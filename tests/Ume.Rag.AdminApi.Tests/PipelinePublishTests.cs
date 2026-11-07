@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.TestKit;
 
@@ -21,6 +22,29 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) => await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+
+    /// <summary>
+    /// A worker instance (<c>WorkerInstances</c>, <c>WorkerNodeSupport</c>) that runs every stage version of
+    /// <paramref name="template"/> in every job class that hosts it, except <paramref name="withoutClass"/>; removed on dispose.
+    /// </summary>
+    private static async Task<IAsyncDisposable> LiveWorkerAsync(RagDbContext db, PipelineTemplate template, TimeSpan? heartbeatAge = null, string? withoutClass = null)
+    {
+        var instance = new WorkerInstance
+        {
+            InstanceId = Guid.CreateVersion7(), BuildVersion = "test", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            LastHeartbeatAt = DateTimeOffset.UtcNow - (heartbeatAge ?? TimeSpan.Zero),
+            Classes = template.Stages.Keys.SelectMany(s => Stages.Find(s)!.HostClasses).Distinct().Where(c => c != withoutClass).ToArray(),
+        };
+        db.WorkerInstances.Add(instance);
+        db.WorkerNodeSupport.AddRange(template.Stages.Select(s => new WorkerNodeSupport { InstanceId = instance.InstanceId, NodeType = s.Key, TypeVersion = s.Value }));
+        await db.SaveChangesAsync(Ct);
+        return new Removal(() => db.WorkerInstances.Where(w => w.InstanceId == instance.InstanceId).ExecuteDeleteAsync(Ct));
+    }
+
+    private sealed class Removal(Func<Task<int>> remove) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync() => await remove();
+    }
 
     [Fact]
     public async Task A_department_plans_on_a_copy_confirms_after_the_plan_and_rolls_back()
@@ -87,6 +111,31 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
             JsonSerializer.Serialize(await Json(invalid)).ShouldContain("pipeline_params_invalid");
         }
 
+        // V24 / engine §4 rule 4 (B-22): refused while no live worker runs the template version's stages in their job classes.
+        async Task ShouldBeUnsupportedAsync()
+        {
+            using var refused = await admin.PostAsJsonAsync($"/api/pipelines/{platform.Id}/publications", new { parameters = new { }, version, collectionId = collection.Id }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, await refused.Content.ReadAsStringAsync(Ct));
+            var problem = await Json(refused);
+            problem.GetProperty("code").GetString().ShouldBe("template_unsupported");
+            problem.GetProperty("params").GetProperty("type").GetString().ShouldBe(SourceTypes.UrlList);
+        }
+
+        await ShouldBeUnsupportedAsync();
+        await using (await LiveWorkerAsync(db, template, heartbeatAge: TimeSpan.FromMinutes(2)))
+        {
+            await ShouldBeUnsupportedAsync(); // a silent instance's support does not count
+        }
+
+        var firstClass = template.Stages.Keys.SelectMany(s => Stages.Find(s)!.HostClasses).Distinct().Order(StringComparer.Ordinal).First();
+        await using (await LiveWorkerAsync(db, template, withoutClass: firstClass))
+        {
+            await ShouldBeUnsupportedAsync(); // checked per job class
+        }
+
+        (await db.Pipelines.AsNoTracking().CountAsync(p => p.DepartmentId == department.Id, Ct)).ShouldBe(0); // no copy left behind
+
+        await using var worker = await LiveWorkerAsync(db, template);
         using var planned = await admin.PostAsJsonAsync($"/api/pipelines/{platform.Id}/publications", new { parameters = new { }, version, collectionId = collection.Id }, Ct);
         planned.StatusCode.ShouldBe(HttpStatusCode.Accepted, await planned.Content.ReadAsStringAsync(Ct));
         var plan = await Json(planned);

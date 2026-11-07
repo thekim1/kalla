@@ -87,7 +87,7 @@ public static class AdminErrorCodes
     public static AdminErrorCode ImpactNotConfirmed { get; } = new("impact_not_confirmed", 409, "The change affects which documents the source holds. Check its impact and confirm.");
 
     /// <summary>V24: no published pipeline of a template for source type <c>{type}</c>.</summary>
-    public static AdminErrorCode TemplateUnsupported { get; } = new("template_unsupported", 400, "There is no pipeline for the source type {type}.");
+    public static AdminErrorCode TemplateUnsupported { get; } = new("template_unsupported", 400, "There is no pipeline for the source type {type} that the running workers support.");
 
     /// <summary>A field only platform admins may change.</summary>
     public static AdminErrorCode AdminOnly { get; } = new("admin_only", 403, "Only a platform administrator can change this.");

@@ -30,7 +30,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   source_above_collection: 'A source cannot have a higher information class than its knowledge base {collection} ({level}).',
   source_settings_invalid: 'The source setting {field} is not valid: {problem}',
   impact_not_confirmed: 'The change affects which documents the source holds. Check the impact and confirm.',
-  template_unsupported: 'There is no processing for the source type {type}.',
+  template_unsupported: 'There is no processing for the source type {type} that the running workers support.',
   admin_only: 'Only a platform administrator can change this.',
   run_not_active: 'The run has already ended ({state}).',
   reason_too_short: 'The reason must be at least {min} characters.',

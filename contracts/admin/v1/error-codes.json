@@ -119,7 +119,7 @@
     {
       "code": "template_unsupported",
       "status": 400,
-      "message": "There is no pipeline for the source type {type}."
+      "message": "There is no pipeline for the source type {type} that the running workers support."
     },
     {
       "code": "admin_only",

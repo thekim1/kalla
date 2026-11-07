@@ -226,7 +226,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** knowledge §6.6; data-model §1.1.
 
-### [ ] B-22 Publish checks the worker supports the template version (M-3, #298)
+### [x] B-22 Publish checks the worker supports the template version (M-3, #298)
 - **Do:** pipeline publish calls `PipelineValidator.ValidateForPublish` (rules 1–4, with the live workers' supported
   template versions) instead of `Validate` (`PipelineEndpoints.cs:227`), so engine §4 rule 4 / admin V24 hold during a
   rolling update.
