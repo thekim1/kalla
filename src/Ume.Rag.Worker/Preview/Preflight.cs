@@ -391,7 +391,7 @@ public sealed partial class Preflight(
                 var context = new FetchContext(Guid.Empty, level, jobId, plan.Settings, Revalidate: true);
                 var fetchStarted = time.GetTimestamp();
                 page = await pages.FetchAsync(new PageRequest(context, request, store, plan.Browser), cancellationToken);
-                await lease.CompleteAsync(PreviewHosts.Response(page.Outcome, time.GetElapsedTime(fetchStarted)), cancellationToken);
+                await lease.CompleteAsync(PreviewHosts.Response(page.Outcome, PageLatency.Of(page.Outcome, time.GetElapsedTime(fetchStarted))), cancellationToken);
             }
 
             if (page.Outcome is FetchOutcome.Transient { Reason: var reason } && reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal))

@@ -452,7 +452,7 @@ public sealed class CrawlTraversal(
             page = await connector.FetchPageAsync(context.FetchContext, item, softNotFound, cancellationToken);
         }
 
-        var verdict = await lease.CompleteAsync(Response(page.Outcome, time.GetElapsedTime(started)), cancellationToken);
+        var verdict = await lease.CompleteAsync(Response(page.Outcome, PageLatency.Of(page.Outcome, time.GetElapsedTime(started))), cancellationToken);
         if (verdict.PausedUntil is { } until)
         {
             await runs.PauseHostAsync(run.RunId, row.Host, verdict.Reason!, until, cancellationToken);
@@ -684,7 +684,7 @@ public sealed class CrawlTraversal(
     /// </summary>
     private static Uri? KnownPathForm(FrontierRow row) => row is { FetchUrl: { } path, RedirectTo: null } ? new Uri(path) : null;
 
-    private static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
+    private static HostResponse Response(FetchOutcome outcome, TimeSpan? latency) => outcome switch
     {
         FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
         FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),

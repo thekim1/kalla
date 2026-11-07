@@ -28,7 +28,9 @@ public sealed partial class RenderOptions
     public long MaxBytes { get; set; } = 20 * 1024 * 1024;
 
     /// <summary>Ready when <c>load</c> fired and no routed request has been open for this long.</summary>
-    public TimeSpan QuietPeriod { get; set; } = TimeSpan.FromMilliseconds(100);
+    /// <remarks>500 ms, measured on a live single-page app (A-13): at 100 ms a module-heavy app was "ready" between its
+    /// last script and its first data request, so pages were stored without their content and their links.</remarks>
+    public TimeSpan QuietPeriod { get; set; } = TimeSpan.FromMilliseconds(500);
 
     /// <summary>The worker's script and stylesheet cache, in MB.</summary>
     public int AssetCacheMb { get; set; } = 128;
