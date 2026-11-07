@@ -436,8 +436,9 @@ policy matrix is a table-driven unit test.
 ```csharp
 public interface IAccessPolicy
 {
-    AccessDecision Decide(RagPrincipal who, ResourceRef what, RagAction action, PolicySnapshot config);
-    IReadOnlyList<ResourceRef> Filter(RagPrincipal who, IEnumerable<ResourceRef> candidates, RagAction action, PolicySnapshot config);
+    AccessDecision Decide(RagPrincipal who, ResourceRef what, RagAction action, PolicySnapshot config, bool confirmed);
+    IReadOnlyList<ResourceRef> Filter(RagPrincipal who, IEnumerable<ResourceRef> candidates, RagAction action,
+        PolicySnapshot config, bool confirmed);
 }
 
 public enum RagAction { ListModels, Chat, Search, ReadDocument, McpCall, ToolCall, Feedback }
@@ -448,14 +449,17 @@ public sealed record AccessDecision(
     int HttpStatus,                    // 200/401/403/404/503
     Classification EffectiveLevel,     // the resource's level (drives residency)
     Residency MaxResidency,            // always sent; public = External (§4.7)
-    long ConfigVersion);
+    long ConfigVersion,
+    string Step);                      // the first failing §4.3 step's id (explain access, §4.9)
 ```
 
-`PolicySnapshot` is the config snapshot (data-model §5) with `Version`, `Confirmed` (last confirmed at most
-`Config:MaxUnconfirmedSeconds` ago, default 90 s), clients, keys' scopes, assistants with audiences and their
+`PolicySnapshot` is the config snapshot (data-model §5), immutable per version, with `Version`, clients, keys'
+scopes, assistants with audiences and their
 **published** version's collections (the api reads only `config."PublishedAssistantVersions"`, so a draft never
 reaches a decision),
-collections, skills, tools, data-protection policies and the department mirror. Membership comes from the token's
+collections, skills, tools, data-protection policies and the department mirror. `confirmed` (step 0's input: the
+snapshot was last confirmed at most `Config:MaxUnconfirmedSeconds` ago, default 90 s) is passed with each call, not
+kept in the snapshot. Membership comes from the token's
 claims as `MembershipFacts { Departments, Groups, Known: bool }` (`Known = false` for an overage token), so the policy
 itself never waits.
 
@@ -474,7 +478,7 @@ itself never waits.
 | 7 | **Classification ceiling**: resource level ≤ client ceiling | `ceiling_exceeded` (event 5005) | 404 |
 | 8 | **Anonymous**: resource level = `public` | `anonymous_not_allowed` | 404 |
 | 9 | **Data handling**: level policy `ClientsWithoutHistoryOnly` ⇒ `!client.StoresHistory`; `AllowedHistoryModes` contains the assistant's mode; a level whose `DataProtectionPolicies` row was never saved gets the code defaults (`DataProtectionPolicy.DefaultFor(level)`, the same as the admin's), and a level missing from the snapshot fails closed | `client_stores_history` | 404 |
-| 10 | **Audience** (assistants; collections via the assistant, or via `CollectionAudiences` for token callers in P2, knowledge design §4.2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows | `audience_mismatch` | 404 |
+| 10 | **Audience** (assistants; collections via the assistant, or via `CollectionAudiences` for token callers in P2, knowledge design §4.2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows. A collection decided directly (knowledge routes, download grants) passes in P1 only for an `internal` client or a download grant; other client kinds wait for `CollectionAudiences` (P2) | `audience_mismatch` | 404 |
 | 11 | Step 10 needs a department/group row and `Membership.Known = false` | `membership_unavailable` | 503 |
 | 12 | Tools (P2): tool policy = tools design §5.1 (server → skill → assistant → client, `ToolPolicy.Visible`/`Authorize`); inside an agent loop a denial is a `denied` tool message + 5002, not an HTTP 403; on `/mcp` the SDK's unknown-tool error (tools design §5.2) | `tool_not_allowed` | 403 / tool message |
 | ✓ | Allowed: `EffectiveLevel` = resource level; `MaxResidency` per §4.7 | – | – |
@@ -605,8 +609,8 @@ and nothing to clean up; no security event is emitted (nothing is accessed). Who
 
 With `ENABLE_FORWARD_USER_INFO_HEADERS=true` and `FORWARD_USER_INFO_HEADER_JWT_SECRET` set, every request to a
 connection carries `X-OpenWebUI-User-Jwt` (`backend/open_webui/env.py:997-1016`), an HS256 JWT minted per request
-(`backend/open_webui/utils/headers.py:41-52`). Line numbers in this section are at the pinned **v0.12.3**, which keeps
-the JWT as designed (to-verify #46):
+(`backend/open_webui/utils/headers.py:41-52`). Line numbers in this section were taken at **v0.12.3**; the pin
+is **v0.12.5** (A-4, #457), which keeps the JWT and the settings below as designed (to-verify #46):
 
 ```json
 { "sub": "<Open WebUI user id>", "email": "...", "name": "...", "role": "user|admin|pending",
@@ -630,7 +634,8 @@ conversation** (keyed by the JWT `sub`), never grant access.
 2. Header present and ≤ 4 KB; exactly one.
 3. Header `alg` must be `HS256` (pinned `ValidAlgorithms = ["HS256"]`; `none`, `RS*`, `ES*` and a `kid` are refused).
    Key: `OpenWebUi:JwtSecret` (secret file `OpenWebUi__JwtSecret`, ≥ 32 bytes, generated by `init-deployment.sh`,
-   repo-and-deployment §7.1); `OpenWebUi:ClientId` names the registry client it belongs to. A second instance later
+   repo-and-deployment §7.1); `OpenWebUi:ClientId` names the registry client it belongs to (empty or not a GUID =
+   not configured: rag-api starts, and no Open WebUI user JWT is trusted). A second instance later
    gets `OpenWebUi:Instances:<name>:{ClientId, JwtSecret}`: the decided fallback for a second department is one Open
    WebUI instance per department, each its own client with its own ceiling and audience, until W3 and E1 are solved
    (weakness review §5, plan §5).
@@ -666,14 +671,13 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   form and does not block API password sign-in; on only while the service account's key is minted),
   `DEFAULT_USER_ROLE=user` (with the default `pending` and no person as admin, no OIDC account could chat), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
   `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2570`),
-  `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/callback` (`:2629`; the `oidc` provider registers only
-  with `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL` and a client secret or PKCE method, `:2792`). At v0.12.3 the callback
-  route is `/oauth/{provider}/login/callback`; the older `/oauth/{provider}/callback` is still served as a "legacy
-  endpoint" (`backend/open_webui/main.py:2932-2933`). The pilot keeps the legacy path, which
-  `deploy/compose.openwebui.yaml` (`OPENID_REDIRECT_URI`), the dev realm (`open-webui-dev`), the Entra Bicep and the P1
-  realm additions (`open-webui`, §11.2) use; the move to `/oauth/oidc/login/callback` happens in all of them together at the next
-  Open WebUI pin bump, before the legacy route is removed (settled at the P0 integration sync point, Decisions table
-  "P0 integration, stream A"; to-verify #46).
+  `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/login/callback` (`:2629`; the `oidc` provider registers only
+  with `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL` and a client secret or PKCE method, `:2792`). The callback route
+  is `/oauth/{provider}/login/callback`; the older `/oauth/{provider}/callback` is still served as a "legacy endpoint"
+  (`backend/open_webui/main.py:2932-2933` at v0.12.3). `deploy/compose.openwebui.yaml` (`OPENID_REDIRECT_URI`), the dev
+  realm (`open-webui-dev`), the Entra Bicep and the P1 realm additions (`open-webui`, §11.2) all use
+  `/oauth/oidc/login/callback`; they moved together at the go-live pin bump to v0.12.5 (A-4, #457), before the legacy
+  route is removed (Decisions table "P0 integration, stream A"; to-verify #46).
 - **Provider per phase.** P1: the shared Keycloak, client `open-webui` in realm `ume` (§11.2), with
   `OPENID_PROVIDER_URL=https://<keycloak host>/realms/ume/.well-known/openid-configuration`
   (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL`, `init-deployment.sh --openwebui-oidc-provider-url`), `OAUTH_CLIENT_ID=open-webui`
@@ -763,7 +767,10 @@ Same order as `GatewayRequestHandler.Stages.cs:21-77`:
 3. Status: `key_revoked`, `key_disabled`, `key_expired`, `owner_inactive` (team inactive in the mirror, or client
    disabled) ⇒ failure bucket with key id, 401/403.
 4. `address_not_allowed` after the status checks, so a revoked key is reported as revoked wherever it is used
-   (`:63-67`).
+   (`:63-67`). The address is the client's: rag-api's `ClientAddressMiddleware` (copied from the gateway) takes it from
+   `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (read from the access
+   snapshot), else the connection address. Until the snapshot's first load, seconds after start, the list is empty
+   and the proxy's address is used.
 5. **New for `pk` keys**: `origin_not_allowed` (§6.5).
 6. Config confirmed (§4.5), then the client layer (Open WebUI JWT, §5) and the policy.
 
@@ -780,7 +787,10 @@ table comes with a schema PR.
 Keys page copies the gateway's endpoints (`KeyEndpoints.cs:79-133`): create (secret shown once), update, rotate
 (immediate or 24 h grace), reveal/copy (platform admin, audited), revoke. Who may manage: `rag-platform-admin`
 everywhere, `rag-department-admin` for keys of teams in their departments (`AdminContext.KeyTeams` pattern,
-`AdminContext.cs:102-113`). Every change is `rag.admin.change`.
+`AdminContext.cs:102-113`). Every change is `rag.admin.change`. Adapted from the gateway: a key belongs to a client,
+with an optional team for attribution and management; only a platform admin creates a key without a team (platform
+integrations). P1 creates `sk` keys only. Keys carry no `version` (rotate and revoke check the key's own state), and
+errors carry admin codes (`key_not_rotatable`, `key_revoked`, `key_secret_unavailable`, `key_scope_invalid`).
 
 ### 6.5 Widget `pk` keys (P2)
 
@@ -1023,7 +1033,7 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
 | Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All`; `service_account` in its default client scopes (without it a token has no `client_id` claim, to-verify #83) |
 | Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
-| Client `open-webui-dev` | confidential, code flow, secret from the placeholder `UME_RAG_OWUI_CLIENT_SECRET` (generated by the AppHost), redirect `http://localhost:8080/oauth/oidc/callback` (Open WebUI's default port; §5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
+| Client `open-webui-dev` | confidential, code flow, secret from the placeholder `UME_RAG_OWUI_CLIENT_SECRET` (generated by the AppHost), redirect `http://localhost:8080/oauth/oidc/login/callback` (Open WebUI's default port; §5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
 | Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute, role `rag-viewer`, since membership never grants a role; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
@@ -1042,7 +1052,7 @@ follows:
 | Realm roles | the `rag-*` roles of §1.3 | names unchanged; none collides with the gateway's (§1.6) |
 | `departmentCodes` (and `teamCodes`) | **shared with the gateway**: one user attribute, declared in the realm's user profile (`docs/identity-and-roles.md:148-149`), read by both systems' attribute mappers; one value scopes the user in both | the user profile is a realm-level setting, so it is declared once for both systems (who declares it: §16) |
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect `https://<rag admin host>/signin-oidc`, post-logout `https://<rag admin host>/signout-callback-oidc`, web origin `https://<rag admin host>` (as the gateway's Keycloak client, `docs/identity-and-roles.md:137-141`); mappers as §11.1 (`roles`, `departmentCodes`, `teamCodes`, `groups`, all to the ID token); secret as an import placeholder | pilot hosts instead of localhost; **full scope allowed off**, with role scope mappings to the `rag-*` roles so `roles` still carries them |
-| Client `open-webui` | confidential, code flow, redirect `https://<owui host>/oauth/oidc/callback` (legacy path, §5.3), `email` in the ID token, secret as an import placeholder | named `open-webui` (dev: `open-webui-dev`); pilot host; full scope allowed off |
+| Client `open-webui` | confidential, code flow, redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3), `email` in the ID token, secret as an import placeholder | named `open-webui` (dev: `open-webui-dev`); pilot host; full scope allowed off |
 | Client `ume-rag-api` | the audience of RAG API tokens (`RagApi:Audience`, §7.1); no sign-in flow of its own | dev uses an audience mapper value `ume-rag-api` on `ume-rag-api-dev` and on the scopes `Chat.Use`, `Knowledge.Read`, `Mcp.Use`; whether P1 also carries those scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a client-credentials client is open (§7.1, §16) |
 | *Full scope allowed* | **off on every RAG client**, as on the gateway's, so a token carries only its own system's roles | dev keeps Keycloak's default (on) |
 | Password policy, brute-force protection, user profile | **in the gateway's base realm file**, not in RAG's additions (Q3); the additions file must not declare `userProfile` (keycloak-config-cli would replace the whole profile) | dev has neither |
@@ -1060,7 +1070,10 @@ resource type with `no-delete` (a file adds and updates, never removes). RAG's `
 `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A RAG change reaches production when the
 operator pulls a new tagged RAG version of the file. `rag-realm-settings.json`, the OTP flow and `apply-additions.py`
 are not used for the shared realm; a standalone Ume.Rag realm declares password policy, brute-force protection and
-the user profile in its own file. Local redirect URIs stay out of the production additions directory. Q8:
+the user profile in its own file, `deploy/keycloak/standalone/10-rag-realm.json` (laid out like the gateway's
+`realm/`, so it imports before the additions). Local redirect URIs stay out of the production additions directory:
+they are in `rag-additions.local.json` (test realms only), which declares the pilot URIs next to the local ones,
+since keycloak-config-cli replaces a client's URI lists rather than merging them. Q8:
 `ume-rag-api` is the audience client only. Password and brute-force values are the gateway's (the same as RAG's).
 
 **What P1 relies on in the code** (no change needed): the BFF and claim mapping are OIDC-generic
@@ -1118,7 +1131,7 @@ Enterprise applications.
 |---|---|---|
 | `ume-rag-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); `acceptMappedClaims` (parameter, default true) for the `departmentCodes` claims-mapping policy, as the gateway's Entra step 4 (plan §2); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
-| `ume-rag-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
+| `ume-rag-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
 | Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `ume-rag-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `ume-rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |

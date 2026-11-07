@@ -356,7 +356,8 @@ others; `NER_PERSON_LABELS` defaults to `PER,PRS`; mixed labels are returned onl
 
 The worker calls it **only when gated** (the document is in a source of a `public` collection, is not already flagged
 by another rule, and has ≥ 5 contact values) and from its processing job, not from a job class of its own
-Served by one warm process **`ner-0`** (never behind conversions; `NER_THREADS` 2,
+Served by one process **`ner-0`**, started on demand and stopped when idle (§10.1; `/v1/ner` answers 503 `not_ready`
+while it is cold or warming), never behind conversions (`NER_THREADS` 2,
 `NER_QUANTIZE`, at most `NER_QUEUE` (4) waiting requests else `503 busy`, recycled after 5 000 requests); `/v1/info`
 adds `ner_ready` and the model block inside `build_hash`; readiness does not depend on NER. `NER_ENABLED=false`
 starts no `ner-0`: `/v1/ner` answers 503 `not_ready` and `/v1/info` has `ner: null` and `ner_ready: false`, so the worker's gated call fails
@@ -565,8 +566,12 @@ Models baked (sizes approximate, *to verify* at P0):
 | Tesseract `swe` | Debian package | ≈ 10–30 MB | Apache-2.0 |
 | Garble bigram table | built in-repo from public Swedish/English text | ≈ 50 KB | own |
 
-**Licence inventory** (postponed P2, before the pilot): `src/parser/LICENSES.md` replaces `MODELS.md`, generated at
-build from `uv pip list` + package metadata, Debian `copyright` files of installed packages, and the model table above.
+**Licence inventory**: `src/parser/LICENSES.md` replaces `MODELS.md` and ships in the image at
+`/usr/share/doc/ume-rag-parser/LICENSES.md`. `scripts/licences.py` writes it inside the image's `test-env` stage (the
+runtime venv plus the dev group; the `test` stage runs pytest on top of it) from the installed `dist-info` metadata of
+the runtime packages (nothing imported; the SPDX `License-Expression` where a package gives one, else its trove
+classifiers), the Debian `copyright` files of installed packages, and the model table above. The file is checked in;
+`tests/test_licences.py` fails the image's test build when it no longer matches what is installed.
 Known so far: Docling and its parsers MIT (`docling-parse` *to verify*), `docling-slim` and `docling-core` MIT (PyPI
 metadata, checked in review), PyTorch BSD-3, pdfium BSD-3/Apache-2.0, Tesseract Apache-2.0, psutil BSD-3, tini MIT.
 

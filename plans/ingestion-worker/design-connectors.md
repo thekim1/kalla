@@ -145,10 +145,11 @@ run items are written by the runner.
   link alone is ~500 bytes per drive): `SourceId`, `Classification`, `Kind` (`run` = position of the current listing;
   `state` = durable cursor such as delta links), `SchemaVersion`, `Checkpoint jsonb`, `RunId`, `UpdatedAt`. Serialised
   with System.Text.Json source generation.
-- A `Checkpoint` event is committed **in the same transaction** as the claims, `fetch` jobs and run items produced
-  since the previous one. A crash or lease loss (6a §9.4) loses only uncommitted work; resuming re-lists from the
-  last checkpoint, and dedup keys plus upserts absorb repeated items. A yield re-enqueues the `sync` job with the
-  checkpoint reference (no attempt, 6a §9.2).
+- At a `Checkpoint` event the runner writes the admissions (or `fetch` jobs) and run items produced since the
+  previous one, then the checkpoint; each store write commits on its own, the checkpoint last. A crash or lease loss
+  (6a §9.4) between them leaves items written past the stored checkpoint; resuming re-lists from it, admission
+  ignores URLs already in the run, and dedup keys plus upserts absorb the repeated items. A yield re-enqueues the
+  `sync` job with the checkpoint reference (no attempt, 6a §9.2).
 - Unknown `SchemaVersion` (rolled-back worker) → listing restarts from the beginning, which is always safe because
   listing is idempotent. A `state` checkpoint is replaced only when its listing reaches `Done`.
 - Crawl checkpoints are tiny (seed phase and sitemap cursor) because the traversal state lives in the frontier.
@@ -300,10 +301,10 @@ only the headers are read).
   `sitemapindex.xml` → one `sitemap1.xml.gz` with 24,184 URLs, all with `lastmod`. A sitemap that cannot be read
   **pauses its host** for the run (once), like an unreachable robots.txt, instead of counting as one failed seed;
   otherwise one failed sitemap among several would leave the ratio rule (§5.4) satisfied and allow mass `not-seen`
-  proposals for the URLs it lists. Before that, a transient failure (5xx, timeout, 429 with `Retry-After` ≤ 60 s) is
-  retried twice within the host budget (Crawlee review, 2026-11-07), so one bad moment does not block the run's
-  deletions. Plain-text sitemaps (one URL per line, sitemaps.org) are read too, and `/sitemap_index.xml` is probed
-  after `/sitemap.xml`.
+  proposals for the URLs it lists. Before that, a transient failure (5xx, timeout, 429 or 503 with `Retry-After`
+  ≤ 60 s) is retried twice inside the listing job, after 1 s and 2 s or after its `Retry-After` (the listing does not
+  take host slots; Crawlee review, 2026-11-07), so one bad moment does not block the run's deletions. Plain-text
+  sitemaps (one URL per line, sitemaps.org) are read too, and `/sitemap_index.xml` is probed after `/sitemap.xml`.
 
 ### 5.2 Scope
 
@@ -320,8 +321,9 @@ only the headers are read).
 
 ### 5.3 URL-space traps
 
-Detected per run in the fetch path; each detection is a `skipped` `trap.<kind>` for admitted URLs and a counter
-with an example pattern in the report.
+Detected per run in the fetch path, on a link's canonical identity (every §3.1 rule, rule 10 included; the scope
+patterns before it see the path form, §5.2); each detection is a `skipped` `trap.<kind>` for admitted URLs and a
+counter with an example pattern in the report.
 
 | Trap | Detection | Action |
 |---|---|---|
@@ -331,7 +333,7 @@ with an example pattern in the report.
 | Session ids | removed by normalisation (§3.1 rule 7–8); > 20 URLs whose only difference is one unknown parameter → that parameter is reported as a candidate for `ignoreQueryParams` (and proposed to the site profile, §5.6) | report |
 | Soft-404 / duplicate fan-out | ≥ 20 URLs in a run with the same content hash | their links are expanded once per content hash (a page already expanded adds nothing new) |
 | Soft-404 pages (Crawlee review, 2026-11-07) | once per host and run, a request to a random non-existent path (`/{12 random letters}-ume-rag-404`); when it answers 200, the normalised main text's hash is the host's soft-404 fingerprint | a page with that fingerprint ends `failed` `http.soft_404` (counts like a 404 toward the persistent-failure rule of §13.1, never an instant deletion), so a "page not found" served with 200 never replaces a document's good content |
-| Challenge pages | known markers of bot challenges and WAF blocks (Cloudflare challenge/turnstile, Incapsula, a `cf-mitigated` header) on a 200 or 403 | `Transient` `http.challenge`: the last good content stays, the host backs off as on a 429 (§6.4); repeated in a run, the host is paused and the run says why. Never an attempt to get past the challenge |
+| Challenge pages | known markers of bot challenges and WAF blocks (Cloudflare challenge/turnstile, Incapsula, a `cf-mitigated` header) on a 200 or 403 | `Transient` `http.challenge`, counting an attempt (a URL list has no per-run pause): the last good content stays, the host backs off as on a 429 (§6.4); repeated in a run, the host is paused and the run says why; out of attempts, the item ends `failed http.challenge`, content kept. Never an attempt to get past the challenge |
 | Default excludes in the `website` template form | `**/sok?*`, `**/search?*`, `**?*sort=*`, `**?*print=*`, `**/login*`, `**/logout*` | editable |
 
 ### 5.4 Traversal, incremental runs and deletions
@@ -509,7 +511,10 @@ The shared frontier with claims and the releaser (§6.1–§6.3) is **P2** (reas
 **its own frontier**: `CrawlFrontier` rows are keyed by (`Classification`, `SourceId`, `UrlHash`) and carry the
 source's `RunId`, `Depth`, `Leaf` and `RemovalCheck` (§5.4), so admission is one upsert per URL and no `CrawlClaims`
 table, freshness-window reuse across sources or `fetch.shared` fact exists. The source's own `sync` traversal enqueues its `fetch` jobs from its
-`pending` rows in small batches per host (`Crawl:FetchBatchPerHost` in configuration), topping up as they finish. The
+`pending` rows in small batches per host (`Crawl:FetchBatchPerHost` in configuration), topping up as they finish:
+removal checks first, then lowest depth, rows of equal depth by URL (no admission-time column). Admission takes one
+row lock per run on its `CrawlRuns` row, which keeps `Admitted` and the page limit exact; an admission of a URL
+already in the run changes nothing, so a re-listed batch is harmless. The
 host budget does not change: every `fetch` takes its slot in `CrawlHosts` as in §6.3, so rates, connection caps,
 back-off, breaker (§6.4) and the night window (§6.5) hold across all sources and previews. Two sources on one host
 fetch a page twice; the content-addressed raw blob and the parse and embedding caches still make the second one cheap.
@@ -651,7 +656,7 @@ not per source, because the host budget is shared by every source, preview and l
 | `crawlDelay` | `honour` (capped at 60 s) | `honour`, `ignore` |
 | `adaptToLatency` | `true` (the `LatencyEwma` term of the interval) | `true`, `false` |
 | `crawlWindow` | `source` (the source's `crawlWindow`, §6.5) | `source`, `any` (daytime crawling allowed) |
-| `backoff` | 429/503 honour `Retry-After` (≤ 1 h), factor ×2 up to 16 | `maxRetryAfterSeconds` (≤ 3,600), `maxFactor` (1–16); a 429/503 is always honoured for its `Retry-After` up to that cap |
+| `backoff` | 429/503 honour `Retry-After` (≤ 1 h), factor ×2 up to 16 | `maxRetryAfterSeconds` (≤ 3,600), `maxFactor` (1–16); a 429/503 is always honoured for its `Retry-After` up to that cap, and a longer one is cut to the cap, except that one over 1 h still pauses the host (§6.4) |
 | `circuitBreaker` | ≥ 50 % of the last 100 responses failing → pause 30 min | `threshold` (0.2–1.0), `pauseMinutes` (1–120), or `off` |
 | `robots` | `respect` | `respect`, `ignore` **with a required `reason`** (e.g. "own site, web team consent 2026-11-10"): robots.txt is then neither asked for seeds' `Disallow` nor for redirect hops; its `Sitemap:` lines are still read; meta/`X-Robots-Tag` `noindex` handling (§5.2) is unchanged |
 | `userAgent` | `UmeaKommunBot/1.0` | any string (1–256 printable ASCII), e.g. a browser's; sent on every request to the host (HTTP and the renderer's fetches); robots.txt groups are still matched against `UmeaKommunBot` |
@@ -661,8 +666,10 @@ Presets: `polite` = the external defaults; `municipal` = the municipal defaults;
 `crawlDelay` `ignore`, `adaptToLatency` `false`, `crawlWindow` `any`, the back-off and breaker unchanged. `robots` and
 `userAgent` are never part of a preset: each is set explicitly per host. The ceilings (`Crawl:MaxHostRate`,
 `Crawl:MaxHostConnections`) are deployment knobs, so a typo in the admin UI cannot turn the crawler into a load test.
-The crawl report and the source page show a host's non-default politeness ("crawled at 10 req/s, robots.txt ignored:
-own site, web team consent"). Every override is per host; there is no global "ignore robots" switch.
+The crawl report and the run page show a host's non-default politeness ("crawled at 10 req/s, robots.txt ignored:
+own site, web team consent"); the source page does not yet. Every override is per host; there is no global "ignore
+robots" switch. Overrides are keyed by the host without a port (V37), and the worker drops a URL's port when it looks
+its host up.
 
 ## 7. Egress / SSRF guard
 
@@ -703,9 +710,10 @@ detection, storage) stays in the worker (§8.7 lists the options weighed).
   is rendered; HTTP stays the default for every other source. Path rules and automatic detection may follow once the
   first sites are measured (§8.8); short text alone is not a reliable signal (some valid pages are only a heading).
   Uploaded HTML is never rendered. The site profile's `javascriptNeeded` field is removed.
-- **Hint, not a decision:** the source form's preflight (admin §4.7) fetches each start URL raw and rendered and shows
-  both main-text word counts, with "This site seems to need JavaScript" when the raw count is under half the rendered
-  one; the editor switches `fetchMode`. The crawl report's short-page note (§5.5) and the `parse.empty` text point to
+- **Hint, not a decision:** the add drawer's preflight (admin §4.7) fetches the start URLs raw, renders at most 3 of
+  them (its 2-minute deadline) and shows both main-text word counts per rendered page, with "This site seems to need
+  JavaScript" (`render.suggested`) when the raw count is under half the rendered one, else `render.compared`; the
+  editor switches `fetchMode`. The crawl report's short-page note (§5.5) and the `parse.empty` text point to
   the same setting.
 - **Later: automatic detection** (`fetchMode` `auto`, after §8.8; Crawlee review). A render already has the raw body,
   so a detection costs no extra request: compare raw and rendered main text (under `mainRoot`), link set and
@@ -728,8 +736,11 @@ public interface IRenderFetcher   // the worker's guarded fetch for every reques
     ValueTask<RenderResponse> FetchAsync(RenderSubrequest request, CancellationToken ct);
 }
 public sealed record RenderRequest(Uri Url, FetchedBody MainDocument, string? ReadySelector, RenderLimits Limits);
-public sealed record RenderResult(string Html, RenderStats Stats, IReadOnlyList<DataRequest> DataRequests, bool Ready);
-public sealed record DataRequest(Uri Url, string ContentHash);          // recorded for the later replay check (§8.5)
+public sealed record RenderResult(string Html, RenderStats Stats, bool Ready)
+{
+    public Uri? Navigation { get; init; }                      // script navigation before ready: a hop (§8.3)
+    public IReadOnlyList<Uri> Discovered { get; init; } = [];  // later navigations, popups, downloads (§8.3)
+}   // no data-request manifest yet: it comes with the later replay check (§8.5)
 ```
 
 One fetch path for every HTTP source: **`PageFetcher`** (fetch → render for a `browser` source → store) is used
@@ -755,7 +766,8 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   (Playwright continues the hop unrouted, and it fails closed); a redirected module script whose relative imports
   then resolve against the original URL breaks, and is counted (`render.redirected_module`). CORS preflights are
   answered inside Playwright and never reach the worker, so the worker applies its own **method policy**: `GET` and
-  `HEAD` anywhere in scope of the guard, `POST` only to the page's own site, every other method refused (204).
+  `HEAD` anywhere in scope of the guard, `POST` only to the page's own host (no public-suffix list), every other
+  method refused (204). A request the guard or robots.txt refuses is aborted, as is a failed fetch.
 - **Fails closed:** `rag-renderer` sits only on the internal `render` network (no route out, no external DNS: Docker's
   resolver answers but resolves nothing outside), so anything the route misses fails. Service workers blocked;
   **`RouteWebSocketAsync` is mandatory** and closes every WebSocket; WebRTC disabled (it otherwise puts mDNS and IGMP
@@ -843,7 +855,8 @@ regardless. Adopted only if the measurements show re-rendering is the cost that 
 
 Event 5101 with `Purpose = Render` for a refused browser request (SIEM alert, identity §10); metrics
 `rag.worker.render.duration` (by outcome), `rag.worker.render.requests` (fetched, cached, blocked),
-`rag.worker.render.slots` (in use, busy releases); run item facts `fetchMode`, `renderMs`, `requests`, `truncated`;
+`rag.worker.render.slots` (in use, busy releases); one structured log line per render with `fetchMode`, `renderMs`,
+`requests`, `truncated` and `ready` (`RunItems` has no facts column);
 the crawl report counts rendered pages, render failures and pages kept from the last good content.
 
 ### 8.7 Options weighed (2026-11-07)
@@ -880,6 +893,9 @@ host. Results in to-verify #29; the defaults of `Render:*` are set from them.
 `SourceId`, `Classification`, `BatchId` (last change), `FileName`, `DeclaredMediaType`, `SniffedMediaType`, `Bytes`,
 `Sha256` (current version), `State` (`received`/`clean`/`malware`/`refused`/`indexed`/`deleted`), `Reason`,
 `DocumentId`, `UploadedBy`, `UploadedAt`, `ReplacedAt`, `DeletedAt`. The admin reads it for the source's file list.
+When a slot's `fetch` commits, it sets the slot's state with the outcome's reason: `clean` for content, `malware` for
+quarantine, and `refused` for a refused, failed or skipped file and for a transient failure that ends the item (its
+last attempt, or 24 h without a ClamAV verdict, §11).
 
 ### 9.2 Types
 
@@ -1015,7 +1031,7 @@ documents shown on save is not built.
 | `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304, a `lastmod` skip or a hash compare); narrowing: documents whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save). A narrowing also starts a traversal and the removals happen at its reconcile, not on save; the check runs at every crawl reconcile (idempotent, also covers site-profile `excludedTypes`), and no request goes to an out-of-scope URL, removal checks included |
 | `demote` | crawl | cosmetic | none: ranking only, read by retrieval from the config snapshot (knowledge design §6.5) |
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial). Lowering also starts a traversal (the hashes cannot tell raising from lowering), still never deleting; a lowered `maxDepth` skips the deeper documents instead of marking the traversal partial |
-| `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save). A crawl's removals are `identity-changed`, and an identity no longer canonical under the current rules counts as changed too (covering site-profile `identityRule`/`ignoreQueryParams`); a URL list's old identities are removed as `removed-from-list` (exempt, same effect) |
+| `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save). A crawl's removals are `identity-changed`, and an identity no longer canonical under the current rules counts as changed too (covering site-profile `identityRule`/`ignoreQueryParams`). A URL list's unlisted identity is `identity-changed` by the same rule (its run's identity settings differ from the last applied ones, or it is no longer canonical), else `removed-from-list`; both are exempt |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
 | `fetchMode` (`http`/`browser`), `readySelector`, `scrollToLoad` (§8.1, §8.3) | url-list, crawl | behaviour | a sync now that fetches every page again in the new mode (no conditional GET, no `lastmod` skip on that run); pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
@@ -1107,10 +1123,11 @@ unique) and is processed as new content.
 
 ### 13.5 What the admin sees
 
-The run page in state `awaiting-deletion-confirmation`: `n`, `N` and the ratio, the rule that tripped, a breakdown by
-reason, traversal facts (pages reached this run vs. the previous run, paused hosts, seed failures), 50 example URLs
-or names with `LastSeenAt` and last status, a CSV of all proposals, and **Confirm** / **Reject** buttons that insert
-the `command` jobs. The source page shows held documents and the exempt removals of config changes.
+The run page in state `awaiting-deletion-confirmation`: the proposal count `n` and the guard's rule, below the run's
+crawl report (completeness with its reasons, §5.4), the proposals page by page (title or URL or name, reason,
+`LastSeenAt`, exempt removals marked), a CSV of all proposals, and **Confirm** / **Reject** buttons that insert the
+`command` jobs. The run returns no `N`, ratio or count per reason, so the page shows none. The source page shows
+held documents and the exempt removals of config changes.
 
 ## 14. SharePoint (P2 outline)
 

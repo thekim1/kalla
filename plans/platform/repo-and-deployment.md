@@ -23,10 +23,10 @@ namespaces and assembly names `Ume.Rag.*`, image repositories `ume-rag/<service>
 .editorconfig  .gitattributes  .gitignore  global.json  Directory.Build.props  Directory.Build.targets
 Directory.Packages.props  dotnet-tools.json  aspire.config.json  UmeRag.slnx  README.md  CHANGELOG.md
 .githooks/pre-commit                 admin UI lint (copy) + parser ruff check (new)
-.github/workflows/                   P0: verify.yml parser.yml release.yml entra.yml; P1: perf.yml evaluation.yml; P2: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
+.github/workflows/                   P0: verify.yml parser.yml release.yml entra.yml; P1: perf.yml evaluation.yml audit.yml; P2: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
 src/
   Ume.Rag.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, IJobQueue, IReranker)
-  Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list as an embedded resource, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
+  Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list shipped as files, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
   Ume.Rag.Answering/                 knowledge core (KnowledgeService without HTTP) and chat answer core (RagAnswerStrategy, PromptBuilder, TokenBudget, Condenser, AnswerFilter, CitationEmitter, LanguageGuess); referenced by Api and AdminApi only (never the worker), so the test panel runs the real chat path (admin design §2.1) and the admin runs the P2 answer-level judge (`answers` runs) and the P2 skill gate; P2: AgentAnswerStrategy, AgentPromptBuilder, BuiltInTools, ToolCallStreamParser, SkillFileCache (tools design §2.1)
   Ume.Rag.Pipelines/                 fixed pipeline templates per source type, versioned parameter sets, validator, per-stage cache keys, re-processing plan (every document in P1; from effect tags in P2, weakness review §1) (admin + worker; engine design §4)
   Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, `IRateLimitStore`/`ISharedCache` (in-memory; Redis from P2) and RedisKeys, Postgres admin session store, gateway client, blob stores, key providers, SecurityEvents
@@ -65,9 +65,9 @@ tests/
   e2e/                               Playwright TypeScript browser tests (copy of the gateway's setup)
   evaluation/smoke/                  fixture collection (documents) + 30 questions, used by CI
   fixtures/                          documents for parser and node tests (Swedish PDFs, DOCX, scanned pages); `processing/`, `pii/` (processing design §17); `umea/` (≈ 20 saved umea.se pages, HTML and PDF: the site-profile regression corpus, simplification pass §13.2)
+  Ume.Rag.Benchmarks/                BenchmarkDotNet, local only (not in the solution): Retrieval, PostgresRetrieval, ChatStream, ChatTurn (chat design §16.2), Access and Ingestion benchmarks, baselines in `results/` (knowledge design §11)
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
-  Ume.Rag.Benchmarks/                BenchmarkDotNet: RetrievalBenchmarks, ChatBenchmarks (chat design §16.2), InteractionAudit (copy of the gateway's; knowledge design §11)
 deploy/
   compose.prod.yaml                  data plane + control zone (host A), incl. postgres (pgBackRest inside, §7.4)
   compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
@@ -133,23 +133,23 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Packages | `ManagePackageVersionsCentrally`, `CentralPackageTransitivePinningEnabled=false` | `Directory.Packages.props` |
 | Version | `0.0.0-local`; release overrides `-p:Version` from the tag | `Directory.Build.props`, `release.yml` |
 | Containers | SDK container publish (`-t:PublishContainer`), **no Dockerfiles for .NET**; base `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6…4374`, user 1654 | `Directory.Build.targets` |
-| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.1`, `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
+| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.4` (ahead of the gateway's 13.6.1 at the user's request, #339), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
 
 ### 2.2 Initial `Directory.Packages.props`
 
 | Group | Package | Version | Status |
 |---|---|---|---|
-| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.1 | gateway |
-| | `Aspire.Hosting.Keycloak` | 13.6.1-preview.1.26506.6 | gateway |
+| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.4 | gateway's family (13.6.1 there; user, #339) |
+| | `Aspire.Hosting.Keycloak` | 13.6.4-preview.1.26523.11 | gateway's family (#339) |
 | | `CommunityToolkit.Aspire.Hosting.Ollama` | 13.6.0 | gateway (optional local BGE-M3, §4.4) |
 | | `MessagePack` | 2.5.307 | gateway (GHSA pin) |
-| | `Aspire.Hosting.Python` | 13.6.1 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
+| | `Aspire.Hosting.Python` | 13.6.4 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
 | Runtime (gateway) | `Microsoft.Extensions.Http.Resilience`, `Microsoft.Extensions.ServiceDiscovery` | 10.11.0 | gateway |
 | | `OpenTelemetry.Exporter.OpenTelemetryProtocol`, `OpenTelemetry.Extensions.Hosting` | 1.19.1 | gateway |
 | | `OpenTelemetry.Instrumentation.AspNetCore`, `.Http`, `.Runtime` | 1.19.0 | gateway |
 | | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.13 | gateway |
 | | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | gateway |
-| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.1 | gateway |
+| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.4 | gateway's family (#339) |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
 | Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; dependency ranges admit Npgsql EF 10.0.3 (Stage 0); EF 10 compatibility test in P0 #6 |
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
@@ -160,7 +160,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Microsoft.Playwright` | same as renderer image (§5.4) | the worker's renderer client; exact match with the server required (to-verify #29) |
 | | `Cronos` | 0.13.0 (2026-04-29; syntax and DST tests with the scheduler) | schedules (worker) |
 | Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Ume.Rag.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
-| Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | embedded resource of `SwedishDecompounder` (data-model §3.1); licence in postponed P2 |
+| Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | content files of `Ume.Rag.Retrieval` (`Text/sv_SE/`: `.aff`, `.dic` and the licence texts), copied to `dictionaries/sv_SE` next to the application and replaceable: `Text:SwedishWordListDirectory` names another directory (data-model §3.1) |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
 | Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
@@ -211,7 +211,7 @@ src/parser/
 | Models | Docling layout and TableFormer, KB BERT NER (`KBLab/bert-base-swedish-cased-ner`, rev `f3c83af`, `/opt/models/kb-ner`) downloaded at **image build** by `scripts/download_models.py` with pinned revisions and SHA-256 into `/opt/models`; runtime sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, Docling `artifacts_path=/opt/models`; `test_offline.py` converts a PDF with networking disabled |
 | OCR | **Tesseract 5 CLI, `swe` only** (Debian package); P1 acceptance check: å/ä/ö recall ≥ 95 % on a 20-page Umeå sample (parser design §9.3; postponed P1 closed) |
 | Worker tokenizer | `Microsoft.ML.Tokenizers` 2.0.1 (MIT) with BGE-M3's `sentencepiece.bpe.model` (a Unigram model, pinned revision and SHA-256) as a worker resource; parity test against Hugging Face (processing design §6.1) |
-| Licences | `src/parser/LICENSES.md`, generated at build from package metadata, Debian copyright files and the model table (parser design §12; before the pilot) |
+| Licences | `src/parser/LICENSES.md`, generated by `scripts/licences.py` from installed package metadata, Debian copyright files and the model table, checked by the image's test build (parser design §12) |
 
 ## 3. Projects and roles
 
@@ -228,7 +228,7 @@ src/parser/
 | `Ume.Rag.AdminApi` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering, Pipelines, `Ume.Rag.Tools` (P2); OIDC, OpenApi, Scalar (the P2 Graph member-group lookup uses a plain `HttpClient`, §2.2) | `ume-rag/admin` (`PublishAdminUi=true`) | `rag-admin` (+ `rag-admin-b` from P2) |
 | `Ume.Rag.MigrationService` | `Microsoft.NET.Sdk.Worker` | Infrastructure, ServiceDefaults | `ume-rag/migrations` | `rag-migrate` |
 | `Ume.Rag.FakeGateway` | `Microsoft.NET.Sdk.Web`, `ContainerFamily noble-chiseled` (as FakeLlm) | ServiceDefaults | `ume-rag/fake-gateway` (tests, R1 test) | dev/CI only |
-| `Ume.Rag.AppHost` | `Aspire.AppHost.Sdk/13.6.1` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
+| `Ume.Rag.AppHost` | `Aspire.AppHost.Sdk/13.6.4` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
 | `Ume.Rag.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `ume-rag/api`; its own host `rag-tools` only with the first external, OBO or write tool, P3) | chat role of `rag-api`; `rag-admin` |
 
 Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(args)) return;`, then
@@ -239,7 +239,7 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 | Setting | Values | Default | Effect |
 |---|---|---|---|
 | `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.prod.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
-| `Retrieval:Mode` | `InProcess`, `Http` | `InProcess` | `chat` without `knowledge` requires `Http` and `Retrieval:BaseUrl`; `IRetriever` is then the HTTP client with a `ume-rag-sk-` service key |
+| `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Ume.Rag.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `ume-rag-sk-` service key |
 | `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
 | `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:PollSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 2, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
 | `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
@@ -302,7 +302,9 @@ via a Redis lease, default 2 × provider replicas; Redis down: per-instance AIMD
 3- and 5-host topologies); `BlobStore:Root` (the file-system store's container, an absolute path, default
 `/data/blobs/rag`: the `rag/` container on the `rag-blobs` volume, §6.3); P1 with the S3 store: `BlobStore:Kind` (`FileSystem` | `S3`; `FileSystem` on the single-host pilot),
 `BlobStore:S3:ServiceUrl`, `BlobStore:S3:Bucket` (`rag`); `ConnectionStrings__ragdb-listen`
-(LISTEN on its own connection string, same server today, so the pooled strings stay pooler-safe) and
+(LISTEN on its own connection string, same server today, so the pooled strings stay pooler-safe),
+`ConnectionStrings__ragdb-maintenance` (the worker's HNSW rebuild, unpooled, falls back to `ragdb`; the AppHost sets
+it to the same database) and
 `ConnectionStrings__ragdb-read` (read replica for K, V, H+D and the evaluator, only when its trigger fires).
 
 ## 4. Local development
@@ -328,7 +330,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `mcp-kommun` | `AddProject<Ume.Mcp.Kommun>` (from `templates/mcp-server/`) | P2 | `ume-mcp-kommun`, first tool the mock fee calculator (tools design §8.5), reached by the api's in-process tool hub only |
 | `adminapi` | `AddProject<…AdminApi>("adminapi", "https")` | – | `Oidc__ClientId=ume-rag-admin`; `Oidc:*` passed through when external |
 | `admin-ui` | `AddViteApp("admin-ui", "../admin-ui")`, port **5174** (gateway: 5173), `PublishWithContainerFiles(adminUi, "wwwroot")` | – | both stacks can run side by side |
-| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default true in run mode; the resource also needs `Seed:Enabled`, since its key is the seeded client's) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.3** by digest (the forwarded user JWT is the same as at v0.12.5, which the design was checked against; the pin is reviewed at go-live); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.openwebui.yaml`) |
+| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default true in run mode; the resource also needs `Seed:Enabled`, since its key is the seeded client's) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.5** by digest (go-live pin review A-4, #457); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.openwebui.yaml`) |
 
 Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outside the gateway's (gateway admin
 7212, Vite 5173), so a developer can run the gateway's AppHost and ours at once (§4.4).
@@ -369,10 +371,10 @@ streaming code, and adds:
 | `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
 | Stream modes (chat design §18.4): configurable usage-only final chunk (on/off), broken stream mid-way, stall (> idle timeout), missing `[DONE]`, empty deltas, `finish_reason: length`; echoes `x-ume-session` | streaming edge cases |
 | `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names); lists only models with a target within the request's `x-ume-max-residency`, as the gateway does from release 1 for every key (gateway design §3.4) | model validation on assistant save (plan §6) |
-| Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal; records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2; not needed before gateway release 2 in P2, when Ume.Rag starts sending it, weakness review §5) | fail-closed and key-layer tests (plan §6, §7) |
+| Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`; the switch `FakeGateway:RequireMaxResidency`, default on); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal; records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2; not needed before gateway release 2 in P2, when Ume.Rag starts sending it, weakness review §5) | fail-closed and key-layer tests (plan §6, §7) |
 | `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) and `/v1/catalog/teams` (incl. `code`; `memberGroups` and `code` come with gateway release 2, P2, weakness review §5) | organisation sync without the gateway |
-| Fault injection: model names `fake-fail-500`, `fake-slow`, `fake-wrong-residency`, `fake-drained` (503 with `Retry-After`: targets within the ceiling exist but are drained) | resilience and residency tests |
-| Rerank endpoint (P1, scores from word overlap; path as the gateway's P2 endpoint, *to verify*) | the `IReranker` seam and the evaluator's with/without comparison |
+| Fault injection: model names `fake-fail-500` (502 `all_providers_failed`, as the gateway after its own fallbacks), `fake-fail-timeout` (504), `fake-fail-fallback` (its `OnPrem` target fails: 502 at an `OnPrem` ceiling, an answer from `Eu` at `Eu`), `fake-slow`, `fake-wrong-residency`, `fake-drained` (503 with `Retry-After`: targets within the ceiling exist but are drained); a bad or missing key is 401 `invalid_api_key`, the gateway's code | resilience and residency tests |
+| Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`, gateway #68; scores from word overlap), off unless `FakeGateway:RerankEnabled` (while off, a rerank model answers 404 `model_not_found` and `/v1/models` and the catalogue list none); its model `bge-reranker-v2-m3` is an `Eu` target | the `IReranker` seam and the evaluator's with/without comparison |
 | `FakeGateway:Upstream:Embeddings=http://ollama…` | real BGE-M3 vectors from Ollama when enabled |
 | Scripted tool modes (P2): a fixture lists the assistant messages per step (`tool_calls` with ids and arguments, streamed in deltas, or text) | deterministic agent-loop tests (tools design §11.2) |
 | **Throughput model** (P1, not built yet): `Embed:TokensPerSecond` (a token bucket emulating a GPU-served embedding model), `Embed:Replicas`, `Embed:MaxQueue` (beyond it `429` with `Retry-After`), `Embed:QueryLane` (a separate bucket for query embeddings); chat keeps the latency profile (`FirstTokenMs` 400, `TokenIntervalMs` 25, `JitterPercent` 30, as the gateway's `benchmarks/compare`) | the embedding caps, the query-lane trigger and the scale test (`scale.yml`, §8.1; reasoning: performance pass §7) |
@@ -391,7 +393,8 @@ vectors when we run against a real local gateway.
   fake catalog; a `public` collection *Umeå kommun – exempel* with an upload source holding
   `tests/evaluation/smoke/documents/*` (no crawl needed offline) and its 30 smoke questions as the evaluation set;
   assistant *Demo-assistent* (`public`); client *Open WebUI (dev)* at ceiling `internal` with key `ume-rag-sk-` from
-  `Secret("dev-key", 43)`; a local `IKeyProvider` key file under the AppHost's user-secrets directory.
+  `Secret("dev-key", 43)` and `PortalUrl` the stack's Open WebUI (`Seed:DevClientPortalUrl`, set by the AppHost); a
+  local `IKeyProvider` key file under the AppHost's user-secrets directory.
 - **Dev URL-list seed** (dev and test hosts only, until the admin's set-up endpoints exist): `scripts/dev/seed_url_list.py` runs `seed-url-list.sql` with psql against a local
   database only (`--docker` runs psql in the Postgres container, `--socket` over its Unix socket as `postgres`). It
   finds or creates a hand-made department (unless `--department-id` names a synced one; the org sync then marks it
@@ -470,12 +473,15 @@ in dev, TLS through `PARSER_TLS_*` in production Compose. Size budget ≤ 4.0 GB
 
 Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8), checked in the spike (A-9, results-a row
 29): the official Playwright image pinned by digest (`mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a7…`,
-2.56 GB with Firefox and WebKit; a Chromium-only image is worth trying in A-10) plus `playwright-core` installed at
+2.56 GB with Firefox and WebKit), kept to the Chromium headless shell and flattened to one layer (1.48 GB, A-10), plus
+`playwright-core` installed at
 build time from a lockfile (`npm ci`; the image carries no Playwright package, and `npx` would download at start,
 which fails without a network). It runs only `node …/cli.js launch-server --browser chromium --config <file>` with
 `{ chromiumSandbox: true, wsPath: <secret from the environment> }` (`run-server` launches with `--no-sandbox` and
-ignores the client's sandbox option); WebRTC disabled by a Chromium flag in the config. No other process, no logic, no
-volumes. User 10002, `read_only` with a sized `tmpfs` `/tmp` (no `shm_size`: Playwright passes
+ignores the client's sandbox option); the path comes from `secrets/renderer.env` (`UME_RAG_RENDER_WS_PATH`, written by
+`init-deployment.sh`) through a Compose `env_file`, and without it the renderer refuses to start; WebRTC disabled by one
+Chromium flag in the config (`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`). No other process, no
+logic, no volumes. User 10002, `read_only` with a sized `tmpfs` `/tmp` (no `shm_size`: Playwright passes
 `--disable-dev-shm-usage`), `cap_drop: [ALL]`, `no-new-privileges`, and a **seccomp profile kept in
 `images/renderer/`: Moby's default plus `clone`, `unshare` and `chroot`**, so Chromium's own sandbox (user namespaces
 and its seccomp filter) works; Docker's default profile fails it. To check on the production Linux host: Ubuntu's
@@ -705,20 +711,20 @@ Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. 
 | `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
 | `--org-sync-key-file FILE` | – | `secrets/admin/OrgSync__DataApiKey` (gateway Data API key `ume-dk-…`, `catalog.read` only; identity design §2.1) |
-| `--gateway-key-file LEVEL=FILE` (repeated for `OnPrem`, `Eu`, `External`) | – (keys issued by the gateway team per deployable) | `secrets/{api,admin}/Gateway__Keys__<level>`; `secrets/worker/` only `OnPrem` and `Eu` (refuses `External` for the worker) |
+| `--gateway-key-file [SERVICE:]LEVEL=FILE` (repeated for `OnPrem`, `Eu`, `External`; `SERVICE` = `api`, `admin` or `worker` gives that deployable its own key and wins over the shared one) | – (keys issued by the gateway team per deployable) | `secrets/{api,admin}/Gateway__Keys__<level>`; `secrets/worker/` only `OnPrem` and `Eu` (refuses `External` for the worker) |
 | `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` (P0 builds `file` only; the others come with K1) | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key file `secrets/keys/rag-blob-internal` (mode 0400; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4), then a reminder to run `escrow-keys.sh` (§7.4) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` in `secrets/pgbackrest/repo.conf` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target: a mounted share gives `DIR/pgbackrest` (`UME_RAG_BACKUP_DIR`) and `DIR/uploads` (`UME_RAG_UPLOAD_BACKUP_DIR`); S3 (`--backup-s3-credentials-file`, `--backup-s3-region`) sets `UME_RAG_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built in P0; `local` = a Docker volume and `deploy/upload-backup` (test hosts only: not off the host) |
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
 | `--host-memory 16\|24` | `16` | the §6.2 profile: 24 adds `compose.host-24g.yaml` and the 24 GB ClamAV confs (§5.5) to `COMPOSE_FILE` |
 | `--freshclam-proxy HOST:PORT` | none | `UME_RAG_FRESHCLAM_PROXY` and the mounted `freshclam.conf` (§5.5); the `mirror` network then reaches only the proxy (§6.1) |
-| `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-provider-url`, `--openwebui-data-dir` | none; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8) |
+| `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-provider-url`, `--openwebui-data-dir`, `--openwebui-oidc-client-secret-file`, `--openwebui-api-key-file`, `--openwebui-rag-client-id` | none; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8). `openwebui.env` is written once; a re-run sets only `OAUTH_CLIENT_SECRET` and `OPENAI_API_KEYS` in place when their files are given, never the JWT secret |
 | `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets); P0 builds `all` only |
 | `--proxy`, `--upstream-host`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway; in P0 `--proxy` prints the proxy routes instead of writing the nginx file, and `--rolling` is not built (P2) |
 
 It generates: the internal CA and service certificates (api, admin, worker, parser, postgres), the Data
 Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`, the pgBackRest repository passphrase (escrowed, §7.4), the key
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
-cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the crawl key pepper (`Security__CrawlKeyPepper`, worker, from P1a), the renderer WebSocket path secret (if adopted) and, with `--role data` on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker, and `deploy/.env` (non-secret settings only).
+cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the crawl key pepper (`Security__CrawlKeyPepper`, worker, from P1a), the renderer WebSocket path secret (`renderer.env`, §5.4) and, with `--role data` on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker, and `deploy/.env` (non-secret settings only).
 The Open WebUI admin API key (`OpenWebUi__AdminApiKey`) is not generated: an operator creates the service account and
 its key in Open WebUI and places the file (chat design §14.2): `--openwebui-host` generates the service account's credentials once (`WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME`,
 `WEBUI_ADMIN_PASSWORD` in `secrets/openwebui.env`; Open WebUI creates it as its first user on an empty store), and the
@@ -842,6 +848,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 | `perf.yml` | P1 (before the pilot) | weekly + before each release (dispatch) | new | R1 release test (§8.3) |
 | `scale.yml` | P2 | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §7): `tests/scale/Ume.Rag.FakeSites` (synthetic multi-host site), `tests/scale/Ume.Rag.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
 | `evaluation.yml` | P1 (before the pilot) | nightly, dispatch | new | evaluation sets against the **test** deployment with that deployment's own embedding profile (EU-hosted `text-embedding-3-large` in the pilot; on-prem BGE-M3 once it exists; runner on the test host, §12.4) |
+| `audit.yml` | P1 | daily 04:17, dispatch; no push or PR trigger | new | the dependency audits of `main` (§8.4): `dotnet list … --vulnerable`, `npm audit` and `pip-audit` (`parser.yml`'s two commands), so an advisory against unchanged code is found without waiting for a PR; the .NET and npm reports are read by `scripts/audit/audit.py`, shared with `verify.yml` (npm exceptions, dated and dev-only, in `scripts/audit/npm-audit-exceptions.txt`); runs on the self-hosted runner, so its schedule is on |
 | `entra.yml` | P0 (package 1) | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/`, which owns **only RAG's own registrations** (`ume-rag-admin` and the API registration; never the gateway's); deployer identity `Application.ReadWrite.OwnedBy` + `Group.Create` only, so admin consent, role assignments and client secrets stay manual steps (identity design §12) |
 
 ### 8.2 What runs on every PR (`verify.yml`, `parser.yml`)
@@ -1029,12 +1036,12 @@ decided form of the simplification pass (2026-10-30).
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend; with many backends this can be GBs inside a 3 GB Postgres limit | **Closed** (simplification pass §3, postponed H1): no dictionary in Postgres; decompounding in .NET (data-model §3.1) |
 | 7 | P0 Entra registrations | Identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | P0 = package 1 (RAG's own registrations) built (checklist #17); submitting it moved to P2 (Decisions table "P1 pilot sign-in") |
-| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), no pruning sidecar; ceiling `internal`; v0.12.3 by digest (§4.1), uid 1000 with `DATA_DIR=/data` on a host directory, secrets from an `env_file`, plain HTTP on loopback behind the proxy, its own `openwebui` network (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
+| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), no pruning sidecar; ceiling `internal`; v0.12.5 by digest (§4.1), uid 1000 with `DATA_DIR=/data` on a host directory, secrets from an `env_file`, plain HTTP on loopback behind the proxy, its own `openwebui` network (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 (for `internal` blobs; chat content keys only once A1 allows stored content, weakness review §4) | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, chat master keys only in api/admin, the blob master key in worker/admin and read-only in api (§6.3), long-lived keys escrowed (§7.4), no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
-| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.3 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |
-| 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | Stay on 13.6.1 with the gateway; upgrade both together |
+| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.5 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |
+| 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | **Decided (user, 2026-11-02, #339):** 13.6.4, ahead of the gateway's 13.6.1 within the same 13.6 family |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |
 | 15 | ClamAV updates | Plan §2 assumed a controlled mirror | **Decided: direct, no mirror**: freshclam updates from `database.clamav.net`, allowed through the host firewall for the `mirror` network only |
 

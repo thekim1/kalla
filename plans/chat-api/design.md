@@ -17,8 +17,8 @@ elsewhere: §20; questions: §21; unverified facts: §22; removed or deferred: �
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); "Pipeline" means
 `src/Ume.LlmGateway.Gateway/Pipeline/`. Open WebUI citations are `path:line` in `~/git/rag-platforms/open-webui` at
 `f7ac7ee` (**v0.12.5**, 2026-10-29); `ow/` means `backend/open_webui/`, `src/` the Svelte front end. The deployed pin
-is **v0.12.3** (`deploy/compose.openwebui.yaml`, §4.3): v0.12.5 citations outside §4.3 are not all re-checked at the pin
-and are re-checked at the next pin bump (2026-10-31). No new NuGet package
+is **v0.12.5** (`deploy/compose.openwebui.yaml`, §4.3; go-live pin review A-4, #457), the version these citations are
+at. No new NuGet package
 is proposed: language guessing, token estimates and SSE handling are small in-house code (gateway practice), so no
 package source had to be checked for this step.
 
@@ -280,8 +280,8 @@ The member is parsed with the rest of the body (§4.1 step 2), so a refusal come
 |---|---|
 | `outcome` | the turn's outcome as stored in `Messages.Outcome` (§6.2): `answered`, `answered-general`, `not-found` or `unavailable`. A refusal is an HTTP error and an interrupted stream an error chunk (§9.6), so neither has one |
 | `degraded` | `true` when the sources came from keyword search only (§10.2) |
-| `related_documents` | present when asked (§9.7); `[]` when nothing qualifies |
-| `follow_ups` | present when asked (§9.8); `[]` when skipped, timed out or failed |
+| `related_documents` | present when asked with 1 or more (§9.7; absent for 0); `[]` when nothing qualifies |
+| `follow_ups` | present when asked with 1 or more (§9.8; absent for 0); `[]` when skipped, timed out or failed |
 
 **Delivery.** Without streaming, `ume` is a top-level member of the `chat.completion` object, written when the
 follow-up call has returned or its budget has run out. When streaming, it comes in `chat.completion.chunk` objects with
@@ -344,12 +344,12 @@ prompt (a single user message starting with `### Task:`, `ow/config.py:2289`, `:
 itself (`ow/utils/task.py:17-28`), i.e. as a RAG question to our assistant; the contract test (§18.3) asserts that no
 such request arrives with the §4.3 settings.
 
-### 4.3 Open WebUI configuration (pilot, v0.12.3)
+### 4.3 Open WebUI configuration (pilot, v0.12.5)
 
-`deploy/compose.openwebui.yaml` pins **v0.12.3** by digest: v0.12.4 and v0.12.5 were under 7 days old when it was pinned.
-The settings below exist under the same names at v0.12.3 and the environment wins with
-`ENABLE_PERSISTENT_CONFIG=false` (to-verify #134); the line numbers in this table are at v0.12.3 (settled at the P0
-integration sync point). Elsewhere this document still cites v0.12.5 source.
+`deploy/compose.openwebui.yaml` and the AppHost pin **v0.12.5** by digest (A-4, #457; first pinned at v0.12.3, whose
+behaviour for these settings is unchanged at v0.12.5). The settings below exist under the same names and the environment
+wins with `ENABLE_PERSISTENT_CONFIG=false` (to-verify #134); the line numbers in this table were taken at v0.12.3
+(settled at the P0 integration sync point). Elsewhere this document cites v0.12.5 source.
 
 | Setting | Value | Why |
 |---|---|---|
@@ -572,14 +572,16 @@ third lines above are the `off` frame (default). The other levels replace them; 
 | `fallback` | as `supplement` | "Inga källor om detta har hittats. Du får svara med allmän kunskap, men ange inga fakta om kommunen, till exempel regler, avgifter, tider, beslut eller kontaktuppgifter; hänvisa i stället till kommunen. Gissa inte." |
 | `open` | "Använd källorna i användarens meddelande när de är relevanta. Du får också svara med allmän kunskap. Påstå aldrig att något gäller i Umeå kommun om det inte står i källorna; säg då att uppgiften bör kontrolleras med kommunen." | "Inga källor om detta har hittats. Svara med allmän kunskap. Påstå aldrig att något gäller i Umeå kommun; säg att uppgiften bör kontrolleras med kommunen." |
 
-Without sources the citation line is dropped too and no `<sources>` block is sent. General-knowledge text never
-carries markers (§9.2 is unchanged). The level never widens access: the same collections, levels and ceiling apply,
+Without sources the citation line and the `<sources>` data line are dropped too and no `<sources>` block is sent;
+"Hitta aldrig på källnummer. Skriv inga länkar, …" stays, so those rules hold at every level. General-knowledge text
+never carries markers (§9.2 is unchanged). The level never widens access: the same collections, levels and ceiling apply,
 and a `public` assistant runs the level its published version names: a level other than `off` on a `public`
 assistant was confirmed at publish (admin V36, #445), so the runtime does not override it.
 
-**No-sources frame** (conversational messages, §6.2, every `generalKnowledge` level): the first two lines are replaced by "Inga källor har hämtats
-för detta meddelande. Svara kort och vänligt. Svara inte på sakfrågor om kommunen utan källor; be användaren ställa
-sin fråga." and no `<sources>` block is sent.
+**No-sources frame** (conversational messages, §6.2, every `generalKnowledge` level): the rule lines, the citation
+line, the no-invented-numbers line and the `<sources>` data line are replaced by "Inga källor har hämtats för detta
+meddelande. Svara kort och vänligt. Svara inte på sakfrågor om kommunen utan källor; be användaren ställa sin fråga."
+(the first line and the language line stay; `PromptBuilder.Frame`), and no `<sources>` block is sent.
 
 The editor's `SystemPrompt` follows (tone, audience, domain rules); it cannot remove the frame (the admin API stores
 it separately and the frame is prepended at run time). P2: each linked skill's body is appended after it as a
@@ -677,7 +679,7 @@ WebUI use EU or on-prem models.
 | Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22). The check's "full 16k-token prompt" is **15,360 prompt tokens + `max_tokens` 1,024**: `ContextTokens` 16,384 minus the answer reserve (§6.3); `scripts/capacity/capacity.py answer-ttft` measures it (`--prompt-tokens` changes it); settled at the P0 integration sync point |
 | Idle timeout | `Chat:StreamIdleTimeout` **60 s** between events: the gateway relays a stream as long as the client is connected and has no idle limit (`OpenAICompatibleAdapter.cs:44`), so we impose one |
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
-| Retries | one 502/504 retry with the same ceiling and key (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
+| Retries | one 502/504 retry with the same ceiling and key after `Gateway:RetryDelay` (250 ms) (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
 | Client disconnect | `HttpContext.RequestAborted` cancels the gateway read and disposes the response; the gateway accounts it as `ClientCancelled` 499 (`GatewayRequestHandler.cs:418-422`); the partial answer is recorded with `Outcome = cancelled` (§12) |
 | Usage | from the final chunk's `usage` (stream) or the JSON body; `x-ume-cost-usd` exists only on complete JSON answers (`GatewayHeaders.cs:20-21`), so streamed `CostUsd` stays null in P1 and is reconciled from the gateway's usage feed by run id in P2 (§12.4) |
 
@@ -797,13 +799,13 @@ Decisions "Follow-up suggestions". Short next questions the user can click, writ
 | When | `ume.follow_ups` ≥ 1 and outcome `answered` or `answered-general`, after the model's answer ended without an error. **Skipped** (`[]`) for fixed texts (not found, unavailable), conversational messages, `Chat:FollowUpTimeout` 0, no `Settings.Chat.condenseModel`, a turn with ceiling `OnPrem` (no condense model, §5), and after an error chunk or a disconnect (nothing more is written) |
 | Model and call | one non-streaming `/v1/chat/completions` call to `Settings.Chat.condenseModel` (the platform's only task model, §23), `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 40 × N (≤ 200), `x-ume-run-id` = the message id, **`x-ume-step: follow-ups`** (opaque to the gateway, gateway-changes §7.1) |
 | Residency | the condense ceiling, `Condenser.Ceiling(answer ceiling)`: `Eu` until M2 and **never above the answer's ceiling**; `x-ume-residency` checked as §8.2 (outside → no suggestions, event 5003, outcome `residency`). `Gateway:MaxResidency` caps it as every call |
-| Input | user message: `Fråga: ` + the turn's search query (≤ 2,000 characters: the question, or its condensed form, §5, §5.1); `Svar: ` + the delivered answer without our caveat line and contact links, markers and Markdown links removed (`PromptBuilder.StripMarkers`, the §5 link rule), cut to its first 3,000 characters; `Källor: ` + the titles of the prompt's documents, cited first, ≤ 10, each ≤ 200 characters on its own line, neutralised as §7.2. The streaming writer keeps the delivered text only when follow-ups were asked |
+| Input | user message: `Fråga: ` + the turn's search query (≤ 2,000 characters: the question, or its condensed form, §5, §5.1); `Svar: ` + the delivered answer without our caveat line and contact links, markers and Markdown links removed (`PromptBuilder.StripMarkers`, the §5 link rule), cut to its first 3,000 characters; `Källor: ` + the titles of the prompt's documents, cited first, ≤ 10, each ≤ 200 characters on its own line, neutralised as §7.2 (the section is left out when there are no titles, as for `answered-general`). The streaming writer keeps the delivered text only when follow-ups were asked |
 | Language | the turn's language (§10.3; `answer.language = sv` forces Swedish), told to the model in the prompt's last line |
 | Budget | **`Chat:FollowUpTimeout` 2,000 ms** hard timeout from sending the call (deployment knob, as `Chat:CondenseTimeout`), no retry; 0 switches the feature off. `[DONE]` (or the JSON response) is delayed by at most this budget; time to first token is unchanged. The client's disconnect cancels the call |
-| Accept | the output split into lines; leading bullets and numbering (`-`, `*`, `•`, `1.`, `1)`) and quotes removed; a line is **dropped** (never edited) when it is shorter than 5 or longer than 150 characters, or contains a citation marker (`[` + digit), `http`, `www.`, `<`, `@`, a run of six or more digits (spaces and hyphens between them allowed: personal identity and phone numbers), `### Task`, a refusal pattern (§5), or repeats the question or an earlier line (case-insensitive). The first N lines left are the suggestions; none left → `[]` |
+| Accept | the output split into lines; leading bullets and numbering (`-`, `*`, `•`, `1.`, `1)`) and quotes removed; a line is **dropped** (never edited) when it is shorter than 5 or longer than 150 characters, or contains a citation marker (`[` + digit), `http`, `www.`, `<`, `@`, a run of six or more digits (spaces and hyphens between them allowed: personal identity and phone numbers), `### Task`, a refusal pattern (§5), or repeats the question (its raw text or the search query) or an earlier line (case-insensitive). The first N lines left are the suggestions; none left → `[]` |
 | Failure | timeout, gateway error, residency refusal or nothing accepted → `[]`; counted, never an error chunk, never retried |
 | Personal data | the call sends nothing a new party has not already received: the search query and the answer went to the gateway at the same or a wider ceiling in this turn. The prompt forbids personal data in the suggestions and the accept rule drops lines with digit runs, `@` or links; a name can still slip through, and then it reaches only the caller who wrote it. Necessary, not sufficient, as §7.4 |
-| Stored | **never**: no column, no log line, no trace attribute; the conversation writer gets nothing new. A suggestion the user clicks comes back as an ordinary question |
+| Stored | **never**: no column, no log line, no trace attribute; the conversation writer gets nothing new. In a stream the conversation write still follows `[DONE]`, so it also waits for this call. A suggestion the user clicks comes back as an ordinary question |
 | Usage | not in the response's `usage` (the answer call's only, §3.2); tokens in `rag.chat.tokens{step=follow-ups}`; the gateway charges the call to the team under its step, as condense |
 
 Prompt (system message; `{N}` and the language line filled in):
@@ -853,7 +855,8 @@ The model answers without sources (§6.2, §7.3). The platform writes a fixed ca
 as the degraded caveat: sv "*Jag hittar inget om detta i kommunens källor. Svaret bygger på allmän kunskap och kan
 vara fel för Umeå kommun.*", en "*I found nothing about this in the municipality's sources. This answer is based on
 general knowledge and may not apply to Umeå kommun.*" The text comes from us, never from the model, so it cannot be
-dropped or reworded. The assistant's contact links (§10.1) follow the answer as a Markdown list. No citations, no
+dropped or reworded. The assistant's contact links (§10.1; `NotFound.links`, else those of `Settings.Chat`, as for
+the text) follow the answer as a Markdown list. No citations, no
 `source` events; `Outcome = answered-general`, counted in `AssistantDailyTotals.GeneralAnswers`, not in
 `UncitedAnswers`. After a failed condense the §6.2 condense row applies in every level (answer from what was found).
 
@@ -959,15 +962,17 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
 2. **Conversation upsert**: `INSERT … ON CONFLICT (ClientId, SubjectId, ExternalChatId, AssistantId) DO UPDATE SET
    "LastMessageAt" = excluded."LastMessageAt", "ExpiresAt" = … RETURNING "Id"` (issued ids: `ON CONFLICT ("Id")`).
 3. **Bucket key** (§12.3) for each message with content (none in P1, mode `none`).
-4. `Seq` = `max(Seq) + 1` under a row lock on the conversation (`SELECT … FOR UPDATE`, in the same batch); the lock is
-   held for the batch only.
+4. `Seq` = `max(Seq) + 1` under a row lock on the conversation (`SELECT … FOR UPDATE`, in the same transaction); the
+   lock is held for the batch only.
 5. Encrypt (AES-256-GCM, AAD per data-model §7) the title (first question, ≤ 120 characters, on conversation insert),
    the messages, snippets (skipped in mode `none`: all of P1).
-6. One `NpgsqlBatch`: messages (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING` for user messages),
-   `MessageSources` (multi-row insert), **`AssistantDailyTotals`** upsert with the batch's aggregated deltas per
+6. Messages (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING` for user messages), one `MessageSources`
+   insert per source, then the **`AssistantDailyTotals`** upserts with the batch's aggregated deltas per
    (Europe/Stockholm day, assistant, client, level) (data-model §2.3: statistics never depend on rows retention
-   removes), placed as the **last** statement of the batch with its keys sorted, so the hot totals row lock is held for
-   one statement only, commit.
+   removes), placed **last** in sorted key order, so the hot totals row locks are held only until the commit that
+   follows. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
+   folding the lock, `Seq` and the inserts into one `NpgsqlBatch` is built only if the R1 performance test shows the
+   writer falling behind (#392, stream A A-L6; to-verify #20).
 7. Failure: the batch is retried after 2 s (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split
    and retried per turn; a turn failing alone three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids
    logged). While Postgres is down the queue fills, then the enqueue rule applies.
@@ -1064,7 +1069,7 @@ data, same retention; in P1, mode `none`, a comment is refused with `comment_not
 | Topic | Design |
 |---|---|
 | Source | `GET {OpenWebUi:BaseUrl}/api/v1/evaluations/feedbacks/list?order_by=updated_at&direction=desc&page=n` (admin only; 30 per page; `ow/routers/evaluations.py:366`, `:399-422`; router prefix `ow/main.py:913`). The list returns `FeedbackUserResponse` **without the chat snapshot** (`ow/models/feedbacks.py:51-60`, `:121-127`); `/feedbacks/all/export` (with snapshots) is never used |
-| Credential | an Open WebUI service account with role `admin` and an API key (`sk-…`), stored as secret `OpenWebUi__AdminApiKey` (per instance `OpenWebUi:Instances:<name>:AdminApiKey`); Open WebUI restricts every API key to the list endpoint (§4.3). The account is Open WebUI's first user (`WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`, §4.3); `deploy/openwebui-feedback-key.sh` switches password sign-in on, mints the key, checks it (list 200, other routes 403), writes the single-instance secret file `OpenWebUi__AdminApiKey` and switches password sign-in off again; a re-run rotates the key. The importer's configuration names wait for stream B (L6) |
+| Credential | an Open WebUI service account with role `admin` and an API key (`sk-…`), stored as secret `OpenWebUi__AdminApiKey` (per instance `OpenWebUi:Instances:<name>:AdminApiKey` once a second instance exists); Open WebUI restricts every API key to the feedback list and per-id feedback routes (§4.3), so the same key prunes (§13.3). The account is Open WebUI's first user (`WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`, §4.3); `deploy/openwebui-feedback-key.sh` switches password sign-in on, mints the key, checks it (list 200, other routes 403), writes the single-instance secret file `OpenWebUi__AdminApiKey` and switches password sign-in off again; a re-run rotates the key. The importer runs only when `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` and `OpenWebUi:ClientId` (the instance's registry client) are set; a refused prune ends the run as `prune-failed:<status>` after the import |
 | Schedule | every 15 minutes in the chat role, one runner across instances via `pg_try_advisory_lock`; the same run deletes Open WebUI feedback older than `ClientRetentionDays` (§13.3) |
 | Watermark | `chat."FeedbackImportState"` (`ClientId` PK, `WatermarkUpdatedAt bigint`, `LastRunAt`, `LastOutcome`, `Unmapped int`; §20); pages until an item's `updated_at` < watermark − 1 h (overlap for clock skew), max 50 pages per run |
 | Fields used | `id`, `user_id`, `updated_at`, `data.rating` (1/−1), `data.details.rating` (1–10, optional), `data.reason`, `data.comment`, `data.model_id`, `meta.chat_id`, `meta.message_id` (`ow/models/feedbacks.py:77-90`, front end `ResponseMessage.svelte:506-524`) |
@@ -1143,10 +1148,10 @@ retrieval) + (time our first content byte is flushed − time the gateway's firs
 
 ### 16.2 How it is measured
 
-1. **Micro-benchmarks** (`benchmarks/Ume.Rag.Benchmarks/ChatBenchmarks.cs`, BenchmarkDotNet as the gateway's
-   `PipelineBenchmarks`): request parsing (Open WebUI body with 40 messages), `PromptBuilder` with 10 documents and 8,000
-   tokens, `TokenBudget`, `AnswerFilter` over a 2 KB answer fed in chunks of 1, 7 and 50 characters, chunk
-   re-serialisation, `LanguageGuess`; allocation per message is the regression gate
+1. **Micro-benchmarks** (`tests/Ume.Rag.Benchmarks/ChatTurnBenchmarks.cs` and `ChatStreamBenchmarks.cs`, local
+   only, BenchmarkDotNet as the gateway's `PipelineBenchmarks`): request parsing (Open WebUI body with 40 messages),
+   `PromptBuilder` with 10 documents and 8,000 tokens, `TokenBudget`, `AnswerFilter` over a 2 KB answer fed in chunks
+   of 1, 7 and 50 characters, chunk re-serialisation, `LanguageGuess`; allocation per message is the regression gate
    (`docs/performance-improvement-plan.md:94-101`).
 2. **Interaction audit** (copy of `benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-40`, Npgsql and Redis
    activities under the request activity): a warm chat message issues **0 Postgres statements from the chat role**
@@ -1173,7 +1178,7 @@ totals).
 | `rag.chat.ttft` (existing name) | histogram, ms | `level`, `client_kind`, `outcome` |
 | `rag.chat.overhead` | histogram, ms | `client_kind` |
 | `rag.chat.stage.duration` | histogram, ms | `stage` (`auth`, `policy`, `condense`, `retrieve`, `prompt`, `gateway_headers`, `first_event`) |
-| `rag.chat.requests` | counter | `outcome` (`answered`, `answered-general`, `not-found`, `unavailable`, `refused`, `error`, `cancelled`), `level`, `client_kind`, `stream`, `conversational` |
+| `rag.chat.requests` | counter | completed turns: `outcome` (`answered`, `answered-general`, `not-found`, `unavailable`; refused, failed and cancelled turns are not counted), `level`, `client_kind`, `stream`, `conversational` |
 | `rag.chat.condense` | counter | `kind` (`follow-up`, `long`, §5.1), `outcome` (`used`, `skipped`, `skipped_self_contained`, `disabled`, `timeout`, `error`, `residency`, `rejected`); for `long` every outcome but `used` means the 2,000-character fallback |
 | `rag.chat.follow_ups` | counter | `outcome` (`used`, `empty`, `skipped`, `timeout`, `error`, `residency`) (§9.8) |
 | `rag.chat.related_documents` | histogram | entries per answer (§9.7) |
@@ -1193,8 +1198,9 @@ totals).
   (knowledge §15), `rag.chat.prompt`, `rag.chat.answer` (HTTP span); attributes: assistant id, level, client kind,
   history mode, coverage, degraded, outcome, token counts, cited count, condense outcome, config version. **Never**
   message text, condensed queries, follow-up suggestions, titles, comments, snippets or URLs of non-`public`
-  documents. The long-question and follow-up calls are child spans `rag.chat.condense` (attribute `kind=long`) and
-  `rag.chat.follow_ups`.
+  documents. rag-api has no chat `ActivitySource` yet: today a turn's trace is the request span and the HTTP client
+  span of each gateway call (condense, long-question condense, follow-ups, answer), and the named spans and their
+  attributes come with that source; until then the condense and follow-up steps are covered by the counters above.
 - **Logs**: `[LoggerMessage]` as the gateway; events: gateway error (a refused chat call: one Warning with status, the
   gateway's error code and `x-request-id`), residency/echo refusal, condense
   failure (reason), long-question fallback (reason, message id; §5.1), stream interrupted, writer batch failure, dropped turn (message id), import run summary. Scopes: `ConfigVersion`, `AssistantId`, `ClientId`, `Classification`, `ConversationId` hash
@@ -1375,7 +1381,7 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
 | `ingestion-worker/design-processing.md` §14.8 | answer-level evaluation (§18.8) runs in `rag-admin` (run kind `answers`), judge `Settings.EvaluationJudgeModel`; the worker references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` |
 | `platform/repo-and-deployment.md` §2.2, §3 | `Microsoft.Extensions.AI.OpenAI` not needed by the chat role; settings `Chat:*` (`PublishApiReference`, `CondenseTimeout` 600 ms, `GatewayHeadersTimeout` 15 s, `StreamIdleTimeout`, `MaxAnswerDuration`, `WriterEnqueueTimeout`, `CharsPerToken`), `Gateway:RequireDelegationEcho`, `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey`; `Gateway:AttributionMode` and `Gateway:SendResidencyCeiling` removed (always on) |
 | `platform/repo-and-deployment.md` §6.1, §6.3, §7.1 | egress `rag-api` → Open WebUI host (feedback import and pruning); secrets: the `OnPrem`, `Eu` and open delegating keys of `rag-api` (and `rag-admin` for the test panel and §18.8), `OpenWebUi__AdminApiKey`, `Security__ConversationIdKeys__<kid>` (made by `init-deployment.sh`, except the Open WebUI key which an operator creates) |
-| `platform/repo-and-deployment.md` §1, §4.1, §12.8 | `benchmarks/Ume.Rag.Benchmarks/ChatBenchmarks.cs`; overhead run under `benchmarks/release-test`; `compose.openwebui.yaml` env of §4.3; no pruning sidecar |
+| `platform/repo-and-deployment.md` §1, §4.1, §12.8 | `tests/Ume.Rag.Benchmarks/ChatTurnBenchmarks.cs`; overhead run under `benchmarks/release-test`; `compose.openwebui.yaml` env of §4.3; no pruning sidecar |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway | streams with configurable usage chunk, broken stream, stall, missing `[DONE]`; echoes `x-ume-session`; refuses requests without `x-ume-max-residency`; modes `503` + `Retry-After` and `403 max_residency_not_met` |
 | `platform/repo-and-deployment.md` §9 | metrics of §17 |
 | `archive/area-plans/admin.md` §4–§5 | publish/audience validation: an assistant offered to a history-keeping client needs a gateway model served at max(level, client ceiling) (§8.2); Assistants form: condense toggle, history window, context and output tokens, temperature, language mode, not-found texts sv/en + contact links; answer-level evaluation on the assistant page (§18.8); test panel shows raw vs filtered answer; **Feedback page in P1** (§14.4); Clients page: warning when Open WebUI headers are missing (no task model) |

@@ -129,8 +129,9 @@ parse=auto(rule=regulations@1)[text-layer:1-38,docling-tables:39-40,docling-ocr:
 parse=html(profile=www.umea.se@3)
 ```
 
-Grammar: `parse=<route>(rule=<name>@<v> | profile=<host>@<v>)[<strategy>:<page ranges>,…;rerender:<pages>;missing:<pages>]`,
-pages compressed to ranges, `…` when truncated. Non-paged inputs: `parse=auto[docling-docx]`, `[docling-image]`. The
+Grammar: `parse=<route>(rule=<name>@<v> | profile=<host>@<v> | preset=<name>@<v>)[<strategy>:<page ranges>,…;rerender:<pages>;missing:<pages>]`,
+pages compressed to ranges, `…` when truncated. `preset=` names the built-in HTML preset an HTML page was extracted
+with when no site profile applies. Non-paged inputs: `parse=auto[docling-docx]`, `[docling-image]`. The
 same string is the fact `parse.strategy` and `Documents.ParseStrategy`.
 
 ### 3.5 Parse rules and observations
@@ -363,6 +364,9 @@ Upload replacements keep the document id (6b), so this survives file revisions t
 - **Date** (`SourceModifiedAt`), first available: the visible date from the site profile's date pattern (§3.7); a
   path-rule `date`; the sitemap `lastmod` when 6b marks it reliable for the host; the document's own metadata (PDF/Office
   properties); HTTP `Last-Modified`. CMS `Last-Modified` is often the render time, so it comes last.
+  The two fetch dates are kept on the document (`Documents.SitemapLastMod`, `Documents.HttpLastModified`), so `parse`
+  and reprocess jobs, which don't fetch, and the stage preview build the same input (one shared stage-input builder
+  in `Processing/`).
 - **Description and keywords** from the page (§3.7) are stored as document metadata (`Documents.Description`,
   `Documents.Keywords`, §19), shown with citations and available as filters; they are not chunk text.
 
@@ -399,7 +403,7 @@ and names.
 | Type | Candidate (regex, with `\b`-style boundaries: no digit, letter or `-` directly before/after, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
 |---|---|---|
 | `personnummer` | `(?<c>18\|19\|20)?(?<yy>\d{2})(?<mm>\d{2})(?<dd>\d{2})(?<sep>[-+]?)(?<nnn>\d{3})(?<k>\d)` | `mm` 01–12; `dd` valid for the month and year (leap years with the century: given, else the latest century with date ≤ today, minus 100 years when `sep = +`); **Luhn** over the 10 digits `yymmddnnn k`; 10-digit form **without** separator only with a keyword (`personnummer`, `pers.nr`, `pnr`, `personnr`, `födelsenummer`) within 30 characters before it |
-| `samordningsnummer` | same | as above with `dd` 61–91 (day + 60) |
+| `samordningsnummer` | same | as above with `dd` 60–91 (day + 60); month `00` or day `60` (an unknown month or day, as in Skatteverket's test numbers) skips the date check, Luhn still applies |
 | `email` | `[\p{L}\p{N}._%+-]{1,64}@[\p{L}\p{N}.-]{1,253}\.\p{L}{2,24}`; obfuscated `namn[at]domän.se`, `namn (at) domän.se`, `snabel-a` | domain has a dot and a valid TLD shape |
 | `phone` | `(?:\+46\|0046\|0)[\s-]?\(?0?\)?(?<area>[1-9]\d{0,3})[\s-]?\d{2,3}(?:[\s-]?\d{2,3}){1,3}` and `\+\d{1,3}[\s\d-]{6,16}` | national significant digits 7–9 (after the leading 0); mobile `7[02369]` with 9 digits; not a personnummer match; not preceded by `bankgiro`, `plusgiro`, `bg`, `pg`, `org.nr`, `OCR`, `fakturanr` within 20 characters |
 
@@ -485,10 +489,10 @@ example page's contact block (3 contact values) is below the name-check threshol
   `pii.clear`. The worker sets `Documents.PiiClearedAt`, `PiiClearedBy` and `PiiClearedCounts` (= the held set's
   `PiiCounts`) and releases the document's `held` set. Flag and counts stay on `ChunkSets`.
 - **Carry-over and re-flag**: when a new set of a cleared document is swapped in (new content, new pipeline version),
-  it is covered by the clearance if no type that can flag has a count above the document's `PiiClearedCounts` value;
-  otherwise the new set is flagged again (`Reflag`) and held. Accepted gap: one personnummer replaced by another keeps the count; keyed fingerprints
+  it is covered by the clearance if no type that can flag has a count above the document's `PiiClearedCounts` value
+  and its NER is not `pending` (unchecked names are never covered: fail closed); otherwise the new set is flagged again (`Reflag`) and held. Accepted gap: one personnummer replaced by another keeps the count; keyed fingerprints
   are a P3 option (§18).
-- **Event 5103 `rag.pii.flagged`** (Information; SIEM rule only for sets in a `public` collection with a personnummer)
+- **Event 5103 `rag.pii.flagged`** (Warning, as `docs/security-events.md`; SIEM rule only for sets in a `public` collection with a personnummer)
   on every transition to flagged: `DocumentId`, `ChunkSetId`, `Classification`, `Types` (types that fired), `Counts`
   (numbers only), `SourceId`, `RunId`, `Reflag` (bool). Never values or text.
 
@@ -699,7 +703,7 @@ top 10). `recall@10` = share with a rank, reported with its counts (`found / que
 (0 without). Comparison with the previous run of the collection: questions won, lost and net, listed so an editor can
 open the lost ones. No intervals or significance tests; a blocking gate is reconsidered only when measured run-to-run
 variance shows the numbers can tell versions apart (§14.2). With retrieval deterministic for a fixed index, a re-run
-reproduces every number (test, §17).
+reproduces every number except the measured latencies (`search`), which the test leaves out (§17).
 
 Coverage (weakness review §2): per question the run also records the coverage status, best distance and best keyword
 score (knowledge design §7). Over `human` questions the report shows false not-found (answerable questions with `low`)
@@ -731,9 +735,12 @@ public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // wor
 ```
 
 The harness measures retrieval; answers are judged by people. For the go-live gate, `scripts/grading/grading.py` sends
-each gold-set question (§13.4) through the chat API as the pilot assistant and writes question, answer, citations and
-coverage to a CSV; reviewers grade it in a spreadsheet, and the graded file with its totals is attached to the go-live
-decision. P1 has no grading UI.
+each gold-set question (§13.4) through the chat API as the pilot assistant and writes question, answer, citations
+(title and URL) and the detected outcome to a CSV (English headers); the outcome is read from chat design §10's fixed
+texts (plus the assistant's own not-found texts, `--not-found-text`) and zero usage without citations. The questions
+come from a file (saved admin export pages, a JSON list or CSV), since the admin API is a cookie-only BFF. Reviewers
+grade it in a spreadsheet (grade values in Swedish or English), and the graded file with its totals is attached to the
+go-live decision. P1 has no grading UI.
 
 ### 14.1 Publish report
 
@@ -903,7 +910,8 @@ applied then and are not repeated.
   quality on our fixtures; SUC 3.0 terms for derived weights.
 - Gateway embeddings: maximum inputs and tokens per request for the on-prem BGE-M3 provider; whether BGE-M3 is served
   without instruction prefixes; throughput (6a §23). Gateway side answered (to-verify #43): no
-  input or token limit per request, but the whole request is checked against `ContextWindow` (§11 Batching).
+  input or token limit per request; from v0.9.0 each input, not the whole request, is checked against `ContextWindow`
+  (§11 Batching).
 - The parser's `text-layer` fast path output: block shape, heading levels and whether it labels furniture (§4.2).
 - SmartReader as fallback for hosts without a profile; the Sitevision preset against the ≈ 20 saved umea.se pages;
   the example page's breadcrumb path on the live page. Preset and breadcrumb done (to-verify #31,

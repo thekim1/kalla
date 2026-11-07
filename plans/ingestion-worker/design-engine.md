@@ -158,8 +158,9 @@ source type and its stages with their code versions and declares its parameters:
 - `rules` holds the cross-parameter rules (§4 rule 3) as JSON Schema `if`/`then` over the parameters with defaults
   applied.
 - `collectionDefaults` holds the collection defaults of §13.1 (`recency` only).
-- **Templates carry no labels.** Admin UI text lives only in `labels.ts` (AGENTS.md), so the form takes each
-  parameter's Swedish label from there by parameter name.
+- `labels` (optional) names a parameter whose name says too little (`pathRules`: `en` Topics, `sv` Ämnen); the
+  catalog serves it as `x-labels` in `paramsSchema`, and a label for an unknown parameter fails the template check.
+  The form takes a parameter's label from `labels.ts` by name first (AGENTS.md), then from `x-labels` (admin §6.3).
 - `TemplateCatalog.BuiltIn` (`Ume.Rag.Pipelines`) embeds the template files as resources, so the admin and the
   worker validate against the same versions without reading the database. The migration service seeds them into
   `config` (§13.1).
@@ -760,7 +761,7 @@ jobs count as Failed; `degraded` counts as Updated.
 | Step | Who | What |
 |---|---|---|
 | 1 | admin | validate the draft (§4 incl. live support); enqueue the plan (`preview`, `kind = publish-plan`, dedup `plan:{pipelineId}`), storing `PlanJobId` and the definition's hash |
-| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2); the cost is 0, because the worker has no `SELECT` on `config."GatewayModels"`, and the time comes from fixed, conservative rates (§18), with parser documents recognised by the `ParseStrategy` prefix `parse=auto` |
+| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2); the cost is 0 (P1's plan reads no prices, although the worker may read `config."GatewayModels"` for evaluation), and the time comes from fixed, conservative rates (§18), with parser documents recognised by the `ParseStrategy` prefix `parse=auto` |
 | 3 | user | sees plan and forecast; confirms or cancels. Confirm is refused if the draft changed since the plan |
 | 4 | admin | one config transaction: version → `published` (`PublishedAt`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 5 | worker | `EnsureCurrent` per live document: new sets are written not live next to the live ones and **swapped per document** (§14); unaffected documents are re-keyed (`unchanged`) |

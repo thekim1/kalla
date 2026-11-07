@@ -70,6 +70,11 @@ admin host passes them to the shared core (test panel, §4.5).
 
 ### 2.2 In-process interface (Chat API → knowledge role)
 
+While the chat role runs only with the knowledge role in its process, the chat code calls `KnowledgeService`'s methods
+below directly: the `IRetriever` interface was removed while it had a single implementation (#411), and the records
+moved to `Ume.Rag.Domain/Retrieval/RetrievalContract.cs`. The interface returns with `HttpRetriever` when the roles are
+split; `IRetriever` in this document names that port and, until then, `KnowledgeService`'s methods.
+
 ```csharp
 // Ume.Rag.Domain
 public interface IRetriever
@@ -170,7 +175,7 @@ download grant; tokens and Open WebUI user JWTs are not accepted, since P1 calle
 | Field | Type | Default | Validation (400 `invalid_request`, field errors as `ApiFaultException.Validation`) |
 |---|---|---|---|
 | `query` | string | required | after normalisation (§5.1) 1–2,000 characters; at least one letter or digit |
-| `collections` | string[] (slugs) | all collections the caller may search (P2), max 20 | 1–20 distinct slugs, each ≤ 100 characters; an invisible slug → **404** `collection_not_found` (§4.4) |
+| `collections` | string[] (slugs) | all live collections the caller may search, capped at 20 (in P1 only `internal` clients pass a direct collection decision, identity §4.3 step 10) | 1–20 distinct slugs, each ≤ 100 characters; an invisible slug → **404** `collection_not_found` (§4.4) |
 | `top_k` | int | 10 | 1–50 |
 | `mode` | `hybrid` \| `vector` \| `keyword` | `hybrid` | enum (gateway `JsonStringEnumConverter(allowIntegerValues: false)`, `WebDefaults.cs:83`) |
 | `filters.tags` | string[] | none | ≤ 20 items, each 1–100 characters; **any-of** (`Tags && $`) |
@@ -354,7 +359,8 @@ At most 20 collections per query (an assistant with more is refused on save by t
 - **Allowed levels** `$levels` = `{ l : l ≤ client ceiling ∧ l ≤ effective level }`. Chunk level = document level ≤
   collection level (data-model §6 rule 4), so this never removes a legitimate chunk; it stops a mislabelled or
   mislabelled chunk from reaching a client above its ceiling. All levels live in one database (rows carry a plain
-  `Classification`); one candidate run per embedding profile (P1: one profile, so one run).
+  `Classification`); one candidate run per embedding profile (P1: one profile, so one run: the first resolved
+  collection's profile is searched, and a collection on another profile is skipped and logged, `profile_mismatch`).
 
 ### 4.4 404 versus 403
 
@@ -428,7 +434,8 @@ download path, binding the download to the user.
   for the ranks `MarkCited` receives: only the results actually cited (chat §9.5). Flushed every 30 s or at 5,000 keys
   through `content.rag_count_retrievals(...)` (`SECURITY DEFINER`, data-model §12.3), off the request path, which
   upserts its keys in sorted order so overlapping flushes of several instances cannot deadlock; a crash loses at most
-  30 s of counts. Keyed by `(DocumentId, TextHash)`, not chunk id, so counts survive
+  30 s of counts, and an increment that lands in a batch while the flush is writing it may be lost (counters only,
+  no lock on the request path). Keyed by `(DocumentId, TextHash)`, not chunk id, so counts survive
   re-chunking (processing §6.5; data-model change §18).
 - **Query text is never stored or logged**: not in Postgres, logs, traces, metrics, problem details or cache keys
   (the cache key is an HMAC, §5.4). A telemetry-scan test (repo-and-deployment §9) runs a retrieval with a marker
@@ -479,7 +486,8 @@ traceparent: …
   `gateway-query` with `RemoveStandardResilienceHandler()` (`Extensions.cs:51-68`), as the gateway does for calls with
   their own timeout.
 - Attempt timeout `Retrieval:EmbeddingTimeout` **1,500 ms**; **one** retry after 50 ms only for connection failures and
-  502/503 without `Retry-After`, within a total of 2,000 ms. No retry for 4xx, 429 (`rate limit`), 402 (budget), 503
+  502/504 (the shared gateway retry, Decisions "Gateway release 1 and shared Keycloak as built") and 503 without
+  `Retry-After`, within a total of 2,000 ms. No retry for 4xx, 429 (`rate limit`), 402 (budget), 503
   with `Retry-After` (in-ceiling targets drained or circuit-open: degrade at once) or a failed response check. `403
   max_residency_not_met` (no embedding target within the profile's ceiling) is a configuration fault: degrade, log at
   Error.
@@ -623,11 +631,13 @@ before the pilot crawl"). .NET chooses the stop list and passes it as `$4`; Post
 query vector with `ts_delete`, since only its `swedish` stemmer knows the query text's lexemes. The statistics are
 kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks, read
 with the §6.4 chunk counts); a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
-a term. Scopes under 1,000 chunks get no stop list: K is cheap there and a share says little. A query of stop lexemes
-only gives no candidates, like stop words. No Postgres configuration changes. The api reads the counts and statistics
-once at start: readiness waits for that attempt, read or failed, for at most 60 s. With no statistics held, a failed
-read is retried after 1 minute, not by each search, and K runs with every term meanwhile; with statistics held, they
-are kept until the next 10-minute read (#338).
+a term. A collection linked with topics counts with its whole chunk count here (floor and share alike), since the
+statistics are per whole collection and a topic's count would inflate the shares; only the §6.4 size count is
+topic-filtered. Scopes under 1,000 chunks get no stop list: K is cheap there and a share says little. A query of stop
+lexemes only gives no candidates, like stop words. No Postgres configuration changes. The api reads the counts and
+statistics once at start: readiness waits for that attempt, read or failed, for at most 60 s. With no statistics held, a
+failed read is retried after 1 minute, not by each search, and K runs with every term meanwhile; with statistics held,
+they are kept until the next 10-minute read (#338).
 
 Compared with data-model §3.3: fusion, dedup and the final `LIMIT` move to .NET (§6.5); the `ParentId`/`ParentText`
 join is gone (flat chunks; sections come from §9); `ChunkSetId`, `Ordinal`, `CollectionId` and the document's
@@ -685,9 +695,11 @@ HNSW applies the `CollectionId` filter **after** the graph walk; with `relaxed_o
 walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Iterative Index Scans",
 `src/hnsw.c:102-104`). For a small collection inside a large shared index that means poor recall or a long walk. So:
 
-- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection), from
-  `SELECT "EmbeddingProfileId", "CollectionId", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND "Kind" =
-  'child' GROUP BY 1, 2` every 10 minutes, so a scope's share *s* of its profile's index is known.
+- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
+  `SELECT "EmbeddingProfileId", "CollectionId", "Tags", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND
+  "Kind" = 'child' GROUP BY 1, 2, 3` every 10 minutes, so a scope's share *s* of its profile's index is known. A
+  collection linked with topics counts only its chunks carrying one of the link's tags (a chunk with two of them counts
+  once), so a narrow topic in a large collection falls under the exact-search limit (Decisions "M-2 open design calls").
 - Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a
   B-tree scan on `CollectionId` and a top-100 sort over at most 10,000 distances. Small collections take this path.
   The pilot's umea.se collection (≈ 14,300 documents) is larger, so the pilot searches it through HNSW. Larger → HNSW
@@ -700,12 +712,19 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
 - **Index health.** Every chunk enters the index through the swap's `UPDATE` (chunks are written hidden, data-model
   §3.2), and re-processing leaves dead entries behind; on the pilot (10,074 chunks after re-crawls) the walk at
   `ef_search` 100 returned a best distance of 0.454 where the exact best was 0.246, and `REINDEX` restored it (measured
-  2026-11-02). So the worker checks each profile's index: nightly, and after a sync run that made more than 10 % of the
+  2026-11-02). So the worker checks the index of each profile with more than `exactScanMaxChunks` live chunks in
+  total (no other can have an HNSW-searched scope): nightly, and after a sync run that made more than 10 % of the
   profile's chunks live, it takes 200 random live child chunks of each HNSW-searched scope as queries (their own
   embeddings), compares the approximate top 10 with the exact top 10, and records recall as
-  `rag.retrieval.hnsw_recall{profile}`. Below **0.95** it runs `REINDEX INDEX CONCURRENTLY` on that profile's index
+  `rag.retrieval.hnsw_recall{profile}`. The scopes are those that can be enumerated: each live collection alone, and
+  each distinct scope of an active assistant's published links, with their topics; sized and chosen by
+  `ScopeSizeCache`'s own rule (topic-filtered counts), so the check and retrieval cannot drift apart. A direct caller's
+  own collection list, its "all searchable" default and a request narrowed to a subset of the links are not sampled.
+  The metric is the worst scope's recall, and each scope below the floor is logged by name. Below **0.95** it runs
+  `REINDEX INDEX CONCURRENTLY` on that profile's index
   (one at a time, `command` class, audited as a system action; the worker role holds `MAINTAIN` on
-  `content."Chunks"` (Postgres 17) and the statement runs with `statement_timeout = 0`) and measures again. An interrupted
+  `content."Chunks"` (Postgres 17) and the statement runs with `statement_timeout = 0` on its own unpooled
+  `ConnectionStrings:ragdb-maintenance`, else `ragdb`) and measures again. An interrupted
   rebuild leaves an invalid `…_ccnew` index the worker cannot drop; the migration service (the owner) drops invalid
   `IX_Chunks_Embedding_*_ccnew*` indexes on every run. Both bounds are
   `Settings.Retrieval.hnswRecallFloor` and `hnswCheckSample`.
@@ -778,8 +797,10 @@ in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
 | `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 1.5 s (covers the POC model's p95 of 1.4 s, #421) | input tokens |
 
 Both go through the `gateway-rerank` client with the call's residency ceiling (the assistant's turn ceiling) and
-`x-ume-step: rerank`; the 502/504 retry applies. Placement: after fusion and dedup, before the per-document cap,
-over the top `rerankCandidates` (20) whose texts are read in one extra statement. Unscored passages keep their fused
+`x-ume-step: rerank`; the 502/504 retry applies. Only a caller with a ceiling asks for it: chat and the test panel (the
+turn's ceiling) and the evaluator's `hybrid-rerank` variants (the collection level's, capped at `Eu`).
+`POST /v1/retrieve` with an `assistant_id` keeps the fused order, since that route has no turn ceiling to pass.
+Placement: after fusion and dedup, before the per-document cap, over the top `rerankCandidates` (20) whose texts are read in one extra statement. Unscored passages keep their fused
 order below the scored ones. Timeout or error → fused order, `degraded: "rerank_unavailable"`, logged once per model
 and reason. The evaluation's `hybrid-rerank` variants compare with and without (§13 of the processing design).
 
@@ -967,7 +988,8 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 ```
 
 `recency` is `null` (off) or `{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }` (the `website` template's value, §6.5); `kinds`
-are `DocumentType` values. The first five change rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
+are `DocumentType` values (an empty list means every type; the admin refuses one, V16). The first five change
+rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
 collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only values live in
 `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 % (§6.4),
 `expandTotalMaxTokens` 8,000; P2 adds `rerankCandidates` and `coverageMinRerankScore` (§6.7). The grant lifetime is a
@@ -1124,9 +1146,10 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 ### 16.3 API and contract (`Ume.Rag.Api.Tests`, WebApplicationFactory + FakeGateway)
 
 - In-process chat path and `HttpRetriever` (roles split) return identical results.
-- **Contract test evaluator == API** (processing §13.5): the smoke fixture collection; for each of the 30 questions the
-  evaluator's `RetrievalEngine` call (`Collections` scope, hybrid, k = 10, no filters) and `POST /v1/retrieve`
-  (`rag-internal`, `expand: none`) return the same chunk ids in the same order. FakeGateway embeddings are
+- **Contract test evaluator == API** (processing §13.5; in `Ume.Rag.Worker.Tests`, which hosts rag-api too, §16.4): the
+  smoke fixture collection; for each of the 30 questions the evaluator's `RetrievalEngine` call (`Collections` scope,
+  hybrid, k = 10, no filters) and `POST /v1/retrieve` (`rag-internal`, `expand: none`) return the same chunk ids in the
+  same order. FakeGateway embeddings are
   deterministic, so any difference is wiring (settings, scope, normalisation, diversity), not model noise.
 - Download: bytes equal the uploaded file; tampered ciphertext segment → aborted response and `integrity` metric;
   `Content-Disposition`/`nosniff`/CSP headers; uploaded HTML served as attachment; `url` document → 404
@@ -1143,7 +1166,8 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
   embedding quality. The smoke collection's own `coverageMaxDistance` is 0.85 (FakeGateway distances, §7); the
   evaluator == API contract test (§16.3) runs over the smoke set; both live in `Ume.Rag.Worker.Tests`, which hosts
-  rag-api too.
+  rag-api too. Only the smoke itself carries the `EvaluationSmoke` trait and runs in that job; the contract test runs
+  in the `backend` job.
 - `evaluation.yml` nightly (P1, before the pilot) on the test host with the pilot's real embedding model through the
   gateway (self-hosted runner, open item R1 in the register): the evaluation sets of every published collection plus
   the smoke set; advisory trend in `rag.evaluation.recall_at_10`, no gate. Reports lead with the `human` gold-set
@@ -1159,7 +1183,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 
 | Case | Expected |
 |---|---|
-| Query with SQL/tsquery syntax (`'); DROP`, `a & !b`, `<->`, `'`, `\`, 2,000 × `&`) | treated as text (parameter → `to_tsvector` → lexemes), no error, no plan change |
+| Query with SQL/tsquery syntax (`'); DROP`, `a & !b`, `<->`, `'`, `\`, 2,000 × `&`; `'`, `\` and `&` alone are 400 by §3.1's letter-or-digit rule, so the test pairs each with a word) | treated as text (parameter → `to_tsvector` → lexemes), no error, no plan change |
 | 20 collections + all filters + top_k 50 + expand section | within the §11 budget |
 | Slug of a collection above the client ceiling / outside the audience / unpublished / deleted | identical 404 bodies; 5005 or 5002 with the real reason |
 | Document id above the allowed levels, of an invisible collection, malformed | identical 404 |
