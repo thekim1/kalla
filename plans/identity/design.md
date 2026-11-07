@@ -1077,6 +1077,28 @@ accounts is open (§16).
 **P2: Entra.** The same clients become the Entra registrations of §12 (`ume-rag-admin`, `ume-rag-open-webui`; package 2
 for `rag-api`); switching is `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings.
 
+### 11.3 Shared sign-in with the gateway (2026-11-07, #468)
+
+Decided by the user (Decisions "Shared sign-in with the gateway"): one group membership gives a person their roles in
+both products, with **no code in either product referring to the other's roles**.
+
+- **Keycloak (the shared realm `ume`):** operator-made groups carry realm-role mappings for both systems, e.g.
+  `ume-admins` → `gateway-admin` + `rag-platform-admin`, `ume-department-admins` → `department-admin` +
+  `rag-department-admin`. The RAG-only roles (`rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor`) are mapped
+  to groups the same way. These groups are **operator data** (the admin console or a site file such as
+  `additions/90-groups.json`), never in `rag-additions.json`: a RAG file that maps to `gateway-admin` would fail on a
+  standalone Keycloak where that role does not exist.
+- **One client per system:** `ume-admin` (gateway) and `ume-rag-admin` keep their own role scope mappings, so each
+  token carries only its own system's roles in `roles`. Ume.Rag keeps reading `rag-*` roles; the `rag-` rule for role
+  groups (§1.4, #413) stays.
+- **Direct Entra route:** one app registration per product with app roles named as that product's roles; the same
+  Entra security group is assigned to `gateway-admin` on the gateway's app and to `rag-platform-admin` on Ume.Rag's
+  (`infra/entra/`). App roles, not the groups claim (object ids, overage above 200 groups).
+- **Deployment:** two Compose projects with the same layout and conventions, run side by side or apart; the gateway's
+  `deploy/keycloak` project runs Keycloak and Ume.Rag delivers only its additions file; Ume.Rag's default ports avoid
+  the gateway's (8443, 9443, 10443, 11443, 8444/9444). Standalone Ume.Rag runs the same Keycloak project with its own
+  realm-wide settings and user profile.
+
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)
 
 **Later (P2):** `infra/entra/` and `entra.yml` hold it, not yet applied in a tenant. Entra sign-in is
