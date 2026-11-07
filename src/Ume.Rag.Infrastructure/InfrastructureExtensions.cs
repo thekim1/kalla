@@ -41,9 +41,10 @@ public static class InfrastructureExtensions
     /// (data-model §1.1 budget). pgvector's types are mapped on it (<c>UseVector()</c>, #110), so raw Npgsql can bind
     /// <c>Pgvector.Vector</c> and write embeddings with binary <c>COPY</c>; the <c>vector</c> columns stay out of the EF model. EF Core on top of it with
     /// Aspire's enrichment (context pooling, retries, health check, tracing). Production refuses the superuser and
-    /// anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>.
+    /// anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>. <paramref name="configure"/> adds a
+    /// service's own data source settings to that one pool (rag-api: auto-prepare for the retrieval statements, knowledge §6.6).
     /// </summary>
-    public static IHostApplicationBuilder AddRagDatabase(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddRagDatabase(this IHostApplicationBuilder builder, Action<NpgsqlDataSourceBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         if (builder.Environment.IsProduction())
@@ -62,6 +63,7 @@ public static class InfrastructureExtensions
         {
             var dataSource = new NpgsqlDataSourceBuilder(connectionString);
             dataSource.UseVector();
+            configure?.Invoke(dataSource);
             return dataSource.Build();
         });
         builder.Services.AddDbContextPool<RagDbContext>((sp, options) =>

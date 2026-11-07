@@ -22,7 +22,8 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.W
 // Bodies above 16 KB are refused (knowledge design §3.6, as the gateway's Data API).
 builder.AddUmeWebDefaults(maxRequestBodySize: 16 * 1024, errors => errors.Title = "The request could not be completed");
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
-builder.AddRagDatabase();
+// One pool for EF, the config monitor and retrieval (data-model §1.1), with retrieval's auto-prepare (knowledge §6.6).
+builder.AddRagDatabase(data => Ume.Rag.Retrieval.Postgres.RetrievalDataSource.Configure(data));
 builder.AddRagConfigMonitor();
 builder.AddRagKeys();
 // Client addresses come only from the trusted proxies set in the admin UI (ClientAddressMiddleware, as the gateway's).

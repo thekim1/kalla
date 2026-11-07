@@ -36,26 +36,26 @@ public sealed class KnowledgeOptions
 /// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/>).</summary>
 public static class KnowledgeExtensions
 {
-    /// <summary>The service key of the retrieval data source (<see cref="RetrievalDataSource"/>).</summary>
-    public const string RetrievalPoolKey = "retrieval";
-
     /// <summary>
-    /// The snapshot (a config change handler), the policy, the retrieval data source (<see cref="RetrievalDataSource"/>:
-    /// pgvector types and auto-prepare, §6.6), engine (<c>Retrieval:MaxConcurrentSearches</c>, <c>Retrieval:SlotWait</c>,
+    /// The snapshot (a config change handler), the policy, engine (<c>Retrieval:MaxConcurrentSearches</c>, <c>Retrieval:SlotWait</c>,
     /// <c>Retrieval:RerankTimeout</c>, <c>Retrieval:GatewayRerankTimeout</c>) with the assistant's reranker (<see cref="RerankRouter"/>:
     /// <see cref="ChatModelReranker"/> or <see cref="GatewayReranker"/>) on gateway client <see cref="ChatModelReranker.HttpClientName"/>
     /// and the hydrator as its text reader (§6.7), hydrator, the query embedder on gateway client
     /// <see cref="GatewayQueryEmbedder.HttpClientName"/> with <c>Security:CacheKeyPepper</c> (≥ 32 bytes), the retrieval counter,
     /// the section window <c>Retrieval:ExpandNeighbourChunks</c> (8), the download grants (<c>Security:DownloadGrantKeys:&lt;kid&gt;</c>,
     /// at least one of ≥ 32 bytes; <c>Knowledge:DownloadGrantLifetime</c>, <c>Knowledge:PublicBaseUrl</c>)
-    /// and <see cref="KnowledgeService"/>. Needs <c>AddRagDatabase</c> and <c>AddRagConfigMonitor</c>.
+    /// and <see cref="KnowledgeService"/>. Retrieval runs on the process's one <c>ragdb</c> pool (knowledge §6.6, data-model §1.1),
+    /// so call <c>AddRagDatabase</c> with <see cref="RetrievalDataSource.Configure"/> first for auto-prepare (checked here), and <c>AddRagConfigMonitor</c>.
     /// </summary>
     public static IHostApplicationBuilder AddRagKnowledge(this IHostApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        if (!builder.Services.Any(d => d.ServiceType == typeof(Npgsql.NpgsqlDataSource) && !d.IsKeyedService))
+        {
+            throw new InvalidOperationException("AddRagKnowledge needs the ragdb NpgsqlDataSource: call AddRagDatabase with RetrievalDataSource.Configure first.");
+        }
+
         var configuration = builder.Configuration;
-        var connectionString = configuration.GetConnectionString(InfrastructureExtensions.DatabaseResourceName)
-            ?? throw new InvalidOperationException($"ConnectionStrings:{InfrastructureExtensions.DatabaseResourceName} is not configured.");
         var pepper = configuration["Security:CacheKeyPepper"] is { Length: >= 32 } value
             ? Encoding.UTF8.GetBytes(value)
             : throw new InvalidOperationException("Security:CacheKeyPepper must be set (at least 32 characters).");
@@ -84,10 +84,7 @@ public static class KnowledgeExtensions
         services.AddSingleton<IPolicySnapshotSource>(sp => sp.GetRequiredService<PolicySnapshotStore>());
         services.AddSingleton<IAccessPolicy>(new AccessPolicy(new HashSet<string>(knowledge.OpenToClientKinds, StringComparer.Ordinal)));
 
-        // The retrieval pool is made by the container, so it is disposed with the host (a test host built per test no
-        // longer leaves its connections open until the role's connection limit is reached).
-        services.AddKeyedSingleton(RetrievalPoolKey, (_, _) => RetrievalDataSource.Create(connectionString));
-        static Npgsql.NpgsqlDataSource Pool(IServiceProvider sp) => sp.GetRequiredKeyedService<Npgsql.NpgsqlDataSource>(RetrievalPoolKey);
+        static Npgsql.NpgsqlDataSource Pool(IServiceProvider sp) => sp.GetRequiredService<Npgsql.NpgsqlDataSource>();
         services.AddSingleton(sp => new PostgresSearchIndex(Pool(sp)));
         services.AddSingleton<RetrievalMetrics>();
         services.AddSingleton(sp => new ScopeSizeCache(sp.GetRequiredService<PostgresSearchIndex>(), TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
