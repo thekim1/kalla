@@ -161,7 +161,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             (new { circuitBreaker = new { threshold = 0.1 } }, "circuitBreaker.threshold"),
             (new { circuitBreaker = new { pauseMinutes = 121 } }, "circuitBreaker.pauseMinutes"),
             (new { circuitBreaker = "on" }, "circuitBreaker"),
-            (new { renderPerHost = 3 }, "renderPerHost"),
+            (new { renderPerHost = 5 }, "renderPerHost"),
             // A typo is no silent default.
             (new { requestPerSecond = 5 }, "requestPerSecond"),
             (new { backoff = new { maxWait = 5 } }, "backoff.maxWait"),

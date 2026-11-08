@@ -161,7 +161,7 @@ public sealed class RenderTests : IAsyncLifetime
     public async Task Render_slots_cap_the_worker_and_each_host()
     {
         var policy = new FixedCrawlPolicy();
-        policy.Overrides["b.test"] = new HostPoliteness { RenderPerHost = 2 };
+        policy.Overrides["b.test"] = new HostPoliteness { RenderPerHost = 2, MaxConnections = 2 };
         var slots = new RenderSlots(Microsoft.Extensions.Options.Options.Create(RenderTestKit.Options(maxConcurrent: 2)), policy, new RenderMetrics(ConnectorTestKit.Meters));
 
         var a = slots.TryAcquire("a.test").ShouldBeOfType<RenderSlot.Granted>();
