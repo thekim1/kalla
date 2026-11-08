@@ -5,10 +5,52 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
-P1a code on FakeGateway and fixtures (code first, live testing last); nothing deployed yet.
+## 0.2.0 (2026-11-08)
+
+P1a and P1b code: crawl, upload, parse and embed; hybrid retrieval with citations; the chat API behind Open WebUI;
+the admin UI for the pilot journey; evaluation, publishing and rollback; JavaScript rendering. Built on the
+FakeGateway and checked live on the local stack against the interim gateway. Not in production yet: the live block
+(gold set, test host, DPIA) comes before the pilot goes live.
 
 ### Added
 
+- Retrieval core (`Ume.Rag.Retrieval`) and the knowledge API in `rag-api`: access policy and snapshot, keys and
+  grants, citations and downloads through the blob envelope, section expansion, security events and the auth-failure
+  throttle (#112, #125, #127, #146, #152, #163, #165).
+- Blob envelope URB2: blobs encrypted by data-protection level, segment-verified AES-256-GCM (#153).
+- Retrieval tuning: age decay and source demote after fusion, the keyword stop list, topics that limit the scope,
+  HNSW index health with concurrent rebuild, optional rerank per assistant (a chat model, or the gateway's
+  `/v1/rerank`) (#235, #241, #248, #330, #347, #388, #400, #415).
+- Chat API, OpenAI-compatible: `/v1/models`, chat completions with streaming, condense, the answer filter, rate limits
+  per user and per key, Open WebUI user-JWT trust, long questions condensed into the search query, the `ume` chat
+  extension (outcome, related documents) and follow-up suggestions (#198, #203, #204, #205, #430, #431, #433, #434).
+- Conversations and feedback: issued conversation ids, conversation list and delete, chat retention,
+  `POST /v1/feedback` (ratings only), the Open WebUI feedback importer (#262, #263, #264, #267).
+- Admin API for the pilot journey: knowledge bases, sources, runs and the crawl report, uploads, API keys, site
+  profiles, assistants with drafts, versions, publish, restore, archive and retention, documents, personal-data
+  clearance and deletion decisions, pipelines with preview, publish and rollback, evaluation, the retrieval and
+  assistant test panels, the audit log and explain access, organisation (#176, #178, #180, #185, #188, #254, #255,
+  #257, #258, #259, #260, #261, #298, #299, #361).
+- Admin UI (Vue, English): knowledge bases, Add source with check and preview (Before / After), source and run pages,
+  files and quarantine, deletion decisions, assistants (draft, test, publish, versions, audience, storage),
+  publishing, test questions and quality, search settings, the audit log, feedback, organisation and the Map, generic
+  forms for platform objects, the setup checklist (#279, #281, #285, #288, #301, #303, #304, #305, #306, #309, #310,
+  #312, #313, #320, #321, #322, #366).
+- General knowledge per assistant, a confirmed warning on a public assistant; a new assistant starts from a default
+  (#358, #359, #369, #464).
+- Organisation: sharing levels, collection shares, collection links with topics, member groups (#346, #347, #348,
+  #349).
+- Evaluation: test-question generation with a forecast, candidate comparison and threshold proposal, the
+  `evaluation-smoke` CI job, rerank variants with latency and cost per question (#208, #220, #258, #402, #416).
+- Browser tests: the pilot journey with mouse and keyboard and the accessibility spec on a fixture website
+  (`tests/e2e`, `e2e.yml`) (#362, #368, #377).
+- Shared Keycloak realm: realm additions, `deploy/keycloak` for keycloak-config-cli, role groups as `rag-` names or
+  Entra object ids, OIDC claim names configurable in Compose, `init-deployment --proxy` writes the nginx config
+  (#207, #409, #423, #469, #470, #474).
+- AppHost: Open WebUI, fixed host ports, the feedback importer and the renderer container locally (#206, #340, #341).
+- Restore a deleted uploaded file within the 14-day grace; publish checks that a live worker runs the template
+  version (#486, #489).
+- Licence notices; the sv_SE word list as separate, replaceable files (#381, #450).
 - Worker contracts (J3) and P1b contracts (L1): source settings, pipeline definition v2, job payloads and results,
   site profiles, with a drift test (#78, #88).
 - Schema part 1 (ingestion) and part 2 (serving); platform pipelines seeded from the built-in templates (#76, #89, #93).
@@ -59,12 +101,11 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
 
 - HTML noise rules v2 (Sitevision `data-cid` and `sv_` ids): **HTML documents are re-processed once after the
   upgrade**, because the change-detection hash is version-tagged (#107).
-- CI runs `verify.yml` and `parser.yml` on a pull request only while it carries the label `ci`; the nightly and weekly
-  schedules are off (#109).
+- CI on the self-hosted runners: `verify.yml` on every non-draft pull request, path-filtered (images, evaluation smoke
+  and renderer only when their paths change); `e2e.yml` by hand or from a release when asked, after `verify` and
+  `parser`; no schedules (#109, #151, #367, #372, #373, #397, #494).
 - Site profiles are keyed by host without a port (#136).
-- Embedding requests carry at most `Worker:Embed:MaxTokensPerRequest` tokens (default 6000, was 16,384), so a batch
-  stays under the gateway's per-request context-window check; files waiting more than 24 h for a ClamAV verdict end
-  `failed` (`clamav.unavailable`) (#143).
+- Files waiting more than 24 h for a ClamAV verdict end `failed` (`clamav.unavailable`) (#143).
 - Open WebUI: password sign-in off (`ENABLE_PASSWORD_AUTH=false`, on only while the key script runs) and
   `DEFAULT_USER_ROLE=user` for OIDC sign-ins (#135).
 - A URL that failed at any depth in a run is never a `not-seen` deletion candidate in that run, not only a seed
@@ -72,6 +113,19 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
 - Site-profile identity rules match with the non-backtracking engine and no timeout: under load a timeout kept a
   URL's path form and gave one page two documents (#475).
 - `Retrieval:GatewayRerankTimeout` defaults to 1.5 s (was 500 ms) for the Foundry reranker (#439).
+- Crawl and render knobs after live checks: `Worker:Concurrency:fetch` 32 with fetched bodies spooled to disk,
+  `Render:MaxConcurrent` 4 with `renderPerHost` capped at the host's connections, `Render:QuietPeriod` 500 ms, the
+  ready rule is `readySelector` and quiet (#482, #491, #492, #493).
+- Gateway clients retry 502 and 504 with the same ceiling, and once on a connection failure (#406, #422).
+- Open WebUI v0.12.5 (OIDC callback `/oauth/oidc/login/callback`), Keycloak 26.8.1, Aspire 13.6.4 (#339, #409, #457,
+  #458).
+- Parser image 2.88 GB → 2.58 GB; NER loads on demand and an idle convert slot goes cold (#418, #419).
+
+### Security
+
+- The gateway address stays out of logs and telemetry (#233, #238, #247, #272).
+- API keys' `AllowedIpRanges` are enforced, with the client address taken behind a trusted proxy only (#432).
+- Regex patterns and identity rules refuse constructs the non-backtracking engine lacks (#476, #477).
 
 ## 0.1.0 (2026-10-31)
 
