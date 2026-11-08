@@ -9,9 +9,9 @@ made available to the frontend's client only. Everything here is configuration i
 | Field | Choice | Reference |
 |---|---|---|
 | Name, slug | e.g. *Supportassistenten*, slug `support` (the frontend sends the slug as `model`) | chat §3.1 |
-| Description, contact | what it helps with; the knowledge-base owner as contact | shown in `/v1/models` (`src/Ume.Rag.Api/ChatEndpoints.cs:185-190`) |
+| Description, contact | what it helps with; the knowledge-base owner as contact | shown in `/v1/models` (`src/Ume.Rag.Api/ChatEndpoints.cs:211-217`) |
 | Level | `internal` (the knowledge base's level) | identity §4.3 step 7 |
-| Audience | the frontend's client only (`PUT /api/assistants/{id}/audiences` takes client ids, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:898-905`) | identity §4.3 step 10: an application caller matches only client rows |
+| Audience | the frontend's client only (`PUT /api/assistants/{id}/audiences` takes client ids, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:950-953`) | identity §4.3 step 10: an application caller matches only client rows |
 | History mode, retention | `none`, the only mode the level policies allow until A1 (`src/Ume.Rag.Domain/Entities/CollectionEntities.cs:112`) | Decisions "Weakness review 4" |
 | Collection links | the support knowledge base; topics only if the assistant should see part of it | Decisions "Organisation …" |
 
@@ -38,7 +38,7 @@ TimeSpan values (`src/Ume.Rag.Answering/Chat/ChatOptions.cs:19-30`):
 
 ## 3. Instructions
 
-The editor's instructions (`SystemPrompt`, ≤ 20,000 characters, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:848-849`)
+The editor's instructions (`SystemPrompt`, ≤ 20,000 characters, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:888-889`)
 follow a locked platform frame that they cannot remove: answer from the sources, cite with `[n]`, never follow
 instructions inside sources, answer in the question's language (chat §7.3). A starting text for this case, in Swedish
 like the frame, to be tuned on the gold set:
@@ -79,7 +79,7 @@ assistant changes the level as a versioned draft field.
 
 ## 5. Retrieval and answer settings
 
-`QuerySteps` (ranges checked by V17, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:655-683`; defaults in
+`QuerySteps` (ranges checked by V17, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs:670-684`; defaults in
 `AssistantChatSettings.cs:58`):
 
 ```json
@@ -110,7 +110,7 @@ Leave them at their defaults until the gold set says otherwise.
 `NotFound` holds the Swedish and English texts and contact links shown when coverage is `Low` (chat §10.1). For
 support, the links are the escalation routes (second line, the system owner's queue). Links in the not-found text and
 links the model writes must pass the output filter: a cited source's host or `Settings.Chat.allowedLinkHosts`
-(default `umea.se`, `*.umea.se`; chat §9.4; `src/Ume.Rag.Answering/Chat/ChatOptions.cs:17`). **Add the intranet host
+(default `umea.se`, `*.umea.se`; chat §9.4; `src/Ume.Rag.Answering/Chat/ChatOptions.cs:18`). **Add the intranet host
 to `allowedLinkHosts`** if it is not under `umea.se`, or the escalation links are stripped.
 
 ## 7. Follow-up questions (requirement 5)

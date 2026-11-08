@@ -14,17 +14,38 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 | 0.5 | An inventory of the sources: intranet sections, file folders, Markdown repositories, file types (legacy Office?) | support organisation |
 | 0.6 | Condense model: **`gpt-6-luna`** (user, 2026-11-06), with `Chat:LongQuestionCondenseTimeout` 4 s and `Chat:FollowUpTimeout` 3 s ([`01-gateway-setup.md`](01-gateway-setup.md) §1) | done |
 
+## 0b. Proof of concept on the local stack (suggestion, main session, 2026-11-08)
+
+The case end to end on the main session's local stack (`v0.2.0` code, the interim gateway), before the test host and
+the DPIA exist. It shows whether the documents parse well, whether the answers solve tickets and whether related
+documents and follow-ups help, and it gives the frontend team real answers to build against. **Anonymised or invented
+tickets only**: real ticket text waits for G1 (0.2).
+
+| # | Step | Needs |
+|---|---|---|
+| P1 | Local stack against the interim gateway (`docs/local-development.md`; `Seed__Enabled=false`) | ready |
+| P2 | The documents: the Word, PDF and Markdown files copied to the machine; intranet pages crawled if the intranet is reachable from it, else saved as PDF or HTML and uploaded | the source inventory (0.5) |
+| P3 | DoIT knowledge base `support` (`internal`): upload source, crawl source if reachable; preview, first sync, run reports, personal-data report ([`02-knowledge-base.md`](02-knowledge-base.md) §5) | main session |
+| P4 | Assistant `support`: the instructions of [`04-assistant.md`](04-assistant.md) §3, `generalKnowledge` `fallback`, a not-found text with the real escalation links; condense model per [`01-gateway-setup.md`](01-gateway-setup.md) §1 (local stack) | main session |
+| P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"ume": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
+| P6 | Generated evaluation set and a first retrieval report (processing §13, §14) | – |
+| P7 | Show it: the admin test panel and Open WebUI work today; a throwaway demo page (answer, citation links, related documents, follow-up chips, outcome) is optional and is not the frontend team's app | the user's choice |
+| P8 | Findings back into this plan: instruction text, noise selectors or a site profile, articles the misses point to, the condense model | main session |
+
+Not in the proof of concept: real tickets (G1), staff use (the test host, §1), the gold-set gate (§4, §7).
+
 ## 1. Platform readiness
 
 | # | Step | Detail |
 |---|---|---|
-| 1.1 | Ume.Rag deployed against the gateway (test host first) | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
-| 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
+| 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
+| 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
 | 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
 | 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |
+| 1.8 | Politeness profile for the intranet host if the defaults do not fit (rate, connections, crawl window, robots with a reason) | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 
 ## 2. Knowledge base
 

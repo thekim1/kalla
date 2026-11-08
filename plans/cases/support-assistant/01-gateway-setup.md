@@ -1,7 +1,8 @@
 # Gateway setup
 
-What the LLM gateway operator provides for this case. The gateway is v0.9.0 (residency ceiling, optional rerank,
-shared Keycloak; Decisions "Gateway release 1 and shared Keycloak as built"). Ume.Rag needs no gateway change for the
+What the LLM gateway operator provides for this case. The deployed gateway is v0.9.1 (residency ceiling, optional
+rerank, rerankers on Azure AI Foundry, shared Keycloak; verified live, B-L4, #441; Decisions "Gateway release 1 and
+shared Keycloak as built"); v0.9.2 (2026-11-07) adds Keycloak groups shared with Ume.Rag and changes nothing for the case. Ume.Rag needs no gateway change for the
 case: every need below is an existing gateway feature.
 
 If Ume.Rag is already deployed against the gateway for the pilot ([`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md)),
@@ -32,21 +33,28 @@ for this case ([`04-assistant.md`](04-assistant.md) §2). A long ticket then wai
 token; the follow-ups only delay the end of the stream. `claude-haiku-5-5` stays the faster alternative if the pilot
 shows the wait matters.
 
+**On the local stack** (the proof of concept, [`07-rollout.md`](07-rollout.md) §0b) the model mirror is filled by
+hand (model sync is off locally) and holds `claude-haiku-5-5`, `claude-opus-5-5` and `Cohere-rerank-v5-fast` today. Add
+a manual mirror row for `gpt-6-luna` to try the decided condense model, or run the proof of concept on
+`claude-haiku-5-5` (the measured faster alternative above) with the default budgets.
+
 Gateway side: providers and models are added as in `~/git/llmgateway/docs/providers-and-models.md` (rerank:
 section "Reranking (optional)"). Ume.Rag side, after any model change: a platform admin runs the model sync
-(`POST /api/gateway/sync`, `src/Ume.Rag.AdminApi/GatewayEndpoints.cs:91`) and, for an embedding change, the embedding
+(`POST /api/gateway/sync`, `src/Ume.Rag.AdminApi/GatewayEndpoints.cs:144`) and, for an embedding change, the embedding
 canary (`POST /api/gateway/canary-check`; Decisions "Embedding canary on demand"). Rerank models are set in
 `PUT /api/settings/retrieval` ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Rerank
 (optional)").
 
-**The Foundry reranker.** Gateway v0.9.0 cannot route rerank under a Foundry provider; gateway issue
-thekim1/llmgateway#72 covers it, with the user's requirement that models and their location are configured in the
-gateway admin UI, never by a code change. Until #72 is released, the workaround is:
+**The Foundry reranker.** Gateway v0.9.1 routes rerankers on Azure AI Foundry natively (thekim1/llmgateway#72, ADR
+019; release notes "Rerankers on Azure AI Foundry, and a residency per model"); the earlier OpenAI-compatible
+workaround is no longer needed:
 
-1. Gateway admin UI: an *OpenAI-compatible* provider with the Foundry Cohere address, *Rerank* ticked under the
-   endpoints it offers, residency `Eu`.
-2. The model `Cohere-rerank-v5-fast` under it, of kind *Rerank*.
-3. Ume.Rag: model sync, then `Settings.Retrieval.gatewayRerankModel` = that model's alias (`PUT /api/settings/retrieval`).
+1. Gateway admin UI: the model `Cohere-rerank-v5-fast` under the existing Foundry provider, of kind *Rerank*, with its
+   residency `Eu` (the residency is per model since v0.9.1).
+2. Ume.Rag: model sync, then `Settings.Retrieval.gatewayRerankModel` = that model's alias (`PUT /api/settings/retrieval`).
+
+It was measured live on `turkos` (B-16, #421, #438); `Retrieval:GatewayRerankTimeout` defaults to 1.5 s for it
+(Decisions "Gateway rerank time limit 1.5 s").
 
 Rerank stays optional and off by default: an assistant uses it (`retrieval.rerank` `gateway`) only if the gold set
 shows a gain ([`04-assistant.md`](04-assistant.md) §5). The chat-model reranker (`Settings.Retrieval.rerankModel`,
@@ -67,7 +75,7 @@ gateway ("Every model call goes through the gateway", `AGENTS.md`).
 ## 3. Residency ceiling
 
 Ume.Rag sends `x-ume-max-residency` on every model call, derived from the level of the data in the call (identity
-§4.7), capped by the deployment knob `Gateway:MaxResidency` (`src/Ume.Rag.Answering/Chat/ChatService.cs:52`). An
+§4.7), capped by the deployment knob `Gateway:MaxResidency` (`src/Ume.Rag.Answering/Chat/ChatService.cs:65`). An
 `internal` assistant therefore calls at most `Eu`. The gateway refuses with `403 max_residency_not_met` when no
 target within the ceiling exists, and answers `503 no_eligible_provider` when in-ceiling targets are drained; Ume.Rag
 retries only with the same ceiling (Decisions "Gateway release 1 …"; gateway ADR 018 in
@@ -101,8 +109,8 @@ Trade-offs to bring to it:
 - [ ] `text-embedding-3-large` within `Eu`; the platform embedding profile's canary passes.
 - [ ] `api`, `admin`, `worker` keys with residency `Eu` only; Data API key with `catalog.read`.
 - [ ] PII policy on the api key decided in the DPIA.
-- [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker through an OpenAI-compatible provider (Rerank ticked,
-      residency `Eu`, model of kind Rerank) until llmgateway#72; `Settings.Retrieval.gatewayRerankModel` set to its alias.
+- [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker under the Foundry provider (kind Rerank, residency `Eu`;
+      gateway v0.9.1); `Settings.Retrieval.gatewayRerankModel` set to its alias.
 - [ ] Optional: `requireMaxResidency` on the RAG keys.
 - [ ] Optional: the embedding deployment's `ContextWindow`. [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md)
       says to leave it empty because the gateway checked whole batches; release 1 checks embeddings per input

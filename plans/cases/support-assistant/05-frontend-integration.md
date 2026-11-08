@@ -2,7 +2,7 @@
 
 The frontend is built by another team in its own repository. This file is what they build against: how the app
 authenticates, which endpoints it calls, what comes back, and what Ume.Rag's operators set up. Everything below is
-read from the code on `main` (2026-11-06); the binding descriptions are chat §3 and knowledge §3–§4.
+read from the code on `main` (2026-11-06; line references re-checked against `v0.2.0` on 2026-11-08); the binding descriptions are chat §3 and knowledge §3–§4.
 
 ## 1. Architecture and authentication
 
@@ -20,7 +20,7 @@ staff browser ──────── citation links ──────▶ rag-
 | The app calls rag-api **from its own backend**, never from the browser | the key is a secret; rag-api has no CORS (no `AddCors`/`UseCors` in `src/Ume.Rag.Api/Program.cs`), so browser calls fail anyway | identity §6 |
 | One Ume.Rag client of kind **`integration`** and one `ume-rag-sk-` key for it | `integration` accepts a secret key (`src/Ume.Rag.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Ume.Rag.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
 | Staff sign in to **the app**, not to Ume.Rag | rag-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
-| The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Ume.Rag.Api/KnowledgeCallers.cs:90`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
+| The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Ume.Rag.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
 | The rate limit is the app key's own | for a key subject the chat limit is the key's `RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser` (`ChatRateLimiter.LimitFor`, `src/Ume.Rag.Api/ChatStreaming.cs:250-257`); the platform admin sets it on the app key (§2, §7) | chat §4.1 step 4 |
 | Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Ume.Rag.Domain/Services/KeyChecks.cs:38`, `src/Ume.Rag.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, rag-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Ume.Rag.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
 
@@ -38,9 +38,9 @@ in … in P1 is not settled").
 | Create its key, scoped to the support assistant (`Scopes.AssistantIds`), with an expiry, `requestsPerMinute` for the whole app (e.g. 200 for twenty staff) and `allowedIpRanges` = the app backend's addresses | platform admin | `POST /api/keys`, edit with `PUT /api/keys/{id}` (`src/Ume.Rag.AdminApi/KeyEndpoints.cs:41`, `:66`; fields `:240-245`, `requestsPerMinute` 1–100,000); rotate with `POST /api/keys/{id}/rotate`, which copies both (`src/Ume.Rag.Domain/Services/KeyRotation.cs:43-44`) |
 | Hand the key over once, through a secret channel | platform admin → frontend team | never in a repository or ticket |
 | Make the assistant available to the client | department admin | assistant page, *Audience* (`PUT /api/assistants/{id}/audiences`) |
-| Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Ume.Rag.AdminApi/SettingsEndpoints.cs:26-30`; a `/0` network is refused, `:195`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
+| Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Ume.Rag.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
 | Route the app's backend host to rag-api | operator | reverse proxy and firewall: `/v1/models`, `/v1/chat/completions`, `/v1/feedback` from the app's backend only; `/v1/documents/*` from the staff network (identity §5.3; knowledge §4.6) |
-| Absolute citation links | operator | `Knowledge:PublicBaseUrl` = rag-api's staff-network address (set from `UME_RAG_API_PUBLIC_URL`, `deploy/compose.prod.yaml:155`) |
+| Absolute citation links | operator | `Knowledge:PublicBaseUrl` = rag-api's staff-network address (set from `UME_RAG_API_PUBLIC_URL`, `deploy/compose.prod.yaml:157`) |
 | Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Ume.Rag.Api/ChatEndpoints.cs:19`); the printed proxy routes allow 1 MB outside uploads ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"), so raise it on this route (gap SA-15) |
 
 The proxy and the firewall still restrict the routes; the key's allow-list is the second line, so a leaked key is
@@ -169,7 +169,7 @@ These come back as ordinary completions; `ume.outcome` and `ume.degraded` tell t
 | General answer (`fallback`/`open`, coverage `Low`) | `answered-general` | `false` | the caveat line, the model's answer, the contact links | none | `[]` |
 | Search unavailable | `unavailable` | `false` | a fixed "try again shortly" text plus contact links | none | `[]` |
 
-(chat §3.8, §10; `src/Ume.Rag.Answering/Chat/ChatService.cs:106-121`; names in `src/Ume.Rag.Answering/Chat/ChatPlan.cs:22-28`;
+(chat §3.8, §10; `src/Ume.Rag.Answering/Chat/ChatService.cs:103-121`; names in `src/Ume.Rag.Answering/Chat/ChatPlan.cs:22-28`;
 golden files `json-ume-not-found.txt`, `sse-ume-degraded.txt`.) Suggested UI: offer the escalation route on
 `not-found`, mark an `answered-general` answer as not resting on the knowledge base. A refusal is an HTTP error (§7)
 and has no outcome.
@@ -291,7 +291,7 @@ checks the length before sending and tells the user, never cutting the text sile
 Its size is the key's `RequestsPerMinute` (§2; e.g. 200), or, when unset, the platform's
 `Settings.Chat.messagesPerMinutePerUser` (20; `src/Ume.Rag.Api/ChatStreaming.cs:202-257`; chat §4.1 step 4). A new
 value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads: 120 a minute per client address
-(`src/Ume.Rag.Api/Program.cs:47-56`), the staff member's own address once the trusted proxies are set (§2).
+(`src/Ume.Rag.Api/Program.cs:48-59`), the staff member's own address once the trusted proxies are set (§2).
 
 ## 8. Developing against Ume.Rag
 
@@ -300,7 +300,7 @@ value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads
   assistant. The FakeGateway answers deterministically, so the app's parsing and rendering can be tested without
   model cost.
 - **API reference:** rag-api publishes an OpenAPI document and a Scalar page when `Knowledge:PublishApiReference` is
-  on (default on; `src/Ume.Rag.Api/Program.cs:55-66`, `:125-131`). It is titled "Ume.Rag Knowledge API"; whether the
+  on (default on; `src/Ume.Rag.Api/Program.cs:60-71`, `:138-144`). It is titled "Ume.Rag Knowledge API"; whether the
   chat routes appear in it is unverified. This file and chat §3 are the contract until then.
 - **Test host:** the same routes as production, with the app's backend host routed by the operator.
 

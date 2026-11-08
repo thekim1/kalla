@@ -102,7 +102,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 ## SA-8 Authenticated intranet crawl
 
 - **Missing.** The crawler sends no cookies or credentials (`src/Ume.Rag.Worker/Connectors/Egress/CrawlHttpClient.cs:11`,
-  `:33`; `src/Ume.Rag.Worker/Connectors/Http/HttpFetcher.cs:82`).
+  `:33`; `src/Ume.Rag.Worker/Connectors/Http/HttpFetcher.cs:101`).
 - **Why.** Requirement 1, if the intranet requires a login.
 - **Sketch.** A per-source credential reference (a secret file named in deployment config, never in the settings
   JSON), sent only to the source's scope hosts through the egress guard (basic, bearer or NTLM per host), audited;
@@ -111,7 +111,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 ## SA-9 Scripted upload API
 
-- **Missing.** Upload routes need an admin's browser session with antiforgery (`src/Ume.Rag.AdminApi/AdminAuthentication.cs:112-115`);
+- **Missing.** Upload routes need an admin's browser session with antiforgery (`src/Ume.Rag.AdminApi/AdminAuthentication.cs:104-115`);
   no machine credential exists on the admin API.
 - **Why.** Requirement 7 for files kept outside the intranet: a script or CI job could push changed files.
 - **Sketch.** A service token (Keycloak client credentials) with a department-scoped `rag-*` role on the upload-batch
@@ -131,7 +131,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 ## SA-11 Replace an upload by file name
 
 - **Missing.** An upload without `X-Upload-Id` is a new slot; only byte-identical files are skipped
-  (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:118-124`; connectors §9.3).
+  (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:188-194`; connectors §9.3).
 - **Why.** An edited file uploaded as new leaves the old version searchable ([`03-updates.md`](03-updates.md) §3).
 - **Sketch.** When an added file's name matches a live slot, the admin UI proposes *Replace*; the API offers an
   explicit `replace-by-name` entry for scripts (SA-9).
@@ -149,7 +149,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 ## SA-13 `.markdown` extension
 
-- **Missing.** The admin's allowed set has `.md` only (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:36-39`); the worker's
+- **Missing.** The admin's allowed set has `.md` only (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:40-43`); the worker's
   sniffer maps `.markdown` too (`src/Ume.Rag.Worker/Connectors/Uploads/FileTypeSniffer.cs:265`).
 - **Sketch.** Add `.markdown` to the allowed set. **Size S.**
 
@@ -164,11 +164,14 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 ## SA-15 Proxy body size
 
-- **Missing.** `init-deployment.sh` prints "the gateway's 1 MB elsewhere" for the proxy (`deploy/init-deployment.sh:545-549`;
-  [`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"), but
-  `/v1/chat/completions` takes up to 2 MB (`src/Ume.Rag.Api/ChatEndpoints.cs:19`). Long conversations hit the proxy
-  first (Open WebUI too).
-- **Sketch.** Print and document 2 MB for `POST /v1/chat/completions` on the api host. **Size S.**
+- **Missing.** The proxy configuration that `init-deployment.sh --proxy` writes (#470, from
+  `deploy/proxy/nginx.conf.example`) sets `client_max_body_size 1m` on the whole api host, and the printed and
+  documented routes say 1 MB outside uploads ([`../../../docs/production-setup.md`](../../../docs/production-setup.md),
+  "Reverse proxy and PKI"), but `/v1/chat/completions` takes up to 2 MB (`src/Ume.Rag.Api/ChatEndpoints.cs:19`). Long
+  conversations hit the proxy first (Open WebUI too).
+- **Sketch.** 2 MB on the api host (or on a `location = /v1/chat/completions`) in the nginx example, the printed routes
+  and the production setup. **Size S**, stream a. **Suggested before the pilot** (main session, 2026-11-08): a
+  one-line change that removes an operator step from [`05-frontend-integration.md`](05-frontend-integration.md) §2.
 
 ## Not gaps
 

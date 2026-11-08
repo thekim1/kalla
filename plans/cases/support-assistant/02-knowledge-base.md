@@ -8,11 +8,11 @@ for this case.
 
 | Setting | Choice for the case | Rule |
 |---|---|---|
-| Owner | the support organisation's department; its admins hold `rag-department-admin` | Decisions "Organisation …": departments own content and are the admin boundary |
+| Owner | **DoIT**, the pilot department (README, decision 1); its admins hold `rag-department-admin` | Decisions "Organisation …": departments own content and are the admin boundary |
 | Sharing | *only our department* (the default) | same row; widen later only if another department's assistant should link it |
 | Contact person | the knowledge-base editor (name, e-mail) | same row; shown to departments that link it |
 | Level | **`internal`** (question 3 in [`README.md`](README.md)) | Decisions "Classification", "Residency per level". `public` is wrong for internal support content; `sensitive` needs on-prem models (none yet, M2) |
-| Topics | optional: path rules on crawl and URL-list sources tag chunks (template parameter `pathRules`, label "Topics", `src/Ume.Rag.MigrationService/Templates/website.v1.json`); uploads carry no topics | Decisions "Organisation …", "M-2 open design calls" (uploads need no topics) |
+| Topics | optional: path rules tag chunks (template parameter `pathRules`, label "Topics"): on crawl and URL-list sources by URL path (`src/Ume.Rag.MigrationService/Templates/website.v1.json`), and since A-16 (#481) on upload sources by the file's display name (`src/Ume.Rag.MigrationService/Templates/files.v1.json`) | Decisions "Organisation …" |
 
 With level `internal`, uploads and raw blobs are envelope-encrypted (connectors §9.1; `DataProtectionPolicy.DefaultFor`
 in `src/Ume.Rag.Domain/Entities/CollectionEntities.cs:106-121`).
@@ -26,15 +26,23 @@ direct number is fine, a pasted ticket with a citizen's personnummer in an artic
 **Preconditions** (operator, once per deployment):
 
 - The intranet hosts' address ranges are in `--crawl-allow` (`init-deployment.sh`), which feeds both the worker's
-  egress guard (`Crawl:AllowedPrivateRanges`, `src/Ume.Rag.Worker/Connectors/Egress/CrawlOptions.cs:16-19`) and the
+  egress guard (`Crawl:AllowedPrivateRanges`, `src/Ume.Rag.Worker/Connectors/Egress/CrawlOptions.cs:17-21`) and the
   host firewall ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "2. `init-deployment.sh`";
   connectors §7). Without it every private address is refused.
 - The pages are readable **without signing in**. The crawler sends no cookies, credentials or proxy
-  (`src/Ume.Rag.Worker/Connectors/Egress/CrawlHttpClient.cs:11`, `:33`; `src/Ume.Rag.Worker/Connectors/Http/HttpFetcher.cs:82`).
-  A login wall is gap SA-8 (question 2).
-- robots.txt is always honoured; page-level `noindex`/`nofollow` are ignored on allow-listed municipal hosts
+  (`src/Ume.Rag.Worker/Connectors/Egress/CrawlHttpClient.cs:11`, `:33`; `src/Ume.Rag.Worker/Connectors/Http/HttpFetcher.cs:101`).
+  A rendered page (`fetchMode` `browser`) keeps the cookies its own responses set, within that one page only
+  (`HttpFetcher.cs:60-64`; connectors §8.3); that is no login either. A login wall is gap SA-8 (question 2).
+- robots.txt is honoured by default; page-level `noindex`/`nofollow` are ignored on allow-listed municipal hosts
   (Decisions "Crawler (step 6b questions)"). If the intranet's robots.txt disallows bots, the web team adds an
-  allowance for `UmeaKommunBot`.
+  allowance for `UmeaKommunBot`, or a platform admin sets `robots` `ignore` with a reason on the host's politeness
+  profile (below).
+- **Politeness per host** (connectors §6.6; Decisions "Configurable politeness per host"): a platform admin may set a
+  profile for the intranet host in `Settings.Crawl.hostOverrides` (admin UI, crawl settings: preset `polite`,
+  `municipal` or `fast`, rate, connections, crawl window, robots with a reason). A host under the municipal host list
+  gets the `municipal` defaults (10 requests a second, 4 connections); others get `polite` (1 a second, 1 connection)
+  until a profile says otherwise. With the web team's consent, `crawlWindow` `any` allows the daytime runs of
+  [`03-updates.md`](03-updates.md) §2.
 
 **Source settings** (`contracts/sources/v1/crawl.schema.json`; the drawer shows them under "Advanced"):
 
@@ -47,6 +55,7 @@ direct number is fine, a pasted ticket with a citizen's personnummer in an artic
 | `noiseSelectors` | CSS selectors of the intranet template's changing parts (dates, "most read" boxes) | keeps the content hash stable, so unchanged pages are not re-processed (connectors §12.2) |
 | `crawlWindow` | see [`03-updates.md`](03-updates.md) §1 | default `22:00-06:00` |
 | `demote` | archive sections, if any | ranking only (knowledge §6.5) |
+| `fetchMode`, `readySelector` | `http` (default); `browser` only if the intranet builds its pages in JavaScript | the preflight compares raw and rendered text and says "This site seems to need JavaScript" (`render.suggested`) when it does; a `browser` source renders every page in the renderer container, at most `renderPerHost` at a time (connectors §8.1, §8.3). Without a `readySelector` a page counts as loaded when its text has stopped changing (the quiet rule, checked live on e.umea.se, #490) |
 
 Files linked from the pages (PDF, DOCX, MD and the other allowed types) are fetched when their URLs are in scope
 (`src/Ume.Rag.Worker/Connectors/Crawl/CrawlScope.cs:42-50`, `src/Ume.Rag.Worker/Connectors/Http/MediaTypes.cs:13`,
@@ -56,7 +65,7 @@ what staff expect. Links inside PDFs are not followed (P2, connectors §19).
 **Site profile.** The only built-in preset is umea.se's Sitevision profile
 (`contracts/site-profiles/v1/www.umea.se.profile.json`). For the intranet the first preview shows whether menus and
 footers leak into the text. If they do, a platform admin creates a manual profile for the host (main root,
-boilerplate selectors, breadcrumb; `POST /api/site-profiles`, `src/Ume.Rag.AdminApi/SiteProfileEndpoints.cs:73`).
+boilerplate selectors, breadcrumb; `POST /api/site-profiles`, `src/Ume.Rag.AdminApi/SiteProfileEndpoints.cs:74`).
 Learned profiles are P2 (Decisions "Weakness review 1").
 
 **URL list instead.** If the knowledge base is a small, fixed set of pages, a URL-list source fetches exactly those
@@ -67,11 +76,12 @@ URLs, nightly by default and outside the crawl window (`contracts/sources/v1/url
 
 | Topic | Today | Reference |
 |---|---|---|
-| Allowed types | `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.odt`, `.ods`, `.odp`, `.jpg`/`.jpeg`, `.png`, `.tif`/`.tiff`, `.txt`, **`.md`**, `.csv`, `.html`/`.htm` | `src/Ume.Rag.AdminApi/UploadEndpoints.cs:36-39` |
+| Allowed types | `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.odt`, `.ods`, `.odp`, `.jpg`/`.jpeg`, `.png`, `.tif`/`.tiff`, `.txt`, **`.md`**, `.csv`, `.html`/`.htm` | `src/Ume.Rag.AdminApi/UploadEndpoints.cs:40-43` |
 | Refused until P2 | `.doc`, `.xls`, `.ppt`, `.rtf`, `.eml`, `.msg` (`upload.format_deferred`); macro-enabled Office and archives | connectors §9.2; postponed item Z1 |
 | `.markdown` extension | refused by the admin's extension pre-check (only `.md` is listed), although the worker's sniffer knows it (`src/Ume.Rag.Worker/Connectors/Uploads/FileTypeSniffer.cs:265`). Rename to `.md` (gap SA-13) | – |
 | Limits | ≤ 50 MB per file (source setting `maxFileSizeMb`), ≤ 100 files and ≤ 500 MB per batch | connectors §9.1 |
 | Scanning | every upload passes ClamAV, fail-closed | connectors §11 |
+| Delete and restore | a deleted file leaves retrieval at once and can be restored from the source's file list for 14 days (platform admin; B-24, #489, `POST /api/sources/{id}/files/restore`) | connectors §9.3, §13.4 |
 | Backup | uploads are copied to the backup target within 15 minutes | connectors §9.1; [`../../../docs/runbook.md`](../../../docs/runbook.md) "Upload copy" |
 | Citation | the file name is the citation's display name; the title comes from the parsed document | connectors §9.4 |
 

@@ -1,7 +1,7 @@
 # Case: a support assistant for ticket handling
 
-Status: **case plan, non-binding** (main session, 2026-11-06). It applies the platform to one use; it does not change
-the platform. The Decisions table ([`../../../01-general-idea.md`](../../../01-general-idea.md) §10) and the design
+Status: **case plan, non-binding** (main session, 2026-11-06; brought up to date with `v0.2.0` on 2026-11-08). It
+applies the platform to one use; it does not change the platform. The Decisions table ([`../../../01-general-idea.md`](../../../01-general-idea.md) §10) and the design
 documents ([`../../README.md`](../../README.md)) bind and win where this plan differs from them. Every claim about
 existing behaviour names the file it was checked in; "unverified" marks what was not.
 
@@ -32,17 +32,30 @@ is the other team's; tickets come in by chat only (staff paste the text); ticket
 | Keeping the knowledge base current | Changes to the binding designs (they go to the main session as gaps) |
 | Evaluation, pilot and go-live | |
 
+## Where it stands (2026-11-08)
+
+**No platform code is missing for the pilot.** Every gap chosen before the pilot is built and released in `v0.2.0`
+(https://github.com/thekim1/ume-rag-platform/releases/tag/v0.2.0): related documents and the outcome (#433), follow-up
+suggestions (#434), long tickets (#431), the key's own rate limit (#430) and IP allow-list (#432). Since the first
+draft the platform also gained what this case can use: JavaScript rendering for intranet pages built in the browser
+(connectors §8), politeness profiles per host (#461), topics on uploads (#481) and restoring a deleted file (#489).
+
+What is left is configuration and people ([`07-rollout.md`](07-rollout.md)): the source inventory and the documents,
+the test host, the DPIA (G1), the named people and the gold set from real tickets, and the frontend team's app. A
+**proof of concept on the local stack** can start before all of that, with only the documents and a few anonymised
+tickets ([`07-rollout.md`](07-rollout.md) §0b).
+
 ## Fit summary
 
 | # | Need | Today | What it takes | Where |
 |---|---|---|---|---|
-| 1 | Ingest by crawl or upload | **Works.** Crawl and URL-list sources, upload sources with PDF, DOCX/PPTX/XLSX, ODF, images, TXT/**MD**/CSV, HTML (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:36-39`) | Configuration. The crawler fetches intranet hosts only inside `--crawl-allow` ranges and never sends cookies or credentials (`src/Ume.Rag.Worker/Connectors/Egress/CrawlHttpClient.cs:33`), so an intranet behind a login cannot be crawled (gap SA-8). Legacy `.doc` is refused until P2 (connectors §9.2) | [`02`](02-knowledge-base.md) |
+| 1 | Ingest by crawl or upload | **Works.** Crawl and URL-list sources, upload sources with PDF, DOCX/PPTX/XLSX, ODF, images, TXT/**MD**/CSV, HTML (`src/Ume.Rag.AdminApi/UploadEndpoints.cs:40-43`) | Configuration. The crawler fetches intranet hosts only inside `--crawl-allow` ranges and never sends cookies or credentials (`src/Ume.Rag.Worker/Connectors/Egress/CrawlHttpClient.cs:33`), so an intranet behind a login cannot be crawled (gap SA-8). Legacy `.doc` is refused until P2 (connectors §9.2). Pages built in JavaScript: `fetchMode` `browser` (connectors §8) | [`02`](02-knowledge-base.md) |
 | 2 | Own frontend app | **Works for a server-side caller.** OpenAI-compatible `GET /v1/models` and `POST /v1/chat/completions` accept a client of kind `integration` with a `ume-rag-sk-` key (`src/Ume.Rag.Domain/Access/AccessPolicy.cs:203-211`) | Configuration: client, key with its own rate limit and IP allow-list, trusted proxies, assistant audience, proxy route. No CORS (by design: the key stays server-side). No per-user identity: every staff member is the same key subject (gap SA-5) | [`05`](05-frontend-integration.md) |
 | 3 | Citations link to real pages; open or download | **Works.** A crawled document's citation is its page URL; an uploaded one's is a signed download link, `#page=` added for PDFs (`src/Ume.Rag.Answering/Chat/Citations.cs:66-73`) | Configuration: `Knowledge:PublicBaseUrl`, the proxy opens `/v1/documents/*` to the staff network. Uploaded Markdown and Word download as files; there is no rendered view (gap SA-12) | [`05`](05-frontend-integration.md) |
 | 4 | Top or related documents | **Built** (#433, SA-1). `ume.related_documents` lists the documents the answer's own search found, cited and uncited, with links as for citations (chat §9.7; `src/Ume.Rag.Answering/Chat/RelatedDocuments.cs`) | The frontend asks for them (`"ume": {"related_documents": 5}`) | [`05`](05-frontend-integration.md) |
 | 5 | Follow-up suggestions | **Built** (#434, SA-3). `ume.follow_ups` from one call on the condense model after the answer (chat §9.8; `src/Ume.Rag.Answering/Chat/FollowUps.cs`); clarifying questions stay in the instructions | The frontend asks for them (`"ume": {"follow_ups": 3}`); `claude-haiku-5-5` recommended as condense model | [`04`](04-assistant.md), [`05`](05-frontend-integration.md) |
 | 6 | Strictness of general knowledge | **Works.** `QuerySteps.answer.generalKnowledge` `off`/`supplement`/`fallback`/`open` per assistant version (Decisions "General knowledge per assistant"; `src/Ume.Rag.Answering/Chat/AssistantChatSettings.cs`) | Configuration: `fallback` meets the requirement (general answers where the knowledge base is silent); `supplement` is the conservative option | [`04`](04-assistant.md) |
-| 7 | Automatic updates | **Works for crawled pages, manual for files.** Scheduled crawls with content-hash change detection; only changed content is re-parsed and re-embedded; guarded deletions (connectors §12, §13). Uploads change only by an admin's replace in the admin UI | Configuration (daily schedule). No push trigger, scripted upload API or folder/Git sync (gaps SA-9, SA-10, SA-14) | [`03`](03-updates.md) |
+| 7 | Automatic updates | **Works for crawled pages, manual for files.** Scheduled crawls with content-hash change detection; only changed content is re-parsed and re-embedded; guarded deletions (connectors §12, §13). Uploads change only by an admin's replace in the admin UI; a deleted file can be restored for 14 days (#489) | Configuration (daily schedule). No push trigger, scripted upload API or folder/Git sync (gaps SA-9, SA-10, SA-14) | [`03`](03-updates.md) |
 | – | Ticket text as the question | **Built** (#431, SA-4). The question may be 16,000 characters (`src/Ume.Rag.Answering/Chat/ChatRequest.cs:60`); over 2,000 the condense model writes the search query, and the answer model reads the whole ticket (chat §5.1) | None: staff paste the ticket | [`05`](05-frontend-integration.md) §6 |
 
 In short: points 1, 3 and 6 work with configuration, 2 and 7 work with configuration and known limits, 4 and 5 are
@@ -91,5 +104,10 @@ The gaps chosen before the pilot are built. What remains is configuration and pe
 
 ## Still open
 
+- **The source inventory** (rollout 0.5): which intranet sections, which folders of Word, PDF and Markdown files, and
+  whether the intranet is reachable from where the proof of concept runs.
+- **Suggestions before the pilot** (main session, 2026-11-08): close SA-15 in the printed proxy configuration (a
+  2 MB body on `/v1/chat/completions`, stream a, size S) so the operator does not have to remember it; SA-13
+  (`.markdown` uploads) only if the Markdown files use that extension.
 - **Legacy Office files** (`.doc`, `.xls`, `.ppt`) in the collection? They wait for P2 (postponed item Z1); until
   then they are converted to `.docx`/`.xlsx`/`.pptx` before upload.
