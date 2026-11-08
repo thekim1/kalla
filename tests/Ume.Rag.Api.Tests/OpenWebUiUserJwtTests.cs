@@ -17,6 +17,7 @@ namespace Ume.Rag.Api.Tests;
 public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
     private const string Secret = "open-webui-jwt-secret-for-tests-0123456789";
+    private const string LongSecret = "open-webui-jwt-secret-for-tests-long-enough-for-hs512-0123456789";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static readonly DateTimeOffset Now = new(2026, 11, 1, 8, 0, 0, TimeSpan.Zero);
 
@@ -29,10 +30,20 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         return $"{head}.{body}.{B64(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(head + "." + body)))}";
     }
 
+    /// <summary>A token signed with <paramref name="alg"/> (an HMAC other than HS256) and the right secret.</summary>
+    private static string Signed(object payload, string alg)
+    {
+        var head = B64(JsonSerializer.SerializeToUtf8Bytes(new { alg, typ = "JWT" }));
+        var body = B64(JsonSerializer.SerializeToUtf8Bytes(payload));
+        var input = Encoding.ASCII.GetBytes(head + "." + body);
+        var key = Encoding.UTF8.GetBytes(LongSecret);
+        return $"{head}.{body}.{B64(alg == "HS384" ? HMACSHA384.HashData(key, input) : HMACSHA512.HashData(key, input))}";
+    }
+
     private static object Claims(DateTimeOffset? iat = null, int lifetime = 300, string role = "user", string iss = "open-webui", string sub = "u-123") =>
         new { sub, email = "anna@umea.se", name = "Anna", role, iss, iat = (iat ?? Now).ToUnixTimeSeconds(), exp = (iat ?? Now).AddSeconds(lifetime).ToUnixTimeSeconds() };
 
-    private static (OpenWebUiUser? User, string? Refusal) Check(string? token)
+    private static (OpenWebUiUser? User, string? Refusal) Check(string? token, string secret = Secret)
     {
         var http = new DefaultHttpContext();
         if (token is not null)
@@ -40,7 +51,8 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
             http.Request.Headers[OpenWebUiUserJwt.Header] = token;
         }
 
-        return OpenWebUiUserJwt.Validate(http.Request, new OpenWebUiOptions { ClientId = Guid.NewGuid().ToString(), JwtSecret = Secret }, Now);
+        return OpenWebUiUserJwt.ValidateAsync(http.Request, new OpenWebUiOptions { ClientId = Guid.NewGuid().ToString(), JwtSecret = secret }, Now)
+            .GetAwaiter().GetResult();
     }
 
     [Fact]
@@ -60,6 +72,13 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         Check(Jwt(Claims(role: "pending"))).Refusal.ShouldBe("user_jwt_role");
         Check(Jwt(Claims(sub: ""))).Refusal.ShouldBe("user_jwt_invalid");
         Check("not.a.jwt").Refusal.ShouldBe("user_jwt_invalid");
+        // Another algorithm with the same secret (long enough for HS512, so only the algorithm pin refuses), and a token
+        // without iat or exp (#512).
+        Check(Jwt(Claims(), LongSecret), LongSecret).User.ShouldNotBeNull();
+        Check(Signed(Claims(), "HS384"), LongSecret).Refusal.ShouldBe("user_jwt_invalid");
+        Check(Signed(Claims(), "HS512"), LongSecret).Refusal.ShouldBe("user_jwt_invalid");
+        Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", exp = Now.AddMinutes(5).ToUnixTimeSeconds() })).Refusal.ShouldBe("user_jwt_invalid");
+        Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", iat = Now.ToUnixTimeSeconds() })).Refusal.ShouldBe("user_jwt_invalid");
         // Out of DateTimeOffset's range, with a valid signature: a refusal, not a 500 (#205 review).
         Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", iat = Now.ToUnixTimeSeconds(), exp = long.MaxValue })).Refusal.ShouldBe("user_jwt_invalid");
     }

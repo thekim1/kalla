@@ -29,7 +29,7 @@ public sealed class ChatCallers(KnowledgeCallers keys, IOptions<OpenWebUiOptions
         }
 
         var configured = options.Value.Client == who.Client.Id;
-        var (user, refusal) = configured ? OpenWebUiUserJwt.Validate(request, options.Value, time.GetUtcNow()) : (null, hasJwt ? "user_jwt_invalid" : "user_jwt_missing");
+        var (user, refusal) = configured ? await OpenWebUiUserJwt.ValidateAsync(request, options.Value, time.GetUtcNow()) : (null, hasJwt ? "user_jwt_invalid" : "user_jwt_missing");
         if (user is null)
         {
             security.AuthFailed(request.HttpContext, refusal!, "owui-jwt", who.Key?.Id, null, who.Client.Id);

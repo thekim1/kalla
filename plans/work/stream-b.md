@@ -296,7 +296,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #509; knowledge §6.2.
 
-### [ ] B-29 Open WebUI user JWT through a library (#512)
+### [x] B-29 Open WebUI user JWT through a library (#512) (#PR)
 - **Do:** validate the forwarded user JWT with `Microsoft.IdentityModel.JsonWebTokens` (HS256 only, issuer
   `open-webui`, 30 s clock skew, the existing maximum lifetime), keeping every refusal code.
 - **Paths:** `src/Ume.Rag.Api/**`, `tests/Ume.Rag.Api.Tests/**`, `Directory.Packages.props` (shared: its own small PR).
