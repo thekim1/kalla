@@ -36,6 +36,11 @@ Three tracks:
    7. the go-live gate graded by department reviewers, then the pilot goes live.
 3. **Decisions and inputs from people** (below).
 
+**Cost attribution, stage 1** (Decisions "Cost attribution", 2026-11-08; not a go-live gate): Ume.Rag meters tokens and
+cost of every model call per assistant, knowledge base, step and client and shows them in the admin UI
+([`platform/cost-attribution.md`](platform/cost-attribution.md) §5, steps C1–C6). It needs no gateway change; stage 2, the
+gateway's delegated attribution, follows in P2 before a second department.
+
 ## Waiting on people
 
 | What | Who | Blocks |
@@ -58,7 +63,8 @@ Several departments, internal sources, tools, and the first multi-host deploymen
 work split is written when P1b is live.
 
 - **More departments:** gateway release 2 (delegation, member groups from claims) before a second department or a
-  group audience; Entra ID with RAG's own registrations; OBO and the E1 spike; one Open WebUI per department until W3
+  group audience; **cost attribution** per department, team and assistant through that delegation, the long-term goal
+  of [`platform/cost-attribution.md`](platform/cost-attribution.md) (stage 2); Entra ID with RAG's own registrations; OBO and the E1 spike; one Open WebUI per department until W3
   and E1 are solved; owner-team edit scoping.
 - **Assistants:** version diff, per-assistant test-question sets, templates and presets (architecture plan item 3),
   copy; unused-assistant attention items; the drawn Map.

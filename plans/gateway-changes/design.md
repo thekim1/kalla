@@ -332,7 +332,9 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 ### 5.1 Model
 
 **Later (P2):** release 2. Until then Ume.Rag uses the pilot team's per-level keys and sends no `x-ume-on-behalf-of`
-(§13.4).
+(§13.4). Delegation is the long-term goal of cost attribution (Decisions "Cost attribution", 2026-11-08): which call
+is charged to which team, the owner-team rules and the order of work are in
+[`../platform/cost-attribution.md`](../platform/cost-attribution.md) §4, §6.
 
 - `VirtualKey` (`Entities.cs:46-116`) gains `public List<Guid> DelegatedTeamIds { get; set; } = [];` (empty = not
   delegating). An array, like `AllowedModels`/`AllowedResidencies` (`:76-82`) and `RoutingRule.ScopeIds`: no join

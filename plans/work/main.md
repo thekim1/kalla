@@ -96,3 +96,12 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Do:** run it in the roadmap's order with the streams and the user; the three-way gold-set run and the hand
   grading use `scripts/grading/` (README there).
 - **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
+
+### [ ] M-9 Cost attribution stage 1: settle the design and queue the streams
+- **Do:** write stage 1 of [`../platform/cost-attribution.md`](../platform/cost-attribution.md) §5 into the designs it names
+  (chat §17 and the `AssistantDailyTotals` columns or a per-step table, admin §4.9 and a cost subsection under §8,
+  processing §11/§14, engine §10), then queue C1–C6 in `stream-a.md` and `stream-b.md` with paths and done-whens.
+  Bring Q1–Q3 of the plan's §7 to the user.
+- **Done when:** the design sections state stage 1's rules, the queue items exist, and the user has answered Q1–Q3
+  (or confirmed the defaults).
+- **Waits on:** nothing. Stage 2 (delegation, gateway release 2) is P2 and waits on the gateway's release.
