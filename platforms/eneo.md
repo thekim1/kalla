@@ -1,5 +1,8 @@
 # Eneo (eneo-ai/eneo, formerly intric): platform analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed 2026-10-29. Local clone `~/git/eneo` is detached at **v2.1.1** (Aug 2026); upstream is at v2.3.0-rc.5
 (2026-10-28). Code references below are to v2.1.1 under `backend/src/intric/` unless stated. Upstream changes after
 v2.1.1 that matter (reranking, "web-next" frontend, Skills runtime) are taken from GitHub issues and marked as such.

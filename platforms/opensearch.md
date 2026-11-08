@@ -1,5 +1,8 @@
 # OpenSearch for the Umeå knowledge platform
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Evaluated 2026-10-29 against the draft `../01-general-idea.md` (sections 2, 6, 9). Sources: OpenSearch docs repo
 (`opensearch-project/documentation-website`, commit 975c110, docs version 3.9.0), local clones in
 `/home/crotalus/git/rag-platforms/` (onyx a4e97fc, ragflow a609e62, dify), CommunityToolkit/AI (e0a1ec3), NuGet API,

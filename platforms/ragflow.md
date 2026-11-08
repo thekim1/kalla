@@ -1,5 +1,8 @@
 # RAGFlow (infiniflow/ragflow): competitive analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed: shallow clone at `~/git/rag-platforms/ragflow`, HEAD `a609e62` (2026-10-29), version `1.0.0-rc2`
 (`pyproject.toml:3`, `docker/.env:316`). Paths below are relative to the repo root. GitHub data from read-only `gh`
 queries on 2026-10-29. "Verified" means read in code/config or measured; "inferred" means my reading, not proven.

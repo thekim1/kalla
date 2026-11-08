@@ -1,5 +1,8 @@
 # Onyx (formerly Danswer): platform analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed: shallow clone `~/git/rag-platforms/onyx` (onyx-dot-app/onyx), HEAD `a4e97fc`, 2026-10-29.
 Paths below are relative to the repo root; `backend/onyx/...` unless stated. Facts are **verified** (read in code,
 measured, or stated in an issue) unless marked *inferred*.

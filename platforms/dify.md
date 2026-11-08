@@ -1,5 +1,8 @@
 # Dify: competitive analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed: `langgenius/dify` shallow clone at `~/git/rag-platforms/dify`, commit `a544e2c` (2026-10-29), release
 **1.18.0** (2026-10-23). Paths below are relative to the repo root unless noted. "Verified" means read in code or
 measured. "Inferred" means a conclusion drawn from code/issues but not reproduced.

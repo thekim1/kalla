@@ -1,5 +1,8 @@
 # Microsoft Kernel Memory + the .NET building blocks for Umeå's platform
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Research for `01-general-idea.md` (sections 5, 5a, 6, 9). Date: 2026-10-29.
 Source: shallow clone `~/git/rag-platforms/kernel-memory` (HEAD `8fc4e16`, 2026-06-08), `gh`, NuGet API, Microsoft Learn.
 

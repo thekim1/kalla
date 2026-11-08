@@ -1,5 +1,8 @@
 # Bifrost (maximhq/bifrost): MCP, skills and tool governance analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed: shallow clone `~/git/rag-platforms/bifrost`, HEAD `a09cea0` (2026-10-29). Paths are relative to the repo
 root. Facts are **verified** (read in code or docs in the repo, or stated in an issue) unless marked *inferred*.
 Focus: what the municipality's tool hub (`plans/tools`), identity plan (`plans/identity`) and LLM gateway

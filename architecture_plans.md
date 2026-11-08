@@ -6,6 +6,8 @@ inspection of the retrieval, assistant and access code, and the references below
 not a new measurement or an implementation brief. It is not binding until adopted in `01-general-idea.md` §10.
 Rewriting this proposal does not adopt its scope changes. Items marked **changes a decision** need adoption before
 implementation; items marked **fits current decisions** still need a scheduled checklist item if none exists.
+Where the items stand is kept in the roadmap, not here (`plans/roadmap.md`: items 1, 2 and 4–7 wait on product
+calls in *Waiting on people*; item 3 is a P2 theme).
 
 ## 1. Assessment
 

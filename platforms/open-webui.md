@@ -1,5 +1,8 @@
 # Open WebUI: platform analysis
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Analysed: `open-webui/open-webui` shallow clone at `~/git/rag-platforms/open-webui`, commit `f7ac7ee` (2026-10-29),
 `package.json` version **0.12.5**. Paths below are relative to the repo root; `ow/` = `backend/open_webui/`.
 Evidence labels: **[V]** verified in code/changelog/issue tracker, **[I]** inferred.

@@ -1,5 +1,8 @@
 # Platform comparison: what to copy, what to fix
 
+> Background research from 2026-10-29, kept for its evidence. It does not bind: the Decisions table and the design
+> documents decide. Facts are as of the commits named below and are not kept up to date.
+
 Date: 2026-10-29. Sources: the per-platform reports in this folder (each with file paths, issue links and a
 verified/inferred split). This page is the synthesis; follow the links for evidence.
 

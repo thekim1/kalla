@@ -1,7 +1,8 @@
 # Ume.Rag
 
 RAG, crawling and chat platform for Umeå kommun, built as small .NET 10 services on top of the team's LLM gateway.
-This repo holds the design (`01-general-idea.md`, `plans/`, `platforms/`) and, from P0, the code in the layout of
+This repo holds the design (`01-general-idea.md`, `plans/`; background research on other platforms, not binding, in
+`platforms/`) and, from P0, the code in the layout of
 `plans/platform/repo-and-deployment.md` §1.
 
 ## Where the truth is
