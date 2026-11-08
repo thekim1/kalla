@@ -53,7 +53,10 @@ jobs:
   e2e:
     # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
     # variable RELEASE_E2E is 'true', a dry run when its e2e input is ticked. Skipped otherwise; a failed run still stops
-    # the release.
+    # the release. After verify and parser, never beside them: both runners share one machine, and with verify's backend
+    # and renderer jobs running next to it the browser's requests to the admin UI failed (run 42469437132; alone, run
+    # 42471519711 passed on the same commit).
+    needs: [verify, parser]
     if: (github.event_name == 'push' && vars.RELEASE_E2E == 'true') || (github.event_name == 'workflow_dispatch' && inputs.e2e)
     uses: ./.github/workflows/e2e.yml
 
