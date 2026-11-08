@@ -21,6 +21,18 @@ public enum FilterFragments
 }
 
 /// <summary>
+/// The search vector statement K matches and ranks on (#509). <see cref="Stored"/> is production's: the generated
+/// <c>SearchVector</c> column. <see cref="WithoutDecompounder"/> is the <c>hybrid-no-decompounder</c> evaluation variant's
+/// (processing design §13.4): the generated column's expression with <c>"Text"</c> for <c>"SearchText"</c>, computed in
+/// the statement.
+/// </summary>
+public enum KeywordVector
+{
+    Stored,
+    WithoutDecompounder,
+}
+
+/// <summary>
 /// The texts of statements K and V (knowledge design §6.2; data-model §3.3), one per variant: K or V × exact or
 /// approximate × 2⁴ filter combinations, per profile and candidate depth. Parameters: <c>$1</c> the query search text (K) or the query
 /// vector (V), <c>$2 uuid[]</c> the scope, <c>$3 text[]</c> the allowed levels, for K <c>$4 text[]</c> the stop lexemes, then
@@ -52,17 +64,28 @@ public static class RetrievalStatements
     /// <c>$4</c> is the scope's keyword stop list (<see cref="SearchScope.KeywordStopLexemes"/>, empty for none): its
     /// lexemes are removed from the query vector before the OR, so a term in most chunks neither matches nor is ranked
     /// (knowledge design §6.2, §20). A query of stop lexemes only gives no query and no candidates, like stop words.
+    /// <para>
+    /// <paramref name="vector"/> picks the vector matched and ranked (<see cref="KeywordVector"/>). A computed vector still
+    /// goes through the stored one's GIN index first: without the decompounder <c>SearchText</c> is <c>Text</c> with the
+    /// compound parts appended, so the stored vector matches a superset of the chunks the computed one matches, and the
+    /// computed vector is evaluated only for those.
+    /// </para>
     /// </summary>
-    public static string Keyword(Guid profileId, int limit, FilterFragments filters) =>
-        Cache.GetOrAdd(('K', profileId, 0, limit, filters), static key => $"""
+    public static string Keyword(Guid profileId, int limit, FilterFragments filters, KeywordVector vector = KeywordVector.Stored) =>
+        Cache.GetOrAdd((vector == KeywordVector.Stored ? 'K' : 'N', profileId, 0, limit, filters), static key =>
+        {
+            var (match, rank) = key.Kind == 'K'
+                ? ("", StoredSearchVector)
+                : ($"\n      AND {WithoutDecompounderSearchVector} @@ q.tsq", WithoutDecompounderSearchVector);
+            return $"""
             WITH q AS MATERIALIZED (
                 SELECT content.rag_or_query(ts_delete(to_tsvector('swedish', $1), $4::text[])) AS tsq
             ), kw AS MATERIALIZED (
                 SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
                        c."DocumentType", c."SourceModifiedAt",
-                       ts_rank_cd(c."SearchVector", q.tsq)::double precision AS score
+                       ts_rank_cd({rank}, q.tsq)::double precision AS score
                 FROM content."Chunks" c, q
-                WHERE c."SearchVector" @@ q.tsq
+                WHERE c."SearchVector" @@ q.tsq{match}
                   AND c."Kind" = 'child' AND c."DeletedAt" IS NULL
                   AND c."EmbeddingProfileId" = {ProfileLiteral(key.Profile)}
                   AND c."CollectionId" = ANY ($2)
@@ -73,7 +96,18 @@ public static class RetrievalStatements
             SELECT kw."Id", kw."DocumentId", kw."ChunkSetId", kw."Ordinal", kw."TextHash", kw."CollectionId", kw."Classification",
                    kw."DocumentType", kw."SourceModifiedAt", kw.score, d."IdentityKind", d."IdentityHash", d."SourceId", d."Url"
             FROM kw JOIN content."Documents" d ON d."Id" = kw."DocumentId"
-            """);
+            """;
+        });
+
+    /// <summary>The generated column K searches in production (migration <c>IngestionSchema</c>).</summary>
+    public const string StoredSearchVector = "c.\"SearchVector\"";
+
+    /// <summary>
+    /// The generated column's expression (<c>setweight(heading path, A) || setweight(search text, B)</c>, migration
+    /// <c>IngestionSchema</c>) over <c>"Text"</c>: the chunk's search vector had the decompounder added no compound parts.
+    /// </summary>
+    public const string WithoutDecompounderSearchVector =
+        """(setweight(to_tsvector('swedish'::regconfig, coalesce(c."HeadingPath", '')), 'A') || setweight(to_tsvector('swedish'::regconfig, c."Text"), 'B'))""";
 
     /// <summary>
     /// V, approximate: the profile's partial HNSW index on <c>("Embedding"::halfvec(N))</c> (data-model §3.2); the

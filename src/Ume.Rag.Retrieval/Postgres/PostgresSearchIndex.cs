@@ -15,6 +15,12 @@ public sealed class PostgresSearchOptions
     /// <c>search_unavailable</c>. The role's <c>statement_timeout</c> (5 s for the api) is the server-side backstop.
     /// </summary>
     public TimeSpan StatementTimeout { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The vector statement K matches and ranks on: the stored <c>SearchVector</c>, or the <c>hybrid-no-decompounder</c>
+    /// evaluation variant's computed one (#509).
+    /// </summary>
+    public KeywordVector KeywordVector { get; set; } = KeywordVector.Stored;
 }
 
 /// <summary>
@@ -41,7 +47,7 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(querySearchText);
         var fragments = RetrievalStatements.FragmentsOf(scope, filters);
-        var sql = RetrievalStatements.Keyword(scope.EmbeddingProfileId, limit, fragments);
+        var sql = RetrievalStatements.Keyword(scope.EmbeddingProfileId, limit, fragments, _options.KeywordVector);
         var stop = new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.KeywordStopLexemes.ToArray() };
         return ReadCandidatesAsync(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = querySearchText }, scope, filters,
             fragments, keyword: true, cancellationToken, stop);
