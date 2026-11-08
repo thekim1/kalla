@@ -79,7 +79,11 @@ public static class Extensions
             logging.IncludeScopes = true;
         });
 
-        builder.Services.AddOpenTelemetry()
+        // Traces exist only to be exported (#503): without an OTLP endpoint no tracer provider is registered, so requests,
+        // gateway calls and SQL commands create no recorded spans. Sampling is the standard OTEL_TRACES_SAMPLER and
+        // OTEL_TRACES_SAMPLER_ARG variables (the SDK reads them; the Compose knob is A-21).
+        var exporting = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
+        var telemetry = builder.Services.AddOpenTelemetry()
             .WithMetrics(metrics => metrics
                 .AddMeter(TelemetryName)
                 .AddAspNetCoreInstrumentation()
@@ -88,8 +92,10 @@ public static class Extensions
                 // Outgoing HTTP metrics carry no host (#232): the gateway's address is a secret and OTLP leaves the host.
                 .AddView(instrument => instrument.Meter.Name == HttpClientMeter
                     ? new MetricStreamConfiguration { TagKeys = HttpClientMetricTags }
-                    : null))
-            .WithTracing(tracing => tracing
+                    : null));
+        if (exporting)
+        {
+            telemetry.WithTracing(tracing => tracing
                 .AddSource(builder.Environment.ApplicationName)
                 .AddSource(TelemetryName)
                 .AddAspNetCoreInstrumentation(o =>
@@ -100,12 +106,10 @@ public static class Extensions
                 })
                 .AddHttpClientInstrumentation(o => o.EnrichWithHttpRequestMessage = RedactOutgoing)
                 .AddProcessor(new OutgoingHttpRedaction.StatusScrubber()));
-        OutgoingHttpRedaction.Register(); // the failure path: exception events without host or port (#232)
-
-        if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
-        {
-            builder.Services.AddOpenTelemetry().UseOtlpExporter();
+            telemetry.UseOtlpExporter();
         }
+
+        OutgoingHttpRedaction.Register(); // the failure path: exception events without host or port (#232)
 
         return builder;
     }

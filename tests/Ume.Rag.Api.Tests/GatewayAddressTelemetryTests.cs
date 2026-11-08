@@ -29,6 +29,33 @@ public sealed class GatewayAddressTelemetryTests
     }
 
     [Theory]
+    [InlineData("Ume.Rag.Api")]
+    [InlineData("Ume.Rag.AdminApi")]
+    [InlineData("Ume.Rag.MigrationService")]
+    public void The_service_does_not_log_ef_sql_text_at_information(string project)
+    {
+        // #503: EF's command log at Information writes every statement's SQL text and timing.
+        using var settings = JsonDocument.Parse(File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("src", project, "appsettings.json"))));
+        var levels = settings.RootElement.GetProperty("Logging").GetProperty("LogLevel");
+        levels.TryGetProperty("Microsoft.EntityFrameworkCore.Database.Command", out var level).ShouldBeTrue();
+        level.GetString().ShouldBeOneOf(["Warning", "Error", "Critical", "None"]);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("http://127.0.0.1:9", true)]
+    public void Tracing_is_registered_only_with_an_otlp_endpoint(string? endpoint, bool traced)
+    {
+        // #503: without an exporter no tracer provider exists, so no request, HTTP or SQL span is recorded to be dropped.
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint;
+        builder.AddServiceDefaults();
+        using var app = builder.Build();
+        (app.Services.GetService<OpenTelemetry.Trace.TracerProvider>() is not null).ShouldBe(traced);
+        app.Services.GetService<OpenTelemetry.Metrics.MeterProvider>().ShouldNotBeNull(); // metrics stay
+    }
+
+    [Theory]
     [InlineData("http://gateway-secret.invalid:8443/v1/embeddings?key=abc", "gateway-secret", "http://redacted/v1/embeddings")] // DNS failure
     [InlineData("http://127.0.0.1:{free}/v1/embeddings?key=abc", "127.0.0.1", "http://redacted/v1/embeddings")]              // refused
     public async Task A_failed_outgoing_span_names_no_host_in_tags_events_or_status(string url, string host, string redacted)
@@ -41,6 +68,7 @@ public sealed class GatewayAddressTelemetryTests
         url = url.Replace("{free}", free.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
 
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://127.0.0.1:9"; // spans are made only to be exported (#503)
         builder.AddServiceDefaults();
         builder.Services.AddHttpClient("gateway").RemoveStandardResilienceHandler();
         using var app = builder.Build();

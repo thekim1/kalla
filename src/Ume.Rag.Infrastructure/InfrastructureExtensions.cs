@@ -68,7 +68,9 @@ public static class InfrastructureExtensions
         });
         builder.Services.AddDbContextPool<RagDbContext>((sp, options) =>
             options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), RagDbContext.ConfigureNpgsql));
-        builder.EnrichNpgsqlDbContext<RagDbContext>();
+        // Its Npgsql tracing registers a tracer provider of its own: only when traces are exported (#503, ServiceDefaults).
+        var exporting = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
+        builder.EnrichNpgsqlDbContext<RagDbContext>(settings => settings.DisableTracing |= !exporting);
         return builder;
     }
 
