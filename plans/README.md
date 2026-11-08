@@ -28,7 +28,8 @@ nobody needs to read them end to end.
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.
-- [`to-verify.md`](to-verify.md): package, behaviour and estimate checks with their results; the streams record new
+- [`to-verify.md`](to-verify.md): the open package, behaviour and estimate checks; closed rows, with their results, are
+  in [`archive/to-verify-closed.md`](archive/to-verify-closed.md) under the same numbers. The streams record new
   results in `work/results-a.md` and `work/results-b.md`.
 - [`architecture.md`](architecture.md): diagrams (system overview, chat request, ingestion, tool call).
 - [`gold-set/`](gold-set/README.md): the draft gold set for the go-live gate.
