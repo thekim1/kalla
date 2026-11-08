@@ -98,7 +98,12 @@ jobs:
         run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Start the dry run's registry
         if: github.event_name != 'push'
-        run: docker run -d --name registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
+        # Both runners share one Docker daemon: remove a registry an earlier, cancelled or failed dry run left behind.
+        run: |
+          docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
+          # Before this step had a cleanup the container was called "registry": remove it only if it runs our image.
+          if [ "$(docker inspect -f '{{.Config.Image}}' registry 2>/dev/null)" = "$DRY_RUN_REGISTRY_IMAGE" ]; then docker rm -f registry; fi
+          docker run -d --name ume-rag-dryrun-registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
@@ -136,6 +141,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           REGISTRY_HOST: ${{ steps.version.outputs.registry_host }}
           REPOSITORY: ${{ steps.version.outputs.repository }}
+          # The SBOM tool ships only tools/net8.0 (4.1.13 is the latest); the runner host has .NET 10 runtimes only.
+          DOTNET_ROLL_FORWARD: Major
         run: |
           mkdir -p sbom
           for entry in api:Api admin:AdminApi worker:Worker migrations:MigrationService; do
@@ -241,9 +248,11 @@ jobs:
           set -a; . ./images.env; set +a
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
       - name: Smoke test the bundle
+        # The self-hosted runner has no sudo (docs/ci-runner.md): init-deployment.sh's chown runs as root in a
+        # throwaway container of the bundle's postgres image.
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke"
+            --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker
       - uses: actions/upload-artifact@v7
         with:
           name: release
@@ -252,6 +261,9 @@ jobs:
             sbom/
             images.env
           if-no-files-found: error
+      - name: Remove the dry run's registry
+        if: always() && github.event_name != 'push'
+        run: docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
 
   publish:
     # Only for a pushed tag; a dry run ends after the smoke test.
