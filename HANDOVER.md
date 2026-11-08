@@ -156,50 +156,17 @@ images on ghcr.io by digest, the bundle, SBOMs, SHA256SUMS). M-3 is ticked. What
 
 ## Lessons
 
-- **Before a release, run a release dry run** (`gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false`,
-  ~30 min) and fix what it finds; it is the only run of the bundle's smoke test. It never reaches the publish job.
-  Dispatch `e2e.yml` only when no other workflow runs (`gh run list --status in_progress`).
-- **The runner host was rebuilt since v0.1.0:** no sudo, no .NET 8, no `gh`. A workflow that needs a tool downloads a
-  pinned, checksummed copy (as Syft and gh) or rolls forward.
-- A failed `gh run view --log-failed` of the smoke test is long: grep `ok:|error:` for the script's own lines; an
-  `up --wait` "not healthy within 900s" after a few seconds means a one-shot container failed (read its log lines).
-- **Hardened Compose one-shots:** with `cap_drop: [ALL]`, root needs FOWNER to chmod what it has chowned.
-- **rag-api's JSON is snake_case globally** (OpenAI routes), so every endpoint it serves is too, including `/version`.
+Development and CI gotchas are in [`docs/local-development.md`](docs/local-development.md) (*Working notes*) and
+[`docs/ci-runner.md`](docs/ci-runner.md) (*Working with the workflows*), where stream agents read them too. What only the
+main session needs:
+
 - **`scripts/check-doc-refs.py`** resolves a bare `name.md §N` by file name: a new file with a common name (`plan.md`)
   captures old references. Give plan files distinctive names.
-- **Admin API scripting:** `/bff/login` → Keycloak form (`#username`, `#password`, `#kc-login`; the AppHost secret
-  `Parameters:dev-user-password` from `~/.microsoft/usersecrets/ume-rag-apphost-dev/secrets.json`, BOM) → the
-  `form_post` page (upper-case `FORM`/`INPUT` attributes: match case-insensitively) → `GET /bff/user`. Writes need
-  `X-Requested-With: XMLHttpRequest` and `X-XSRF-TOKEN` (cookie `RAG-XSRF-TOKEN`). The OpenAPI document is
-  `/openapi/v1.json` through the BFF. A draft made by API needs `collectionLinks`, or it searches nothing.
-- **Browser checks:** the Playwright MCP browser is not installed; use `playwright-core` 1.64.1 in a scratch folder
-  with `executablePath` `~/.cache/ms-playwright/chromium-1247/chrome-linux64/chrome`, `ignoreHTTPSErrors`. Drawers are
-  `dialog[open]`. Wait for the data, not only `networkidle`.
-- **The interim gateway:** Claude models refuse `temperature`; 403 for Python's default User-Agent; 429 on
-  embeddings (requeued); its front proxy answers intermittent `error code: 502`, so chat-model rerank runs carry many
-  fallbacks (the Foundry reranker had none).
-- **AppHost containers:** DCP copies files into a container before it starts, so `--read-only` breaks an AppHost
-  container; Compose keeps the read-only root.
-- **Worktrees:** running the AppHost from a worktree makes it `npm install` into `src/admin-ui/node_modules`, replacing
-  a symlink with a real directory (git-ignored, but `git worktree remove` then needs `--force`). Never `git add -A` in
-  a worktree. Merge a PR without `--delete-branch` while another agent still reads its worktree.
-- The `implementor` agent refuses git writes (commit, rebase): review its diff, commit and rebase yourself.
+- The `implementor` agent refuses git writes (commit, rebase): review its diff, commit and rebase yourself. Merge a PR
+  without `--delete-branch` while another agent still reads its worktree.
 - Squash-merged branches look unmerged to git: check the PR state (`gh pr list --state all`) and `git rev-list
   --count main..<branch>` before `git branch -D`.
-- Read the first real failure; don't overlap two Worker.Tests runs. Admin UI checks in a worktree: symlink
-  `node_modules`, `npx vitest run --pool=threads`, `npx eslint --max-warnings 0 …`, `npx vue-tsc -p tsconfig.app.json
-  --noEmit --composite false --incremental false`; remove the symlink.
-- A flaky test can be a real bug (#471): read the failed attempt's full log (`gh run view <id> --attempt 1
-  --log-failed`) before calling it a race.
-- Tests that listen to process-wide `ActivitySource`s or meters must filter to their own scope (#431).
 - When editing a stream's queue on `main`, `pull --rebase` first: stream B edits queues too.
-- `Chat:*Timeout` knobs are TimeSpans (`00:00:03`); a bare `3` means three days.
-- **`pkill -f <pattern>` kills its own shell** when the pattern appears in the command line: use
-  `pgrep -f '<pat>[.]sh' | xargs -r kill`, or kill by PID.
-- **Knobs live in two services:** `Render:MaxConcurrent` is the worker's render cap *and* the admin API's ceiling for
-  `renderPerHost` (V37). A local test value needs both user secrets (`ume-rag-worker`, `ume-rag-adminapi`).
-- **The admin test endpoint is rate limited** (20 calls a minute: 429s); pace chat-latency samples (one per 10 s).
-- `gh pr checks --watch` right after a push returns at once with "no checks reported": wait ~30 s first.
 
 ## Environment notes
 
@@ -207,6 +174,4 @@ images on ghcr.io by digest, the bundle, SBOMs, SHA256SUMS). M-3 is ticked. What
   address and the same key are in the AppHost user secrets (`Gateway:BaseUrl`, `Gateway:Keys:Eu`). Never commit,
   print or move them.
 - **Git over HTTPS:** `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch|pull|push …`.
-- Self-hosted runners `ume-rag` and `ume-rag2` share one machine and one Docker daemon (`docs/ci-runner.md`); the
-  renderer tests use fixed subnets 10.214.0.0/24 and 10.215.0.0/24, so two renderer jobs at once could collide.
 - `172.30.0.0/16` is taken on this machine; test networks use 10.21x.0.0/24.

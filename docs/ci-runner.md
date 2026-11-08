@@ -14,6 +14,23 @@ With `verify.yml`'s backend and renderer jobs on the other runner at the same ti
 the browser ("The server cannot be reached") although the same commit passed alone. `release.yml` starts them after
 `verify` and `parser` for that reason.
 
+## Working with the workflows
+
+- **Before a release, run a release dry run** and fix what it finds:
+  `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 30 minutes). It is the only run of the
+  bundle's smoke test (`deploy/tests/release-smoke.sh`), and it never reaches the publish job.
+- **The runner has no sudo, no .NET 8 and no `gh`.** A workflow that needs a tool downloads a pinned, checksummed copy
+  (as `release.yml` does for Syft and `gh`) or rolls forward (`DOTNET_ROLL_FORWARD: Major` for the net8-only SBOM tool).
+- **Reading a failed smoke test:** `gh run view <id> --log-failed` is long; grep `ok:|error:` for the script's own
+  lines. An `up --wait` "not healthy within 900s" a few seconds after the start means a one-shot container failed:
+  read its log lines.
+- **A flaky test can be a real bug** (#471): read the failed attempt's full log (`gh run view <id> --attempt 1
+  --log-failed`) before calling it a race.
+- `gh pr checks --watch` right after a push returns at once with "no checks reported": wait about 30 s first.
+- **Fixed test subnets:** the renderer image test uses `10.214.0.0/24` and `10.214.1.0/24`, the worker's renderer
+  container test in `verify.yml` `10.215.0.0/24`. Both runners share one Docker daemon, so two renderer jobs at once can
+  collide.
+
 ## Packages (once, with sudo)
 
 ```bash
