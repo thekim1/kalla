@@ -48,7 +48,7 @@ Once decided: a Decisions row, then drop the collision notes in `docs/ci-runner.
   is #497 for stream b. Dry run 42479183095 green, then the tag.
 - **The tag run (42480775293)** passed verify, parser and build (images pushed), then **publish** failed: `gh: command
   not found` on the runner. The release was created by hand from that run's `release` artifact with the workflow's own
-  notes script (checksums verified after download). **#498** (open; merge when green): the publish job downloads a
+  notes script (checksums verified after download). **#498** (merged): the publish job downloads a
   pinned gh 2.103.3 with its sha256. A dry run never reaches publish, so the next tag is its first real test.
 - **M-3 ticked**, roadmap "P1b code done, released as `v0.2.0`".
 
@@ -57,7 +57,6 @@ Once decided: a Decisions row, then drop the collision notes in `docs/ci-runner.
 - **#488 parts 1 and 3** are stream b's (validate `readySelector` on save; a Cancel run action in the admin UI).
 - **Waiting on people** (roadmap): gold set with DoIT, G1/DPIA, test host (also: Chromium's sandbox on a Linux Docker
   Engine host, to-verify #29), U1, N1/W1.
-- **#498:** merge when its checks are green (pinned gh for the publish job).
 - **#497** (stream b): `/version` in one JSON shape in every service; then drop the smoke test's fallback.
 - The live block (M-4), in the roadmap's order.
 
