@@ -1,6 +1,6 @@
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Ume.Rag.Api;
 
@@ -34,20 +34,24 @@ public sealed class OpenWebUiOptions
 public sealed record OpenWebUiUser(string Subject, string? Name, string? Email, string Role);
 
 /// <summary>
-/// Validates Open WebUI's per-request user JWT (identity design §5.2) without a JWT library: exactly one header of ≤ 4 KB;
-/// <c>alg</c> pinned to <c>HS256</c> (no <c>kid</c>); the signature compared in constant time with <c>OpenWebUi:JwtSecret</c>;
-/// <c>iss = open-webui</c>; <c>exp</c> and <c>iat</c> required with 30 s skew, a lifetime ≤ <c>MaxLifetimeSeconds</c> and
-/// <c>iat</c> not in the future; <c>sub</c> printable, 1–100 characters; <c>role</c> <c>user</c> or <c>admin</c>. Refusal
-/// codes: <c>user_jwt_missing</c>, <c>user_jwt_invalid</c>, <c>user_jwt_expired</c>, <c>user_jwt_role</c>.
+/// Validates Open WebUI's per-request user JWT (identity design §5.2) with <c>Microsoft.IdentityModel.JsonWebTokens</c>
+/// (#512): exactly one header of ≤ 4 KB; <c>alg</c> pinned to <c>HS256</c> and no <c>kid</c> (the library would try the
+/// key for any <c>kid</c>); the signature checked with <c>OpenWebUi:JwtSecret</c>; <c>iss = open-webui</c>. The time rules
+/// are checked here against the host's clock (the library's lifetime check reads the system clock; its
+/// <c>TimeProvider</c> is internal in 8.19): <c>exp</c> and <c>iat</c> required with 30 s skew, a lifetime ≤
+/// <c>MaxLifetimeSeconds</c> and <c>iat</c> not in the future. <c>sub</c> printable, 1–100 characters; <c>role</c>
+/// <c>user</c> or <c>admin</c>.
+/// Refusal codes: <c>user_jwt_missing</c>, <c>user_jwt_invalid</c>, <c>user_jwt_expired</c>, <c>user_jwt_role</c>.
 /// </summary>
 public static class OpenWebUiUserJwt
 {
     public const string Header = "X-OpenWebUI-User-Jwt";
     private const int MaxLength = 4096;
     private static readonly TimeSpan Skew = TimeSpan.FromSeconds(30);
+    private static readonly JsonWebTokenHandler Handler = new();
 
     /// <summary>The user, or the refusal code (the JWT is never a credential on its own; the caller checked the key first).</summary>
-    public static (OpenWebUiUser? User, string? Refusal) Validate(HttpRequest request, OpenWebUiOptions options, DateTimeOffset now)
+    public static async Task<(OpenWebUiUser? User, string? Refusal)> ValidateAsync(HttpRequest request, OpenWebUiOptions options, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(options);
@@ -62,69 +66,49 @@ public static class OpenWebUiUserJwt
             return (null, "user_jwt_invalid");
         }
 
-        var parts = token.Split('.');
-        if (parts.Length != 3)
+        var result = await Handler.ValidateTokenAsync(token, new TokenValidationParameters
+        {
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+            ValidIssuer = "open-webui",
+            ValidateAudience = false,
+            ValidateLifetime = false,
+        });
+        if (!result.IsValid)
         {
             return (null, "user_jwt_invalid");
         }
 
-        try
-        {
-            using var header = JsonDocument.Parse(Base64Url(parts[0]));
-            if (!header.RootElement.TryGetProperty("alg", out var alg) || alg.GetString() != "HS256" || header.RootElement.TryGetProperty("kid", out _))
-            {
-                return (null, "user_jwt_invalid");
-            }
-
-            var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]));
-            if (!CryptographicOperations.FixedTimeEquals(expected, Base64Url(parts[2])))
-            {
-                return (null, "user_jwt_invalid");
-            }
-
-            using var payload = JsonDocument.Parse(Base64Url(parts[1]));
-            var claims = payload.RootElement;
-            if (Text(claims, "iss") != "open-webui" || !claims.TryGetProperty("exp", out var expClaim) || !claims.TryGetProperty("iat", out var iatClaim) ||
-                !expClaim.TryGetInt64(out var exp) || !iatClaim.TryGetInt64(out var iat))
-            {
-                return (null, "user_jwt_invalid");
-            }
-
-            var issued = DateTimeOffset.FromUnixTimeSeconds(iat);
-            var expires = DateTimeOffset.FromUnixTimeSeconds(exp);
-            if (issued > now + Skew || expires - issued > TimeSpan.FromSeconds(options.MaxLifetimeSeconds) || expires <= issued)
-            {
-                return (null, "user_jwt_invalid");
-            }
-
-            if (expires + Skew < now)
-            {
-                return (null, "user_jwt_expired");
-            }
-
-            var subject = Text(claims, "sub");
-            if (subject is not { Length: > 0 and <= 100 } || subject.Any(char.IsControl))
-            {
-                return (null, "user_jwt_invalid");
-            }
-
-            var role = Text(claims, "role");
-            return role is "user" or "admin"
-                ? (new OpenWebUiUser(subject, Text(claims, "name"), Text(claims, "email"), role), null)
-                : (null, "user_jwt_role");
-        }
-        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentOutOfRangeException)
+        var jwt = (JsonWebToken)result.SecurityToken;
+        if (jwt.TryGetHeaderValue<object>(JwtHeaderParameterNames.Kid, out _)
+            || !jwt.TryGetPayloadValue<long>(JwtRegisteredClaimNames.Iat, out _) || !jwt.TryGetPayloadValue<long>(JwtRegisteredClaimNames.Exp, out _))
         {
             return (null, "user_jwt_invalid");
         }
+
+        // ValidTo is clamped to DateTime.MaxValue for an exp beyond it, so an absurd exp is a too-long lifetime, not a 500.
+        var (issued, expires) = (jwt.IssuedAt, jwt.ValidTo);
+        if (issued > now.UtcDateTime + Skew || expires - issued > TimeSpan.FromSeconds(options.MaxLifetimeSeconds) || expires <= issued)
+        {
+            return (null, "user_jwt_invalid");
+        }
+
+        if (expires + Skew < now.UtcDateTime)
+        {
+            return (null, "user_jwt_expired");
+        }
+
+        var subject = Text(jwt, JwtRegisteredClaimNames.Sub);
+        if (subject is not { Length: > 0 and <= 100 } || subject.Any(char.IsControl))
+        {
+            return (null, "user_jwt_invalid");
+        }
+
+        var role = Text(jwt, "role");
+        return role is "user" or "admin"
+            ? (new OpenWebUiUser(subject, Text(jwt, "name"), Text(jwt, "email"), role), null)
+            : (null, "user_jwt_role");
     }
 
-    private static string? Text(JsonElement claims, string name) =>
-        claims.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-
-    private static byte[] Base64Url(string text)
-    {
-        var padded = text.Replace('-', '+').Replace('_', '/');
-        return Convert.FromBase64String(padded.PadRight(padded.Length + (4 - padded.Length % 4) % 4, '='));
-    }
+    private static string? Text(JsonWebToken jwt, string name) => jwt.TryGetPayloadValue<string>(name, out var value) ? value : null;
 }
