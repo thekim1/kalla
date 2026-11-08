@@ -39,6 +39,10 @@ env:
   # from the release's syft_1.55.0_checksums.txt.
   SYFT_VERSION: 1.55.0
   SYFT_SHA256: bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d
+  # GitHub CLI for the publish job (the self-hosted runner has none): v2.103.3 (2026-10-26), sha256 of
+  # gh_2.103.3_linux_amd64.tar.gz from the release's gh_2.103.3_checksums.txt.
+  GH_CLI_VERSION: 2.103.3
+  GH_CLI_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
   # Microsoft.Sbom.DotNetTool 4.1.13 (NuGet, 2026-09-22), the gateway's.
   SBOM_TOOL: Microsoft.Sbom.DotNetTool@4.1.13
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
@@ -274,6 +278,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: GitHub CLI
+        # v0.2.0's publish failed with "gh: command not found" on the self-hosted runner.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/gh.tar.gz" \
+            "https://github.com/cli/cli/releases/download/v$GH_CLI_VERSION/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          echo "$GH_CLI_SHA256  $RUNNER_TEMP/gh.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gh.tar.gz" -C "$RUNNER_TEMP/bin" --strip-components=2 "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v8
         with:
           name: release
