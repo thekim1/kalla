@@ -13,7 +13,7 @@ public sealed record PolitenessCeilings(double MaxHostRate, int MaxHostConnectio
 {
     public const double DefaultMaxHostRate = 50;
     public const int DefaultMaxHostConnections = 16;
-    public const int DefaultMaxRenderPerHost = 2;
+    public const int DefaultMaxRenderPerHost = 4;
 
     public static PolitenessCeilings Default { get; } = new(DefaultMaxHostRate, DefaultMaxHostConnections, DefaultMaxRenderPerHost);
 }

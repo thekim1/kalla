@@ -73,7 +73,7 @@ public sealed class PolitenessProfileTests
         });
 
         var profile = policy.ProfileOf("www.example.org");
-        (profile.RequestsPerSecond, profile.MaxConnections, profile.RenderPerHost).ShouldBe((50.0, 16, 2));
+        (profile.RequestsPerSecond, profile.MaxConnections, profile.RenderPerHost).ShouldBe((50.0, 16, 4));
         var lowered = (policy with { Ceilings = new PolitenessCeilings(20, 8, 1) }).ProfileOf("www.example.org");
         (lowered.RequestsPerSecond, lowered.MaxConnections, lowered.RenderPerHost).ShouldBe((20.0, 8, 1));
         var slow = policy.ProfileOf("slow.example.org");
@@ -213,5 +213,16 @@ public sealed class PolitenessProfileTests
 
         failures.ShouldBe(20);
         verdict.ShouldBe(new HostVerdict(time.GetUtcNow().AddMinutes(5), HostBudget.BreakerPause));
+    }
+
+    [Fact]
+    public void Render_per_host_is_capped_at_the_hosts_connections()
+    {
+        // A rendered page holds one of the host's connections for its whole render (A-13 follow-up): renderPerHost 4 on
+        // an external host (1 connection) renders one page at a time, and with 4 connections four.
+        var ceilings = new PolitenessCeilings(50, 16, 4);
+        PolitenessProfile.Resolve(HostKind.External, new HostPoliteness { RenderPerHost = 4 }, ceilings).RenderPerHost.ShouldBe(1);
+        PolitenessProfile.Resolve(HostKind.External, new HostPoliteness { RenderPerHost = 4, MaxConnections = 4 }, ceilings).RenderPerHost.ShouldBe(4);
+        PolitenessProfile.Resolve(HostKind.External, new HostPoliteness { RenderPerHost = 4, MaxConnections = 2 }, ceilings).RenderPerHost.ShouldBe(2);
     }
 }

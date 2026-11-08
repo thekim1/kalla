@@ -15,8 +15,11 @@ public sealed partial class RenderOptions
     /// <summary>The <c>rag-renderer</c> WebSocket URL with its secret path (<c>ws://rag-renderer:3000/&lt;path&gt;</c>); a secret.</summary>
     public string? Endpoint { get; set; }
 
-    /// <summary>Renders at once in this worker; also the most a host's <c>renderPerHost</c> may be (§6.6).</summary>
-    public int MaxConcurrent { get; set; } = 2;
+    /// <summary>
+    /// Renders at once in this worker; also the most a host's <c>renderPerHost</c> may be (§6.6). 4 (A-13 follow-up): the
+    /// renderer's peak was 294 MiB with one open page and 453 MiB with four (≈ +55 MiB each) against its 2 GB limit.
+    /// </summary>
+    public int MaxConcurrent { get; set; } = 4;
 
     /// <summary>A page must be ready within this.</summary>
     public TimeSpan PageTimeout { get; set; } = TimeSpan.FromSeconds(20);

@@ -42,7 +42,7 @@ public sealed record HostPoliteness
     /// <summary>Sent on every request to the host; robots.txt groups are still matched against <c>UmeaKommunBot</c>.</summary>
     public string? UserAgent { get; init; }
 
-    /// <summary>Pages the renderer loads at once from this host (§8.3).</summary>
+    /// <summary>Pages the renderer loads at once from this host (§8.3); the worker uses at most the host's <c>maxConnections</c>, since a render holds a connection.</summary>
     public int? RenderPerHost { get; init; }
 }
 

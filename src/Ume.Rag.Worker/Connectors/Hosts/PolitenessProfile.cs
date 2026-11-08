@@ -139,11 +139,14 @@ public sealed record PolitenessProfile
             };
         }
 
+        var connections = Math.Clamp(profile.MaxConnections, 1, ceilings.MaxHostConnections);
         return profile with
         {
             RequestsPerSecond = Math.Clamp(profile.RequestsPerSecond, HostPolitenessRules.MinRequestsPerSecond, ceilings.MaxHostRate),
-            MaxConnections = Math.Clamp(profile.MaxConnections, 1, ceilings.MaxHostConnections),
-            RenderPerHost = Math.Clamp(profile.RenderPerHost, 1, ceilings.MaxRenderPerHost),
+            MaxConnections = connections,
+            // A rendered page holds one of the host's connections for its whole render, so renders beyond MaxConnections
+            // would only hold render slots while they wait for a connection (A-13 follow-up).
+            RenderPerHost = Math.Clamp(profile.RenderPerHost, 1, Math.Min(ceilings.MaxRenderPerHost, connections)),
         };
     }
 }
