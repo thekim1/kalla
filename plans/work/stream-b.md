@@ -287,7 +287,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #504.
 
-### [ ] B-28 One statement K: the search-vector expression as a parameter (#509, statement part)
+### [x] B-28 One statement K: the search-vector expression as a parameter (#509, statement part) (#523)
 - **Do:** `RetrievalStatements.Keyword` takes the search-vector expression (the stored `SearchVector` by default,
   `to_tsvector('swedish', "Text")` for the no-decompounder variant), cached per variant like the other statements.
   The worker's variant switches to it in A-24.

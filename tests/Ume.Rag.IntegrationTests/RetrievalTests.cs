@@ -88,6 +88,36 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Without_the_decompounder_k_matches_and_ranks_on_the_text_without_compound_parts()
+    {
+        var collection = Guid.NewGuid();
+        var compound = await _writer.AddDocumentAsync(Doc(collection),
+            [new FixtureChunk("Skicka in din bygglovsansökan i tid.") { SearchText = "Skicka in din bygglovsansökan i tid. bygglov ansökan", Embedding = V(0, 1, 0) }], Ct);
+        var plain = await _writer.AddDocumentAsync(Doc(collection),
+            [new FixtureChunk("Ansökan om bygglov lämnas via e-tjänsten.") { HeadingPath = "Bygglov", Embedding = V(0, 0, 1) }], Ct);
+        var stored = new PostgresSearchIndex(_api);
+        var computed = new PostgresSearchIndex(_api, new PostgresSearchOptions { KeywordVector = KeywordVector.WithoutDecompounder });
+
+        (await stored.KeywordAsync(Scope(collection), "bygglov", null, 10, Ct)).Select(c => c.ChunkId)
+            .ShouldBe([plain.ChunkIds[0], compound.ChunkIds[0]], ignoreOrder: true);
+        var hits = await computed.KeywordAsync(Scope(collection), "bygglov", null, 10, Ct);
+        hits.ShouldHaveSingleItem().ChunkId.ShouldBe(plain.ChunkIds[0], "the compound part is in SearchText only");
+
+        // Ranked on the computed vector: the heading path's A weight counts as it does in the generated column.
+        await using var connection = await _api.OpenConnectionAsync(Ct);
+        await using var rank = new NpgsqlCommand($"""
+            SELECT ts_rank_cd({RetrievalStatements.WithoutDecompounderSearchVector}, content.rag_or_query(to_tsvector('swedish', 'bygglov')))::double precision
+            FROM content."Chunks" c WHERE c."Id" = $1
+            """, connection);
+        rank.Parameters.Add(new NpgsqlParameter { Value = plain.ChunkIds[0] });
+        hits[0].KeywordScore.ShouldNotBeNull().ShouldBe((double)(await rank.ExecuteScalarAsync(Ct))!, 1e-9);
+
+        // Filters and the stop list apply to the variant as to production's K.
+        (await computed.KeywordAsync(Scope(collection) with { KeywordStopLexemes = ["bygglov"] }, "bygglov", null, 10, Ct)).ShouldBeEmpty();
+        (await computed.KeywordAsync(Scope(collection), "bygglov", new RetrievalFilters(DocumentTypes: ["nothing"]), 10, Ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Bygglov_altan_finds_a_chunk_with_only_the_compound_and_an_inflection()
     {
         var collection = Guid.NewGuid();

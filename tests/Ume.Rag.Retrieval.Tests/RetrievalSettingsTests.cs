@@ -58,6 +58,26 @@ public sealed class RetrievalSettingsTests
     }
 
     [Fact]
+    public void The_no_decompounder_statement_k_differs_from_production_only_in_the_search_vector()
+    {
+        for (var mask = FilterFragments.None; mask <= FilterFragments.All; mask++)
+        {
+            var stored = RetrievalStatements.Keyword(Profile, 100, mask);
+            var computed = RetrievalStatements.Keyword(Profile, 100, mask, KeywordVector.WithoutDecompounder);
+            computed.ShouldNotBe(stored);
+            RetrievalStatements.Keyword(Profile, 100, mask, KeywordVector.WithoutDecompounder).ShouldBeSameAs(computed, "cached per variant");
+
+            // The stored GIN index still preselects; the computed vector then matches and ranks.
+            var v = RetrievalStatements.WithoutDecompounderSearchVector;
+            computed.Replace($"\n      AND {v} @@ q.tsq", "", StringComparison.Ordinal)
+                .Replace($"ts_rank_cd({v}, q.tsq)", """ts_rank_cd(c."SearchVector", q.tsq)""", StringComparison.Ordinal)
+                .ShouldBe(stored);
+        }
+
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldNotContain("to_tsvector('swedish'::regconfig");
+    }
+
+    [Fact]
     public void Every_statement_variant_is_distinct_and_numbers_its_filters_in_order()
     {
         var texts = new HashSet<string>(StringComparer.Ordinal);
