@@ -3,7 +3,7 @@
 Detail step 10 of the Ume.Rag design. The rules of the weakness review and the simplification, performance and
 consistency passes are stated here (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §2, §5,
 §7–§10, §13, §15). Details [`../archive/area-plans/admin.md`](../archive/area-plans/admin.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
-in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without redesigning: the BFF, claim mapping,
+in [`../decisions.md`](../decisions.md). Consumes, without redesigning: the BFF, claim mapping,
 `RagPrincipal`, internal callers, keys and security events of [`../identity/design.md`](../identity/design.md) (§1–§4,
 §6, §10–§12); tables, grants, the outbox, encryption and retention of
 [`../platform/data-model.md`](../platform/data-model.md); templates, parameters, preview, publish, rollback and site
@@ -1518,7 +1518,7 @@ component axe checks.
 
 | Document | Change |
 |---|---|
-| `01-general-idea.md` §10 | row "Admin (step 10)" restated: journey pages only in P1, generic forms for platform objects, publish = plan → re-process → advisory report → keep or roll back, no canvas, serialised config writes, **V1–V34 with V20 and V27 retired (32 rules)**, one assistant type with draft/publish and versions (replaces "V1–V31", "`gating`", "Vue Flow 1.48.2", "`building` collections") |
+| `archive/decisions-log.md` | row "Admin (step 10)" restated: journey pages only in P1, generic forms for platform objects, publish = plan → re-process → advisory report → keep or roll back, no canvas, serialised config writes, **V1–V34 with V20 and V27 retired (32 rules)**, one assistant type with draft/publish and versions (replaces "V1–V31", "`gating`", "Vue Flow 1.48.2", "`building` collections") |
 | `HANDOVER.md` | admin row: drop "Vue Flow canvas P2"; cross-rules "V1–V34 (V20, V27 retired)" |
 | `identity/design.md` §1.3, §1.4 | `rag-reviewer` → `Review`, `FeedbackComments`, `Read`; `rag-pipeline-editor` = template parameters; roles on `ume-rag-admin`; env `UME_RAG_OIDC_GROUPS_REVIEWER` |
 | `identity/design.md` §4.3, §4.8 | explain-access endpoint consumes the pure `IAccessPolicy` steps and needs a stable step id and reason code per step; test panel runs `Ume.Rag.Answering` with the admin's `oid`, unpublished collections included; P2 agent test calls through the admin's in-process hub as `admin-console` (`ToolPolicy = read`) |

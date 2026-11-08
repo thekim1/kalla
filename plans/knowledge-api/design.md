@@ -1,7 +1,7 @@
 # Knowledge API: detailed design
 
 Detail step 7 of the Ume.Rag design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (binding, incl. its answered questions 1–3 and §20
-here) and the Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without
+here) and the Decisions table in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Ume.Rag.Retrieval` and
 the evaluator of [`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) (§5–§6, §11,
@@ -189,7 +189,7 @@ Unknown members are refused (`JsonUnmappedMemberHandling.Disallow` on the reques
 **Rejected filters**, with reasons: `language` (chunks carry no language column; documents are mostly Swedish; P2 if
 evaluation shows a need), score thresholds (rank-based scores; coverage is the supported signal), document or source
 ids (would let a caller probe membership; P2 "search within a document" only for MCP resources), arbitrary JSON
-metadata (no index, would bypass the GIN-only filter rule of `01-general-idea.md` §6).
+metadata (no index, would break the rule that every filter runs on an index).
 
 ### 3.2 Response (200)
 

@@ -112,3 +112,27 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
   swap transaction in engine §12 and data-model §3.2. Then queue the code items (A-25 waits on this).
 - **Done when:** the design sections say it and the items are queued.
 - **Waits on:** B-25's measurement (for #499).
+
+### [ ] M-11 Design documents that contradict the decisions (found in the rewrite, 2026-11-08)
+- **Do:** align each design with [`../decisions.md`](../decisions.md), or bring the call to the user where the decision
+  itself looks wrong:
+  - engine §13.1 says `files` has no `pathRules` (it has them, "Organisation"); connectors §5.1 says robots.txt is
+    always honoured ("Configurable politeness per host"); connectors §8.3 marks shadow-DOM flattening and same-host
+    iframe inlining "Later", the Crawlee entry lists them as adopted (user call).
+  - repo-and-deployment §6.2 still counts six containers; §8.1 states the deployer's `Group.Create` as settled (H7 is
+    open); §8 names one runner (there are two); §8.2 says the backend tests run on the pinned pgvector image (they
+    build `ume-rag/postgres`); the daily `audit.yml` schedule is in no decision.
+  - identity: the provider-per-phase table gives admins OTP in P1 ("P1 pilot sign-in": no OTP); the brokered AD and
+    Entra ID requirement of "Identity providers" is missing; identity §4.7 retries a gateway 503, chat §8.3 does not.
+  - gateway-changes §1 and §13.1 call rerank a separate P2 release ("Rerank pulled forward").
+  - `MaxInputTokens`: data-model §2.1 and `compose.prod.yaml` say 8192, "Pilot embedding model, U-b" 8191 (the model's
+    limit is 8191: check and align).
+  - admin: the judge model is "on-prem, V32" ("Evaluation models at the collection's ceiling": the collection's
+    ceiling); Swedish labels and wireframes remain ("Admin UI in English"); Edit is a header button, "Level change in
+    the edit drawer" puts it in the ⋯ menu.
+  - roadmap and postponed B1 give the gold set as 100–150 answerable (decision: 120–150); processing §14.8 has an
+    Overview alert, which "M-3 settlements" makes P2; the roadmap's P2 rerank bullet reads as if rerank were still P2.
+  - "Ask-a-file workspaces" (P2) are owned by teams and individuals, "Organisation" by departments only (user call
+    before P2).
+- **Done when:** each point is fixed in its design or answered by the user, and `check-doc-refs.py` passes.
+- **Waits on:** the decisions register (this PR).

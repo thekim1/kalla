@@ -24,7 +24,7 @@ never edit it), read:
 - `plans/gateway-changes/design.md` (the specification of every change below, with file and line citations into this
   repo);
 - `plans/gateway-changes/adr-drafts.md` (ADR drafts 018–020; release 1 needs only the residency-ceiling one);
-- `01-general-idea.md` §10, Decisions table rows "P1 pilot sign-in" and "M2 and test hosting".
+- `plans/decisions.md`, entries "P1 pilot sign-in" and "M2 and test hosting".
 
 **Citations are stale.** `gateway-changes/design.md` cites this repo at `e25b491` (v0.8.5). Since then v0.8.9 split
 `GatewayRequestHandler` along its seams (`RequestStages`, `RequestAccounting`, `ContentGuardStage`,

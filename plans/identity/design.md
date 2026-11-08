@@ -1,7 +1,7 @@
 # Identity, authentication and authorisation: detailed design
 
 Detail step 3 of the Ume.Rag design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (binding, incl. its answered questions) and the
-Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consistent with
+Decisions table in [`../decisions.md`](../decisions.md). Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
 The rules of the weakness review and the simplification pass are stated here (reasoning:
@@ -12,7 +12,7 @@ Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); O
 `~/git/rag-platforms/open-webui`. "Copy" means the file is copied with namespace and names changed only; "adapt" means
 copied and changed as stated; "new" means there is no gateway counterpart.
 
-**Identity provider per phase** (`../../01-general-idea.md` §10, row "P1 pilot sign-in", 2026-10-30; plan §1):
+**Identity provider per phase** (`../decisions.md` "P1 pilot sign-in"; plan §1):
 
 | Phase | Provider | RAG's part |
 |---|---|---|
@@ -1115,7 +1115,7 @@ both products, with **no code in either product referring to the other's roles**
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)
 
 **Later (P2):** `infra/entra/` and `entra.yml` hold it, not yet applied in a tenant. Entra sign-in is
-**P2**: the pilot (P1) signs in with Keycloak (`01-general-idea.md` §10, row "P1 pilot sign-in"), so package 1 is
+**P2**: the pilot (P1) signs in with Keycloak (`decisions.md` "P1 pilot sign-in"), so package 1 is
 submitted for P2.
 
 ### 12.1 Content

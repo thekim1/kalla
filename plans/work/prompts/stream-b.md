@@ -14,7 +14,7 @@ session reviews and settles the design.
 1. `AGENTS.md` (binding rules).
 2. `plans/roadmap.md` (where the project is; one page).
 3. `plans/work/stream-b.md`: **your queue.** Each item says what to do, the paths, the done-when, what it waits on
-   and the design sections to read. Read only those sections; the Decisions table (`01-general-idea.md` §10) wins
+   and the design sections to read. Read only those sections; the decisions (`plans/decisions.md`) win
    over a design document.
 
 **Work loop:**

@@ -3,7 +3,7 @@
 Status: proposal, 2026-11-02. Based on `main` at `c224551` (including the benchmark findings in #333), the current
 Decisions table and detail documents,
 inspection of the retrieval, assistant and access code, and the references below. This is a design recommendation,
-not a new measurement or an implementation brief. It is not binding until adopted in `01-general-idea.md` §10.
+not a new measurement or an implementation brief. It is not binding until adopted in `plans/decisions.md`.
 Rewriting this proposal does not adopt its scope changes. Items marked **changes a decision** need adoption before
 implementation; items marked **fits current decisions** still need a scheduled checklist item if none exists.
 Where the items stand is kept in the roadmap, not here (`plans/roadmap.md`: items 1, 2 and 4–7 wait on product
@@ -221,7 +221,7 @@ Repository evidence: [assistant entities](src/Ume.Rag.Domain/Entities/AssistantE
 [access policy](src/Ume.Rag.Domain/Access/AccessPolicy.cs),
 [coverage evaluation](src/Ume.Rag.Retrieval/CoverageEvaluator.cs),
 [result diversity](src/Ume.Rag.Retrieval/ResultDiversifier.cs), and [current handover](HANDOVER.md).
-Binding details remain in the [Decisions table](01-general-idea.md), [organisation proposal](plans/archive/organisation-proposal.md),
+Binding details remain in the [decisions](plans/decisions.md), [organisation proposal](plans/archive/organisation-proposal.md),
 [knowledge design](plans/knowledge-api/design.md), [chat design](plans/chat-api/design.md),
 [connector design](plans/ingestion-worker/design-connectors.md), and [phase plan](plans/README.md).
 

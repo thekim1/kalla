@@ -1276,7 +1276,7 @@ simplification-pass form; items marked **(SP)** are new with this rewrite and st
 | `archive/area-plans/admin.md` §4 | preflight results, impact count before scope/identity changes, crawl report (§5.5), upload list, quarantine list, deletion confirmation (§13.5), held documents; municipal hosts, host overrides, blocked hosts. **(SP)** no crawl hierarchy tree or two-variant warning; site profile preview in the source form, profile versions, proposals and rollback; upload replace; incomplete-traversal alert |
 | `knowledge-api` | upload citations use the document's `DisplayName` **(SP: no "Bilaga … i …" in P1)**; consider de-duplicating chunks by `TextHash` within a collection (§3.1) |
 | `postponed-decisions.md` | the crawler about page (answered 10) needs an owner and URL; SharePoint ACL mirroring if §21 Q2 is answered "later". **(SP)** Z1 joined by legacy Office, RTF and email with child documents |
-| `01-general-idea.md` §10 | "Connectors (step 6b)" row: final-URL identity, canonical trusted only when verified, claims + releaser, site profiles, guard with reconcile phase |
+| `archive/decisions-log.md` | "Connectors (step 6b)" row: final-URL identity, canonical trusted only when verified, claims + releaser, site profiles, guard with reconcile phase |
 
 ## 21. Answered questions (2026-10-29)
 

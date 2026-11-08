@@ -1,7 +1,7 @@
 # Case: a support assistant for ticket handling
 
 Status: **case plan, non-binding** (main session, 2026-11-06; brought up to date with `v0.2.0` on 2026-11-08). It
-applies the platform to one use; it does not change the platform. The Decisions table ([`../../../01-general-idea.md`](../../../01-general-idea.md) §10) and the design
+applies the platform to one use; it does not change the platform. The decisions ([`../../decisions.md`](../../decisions.md)) and the design
 documents ([`../../README.md`](../../README.md)) bind and win where this plan differs from them. Every claim about
 existing behaviour names the file it was checked in; "unverified" marks what was not.
 

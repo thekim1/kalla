@@ -7,7 +7,7 @@ skills or tools.
 Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
 §10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (binding, incl. its answered questions 2–4
 and the recommendation of question 1, and §14 here) and the Decisions table in
-[`../../01-general-idea.md`](../../01-general-idea.md) §10. All of it is **P2 scope** unless marked (OBO, write tools,
+[`../decisions.md`](../decisions.md). All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
 budget, prompt frame, injection defences, gateway call, residency and echo checks, streaming, citations, output filter,
 writer and observability of [`../chat-api/design.md`](../chat-api/design.md) (§2.2, §4, §6.3, §7, §8, §9, §12, §17);
@@ -1159,7 +1159,7 @@ streams).
 
 | Document | Change |
 |---|---|
-| `01-general-idea.md` §10 | row "Tools (step 9)" restated: in-process hub with bulkheads, `hosted` only, one server `ume-mcp-kommun`, served pointer + rollback, static skills ≤ ~4k tokens, advisory skill gate end to end, share lists, lethal trifecta as hard refusal, early `/mcp` with two tools |
+| `archive/decisions-log.md` | row "Tools (step 9)" restated: in-process hub with bulkheads, `hosted` only, one server `ume-mcp-kommun`, served pointer + rollback, static skills ≤ ~4k tokens, advisory skill gate end to end, share lists, lethal trifecta as hard refusal, early `/mcp` with two tools |
 | `postponed-decisions.md` M1 | still open: Entra CIMD, RFC 8414 vs OIDC discovery, RFC 8707 `resource`, pre-authorisable client ids, client support for resources/prompts (P3), SDK recheck at P2 start (§15) |
 | `postponed-decisions.md` O2 | stopgap: `ume-mcp-kommun` with sample tariffs (§8.5) |
 | `archive/area-plans/platform.md` §1, §2 | `Ume.Rag.Tools` is a library (in-process hub in the chat role, also used by the admin; never the worker); no `rag-tools` container in P2; zone `tools-hosted` for hosted MCP servers |

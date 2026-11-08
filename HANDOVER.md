@@ -14,11 +14,9 @@ sink" monolith. Design and code live in this repo.
 
 ## Where to read
 
-1. `01-general-idea.md` §10 **Decisions table** (rows `current` bind). If **#521** has merged, read
-   `plans/decisions.md` (the register) instead; the old table is then `plans/archive/decisions-log.md`.
-2. **`plans/roadmap.md`**: what is done, what is left before go-live, the live block, waiting on people, P2/P3. One page.
-3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md` and `main.md`; results in `results-a.md` and
-   `results-b.md`.
+1. [`plans/decisions.md`](plans/decisions.md): the decisions in force (every entry binds).
+2. **`plans/roadmap.md`**: done, what is left before go-live, the live block, waiting on people, P2/P3. One page.
+3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md`; results in `results-a.md`/`results-b.md`.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
 6. **New this session:** `plans/platform/upload-quality-review.md` (an assessment, not binding: how well uploads are

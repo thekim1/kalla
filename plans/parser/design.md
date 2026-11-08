@@ -735,7 +735,7 @@ What this design needs from other documents; each of them states it.
 | `identity/design.md` §10 / repo-and-deployment §9 | security event `5104 rag.parser.limit_exceeded` (worker logs it) |
 | `archive/passes/performance-pass.md` §3.8 | parser hosts run a `parse` worker only (no `ner` class, no `NER_LANES` 2–6 sizing); the parser now also takes clean PDF pages (fast path) |
 | `postponed-decisions.md` | V1: `docling-slim` (2.145 reviewed), Tesseract, pypdfium2, uv image digest, snapshot date. Z1: archives and macro-enabled formats. P1 (OCR engine) closed: Tesseract `swe` with the §9.3 check; Z1 joined by legacy Office, RTF and email; P2 licence list without LibreOffice, EasyOCR, `python-oxmsg` |
-| `01-general-idea.md` §10 | "Parser detail (step 5)" row: routing (every PDF to the parser, fast path), inspect, multipart contract, stored DoclingDocument, supervisor model, Tesseract `swe` set explicitly |
+| `archive/decisions-log.md` | "Parser detail (step 5)" row: routing (every PDF to the parser, fast path), inspect, multipart contract, stored DoclingDocument, supervisor model, Tesseract `swe` set explicitly |
 
 ## 18. Answered questions (2026-10-29)
 
