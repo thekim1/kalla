@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-07, end of session 24 (`main` at `57b2a5c`). Earlier
+State of the Ume.Rag work for the next session. Rewritten 2026-11-08, end of session 25 (`main` at `e80c42c`). Earlier
 sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
 `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
@@ -16,109 +16,115 @@ sink" monolith. Design and code live in this repo.
 
 1. `01-general-idea.md` §10 **Decisions table** (rows `current` bind).
 2. **`plans/roadmap.md`**: done, what is left before go-live, the live block, waiting on people, P2/P3. One page.
-3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md` (each item: do, paths, done-when, waits on,
-   read). Items are ticked in the PR that does them. Start prompts in `plans/work/prompts/`.
+3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md`; results in `results-a.md`/`results-b.md`.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
 
-## Where we are
+## Start here: the e2e failure blocks M-3
 
-- **P0** released (`v0.1.0`). **P1a/P1b code is done apart from the M-3 follow-ups** (below). Every other code item of
-  both queues is ticked; the rest of the queues is the live block, waiting on people.
-- **Stream B is active again** (remote, GitHub `thekim1`). It built B-20 (#447 model pickers, API side), B-L1, B-L4
-  (gateway release 1 verified live), B-6, #468's convention changes and operator guide, and #476.
-- **Gateway** v0.9.1 is deployed and release 1 verified live. The interim key lists `Cohere-rerank-v5-fast`,
-  `claude-haiku-5-5`, `gpt-6-luna`, `text-embedding-3-large`; **not `claude-opus-5-5`**, so `turkos` (published on
-  Opus) fails in Open WebUI until the user decides (below).
+**Every code item of both queues is ticked.** M-3 (`plans/work/main.md`) is done except its last step, "run the full
+CI set once". On `main` at `e80c42c` (2026-11-08, dispatched by hand):
 
-### Built and merged in session 24 (all CI green, tests re-run by the main session)
+- `verify.yml` (run 42469432178): **all jobs green** (backend, admin-ui, renderer, evaluation-smoke, images,
+  deploy-checks, doc-refs).
+- `parser.yml` (run 42469434705): **all green**.
+- `e2e.yml` (run 42469437132): **failed**. Both pilot journeys show the admin UI's `offline` message, "The server cannot
+  be reached. Check your connection and try again.":
+  - **mouse** (`tests/e2e/specs/pilot.spec.ts:64`): step 5, after Preview, the "Result of the preview" region shows
+    the alert and never "Before / After". The preflight before it worked ("About 10 pages"), and the worker logged
+    `Preview …: 1 documents in 1590 ms`, so the job ran; a later request failed.
+  - **keyboard** (`:143`): step 10, the test panel's answer never shows "Answered"; the same alert.
+- That message is `ApiError(0, …, 'network')` from `src/admin-ui/src/api/client.ts`: **`fetch` itself threw**
+  (network error, a CSP-blocked request, or a redirect to another origin), not an HTTP error status. The server logs
+  in the run (step "Server logs of a failed run": last 300 lines of adminapi, admin-ui, api and worker) show no
+  `fail:` or exception. The admin UI is Vite 8.3.3's dev server proxying to the admin API.
+- **Last green e2e:** run 42142370096 on 2026-11-06 (branch `b/B-11-open-webui-link`, `bbc1c9e`, not on `main`; the
+  nearest main commit is `f7baab9`). About 20 PRs of both streams merged since. Admin API files changed since
+  `f7baab9`: `AssistantEndpoints.cs` (B-18/B-19/B-20/B-22), `SettingsEndpoints.cs`, `UploadEndpoints.cs` (B-24),
+  `GatewayEndpoints.cs`, `PipelineEndpoints.cs`, `Program.cs` (A-14, B-20). Admin UI: A-12, A-14, A-17, B-18..B-24.
+- **Next step:** reproduce locally. No `pwsh` here, so mirror `scripts/Start-E2E.ps1` in bash: `aspire stop --all`,
+  `docker volume rm ume-rag-e2e-postgres`, export `DevelopmentVolumes__Postgres=ume-rag-e2e-postgres
+  Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`, `aspire start --apphost … --non-interactive`,
+  `aspire wait admin-ui …`; then in `tests/e2e`: `npm ci`, `npx playwright install chromium` (the spec pins
+  `@playwright/test` 1.63.0), `npx playwright test specs/pilot.spec.ts --grep mouse --trace on`. The trace's network
+  tab names the request that fails. (A first attempt was stopped before it started, session 25.) Alternative: bisect
+  with `gh workflow run e2e.yml --ref <commit>` on a few main commits between `f7baab9` and `e80c42c`.
+- **When e2e is green:** tick M-3, say "P1b code done" in the roadmap, then the **v0.2.0 release** (user approved:
+  "after M-3 closes"; images and tag are outward-facing, the user said yes already).
 
-- **Rerank live run (#421):** `Cohere-rerank-v5-fast` on Foundry: MRR 0.825 vs 0.786 hybrid, 0 fallbacks, p50 651 ms.
-  `Retrieval:GatewayRerankTimeout` default 500 ms → **1.5 s** (#439). B-12, B-16 ticked.
-- **#435 (#443):** chunk dates from HTTP `Last-Modified` and reliable `lastmod` reach production; one shared
-  stage-input builder for production, preview and `DocumentProcessor`.
-- **JavaScript rendering (connectors §8; A-9 to A-12):** spike (#459, results-a row 29); `images/renderer`
-  (Playwright 1.64.1 `launch-server`, Chromium with its sandbox via `images/renderer/seccomp.json`, secret WebSocket
-  path, WebRTC off, 1.48 GB) on the internal `render` network 172.30.18.0/24 (#462); the worker drives it and fetches
-  every browser request through its egress guard, `PageFetcher` as the one fetch path, render slots, failures keep the
-  last good content and links, `Documents.FetchMode` (#463); source settings `fetchMode`/`readySelector`/`scrollToLoad`,
-  preflight raw-vs-rendered word counts with the "needs JavaScript" hint, render card, fetch mode in the preview
-  (#472). CI's `renderer` job runs the real-container test (#479). **A-13** partly done on a demo site (below).
-- **Politeness profiles per host (A-14, #461):** presets `polite`/`municipal`/`fast`/`custom` in
-  `Settings.Crawl.hostOverrides`; rate, connections, `Crawl-delay`, latency term, window, back-off, breaker,
-  **robots.txt ignore per host with a reason**, **free User-Agent per host**; ceilings `Crawl:MaxHostRate` 50 and
-  `Crawl:MaxHostConnections` 16; V37; host table in the admin UI.
-- **Crawlee review → HTTP gaps (A-15, #460):** meta refresh as a redirect hop, `redirect.cookie_required`, sniffed
-  `octet-stream`, soft-404 fingerprint (`http.soft_404`), challenge pages (`http.challenge`, never evaded), sitemap
-  retries and text sitemaps; **a URL that failed at any depth in a run is never `not-seen`** (was seeds only).
-- **#471 (#475):** the "flaky" test was a production bug: identity rules matched with a 50 ms timeout, so under load a
-  page got two identities; now `NonBacktracking` with no timeout. #476 (stream B) refuses constructs that engine lacks.
-- **#466 (#473):** Settings model fields are pickers that grey out models the key may not use.
-- **A-16 (#481):** the `files` template takes `pathRules` (a rule matches an upload's display name).
-- **M-3 (in progress):** every design deviation of the 309 PRs since v0.1.0 checked and settled in the design
-  (`fd46ad3`); results-a/b folded into `to-verify.md`; CHANGELOG (#478); the roadmap's gateway row updated.
+## Done in session 25 (2026-11-07/08; all merged, CI green with the tests actually run)
 
-## Decided this session (user, 2026-11-07; all in the Decisions table)
+- **A-13 renderer live check (#482):** Klimatkollen (a client-only Vite/React app) as the JavaScript site, umea.se
+  `turkos` as the HTTP baseline, both mixed, chat p95 during the crawl (unaffected). Two defects fixed: (1) a rendered
+  page's whole time fed the host's `LatencyEwmaMs`, which on an external host *is* the pacing interval, so renders
+  slowed each other into timeouts (`PageLatency.Of`); (2) `Render:QuietPeriod` 100 ms → **500 ms** (at 100 ms pages were
+  stored empty). Results: `results-a.md` "item A-13 (live sites)".
+- **A-17 (#483):** preflight `render.empty` warn; the run report's `render.empty` count and run-page row.
+- **A-18 (#484):** crawl concurrency probe (`tests/Ume.Rag.Worker.Tests/Scale/`, trait `Category=Scale`, runs only with
+  `UME_RAG_SCALE=1`): with many hosts the fetch lanes bound first; polite hosts filled them with in-process slot waits.
+- **#491:** `Worker:Concurrency:fetch` 8 → **32** (user); fetched bodies spool to `/data/blobs/spool` on disk
+  (`TMPDIR`), not the `/tmp` tmpfs that counts against the worker's 1.5 GB limit; `rag-blobs-init` creates it, release
+  smoke checks it, the worker deletes stale spool files at start.
+- **#492:** `Render:MaxConcurrent` 2 → **4** (user, after measuring: renderer peak 294 MiB with one open page, 453 MiB
+  with four, 2 GB limit); `renderPerHost` capped at the host's `maxConnections` (a render holds a connection).
+- **A-19 (#493, #488 part 2, #490):** ready rule with a `readySelector` = holds text **and** quiet (user); permanent
+  `render.bad_selector` and `render.selector_not_found`; `render.mostly_empty` degrades a run. Checked live on
+  e.umea.se: `<h1>` → bad selector in 4 s; `h2` now gives full pages (stream b's `h2` run had stored 130 of 131 empty).
+- **e.umea.se live check (#490 item 1, user approved):** no `readySelector`, 137 pages added, 0 empty, 0 failed;
+  answered on #490.
+- **Stream B** merged B-21..B-24 (#485–#489); their deviations are settled in the design (`e80c42c`).
+- **Small fixes:** `turkos` republished as v2 on `claude-haiku-5-5` (works in Open WebUI and the test panel); old dev
+  `Runs.SettingsHashes` without `fetch` cleared by hand (they failed every scheduler pass); three leftover branches
+  deleted.
 
-- **Gateway rerank time limit 1.5 s.**
-- **General knowledge on a public assistant** allowed with a warning and a confirmation on publish (#445; B-18).
-- **Level change in the edit drawer**, `edit` right (#446; B-19).
-- **Model pickers show what the key may use**, greyed out (#447; done).
-- **Parser telemetry is logs only in P1**; OTel in P2 (#453).
-- **JavaScript rendering:** a browser-only container driven by the worker (Option A; Chromium in the worker, a crawler
-  in the browser image and an egress proxy were rejected); per-source `fetchMode`, no automatic detection yet, render
-  every page of a `browser` source on every traversal; replay check, path rules, auto-detection and Lightpanda later.
-- **Configurable politeness per host** (robots.txt ignorable with a reason; User-Agent free; platform admin only).
-- **Crawlee review:** ideas adopted, Crawlee itself not (own queue, no SSRF guard, anti-bot machinery).
-- **Shared sign-in with the gateway** (#468): Keycloak groups carry role mappings for both systems, one client per
-  system, Entra app roles per product, two Compose projects; no code in either product refers to the other's roles.
-- **M-3 settlements:** the test panel is designed as built (its missing parts P2); Overview attention items and editors'
-  site-profile read access P2; the interaction-audit benchmark dropped; to-verify #102 (retrieval over budget at
-  100k chunks in one scope) accepted for the pilot, re-measured in R1.
+## Decided this session (user, 2026-11-07/08)
 
-## Next session
+- Keep strict 1 req/s pacing for an external single-page app's own subrequests; a per-page burst and a renderer asset
+  cache kept across runs are **P2** (roadmap, connectors P2 table).
+- `Worker:Concurrency:fetch` 32; `Render:MaxConcurrent` 4 after the memory measurement.
+- Ready rule: selector **and** quiet.
+- Testing on external JavaScript sites is fine; e.umea.se crawl approved.
 
-1. **GitHub:** `gh pr list`, `gh issue list`; review stream B's PRs (security-relevant parts), answer `main` issues.
-2. **M-3 closes** when stream B's **B-21..B-24** are merged (#480: one connection pool in rag-api; publish calls
-   `ValidateForPublish`; feedback-import alert, sources-table columns, deletion-card text from the configured guard,
-   stale `rag-additions.json` description; restore a deleted uploaded file). Then run the full CI set once **including
-   `e2e.yml`** (workflow_dispatch; M-3's done-when asks for it), tick M-3, and say "P1b code done" in the roadmap.
-   B-18, B-19 (#445, #446) are stream B's too.
-3. **Ask the user, then:** the v0.2.0 release (images and tag are outward-facing).
-4. **A-13** needs the user's two or three real JavaScript sites (§8.8 scenarios: mixed crawl, a change behind an
-   unchanged shell, chat p95 during the crawl).
-5. **User:** `turkos`'s model (allow Opus on the interim key, or republish on `claude-haiku-5-5`/`gpt-6-luna`); the
-   roadmap's "Waiting on people" (gold set with DoIT, G1/DPIA, test host, U1, N1/W1); three leftover branches of merged
-   PRs (`a/228-fetch-url`, `a/l3-eval-demote`, `a/compat-sweep`, local and remote) that the permission check would not
-   let the session delete.
+## Open, not blocking M-3
+
+- **#488 parts 1 and 3** are stream b's (validate `readySelector` on save; a Cancel run action in the admin UI).
+- **Waiting on people** (roadmap): gold set with DoIT, G1/DPIA, test host (also: Chromium's sandbox on a Linux Docker
+  Engine host, to-verify #29), U1, N1/W1.
+- The live block (M-4) after the release.
 
 ## Local stack (this machine)
 
+- **State at handover:** the dev AppHost is **stopped** (`aspire stop --all`). Its persistent containers (postgres,
+  keycloak, parser, clamav, renderer) still run. The e2e volume `ume-rag-e2e-postgres` does not exist. User secrets
+  are back to defaults (worker: none; admin API: no `Render:*`). The working tree's last build is of A-19's commit
+  (`c2d01eb`); run `dotnet build UmeRag.slnx` on `main` before starting.
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
-  --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. After merges:
-  `dotnet build UmeRag.slnx`, then restart. It runs `main` at `57b2a5c` now, renderer included.
+  --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
+  `aspire resource worker restart --apphost … --non-interactive`.
 - Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
-  `aspire logs worker --non-interactive --search <text>`; `aspire describe --apphost …` shows resource states.
+  `aspire logs worker --non-interactive`; `aspire describe --apphost …` shows resource states.
 - Ports: dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); api
   7401, admin API 7402, worker 7403; **Open WebUI `http://localhost:7410`**, Keycloak 7411, Postgres 7412, parser 7413,
-  ClamAV 7414, **renderer 7417** (`Render:Mode` `container` default, `off` skips it). Platform objects are under
-  `/plattform/<resource>` (e.g. `/plattform/settings`).
+  ClamAV 7414, **renderer 7417**. Platform objects are under `/plattform/<resource>` (e.g. `/plattform/settings`).
 - **Parser** goes cold after 15 idle minutes; `PARSER_IDLE_STOP_S=0` / `NER_IDLE_STOP_S=0` keep it warm.
-- **Data:** department DoIT; collection `turkos` (1,166 live documents, a 100-question generated evaluation set),
-  assistant `turkos` v1 on `claude-opus-5-5` (refused by the key). Collection **`renderer-demo`** with two crawl sources
-  of `quotes.toscrape.com` (`/js/` as `browser`, `/` as `http`; 5 pages each). Settings: `rerankModel` and the
-  evaluation models `claude-haiku-5-5`, `gatewayRerankModel` `Cohere-rerank-v5-fast`; manual mirror rows
-  `claude-haiku-5-5`, `claude-opus-5-5`, `Cohere-rerank-v5-fast` (rerank) — model sync is not configured locally
-  (`sync_off`), so new models need a manual `config."GatewayModels"` row.
-- **Rerank comparison:** `POST /api/collections/{turkos}/evaluation/run` with
-  `{"variants":["hybrid","hybrid-rerank","hybrid-rerank-gateway"]}`; result in `content."Jobs"."Result"`.
+- **Data:** department DoIT; collection `turkos` (1,166 live documents, a 100-question evaluation set), assistant
+  `turkos` **v2 on `claude-haiku-5-5`**; collection `renderer-demo` (quotes.toscrape.com, `browser` and `http`);
+  collection **`a13-klimatkollen`** (source *Klimatkollen companies (browser)*, 25 pages); collection **`a19-e-umea`**
+  (source *e.umea.se (browser, no readySelector)*, 137 pages). Crawl settings: `hostOverrides` only `www.umea.se`
+  (2 req/s, 2 connections). Gateway models: manual mirror rows `claude-haiku-5-5`, `claude-opus-5-5`,
+  `Cohere-rerank-v5-fast` (model sync is off locally).
+- **Admin API scripting:** `~/ume-rag-tools/` (outside the repo, no secrets in it): `admin.py` (BFF login from the
+  AppHost user secret, XSRF; `python3 -I admin.py GET /api/assistants`, or `import admin; admin.call(m, path, body)`),
+  `pf.py '<preflight JSON>'` (runs a preflight, prints its render check), `runwait.py <sourceId> [start]` (sync and
+  wait), `chat.py <n> <label> <out.json> [gap s]` (`turkos` test-panel latency). Run them from that folder.
 - Feedback importer: every minute, user secret `Parameters:openwebui-admin-api-key`. Logins:
   `~/ume-rag-demo-login.txt` (mode 600; port 7410). Draft gold sets: `~/ume-rag-gold-draft-*.csv`, `plans/gold-set/`.
 - Postgres: `docker exec -e PGPASSWORD="$(docker exec <postgres-…> printenv POSTGRES_PASSWORD)" <postgres-…> psql -h
   localhost -U postgres -d ragdb` (schemas `config`, `content`, `chat`).
-- Local images: `ume-rag/renderer:ci` (also tagged `ume-rag.local/renderer:ci`; the container test uses
+- Local images: `ume-rag/renderer:ci` (also `ume-rag.local/renderer:ci`; the container test uses
   `UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:ci`), `ume-rag.local/clamav:dev`, `ume-rag.local/parser:ci`,
-  `ume-rag.local/postgres:ci`.
+  `ume-rag.local/postgres:ci`. Playwright scratch use: `playwright-core` 1.64.1 with `executablePath`
+  `~/.cache/ms-playwright/chromium-1247/chrome-linux64/chrome`.
 
 ## How we work (user preferences, binding)
 
@@ -172,6 +178,16 @@ sink" monolith. Design and code live in this repo.
 - Tests that listen to process-wide `ActivitySource`s or meters must filter to their own scope (#431).
 - When editing a stream's queue on `main`, `pull --rebase` first: stream B edits queues too.
 - `Chat:*Timeout` knobs are TimeSpans (`00:00:03`); a bare `3` means three days.
+- **`pkill -f <pattern>` kills its own shell** when the pattern appears in the command line (it happened twice):
+  use `pgrep -f '<pat>[.]sh' | xargs -r kill`, or kill by PID.
+- **Knobs live in two services:** `Render:MaxConcurrent` is the worker's render cap *and* the admin API's ceiling for
+  `renderPerHost` (V37). A local test value needs both user secrets (`ume-rag-worker`, `ume-rag-adminapi`).
+- **A rendered page holds one host connection** for its whole render, so `renderPerHost` above `maxConnections` does
+  nothing (now capped, #492). An external host has 1 connection.
+- **Measuring Chromium pages in the renderer:** `ps -eo args | grep -c -- '--type=renderer'` counts 2 at idle (the
+  spare process and the grep itself).
+- **The admin test endpoint is rate limited** (20 calls a minute: 429s); pace chat-latency samples (one per 10 s).
+- `gh pr checks --watch` right after a force-push returns at once with "no checks reported": wait ~30 s first.
 
 ## Environment notes
 
