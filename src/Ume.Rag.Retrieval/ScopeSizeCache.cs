@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Ume.Rag.Retrieval;
 
 /// <summary>
@@ -17,8 +19,11 @@ namespace Ume.Rag.Retrieval;
 /// none yet it is retried after <see cref="FailedReadRetry"/>, not by every search (#333: each search used to wait for
 /// the failing read again, up to the role's statement timeout).
 /// </para>
+/// <para>A failed read of either is logged at Warning with the statement's name (#499, B-25).</para>
 /// </summary>
-public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, TimeSpan? refreshInterval = null, RetrievalMetrics? metrics = null) : IDisposable
+public sealed partial class ScopeSizeCache(
+    IScopeSizeSource source, TimeProvider time, TimeSpan? refreshInterval = null, RetrievalMetrics? metrics = null, ILogger? logger = null)
+    : IDisposable
 {
     /// <summary>A lexeme in more than this share of the scope's chunks is dropped from statement K's query.</summary>
     public const double KeywordStopShare = 0.30;
@@ -209,8 +214,18 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
                 _snapshot = snapshot;
                 return snapshot;
             }
-            catch (Exception) when (snapshot is not null && !cancellationToken.IsCancellationRequested)
+            catch (Exception e) when (!cancellationToken.IsCancellationRequested)
             {
+                if (logger is not null)
+                {
+                    LogReadFailed(logger, e, "CountChunks", snapshot is null ? "none yet" : "the previous ones");
+                }
+
+                if (snapshot is null)
+                {
+                    throw;
+                }
+
                 return snapshot; // keep the previous counts; the next search tries again
             }
         }
@@ -299,9 +314,14 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
                     .ToDictionary(g => g.Key, g => (IReadOnlyList<(string, long)>)[.. g.Select(r => (r.Lexeme, r.Chunks))]));
         }
 #pragma warning disable CA1031 // Any failure leaves K without a stop list (or with the previous one), never fails a search.
-        catch (Exception)
+        catch (Exception e)
 #pragma warning restore CA1031
         {
+            if (logger is not null)
+            {
+                LogReadFailed(logger, e, "FrequentLexemes", previous is null ? "none yet" : "the previous ones");
+            }
+
             next = previous is null ? null : previous with { ReadAt = time.GetUtcNow() };
             metrics?.KeywordStatisticsUnavailable();
             lock (_lexemeLock)
@@ -324,6 +344,9 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
 
         return next;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The search statistics statement {Statement} failed; searches keep {Kept}")]
+    private static partial void LogReadFailed(ILogger logger, Exception exception, string statement, string kept);
 
     private sealed record LexemeSnapshot(DateTimeOffset ReadAt, Dictionary<(Guid Profile, Guid Collection), IReadOnlyList<(string Lexeme, long Chunks)>> ByCollection);
 

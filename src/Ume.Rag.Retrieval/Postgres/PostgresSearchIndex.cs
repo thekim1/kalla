@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using Npgsql;
 using NpgsqlTypes;
 using Pgvector;
@@ -19,11 +20,19 @@ public sealed class PostgresSearchOptions
 /// <summary>
 /// Statements K and V on Postgres (knowledge design §6.2, §6.4) and the chunk counts for the exact/HNSW rule. Each call
 /// takes its own pooled connection, so K and V of one search overlap; no transaction (autocommit), no <c>SET</c> (the
-/// <c>hnsw.*</c> settings are role defaults, data-model §1.1). The data source must map pgvector types
-/// (<see cref="RetrievalDataSource.Configure"/>).
+/// <c>hnsw.*</c> settings are role defaults, data-model §1.1). The exception are the two background statistics, which
+/// read the whole index and can outlast the api role's 5 s <c>statement_timeout</c> on a large corpus (#499, B-25): they
+/// run in a read-only transaction with <c>SET LOCAL statement_timeout</c> equal to their client limits. The data source
+/// must map pgvector types (<see cref="RetrievalDataSource.Configure"/>).
 /// </summary>
 public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSearchOptions? options = null) : ISearchIndex, IScopeSizeSource
 {
+    /// <summary>Limit of <see cref="RetrievalStatements.CountChunks"/>, client and server side.</summary>
+    public static readonly TimeSpan CountChunksTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>Limit of <see cref="RetrievalStatements.FrequentLexemes"/>, client and server side.</summary>
+    public static readonly TimeSpan FrequentLexemesTimeout = TimeSpan.FromSeconds(60);
+
     private readonly PostgresSearchOptions _options = options ?? new PostgresSearchOptions();
 
     public Task<IReadOnlyList<Candidate>> KeywordAsync(
@@ -68,7 +77,7 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
                     Tags = reader.IsDBNull(2) ? [] : reader.GetFieldValue<string[]>(2),
                 });
             }
-        }, TimeSpan.FromSeconds(30), cancellationToken);
+        }, CountChunksTimeout, cancellationToken, serverLimit: true);
         return counts;
     }
 
@@ -86,7 +95,7 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
                 {
                     lexemes.Add(new FrequentLexeme(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt64(3)));
                 }
-            }, TimeSpan.FromSeconds(60), cancellationToken);
+            }, FrequentLexemesTimeout, cancellationToken, serverLimit: true);
         return lexemes;
     }
 
@@ -165,23 +174,44 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
 
     /// <summary>
     /// Runs one statement on its own connection within <paramref name="timeout"/>; a timeout or a server-side cancel
-    /// (not the caller's) becomes <see cref="SearchUnavailableException"/>.
+    /// (not the caller's) becomes <see cref="SearchUnavailableException"/>. With <paramref name="serverLimit"/> the
+    /// statement runs in a read-only transaction whose <c>statement_timeout</c> is <paramref name="timeout"/> instead of
+    /// the role's.
     /// </summary>
     internal async Task RunAsync(
-        string sql, IReadOnlyList<NpgsqlParameter> parameters, Func<DbDataReader, CancellationToken, Task> read, TimeSpan timeout, CancellationToken cancellationToken)
+        string sql, IReadOnlyList<NpgsqlParameter> parameters, Func<DbDataReader, CancellationToken, Task> read, TimeSpan timeout,
+        CancellationToken cancellationToken, bool serverLimit = false)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(timeout);
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(limit.Token);
+            await using var transaction = serverLimit ? await connection.BeginTransactionAsync(limit.Token) : null;
+            if (transaction is not null)
+            {
+#pragma warning disable CA2100 // An integer literal; SET takes no parameters.
+                await using var set = new NpgsqlCommand(
+                    string.Create(CultureInfo.InvariantCulture, $"SET TRANSACTION READ ONLY; SET LOCAL statement_timeout = {(long)timeout.TotalMilliseconds}"),
+                    connection, transaction);
+#pragma warning restore CA2100
+                await set.ExecuteNonQueryAsync(limit.Token);
+            }
+
 #pragma warning disable CA2100 // Statement texts are built from constants and config literals (Guid, int) only; values are parameters.
-            await using var command = new NpgsqlCommand(sql, connection);
+            await using var command = new NpgsqlCommand(sql, connection, transaction);
 #pragma warning restore CA2100
             command.CommandTimeout = Math.Max(1, (int)Math.Ceiling(timeout.TotalSeconds)) + 1; // backstop behind the token
             command.Parameters.AddRange(parameters.ToArray());
-            await using var reader = await command.ExecuteReaderAsync(limit.Token);
-            await read(reader, limit.Token);
+            await using (var reader = await command.ExecuteReaderAsync(limit.Token))
+            {
+                await read(reader, limit.Token);
+            }
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(limit.Token);
+            }
         }
         catch (Exception e) when (!cancellationToken.IsCancellationRequested && IsTimeout(e))
         {

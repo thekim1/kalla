@@ -130,6 +130,23 @@ public sealed class KeywordStopListTests
     }
 
     [Fact]
+    public async Task A_failed_read_is_logged_at_warning_with_the_statement_name()
+    {
+        // #499, B-25: a refresh that fails (for example on the role's statement timeout) is visible, not silent.
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("ts_stat") };
+        var logger = new GatewayRerankerTests.ListLogger();
+        var time = new FakeTimeProvider();
+        using var cache = new ScopeSizeCache(index, time, logger: logger);
+        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
+        logger.Messages.ShouldHaveSingleItem().ShouldBe("The search statistics statement FrequentLexemes failed; searches keep none yet");
+
+        index.CountsFailure = new TimeoutException("count");
+        time.Advance(TimeSpan.FromMinutes(10));
+        (await cache.SizeAsync(OneCollection(), Ct)).ScopeChunks.ShouldBe(10_000); // the previous counts are kept
+        logger.Messages.ShouldContain("The search statistics statement CountChunks failed; searches keep the previous ones");
+    }
+
+    [Fact]
     public async Task Warming_reads_counts_and_statistics_so_the_first_search_does_not()
     {
         var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000)] };
