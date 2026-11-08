@@ -46,6 +46,7 @@ Three tracks:
 | Self-hosted runner on the test host (R1), or the manual stopgap | IT security | R1 test, nightly evaluation in CI |
 | U1 (crawler about page) with the web editors | user | full umea.se crawl |
 | N1 product name; W1 relation to `chat.umea.se`; owners and dates for G1, W2, N1, U1, R1, A1 | user, product owner | go-live |
+| CI runners (proposal, 2026-11-08; nothing changed yet): the runners `ume-rag` and `ume-rag2` share one machine and one Docker daemon, so jobs collide (e2e beside `verify` failed, run 42469437132; a dry run's leftover registry). **A:** one runner per Docker host: remove `ume-rag2` (jobs queue, nothing collides, no workflow change), or give it its own machine or VM. **B:** `release.yml` on GitHub-hosted runners (clean host with sudo and .NET 8; paid minutes, private repo). Either way: a release dry run is part of the full CI set before every release, so host drift shows early (the v0.2.0 dry runs found three: no .NET 8, no sudo, no registry clean-up) | user | nothing; once decided, record it in the Decisions table and drop the collision notes (`docs/ci-runner.md`, `release.yml`) |
 | Product calls: #333 findings 1–2; [`../architecture_plans.md`](../architecture_plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
 
 Every postponed decision with its stopgap and deadline: [`postponed-decisions.md`](postponed-decisions.md).
