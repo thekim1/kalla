@@ -53,7 +53,7 @@ gateway's delegated attribution, follows in P2 before a second department.
 | U1 (crawler about page) with the web editors | user | full umea.se crawl |
 | N1 product name; W1 relation to `chat.umea.se`; owners and dates for G1, W2, N1, U1, R1, A1 | user, product owner | go-live |
 | CI runners (proposal, 2026-11-08; nothing changed yet): the runners `ume-rag` and `ume-rag2` share one machine and one Docker daemon, so jobs collide (e2e beside `verify` failed, run 42469437132; a dry run's leftover registry). **A:** one runner per Docker host: remove `ume-rag2` (jobs queue, nothing collides, no workflow change), or give it its own machine or VM. **B:** `release.yml` on GitHub-hosted runners (clean host with sudo and .NET 8; paid minutes, private repo). Either way: a release dry run is part of the full CI set before every release, so host drift shows early (the v0.2.0 dry runs found three: no .NET 8, no sudo, no registry clean-up) | user | nothing; once decided, record it in the Decisions table and drop the collision notes (`docs/ci-runner.md`, `release.yml`) |
-| Review #513: #511 splitting the worker into libraries (stream b: only if it keeps growing in P2); #502 is answered (to-verify #117 first, then `halfvec` storage in P2 if the recall delta is ≤ 0.5 points); the rest is queued (A-20–A-28, B-25–B-29, M-10) | user | nothing in P1b |
+| Review #513: #511 splitting the worker into libraries (stream b: only if it keeps growing in P2); #502 is answered and measured (to-verify #117, 2026-11-08: delta 0.0 points, so `halfvec` storage in P2); the rest is queued (A-20–A-28, B-25–B-29, M-10) | user | nothing in P1b |
 | Product calls: #333 findings 1–2; [`../architecture_plans.md`](../architecture_plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
 
 Every postponed decision with its stopgap and deadline: [`postponed-decisions.md`](postponed-decisions.md).
@@ -73,6 +73,8 @@ work split is written when P1b is live.
   renderer's replay check and path rules (after measurement), legacy Office/RTF/e-mail/archives (Z1), parse-profile
   proposals, adaptive embedding concurrency; for external single-page apps a per-page burst of the page's own
   subrequests and a renderer asset cache kept across runs (A-13, user 2026-11-07).
+- **Storage:** embeddings stored as `halfvec` (#502; to-verify #117 found no recall cost), after repeating the check
+  on the full crawl's evaluation set.
 - **Answer quality:** nightly answer judge, publish plans from effect tags, rerank (a separate gateway release with an
   on-prem reranker), on-prem models when hardware exists (M2).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),

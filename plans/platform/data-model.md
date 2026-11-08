@@ -424,10 +424,11 @@ A new profile gets its index from `content.rag_ensure_profile_index(profile_id u
 owner migrator, called by the worker) **before** any row of that profile exists, so the build is instant and needs no
 `CONCURRENTLY`; it builds the `halfvec` form (≈ 2.7 KB per element instead of 4.3–8 KB, so 10M chunks fit a 64 GB
 database host; reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.3). The column stays `vector`, so
-exact scans, the evaluator and a profile migration use full precision; the fp16 recall cost (HNSW against exact) is
-measured with the evaluation sets before the first large collection (§12.16). A second profile migrated into a large
-corpus gets its index **after** the shadow load (`CREATE INDEX CONCURRENTLY`); partitioning `Chunks` by profile would
-not help, and per-collection partial indexes are the fallback if filtered recall falls short (performance pass §6).
+exact scans, the evaluator and a profile migration use full precision; the fp16 recall cost was measured on the
+evaluation sets (to-verify #117, 2026-11-08: exact fp16 gives the same top 10 as exact fp32, HNSW keeps 99 % of it,
+recall@10 unchanged; index elements 2,710 B `halfvec` against 8,125 B `vector`), so `halfvec` storage follows in P2
+(§12.16). A second profile migrated into a large corpus gets its index **after** the shadow load (`CREATE INDEX
+CONCURRENTLY`); partitioning `Chunks` by profile would not help, and per-collection partial indexes are the fallback if filtered recall falls short (performance pass §6).
 Every profile's index, the first one included, comes from this function; the index is named `IX_Chunks_Embedding_` plus
 the profile id without hyphens. The function refuses `dims` outside 1–4,000 (the `halfvec` limit), an unknown profile and a `dims` other
 than the profile's `Dimensions`; it takes a transaction advisory lock, returns `false` when the index already exists
@@ -927,7 +928,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 | 13 | Cache key "node id" | Pipeline-local node ids would prevent sharing | Stage type id + input hash (§9); stage outputs are content-addressed and shared across documents and sources |
 | 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only); resolved by knowledge design §5.4 (L1 in process for all levels with an HMAC key; from P2 an L2 in Redis for `public`/`internal` only, §11; no Redis in P1) |
 | 15 | Coverage signal | Knowledge §3 uses "best fused score"; RRF scores are rank-only | Coverage on best cosine distance per collection together with the keyword list (`low` only when the distance is above the threshold and the keyword list is empty or below its floor; knowledge design §7) |
-| 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | **Decided (performance pass, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.3)**: HNSW index on `("Embedding"::halfvec(1024))` from P1, column stays `vector`; recall measured with the evaluation sets (HNSW vs exact) before the first large collection |
+| 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | **Decided (performance pass, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.3)**: HNSW index on `("Embedding"::halfvec(1024))` from P1, column stays `vector`; recall measured with the evaluation sets (HNSW vs exact) before the first large collection. **P2 (#502, user 2026-11-08; measured in to-verify #117):** the columns `Chunks.Embedding` and `EmbeddingCache.Embedding` become `halfvec(N)` (half the vector bytes in the table, WAL and backups; exact scans read half), because exact fp16 matched exact fp32 on every evaluation question; repeat the check on the full crawl's set first. Until then the column stays `vector` |
 | 17 | Run items, frontier, profiles placement | Hold URLs and patterns of possibly `sensitive` sources | Carry `Classification`; parse rules and site profiles apply only within their level |
 | 18 | Swedish compounds | Postgres `ispell` per backend costs memory and does not support every Hunspell compound rule | **Decided (simplification pass §3)**: decompound in .NET, built-in `swedish` in Postgres (§3.1); postponed H1 closed |
 | 19 | One context | Alternative: a second context per tier | One context, one database (no tiers) |
