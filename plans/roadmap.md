@@ -33,7 +33,9 @@ Three tracks:
    4. test host: deploy, restore drill, R1 performance test, a week of nightly evaluation;
    5. checks on the crawled collection: `lastmod` result, freshness and HNSW recall, personal-data dry run;
    6. gateway release 1 switch, live feedback import, banner and public-records route (after G1);
-   7. the go-live gate graded by department reviewers, then the pilot goes live.
+   7. the go-live gate graded by department reviewers, then the pilot goes live. Before it: the 7-day package rule
+      applies again, and GitHub Actions are pinned by commit SHA with automated pin bumps (A-20, A-27; postponed by
+      the user, 2026-11-08).
 3. **Decisions and inputs from people** (below).
 
 **Cost attribution, stage 1** (Decisions "Cost attribution", 2026-11-08; not a go-live gate): Ume.Rag meters tokens and

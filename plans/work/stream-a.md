@@ -233,7 +233,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   against the action's release; optionally `zizmor` in `audit.yml`.
 - **Paths:** `.github/**`.
 - **Done when:** no workflow references an action by tag; `verify.yml` green.
-- **Waits on:** –
+- **Waits on:** postponed by the user (2026-11-08) until before go-live, with the 7-day package rule's return; A-27
+  follows it.
 - **Read:** #506; repo-and-deployment §8.
 
 ### [ ] A-21 Compose knobs for telemetry and health checks (#503, #504, Compose part)
