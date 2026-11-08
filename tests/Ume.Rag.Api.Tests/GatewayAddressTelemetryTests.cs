@@ -32,6 +32,7 @@ public sealed class GatewayAddressTelemetryTests
     [InlineData("Ume.Rag.Api")]
     [InlineData("Ume.Rag.AdminApi")]
     [InlineData("Ume.Rag.MigrationService")]
+    [InlineData("Ume.Rag.Worker")]
     public void The_service_does_not_log_ef_sql_text_at_information(string project)
     {
         // #503: EF's command log at Information writes every statement's SQL text and timing.
