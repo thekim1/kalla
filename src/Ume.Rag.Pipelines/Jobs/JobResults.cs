@@ -393,7 +393,7 @@ public sealed record PreflightResult
 
 public sealed record PreflightCheckResult
 {
-    [Description("The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http and for render.empty): render.suggested, render.empty or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout or render.unavailable.")]
+    [Description("The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http and for render.empty): render.suggested, render.empty or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout, render.bad_selector, render.selector_not_found or render.unavailable.")]
     [RegularExpression("^[a-z][a-z0-9-]{0,49}$")]
     public required string Check { get; init; }
 

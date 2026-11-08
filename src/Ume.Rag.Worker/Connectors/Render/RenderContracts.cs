@@ -6,7 +6,7 @@ namespace Ume.Rag.Worker.Connectors.Render;
 /// Renders one page in a browser (connectors design §8.2, §8.3): every request the page makes goes to the
 /// <see cref="IRenderFetcher"/>, the main document is <see cref="RenderRequest.MainDocument"/>. Throws
 /// <see cref="RenderUnavailableException"/> when no browser can be reached or a browser operation fails; a page that does
-/// not get ready in time is a result with <see cref="RenderResult.Ready"/> false.
+/// not get ready in time is a result with <see cref="RenderResult.Ready"/> false and its <see cref="RenderResult.NotReadyReason"/>.
 /// </summary>
 public interface IRenderer
 {
@@ -49,6 +49,13 @@ public sealed record RenderRequest(Uri Url, FetchedBody MainDocument, string? Re
 /// <param name="Ready">The page reached ready within <see cref="RenderLimits.PageTimeout"/>.</param>
 public sealed record RenderResult(string Html, RenderStats Stats, bool Ready)
 {
+    /// <summary>
+    /// Why the page is not ready: <c>render.timeout</c> (the page itself: <c>load</c> not fired, or never quiet),
+    /// <c>render.bad_selector</c> or <c>render.selector_not_found</c> (the source's <c>readySelector</c>,
+    /// <see cref="RenderReasons"/>); ignored when <see cref="Ready"/>.
+    /// </summary>
+    public string NotReadyReason { get; init; } = RenderReasons.Timeout;
+
     /// <summary>
     /// A main-frame navigation by script or meta refresh before ready (§8.3): a redirect hop the worker fetches and renders
     /// instead; null when the page stayed.
@@ -137,14 +144,47 @@ public static class RenderReasons
     /// <summary>No <c>Render:Endpoint</c>: the job waits without an attempt.</summary>
     public const string NotConfigured = "render.not_configured";
 
-    /// <summary>Not ready within <c>Render:PageTimeout</c>.</summary>
+    /// <summary>
+    /// Not ready within <c>Render:PageTimeout</c>: <c>load</c> did not fire, the page was never quiet, or (with a
+    /// <c>readySelector</c>) the selector held no text while requests were still open. Transient.
+    /// </summary>
     public const string Timeout = "render.timeout";
+
+    /// <summary>The browser refuses the source's <c>readySelector</c> (not a selector it can parse, e.g. <c>&lt;h1&gt;</c>): permanent.</summary>
+    public const string BadSelector = "render.bad_selector";
+
+    /// <summary>
+    /// The source's <c>readySelector</c> never held text within <c>Render:PageTimeout</c> although the page had loaded and
+    /// was quiet at the end (no routed request open for <c>Render:QuietPeriod</c>): permanent, as the next attempt would end
+    /// the same way.
+    /// </summary>
+    public const string SelectorNotFound = "render.selector_not_found";
+
+    /// <summary>
+    /// A crawl run's degradation (the report's <c>verdict.runDegradation</c>): at least half of its ready renders, and at
+    /// least one, ended <c>parse.empty</c>, so the pages were probably ready before their content loaded (§8.6).
+    /// </summary>
+    public const string MostlyEmpty = "render.mostly_empty";
 
     /// <summary>No renderer connection, or a browser operation failed.</summary>
     public const string Unavailable = "render.unavailable";
 
     /// <summary>Every reason of the renderer starts with this.</summary>
     public const string Prefix = "render.";
+
+    /// <summary>
+    /// The render reason of a failed render's outcome: transient (<c>render.timeout</c>, <c>render.unavailable</c>) or
+    /// permanent (<c>render.bad_selector</c>, <c>render.selector_not_found</c>); null for any other outcome.
+    /// </summary>
+    public static string? Of(FetchOutcome outcome) => outcome switch
+    {
+        FetchOutcome.Transient { Reason: var reason } when reason.StartsWith(Prefix, StringComparison.Ordinal) => reason,
+        FetchOutcome.Failed { Reason: var reason } when reason.StartsWith(Prefix, StringComparison.Ordinal) => reason,
+        _ => null,
+    };
+
+    /// <summary>Whether a crawl run is <see cref="MostlyEmpty"/>: of its <paramref name="rendered"/> ready renders, at least one and at least half <paramref name="empty"/>.</summary>
+    public static bool IsMostlyEmpty(int rendered, int empty) => empty > 0 && empty * 2 >= rendered;
 
     /// <summary>A failed or unconfigured render is tried again after this (§8.4).</summary>
     public static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(5);

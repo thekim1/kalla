@@ -22,12 +22,19 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// <c>browser</c> sources on a fake renderer (connectors design §8, A-11): the rendered DOM is the stored content with its
 /// discovered links and fetch mode, no conditional GET is sent, a render slot is taken only when free (else the job goes
 /// back without an attempt), a failed render keeps the last good content and the traversal its last good links (never the
-/// raw shell), a navigation before ready is a redirect hop; and the worker side of the browser's requests
-/// (<see cref="RenderFetcher"/>): blocking, the method policy, the asset cache, the guard with <c>Purpose = Render</c>,
+/// raw shell), a <c>readySelector</c> the browser refuses or never finds fails the item at once, a navigation before ready is
+/// a redirect hop; the real <see cref="PlaywrightRenderer"/>'s ready rule on a <see cref="FakeBrowser"/> page through the
+/// worker's route (selector and quiet, the selector reasons kept apart from a page still loading); and the worker side of
+/// the browser's requests (<see cref="RenderFetcher"/>): blocking, the method policy, the asset cache, the guard with <c>Purpose = Render</c>,
 /// robots.txt, cookies within the page, redirects and the request limit.
 /// </summary>
 public sealed class RenderTests : IAsyncLifetime
 {
+    /// <summary>The data the slow API request answers with (<c>/api/slow</c>, after <see cref="SlowData"/>).</summary>
+    private const string SlowText = "Innehåll som kom efter en stund";
+
+    private static readonly TimeSpan SlowData = TimeSpan.FromMilliseconds(800);
+
     private const string Shell = "<html><head><title>App</title></head><body><main><div id=\"app\">Laddar…</div></main><script src=\"/app.js\"></script></body></html>";
 
     private readonly ConcurrentQueue<string> _hits = new();
@@ -120,6 +127,107 @@ public sealed class RenderTests : IAsyncLifetime
         _renderer.Render = (_, _) => throw new RenderUnavailableException();
         (await rig.Traversal.ProcessAsync(context, rig.Store.Row(source, Url("/"))!.UrlHash, Ct))
             .ShouldBe(new CrawlFetchResult.Requeue(RenderReasons.RetryAfter, RenderReasons.Unavailable, CountsAttempt: true));
+    }
+
+    [Theory]
+    [InlineData(RenderReasons.BadSelector)]
+    [InlineData(RenderReasons.SelectorNotFound)]
+    public async Task A_ready_selector_failure_fails_the_item_at_once_and_keeps_the_last_good_content_and_links(string reason)
+    {
+        await using var rig = CrawlRig.Create(_site, renderer: _renderer, render: RenderTestKit.Options());
+        var source = Guid.NewGuid();
+        await rig.CrawlAsync(Context(source, FetchMode.Browser));
+        var good = rig.Store.Row(source, Url("/"))!.ContentHash;
+        var blobs = RawBlobs(rig);
+        var page = _renderer.Render;
+        _renderer.Render = (request, fetcher) => request.Url.AbsolutePath == "/" ? Task.FromResult(FakeRenderer.NotReady(reason)) : page!(request, fetcher);
+        var renders = _renderer.Requests.Count;
+
+        var context = await rig.ListAsync(Context(source, FetchMode.Browser));
+        var result = await rig.Traversal.ProcessAsync(context, rig.Store.Row(source, Url("/"))!.UrlHash, Ct);
+
+        // Permanent (#488, #490): the item is done with the reason after one render, not requeued as render.timeout is.
+        result.ShouldBeOfType<CrawlFetchResult.Done>().Outcome.ShouldBe(new FetchOutcome.Failed(reason));
+        _renderer.Requests.Count.ShouldBe(renders + 1);
+        result.ShouldBeOfType<CrawlFetchResult.Done>().Frontier.Facts!.ContentHash.ShouldBe(good, "the document keeps its last good content");
+        RawBlobs(rig).ShouldBe(blobs, "no fallback: the raw shell is never stored");
+        rig.Store.Row(source, Url("/c"))!.RunId.ShouldBe(context.Run.RunId, "the pages below are admitted from the last good links");
+        rig.Store.Row(source, Url("/d"))!.RunId.ShouldBe(context.Run.RunId);
+    }
+
+    [Fact]
+    public async Task The_real_renderer_waits_for_the_quiet_rule_after_the_ready_selector_holds_text()
+    {
+        // e.umea.se (#490): the app shows a translated h2 label at once and its content after a data request of a few seconds.
+        var browser = new FakeBrowser
+        {
+            Script = async page =>
+            {
+                page.Show("h2", "Starta en e-tjänst");
+                page.Show("#content", await page.FetchAsync(new Uri(Url("/api/slow"))));
+            },
+        };
+        await using var renderer = Renderer(browser);
+        await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions());
+
+        var outcome = await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "h2"), Item("/"), Ct);
+
+        var content = outcome.ShouldBeOfType<FetchOutcome.Content>();
+        var stored = await ReadAsync(path.Blobs, content.Raw.Key);
+        stored.ShouldContain("Starta en e-tjänst");
+        stored.ShouldContain(SlowText, Case.Sensitive, "not ready on the label alone: the data request ended and the page was quiet first");
+    }
+
+    [Fact]
+    public async Task The_real_renderer_reports_a_refused_ready_selector_as_render_bad_selector_without_waiting()
+    {
+        // The driver's own message for <h1> (packages/isomorphic/cssParser.ts, Playwright 1.64.1).
+        var browser = new FakeBrowser { SelectorError = "Unexpected token \"<\" while parsing css selector \"<h1>\". Did you mean to CSS.escape it?\nCall log:\n  - waiting for <h1>" };
+        await using var renderer = Renderer(browser);
+        await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions());
+        var started = TimeProvider.System.GetTimestamp();
+
+        var outcome = await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "<h1>"), Item("/"), Ct);
+
+        outcome.ShouldBe(new FetchOutcome.Failed(RenderReasons.BadSelector));
+        TimeProvider.System.GetElapsedTime(started).ShouldBeLessThan(RealRenderOptions().PageTimeout, "a refused selector fails at once");
+        Directory.Exists(Path.Join(path.BlobRoot.FullName, "raw")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task The_real_renderer_tells_a_selector_that_never_matched_from_a_page_still_loading()
+    {
+        var quiet = new FakeBrowser { Script = page => { page.Show("h2", "Starta en e-tjänst"); return Task.CompletedTask; } };
+        await using (var renderer = Renderer(quiet))
+        await using (var path = _site.Fetch(renderer: renderer, render: RealRenderOptions()))
+        {
+            (await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "#intro-description"), Item("/"), Ct))
+                .ShouldBe(new FetchOutcome.Failed(RenderReasons.SelectorNotFound));
+        }
+
+        // Negative proof: a data request still open at the deadline is the page still loading, transient as before.
+        var loading = new FakeBrowser { Script = async page => await page.FetchAsync(new Uri(Url("/api/hang"))) };
+        await using (var renderer = Renderer(loading))
+        await using (var path = _site.Fetch(renderer: renderer, render: RealRenderOptions()))
+        {
+            (await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "#intro-description"), Item("/"), Ct))
+                .ShouldBe(new FetchOutcome.Transient(RenderReasons.Timeout, RenderReasons.RetryAfter, CountsAttempt: true));
+        }
+    }
+
+    [Theory]
+    [InlineData("Unexpected token \"<\" while parsing css selector \"<h1>\". Did you mean to CSS.escape it?", true)]
+    [InlineData("Unexpected token \"\" while parsing css selector \"div[\". Did you mean to CSS.escape it?", true)]
+    [InlineData("Unsupported token \";\" while parsing css selector \"#intro-description;\". Did you mean to CSS.escape it?", true)]
+    [InlineData("Unknown engine \"xpath2\" while parsing selector xpath2=//h1", true)]
+    [InlineData("Malformed selector: internal:has=x", true)]
+    [InlineData("SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'h1:foo' is not a valid selector.", true)]
+    [InlineData("Execution context was destroyed, most likely because of a navigation", false)]
+    [InlineData("Navigation interrupted by another navigation", false)]
+    [InlineData("Target page, context or browser has been closed", false)]
+    public void A_bad_selector_is_told_from_a_navigation_the_page_interrupted_by_playwrights_message(string message, bool bad)
+    {
+        PlaywrightRenderer.IsBadSelector(new Microsoft.Playwright.PlaywrightException(message)).ShouldBe(bad);
     }
 
     [Fact]
@@ -299,6 +407,21 @@ public sealed class RenderTests : IAsyncLifetime
         }
     }
 
+    /// <summary>The real renderer on <paramref name="browser"/>.</summary>
+    private static PlaywrightRenderer Renderer(FakeBrowser browser) =>
+        new(Microsoft.Extensions.Options.Options.Create(RealRenderOptions()), TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<PlaywrightRenderer>.Instance)
+        {
+            CreatePlaywright = browser.CreateAsync,
+        };
+
+    /// <summary>A short page time for the real renderer's tests; the quiet period as configured by default.</summary>
+    private static RenderOptions RealRenderOptions()
+    {
+        var options = RenderTestKit.Options();
+        options.PageTimeout = TimeSpan.FromSeconds(3);
+        return options;
+    }
+
     private RenderFetcher Page(FetchPath path, int maxRequests = 50) =>
         path.RenderFetchers.For(new RenderPage(new Uri(Url("/")), "public", Guid.Parse("0196f4a2-0000-7000-8000-000000000001"), path.Robots.CheckAsync,
             new RenderLimits(maxRequests, 1024 * 1024, TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(100))));
@@ -310,8 +433,9 @@ public sealed class RenderTests : IAsyncLifetime
         new(new CrawlRunKey(sourceId, "public", Guid.NewGuid()), Guid.NewGuid(), SyncKind.Sync, RunTrigger.Manual,
             ContractJson.ToElement(new CrawlSettings { StartUrls = [Url("/")], MaxPages = 100, FetchMode = mode }), Revalidate: false);
 
-    private FetchContext UrlListContext(FetchMode mode) =>
-        new(Guid.NewGuid(), "public", Guid.NewGuid(), ContractJson.ToElement(new UrlListSettings { Urls = [Url("/")], FetchMode = mode }), Revalidate: false);
+    private FetchContext UrlListContext(FetchMode mode, string? readySelector = null) =>
+        new(Guid.NewGuid(), "public", Guid.NewGuid(), ContractJson.ToElement(new UrlListSettings { Urls = [Url("/")], FetchMode = mode, ReadySelector = readySelector }),
+            Revalidate: false);
 
     private WorkItem Item(string pathAndQuery) => new(IdentityKind.Url, Url(pathAndQuery), new Uri(Url(pathAndQuery)), 0, WorkHints.None);
 
@@ -360,6 +484,16 @@ public sealed class RenderTests : IAsyncLifetime
         app.MapGet("/api/data", (HttpContext http) => http.Request.Cookies["session"] == "1"
             ? Results.Text("{\"text\":\"Innehåll från API\"}", "application/json")
             : Results.StatusCode(StatusCodes.Status401Unauthorized));
+        app.MapGet("/api/slow", async (HttpContext http) =>
+        {
+            await Task.Delay(SlowData, http.RequestAborted);
+            return Results.Text(SlowText, "text/plain; charset=utf-8");
+        });
+        app.MapGet("/api/hang", async (HttpContext http) =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), http.RequestAborted);
+            return Results.Text("too late");
+        });
         app.MapPost("/api/echo", async (HttpContext http) =>
         {
             using var reader = new StreamReader(http.Request.Body);

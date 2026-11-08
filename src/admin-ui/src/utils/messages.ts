@@ -203,6 +203,12 @@ export const JOB_MESSAGES: Record<string, string> = {
   'render.busy': 'All browsers that render pages were busy, so the page was not rendered this time.',
   'render.timeout': 'The page did not finish loading in the browser in time. The last content found is kept and the page is tried again later. If the page shows a loading text, name the element that holds the content.',
   'render.unavailable': 'The browser that renders pages could not be reached. The last content found is kept and the page is tried again later.',
+  'render.bad_selector':
+    'The browser does not accept the value of “Content is ready when this element has text” as a CSS selector, for example #content or main article (without < >). The last content found is kept; correct the setting and run again.',
+  'render.selector_not_found':
+    'The page loaded, but no element named in “Content is ready when this element has text” had text in time. The last content found is kept; check that the selector names an element the page really shows, or leave the field empty.',
+  'render.mostly_empty':
+    'At least half of the rendered pages had no main text. They were probably ready before their content loaded: name the element that holds the loaded content under “Content is ready when this element has text”.',
   'eval.unsupported': 'This kind of evaluation is not available yet.',
   'eval.invalid_payload': 'The evaluation was requested incorrectly and did not run. Contact the platform team.',
   'eval.no_questions': 'The knowledge base has no active test questions to evaluate with.',

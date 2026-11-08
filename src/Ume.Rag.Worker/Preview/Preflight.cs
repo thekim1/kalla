@@ -45,7 +45,8 @@ namespace Ume.Rag.Worker.Preview;
 /// when the rendered one is under <see cref="MinRenderedWords"/> and either none or fewer than the raw one (the page was
 /// probably ready before its content loaded: name the loaded content in <c>readySelector</c>); else <c>render.compared</c>.
 /// Without a renderer one <c>render.not_configured</c> entry and no counts; a failed render is its reason
-/// (<c>render.timeout</c>, <c>render.unavailable</c>). These entries are information and never <c>fail</c>.</item>
+/// (<c>render.timeout</c>, <c>render.unavailable</c>, and for the form's <c>readySelector</c> <c>render.bad_selector</c>
+/// or <c>render.selector_not_found</c>). These entries are information and never <c>fail</c>.</item>
 /// </list>
 /// </summary>
 public sealed partial class Preflight(
@@ -399,7 +400,7 @@ public sealed partial class Preflight(
                 await lease.CompleteAsync(PreviewHosts.Response(page.Outcome, PageLatency.Of(page.Outcome, time.GetElapsedTime(fetchStarted))), cancellationToken);
             }
 
-            if (page.Outcome is FetchOutcome.Transient { Reason: var reason } && reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal))
+            if (RenderReasons.Of(page.Outcome) is { } reason)
             {
                 checks.Add(Check(Render, PreflightState.Pass, reason, sample.Target));
             }

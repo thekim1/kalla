@@ -18,7 +18,7 @@ public static class PageLatency
         return outcome switch
         {
             FetchOutcome.Content { Facts.FetchMode: Domain.Entities.FetchModes.Browser } => null,
-            FetchOutcome.Transient { Reason: var reason } when reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal) => null,
+            _ when RenderReasons.Of(outcome) is not null => null,
             _ => elapsed,
         };
     }

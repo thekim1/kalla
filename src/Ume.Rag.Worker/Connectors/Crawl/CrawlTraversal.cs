@@ -471,7 +471,7 @@ public sealed class CrawlTraversal(
 
     /// <summary>
     /// The outcome of one URL for the run: requeued when transient (a failed render first admits the links of the
-    /// document's last good content, §8.4, as a 304 would); otherwise the frontier row's completion for the engine's
+    /// document's last good content, §8.4, as a 304 would, and so does a permanent one before it completes); otherwise the frontier row's completion for the engine's
     /// commit (its facts kept when no request was made, a failed seed counted there), links admitted (in an incremental run
     /// only from a changed page; a repeated admission is a no-op) and a canonical folded when verified.
     /// </summary>
@@ -515,7 +515,12 @@ public sealed class CrawlTraversal(
         var outcome = page.Outcome;
         var changed = outcome is FetchOutcome.Content changedContent && !string.Equals(changedContent.Raw.ContentHash, row.ContentHash, StringComparison.Ordinal);
         var admitted = 0;
-        if (page.Links is { } links && contentHash is not null)
+        if (RenderReasons.Of(outcome) is not null && page.Links is { } kept && row.ContentHash is { } keptHash && !context.Incremental)
+        {
+            // A permanent render failure (a readySelector refused or never found) keeps the pages below too, as a transient one does.
+            admitted = await AdmitAsync(context, row, kept, keptHash, runFacts, cancellationToken);
+        }
+        else if (page.Links is { } links && contentHash is not null)
         {
             if (links.NoIndex && policy.Current.KindOf(row.Host) != HostKind.Municipal && outcome is FetchOutcome.Content)
             {

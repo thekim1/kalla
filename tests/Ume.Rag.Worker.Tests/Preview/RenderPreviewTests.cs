@@ -126,6 +126,36 @@ public sealed class RenderPreviewTests(RagDatabaseFixture database, FakeGatewayF
     }
 
     [Fact]
+    public async Task A_ready_selector_the_browser_refuses_or_never_finds_is_the_render_entrys_reason()
+    {
+        // #488, #490: render.timeout sent the admin to the site; the reason names the setting.
+        _renderer.Render = (request, _) => Task.FromResult(FakeRenderer.NotReady(request.Url.AbsolutePath == "/p/bad" ? RenderReasons.BadSelector : RenderReasons.SelectorNotFound));
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(Shell)));
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, settings: Renderer,
+            services: s => s.AddSingleton<IRenderer>(_renderer));
+        try
+        {
+            string[] urls = [site.Url("/p/bad").AbsoluteUri, site.Url("/p/none").AbsoluteUri];
+            var result = await ResultAsync<PreflightResult>(await EnqueueAsync(seed, new PreflightPayload
+            {
+                CollectionId = seed.CollectionId,
+                SourceType = "url-list",
+                Settings = JsonSerializer.SerializeToElement(new { urls, fetchMode = "browser", readySelector = "<h1>" }),
+            }));
+
+            result.Checks.Where(c => c.Check == Preflight.Render).Select(c => (c.Code, c.State, c.Target, c.Facts)).ShouldBe([
+                (RenderReasons.BadSelector, PreflightState.Pass, urls[0], (JsonElement?)null),
+                (RenderReasons.SelectorNotFound, PreflightState.Pass, urls[1], (JsonElement?)null),
+            ]);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
     public async Task A_browser_crawl_preflight_does_not_suggest_and_without_a_renderer_the_comparison_says_so_once()
     {
         await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(Shell)));

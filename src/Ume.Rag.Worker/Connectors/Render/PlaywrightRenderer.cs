@@ -12,9 +12,13 @@ namespace Ume.Rag.Worker.Connectors.Render;
 /// main-frame navigation is fulfilled from the body the worker already fetched; a later one (script, meta refresh) is
 /// answered 204, which keeps the document, and recorded: before ready as a redirect hop (<see cref="RenderResult.Navigation"/>),
 /// after it as a discovered link. Iframe documents get an empty page, popups and downloads become discovered links (popups
-/// are closed at once), and every WebSocket is closed. Ready: <c>load</c> fired and no routed request open for
-/// <c>Render:QuietPeriod</c>, or the source's <c>readySelector</c> holds text, within <c>Render:PageTimeout</c>; then
-/// <c>scrollToLoad</c> scrolls until the page stops growing, and the DOM is serialised and cleaned
+/// are closed at once), and every WebSocket is closed. Ready, within <c>Render:PageTimeout</c>: <c>load</c> fired, the
+/// source's <c>readySelector</c> (when set) holds text, and then no routed request has been open for
+/// <c>Render:QuietPeriod</c>, so a label the app renders before its data cannot make the page ready on its own (#490).
+/// Not ready is <c>render.bad_selector</c> when the browser refuses the selector (<see cref="IsBadSelector"/>),
+/// <c>render.selector_not_found</c> when the selector held no text by the deadline while the page was quiet, and
+/// <c>render.timeout</c> otherwise (<see cref="RenderResult.NotReadyReason"/>). Then <c>scrollToLoad</c> scrolls until the
+/// page stops growing, and the DOM is serialised and cleaned
 /// (<see cref="RenderedHtml"/>). Browser operations are bounded (a context or page within 15 s, a close within 5 s); a
 /// failed or timed-out one drops the connection (<c>render.unavailable</c> for the page, a reconnect for the next), and
 /// the connection and Playwright's Node driver are closed after 60 s without a render.
@@ -32,11 +36,26 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(10);
 
+    /// <summary>
+    /// The messages of Playwright's selector errors (driver 1.64.1): its CSS parser ("… while parsing css selector …"),
+    /// its selector parser ("Unknown engine … while parsing selector …", "Malformed selector: …") and the browser's own
+    /// <c>querySelectorAll</c> ("… is not a valid selector"). The driver's <c>InvalidSelectorError</c> keeps the name
+    /// <c>Error</c>, so it reaches .NET as a plain <see cref="PlaywrightException"/>: the message is all there is.
+    /// </summary>
+    private static readonly string[] BadSelectorMessages = ["while parsing css selector", "while parsing selector", "Malformed selector", "is not a valid selector"];
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private ITimer? _idle;
     private int _active;
+
+    /// <summary>Starts Playwright's driver; a test replaces it with a fake browser.</summary>
+    internal Func<Task<IPlaywright>> CreatePlaywright { get; init; } = Playwright.CreateAsync;
+
+    /// <summary>Whether <paramref name="exception"/> is Playwright refusing a selector, not a navigation the page interrupted.</summary>
+    internal static bool IsBadSelector(PlaywrightException exception) =>
+        BadSelectorMessages.Any(m => exception.Message.Contains(m, StringComparison.Ordinal));
 
     public async ValueTask<RenderResult> RenderAsync(RenderRequest request, IRenderFetcher fetcher, CancellationToken cancellationToken)
     {
@@ -96,7 +115,7 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
 
             try
             {
-                _playwright ??= await Playwright.CreateAsync().WaitAsync(OperationTimeout, cancellationToken);
+                _playwright ??= await CreatePlaywright().WaitAsync(OperationTimeout, cancellationToken);
                 var browser = await _playwright.Chromium.ConnectAsync(options.Value.Endpoint!,
                         new BrowserTypeConnectOptions { Timeout = (float)OperationTimeout.TotalMilliseconds })
                     .WaitAsync(OperationTimeout + CloseTimeout, cancellationToken);
@@ -239,15 +258,15 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
                 page.Popup += (_, popup) => OnPopup(popup);
                 page.Download += (_, download) => Discover(download.Url);
 
-                var ready = await ReadyAsync(page);
+                var notReady = await ReadyAsync(page);
                 if (_navigation is { } navigation)
                 {
                     return Result(string.Empty, ready: false) with { Navigation = navigation };
                 }
 
-                if (!ready)
+                if (notReady is not null)
                 {
-                    return Result(string.Empty, ready: false);
+                    return Result(string.Empty, ready: false) with { NotReadyReason = notReady };
                 }
 
                 Volatile.Write(ref _ready, 1);
@@ -277,56 +296,79 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
             }
         }
 
-        /// <summary>The document loaded and the ready rule held within the page's time; false when not, or when it navigated away first.</summary>
-        private async Task<bool> ReadyAsync(IPage page)
+        /// <summary>
+        /// The ready rule within the page's time (§8.3): <c>load</c>, then the <c>readySelector</c>'s element holding text
+        /// when there is one, then the quiet rule. Null when ready; else the reason (<see cref="RenderResult.NotReadyReason"/>).
+        /// A navigation away first is in <see cref="_navigation"/>, which the caller checks before the reason.
+        /// </summary>
+        private async Task<string?> ReadyAsync(IPage page)
         {
+            var loaded = false;
             try
             {
                 await page.GotoAsync(request.Url.AbsoluteUri, new PageGotoOptions { WaitUntil = WaitUntilState.Load, Timeout = Remaining() });
-                if (request.ReadySelector is not { } selector)
+                loaded = true;
+                if (request.ReadySelector is { } selector && !await HoldsTextAsync(page, selector))
                 {
-                    return await QuietAsync();
+                    return SelectorMissed();
                 }
 
-                var wait = page.WaitForSelectorAsync(selector, new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached, Timeout = Remaining() });
-                if (await Task.WhenAny(wait, NavigatedAsync()) != wait)
-                {
-                    return false;
-                }
-
-                await wait;
-                var element = page.Locator(selector).First;
-                while (TimeLeft && _navigation is null)
-                {
-                    // A selector on a container that shows a "Loading…" placeholder holds text too early: name the loaded content (§8.3).
-                    if ((await element.InnerTextAsync(new LocatorInnerTextOptions { Timeout = Remaining() })).Trim().Length > 0)
-                    {
-                        return true;
-                    }
-
-                    await Task.Delay(Poll * 2, time);
-                }
-
-                return false;
+                // A label the app renders before its data holds text too: the page is ready only once it is quiet as well (#490).
+                return await QuietAsync() ? null : RenderReasons.Timeout;
             }
             catch (TimeoutException)
             {
-                // Playwright's own timeouts (load, selector) are System.TimeoutException: not ready (render.timeout).
-                return false;
+                // Playwright's own timeouts (load, selector) are System.TimeoutException.
+                return loaded ? SelectorMissed() : RenderReasons.Timeout;
+            }
+            catch (PlaywrightException e) when (IsBadSelector(e))
+            {
+                return RenderReasons.BadSelector;
             }
             catch (PlaywrightException) when (page.Context.Browser?.IsConnected == true && !page.IsClosed)
             {
-                // A navigation the page itself interrupted, or a selector the browser refuses: not ready (render.timeout).
-                return false;
+                // A navigation the page itself interrupted: not ready (render.timeout).
+                return RenderReasons.Timeout;
             }
         }
+
+        /// <summary>Whether the selector's first element holds text within the page's time; false at the deadline or after a navigation.</summary>
+        private async Task<bool> HoldsTextAsync(IPage page, string selector)
+        {
+            var wait = page.WaitForSelectorAsync(selector, new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached, Timeout = Remaining() });
+            if (await Task.WhenAny(wait, NavigatedAsync()) != wait)
+            {
+                return false;
+            }
+
+            await wait;
+            var element = page.Locator(selector).First;
+            while (TimeLeft && _navigation is null)
+            {
+                // A selector on a container that shows a "Loading…" placeholder holds text too early: name the loaded content (§8.3).
+                if ((await element.InnerTextAsync(new LocatorInnerTextOptions { Timeout = Remaining() })).Trim().Length > 0)
+                {
+                    return true;
+                }
+
+                await Task.Delay(Poll * 2, time);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The selector held no text by the deadline: <c>render.selector_not_found</c> when the loaded page was quiet then (it
+        /// would not have come), else <c>render.timeout</c> (the page was still loading).
+        /// </summary>
+        private string SelectorMissed() => Quiet ? RenderReasons.SelectorNotFound : RenderReasons.Timeout;
 
         /// <summary>No routed request open for the quiet period; false at the deadline or after a navigation.</summary>
         private async Task<bool> QuietAsync()
         {
             while (TimeLeft && _navigation is null)
             {
-                if (Volatile.Read(ref _open) == 0 && time.GetElapsedTime(Interlocked.Read(ref _lastActivity)) >= request.Limits.QuietPeriod)
+                if (Quiet)
                 {
                     return true;
                 }
@@ -531,6 +573,9 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
         private void Touch() => Interlocked.Exchange(ref _lastActivity, time.GetTimestamp());
 
         private bool TimeLeft => time.GetElapsedTime(_started) < request.Limits.PageTimeout;
+
+        /// <summary>No routed request is open and none has been for <see cref="RenderLimits.QuietPeriod"/>.</summary>
+        private bool Quiet => Volatile.Read(ref _open) == 0 && time.GetElapsedTime(Interlocked.Read(ref _lastActivity)) >= request.Limits.QuietPeriod;
 
         /// <summary>Milliseconds left of the page's time (Playwright's timeouts; 0 would mean none, so at least 1).</summary>
         private float Remaining() => (float)Math.Max(1, (request.Limits.PageTimeout - time.GetElapsedTime(_started)).TotalMilliseconds);
