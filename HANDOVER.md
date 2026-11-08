@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-08, end of session 25 (`main` at `e80c42c`). Earlier
+State of the Ume.Rag work for the next session. Rewritten 2026-11-08, end of session 26 (`main` at `f61af31` + the M-3 tick, tag `v0.2.0`). Earlier
 sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
 `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
@@ -20,84 +20,57 @@ sink" monolith. Design and code live in this repo.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
 
-## Start here: the e2e failure blocks M-3
+## Start here: P1b code is done and released; the live block is next
 
-**Every code item of both queues is ticked.** M-3 (`plans/work/main.md`) is done except its last step, "run the full
-CI set once". On `main` at `e80c42c` (2026-11-08, dispatched by hand):
+**M-3 is ticked and `v0.2.0` is released** (2026-11-08): https://github.com/thekim1/ume-rag-platform/releases/tag/v0.2.0 (8 images on ghcr.io by digest,
+  bundle, SBOMs, SHA256SUMS). Every code item of both queues is ticked; what
+is left of P1b is the **live block (M-4)**, which waits on people (roadmap "Waiting on people"). Code work that can go
+on meanwhile: stream b's #488 parts 1 and 3 and #497; anything new the user files.
 
-- `verify.yml` (run 42469432178): **all jobs green** (backend, admin-ui, renderer, evaluation-smoke, images,
-  deploy-checks, doc-refs).
-- `parser.yml` (run 42469434705): **all green**.
-- `e2e.yml` (run 42469437132): **failed**. Both pilot journeys show the admin UI's `offline` message, "The server cannot
-  be reached. Check your connection and try again.":
-  - **mouse** (`tests/e2e/specs/pilot.spec.ts:64`): step 5, after Preview, the "Result of the preview" region shows
-    the alert and never "Before / After". The preflight before it worked ("About 10 pages"), and the worker logged
-    `Preview …: 1 documents in 1590 ms`, so the job ran; a later request failed.
-  - **keyboard** (`:143`): step 10, the test panel's answer never shows "Answered"; the same alert.
-- That message is `ApiError(0, …, 'network')` from `src/admin-ui/src/api/client.ts`: **`fetch` itself threw**
-  (network error, a CSP-blocked request, or a redirect to another origin), not an HTTP error status. The server logs
-  in the run (step "Server logs of a failed run": last 300 lines of adminapi, admin-ui, api and worker) show no
-  `fail:` or exception. The admin UI is Vite 8.3.3's dev server proxying to the admin API.
-- **Last green e2e:** run 42142370096 on 2026-11-06 (branch `b/B-11-open-webui-link`, `bbc1c9e`, not on `main`; the
-  nearest main commit is `f7baab9`). About 20 PRs of both streams merged since. Admin API files changed since
-  `f7baab9`: `AssistantEndpoints.cs` (B-18/B-19/B-20/B-22), `SettingsEndpoints.cs`, `UploadEndpoints.cs` (B-24),
-  `GatewayEndpoints.cs`, `PipelineEndpoints.cs`, `Program.cs` (A-14, B-20). Admin UI: A-12, A-14, A-17, B-18..B-24.
-- **Next step:** reproduce locally. No `pwsh` here, so mirror `scripts/Start-E2E.ps1` in bash: `aspire stop --all`,
-  `docker volume rm ume-rag-e2e-postgres`, export `DevelopmentVolumes__Postgres=ume-rag-e2e-postgres
-  Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`, `aspire start --apphost … --non-interactive`,
-  `aspire wait admin-ui …`; then in `tests/e2e`: `npm ci`, `npx playwright install chromium` (the spec pins
-  `@playwright/test` 1.63.0), `npx playwright test specs/pilot.spec.ts --grep mouse --trace on`. The trace's network
-  tab names the request that fails. (A first attempt was stopped before it started, session 25.) Alternative: bisect
-  with `gh workflow run e2e.yml --ref <commit>` on a few main commits between `f7baab9` and `e80c42c`.
-- **When e2e is green:** tick M-3, say "P1b code done" in the roadmap, then the **v0.2.0 release** (user approved:
-  "after M-3 closes"; images and tag are outward-facing, the user said yes already).
+**The user has an open decision (roadmap "Waiting on people", CI runners):** the two runners share one machine and one
+Docker daemon, so jobs collide. Proposal A: one runner per Docker host (remove `ume-rag2`, or give it its own machine
+or VM); B: `release.yml` on GitHub-hosted runners (paid minutes). The user said: write it down, change nothing yet.
+Once decided: a Decisions row, then drop the collision notes in `docs/ci-runner.md` and `release.yml`.
 
-## Done in session 25 (2026-11-07/08; all merged, CI green with the tests actually run)
+## Done in session 26 (2026-11-08)
 
-- **A-13 renderer live check (#482):** Klimatkollen (a client-only Vite/React app) as the JavaScript site, umea.se
-  `turkos` as the HTTP baseline, both mixed, chat p95 during the crawl (unaffected). Two defects fixed: (1) a rendered
-  page's whole time fed the host's `LatencyEwmaMs`, which on an external host *is* the pacing interval, so renders
-  slowed each other into timeouts (`PageLatency.Of`); (2) `Render:QuietPeriod` 100 ms → **500 ms** (at 100 ms pages were
-  stored empty). Results: `results-a.md` "item A-13 (live sites)".
-- **A-17 (#483):** preflight `render.empty` warn; the run report's `render.empty` count and run-page row.
-- **A-18 (#484):** crawl concurrency probe (`tests/Ume.Rag.Worker.Tests/Scale/`, trait `Category=Scale`, runs only with
-  `UME_RAG_SCALE=1`): with many hosts the fetch lanes bound first; polite hosts filled them with in-process slot waits.
-- **#491:** `Worker:Concurrency:fetch` 8 → **32** (user); fetched bodies spool to `/data/blobs/spool` on disk
-  (`TMPDIR`), not the `/tmp` tmpfs that counts against the worker's 1.5 GB limit; `rag-blobs-init` creates it, release
-  smoke checks it, the worker deletes stale spool files at start.
-- **#492:** `Render:MaxConcurrent` 2 → **4** (user, after measuring: renderer peak 294 MiB with one open page, 453 MiB
-  with four, 2 GB limit); `renderPerHost` capped at the host's `maxConnections` (a render holds a connection).
-- **A-19 (#493, #488 part 2, #490):** ready rule with a `readySelector` = holds text **and** quiet (user); permanent
-  `render.bad_selector` and `render.selector_not_found`; `render.mostly_empty` degrades a run. Checked live on
-  e.umea.se: `<h1>` → bad selector in 4 s; `h2` now gives full pages (stream b's `h2` run had stored 130 of 131 empty).
-- **e.umea.se live check (#490 item 1, user approved):** no `readySelector`, 137 pages added, 0 empty, 0 failed;
-  answered on #490.
-- **Stream B** merged B-21..B-24 (#485–#489); their deviations are settled in the design (`e80c42c`).
-- **Small fixes:** `turkos` republished as v2 on `claude-haiku-5-5` (works in Open WebUI and the test panel); old dev
-  `Runs.SettingsHashes` without `fetch` cleared by hand (they failed every scheduler pass); three leftover branches
-  deleted.
+- **The e2e failure was the runners colliding, not code.** Run 42469437132 ran beside `verify.yml` on the shared
+  machine: the mouse journey failed while `verify`'s backend job ran, the keyboard journey during its renderer job.
+  The same code passed 9/9 locally (fresh `Start-E2E` stack, bash mirror of the script) and 9/9 on CI **alone**
+  (42471519711). #494: `release.yml`'s `e2e` needs `verify` and `parser`; `docs/ci-runner.md`: dispatch e2e alone.
+- **CHANGELOG 0.2.0 (#495):** the P1b entries that were missing (#144–#458 and the late items), grouped by area.
+- **Release dry runs found five problems (#496)**; `release.yml` had not run since v0.1.0 and the runner host was
+  rebuilt since: (1) `Microsoft.Sbom.DotNetTool` 4.1.13 is net8-only, the host has .NET 10 only →
+  `DOTNET_ROLL_FORWARD: Major`; (2) the dry-run registry container was never removed → `ume-rag-dryrun-registry`,
+  removed `if: always()`; (3) no sudo → smoke test `--chown-with-docker`; (4) **a bundle bug:** `rag-blobs-init` had
+  CHOWN but not FOWNER, so its chmod failed and the worker never started → `cap_add: [CHOWN, FOWNER]`; (5) rag-api's
+  `/version` is snake_case (`informational_version`, its global JSON policy) → the smoke test reads both; the real fix
+  is #497 for stream b. Dry run 42479183095 green, then the tag.
+- **The tag run (42480775293)** passed verify, parser and build (images pushed), then **publish** failed: `gh: command
+  not found` on the runner. The release was created by hand from that run's `release` artifact with the workflow's own
+  notes script (checksums verified after download). **#498** (open; merge when green): the publish job downloads a
+  pinned gh 2.103.3 with its sha256. A dry run never reaches publish, so the next tag is its first real test.
+- **M-3 ticked**, roadmap "P1b code done, released as `v0.2.0`".
 
-## Decided this session (user, 2026-11-07/08)
-
-- Keep strict 1 req/s pacing for an external single-page app's own subrequests; a per-page burst and a renderer asset
-  cache kept across runs are **P2** (roadmap, connectors P2 table).
-- `Worker:Concurrency:fetch` 32; `Render:MaxConcurrent` 4 after the memory measurement.
-- Ready rule: selector **and** quiet.
-- Testing on external JavaScript sites is fine; e.umea.se crawl approved.
-
-## Open, not blocking M-3
+## Open
 
 - **#488 parts 1 and 3** are stream b's (validate `readySelector` on save; a Cancel run action in the admin UI).
 - **Waiting on people** (roadmap): gold set with DoIT, G1/DPIA, test host (also: Chromium's sandbox on a Linux Docker
   Engine host, to-verify #29), U1, N1/W1.
-- The live block (M-4) after the release.
+- **#498:** merge when its checks are green (pinned gh for the publish job).
+- **#497** (stream b): `/version` in one JSON shape in every service; then drop the smoke test's fallback.
+- The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
 
-- **State at handover:** the dev AppHost is **stopped** (`aspire stop --all`). Its persistent containers (postgres,
-  keycloak, parser, clamav, renderer) still run. The e2e volume `ume-rag-e2e-postgres` does not exist. User secrets
-  are back to defaults (worker: none; admin API: no `Render:*`). The working tree's last build is of A-19's commit
-  (`c2d01eb`); run `dotnet build UmeRag.slnx` on `main` before starting.
+- **State at handover:** the dev AppHost and the e2e stack are **stopped** (`aspire stop --all`); no Ume.Rag
+  containers run (the persistent ones are stopped too; the next `aspire start` starts them). The e2e volume
+  `ume-rag-e2e-postgres` is removed. User secrets are at defaults. The working tree was last built on `0dbfa87` (code
+  unchanged since, except `deploy/`).
+- **E2E locally without pwsh:** `aspire stop --all`; `docker volume rm ume-rag-e2e-postgres`; export
+  `DevelopmentVolumes__Postgres=ume-rag-e2e-postgres Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`;
+  `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`; `aspire wait admin-ui
+  --apphost …`; in `tests/e2e`: `npm ci`, `npx playwright install chromium`, `npx playwright test` (9 tests, ~10 min).
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
   --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
   `aspire resource worker restart --apphost … --non-interactive`.
@@ -151,6 +124,11 @@ CI set once". On `main` at `e80c42c` (2026-11-08, dispatched by hand):
 
 ## Lessons
 
+- **Before a release, run a release dry run** (`gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false`,
+  ~30 min) and fix what it finds; it is the only run of the bundle's smoke test. Dispatch `e2e.yml` only when no other
+  workflow runs (`gh run list --status in_progress`).
+- A failed `gh run view --log-failed` of the smoke test is long: grep `ok:|error:` for the script's own lines; an
+  `up --wait` "not healthy within 900s" after a few seconds means a one-shot container failed (read its log lines).
 - **Admin API scripting:** `/bff/login` → Keycloak form (`#username`, `#password`, `#kc-login`; the AppHost secret
   `Parameters:dev-user-password` from `~/.microsoft/usersecrets/ume-rag-apphost-dev/secrets.json`, BOM) → the
   `form_post` page (upper-case `FORM`/`INPUT` attributes: match case-insensitively) → `GET /bff/user`. Writes need

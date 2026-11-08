@@ -20,8 +20,9 @@ and one pilot department uses its assistant in Open WebUI.
 
 Three tracks:
 
-1. **Code leftovers**, small and mostly unblocked: [`work/stream-a.md`](work/stream-a.md),
-   [`work/stream-b.md`](work/stream-b.md), [`work/main.md`](work/main.md).
+1. **Code leftovers: P1b code done** (M-3, 2026-11-08): every code item of both queues is ticked, the deviations are
+   settled and the full CI set is green; released as `v0.2.0`. New code items still go to
+   [`work/stream-a.md`](work/stream-a.md), [`work/stream-b.md`](work/stream-b.md), [`work/main.md`](work/main.md).
    **JavaScript rendering** (user, 2026-11-07; connectors design §8): some sites the platform will crawl need it, so
    the renderer is built now (stream A, A-9 to A-13: spike, image, worker, settings and UI, live check). It is not a
    go-live gate for the umea.se pilot, which is server-rendered.

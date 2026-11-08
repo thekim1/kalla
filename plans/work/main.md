@@ -87,7 +87,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Waits on:** M-7 (the `ume` parsing and chunk writer).
 - **Read:** Decisions "Follow-up suggestions"; chat §3.8, §5, §7.2, §7.4, §8.2, §9.5, §9.8, §10.3, §16.1, §17.
 
-### [ ] M-3 Code complete
+### [x] M-3 Code complete (2026-11-08, `e80c42c`: verify 42469432178, parser 42469434705, e2e 42471519711 run alone, #494)
 - **Do:** when every code item of both queues is ticked: settle every remaining design deviation, fold the results
   files into `to-verify.md`, run the full CI set once.
 - **Done when:** nothing open in the code sections of the queues; the roadmap says P1b code done.
