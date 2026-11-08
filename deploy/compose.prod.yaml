@@ -110,7 +110,8 @@ services:
     <<: *hardened
     image: ${POSTGRES_IMAGE:-ume-rag/postgres:latest}
     user: "0:0"
-    cap_add: [CHOWN]
+    # FOWNER: root without it may not chmod a directory it has just given to 1654, nor one that already exists.
+    cap_add: [CHOWN, FOWNER]
     restart: "no"
     cpus: 0.1
     mem_limit: 64m
