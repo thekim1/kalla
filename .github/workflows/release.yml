@@ -98,7 +98,12 @@ jobs:
         run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Start the dry run's registry
         if: github.event_name != 'push'
-        run: docker run -d --name registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
+        # Both runners share one Docker daemon: remove a registry an earlier, cancelled or failed dry run left behind.
+        run: |
+          docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
+          # Before this step had a cleanup the container was called "registry": remove it only if it runs our image.
+          if [ "$(docker inspect -f '{{.Config.Image}}' registry 2>/dev/null)" = "$DRY_RUN_REGISTRY_IMAGE" ]; then docker rm -f registry; fi
+          docker run -d --name ume-rag-dryrun-registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
@@ -254,6 +259,9 @@ jobs:
             sbom/
             images.env
           if-no-files-found: error
+      - name: Remove the dry run's registry
+        if: always() && github.event_name != 'push'
+        run: docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
 
   publish:
     # Only for a pushed tag; a dry run ends after the smoke test.
