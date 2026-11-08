@@ -22,8 +22,8 @@ internal sealed class FakeRenderer : IRenderer
     /// <summary>A rendered page: <paramref name="html"/> ready, with <paramref name="discovered"/> links.</summary>
     public static RenderResult Page(string html, params Uri[] discovered) => new(html, NoRequests, Ready: true) { Discovered = discovered };
 
-    /// <summary>A page that was not ready within the page timeout.</summary>
-    public static RenderResult NotReady() => new(string.Empty, NoRequests, Ready: false);
+    /// <summary>A page that was not ready within the page timeout, for <paramref name="reason"/> (<see cref="RenderResult.NotReadyReason"/>).</summary>
+    public static RenderResult NotReady(string reason = RenderReasons.Timeout) => new(string.Empty, NoRequests, Ready: false) { NotReadyReason = reason };
 
     /// <summary>A page that navigated to <paramref name="target"/> before it was ready.</summary>
     public static RenderResult Navigated(Uri target) => new(string.Empty, NoRequests, Ready: false) { Navigation = target };

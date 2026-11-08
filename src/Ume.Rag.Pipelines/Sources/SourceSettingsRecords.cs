@@ -25,8 +25,9 @@ internal static class SettingDescriptions
         "fetched by the worker (connectors design §8). A change starts a sync that fetches every page again.";
 
     public const string ReadySelector =
-        "browser only: CSS naming the loaded content; the page is ready when it holds text. Null: ready when no request has been open for " +
-        "Render:QuietPeriod after load (connectors design §8.3). A change starts a sync that fetches every page again.";
+        "browser only: CSS naming the loaded content; the page is ready when it holds text and then no request has been open for " +
+        "Render:QuietPeriod. Null: ready when no request has been open for Render:QuietPeriod after load (connectors design §8.3). A change starts " +
+        "a sync that fetches every page again.";
 
     public const string ScrollToLoad =
         "browser only: scroll to the bottom until the page stops growing (at most 10 steps) for content loaded on scroll. A change starts a sync " +

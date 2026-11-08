@@ -17,7 +17,7 @@ public sealed class RenderMetrics
     {
         ArgumentNullException.ThrowIfNull(meters);
         var meter = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName);
-        _duration = meter.CreateHistogram<double>("rag.worker.render.duration", "s", "Page renders by outcome (ready, navigated, timeout, unavailable).");
+        _duration = meter.CreateHistogram<double>("rag.worker.render.duration", "s", "Page renders by outcome (ready, navigated, timeout, bad_selector, selector_not_found, unavailable).");
         _requests = meter.CreateCounter<long>("rag.worker.render.requests", description: "Requests of rendered pages by answer (fetched, cached, blocked, refused, truncated, failed).");
         _slots = meter.CreateUpDownCounter<long>("rag.worker.render.slots", description: "Render slots in use (state in_use), and fetch jobs released without a free slot (state busy).");
     }

@@ -13,6 +13,7 @@ using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Jobs;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
 
@@ -111,7 +112,8 @@ public sealed class CrawlSourceRunner(
 
     // The run's rendered pages (a fetched item whose document's content is the rendered DOM, including a page whose main
     // text was empty, skipped parse.empty; a lastmod skip renders nothing), those with an empty main text, its render
-    // failures (attempts used up), and those of them whose document kept its last good content.
+    // failures (attempts used up, or a readySelector refused or never found), and those of them whose document kept its
+    // last good content.
     private const string RenderSql = """
         SELECT count(*) FILTER (WHERE (i."Outcome" IN ('added', 'updated', 'unchanged', 'degraded') OR (i."Outcome" = 'skipped' AND i."Reason" = 'parse.empty'))
                                   AND d."FetchMode" = 'browser' AND i."Reason" IS DISTINCT FROM 'crawl.lastmod_skip')::int,
@@ -315,9 +317,10 @@ public sealed class CrawlSourceRunner(
     /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a URL that
     /// failed in the run, and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
     /// nothing beyond a lowered <c>maxDepth</c>), and the report's sections: completeness with the incomplete-traversal
-    /// count and alert, the run's verdict, the removal checks, the <c>demote</c> patterns with the live documents they match,
-    /// the scope hosts crawled with a non-default politeness profile (connectors design §6.6) and, for a <c>browser</c>
-    /// source, the renderer counts (§8.6).
+    /// count and alert, the run's verdict (the traversal's degradation, else <c>render.mostly_empty</c> for a
+    /// <c>browser</c> source whose ready renders ended <c>parse.empty</c> at least half the time), the removal checks, the
+    /// <c>demote</c> patterns with the live documents they match, the scope hosts crawled with a non-default politeness
+    /// profile (connectors design §6.6) and, for a <c>browser</c> source, the renderer counts (§8.6).
     /// </summary>
     public async Task<CrawlReconcile> PrepareReconcileAsync(SourceContext source, RunRow run, IReadOnlyList<SourceDocument> all,
         IReadOnlyDictionary<Guid, string> explicitGone, CancellationToken cancellationToken)
@@ -339,17 +342,20 @@ public sealed class CrawlSourceRunner(
         var settings = crawl.Settings;
         // Demote counts over Documents.Url, the URL retrieval matches demote on (the path form on an identity-rule host, #228).
         var live = all.Where(d => d.DeletedAt is null && d.Url is not null).Select(d => d.Url!).ToList();
+        var render = settings.FetchMode == FetchMode.Browser ? await RenderSectionAsync(run.Id, cancellationToken) : null;
+        // Most ready renders without main text: the pages were probably ready before their content loaded (#490).
+        var degradation = verdict.RunDegradation ?? (render is not null && RenderReasons.IsMostlyEmpty(render.Rendered, render.Empty) ? RenderReasons.MostlyEmpty : null);
         var report = new Dictionary<string, object>
         {
             ["completeness"] = completeness,
-            ["verdict"] = new { verdict.RunFailure, verdict.RunDegradation },
+            ["verdict"] = new { verdict.RunFailure, RunDegradation = degradation },
             ["removalChecks"] = RemovalSection.From(await RemovalOutcomesAsync(source, run.Id, cancellationToken)),
             ["demote"] = settings.Demote.Select(d => new { d.Pattern, d.Factor, Documents = live.Count(UrlPattern.Parse(d.Pattern).Matches) }).ToList(),
             ["politeness"] = PolitenessReportEntry.For(crawl.Scope.Hosts, policy.Current),
         };
-        if (settings.FetchMode == FetchMode.Browser)
+        if (render is not null)
         {
-            report["render"] = await RenderSectionAsync(run.Id, cancellationToken);
+            report["render"] = render;
         }
 
         var empty = verdict.Complete && !all.Any(d => d.DeletedAt is null && d.LastRunId == run.Id);

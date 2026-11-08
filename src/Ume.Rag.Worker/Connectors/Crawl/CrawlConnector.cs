@@ -238,9 +238,9 @@ public sealed class CrawlConnector(
     /// <summary>
     /// One GET (conditional when validators are stored and the run does not revalidate; never for a <c>browser</c> source),
     /// redirects re-checked against the scope (§3.2), the page rendered for a <c>browser</c> source and the content stored
-    /// with its outlinks; a 304 returns the stored outlinks of the last content, and so does a failed render (§8.4: the
-    /// traversal continues from the last good links, so nothing below the page is missed or proposed for deletion). An
-    /// HTML page whose main text matches <paramref name="softNotFound"/> (the host's fingerprint, §5.3) ends
+    /// with its outlinks; a 304 returns the stored outlinks of the last content, and so does a failed render, transient or
+    /// permanent (§8.4: the traversal continues from the last good links, so nothing below the page is missed or proposed
+    /// for deletion). An HTML page whose main text matches <paramref name="softNotFound"/> (the host's fingerprint, §5.3) ends
     /// <c>http.soft_404</c>.
     /// </summary>
     public async Task<CrawlPage> FetchPageAsync(FetchContext context, WorkItem item, string? softNotFound, CancellationToken cancellationToken)
@@ -261,7 +261,7 @@ public sealed class CrawlConnector(
         {
             case FetchOutcome.NotModified when item.Hints.ContentHash is { } hash:
                 return new CrawlPage(page.Outcome, await PageLinks.LoadAsync(blobs, context.Classification, hash, cancellationToken) ?? PageLinks.None);
-            case FetchOutcome.Transient { Reason: var reason } when reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal) && item.Hints.ContentHash is { } hash:
+            case var failed when RenderReasons.Of(failed) is not null && item.Hints.ContentHash is { } hash:
                 return new CrawlPage(page.Outcome, await PageLinks.LoadAsync(blobs, context.Classification, hash, cancellationToken));
             default:
                 return new CrawlPage(page.Outcome, page.Links);

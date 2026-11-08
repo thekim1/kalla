@@ -207,7 +207,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** performance pass §2.3, §4, §7 (the FakeSites row, for shape only; `scale.yml` stays P2); connectors §6.0,
   §6.3, §8.3.
 
-### [ ] A-19 Ready rule and render reasons (#488, #490)
+### [x] A-19 Ready rule and render reasons (#488, #490)
 - **Do:** (1) **Ready rule** (user 2026-11-08): with a `readySelector`, a page is ready when the selector holds text
   **and** the quiet rule holds (`load`, no routed request open for `Render:QuietPeriod`), so a label the app renders
   before its data (e.umea.se's translated `h2`) can't make it ready alone. (2) **Distinct, permanent reasons** in place of

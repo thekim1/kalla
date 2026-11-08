@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../../../../contracts/admin/v1/error-codes.json?raw'
+import { SOURCE } from './labels'
 import { ERROR_MESSAGES, JOB_MESSAGES, JOB_MESSAGE_PREFIXES, formatMessage, jobMessage } from './messages'
 
 // The exported list of the admin API's error codes (admin design §4.1); CI fails when the UI misses one.
@@ -33,6 +34,7 @@ const WORKER_CODES = [
   'crawl.limit_pages', 'sitemap.found', 'sitemap.none', 'robots.ok', 'robots.missing', 'robots.ignored', 'cms.sitevision', 'cms.unknown',
   // The renderer (RenderReasons, connectors design §8) and the preflight's raw-vs-rendered comparison (Preflight.cs).
   'render.suggested', 'render.compared', 'render.empty', 'render.not_configured', 'render.busy', 'render.timeout', 'render.unavailable',
+  'render.bad_selector', 'render.selector_not_found', 'render.mostly_empty',
   // The eval class (#128, #130; issue #129).
   'eval.unsupported', 'eval.invalid_payload', 'eval.no_questions', 'eval.invalid_candidate_settings', 'eval.invalid_settings',
   'eval.embedding_residency', 'eval.search_unavailable', 'eval.model_unset', 'eval.model_not_onprem', 'eval.no_onprem_key',
@@ -94,5 +96,10 @@ describe('worker messages', () => {
 
   it('tells why a page can come out empty', () => {
     expect(jobMessage('parse.empty')).toContain('JavaScript')
+  })
+
+  it('names the ready-selector field by its label where the setting is the cause', () => {
+    for (const code of ['render.bad_selector', 'render.selector_not_found', 'render.mostly_empty', 'render.empty'])
+      expect(jobMessage(code), code).toContain(`“${SOURCE.readySelector}”`)
   })
 })

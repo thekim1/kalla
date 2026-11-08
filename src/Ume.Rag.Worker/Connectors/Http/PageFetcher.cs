@@ -43,7 +43,9 @@ public sealed record PageResult(FetchOutcome Outcome, PageLinks? Links);
 /// (<see cref="IRenderer"/>, every browser request through <see cref="RenderFetcher"/>): a navigation before ready is a
 /// redirect hop the worker fetches (guard, scope and robots.txt checked, at most 5 hops in all) and renders instead; a
 /// page that is not ready is <c>render.timeout</c> and an unreachable renderer <c>render.unavailable</c>, both transient
-/// (§8.4) and never a fallback to the raw shell, so the document keeps its last good content. The rendered DOM is stored
+/// (§8.4), and a <c>readySelector</c> the browser refuses or that never held text on the quiet page is
+/// <c>render.bad_selector</c> or <c>render.selector_not_found</c>, failed at once (the next attempt would end the same
+/// way); never a fallback to the raw shell, so the document keeps its last good content. The rendered DOM is stored
 /// as the document's raw content (<c>text/html</c>, <see cref="FetchFacts.FetchMode"/> <c>browser</c>) with the links
 /// the page discovered. The caller holds the host's slot (and, for a <c>browser</c> source, a <see cref="RenderSlots"/>
 /// lease) for the whole call. Each render is logged with its facts (fetch mode, duration, requests, truncation; no URL).
@@ -133,8 +135,9 @@ public sealed partial class PageFetcher(
 
                 if (!rendered.Ready)
                 {
-                    metrics.Rendered("timeout", rendered.Stats.Duration);
-                    return Transient(RenderReasons.Timeout);
+                    var reason = rendered.NotReadyReason;
+                    metrics.Rendered(reason[RenderReasons.Prefix.Length..], rendered.Stats.Duration);
+                    return reason == RenderReasons.Timeout ? Transient(reason) : new PageResult(new FetchOutcome.Failed(reason), null);
                 }
 
                 metrics.Rendered("ready", rendered.Stats.Duration);
