@@ -228,6 +228,81 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** connectors §8.3, §8.4, §8.6; issues #488 (part 2) and #490; `results-a.md` "item A-13 (live sites)".
 
+### [ ] A-20 Pin GitHub Actions by commit SHA (#506)
+- **Do:** every `uses:` in `.github/workflows/*.yml` pinned to a full commit SHA with the version in a comment, checked
+  against the action's release; optionally `zizmor` in `audit.yml`.
+- **Paths:** `.github/**`.
+- **Done when:** no workflow references an action by tag; `verify.yml` green.
+- **Waits on:** –
+- **Read:** #506; repo-and-deployment §8.
+
+### [ ] A-21 Compose knobs for telemetry and health checks (#503, #504, Compose part)
+- **Do:** `OTEL_TRACES_SAMPLER` (`parentbased_traceidratio`) and its ratio as deployment knobs in Compose; the .NET
+  health-check interval from B-27's measurement (30–60 s).
+- **Paths:** `deploy/**`, `docs/production-setup.md`.
+- **Done when:** the bundle's smoke test passes with the new values.
+- **Waits on:** B-26, B-27.
+- **Read:** #503, #504.
+
+### [ ] A-22 Postgres settings for SSD and short queries (#500)
+- **Do:** `jit = off`, `random_page_cost = 1.1`, `effective_io_concurrency = 200` in `deploy/postgres/postgresql.conf`,
+  with `EXPLAIN (ANALYZE, BUFFERS)` of statements K, V-exact, V-approximate and H on the scale data before and after.
+- **Paths:** `deploy/postgres/**`.
+- **Done when:** the before/after plans and timings are in `results-a.md`.
+- **Waits on:** –
+- **Read:** #500; performance pass §3.3 (P-52).
+
+### [ ] A-23 Idle cost: notification-driven job lanes, renderer as a profile (#505)
+- **Do:** a lane waits for `rag_jobs` or the class's next `AvailableAt`, capped at about 30 s, instead of polling every
+  2 s; `rag-renderer` behind a Compose profile that `init-deployment.sh` enables, with `render.not_configured` for
+  `browser` sources when it is off (as the AppHost's `Render:Mode` `off`).
+- **Paths:** `src/Ume.Rag.Worker/Jobs/**`, `deploy/**`.
+- **Done when:** an idle worker issues no lane query between notifications (statement count over a minute); the smoke
+  test passes with and without the profile.
+- **Waits on:** –
+- **Read:** #505; engine §9; connectors §8.
+
+### [ ] A-24 The no-decompounder variant on statement K (#509, evaluation part)
+- **Do:** `NoDecompounderSearchIndex` uses B-28's statement with the variant's expression; its own copy goes.
+- **Paths:** `src/Ume.Rag.Worker/Evaluation/**`.
+- **Done when:** the variant's evaluation results are unchanged on the smoke set.
+- **Waits on:** B-28.
+- **Read:** #509; processing §14.
+
+### [ ] A-25 Write each chunk once (#501)
+- **Do:** as M-10 settles engine §12 and data-model §3.2: a chunk set within one batch is copied visible inside the
+  swap transaction; larger sets keep today's path.
+- **Paths:** `src/Ume.Rag.Worker/Engine/**`.
+- **Done when:** about half the WAL bytes and dead chunk tuples for the same re-crawl (`pg_stat_wal`,
+  `pg_stat_user_tables`); swap, rollback and fencing tests pass.
+- **Waits on:** M-10.
+- **Read:** #501; engine §12, §14.
+
+### [ ] A-26 One stage runner for engine and preview (#508)
+- **Do:** one runner with the stage order, input hashing and skip rules, parameterised by the output store and a stop
+  stage; engine and preview call it; a test runs both on the same documents and compares outputs.
+- **Paths:** `src/Ume.Rag.Worker/Engine/**`, `src/Ume.Rag.Worker/Preview/**`.
+- **Done when:** the comparison test passes and both old orchestrations are gone.
+- **Waits on:** –
+- **Read:** #508; engine §7, §11.
+
+### [ ] A-27 Image CVE scan and automated pin bumps (#507)
+- **Do:** a scheduled scan of the built images in `audit.yml` (fixable High/Critical fail it), and Renovate or Dependabot
+  for image digests, NuGet, npm, uv and Actions with a minimum release age of 7 days (the 7-day rule).
+- **Paths:** `.github/**`, `images/**`.
+- **Done when:** the first scan report and the first bump PR exist.
+- **Waits on:** A-20.
+- **Read:** #507; AGENTS.md "7-day package rule".
+
+### [ ] A-28 Schema contract test for positional SQL readers (#510, harness)
+- **Do:** a test that runs each SQL constant with `CommandBehavior.SchemaOnly` against the test database and checks the
+  column names and types its reader expects; the worker's statements first. Stream b adds its stores' statements after
+  it (a follow-up item when this lands).
+- **Paths:** `tests/Ume.Rag.ContractTests/**` or `tests/Ume.Rag.Worker.Tests/**`, `src/Ume.Rag.Worker/**`.
+- **Done when:** a renamed column in a worker statement fails the test.
+- **Waits on:** –
+- **Read:** #510.
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass

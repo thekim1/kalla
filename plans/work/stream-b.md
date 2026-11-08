@@ -256,6 +256,54 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** connectors §9.3, §13.4; admin §4.5.
 
+### [ ] B-25 Search statistics within the role's timeout (#499, step 1)
+- **Do:** measure `RetrievalStatements.CountChunks` and `FrequentLexemes` on the scale test data (A-18's probe or the
+  largest local collection) as `ume_rag_api` with its 5 s `statement_timeout`. If either can exceed it, run both inside a
+  transaction with `SET LOCAL statement_timeout` equal to their client timeouts (30 s, 60 s), and log a failed refresh
+  at Warning with the statement's name. List it under "Design deviations" (knowledge §6.4, §20). The single-writer
+  redesign of #499 is step 2 (M-10), not this item.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, `tests/Ume.Rag.Retrieval.Tests/**`.
+- **Done when:** the measured times are in `results-b.md`; a test shows a refresh slower than the role's timeout
+  completes instead of being cancelled.
+- **Waits on:** –
+- **Read:** #499; knowledge §6.2, §6.4, §20.
+
+### [ ] B-26 Less telemetry overhead (#503, code part)
+- **Do:** `"Microsoft.EntityFrameworkCore.Database.Command": "Warning"` in every service's `appsettings.json`;
+  register tracing only when an OTLP endpoint is configured; leave sampling to the standard `OTEL_TRACES_SAMPLER`
+  variables (the Compose knob is A-21).
+- **Paths:** `src/*/appsettings*.json`, `src/Ume.Rag.ServiceDefaults/**`.
+- **Done when:** a local run logs no EF SQL text at Information; traces still reach the Aspire dashboard locally.
+- **Waits on:** –
+- **Read:** #503; chat §17.
+
+### [ ] B-27 Smaller .NET footprint (#504, csproj part)
+- **Do:** measure idle and loaded RSS per .NET container first (local Compose with the release images, or the
+  AppHost), then `<ServerGarbageCollection>false</ServerGarbageCollection>` for AdminApi, Worker and MigrationService
+  (rag-api keeps Server GC). ReadyToRun only with a measured start-up gain: report it, main changes
+  `Directory.Build.*`. The health-check interval is A-21.
+- **Paths:** `src/Ume.Rag.AdminApi/*.csproj`, `src/Ume.Rag.Worker/*.csproj`, `src/Ume.Rag.MigrationService/*.csproj`.
+- **Done when:** a before/after RSS table in `results-b.md`.
+- **Waits on:** –
+- **Read:** #504.
+
+### [ ] B-28 One statement K: the search-vector expression as a parameter (#509, statement part)
+- **Do:** `RetrievalStatements.Keyword` takes the search-vector expression (the stored `SearchVector` by default,
+  `to_tsvector('swedish', "Text")` for the no-decompounder variant), cached per variant like the other statements.
+  The worker's variant switches to it in A-24.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, `tests/Ume.Rag.Retrieval.Tests/**`.
+- **Done when:** both forms are built from one statement and tested.
+- **Waits on:** –
+- **Read:** #509; knowledge §6.2.
+
+### [ ] B-29 Open WebUI user JWT through a library (#512)
+- **Do:** validate the forwarded user JWT with `Microsoft.IdentityModel.JsonWebTokens` (HS256 only, issuer
+  `open-webui`, 30 s clock skew, the existing maximum lifetime), keeping every refusal code.
+- **Paths:** `src/Ume.Rag.Api/**`, `tests/Ume.Rag.Api.Tests/**`, `Directory.Packages.props` (shared: its own small PR).
+- **Done when:** the existing refusal tests pass unchanged; a token signed with another algorithm is refused.
+- **Waits on:** –
+- **Read:** #512; identity §5.
+
 ## Live (the live block, see the roadmap)
 
 ### [x] B-L1 Status green against the real gateway
