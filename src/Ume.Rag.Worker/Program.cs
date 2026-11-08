@@ -17,5 +17,6 @@ builder.AddRagWorker();
 builder.AddRagEngine();
 
 var app = builder.Build();
+Ume.Rag.Worker.Connectors.Http.FetchedBody.PrepareSpool(TimeProvider.System);
 app.MapDefaultEndpoints();
 app.Run();

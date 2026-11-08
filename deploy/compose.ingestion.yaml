@@ -41,6 +41,9 @@ services:
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
+      # Fetched bodies spool to disk, not the /tmp tmpfs: a tmpfs counts against mem_limit, and 32 fetches
+      # (Worker:Concurrency:fetch) of 50 MB bodies would pass it. rag-blobs-init creates the directory.
+      TMPDIR: /data/blobs/spool
       # Its gateway keys (OnPrem and Eu, never External), Security__CrawlKeyPepper and Render__Endpoint (the renderer's
       # ws://rag-renderer:3000/<secret path>) are secret files.
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
