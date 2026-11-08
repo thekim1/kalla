@@ -465,6 +465,67 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task The_search_statistics_outlast_the_role_statement_timeout_instead_of_being_cancelled()
+    {
+        // #499, B-25. The session options stand in for the api role's limits (statement_timeout 5 s, lock_timeout 1 s) at a
+        // test-sized 300 ms, and an exclusive lock held for 1.5 s stands in for a corpus large enough that the statistics
+        // read longer than that: statement_timeout counts the lock wait, so before B-25 both statements were cancelled.
+        var collection = Guid.NewGuid();
+        await _writer.AddDocumentAsync(new FixtureDocumentSpec { CollectionId = collection, EmbeddingProfileId = _profile },
+            [.. Enumerable.Range(0, 120).Select(i => new FixtureChunk($"umeå kommun del {i}") { Embedding = V(1, 0, 0) })], Ct);
+        var shortLimits = new NpgsqlConnectionStringBuilder(database.Connection(Api)) { Options = "-c statement_timeout=300 -c lock_timeout=0" };
+        await using var api = RetrievalDataSource.Create(shortLimits.ConnectionString);
+        var index = new PostgresSearchIndex(api);
+
+        await using (var probe = await api.OpenConnectionAsync(Ct))
+        {
+            await using var show = new NpgsqlCommand("SHOW statement_timeout", probe);
+            (await show.ExecuteScalarAsync(Ct)).ShouldBe("300ms");
+        }
+
+        async Task<TimeSpan> WhileLockedAsync(Func<Task> statistics)
+        {
+            await using var holder = new NpgsqlConnection(database.Connection(null));
+            await holder.OpenAsync(Ct);
+            await using var transaction = await holder.BeginTransactionAsync(Ct);
+            await using (var lockTable = new NpgsqlCommand("""LOCK TABLE content."Chunks" IN ACCESS EXCLUSIVE MODE""", holder, transaction))
+            {
+                await lockTable.ExecuteNonQueryAsync(Ct);
+            }
+
+            var started = Stopwatch.StartNew();
+            var run = statistics();
+            await Task.Delay(TimeSpan.FromMilliseconds(1500), Ct);
+            run.IsCompleted.ShouldBeFalse(); // still waiting, not cancelled at 300 ms
+            await transaction.CommitAsync(Ct);
+            await run;
+            return started.Elapsed;
+        }
+
+        var counts = Array.Empty<CollectionChunkCount>() as IReadOnlyList<CollectionChunkCount>;
+        (await WhileLockedAsync(async () => counts = await index.CountChunksAsync(Ct))).ShouldBeGreaterThan(TimeSpan.FromMilliseconds(1500));
+        counts.Where(c => c.CollectionId == collection).Sum(c => c.Chunks).ShouldBe(120);
+
+        var lexemes = Array.Empty<FrequentLexeme>() as IReadOnlyList<FrequentLexeme>;
+        (await WhileLockedAsync(async () => lexemes = await index.FrequentLexemesAsync(100, 0.10, Ct))).ShouldBeGreaterThan(TimeSpan.FromMilliseconds(1500));
+        lexemes.Where(l => l.CollectionId == collection).Select(l => l.Lexeme).ShouldContain("kommun");
+
+        // The search statements keep the role's limit: the transaction and SET LOCAL are the statistics' only.
+        await using (var holder = new NpgsqlConnection(database.Connection(null)))
+        {
+            await holder.OpenAsync(Ct);
+            await using var transaction = await holder.BeginTransactionAsync(Ct);
+            await using (var lockTable = new NpgsqlCommand("""LOCK TABLE content."Chunks" IN ACCESS EXCLUSIVE MODE""", holder, transaction))
+            {
+                await lockTable.ExecuteNonQueryAsync(Ct);
+            }
+
+            var searchText = QueryNormalizer.SearchText("kommun", Ume.Rag.Retrieval.Text.SwedishDecompounder.Default);
+            await Should.ThrowAsync<SearchUnavailableException>(() => index.KeywordAsync(Scope(collection), searchText, null, 10, Ct));
+        }
+    }
+
     /// <summary>
     /// The generic plan of a statement with <c>$n</c> parameters (<c>PREPARE</c>, then <c>EXPLAIN EXECUTE</c> under
     /// <c>plan_cache_mode = force_generic_plan</c>, as a pooled statement runs once auto-prepared), with the given planner

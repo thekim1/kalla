@@ -256,7 +256,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** connectors §9.3, §13.4; admin §4.5.
 
-### [ ] B-25 Search statistics within the role's timeout (#499, step 1)
+### [x] B-25 Search statistics within the role's timeout (#499, step 1) (#PR)
 - **Do:** measure `RetrievalStatements.CountChunks` and `FrequentLexemes` on the scale test data (A-18's probe or the
   largest local collection) as `ume_rag_api` with its 5 s `statement_timeout`. If either can exceed it, run both inside a
   transaction with `SET LOCAL statement_timeout` equal to their client timeouts (30 s, 60 s), and log a failed refresh

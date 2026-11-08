@@ -87,7 +87,8 @@ public static class KnowledgeExtensions
         static Npgsql.NpgsqlDataSource Pool(IServiceProvider sp) => sp.GetRequiredService<Npgsql.NpgsqlDataSource>();
         services.AddSingleton(sp => new PostgresSearchIndex(Pool(sp)));
         services.AddSingleton<RetrievalMetrics>();
-        services.AddSingleton(sp => new ScopeSizeCache(sp.GetRequiredService<PostgresSearchIndex>(), TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
+        services.AddSingleton(sp => new ScopeSizeCache(sp.GetRequiredService<PostgresSearchIndex>(), TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>(),
+            logger: sp.GetRequiredService<ILogger<ScopeSizeCache>>()));
         services.AddSingleton(sp => new RerankRouter(
             new ChatModelReranker(sp.GetRequiredService<IHttpClientFactory>(), ChatModelReranker.HttpClientName, sp.GetRequiredService<ILogger<ChatModelReranker>>()),
             new GatewayReranker(sp.GetRequiredService<IHttpClientFactory>(), ChatModelReranker.HttpClientName, sp.GetRequiredService<ILogger<GatewayReranker>>())));

@@ -89,7 +89,11 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
         return Task.FromResult(Vector);
     }
 
-    public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) => Task.FromResult(Counts);
+    /// <summary>When set, <see cref="CountChunksAsync"/> throws it.</summary>
+    public Exception? CountsFailure { get; set; }
+
+    public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) =>
+        CountsFailure is null ? Task.FromResult(Counts) : Task.FromException<IReadOnlyList<CollectionChunkCount>>(CountsFailure);
 
     public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
     {

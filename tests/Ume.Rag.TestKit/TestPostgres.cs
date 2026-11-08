@@ -18,7 +18,14 @@ public static class TestPostgres
     public static string Image =>
         Environment.GetEnvironmentVariable("UME_RAG_TEST_POSTGRES_IMAGE") is { Length: > 0 } image ? image : DefaultImage;
 
-    public static PostgreSqlBuilder Builder() => new(Image);
+    /// <summary>
+    /// The container builder. <c>UME_RAG_TEST_POSTGRES_TMPFS=1</c> keeps the data directory on a tmpfs, for the explicit
+    /// measurements that load millions of chunks (no gigabytes written to the developer's disk).
+    /// </summary>
+    public static PostgreSqlBuilder Builder() =>
+        Environment.GetEnvironmentVariable("UME_RAG_TEST_POSTGRES_TMPFS") == "1"
+            ? new PostgreSqlBuilder(Image).WithTmpfsMount("/var/lib/postgresql/data")
+            : new(Image);
 
     /// <summary>A context with the connection's rights, outside any host.</summary>
     public static RagDbContext Context(string connectionString) =>
