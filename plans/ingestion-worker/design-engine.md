@@ -1013,7 +1013,7 @@ profiles) are 6b §16; processing metrics (`rag.parse.*`, `rag.pii.*`, `rag.embe
 
 | Resource | Per page | At 2.8 pages/s | Budget | Notes |
 |---|---|---|---|---|
-| Worker CPU (fetch, AngleSharp + SmartReader, clean, regex PII, tokenizer, decompounder, JSON) | ≈ 80 ms | ≈ 0.25 cores | 1.5 cores | `fetch` concurrency 8 covers ~200 ms fetch latency |
+| Worker CPU (fetch, AngleSharp + SmartReader, clean, regex PII, tokenizer, decompounder, JSON) | ≈ 80 ms | ≈ 0.25 cores | 1.5 cores | `fetch` concurrency 32 (A-18: at 8 the lanes bound first with many hosts, polite hosts filling them with in-process slot waits; a waiting fetch holds no database connection) |
 | Politeness | – | 2.8 req/s on umea.se | 10 req/s municipal (answered 4) | external hosts at 1 req/s cap a single external site at 3,600 pages/h; incremental runs by `lastmod` fetch only changed pages (6b) |
 | Parser NER (names) | only list-like pages of `public` collections (6c §9.6) | a small fraction of pages | parser NER process | no longer a bottleneck by construction; measured in R1 |
 | Embedding (≈ 8 chunks × 450 tokens) | ≈ 3,600 tokens | ≈ 10,000 tokens/s | the pilot profile: EU-hosted `text-embedding-3-large` at 1024 dimensions through the gateway; on-prem BGE-M3 once register M2's hardware exists | **the bottleneck to verify** (§23); the on-prem capacity run (H8) waits for that hardware and is no P1b gate |
