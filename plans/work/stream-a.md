@@ -207,6 +207,27 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** performance pass §2.3, §4, §7 (the FakeSites row, for shape only; `scale.yml` stays P2); connectors §6.0,
   §6.3, §8.3.
 
+### [ ] A-19 Ready rule and render reasons (#488, #490)
+- **Do:** (1) **Ready rule** (user 2026-11-08): with a `readySelector`, a page is ready when the selector holds text
+  **and** the quiet rule holds (`load`, no routed request open for `Render:QuietPeriod`), so a label the app renders
+  before its data (e.umea.se's translated `h2`) can't make it ready alone. (2) **Distinct, permanent reasons** in place of
+  `render.timeout`: `render.bad_selector` when the browser refuses the selector (Playwright's parse error, today caught
+  as a navigation interruption) and `render.selector_not_found` when the selector never matched within
+  `Render:PageTimeout`, kept apart from a page still loading; neither is retried as transient when it fails the same way
+  (the run item fails with the reason, the document keeps its last good content as for other render failures). The
+  preflight's render check reports both codes too. (3) **Run verdict:** a crawl run where at least half of its ready
+  renders ended `parse.empty` (A-17's `render.empty` count) is `degraded` with a reason naming `readySelector`, not a
+  plain `succeeded`. (4) Messages for the new codes in `messages.ts` (English, naming the "Content is ready when this
+  element has text" field).
+- **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Pipelines/**` if a reason list lives there,
+  `src/admin-ui/src/utils/messages.ts` (on a `main-session/` branch), their tests.
+- **Done when:** worker tests on the fake renderer and `RenderTests`' real-route paths: a placeholder that holds text
+  before a slow data request is not ready until the request ends; a refused selector gives `render.bad_selector` with
+  one attempt; a selector that never matches gives `render.selector_not_found`; a run with most renders empty is
+  `degraded`; vitest for the messages.
+- **Waits on:** –
+- **Read:** connectors §8.3, §8.4, §8.6; issues #488 (part 2) and #490; `results-a.md` "item A-13 (live sites)".
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
