@@ -277,7 +277,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #503; chat §17.
 
-### [ ] B-27 Smaller .NET footprint (#504, csproj part)
+### [x] B-27 Smaller .NET footprint (#504, csproj part) (#PR; measured, no gain: no csproj change)
 - **Do:** measure idle and loaded RSS per .NET container first (local Compose with the release images, or the
   AppHost), then `<ServerGarbageCollection>false</ServerGarbageCollection>` for AdminApi, Worker and MigrationService
   (rag-api keeps Server GC). ReadyToRun only with a measured start-up gain: report it, main changes
