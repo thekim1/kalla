@@ -384,7 +384,7 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
   free per host; robots.txt rules are still matched against `UmeaKommunBot`.
 - The deployment caps every host at `Crawl:MaxHostRate` (50 requests a second) and `Crawl:MaxHostConnections` (16).
   Set them alike on `rag-admin` (which refuses more) and `rag-worker` (which clamps to them), e.g.
-  `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (2).
+  `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (4) and, in effect, at the host's `maxConnections`.
 - A crawl run's page lists the hosts it fetched with their own politeness and the robots.txt reason.
 
 ## Public-records requests (allmän handling)

@@ -660,7 +660,7 @@ not per source, because the host budget is shared by every source, preview and l
 | `circuitBreaker` | ≥ 50 % of the last 100 responses failing → pause 30 min | `threshold` (0.2–1.0), `pauseMinutes` (1–120), or `off` |
 | `robots` | `respect` | `respect`, `ignore` **with a required `reason`** (e.g. "own site, web team consent 2026-11-10"): robots.txt is then neither asked for seeds' `Disallow` nor for redirect hops; its `Sitemap:` lines are still read; meta/`X-Robots-Tag` `noindex` handling (§5.2) is unchanged |
 | `userAgent` | `UmeaKommunBot/1.0` | any string (1–256 printable ASCII), e.g. a browser's; sent on every request to the host (HTTP and the renderer's fetches); robots.txt groups are still matched against `UmeaKommunBot` |
-| `renderPerHost` | 1 (§8.3) | 1–`Render:MaxConcurrent` |
+| `renderPerHost` | 1 (§8.3) | 1–`Render:MaxConcurrent`; used up to the host's `maxConnections`, since a rendered page holds one of the host's connections |
 
 Presets: `polite` = the external defaults; `municipal` = the municipal defaults; `fast` = 10 req/s, 4 connections,
 `crawlDelay` `ignore`, `adaptToLatency` `false`, `crawlWindow` `any`, the back-off and breaker unchanged. `robots` and
@@ -815,7 +815,7 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   this, the content with it.)
 - **Limits:** at most `Render:MaxRequests` (50) and `Render:MaxBytes` (20 MB) per page; past them the remaining
   requests get 204 (fact `truncated`). A page is kept only when it reached **ready**.
-- **Capacity:** `Render:MaxConcurrent` (2) renders per worker and `Render:MaxPerHost` (1) per host, to tune from
+- **Capacity:** `Render:MaxConcurrent` (4; the renderer peaked at 294 MiB with one open page and 453 MiB with four, ≈ +55 MiB a page, against 2 GB) renders per worker and `Render:MaxPerHost` (1) per host, to tune from
   measurements. A fetch job **takes a render slot only when one is free**; otherwise it is released back to the queue
   (`render.busy`, a short delay, no attempt counted), so browser work never holds the `fetch` slots that HTTP sources
   need. The frontier, host budgets, retries and run reporting stay as they are.
