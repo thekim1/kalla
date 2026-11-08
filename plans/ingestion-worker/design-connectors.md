@@ -782,9 +782,11 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   fetched without them; p50 519 ms against 778 ms.
 - **Ready:** the worker knows every open request: a page is ready when `load` has fired and no routed request has
   been open for `Render:QuietPeriod` (500 ms; at 100 ms a module-heavy app was ready between its last module and its first
-  API request and was stored empty, A-13), or when `readySelector` names the **loaded content** and it holds text
-  (a selector on a container that shows a "Loading…" placeholder is ready too early, 0 of 5 in the spike; the default
-  is the quiet rule, not the profile's `mainRoot`); hard limit `Render:PageTimeout` (20 s). No network-idle wait (it
+  API request and was stored empty, A-13). With a `readySelector` it is ready when the selector names the **loaded
+  content**, it holds text, **and then** the quiet rule holds (user 2026-11-08, #490: a label the app renders before its
+  data, as e.umea.se's `h2`, held text at once and 130 of 131 pages were stored empty; a selector on a container that
+  shows a "Loading…" placeholder was ready too early, 0 of 5 in the spike). The default is the quiet rule alone, not
+  the profile's `mainRoot`; on e.umea.se it rendered 137 of 137 pages completely. Hard limit `Render:PageTimeout` (20 s). No network-idle wait (it
   added ≈ 400 ms per page).
 - **Lazy content:** content that loads on scroll is missing at ready (the spike: 0 of 40 items). A source's
   `scrollToLoad` scrolls to the bottom until the height stops growing (at most 10 steps), each step ending on the
@@ -830,8 +832,10 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
 
 No fallback to the raw HTML for a `browser` source: storing the empty shell would empty the document. A render that is
 not ready by `Render:PageTimeout` ends `render.timeout`; no renderer connection ends `render.unavailable`; no
-`Render:Endpoint` ends `render.not_configured` (no attempt counted; shown on the source page). All three are transient
-(retry after 5 min) and, like every failed fetch, **keep the document's last good content and chunks**. For the
+`Render:Endpoint` ends `render.not_configured` (no attempt counted; shown on the source page). These three are transient
+(retry after 5 min). Two are permanent and fail the item at once (A-19, #488): `render.bad_selector`, a `readySelector`
+the browser refuses (Playwright's selector-parse messages), and `render.selector_not_found`, a selector that held no
+text by the deadline while the loaded page was quiet (a page still loading stays `render.timeout`). Every one, like every failed fetch, **keep the document's last good content and chunks**. For the
 traversal a failed render counts as **not reached with its last good links**: the crawl continues from the links
 stored with the document's current content (`PageLinks.LoadAsync`, as a 304 does, §5.4), so the pages below it are
 neither missed nor proposed for deletion, and the run's completeness rule (§5.4) counts it as a failure. A render
@@ -858,7 +862,7 @@ Event 5101 with `Purpose = Render` for a refused browser request (SIEM alert, id
 `rag.worker.render.duration` (by outcome), `rag.worker.render.requests` (fetched, cached, blocked),
 `rag.worker.render.slots` (in use, busy releases); one structured log line per render with `fetchMode`, `renderMs`,
 `requests`, `truncated` and `ready` (`RunItems` has no facts column);
-the crawl report counts rendered pages, render failures and pages kept from the last good content.
+the crawl report counts rendered pages (every ready render), those whose main text was empty (`empty`, `parse.empty`), render failures and pages kept from the last good content (A-17). A run where at least half of its ready renders were empty is `degraded` with `render.mostly_empty`, naming `readySelector` (A-19); the preflight warns `render.empty` for such a render before the source is saved.
 
 ### 8.7 Options weighed (2026-11-07)
 
