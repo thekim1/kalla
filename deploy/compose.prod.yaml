@@ -116,7 +116,8 @@ services:
     mem_limit: 64m
     pids_limit: 16
     entrypoint: [/bin/sh, -c]
-    command: ["mkdir -p -m 0750 /data/blobs/rag && chown 1654:1654 /data/blobs/rag && chmod 0750 /data/blobs/rag"]
+    # /data/blobs/spool: the worker's spool for fetched bodies (TMPDIR, compose.ingestion.yaml), on disk.
+    command: ["mkdir -p -m 0750 /data/blobs/rag /data/blobs/spool && chown 1654:1654 /data/blobs/rag /data/blobs/spool && chmod 0750 /data/blobs/rag /data/blobs/spool"]
     volumes:
       - rag-blobs:/data/blobs
     network_mode: none

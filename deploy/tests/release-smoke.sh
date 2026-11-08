@@ -171,6 +171,9 @@ echo "== blob container (issue #41)"
 owner="$(dc run --rm --no-deps rag-upload-backup stat -c '%u:%g %a' /data/blobs/rag)" || fail "could not stat /data/blobs/rag"
 [ "$owner" = "1654:1654 750" ] || fail "/data/blobs/rag is $owner, expected 1654:1654 750"
 ok "rag-blobs-init made /data/blobs/rag 1654:1654 0750; rag-upload-backup (uid 1654, read-only) can read it"
+spool="$(dc run --rm --no-deps rag-upload-backup stat -c '%u:%g %a' /data/blobs/spool)" || fail "could not stat /data/blobs/spool"
+[ "$spool" = "1654:1654 750" ] || fail "/data/blobs/spool is $spool, expected 1654:1654 750"
+ok "rag-blobs-init made the worker's fetch spool /data/blobs/spool 1654:1654 0750 (TMPDIR, on disk)"
 
 echo "== parser from the worker"
 dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Ume.Rag.Worker.dll --health-check \

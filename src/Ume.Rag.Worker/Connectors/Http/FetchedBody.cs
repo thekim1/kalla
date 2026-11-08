@@ -3,13 +3,52 @@ using System.Security.Cryptography;
 namespace Ume.Rag.Worker.Connectors.Http;
 
 /// <summary>
-/// A response body in a local temp file (<c>/tmp</c> tmpfs or a scratch volume), never in memory (connectors design §11):
-/// written once while hashing, then read as often as needed (malware scan, noise hash, blob write). The file is deleted
-/// on dispose.
+/// A response body in a local temp file (<c>TMPDIR</c>: in Compose a spool directory on the worker's disk volume, since a
+/// tmpfs counts against the container's memory and 32 fetches of 50 MB bodies would pass it), never in memory
+/// (connectors design §11): written once while hashing, then read as often as needed (malware scan, noise hash, blob
+/// write). The file is deleted on dispose; <see cref="PrepareSpool"/> removes what a killed process left.
 /// </summary>
 public sealed class FetchedBody : IAsyncDisposable
 {
     private const int BufferSize = 81920;
+    private const string Prefix = "ume-rag-fetch-";
+
+    /// <summary>A spool file this old belongs to no running fetch (a fetch job's lease is 2 minutes).</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// At start: creates the temp directory if it is missing (a spool directory on a volume) and deletes this worker's spool
+    /// files older than <see cref="StaleAfter"/>, which a killed process left (<c>DeleteOnClose</c> unlinks on close only).
+    /// Returns the number deleted.
+    /// </summary>
+    public static int PrepareSpool(TimeProvider time)
+    {
+        ArgumentNullException.ThrowIfNull(time);
+        var directory = Directory.CreateDirectory(Path.GetTempPath());
+        var cutoff = time.GetUtcNow().UtcDateTime - StaleAfter;
+        var deleted = 0;
+        foreach (var file in directory.EnumerateFiles(Prefix + "*"))
+        {
+            try
+            {
+                if (file.LastWriteTimeUtc < cutoff)
+                {
+                    file.Delete();
+                    deleted++;
+                }
+            }
+            catch (IOException)
+            {
+                // Gone or in use: the next start tries again.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Not this worker's file.
+            }
+        }
+
+        return deleted;
+    }
 
     private readonly FileStream _owner;
 
@@ -53,7 +92,7 @@ public sealed class FetchedBody : IAsyncDisposable
         ReadOnlyMemory<byte> head, Stream source, long maxBytes, bool truncate, string mediaType, string? charset, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        var path = Path.Combine(Path.GetTempPath(), "ume-rag-fetch-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
         var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete, BufferSize,
             FileOptions.Asynchronous | FileOptions.DeleteOnClose);
         try

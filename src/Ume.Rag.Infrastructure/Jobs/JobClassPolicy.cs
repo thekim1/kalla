@@ -16,7 +16,7 @@ public sealed record JobClassPolicy(string Class, TimeSpan Lease, short MaxAttem
         new(JobClasses.Attachment, TimeSpan.FromMinutes(2), 3, 2),
         new(JobClasses.Command, TimeSpan.FromMinutes(1), 3, 2),
         new(JobClasses.Sync, TimeSpan.FromMinutes(5), 3, 2),
-        new(JobClasses.Fetch, TimeSpan.FromMinutes(2), 5, 8),
+        new(JobClasses.Fetch, TimeSpan.FromMinutes(2), 5, 32),
         // min(setting, parser convert_slots) from P1; the pilot parser has one slot.
         new(JobClasses.Parse, TimeSpan.FromMinutes(15), 3, 1),
         new(JobClasses.Embed, TimeSpan.FromMinutes(2), 6, 4),
