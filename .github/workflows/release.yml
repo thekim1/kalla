@@ -136,6 +136,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           REGISTRY_HOST: ${{ steps.version.outputs.registry_host }}
           REPOSITORY: ${{ steps.version.outputs.repository }}
+          # The SBOM tool ships only tools/net8.0 (4.1.13 is the latest); the runner host has .NET 10 runtimes only.
+          DOTNET_ROLL_FORWARD: Major
         run: |
           mkdir -p sbom
           for entry in api:Api admin:AdminApi worker:Worker migrations:MigrationService; do
