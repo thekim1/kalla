@@ -417,9 +417,11 @@ its `renderPerHost` (default 1) up to its `maxConnections`, a slot taken only wh
 
 ### Crawlee review: ideas adopted
 
-Adopted: meta refresh as a redirect hop; `redirect.cookie_required`; sniffing a missing or `octet-stream` type; per-host soft-404 fingerprint; challenge pages transient, never evaded; sitemap retries, text sitemaps, `/sitemap_index.xml`; in the renderer bounded operations, navigations and popups as hops or links, per-page cookies, shadow-DOM and same-host iframe inlining, `scrollToLoad`. Detection by counted verdicts comes later. Detail: `ingestion-worker/design-connectors.md` §3.2, §5.3, §8.3.
+Adopted: meta refresh as a redirect hop; `redirect.cookie_required`; sniffing a missing or `octet-stream` type; per-host soft-404 fingerprint; challenge pages transient, never evaded; sitemap retries, text sitemaps, `/sitemap_index.xml`; in the renderer bounded operations, navigations and popups as hops or links, per-page cookies, `scrollToLoad`. Shadow-DOM flattening and same-host iframe inlining
+come later, when a source needs them: its rendered text falls well short of what a browser shows because of web
+components or same-host iframes (none of the measured sites does). Detection by counted verdicts comes later. Detail: `ingestion-worker/design-connectors.md` §3.2, §5.3, §8.3.
 
-*From:* log row 117; decided by main session, 2026-11-07.
+*From:* log row 117; decided by main session, 2026-11-07; shadow DOM and iframes later, user, 2026-11-08.
 
 ## Parser and processing
 

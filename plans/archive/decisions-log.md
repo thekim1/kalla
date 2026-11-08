@@ -149,3 +149,5 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
 - 2026-11-08, user: `halfvec` storage in P2 after to-verify #117 ("Data model"); A-20 and A-27 before go-live
   ("CI/CD"); managed Postgres not planned ("Postgres hosting"); `Render:MaxConcurrent` 4 and the ready rule of #490
   ("JavaScript rendering").
+- 2026-11-08, user: shadow-DOM flattening and same-host iframe inlining come later, when a source needs them
+  ("Crawlee review: ideas adopted"; connectors §8.3 already says "Later").

@@ -117,8 +117,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Do:** align each design with [`../decisions.md`](../decisions.md), or bring the call to the user where the decision
   itself looks wrong:
   - engine §13.1 says `files` has no `pathRules` (it has them, "Organisation"); connectors §5.1 says robots.txt is
-    always honoured ("Configurable politeness per host"); connectors §8.3 marks shadow-DOM flattening and same-host
-    iframe inlining "Later", the Crawlee entry lists them as adopted (user call).
+    always honoured ("Configurable politeness per host").
   - repo-and-deployment §6.2 still counts six containers; §8.1 states the deployer's `Group.Create` as settled (H7 is
     open); §8 names one runner (there are two); §8.2 says the backend tests run on the pinned pgvector image (they
     build `ume-rag/postgres`); the daily `audit.yml` schedule is in no decision.
