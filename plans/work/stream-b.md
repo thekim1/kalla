@@ -268,7 +268,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #499; knowledge §6.2, §6.4, §20.
 
-### [ ] B-26 Less telemetry overhead (#503, code part)
+### [x] B-26 Less telemetry overhead (#503, code part) (#PR)
 - **Do:** `"Microsoft.EntityFrameworkCore.Database.Command": "Warning"` in every service's `appsettings.json`;
   register tracing only when an OTLP endpoint is configured; leave sampling to the standard `OTEL_TRACES_SAMPLER`
   variables (the Compose knob is A-21).
