@@ -260,6 +260,49 @@ default. See [production-setup.md](production-setup.md) for what the script gene
 [p1a-local-run.md](p1a-local-run.md) for the local P1a run (now on the dev Keycloak and FakeGateway, then the live
 block's shared Keycloak and gateway).
 
+## Working notes
+
+Things the code will not tell you, collected from earlier sessions.
+
+**Admin API from a script.** Sign in through the BFF as a browser does: `GET /bff/login` → the Keycloak form
+(`#username`, `#password`, `#kc-login`; the dev user's password is the AppHost user secret
+`Parameters:dev-user-password`, in a `secrets.json` that starts with a BOM) → the `form_post` page (its `FORM` and
+`INPUT` attributes are upper case: match case-insensitively) → `GET /bff/user` to confirm. Writes need
+`X-Requested-With: XMLHttpRequest` and `X-XSRF-TOKEN` with the value of the `RAG-XSRF-TOKEN` cookie. The OpenAPI
+document is `/openapi/v1.json` through the BFF. An assistant draft created by API needs `collectionLinks`, or it
+searches nothing. The admin's test endpoint is rate limited (20 calls a minute, then 429): pace latency samples at
+about one per 10 s.
+
+**Browser checks outside `tests/e2e`.** Use `playwright-core` (the version in `tests/e2e/package.json`) in a scratch
+folder, with `executablePath` set to the Chromium that `npx playwright install chromium` put under
+`~/.cache/ms-playwright/`, and `ignoreHTTPSErrors`. The admin UI's drawers are `dialog[open]`. Wait for the data to
+show, not only for `networkidle`.
+
+**Worktrees.** Running the AppHost from a worktree makes it `npm install` into `src/admin-ui/node_modules`, replacing a
+symlink with a real directory (git-ignored, but `git worktree remove` then needs `--force`). Never `git add -A` in a
+worktree. Admin UI checks in a worktree: symlink `node_modules` from the main clone, run `npx vitest run
+--pool=threads`, `npx eslint --max-warnings 0 …` and `npx vue-tsc -p tsconfig.app.json --noEmit --composite false
+--incremental false`, then remove the symlink.
+
+**Tests.** Read the first real failure, and don't run two `Worker.Tests` runs at once. A test that listens to a
+process-wide `ActivitySource` or meter must filter to its own scope (#431), or another test's activity leaks in.
+
+**Settings that surprise.**
+
+- `Chat:*Timeout` knobs are TimeSpans (`00:00:03`); a bare `3` means three days.
+- Some knobs live in two services: `Render:MaxConcurrent` is the worker's render cap *and* the admin API's ceiling for
+  `renderPerHost`, so a local test value needs both user secrets (`ume-rag-worker`, `ume-rag-adminapi`).
+- rag-api writes snake_case JSON on every route (its OpenAI routes set it globally), including `/version` (#497).
+- AppHost containers cannot have a read-only root: DCP copies files into a container before it starts. The production
+  Compose files keep it read-only.
+
+**A real gateway instead of the fake** (the interim gateway, whose address is never in the repository): Claude models
+refuse `temperature`; Python's default `User-Agent` gets 403; embeddings answer 429 under load (the worker requeues);
+its front proxy answers an intermittent `error code: 502`, so chat-model rerank runs carry fallbacks.
+
+**Shell.** `pkill -f <pattern>` kills its own shell when the pattern appears in its command line: use
+`pgrep -f '<pat>[.]sh' | xargs -r kill`, or kill by PID.
+
 ## Common problems
 
 | Problem | Cause and fix |
