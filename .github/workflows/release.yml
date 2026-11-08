@@ -248,9 +248,11 @@ jobs:
           set -a; . ./images.env; set +a
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
       - name: Smoke test the bundle
+        # The self-hosted runner has no sudo (docs/ci-runner.md): init-deployment.sh's chown runs as root in a
+        # throwaway container of the bundle's postgres image.
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke"
+            --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker
       - uses: actions/upload-artifact@v7
         with:
           name: release
