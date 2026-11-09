@@ -214,7 +214,11 @@
         "odp",
         "jpeg",
         "png",
-        "tiff"
+        "tiff",
+        "doc",
+        "xls",
+        "ppt",
+        "rtf"
       ],
       "title": "Format",
       "type": "string"

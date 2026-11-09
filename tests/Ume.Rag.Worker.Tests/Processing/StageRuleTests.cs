@@ -32,6 +32,25 @@ public sealed class StageRuleTests
         MediaTypeSniffer.Sniff(bytes, declared).ShouldBe(expected);
 
     [Theory]
+    [InlineData(ProcessingMediaTypes.Doc, ".doc")]
+    [InlineData(ProcessingMediaTypes.Xls, ".xls")]
+    [InlineData(ProcessingMediaTypes.Ppt, ".ppt")]
+    [InlineData(ProcessingMediaTypes.Rtf, ".rtf")]
+    public void Legacy_office_and_rtf_go_to_the_parser(string mediaType, string extension)
+    {
+        ProcessingMediaTypes.Route(mediaType).ShouldBe(ParseRoute.Parser);
+        ProcessingMediaTypes.FileExtension(mediaType).ShouldBe(extension);
+        ProcessingMediaTypes.IsInspected(mediaType).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData(ProcessingMediaTypes.Ole)]
+    [InlineData("application/vnd.ms-outlook")]
+    [InlineData(ProcessingMediaTypes.Eml)]
+    public void Email_and_unknown_compound_files_stay_deferred(string mediaType) =>
+        ProcessingMediaTypes.Route(mediaType).ShouldBe(ParseRoute.Deferred);
+
+    [Theory]
     [InlineData("word/document.xml", ProcessingMediaTypes.Docx)]
     [InlineData("xl/workbook.xml", ProcessingMediaTypes.Xlsx)]
     [InlineData("ppt/presentation.xml", ProcessingMediaTypes.Pptx)]
@@ -51,7 +70,7 @@ public sealed class StageRuleTests
     public async Task Detect_refuses_deferred_and_unsupported_types_before_parsing()
     {
         var detect = new DetectStage();
-        (await Should.ThrowAsync<StageFatalException>(() => detect.RunAsync(new RawContent(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }, "application/msword"), Ct)))
+        (await Should.ThrowAsync<StageFatalException>(() => detect.RunAsync(new RawContent(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }, "application/vnd.ms-outlook"), Ct)))
             .Reason.ShouldBe("parser.format_deferred");
         (await Should.ThrowAsync<StageFatalException>(() => detect.RunAsync(new RawContent("MZ\x90\0"u8.ToArray(), "application/x-msdownload"), Ct)))
             .Outcome.ShouldBe(RunItemOutcome.Unsupported);

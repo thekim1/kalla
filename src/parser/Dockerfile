@@ -35,7 +35,8 @@ RUN python scripts/download_models.py --out /opt/models
 FROM python:3.12.15-slim-trixie@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS runtime
 # Debian packages from a dated snapshot at least 7 days old; moving the date is the security update. The snapshot's
 # Release files are past their Valid-Until, which is expected for an archive. tesseract-ocr depends on
-# tesseract-ocr-eng and -osd; they are installed but the parser only asks for `swe`.
+# tesseract-ocr-eng and -osd; they are installed but the parser only asks for `swe`. LibreOffice (no GUI: Writer, Calc,
+# Impress) converts legacy Word, Excel, PowerPoint and RTF to OOXML before Docling reads them (ume_parser/legacy.py).
 ARG DEBIAN_SNAPSHOT=20261022T000000Z
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' \
@@ -56,6 +57,9 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
         tini=0.19.0-3+b8 \
         tesseract-ocr=5.5.0-1+b1 \
         tesseract-ocr-swe=1:4.1.0-2 \
+        libreoffice-writer-nogui=4:25.2.3-2+deb13u8 \
+        libreoffice-calc-nogui=4:25.2.3-2+deb13u8 \
+        libreoffice-impress-nogui=4:25.2.3-2+deb13u8 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /opt/venv /opt/venv

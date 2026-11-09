@@ -30,8 +30,13 @@ public static class MediaTypes
         "application/vnd.oasis.opendocument.presentation",
     };
 
-    /// <summary>The P1 upload types (§9.2): the document formats plus JPG, PNG and TIFF (OCR).</summary>
-    public static IReadOnlySet<string> UploadFormats { get; } = new HashSet<string>(DocumentFormats.Concat(["image/jpeg", "image/png", "image/tiff"]), StringComparer.Ordinal);
+    /// <summary>
+    /// The upload types (§9.2): the document formats, JPG, PNG and TIFF (OCR), and legacy Word, Excel, PowerPoint and RTF
+    /// (converted by the parser's LibreOffice; fetched documents of these types stay <see cref="Deferred"/>).
+    /// </summary>
+    public static IReadOnlySet<string> UploadFormats { get; } = new HashSet<string>(
+        DocumentFormats.Concat(["image/jpeg", "image/png", "image/tiff", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint", "application/rtf"]),
+        StringComparer.Ordinal);
 
     public static bool IsHtml(string mediaType) => Html.Contains(mediaType);
 

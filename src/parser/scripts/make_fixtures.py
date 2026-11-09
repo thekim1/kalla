@@ -235,7 +235,7 @@ def corrupt_pdf() -> bytes:
 
 
 def legacy_doc() -> bytes:
-    """The OLE compound-file signature and an empty header: a legacy Office file, refused as `format_deferred`."""
+    """The OLE signature and an empty header: no root CLSID or known stream, refused as `format_deferred`."""
     return bytes.fromhex("d0cf11e0a1b11ae1") + bytes(504)
 
 
@@ -619,7 +619,7 @@ def long_pdf(pages: int = 2001) -> bytes:
 
 
 def legacy_rtf() -> bytes:
-    """A small RTF document: P2, refused as `format_deferred`."""
+    """A small RTF document: converted to DOCX by LibreOffice (ume_parser.legacy)."""
     return b"{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\f0\\fs22 Kallelse till sammantr\\'e4de.\\par}"
 
 

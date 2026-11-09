@@ -18,7 +18,7 @@ from ume_parser import limits
 CONTRACT = "parser/v1"
 
 Pipeline = Literal["text_layer", "docling"]
-Format = Literal["pdf", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jpeg", "png", "tiff"]
+Format = Literal["pdf", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jpeg", "png", "tiff", "doc", "xls", "ppt", "rtf"]
 BlockKind = Literal[
     "title",
     "heading",

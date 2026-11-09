@@ -1,18 +1,22 @@
 """Format sniffing (parser design §3): the parser trusts its own result, not the declared type.
 
-Two steps. `sniff` runs in the API process on the first `HEAD_BYTES` and parses nothing: it names PDF, JPEG, PNG and
-TIFF, refuses RTF, e-mail, archives, executables and unknown inputs, and leaves an OLE compound file or a zip for the
-next step. `sniff_ole` (API process) scans an OLE file for the `EncryptedPackage` stream name, which tells a
-password-protected OOXML package (`encrypted`) from a legacy Office or `.msg` file (`format_deferred`); it searches
-bytes and reads no OLE structure. `classify_zip` reads a zip's central directory and runs in a slot or the inspect
-process, never in the API process (a hostile directory can be large): it names DOCX, PPTX, XLSX, ODT, ODS and ODP and
-refuses macro-enabled OOXML and every other zip.
+Two steps. `sniff` runs in the API process on the first `HEAD_BYTES` and parses nothing: it names PDF, JPEG, PNG,
+TIFF and RTF, refuses e-mail, archives, executables and unknown inputs, and leaves an OLE compound file or a zip for
+the next step. `sniff_ole` (API process) names an OLE file: `EncryptedPackage` among its stream names is a
+password-protected OOXML package (`encrypted`); else the root entry's CLSID, or failing that the main stream's name
+(`WordDocument`, `PowerPoint Document`, `Workbook`/`Book`), names legacy Word, PowerPoint or Excel; anything else
+(`.msg`) is `format_deferred`. It reads the header and one directory entry, nothing more. `classify_zip` reads a
+zip's central directory and runs in a slot or the inspect process, never in the API process (a hostile directory can
+be large): it names DOCX, PPTX, XLSX, ODT, ODS and ODP and refuses macro-enabled OOXML and every other zip.
 
-Legacy Office (OLE), RTF and e-mail are P2 (Z1) and refused as `format_deferred`.
+Legacy Word, Excel, PowerPoint and RTF are converted to their OOXML counterpart by LibreOffice in the slot (`LEGACY`,
+`ume_parser.legacy`); e-mail and `.msg` stay P2 (Z1) and are refused as `format_deferred`.
 """
 
 import mmap
 import re
+import struct
+import uuid
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +40,20 @@ _EMAIL_HEADERS = re.compile(
 )
 # The OLE directory stores stream names in UTF-16LE.
 _ENCRYPTED_PACKAGE = "EncryptedPackage".encode("utf-16-le")
+# The root entry's CLSID names the application that wrote the file (the worker's FileTypeSniffer reads the same).
+_OLE_ROOTS: dict[uuid.UUID, "Format"] = {
+    uuid.UUID("00020906-0000-0000-C000-000000000046"): "doc",
+    uuid.UUID("00020820-0000-0000-C000-000000000046"): "xls",
+    uuid.UUID("64818D10-4F9B-11CF-86EA-00AA00B929E8"): "ppt",
+}
+# Without a root CLSID, the main stream's name (an embedded object is a storage of its own, so a file may hold
+# several of these names; the first in this order wins).
+_OLE_STREAMS: tuple[tuple[bytes, "Format"], ...] = (
+    ("WordDocument".encode("utf-16-le"), "doc"),
+    ("PowerPoint Document".encode("utf-16-le"), "ppt"),
+    ("Workbook".encode("utf-16-le"), "xls"),
+    ("Book\x00".encode("utf-16-le"), "xls"),
+)
 
 MEDIA_TYPES: dict[Format, str] = {
     "pdf": "application/pdf",
@@ -48,11 +66,17 @@ MEDIA_TYPES: dict[Format, str] = {
     "jpeg": "image/jpeg",
     "png": "image/png",
     "tiff": "image/tiff",
+    "doc": "application/msword",
+    "xls": "application/vnd.ms-excel",
+    "ppt": "application/vnd.ms-powerpoint",
+    "rtf": "application/rtf",
 }
 EXTENSIONS: dict[Format, set[str]] = {f: {f} for f in MEDIA_TYPES} | {"jpeg": {"jpeg", "jpg"}, "tiff": {"tiff", "tif"}}
 # Formats whose pages can be requested as ranges (§8): PDF pages and TIFF frames.
 RANGEABLE: frozenset[Format] = frozenset({"pdf", "tiff"})
 DECLARATIVE: frozenset[Format] = frozenset({"docx", "pptx", "xlsx", "odt", "ods", "odp"})
+# Legacy formats and the OOXML format LibreOffice converts each to before the declarative backend reads it.
+LEGACY: dict[Format, Format] = {"doc": "docx", "xls": "xlsx", "ppt": "pptx", "rtf": "docx"}
 IMAGES: frozenset[Format] = frozenset({"jpeg", "png", "tiff"})
 
 _OOXML_MAIN: dict[str, Format] = {
@@ -90,7 +114,9 @@ def sniff(head: bytes) -> Sniffed:
         return of("png")
     if head.startswith(_TIFF):
         return of("tiff")
-    if head.startswith(_OLE) or head.startswith(b"{\\rtf") or _EMAIL_HEADERS.match(head):
+    if head.startswith(b"{\\rtf"):
+        return of("rtf")
+    if head.startswith(_OLE) or _EMAIL_HEADERS.match(head):
         raise ParserError("format_deferred")
     if head.startswith(_ZIP):
         return ZIP
@@ -104,16 +130,38 @@ def sniff(head: bytes) -> Sniffed:
 def sniff_file(path: Path, head: bytes) -> Sniffed:
     """`sniff`, with an OLE file told apart by `sniff_ole` first."""
     if head.startswith(_OLE):
-        sniff_ole(path)
+        return sniff_ole(path)
     return sniff(head)
 
 
-def sniff_ole(path: Path) -> None:
-    """Raises `encrypted` for a password-protected OOXML package, else `format_deferred` (legacy Office, `.msg`)."""
+def sniff_ole(path: Path) -> Sniffed:
+    """Legacy Word, Excel or PowerPoint by their main stream's name; `encrypted` for a password-protected OOXML package,
+    else `format_deferred` (`.msg` and other compound files)."""
     with path.open("rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as data:
         if data.find(_ENCRYPTED_PACKAGE) >= 0:
             raise ParserError("encrypted")
+        root = _ole_root(data)
+        if root is not None:
+            return of(root)
+        for name, fmt in _OLE_STREAMS:
+            if data.find(name) >= 0:
+                return of(fmt)
     raise ParserError("format_deferred")
+
+
+def _ole_root(data: mmap.mmap) -> "Format | None":
+    """The format named by the root directory entry's CLSID (header: sector shift at 30, first directory sector at 48;
+    the CLSID at byte 80 of the entry), or None when unset or out of range."""
+    if len(data) < 512:
+        return None
+    shift = struct.unpack_from("<H", data, 30)[0]
+    directory = struct.unpack_from("<I", data, 48)[0]
+    if shift not in (9, 12) or directory >= 0xFFFFFFFA:
+        return None
+    offset = (directory + 1) << shift
+    if offset + 96 > len(data):
+        return None
+    return _OLE_ROOTS.get(uuid.UUID(bytes_le=bytes(data[offset + 80 : offset + 96])))
 
 
 def classify_zip(archive: zipfile.ZipFile) -> Sniffed:

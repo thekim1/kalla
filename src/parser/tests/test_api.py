@@ -91,7 +91,6 @@ def test_declared_type_mismatch_is_a_warning(client):
         (PDF, {"colour": "blue"}, 400, "invalid_request", "none"),
         (PDF, {"pages": {"from": 1, "to": 21}}, 422, "too_many_pages", "smaller_range"),
         (fixture_bytes("legacy.doc"), {"file_ext": ".doc"}, 415, "format_deferred", "none"),
-        (fixture_bytes("legacy.rtf"), {"file_ext": ".rtf"}, 415, "format_deferred", "none"),
         (fixture_bytes("message.eml"), {"file_ext": ".eml"}, 415, "format_deferred", "none"),
         (fixture_bytes("encrypted.docx"), {"file_ext": ".docx"}, 422, "encrypted", "none"),
         (b"\x1f\x8b\x08\x00", {"file_ext": ".gz"}, 415, "unsupported_format", "none"),
