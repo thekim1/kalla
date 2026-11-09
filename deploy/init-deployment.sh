@@ -63,6 +63,9 @@
 #   --proxy-address ADDR[,ADDR]
 #                           the reverse proxy's source addresses (IPv4 or CIDR): the host firewall then accepts new
 #                           connections to the published ports (rag-api, rag-admin, Open WebUI) only from these (#453)
+#   --rolling               a second rag-api and rag-admin (compose.rolling.yaml, on the next ports up) for updates
+#                           without downtime with deploy/rolling-update.sh (docs/zero-downtime-updates.md); with
+#                           --proxy the nginx configuration lists both slots
 #   --api-cert/--api-key/--admin-cert/--admin-key FILE
 #                           certificates from your PKI for the public listeners instead of the internal CA
 #   --certs-dir DIR [deploy/certs], --secrets-dir DIR [deploy/secrets]
@@ -80,7 +83,7 @@ crawl_allow=""; host_memory=16; freshclam_proxy=""; role="all"
 owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
 owui_key_file=""; owui_rag_client=""; owui_data=""
 proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
-yes=0; renew=0; renew_ca=0; chown=1
+yes=0; renew=0; renew_ca=0; chown=1; rolling=0
 gateway_keys=()
 
 # The comment block at the top of this file.
@@ -120,6 +123,7 @@ while [ $# -gt 0 ]; do
     --openwebui-data-dir) owui_data="$2"; shift 2;;
     --role) role="$2"; shift 2;;
     --proxy) proxy=1; shift;;
+    --rolling) rolling=1; shift;;
     --upstream-host) upstream_host="$2"; shift 2;;
     --proxy-address) proxy_sources="$2"; shift 2;;
     --api-cert) api_cert="$2"; shift 2;;
@@ -494,6 +498,7 @@ chmod 755 "$certs" "$secrets" 2>/dev/null || true
 compose_files="$here/compose.prod.yaml:$here/compose.ingestion.yaml"
 [ "$host_memory" = 24 ] && compose_files="$compose_files:$here/compose.host-24g.yaml"
 [ "$clamav_conf" = 1 ] && compose_files="$compose_files:$here/compose.clamav-conf.yaml"
+[ "$rolling" = 1 ] && compose_files="$compose_files:$here/compose.rolling.yaml"
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   if [ -e "$env_file" ]; then
     mv "$env_file" "$env_file.bak"; echo "Existing .env saved as $(basename "$env_file").bak"
@@ -529,6 +534,9 @@ UME_RAG_API_BIND=$bind
 UME_RAG_API_PORT=$api_port
 UME_RAG_ADMIN_BIND=$bind
 UME_RAG_ADMIN_PORT=$admin_port
+# The second slots of compose.rolling.yaml (--rolling; unused without it).
+UME_RAG_API_B_PORT=$((api_port + 1))
+UME_RAG_ADMIN_B_PORT=$((admin_port + 1))
 # pgBackRest posix repository on the host (empty: the pgbackrest-repo volume, or unused with S3), the S3 endpoint
 # (host firewall), and the upload copy's directory (deploy/backup-uploads.sh).
 UME_RAG_BACKUP_DIR=$backup_dir
@@ -578,15 +586,20 @@ if [ "$proxy" = 1 ]; then
   # proxy/nginx.conf from the example, as the gateway's init-deployment.sh writes its own (#468).
   sed -e "s/@API_HOST@/$api_host/g" -e "s/@ADMIN_HOST@/$admin_host/g" -e "s/@UPSTREAM@/$upstream_host/g" \
       -e "s/@API_PORT@/$api_port/g" -e "s/@ADMIN_PORT@/$admin_port/g" \
+      -e "s/@API_B_PORT@/$((api_port + 1))/g" -e "s/@ADMIN_B_PORT@/$((admin_port + 1))/g" \
       -e "s/@OPENWEBUI_HOST@/$owui_host/g" -e "s/@OPENWEBUI_PORT@/3000/g" \
       "$here/proxy/nginx.conf.example" > "$here/proxy/nginx.conf"
   [ -z "$owui_host" ] || sed -i 's/^#owui \{0,1\}//' "$here/proxy/nginx.conf"
+  [ "$rolling" = 0 ] || sed -i 's/#rolling //' "$here/proxy/nginx.conf"
   proxy_note="
 Reverse proxy: $here/proxy/nginx.conf is ready for nginx (add your certificates). For another proxy: forward
 https://$api_host to https://$upstream_host:$api_port and https://$admin_host to https://$upstream_host:$admin_port,
 preserving the Host header; client_max_body_size 60m and proxy_request_buffering off on
 PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), 1 MB elsewhere.
 Restrict those ports to the proxy with the host firewall."
+  [ "$rolling" = 0 ] || proxy_note="$proxy_note
+With --rolling, also list the second slots: $upstream_host:$((api_port + 1)) (rag-api) and
+$upstream_host:$((admin_port + 1)) (admin), retrying on the other slot; proxy/nginx.conf already does."
   if [ -z "$proxy_sources" ]; then
     proxy_note="$proxy_note
 The listeners bind to $bind and nothing on this host limits who reaches them: pass --proxy-address with the
@@ -594,6 +607,13 @@ proxy's source addresses (the host firewall then admits only those), or restrict
   else
     proxy_note="$proxy_note Installed by deploy/host/install.sh: only $proxy_sources may connect."
   fi
+fi
+rolling_note=""
+if [ "$rolling" = 1 ]; then
+  rolling_note="
+Updates without downtime: later, ./deploy/rolling-update.sh (docs/zero-downtime-updates.md). The second slots listen
+on ports $((api_port + 1)) and $((admin_port + 1))."
+  [ "$proxy" = 1 ] || rolling_note="$rolling_note Put a proxy in front that uses both ports of each service."
 fi
 gateway_note=""
 missing=""
@@ -661,5 +681,5 @@ $own_step
   6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
   7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
-$proxy_note$gateway_note$owui_note
+$proxy_note$rolling_note$gateway_note$owui_note
 EOF

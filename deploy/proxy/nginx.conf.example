@@ -7,12 +7,17 @@
 # WebSocket upgrade (Open WebUI's live connection); other requests keep the pooled keep-alive connection.
 map $http_upgrade $ume_rag_connection { default upgrade; '' ''; }
 
+# With compose.rolling.yaml (init-deployment.sh --rolling) rag-api and rag-admin have a second slot; nginx sends
+# requests to both and retries on the other when one fails while it is replaced (proxy_next_upstream below).
+# See docs/zero-downtime-updates.md.
 upstream ume_rag_api {
     server @UPSTREAM@:@API_PORT@;
+    #rolling server @UPSTREAM@:@API_B_PORT@;
     keepalive 32;
 }
 upstream ume_rag_admin {
     server @UPSTREAM@:@ADMIN_PORT@;
+    #rolling server @UPSTREAM@:@ADMIN_B_PORT@;
 }
 #owui upstream ume_rag_openwebui {
 #owui     server @UPSTREAM@:@OPENWEBUI_PORT@;
@@ -38,6 +43,12 @@ server {
         proxy_buffering off;           # stream answer tokens as they arrive (SSE)
         proxy_read_timeout 600s;       # long answers
         proxy_send_timeout 600s;
+        # Retry on the other slot (--rolling) when a connection fails before any response, also for POST
+        # (non_idempotent): a slot being replaced resets connections it accepted but never read, so the request did not
+        # run. Only within 10 s, so a request that ran long and then failed is never repeated. Harmless with one slot.
+        proxy_next_upstream error timeout non_idempotent;
+        proxy_next_upstream_timeout 10s;
+        proxy_next_upstream_tries 2;
         proxy_connect_timeout 5s;
         # The listener presents the internal CA's certificate. To verify it, copy certs/ca.pem to the proxy and enable:
         # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
@@ -59,6 +70,9 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_next_upstream error timeout non_idempotent;  # as for rag-api
+        proxy_next_upstream_timeout 10s;
+        proxy_next_upstream_tries 2;
         proxy_connect_timeout 5s;
         # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
         # proxy_ssl_name rag-admin;

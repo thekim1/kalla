@@ -47,8 +47,8 @@ mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer"
 
 cd "$here"
 cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml compose.openwebui.yaml \
-  init-deployment.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh escrow-keys.sh openwebui-feedback-key.sh \
-  "$dest/"
+  compose.rolling.yaml init-deployment.sh rolling-update.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh \
+  escrow-keys.sh openwebui-feedback-key.sh "$dest/"
 # redis/ is P2, proxy/ and otel/ come with their items: copied once they exist.
 for dir in postgres pgbackrest redis proxy otel host; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
@@ -60,7 +60,7 @@ cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/
 cp "$repo/images/renderer/seccomp.json" "$stage/$name/images/renderer/"
 # The operator documents (platform plan §10: the upgrade guide ships with the release).
 cp "$repo/docs/production-setup.md" "$repo/docs/runbook.md" "$repo/docs/upgrade-guide.md" "$repo/docs/test-host.md" \
-  "$stage/$name/docs/"
+  "$repo/docs/zero-downtime-updates.md" "$stage/$name/docs/"
 
 cd "$dest"
 # Line endings matter: these files are mounted into Linux containers or run by bash.

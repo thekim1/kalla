@@ -178,9 +178,9 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--renew-certs` | – | re-issue the internal certificates only |
 | `--renew-ca` | – | a new internal CA, then re-issue its certificates |
 | `--yes`, `-y` | – | no prompts: every value from an option or its default |
+| `--rolling` | – | a second `rag-api` and `rag-admin` (`compose.rolling.yaml`, ports 8544 and 9544) for updates without downtime; see [Updates without downtime](zero-downtime-updates.md) |
 
-`--help` prints the same list. Not built yet: `--rolling`, roles other than `all`, the `openbao` and `azure` key
-providers, and an nginx file for `--proxy` (the script prints the proxy routes instead).
+`--help` prints the same list. Not built yet: roles other than `all`, and the `openbao` and `azure` key providers.
 
 When it is done the script prints the next steps. If it did not run as root, step 0 lists the `chown` commands to run
 (the containers run as uid 999, 1654, 10001 and 1000 and must read their own files; the renderer, uid 10002, has no

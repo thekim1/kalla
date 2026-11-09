@@ -286,8 +286,9 @@ drilled yet: uploads arrive with the admin UI (P1).
 
 Upgrades follow the [upgrade guide](upgrade-guide.md): announce the window, take a full backup and verify the escrow,
 replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `rag-migrate`
-first. In the pilot `rag-api` and `rag-admin` are replaced together in one announced window; rolling updates come in
-P2 (not built).
+first. With one slot each (the default) `rag-api` and `rag-admin` are replaced together in one announced window. With
+`init-deployment.sh --rolling` there are two of each behind the proxy, and `deploy/rolling-update.sh` replaces them one
+at a time for releases marked *Rolling update: yes* ([Updates without downtime](zero-downtime-updates.md)).
 
 **The worker is stop-then-start, never overlapping.** Two `rag-worker` processes at once would exceed its role's
 connection limit; its job leases make a short pause harmless. Never scale it (`--scale rag-worker=2`) or start a

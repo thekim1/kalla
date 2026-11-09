@@ -160,6 +160,10 @@ proxy_sources="$(env_value UME_RAG_PROXY_SOURCES)"
 if [ -n "$proxy_sources" ]; then
   published=("$(env_value UME_RAG_API_PORT)" "$(env_value UME_RAG_ADMIN_PORT)")
   [ -z "$(env_value UME_RAG_OPENWEBUI_HOST)" ] || published+=("$(env_value UME_RAG_OPENWEBUI_PORT)")
+  # The second slots (compose.rolling.yaml), when COMPOSE_FILE lists it.
+  if [[ "$(env_value COMPOSE_FILE)" == *compose.rolling.yaml* ]]; then
+    published+=("$(env_value UME_RAG_API_B_PORT)" "$(env_value UME_RAG_ADMIN_B_PORT)")
+  fi
   out+=("# published ports: the reverse proxy only (UME_RAG_PROXY_SOURCES)")
   for port in "${published[@]}"; do
     [[ "$port" =~ ^[0-9]+$ ]] || die "a published port in $env_file is not a number: '$port'"
