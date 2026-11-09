@@ -59,7 +59,7 @@ open) works, but needs the intranet web team's consent: daytime crawling is an e
 | Action | How | Effect |
 |---|---|---|
 | Add | upload in the source's file list | a new slot and document |
-| Edit | **Replace** on the file's row: picks the new file and sends it with `X-Upload-Id` (`src/admin-ui/src/components/sources/SourceFiles.vue:117-130`; `src/Ume.Rag.AdminApi/UploadEndpoints.cs:188-194`) | same document id, new version; byte-identical bytes are `unchanged` (connectors §9.3) |
+| Edit | **Replace** on the file's row: picks the new file and sends it with `X-Upload-Id` (`src/admin-ui/src/components/files/FileUpload.vue:167-185`; `src/Ume.Rag.AdminApi/UploadEndpoints.cs:251-257`) | same document id, new version; byte-identical bytes are `unchanged` (connectors §9.3) |
 | Delete | delete entries in a batch | soft delete, exempt from the guard; a platform admin restores it from the file list within 14 days (B-24, #489; connectors §9.3) |
 
 **Pitfall:** uploading an edited file as a new file (not *Replace*) creates a **second** document. Only byte-identical
