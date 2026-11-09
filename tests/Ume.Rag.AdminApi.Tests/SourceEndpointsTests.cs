@@ -133,6 +133,27 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
         (await SettingsAsync(keptOff)).ShouldNotContain("730");
     }
 
+    /// <summary>#488: the selector check refuses what isn't CSS, not modern CSS the browser and the normaliser understand.</summary>
+    [Fact]
+    public async Task Valid_css_selectors_are_accepted()
+    {
+        var (collection, code) = await CollectionAsync();
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+
+        using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources", new
+        {
+            type = "url-list", name = "Selectors", classification = "internal",
+            settings = new
+            {
+                urls = new[] { "https://a.se/s" }, fetchMode = "browser", readySelector = "main:has(h1), #app [data-loaded=\"true\"]",
+                noiseSelectors = new[] { ":is(.cookie, .banner)", "li:nth-child(2n+1)", "div:not(.a, .b) > p" },
+            },
+        }, Ct);
+
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+    }
+
     [Fact]
     public async Task A_source_is_validated_against_the_contract_and_a_scope_change_needs_the_impact_token()
     {
@@ -163,6 +184,18 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
             (await Refused(new { type = "crawl", name = "A", classification = "internal", settings = new { startUrls = new[] { "https://a.se/" }, include = new[] { unsupported } } },
                 "settings.include.0")).ShouldBe("source_settings_invalid");
         }
+
+        // #488: a selector that isn't CSS is refused on save, not on every render (readySelector) or silently skipped (noiseSelectors).
+        foreach (var bad in new[] { "<h1>", "div[", "#", "text=Foo" })
+        {
+            (await Refused(new { type = "url-list", name = "A", classification = "internal", settings = new { urls = new[] { "https://a.se/x" }, fetchMode = "browser", readySelector = bad } },
+                "settings.readySelector")).ShouldBe("source_settings_invalid");
+        }
+
+        (await Refused(new { type = "crawl", name = "A", classification = "internal", settings = new { startUrls = new[] { "https://a.se/" }, noiseSelectors = new[] { ".cookie", "div[" } } },
+            "settings.noiseSelectors.1")).ShouldBe("source_settings_invalid");
+        (await Refused(new { type = "crawl", name = "A", classification = "internal", settings = new { startUrls = new[] { "https://a.se/" }, readySelector = "<main>" } },
+            "settings.readySelector")).ShouldBe("source_settings_invalid");
 
         (await Refused(new { type = "url-list", name = "A", classification = "sensitive", settings = UrlList("https://a.se/x") }, "classification"))
             .ShouldBe("source_above_collection");

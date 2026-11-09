@@ -277,7 +277,8 @@ public static class SourceRules
 
     /// <summary>
     /// The settings checked against <c>contracts/sources/v1/{type}.schema.json</c>, then V25's own checks (URL list
-    /// duplicates, <c>re:</c> patterns compile with <c>NonBacktracking</c>); returned as stored (compact JSON).
+    /// duplicates, <c>re:</c> patterns compile with <c>NonBacktracking</c>, <c>readySelector</c> and <c>noiseSelectors</c>
+    /// parse as CSS, #488); returned as stored (compact JSON).
     /// Refusals: 400 <c>source_settings_invalid</c> with the JSON pointer of the first problem.
     /// </summary>
     public static string Settings(string type, JsonElement settings)
@@ -319,11 +320,13 @@ public static class SourceRules
                     throw Invalid("/urls", "duplicate URLs: " + string.Join(", ", duplicates.Take(10)));
                 }
 
+                Selectors(list.ReadySelector, list.NoiseSelectors);
                 break;
             case CrawlSettings crawl:
                 Patterns("/include", crawl.Include);
                 Patterns("/exclude", crawl.Exclude);
                 Patterns("/demote", crawl.Demote.Select(d => d.Pattern));
+                Selectors(crawl.ReadySelector, crawl.NoiseSelectors);
                 break;
         }
 
@@ -427,6 +430,39 @@ public static class SourceRules
                 // groups), which the worker would refuse too (#476).
                 throw Invalid($"{path}/{i}", "the regular expression does not compile: " + ex.Message);
             }
+        }
+    }
+
+    /// <summary>
+    /// #488: a selector that isn't CSS (<c>&lt;h1&gt;</c>, <c>div[</c>) is refused on save. Otherwise the renderer fails every page
+    /// on it, and the worker's noise normaliser skips it without a word. AngleSharp parses it as the worker's normaliser does.
+    /// </summary>
+    private static void Selectors(string? readySelector, IReadOnlyList<string> noiseSelectors)
+    {
+        var parser = new AngleSharp.Css.Parser.CssSelectorParser();
+        if (readySelector is not null && !IsSelector(parser, readySelector))
+        {
+            throw Invalid("/readySelector", "not a valid CSS selector");
+        }
+
+        foreach (var (selector, i) in noiseSelectors.Select((s, i) => (s, i)))
+        {
+            if (!IsSelector(parser, selector))
+            {
+                throw Invalid($"/noiseSelectors/{i}", "not a valid CSS selector");
+            }
+        }
+    }
+
+    private static bool IsSelector(AngleSharp.Css.Parser.CssSelectorParser parser, string selector)
+    {
+        try
+        {
+            return !string.IsNullOrWhiteSpace(selector) && parser.ParseSelector(selector) is not null;
+        }
+        catch (AngleSharp.Dom.DomException)
+        {
+            return false;
         }
     }
 
