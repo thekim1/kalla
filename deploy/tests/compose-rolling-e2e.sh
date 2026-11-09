@@ -14,9 +14,12 @@
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"; project=ume-rag-rolling-e2e; edge=ume-rag-rolling-e2e-edge; port=18543
-# The proxy (a container) reaches the slots through the host's published ports, as a proxy on another machine would:
-# host.docker.internal is the host on Docker Desktop and, with --add-host ...:host-gateway, on a Linux host.
-upstream=host.docker.internal
+# The proxy is an nginx container on the stack's edge network with the configuration init-deployment.sh --proxy
+# --rolling writes, its upstreams pointed at the slots' containers (re-resolved, as each slot gets a new address when it
+# is replaced). Not through the published ports: Docker Desktop's port forwarder accepts a connection to a port whose
+# container is restarting and then resets it, which a Linux host's DNAT never does, so the test would measure the
+# forwarder instead of the update.
+upstream=docker-host
 cp -R "$repo/deploy" "$work/"
 cd "$work"
 compose=(docker compose -p "$project" --env-file deploy/.env)
@@ -46,13 +49,18 @@ for h in rag.test rag-admin.test; do
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "edge/$h.key" -out "edge/$h.crt" -days 1 -subj "/CN=$h" \
     -addext "subjectAltName=DNS:$h" >/dev/null 2>&1
 done
-sed -e 's/# ssl_certificate/ssl_certificate/' -e "s/listen 443 ssl;/listen $port ssl;/" deploy/proxy/nginx.conf > edge/nginx.conf
-grep -q "server $upstream:8544;" edge/nginx.conf || { echo "error: nginx.conf does not list the second rag-api slot" >&2; exit 1; }
-grep -q "server $upstream:9544;" edge/nginx.conf || { echo "error: nginx.conf does not list the second admin slot" >&2; exit 1; }
+grep -q "server $upstream:8544;" deploy/proxy/nginx.conf || { echo "error: nginx.conf does not list the second rag-api slot" >&2; exit 1; }
+grep -q "server $upstream:9544;" deploy/proxy/nginx.conf || { echo "error: nginx.conf does not list the second admin slot" >&2; exit 1; }
+{ echo "resolver 127.0.0.11 valid=1s ipv6=off;"
+  sed -e 's/# ssl_certificate/ssl_certificate/' -e "s/listen 443 ssl;/listen $port ssl;/" \
+    -e "s/server $upstream:8543;/zone ume_rag_api 64k; server rag-api:8443 resolve;/" \
+    -e "s/server $upstream:8544;/server rag-api-b:8443 resolve;/" \
+    -e "s/server $upstream:9543;/zone ume_rag_admin 64k; server rag-admin:8443 resolve;/" \
+    -e "s/server $upstream:9544;/server rag-admin-b:8443 resolve;/" deploy/proxy/nginx.conf; } > edge/nginx.conf
 
 # The slots listen on 0.0.0.0 (--proxy); this test host has no rag-firewall, which would admit only the proxy.
 "${compose[@]}" up -d --wait --wait-timeout 600
-docker run -d --name "$edge" -p "127.0.0.1:$port:$port" --add-host host.docker.internal:host-gateway \
+docker run -d --name "$edge" -p "127.0.0.1:$port:$port" --network "${project}_edge" \
   -v "$work/edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro" -v "$work/edge:/etc/ssl:ro" \
   docker.io/library/nginx:1.29-alpine >/dev/null
 ready=0

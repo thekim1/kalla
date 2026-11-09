@@ -150,7 +150,14 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 
 ## Tested
 
-`deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (a release's, or ones built with
-`scripts/Build-Images.ps1`), starts the stack with both slots behind nginx, replaces every slot with
-`rolling-update.sh --force` while clients send requests to rag-api and load the admin UI, and fails on a single lost
-request. Results are recorded in `plans/work/results-a.md`.
+`deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (`ume-rag/*:latest` built
+locally, or a release's through `API_IMAGE`, `ADMIN_IMAGE`, `MIGRATIONS_IMAGE` and `POSTGRES_IMAGE`). It starts
+`compose.prod.yaml` + `compose.rolling.yaml` with the files `init-deployment.sh --proxy --rolling` writes, puts nginx
+with the generated `nginx.conf` in front, replaces every slot with `rolling-update.sh --force` while clients send POST
+and GET requests to rag-api and load the admin UI, and fails on a single lost request. The proxy runs on the stack's
+`edge` network and reaches the slots by name: Docker Desktop's port forwarder accepts connections to a restarting
+container's published port and then resets them, which a Linux host does not do.
+
+| Run (2026-11-10, Docker Desktop on WSL 2, images built from `main`) | Requests during the update | Lost |
+|---|---|---|
+| nginx in front, all four slots replaced | 98 127 POST, 289 179 GET, 209 721 admin UI | 0 |
