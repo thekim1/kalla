@@ -321,6 +321,56 @@ deploy/host/restart-unhealthy.sh --dry-run      # what it would restart now
 journalctl -u rag-restart-unhealthy.service --since today
 ```
 
+## Portainer and other hosts without shell access
+
+`deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
+through environment variables, for hosts where `init-deployment.sh` cannot run. It is the gateway's
+`deploy/compose.portainer.yaml`, unchanged, plus RAG's services (all named `rag-…`): rag-postgres, rag-migrate,
+rag-api (8543), rag-admin (9543), rag-worker, rag-parser, rag-clamav and, with the `render` profile, rag-renderer. Open
+WebUI is not part of it.
+
+**Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
+gateway's volumes `<stack>_ume-certs`, `<stack>_ume-secrets` and its database are found by it), add the variables
+below, and *Update the stack*. The RAG images on GHCR are private: add `ghcr.io` under *Registries* with a GitHub token
+that can read packages.
+
+| Variable | |
+|---|---|
+| `UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL` | required: rag-api's public host name and URL (`https://rag.example.se:8543`) |
+| `UME_RAG_GATEWAY_KEY_Eu` | a gateway API key for RAG (gateway admin UI, residency Eu); without it every model call fails, so deploy once, create the key, add it and update the stack |
+| `COMPOSE_PROFILES` | include `data` (the gateway's Data API, which RAG's admin reads for the model catalogue and org sync); `data,render` adds the renderer |
+| `UME_RAG_ORG_SYNC_KEY` | a Data API key with `catalog.read`; without it model settings cannot be saved |
+| `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024) |
+| `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group that grants platform admin (the other roles: `_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER`, `_VIEWER`) |
+
+The optional ones (ports, a separate admin host, per-service gateway keys, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image
+overrides `RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
+network and reach it at `https://gateway:8443` (the Data API at `https://dataapi:8443`), trusting the gateway's
+internal CA.
+
+**Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
+certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
+key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are never regenerated, service
+certificates are re-issued when they expire within 30 days or the host names change. The secrets that follow a
+variable (gateway keys, the Data API key, the OIDC client secret) are written again on every deploy, and removed when
+the variable is emptied; they live in the stack's environment, so restrict who can view it.
+
+**Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
+firewall 8543 and 9543 to your proxy yourself), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
+up `rag-postgres` with `pg_dump` or volume snapshots. The renderer is off by default: Portainer cannot load its
+seccomp profile from a file, so with `render` on it runs without Docker's seccomp filter (Chromium's own sandbox stays
+on); without it the crawler indexes pages as served. PKI-issued certificates are not supported by this variant.
+
+- **Back up** `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and `rag-certs/data-protection.pfx` with the
+  database (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A database restored without
+  them is unusable.
+- **Upgrade.** Read the [upgrade guide](upgrade-guide.md), regenerate the file for the new release (or set the
+  `RAG_*_IMAGE` variables to its images, all on the same version: the migrations image must match the services), and
+  *Update the stack* with *Re-pull image and redeploy*. `rag-migrate` runs before the services.
+- **Generated file.** Edit `deploy/portainer/compose.rag.template.yaml` or `deploy/portainer/bootstrap.sh`, then run
+  `deploy/portainer/build-stack.sh`: it takes the gateway's current `compose.portainer.yaml` (from GitHub, or a path
+  argument), adds RAG's sections and inlines the postgres config files. Run it again after a gateway release too.
+
 ## Host firewall
 
 `deploy/host/docker-user-firewall.sh` gives each Compose network its egress rules in the `DOCKER-USER` chain
