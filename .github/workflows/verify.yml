@@ -252,6 +252,7 @@ jobs:
                        "compose.prod.yaml compose.ingestion.yaml" \
                        "compose.prod.yaml compose.ingestion.yaml compose.clamav-conf.yaml" \
                        "compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml" \
+                       "compose.prod.yaml compose.ingestion.yaml compose.rolling.yaml" \
                        "compose.openwebui.yaml"; do
             args=(); for f in $files; do args+=(-f "deploy/$f"); done
             echo "docker compose ${args[*]} config --quiet"
@@ -292,7 +293,7 @@ jobs:
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "${v}_IMAGE"; done
-          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" --profile backup config --images)"
+          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
       - name: init-deployment.sh keeps its secrets on a re-run

@@ -1,0 +1,56 @@
+# Optional overlay for updates without downtime (docs/zero-downtime-updates.md, repo-and-deployment §7.3). Runs a second
+# rag-api and rag-admin ("b" slots) next to the ones in compose.prod.yaml, on their own host ports, so a reverse proxy
+# can send traffic to both while deploy/rolling-update.sh replaces one slot at a time.
+#
+#   ./deploy/init-deployment.sh ... --rolling     # adds this file to COMPOSE_FILE in deploy/.env, and the b ports
+#   docker compose --env-file deploy/.env up -d --wait
+#   ./deploy/rolling-update.sh                    # later, for every update
+#
+# Needs a reverse proxy in front that lists both ports of each service (init-deployment.sh --proxy --rolling writes
+# that nginx configuration). Without this file the stack runs one of each, as before. The roles' connection limits
+# (deploy/postgres/init.sql: api 26, admin 12) already leave room for two slots of each (data-model §1.1). The worker,
+# parser, ClamAV and renderer keep one instance: the worker is stopped before its replacement starts.
+
+services:
+  rag-api:
+    environment:
+      # On the stop signal a slot first answers for 5 s more with "Connection: close" while its readiness fails, so the
+      # proxy retires its pooled connections to it cleanly; then it closes its listener (the proxy retries new
+      # requests on the other slot) and finishes the requests it has (long streamed answers) for up to 5 minutes.
+      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_RAG_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      OTEL_SERVICE_INSTANCE_ID: rag-api
+    stop_grace_period: 320s
+
+  rag-api-b:
+    extends: {file: compose.prod.yaml, service: rag-api}
+    ports: !override ["${UME_RAG_API_BIND:-127.0.0.1}:${UME_RAG_API_B_PORT:-8544}:8443"]
+    environment:
+      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_RAG_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      OTEL_SERVICE_INSTANCE_ID: rag-api-b
+    stop_grace_period: 320s
+    depends_on:
+      postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      rag-blobs-init: {condition: service_completed_successfully}
+
+  rag-admin:
+    environment:
+      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "60"
+      OTEL_SERVICE_INSTANCE_ID: rag-admin
+    stop_grace_period: 70s
+
+  rag-admin-b:
+    extends: {file: compose.prod.yaml, service: rag-admin}
+    ports: !override ["${UME_RAG_ADMIN_BIND:-127.0.0.1}:${UME_RAG_ADMIN_B_PORT:-9544}:8443"]
+    environment:
+      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "60"
+      OTEL_SERVICE_INSTANCE_ID: rag-admin-b
+    stop_grace_period: 70s
+    depends_on:
+      postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      rag-blobs-init: {condition: service_completed_successfully}

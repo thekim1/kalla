@@ -98,6 +98,7 @@ Only three ports are published (`deploy/compose.prod.yaml`, `deploy/compose.open
 |---|---|---|---|---|---|---|---|
 | `rag-api` | `${UME_RAG_API_BIND}:${UME_RAG_API_PORT}`, `127.0.0.1:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI with `--api-cert`/`--api-key`) | the reverse proxy only, on behalf of: Open WebUI, API and MCP clients with `ume-rag-sk-` keys, staff browsers following citation download links | chat, retrieval, MCP (`Rag__Roles: knowledge,chat,mcp`), health | yes | `--api-port`, `--bind`, `--proxy` (`deploy/init-deployment.sh`) |
 | `rag-admin` | `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_PORT}`, `127.0.0.1:9543` | 8443 | HTTPS (as above, `--admin-cert`/`--admin-key`) | the reverse proxy only, on behalf of admins' browsers | admin UI and its BFF, OIDC redirects `/signin-oidc` and `/signout-callback-oidc`, uploads, health | yes | `--admin-port`, `--bind`, `--proxy` |
+| `rag-api-b`, `rag-admin-b` (only with `--rolling`) | `${UME_RAG_API_BIND}:${UME_RAG_API_B_PORT}`, `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_B_PORT}`, `127.0.0.1:8544` and `:9544` | 8443 | as rag-api and rag-admin | the reverse proxy only | the second slots of [updates without downtime](zero-downtime-updates.md) | yes | `--rolling` |
 | `open-webui` | `${UME_RAG_OPENWEBUI_BIND}:${UME_RAG_OPENWEBUI_PORT}`, `127.0.0.1:3000` | 8080 | **plain HTTP**: the proxy terminates TLS | the reverse proxy only, on behalf of staff browsers and rag-api's feedback import | the chat UI, OIDC callback `/oauth/oidc/callback` | optional | `UME_RAG_OPENWEBUI_PORT` in `deploy/.env` (written as 3000), bind as the listeners' |
 
 **Binding.** By default all three bind to `127.0.0.1`, so nothing is reachable from off the host. With `--proxy` they
@@ -116,7 +117,8 @@ and, with Open WebUI, `UME_RAG_OPENWEBUI_PORT` whose source is not one of them (
 -A UME-RAG-EGRESS -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j REJECT --reject-with icmp-admin-prohibited
 ```
 
-(the same for 9543 and 3000). It matches the original destination port of DNATed connections only, so container egress
+(the same for 9543 and 3000, and for the second slots' 8544 and 9544 when `COMPOSE_FILE` lists `compose.rolling.yaml`,
+[Updates without downtime](zero-downtime-updates.md)). It matches the original destination port of DNATed connections only, so container egress
 is never affected. Without `--proxy-address`, nothing on the host limits who reaches the listeners, and
 `init-deployment.sh` says so: restrict them in a network firewall in front of the host instead. A network firewall is
 still the better second layer. The rules are checked by `iptables-restore --test` (iptables-nft); they have not run on

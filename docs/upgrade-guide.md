@@ -2,8 +2,11 @@
 
 Each release says whether it supports a **rolling update**: the previous version keeps running against the new schema
 while its containers are replaced. The pilot runs **one slot** (one `rag-api`, one `rag-admin`), so every pilot upgrade
-is a short, announced maintenance window whatever the answer; the answer matters from P2, when a/b slots allow updates
-without downtime. Migrations are expand/contract only, so "no" is the exception and comes with its own steps.
+is a short, announced maintenance window whatever the answer. With two slots (`init-deployment.sh --rolling`) a "yes"
+release is updated without downtime by `deploy/rolling-update.sh` ([Updates without downtime](zero-downtime-updates.md)).
+Until the first production deployment releases may break compatibility (Decisions, "No backward compatibility before
+production"), so check the answer every time; from then on migrations are expand/contract only and "no" is the
+exception, with its own steps.
 
 `dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
 
