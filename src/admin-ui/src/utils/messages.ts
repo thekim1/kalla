@@ -37,7 +37,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   deletion_superseded: 'The deletion proposal no longer applies. Open the source’s latest run.',
   pii_not_flagged: 'The document is not flagged for personal data.',
   not_an_upload_source: 'Files can only be uploaded to a source of the type Files.',
-  upload_format_deferred: 'Files of the type {extension} cannot be uploaded yet. Save the file as PDF or in a newer Office format.',
+  upload_format_deferred: 'Files of the type {extension} cannot be uploaded yet. Save the message as PDF.',
   upload_type_refused: 'Files of the type {extension} cannot be uploaded.',
   upload_too_large: 'The file is larger than {mb} MB.',
   upload_file_exists: 'File {n} of the batch has already been sent.',
