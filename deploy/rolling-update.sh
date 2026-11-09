@@ -45,13 +45,14 @@ health() { # health SERVICE: the container's health status, or "missing"
   [ -n "$id" ] || { echo missing; return; }
   docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id"
 }
-image_changed() { # image_changed SERVICE: true when the configured image differs from the running container's
-  local id want have
+image_changed() { # image_changed SERVICE: true when the configured image is not the one the container runs
+  local id want
   id="$("${compose[@]}" ps -q "$1" 2>/dev/null || true)"
   [ -n "$id" ] || return 0
-  want="$("${compose[@]}" config --format json | jq -r --arg s "$1" '.services[$s].image')"
-  have="$(docker inspect -f '{{.Config.Image}}' "$id")"
-  [ "$want" != "$have" ]
+  want="$("${compose[@]}" config --images "$1")"
+  # By image id, so a re-pulled tag counts too; an image not on the host yet is a change.
+  want="$(docker image inspect -f '{{.Id}}' "$want" 2>/dev/null)" || return 0
+  [ "$want" != "$(docker inspect -f '{{.Image}}' "$id")" ]
 }
 
 for pair in "${pairs[@]}"; do
