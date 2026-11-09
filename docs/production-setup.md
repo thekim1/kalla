@@ -342,6 +342,12 @@ on the internal `ingestion` network, and the renderer's WebSocket (port 3000) is
 internal `render` network. Internal certificates last 825 days: re-issue them with
 `./deploy/init-deployment.sh --renew-certs`, which needs `ca.key` back on the host.
 
+## Kubernetes
+
+Instead of Compose, `deploy/kubernetes` has Kustomize manifests for the same services, settings, certificates and
+secrets, with rolling updates built in: see [Kubernetes](kubernetes.md). Sign-in through the gateway's Keycloak, a
+Keycloak of RAG's own, or Entra ID directly: see [Keycloak](keycloak.md).
+
 ## Portainer (gateway and RAG in one stack)
 
 No shell access on the host? `deploy/portainer/compose.portainer.yaml` is the gateway's own Portainer stack with Ume
@@ -370,6 +376,11 @@ The services export OpenTelemetry (logs, metrics, traces) only when an endpoint 
 `UME_RAG_OTEL_ENDPOINT=<collector>` to `deploy/.env` (the firewall then allows it from the `llm` and `crawl` networks)
 and run `up -d` again. Health-check requests are not traced, and query strings are removed from HTTP spans. The
 backup scripts write Prometheus text files to `/var/lib/ume-rag/` (runbook, *Backups*).
+
+Security events (logger category `Ume.Rag.Security`, [security-events.md](security-events.md)) go to the SIEM through a
+collector: [`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) keeps only that
+category and sends it as syslog (RFC 5424), with Splunk, Elastic and Sentinel alternatives, as the gateway's does. One
+collector can serve both products.
 
 ## Open WebUI (optional)
 

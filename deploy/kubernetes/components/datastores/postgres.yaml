@@ -1,0 +1,107 @@
+# pgBackRest archives WAL to the repository in deploy/secrets/pgbackrest/repo.conf (init-deployment.sh --backup-target):
+# an S3-compatible store, or the rag-pgbackrest volume below (posix, inside the cluster: not a backup off it). Create the
+# stanza once per new database: kubectl exec statefulset/postgres -- pgbackrest --stanza=ragdb stanza-create
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: ume-rag/postgres:latest
+          args: [postgres, -c, config_file=/etc/postgresql/postgresql.conf]
+          env:
+            - {name: POSTGRES_PASSWORD_FILE, value: /run/postgres-secrets/bootstrap_password}
+            - {name: POSTGRES_INITDB_ARGS, value: --auth-host=scram-sha-256 --auth-local=peer}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{name: postgres, containerPort: 5432}]
+          readinessProbe:
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres, -d, ragdb]}
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
+            periodSeconds: 15
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {memory: 3Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: pgbackrest, mountPath: /var/lib/pgbackrest}
+            - {name: certs, mountPath: /run/certs, readOnly: true}
+            - {name: secrets, mountPath: /run/postgres-secrets, readOnly: true}
+            - {name: pgbackrest-conf, mountPath: /etc/pgbackrest/conf.d, readOnly: true}
+            - {name: config, mountPath: /etc/postgresql/postgresql.conf, subPath: postgresql.conf, readOnly: true}
+            - {name: config, mountPath: /run/config/pg_hba.conf, subPath: pg_hba.conf, readOnly: true}
+            - {name: config, mountPath: /docker-entrypoint-initdb.d/10-roles.sql, subPath: init.sql, readOnly: true}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        # Postgres accepts a key file owned by root when it is not readable by others (0440, group = fsGroup 999).
+        - name: certs
+          secret: {secretName: ume-rag-postgres-certs, defaultMode: 0440}
+        - name: secrets
+          secret: {secretName: ume-rag-postgres-secrets, defaultMode: 0440}
+        - name: pgbackrest-conf
+          secret: {secretName: ume-rag-pgbackrest, defaultMode: 0440}
+        - name: config
+          configMap: {name: ume-rag-postgres-config}
+        - name: run
+          emptyDir: {medium: Memory}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 1Gi}
+  volumeClaimTemplates:
+    # apiVersion, kind and volumeMode spelled out as the API server stores them, so a re-apply is a no-op.
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
+        resources:
+          requests: {storage: 50Gi}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: pgbackrest
+      spec:
+        accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
+        resources:
+          requests: {storage: 100Gi}
+---
+# "postgres" is also the name in its generated certificate and in the connection strings.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+spec:
+  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]

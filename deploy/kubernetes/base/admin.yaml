@@ -1,0 +1,133 @@
+# rag-admin: the admin UI and its BFF (OIDC sign-in, uploads). Sign-in cookies are protected by the Data Protection key
+# ring in Postgres, so a user stays signed in whichever replica answers; background syncs take advisory locks. Two
+# replicas fit the ume_rag_admin role's connection limit (12 = 2 x 5).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-admin
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  minReadySeconds: 5
+  selector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # Drain (10 s) + longest request (60 s) + margin.
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+      # The blob container's directory (Compose: rag-blobs-init). Under the restricted Pod Security Standard nothing runs
+      # as root, so the volume's root must be writable by the pods' group (fsGroup 1654; an NFS export: owned by
+      # 1654:1654).
+      initContainers:
+        - name: blobs-init
+          # The .NET images are chiseled (no shell); a pinned Alpine runs the one command, as uid 1654.
+          image: docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+          command: [/bin/sh, -c, "mkdir -p /data/blobs/rag && chmod 0750 /data/blobs/rag"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: blobs, mountPath: /data/blobs}
+      containers:
+        - name: rag-admin
+          image: ume-rag/admin:latest
+          ports: [{name: https, containerPort: 8443}]
+          envFrom:
+            - configMapRef: {name: ume-rag-config}
+            - configMapRef: {name: ume-rag-admin-config}
+          env:
+            - {name: ASPNETCORE_ENVIRONMENT, value: Production}
+            - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}
+            - {name: Security__SecretsDirectory, value: /run/app-secrets}
+            - {name: DataProtection__CertificatePath, value: /run/certs/data-protection.pfx}
+            - {name: Kestrel__Endpoints__Https__Url, value: "https://+:8443"}
+            - {name: Kestrel__Endpoints__Https__Certificate__Path, value: /run/certs/admin.crt}
+            - {name: Kestrel__Endpoints__Https__Certificate__KeyPath, value: /run/certs/admin.key}
+            - {name: BlobStore__Root, value: /data/blobs/rag}
+            - {name: SSL_CERT_FILE, value: /run/certs/ca.pem}
+            - {name: OTEL_SERVICE_NAME, value: rag-admin}
+            - {name: OTEL_SERVICE_INSTANCE_ID, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: Shutdown__DrainSeconds, value: "10"}
+            - {name: DOTNET_SHUTDOWNTIMEOUTSECONDS, value: "70"}
+          startupProbe:
+            httpGet: {path: /health/live, port: https, scheme: HTTPS}
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /health/ready, port: https, scheme: HTTPS}
+            periodSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 1
+          livenessProbe:
+            httpGet: {path: /health/live, port: https, scheme: HTTPS}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: secrets, mountPath: /run/app-secrets, readOnly: true}
+            - {name: certs, mountPath: /run/certs, readOnly: true}
+            - {name: blob-key, mountPath: /run/keys, readOnly: true}
+            - {name: blobs, mountPath: /data/blobs}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: secrets
+          secret: {secretName: ume-rag-admin-secrets, defaultMode: 0440}
+        - name: certs
+          secret: {secretName: ume-rag-admin-certs, defaultMode: 0440}
+        - name: blob-key
+          secret: {secretName: ume-rag-blob-key, defaultMode: 0440}
+        - name: blobs
+          persistentVolumeClaim: {claimName: rag-blobs}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+---
+# "rag-admin" is also the name in its generated certificate.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-admin
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+spec:
+  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+  ports: [{name: https, port: 8443, targetPort: https}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-admin
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}

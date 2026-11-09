@@ -1,0 +1,46 @@
+# Ume Rag on Kubernetes: rag-api, rag-admin, the rag-migrate Job and the blob volume. Postgres comes from your platform
+# or from components/datastores; the worker, parser and ClamAV from components/ingestion; the renderer from
+# components/renderer. Do not edit this base: make an overlay (start from ../example) and see docs/kubernetes.md.
+# Names match the Compose services (rag-api, rag-admin, postgres, ...), so the certificates and connection strings that
+# deploy/init-deployment.sh generates work unchanged.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs: {app.kubernetes.io/part-of: ume-rag}
+resources:
+  - blobs.yaml
+  - migrations.yaml
+  - api.yaml
+  - admin.yaml
+configMapGenerator:
+  # app-roles.sql is a copy of deploy/postgres/app-roles.sql (deploy/kubernetes/sync-config.sh; CI checks it).
+  - name: ume-rag-app-roles
+    files: [app-roles.sql]
+  # Settings as the apps read them (Section__Key). The overlay merges its own values in; see ../example.
+  - name: ume-rag-config
+    literals:
+      - Gateway__MaxResidency=Eu
+  - name: ume-rag-api-config
+    literals:
+      - Rag__Roles=knowledge,chat,mcp
+  - name: ume-rag-admin-config
+    literals:
+      - Oidc__ClientId=ume-rag-admin
+      - Oidc__RoleClaim=roles
+      - Oidc__DepartmentClaim=departmentCodes
+      - Oidc__TeamClaim=teamCodes
+      - Oidc__GroupClaim=groups
+      - Oidc__ExtraScopes__0=email
+      - Oidc__RefuseGuests=true
+  - name: ume-rag-migrations-config
+    literals:
+      - EmbeddingProfile__Dimensions=1024
+      - EmbeddingProfile__RequestDimensions=false
+      - EmbeddingProfile__MaxInputTokens=8192
+      - EmbeddingProfile__MaxResidency=Eu
+  # Used only with ../components/ingestion; generated here because an overlay merges its values before components apply.
+  - name: ume-rag-worker-config
+    literals:
+      - Parser__BaseUrl=https://rag-parser:8000
+      - ClamAv__Host=rag-clamav
+      - ClamAv__Port=3310

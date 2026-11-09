@@ -50,7 +50,7 @@ cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav
   compose.rolling.yaml init-deployment.sh rolling-update.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh \
   escrow-keys.sh openwebui-feedback-key.sh "$dest/"
 # redis/ is P2, proxy/ and otel/ come with their items: copied once they exist.
-for dir in postgres pgbackrest redis proxy otel host; do
+for dir in postgres pgbackrest redis proxy otel host kubernetes; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
 # init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.
@@ -89,6 +89,32 @@ while IFS= read -r hit; do
   echo "error: ${hit%%:*}: image without a variable or digest: ${hit#*:}" >&2; bad=1
 done < <(grep -HE '^\s*image:' "${compose_files[@]}" | grep -vF "\${" | grep -vE '@sha256:[0-9a-f]{64}\s*$' || true)
 [ "$bad" = 0 ] || exit 1
+
+# Kubernetes (docs/kubernetes.md): the manifests keep their local image names; an images transformer in the base and in
+# every component (a base's transformer does not reach a component's resources) maps them to the released images.
+if [ -d kubernetes ]; then
+  images_block="$(echo "images:"
+    for var in "${images[@]}"; do
+      ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var%_IMAGE}"
+      echo "  - {name: ume-rag/${svc,,}, newName: $repo, digest: $digest}"
+    done)"
+  for k in kubernetes/base/kustomization.yaml kubernetes/components/*/kustomization.yaml; do
+    printf '%s\n' "$images_block" >> "$k"
+  done
+fi
+
+# The Portainer stack (the gateway's stack plus RAG, deploy/portainer/compose.portainer.yaml) as a release asset of its
+# own, with RAG's RAG_*_IMAGE defaults pinned to this release.
+portainer="$here/portainer/compose.portainer.yaml"
+if [ -f "$portainer" ]; then
+  sed 's/\r$//' "$portainer" > "$out/compose.portainer.yaml"
+  for var in "${images[@]}"; do
+    ref="${!var}"
+    grep -q "\${RAG_${var}:-" "$out/compose.portainer.yaml" || die "RAG_$var is not used in $portainer"
+    sed -i -E 's#\$\{RAG_'"$var"':-[^}]*\}#${RAG_'"$var"':-'"$ref"'}#g' "$out/compose.portainer.yaml"
+  done
+  echo "Wrote $out/compose.portainer.yaml"
+fi
 
 cd "$stage"
 tar --sort=name --owner=0 --group=0 --numeric-owner -cf - "$name" | gzip -n > "$out/$name.tar.gz"

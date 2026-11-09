@@ -1,0 +1,118 @@
+# rag-api: chat completions (streamed), knowledge, MCP. Stateless (all state in Postgres), so it runs as several replicas.
+# A rolling update starts a new pod, waits until it is ready, and only then stops an old one; the old pod first fails
+# its readiness check (Shutdown__DrainSeconds) so it leaves the Service before it stops accepting connections, then
+# finishes the requests it has (long streamed answers) within DOTNET_SHUTDOWNTIMEOUTSECONDS. Two replicas fit the
+# ume_rag_api role's connection limit (26 = 2 x 12, data-model §1.1); more need PgBouncer or a higher limit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  minReadySeconds: 5
+  selector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # Drain (10 s) + longest request (300 s) + margin.
+      terminationGracePeriodSeconds: 330
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+      containers:
+        - name: rag-api
+          image: ume-rag/api:latest
+          ports: [{name: https, containerPort: 8443}]
+          envFrom:
+            - configMapRef: {name: ume-rag-config}
+            - configMapRef: {name: ume-rag-api-config}
+          env:
+            - {name: ASPNETCORE_ENVIRONMENT, value: Production}
+            - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}
+            - {name: Security__SecretsDirectory, value: /run/app-secrets}
+            - {name: DataProtection__CertificatePath, value: /run/certs/data-protection.pfx}
+            - {name: Kestrel__Endpoints__Https__Url, value: "https://+:8443"}
+            - {name: Kestrel__Endpoints__Https__Certificate__Path, value: /run/certs/api.crt}
+            - {name: Kestrel__Endpoints__Https__Certificate__KeyPath, value: /run/certs/api.key}
+            - {name: BlobStore__Root, value: /data/blobs/rag}
+            - {name: SSL_CERT_FILE, value: /run/certs/ca.pem}
+            - {name: OTEL_SERVICE_NAME, value: rag-api}
+            - {name: OTEL_SERVICE_INSTANCE_ID, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: Shutdown__DrainSeconds, value: "10"}
+            - {name: DOTNET_SHUTDOWNTIMEOUTSECONDS, value: "310"}
+          startupProbe:
+            httpGet: {path: /health/live, port: https, scheme: HTTPS}
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /health/ready, port: https, scheme: HTTPS}
+            periodSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 1
+          livenessProbe:
+            httpGet: {path: /health/live, port: https, scheme: HTTPS}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests: {cpu: 250m, memory: 384Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: secrets, mountPath: /run/app-secrets, readOnly: true}
+            - {name: certs, mountPath: /run/certs, readOnly: true}
+            - {name: blob-key, mountPath: /run/keys, readOnly: true}
+            - {name: blobs, mountPath: /data/blobs, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: secrets
+          secret: {secretName: ume-rag-api-secrets, defaultMode: 0440}
+        - name: certs
+          secret: {secretName: ume-rag-api-certs, defaultMode: 0440}
+        - name: blob-key
+          secret: {secretName: ume-rag-blob-key, defaultMode: 0440}
+        - name: blobs
+          persistentVolumeClaim: {claimName: rag-blobs}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+---
+# "rag-api" is also the name in its generated certificate.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+spec:
+  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  ports: [{name: https, port: 8443, targetPort: https}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-api
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
