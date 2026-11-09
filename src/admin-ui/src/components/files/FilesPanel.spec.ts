@@ -444,7 +444,7 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     expect(details.get('[data-test=detail-folder]').text()).toBe('HR/Policys')
     expect(details.text()).toContain('2,4 MB')
     expect(details.text()).toContain('PDF')
-    expect(details.get('[data-test=detail-uploaded]').text()).toContain('by anna')
+    expect(details.get('[data-test=detail-uploaded]').text()).not.toContain('anna')
     expect(details.text()).toContain('Replaced')
     expect(details.text()).toContain('Searchable')
     expect(details.get('[data-test=detail-used-by]').text()).toBe('Bygglovsassistenten')

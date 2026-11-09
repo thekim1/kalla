@@ -82,7 +82,7 @@ watch(
         <DetailRow :label="FILES.details.size"><span class="tabular">{{ sizeText(file.bytes) }}</span></DetailRow>
         <DetailRow v-if="type" :label="FILES.details.type">{{ type }}</DetailRow>
         <DetailRow :label="FILES.details.uploaded">
-          <span data-test="detail-uploaded">{{ file.uploadedBy ? FILES.details.uploadedBy(formatDateTime(file.uploadedAt), file.uploadedBy) : formatDateTime(file.uploadedAt) }}</span>
+          <span data-test="detail-uploaded">{{ formatDateTime(file.uploadedAt) }}</span>
         </DetailRow>
         <DetailRow v-if="file.replacedAt" :label="FILES.details.replaced">{{ formatDateTime(file.replacedAt) }}</DetailRow>
         <DetailRow v-if="file.deletedAt" :label="FILES.deletedAt">{{ formatDateTime(file.deletedAt) }}</DetailRow>

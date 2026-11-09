@@ -16,7 +16,7 @@ const RESTORE_GRACE_MS = 14 * 24 * 60 * 60 * 1000
 export const restorable = (f: UploadFile): boolean => f.deletedAt !== null && Date.now() - Date.parse(f.deletedAt) < RESTORE_GRACE_MS
 
 export const sizeText = (bytes: number): string =>
-  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${formatDecimal(bytes / 1024 / 1024, 1)} MB`
+  bytes === 0 ? '0 kB' : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${formatDecimal(bytes / 1024 / 1024, 1)} MB`
 
 export const stateTone = (state: string): Tone => (state === 'indexed' ? 'ok' : state === 'malware' || state === 'refused' ? 'danger' : 'neutral')
 

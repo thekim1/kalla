@@ -607,7 +607,6 @@ export const FILES = {
     size: 'Size',
     type: 'Type',
     uploaded: 'Uploaded',
-    uploadedBy: (when: string, who: string) => `${when} by ${who}`,
     replaced: 'Replaced',
     state: 'State',
     chunks: 'Passages',

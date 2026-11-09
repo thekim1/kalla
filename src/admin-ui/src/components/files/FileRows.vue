@@ -44,7 +44,7 @@ function toggle(id: string, on: boolean): void {
       <ul class="grid gap-2">
         <li v-for="f in group.files" :key="f.id" class="flex flex-wrap items-center gap-3 border-b border-border pb-2" :data-test="`file-${f.id}`">
           <CheckField
-            v-if="selectable" :model-value="selected.includes(f.id)" :label="FILES.select(f.fileName)" class="sr-label"
+            v-if="selectable" :model-value="selected.includes(f.id)" :label="FILES.select(f.fileName)" hide-label
             @update:model-value="toggle(f.id, $event)"
           />
           <span class="min-w-0 flex-1">
@@ -55,7 +55,7 @@ function toggle(id: string, on: boolean): void {
               {{ grouped ? baseName(f.fileName) : f.fileName }}
             </button>
             <span class="block text-small text-fg-3">
-              {{ sizeText(f.bytes) }} · {{ showDeleted ? FILES.deletedAt : FILES.uploaded }} {{ formatDateTime(f.deletedAt ?? f.uploadedAt) }}<template v-if="f.uploadedBy"> · {{ f.uploadedBy }}</template>
+              {{ sizeText(f.bytes) }} · {{ showDeleted ? FILES.deletedAt : FILES.uploaded }} {{ formatDateTime(f.deletedAt ?? f.uploadedAt) }}
             </span>
             <span v-if="f.reason" class="block text-small text-danger">{{ jobMessage(f.reason) }}</span>
           </span>
