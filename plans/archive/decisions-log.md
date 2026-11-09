@@ -146,8 +146,10 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
 
 - 2026-11-08, user: the table above is rewritten as `../decisions.md` (current state, one entry per topic) and kept
   here; design files may move by a scripted rewrite of their links ("Design documents: one layer").
-- 2026-11-08, user: `halfvec` storage in P2 after to-verify #117 ("Data model"); A-20 and A-27 before go-live
-  ("CI/CD"); managed Postgres not planned ("Postgres hosting"); `Render:MaxConcurrent` 4 and the ready rule of #490
+- 2026-11-05, user (recorded 2026-11-08): pull requests stay lean: each job runs only when its paths change, the full
+  set before a release, and agents run only the test projects they touch ("CI on the self-hosted runner").
+- 2026-11-08, user: `halfvec` storage in P2 after to-verify #117 ("Data model"); A-20 and A-27 postponed until before
+  go-live ("CI/CD"); managed Postgres not planned ("Postgres hosting"); `Render:MaxConcurrent` 4 and the ready rule of #490
   ("JavaScript rendering").
 - 2026-11-08, user: shadow-DOM flattening and same-host iframe inlining come later, when a source needs them
   ("Crawlee review: ideas adopted"; connectors §8.3 already says "Later").

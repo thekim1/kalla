@@ -131,7 +131,13 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     the edit drawer" puts it in the ⋯ menu.
   - roadmap and postponed B1 give the gold set as 100–150 answerable (decision: 120–150); processing §14.8 has an
     Overview alert, which "M-3 settlements" makes P2; the roadmap's P2 rerank bullet reads as if rerank were still P2.
+  - Seven design headers (admin, chat, gateway-changes, identity, knowledge, parser, tools) call their archived area
+    plan "binding, incl. its answered questions"; `AGENTS.md` says the archive does not bind. Fold what still holds
+    into the design and drop the word.
   - "Ask-a-file workspaces" (P2) are owned by teams and individuals, "Organisation" by departments only (user call
     before P2).
+  - repo-and-deployment §8.4 and §12.10 call SHA pins for actions "proposed", and postponed decision S1 is open
+    ("CI/CD": postponed until before go-live, A-20, A-27); connectors §8.3 names `Render:MaxPerHost`, which the code
+    does not have (it is the host's `renderPerHost`, capped by `Render:MaxConcurrent`).
 - **Done when:** each point is fixed in its design or answered by the user, and `check-doc-refs.py` passes.
 - **Waits on:** the decisions register (this PR).
