@@ -43,8 +43,8 @@ public sealed class UploadTests : IDisposable
         { "makro.docm", "docm", "application/vnd.ms-word.document.macroEnabled.12", false, UploadTypeCheck.MacroEnabled },
         { "makro.docx", "docm", FileTypeSniffer.Docx, false, UploadTypeCheck.TypeMismatch },
         { "arkiv.zip", "zip", "application/zip", false, UploadTypeCheck.Archive },
-        { "gammal.doc", "doc", "application/msword", false, UploadTypeCheck.FormatDeferred },
-        { "brev.rtf", "rtf", "application/rtf", false, UploadTypeCheck.FormatDeferred },
+        { "gammal.doc", "doc", "application/msword", true, null },
+        { "brev.rtf", "rtf", "application/rtf", true, null },
         { "mejl.msg", "msg", "application/vnd.ms-outlook", false, UploadTypeCheck.FormatDeferred },
         { "mejl.eml", "eml", "message/rfc822", false, UploadTypeCheck.FormatDeferred },
     };

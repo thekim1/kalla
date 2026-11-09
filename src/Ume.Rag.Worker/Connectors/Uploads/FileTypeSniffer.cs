@@ -11,7 +11,7 @@ public enum FileClass
     /// <summary>An allowed P1 type.</summary>
     Allowed,
 
-    /// <summary>Legacy Office (OLE), RTF, e-mail: <c>upload.format_deferred</c> (Z1).</summary>
+    /// <summary>E-mail (<c>.eml</c>, Outlook <c>.msg</c>): <c>upload.format_deferred</c> (Z1).</summary>
     Deferred,
 
     /// <summary><c>.docm</c>, <c>.xlsm</c>, <c>.pptm</c> and other macro-enabled OOXML: <c>upload.macro_enabled</c>.</summary>
@@ -117,7 +117,7 @@ public static class FileTypeSniffer
 
         if (bytes.StartsWith("{\\rtf"u8))
         {
-            return new("application/rtf", FileClass.Deferred);
+            return new("application/rtf", FileClass.Allowed);
         }
 
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0x1F, 0x8B]) || bytes.StartsWith((ReadOnlySpan<byte>)[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) || bytes.StartsWith("Rar!\x1A\x07"u8)
@@ -221,14 +221,17 @@ public static class FileTypeSniffer
                 file.Position = 0;
                 if (OleRoots.TryGetValue(new Guid(clsid), out var type))
                 {
-                    return new(type, FileClass.Deferred);
+                    return new(type, LegacyClass(type));
                 }
             }
         }
 
         file.Position = 0;
-        return LegacyExtensions.TryGetValue(extension, out var byName) ? new(byName, FileClass.Deferred) : new(null, FileClass.Unknown);
+        return LegacyExtensions.TryGetValue(extension, out var byName) ? new(byName, LegacyClass(byName)) : new(null, FileClass.Unknown);
     }
+
+    /// <summary>Legacy Word, Excel and PowerPoint go to the parser (LibreOffice); Outlook <c>.msg</c> stays deferred.</summary>
+    private static FileClass LegacyClass(string mediaType) => mediaType == "application/vnd.ms-outlook" ? FileClass.Deferred : FileClass.Allowed;
 
     private static SniffedType Text(ReadOnlySpan<byte> head, string extension)
     {
@@ -296,6 +299,8 @@ public static class UploadTypeCheck
         [".odp"] = "application/vnd.oasis.opendocument.presentation", [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg",
         [".png"] = "image/png", [".tif"] = "image/tiff", [".tiff"] = "image/tiff", [".txt"] = "text/plain",
         [".md"] = "text/markdown", [".csv"] = "text/csv", [".html"] = "text/html", [".htm"] = "text/html",
+        [".doc"] = "application/msword", [".xls"] = "application/vnd.ms-excel", [".ppt"] = "application/vnd.ms-powerpoint",
+        [".rtf"] = "application/rtf",
     };
 
     public static TypeVerdict Check(SniffedType sniffed, string fileName, string? declaredMediaType)

@@ -98,7 +98,6 @@
     { "name": "unknown-option", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "colour": "blue" }, "status": 400, "code": "invalid_request", "retry": "none", "echoes_request_id": false },
     { "name": "range-over-20-pages", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "pages": { "from": 1, "to": 21 } }, "status": 422, "code": "too_many_pages", "retry": "smaller_range" },
     { "name": "range-past-the-end", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "pages": { "from": 3, "to": 4 } }, "status": 400, "code": "invalid_request", "retry": "none" },
-    { "name": "legacy-rtf", "file": "legacy.rtf", "options": { "file_ext": ".rtf" }, "status": 415, "code": "format_deferred", "retry": "none" },
     { "name": "legacy-msg", "file": "legacy.msg", "options": { "file_ext": ".msg" }, "status": 415, "code": "format_deferred", "retry": "none" },
     { "name": "message-eml", "file": "message.eml", "options": { "file_ext": ".eml" }, "status": 415, "code": "format_deferred", "retry": "none" },
     { "name": "encrypted-docx", "file": "encrypted.docx", "options": { "file_ext": ".docx" }, "status": 422, "code": "encrypted", "retry": "none" },

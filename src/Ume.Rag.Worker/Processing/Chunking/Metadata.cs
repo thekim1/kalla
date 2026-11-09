@@ -106,9 +106,9 @@ public static partial class Metadata
     {
         ProcessingMediaTypes.Html or ProcessingMediaTypes.Xhtml => "page",
         ProcessingMediaTypes.Pdf => "pdf",
-        ProcessingMediaTypes.Docx or ProcessingMediaTypes.Odt => "word",
-        ProcessingMediaTypes.Pptx or ProcessingMediaTypes.Odp => "presentation",
-        ProcessingMediaTypes.Xlsx or ProcessingMediaTypes.Ods or ProcessingMediaTypes.Csv => "spreadsheet",
+        ProcessingMediaTypes.Docx or ProcessingMediaTypes.Odt or ProcessingMediaTypes.Doc or ProcessingMediaTypes.Rtf => "word",
+        ProcessingMediaTypes.Pptx or ProcessingMediaTypes.Odp or ProcessingMediaTypes.Ppt => "presentation",
+        ProcessingMediaTypes.Xlsx or ProcessingMediaTypes.Ods or ProcessingMediaTypes.Xls or ProcessingMediaTypes.Csv => "spreadsheet",
         ProcessingMediaTypes.Png or ProcessingMediaTypes.Jpeg or ProcessingMediaTypes.Tiff => "image",
         _ => "text",
     };

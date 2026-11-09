@@ -111,6 +111,9 @@ public static class ProcessingMediaTypes
     public const string Png = "image/png";
     public const string Jpeg = "image/jpeg";
     public const string Tiff = "image/tiff";
+    public const string Doc = "application/msword";
+    public const string Xls = "application/vnd.ms-excel";
+    public const string Ppt = "application/vnd.ms-powerpoint";
     public const string Ole = "application/x-ole-storage";
     public const string Rtf = "application/rtf";
     public const string Eml = "message/rfc822";
@@ -121,12 +124,13 @@ public static class ProcessingMediaTypes
     {
         [Pdf] = ".pdf", [Docx] = ".docx", [Pptx] = ".pptx", [Xlsx] = ".xlsx", [Odt] = ".odt", [Ods] = ".ods",
         [Odp] = ".odp", [Png] = ".png", [Jpeg] = ".jpg", [Tiff] = ".tif",
+        // Legacy Word, Excel, PowerPoint and RTF: the parser converts them with LibreOffice (parser ume_parser/legacy.py).
+        [Doc] = ".doc", [Xls] = ".xls", [Ppt] = ".ppt", [Rtf] = ".rtf",
     };
 
     private static readonly HashSet<string> Deferred = new(StringComparer.Ordinal)
     {
-        "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint", Ole, Rtf, "text/rtf", Eml,
-        "application/vnd.ms-outlook",
+        Ole, "text/rtf", Eml, "application/vnd.ms-outlook",
     };
 
     /// <summary>The parser-bound types: those <see cref="Route"/> sends to <see cref="ParseRoute.Parser"/>.</summary>
@@ -195,8 +199,10 @@ public static class MediaTypeSniffer
 
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]))
         {
-            // Legacy .doc/.xls/.ppt/.msg: keep the declared legacy type when there is one (format_deferred either way).
-            return essence is not null && ProcessingMediaTypes.Route(essence) == ParseRoute.Deferred ? essence : ProcessingMediaTypes.Ole;
+            // Legacy .doc/.xls/.ppt/.msg: keep the declared legacy type when there is one (.doc/.xls/.ppt go to the parser,
+            // .msg and an undeclared compound file are format_deferred).
+            return essence is ProcessingMediaTypes.Doc or ProcessingMediaTypes.Xls or ProcessingMediaTypes.Ppt
+                || (essence is not null && ProcessingMediaTypes.Route(essence) == ParseRoute.Deferred) ? essence : ProcessingMediaTypes.Ole;
         }
 
         if (bytes.StartsWith(@"{\rtf"u8))

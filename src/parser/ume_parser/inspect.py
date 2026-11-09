@@ -199,6 +199,8 @@ def inspect(job: dict[str, Any]) -> dict[str, Any]:
         out = _empty(fmt, sniff.MEDIA_TYPES[fmt])
         if fmt == "pdf":
             _pdf(path, out)
+        elif fmt in sniff.LEGACY:
+            pass  # Not read here: LibreOffice runs only in a slot, so page count and encryption stay unknown.
         else:
             _image(path, out)
     out["inspect_ms"] = round((time.monotonic() - started) * 1000)

@@ -1,4 +1,6 @@
 import io
+import struct
+import uuid
 import zipfile
 
 import pytest
@@ -45,7 +47,6 @@ def test_a_zip_is_left_for_the_slot(name):
     [
         (fixture_bytes("legacy.doc"), "format_deferred", None),
         (fixture_bytes("legacy.msg"), "format_deferred", None),
-        (fixture_bytes("legacy.rtf"), "format_deferred", None),
         (fixture_bytes("message.eml"), "format_deferred", None),
         (b"Received: from mx.example.org\r\n", "format_deferred", None),
         (b"7z\xbc\xaf\x27\x1c\x00\x04", "unsupported_format", "archive"),
@@ -62,7 +63,47 @@ def test_refusals_from_the_first_bytes(head, code, reason):
     assert (raised.value.code, raised.value.reason) == (code, reason)
 
 
-@pytest.mark.parametrize(("name", "code"), [("encrypted.docx", "encrypted"), ("legacy.msg", "format_deferred")])
+def test_rtf_is_sniffed_from_its_signature():
+    assert sniff(fixture_bytes("legacy.rtf")).format == "rtf"
+
+
+def _ole(stream_names: tuple[str, ...], clsid: str | None = None) -> bytes:
+    """An OLE header whose first directory sector (sector 0, shift 9) holds the root entry and `stream_names`."""
+    header = bytearray(bytes.fromhex("d0cf11e0a1b11ae1") + bytes(504))
+    struct.pack_into("<H", header, 30, 9)
+    struct.pack_into("<I", header, 48, 0)
+    sector = b""
+    for i, name in enumerate(("Root Entry", *stream_names)):
+        encoded = (name + "\0").encode("utf-16-le")
+        entry = bytearray(encoded.ljust(64, b"\0") + struct.pack("<H", len(encoded)) + bytes(62))
+        if i == 0 and clsid:
+            entry[80:96] = uuid.UUID(clsid).bytes_le
+        sector += bytes(entry)
+    return bytes(header) + sector.ljust(512, b"\0")
+
+
+@pytest.mark.parametrize(
+    ("data", "fmt"),
+    [
+        (_ole(("WordDocument", "1Table")), "doc"),
+        (_ole(("Workbook",)), "xls"),
+        (_ole(("Book",)), "xls"),
+        (_ole(("PowerPoint Document", "Current User")), "ppt"),
+        # A presentation with an embedded Word document: the root CLSID names PowerPoint.
+        (_ole(("PowerPoint Document", "WordDocument"), "64818D10-4F9B-11CF-86EA-00AA00B929E8"), "ppt"),
+        (_ole(("WordDocument",), "00020820-0000-0000-C000-000000000046"), "xls"),
+    ],
+)
+def test_legacy_office_is_named_by_its_root_clsid_or_main_stream(tmp_path, data, fmt):
+    path = tmp_path / "input"
+    path.write_bytes(data)
+    assert sniff_file(path, data[:1024]).format == fmt
+
+
+@pytest.mark.parametrize(
+    ("name", "code"),
+    [("encrypted.docx", "encrypted"), ("legacy.msg", "format_deferred"), ("legacy.doc", "format_deferred")],
+)
 def test_an_ole_file_is_told_apart_by_its_stream_names(tmp_path, name, code):
     path = tmp_path / "input"
     data = fixture_bytes(name)

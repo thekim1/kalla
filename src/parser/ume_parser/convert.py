@@ -8,6 +8,7 @@ the bomb pre-check):
 - **JPEG, PNG, TIFF**: Docling's image input with OCR always on (`off` is read as `auto`, with a warning). A TIFF range
   is cut out of the file first, so only its frames are decoded, and its pages are renumbered to the original frames.
 - **DOCX, PPTX, XLSX, ODT, ODS, ODP**: Docling's declarative backends (no models, no ranges).
+- **DOC, XLS, PPT, RTF**: LibreOffice converts the file to DOCX, XLSX or PPTX (`ume_parser.legacy`), then as above.
 
 It returns the slot's part of `result.json` (the API process adds the request, input and build fields) and writes
 `docling.json.gz` into the job directory when asked for.
@@ -45,7 +46,7 @@ from docling.document_converter import DocumentConverter, ImageFormatOption, Pdf
 from docling_core.types.doc import DoclingDocument
 from docling_core.types.io import DocumentStream
 
-from ume_parser import limits, signals, sniff, textlayer
+from ume_parser import legacy, limits, signals, sniff, textlayer
 from ume_parser.assemble import (
     Assembled,
     area,
@@ -577,6 +578,13 @@ def run_job(job: dict[str, Any], pipelines: Pipelines) -> dict[str, Any]:
         out = _run_pdf(job, options, pipelines)
     elif fmt in sniff.IMAGES:
         out = _run_image(job, options, pipelines, fmt)
+    elif fmt in sniff.LEGACY:
+        # LibreOffice first (ume_parser.legacy), then the OOXML file through the declarative backend; the result keeps
+        # the sniffed legacy format.
+        target = sniff.LEGACY[fmt]
+        work_dir = Path(job["dir"]) / "legacy"
+        converted = legacy.convert(Path(job["input"]), fmt, target, work_dir, options.deadline_ms / 1000)
+        out = _run_declarative({**job, "input": str(converted)}, options, pipelines, target)
     else:
         out = _run_declarative(job, options, pipelines, fmt)
     out.update(

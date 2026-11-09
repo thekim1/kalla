@@ -25,7 +25,7 @@ SPECS: dict[ErrorCode, Spec] = {
     "invalid_request": Spec(400, "none", "The request does not match the convert-request schema."),
     "duplicate_in_flight": Spec(409, "later", "A request with this request_id is already converting."),
     "too_large": Spec(413, "none", "The request body exceeds the size limit."),
-    "format_deferred": Spec(415, "none", "This format is not supported yet (legacy Office, RTF or email)."),
+    "format_deferred": Spec(415, "none", "This format is not supported yet (email)."),
     "unsupported_format": Spec(415, "none", "This format is not supported."),
     "encrypted": Spec(422, "none", "The document needs a password to open."),
     "corrupt": Spec(422, "none", "The document cannot be opened."),
