@@ -1,0 +1,419 @@
+# The RAG part of compose.portainer.yaml. deploy/portainer/build-stack.sh adds each section below to the same section of
+# the gateway's deploy/compose.portainer.yaml (taken unchanged) and inlines the "@INCLUDE path" lines, so the gateway
+# and RAG run as one Portainer stack. Every RAG name starts with rag- (services, networks, volumes, configs): nothing
+# of the gateway's is renamed, and its volumes keep their names. rag-api, rag-admin and rag-worker join the gateway's
+# llm network to reach https://gateway:8443 (and https://dataapi:8443), trusting the gateway's CA.
+#
+# Differences from compose.prod.yaml + compose.ingestion.yaml, for a host without deploy/host/ and init-deployment.sh:
+# no fixed subnets and no host firewall, no ingestion slice (cgroup_parent), no pgBackRest (archive_mode off: back up
+# with pg_dump or volume snapshots), and the renderer behind the render profile (it needs a seccomp profile Portainer
+# cannot read from a file; see rag-renderer).
+
+@SECTION header
+#
+# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
+# The same stack also runs Ume Rag: rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker,
+# rag-parser, rag-clamav and, with COMPOSE_PROFILES=render, rag-renderer. Its one-shot rag-bootstrap creates RAG's
+# certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first start. Keep the stack
+# name: the gateway's volumes are found by it.
+#
+# Required variables (besides the gateway's above)
+#   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
+#   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
+#                             citation links are absolute
+#   UME_RAG_GATEWAY_KEY_Eu    a gateway API key for RAG (created in the gateway's admin UI, residency Eu); without it
+#                             the stack starts but every model call fails. Change it and redeploy to rotate.
+# Recommended
+#   COMPOSE_PROFILES=data     the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
+#                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
+#                             with catalog.read
+#   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
+#                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (false)
+#   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
+#                             UME_OIDC_AUTHORITY (UME_RAG_OIDC_AUTHORITY to use another); redirect URIs
+#                             https://<UME_RAG_ADMIN_HOST>:<port>/signin-oidc and /signout-callback-oidc
+#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN / _DEPARTMENT_ADMIN / _PIPELINE_EDITOR / _REVIEWER / _VIEWER
+#                             groups that grant a RAG role (';'-separated); empty grants nothing
+# Optional
+#   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
+#   UME_RAG_GATEWAY_KEY_OnPrem / _External, UME_RAG_{API,ADMIN,WORKER}_GATEWAY_KEY_Eu (a key per service wins)
+#   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
+#   COMPOSE_PROFILES=data,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
+#                             ghcr.io as a registry in Portainer if the packages are private)
+# Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
+# without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
+# with pg_dump or volume snapshots.
+
+@SECTION x
+x-rag-certs: &rag-certs-mount
+  type: volume
+  source: rag-certs
+  target: /run/certs
+  read_only: true
+
+x-rag-conf: &rag-conf-mount
+  type: volume
+  source: rag-config
+  target: /run/config
+  read_only: true
+
+x-rag-secrets: &rag-secrets-mount
+  type: volume
+  source: rag-secrets
+  target: /run/app-secrets
+  read_only: true
+
+@SECTION services
+  rag-bootstrap:
+    image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
+    restart: "no"
+    entrypoint: [/bin/sh, /config/bootstrap.sh]
+    environment:
+      UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
+      UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      UME_RAG_GATEWAY_KEY_OnPrem: ${UME_RAG_GATEWAY_KEY_OnPrem:-}
+      UME_RAG_GATEWAY_KEY_Eu: ${UME_RAG_GATEWAY_KEY_Eu:-}
+      UME_RAG_GATEWAY_KEY_External: ${UME_RAG_GATEWAY_KEY_External:-}
+      UME_RAG_API_GATEWAY_KEY_Eu: ${UME_RAG_API_GATEWAY_KEY_Eu:-}
+      UME_RAG_ADMIN_GATEWAY_KEY_Eu: ${UME_RAG_ADMIN_GATEWAY_KEY_Eu:-}
+      UME_RAG_WORKER_GATEWAY_KEY_Eu: ${UME_RAG_WORKER_GATEWAY_KEY_Eu:-}
+      UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
+      UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
+    configs:
+      - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
+      - {source: rag-postgres-init, target: /config/postgres-init.sql}
+      - {source: rag-postgres-hba, target: /config/pg_hba.conf}
+      - {source: rag-postgres-conf, target: /config/postgresql.conf}
+      - {source: rag-app-roles, target: /config/app-roles.sql}
+    volumes:
+      - rag-certs:/certs
+      - rag-secrets:/secrets
+      - rag-config:/conf
+      - rag-blobs:/blobs
+      - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    network_mode: none
+
+  rag-postgres:
+    <<: *hardened
+    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.2.0@sha256:3e6b0818aba63e96b6fed69461f10f4b6856226d4f7a73cb6335b38f723433bb}
+    user: "999:999"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    tmpfs: [/tmp, "/var/run/postgresql:uid=999,gid=999,mode=0700"]
+    shm_size: 1g
+    cpus: 2.0
+    mem_reservation: 2g
+    mem_limit: 3g
+    pids_limit: 512
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/postgres-secrets/bootstrap_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+    # deploy/postgres/postgresql.conf (16 GB profile), without WAL archiving: this stack has no pgBackRest repository.
+    command: [postgres, -c, config_file=/run/config/postgresql.conf, -c, archive_mode=off]
+    volumes:
+      - rag-postgres-data:/var/lib/postgresql/data
+      - {<<: *rag-conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
+      - {<<: *rag-conf-mount, volume: {subpath: postgres}}
+      - {<<: *rag-certs-mount, volume: {subpath: postgres}}
+      - {<<: *rag-secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    networks: [rag-data]
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, ragdb]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  rag-migrate:
+    <<: *hardened
+    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.2.0@sha256:7943dbef6500fd2210a1cd420bed718b741a5eddf3a9cb8694adb65df09f25d3}
+    user: "1654:1654"
+    restart: "no"
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 128
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Migration__RolesSqlPath: /run/config/app-roles.sql
+      Seed__Enabled: "false"
+      # The platform embedding profile, seeded once (insert-if-absent) when the model is set.
+      EmbeddingProfile__GatewayModel: ${UME_RAG_EMBEDDING_MODEL:-}
+      EmbeddingProfile__Dimensions: ${UME_RAG_EMBEDDING_DIMENSIONS:-1024}
+      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-false}
+      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8192}
+      EmbeddingProfile__MaxResidency: ${UME_RAG_EMBEDDING_MAX_RESIDENCY:-Eu}
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *rag-conf-mount, volume: {subpath: migrations}}
+      - {<<: *rag-certs-mount, volume: {subpath: migrations}}
+      - {<<: *rag-secrets-mount, volume: {subpath: migrations}}
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+    networks: [rag-data]
+
+  rag-api:
+    <<: *hardened
+    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.2.0@sha256:3fbb166acc7495044329bf5b4f3c701b09487dd54a4a0716f53356f3f21f235c}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 2.0
+    mem_reservation: 384m
+    mem_limit: 1g
+    pids_limit: 512
+    ports: ["${UME_RAG_API_BIND:-0.0.0.0}:${UME_RAG_API_PORT:-8543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/api.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
+      Rag__Roles: knowledge,chat,mcp
+      BlobStore__Root: /data/blobs/rag
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
+      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL (https URL)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-api
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: api}}
+      - {<<: *rag-secrets-mount, volume: {subpath: api}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - {type: volume, source: rag-blobs, target: /data/blobs, read_only: true}
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      gateway: {condition: service_started}
+    networks:
+      rag-edge: {}
+      rag-data: {}
+      llm: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-admin:
+    <<: *hardened
+    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.2.0@sha256:2c8e3b12bbc3ed2118c87cc2a0612c74d3b76f95f935915bc728379c417638e2}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 1.0
+    mem_reservation: 256m
+    mem_limit: 512m
+    pids_limit: 256
+    ports: ["${UME_RAG_ADMIN_BIND:-0.0.0.0}:${UME_RAG_ADMIN_PORT:-9543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/admin.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
+      # The gateway's identity provider by default, with RAG's own client (never the gateway's).
+      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-${UME_OIDC_AUTHORITY}}
+      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
+      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-roles}
+      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
+      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-teamCodes}
+      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-groups}
+      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-email}
+      Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
+      Oidc__RoleGroups__rag-department-admin: ${UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
+      Oidc__RoleGroups__rag-pipeline-editor: ${UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR:-}
+      Oidc__RoleGroups__rag-reviewer: ${UME_RAG_OIDC_GROUPS_REVIEWER:-}
+      Oidc__RoleGroups__rag-viewer: ${UME_RAG_OIDC_GROUPS_VIEWER:-}
+      Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
+      Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
+      BlobStore__Root: /data/blobs/rag
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
+      # The gateway's Data API (COMPOSE_PROFILES=data): org sync and the model catalogue, with UME_RAG_ORG_SYNC_KEY.
+      OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-https://dataapi:8443}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-admin
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: admin}}
+      - {<<: *rag-secrets-mount, volume: {subpath: admin}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - rag-blobs:/data/blobs
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+    networks:
+      rag-edge: {}
+      rag-data: {}
+      llm: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-worker:
+    <<: *hardened
+    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.2.0@sha256:606e27dd997889b449c37e59ca96a259d768107f569962dc46741ddc4d5e1707}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 120s
+    cpus: 1.5
+    mem_reservation: 512m
+    mem_limit: 1.5g
+    pids_limit: 512
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
+      Parser__BaseUrl: https://rag-parser:8000
+      ClamAv__Host: rag-clamav
+      ClamAv__Port: "3310"
+      BlobStore__Root: /data/blobs/rag
+      TMPDIR: /data/blobs/spool
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-worker
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: worker}}
+      - {<<: *rag-secrets-mount, volume: {subpath: worker}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - rag-blobs:/data/blobs
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while.
+      rag-parser: {condition: service_started}
+      rag-clamav: {condition: service_started}
+    # rag-crawl holds the default route (the Internet); llm reaches the gateway.
+    networks:
+      rag-data: {}
+      llm: {}
+      rag-ingestion: {}
+      rag-parser: {}
+      rag-render: {}
+      rag-crawl: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-parser:
+    <<: *hardened
+    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.2.0@sha256:a3206d9b732bf91c329236a5ac9630748463875a50ccf98f6eb63e08ca6d9f50}
+    user: "10001:10001"
+    restart: unless-stopped
+    tmpfs: ["/tmp:size=1g"]
+    cpus: 2.0
+    mem_reservation: 2g
+    mem_limit: 3.5g
+    pids_limit: 256
+    environment:
+      PARSER_WORKERS: "1"
+      PARSER_THREADS: "2"
+      PARSER_SLOT_MAX_RSS_MB: "2200"
+      PARSER_TLS_CERT_FILE: /run/certs/parser.crt
+      PARSER_TLS_KEY_FILE: /run/certs/parser.key
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: parser}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    # Internal network only: no egress at all (parser design §11).
+    networks: [rag-parser]
+
+  rag-clamav:
+    <<: *hardened
+    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.2.0@sha256:88b90287deafedcdbc5209a9b3c485c72fc4c23ad395d9ff994d33b35cf1a0ec}
+    user: "1000:1000"
+    restart: unless-stopped
+    cpus: 1.0
+    mem_reservation: 1.2g
+    mem_limit: 1.5g
+    pids_limit: 128
+    volumes:
+      - rag-clamav-db:/var/lib/clamav
+    # rag-mirror: freshclam's download; rag-ingestion: the worker's INSTREAM on 3310.
+    networks: [rag-ingestion, rag-mirror]
+
+  # Chromium for JavaScript-rendered pages (connectors design §8.3). Off by default: add render to COMPOSE_PROFILES.
+  # Chromium's sandbox needs user namespaces, which Docker's default seccomp profile blocks, and Portainer cannot read
+  # images/renderer/seccomp.json from a file, so this service runs without Docker's seccomp filter (Chromium's own
+  # sandbox stays on). Without it, the worker refuses rendering and indexes the pages' HTML as served.
+  rag-renderer:
+    <<: *hardened
+    profiles: [render]
+    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.2.0@sha256:bdef11f13cf5bc15fc3950b7cb464726563773338548281c3d524e276be131ef}
+    user: "10002:10002"
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true, seccomp=unconfined]
+    init: true
+    tmpfs: ["/tmp:size=512m"]
+    cpus: 2.0
+    mem_reservation: 256m
+    mem_limit: 2g
+    pids_limit: 512
+    # The image reads its secret path only from the environment: read it from the volume, then start as the image does.
+    entrypoint: [/bin/sh, -c, 'UME_RAG_RENDER_WS_PATH="$$(cat /run/render/ws-path)" exec /srv/renderer/start.sh']
+    volumes:
+      - {type: volume, source: rag-secrets, target: /run/render, read_only: true, volume: {subpath: renderer}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    networks: [rag-render]
+
+@SECTION configs
+  rag-bootstrap-script:
+    content: |
+      @INCLUDE portainer/bootstrap.sh
+  rag-postgres-init:
+    content: |
+      @INCLUDE postgres/init.sql
+  rag-postgres-hba:
+    content: |
+      @INCLUDE postgres/pg_hba.conf
+  rag-postgres-conf:
+    content: |
+      @INCLUDE postgres/postgresql.conf
+  rag-app-roles:
+    content: |
+      @INCLUDE postgres/app-roles.sql
+
+@SECTION networks
+  rag-edge: {driver: bridge}
+  rag-data: {driver: bridge, internal: true}
+  rag-ingestion: {driver: bridge, internal: true}
+  rag-parser: {driver: bridge, internal: true}
+  rag-render: {driver: bridge, internal: true}
+  rag-crawl: {driver: bridge}
+  rag-mirror: {driver: bridge}
+
+@SECTION volumes
+  rag-postgres-data:
+  rag-certs:
+  rag-secrets:
+  rag-config:
+  rag-blobs:
+  rag-clamav-db:

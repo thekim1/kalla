@@ -1,0 +1,1265 @@
+# GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it
+# from the gateway's deploy/compose.portainer.yaml (below, unchanged) and deploy/portainer/compose.rag.template.yaml.
+# Do not edit it by hand; the gateway's own note below refers to the gateway's part.
+#
+# GENERATED FILE: edit compose.portainer.template.yaml (and the files it includes), then run
+# deploy/build-portainer-stack.sh. Do not edit compose.portainer.yaml by hand.
+#
+# Environment-driven production stack for Portainer (or any host where you cannot run scripts).
+# Paste this file into a Portainer stack (Web editor) or deploy it from the Git repository, and
+# set the variables below under "Environment variables". Nothing else is needed: the one-shot
+# `bootstrap` service creates the certificates and secrets inside Docker volumes on first start.
+# The containers still read secrets and certificates from read-only files, never from
+# environment variables. Requires Docker 28+ / a recent Compose (configs content, volume subpath).
+#
+# Required variables
+#   GATEWAY_IMAGE, ADMINAPI_IMAGE, MIGRATIONS_IMAGE   images pushed to a registry the host can pull
+#   UME_OIDC_AUTHORITY        https URL of your OIDC provider (Keycloak realm, AD FS, Entra ID)
+#   UME_GATEWAY_HOST          public hostname of the gateway API (for example llm.example.se)
+#   UME_GATEWAY_PUBLIC_URL    its public URL (https://llm.example.se, add :port if not 443)
+# Optional variables
+#   UME_ADMIN_HOST            public hostname of the admin UI (defaults to UME_GATEWAY_HOST)
+#   UME_OIDC_CLIENT_ID (ume-admin), UME_OIDC_CLIENT_SECRET (confidential clients only)
+#   UME_GATEWAY_BIND / UME_ADMIN_BIND (0.0.0.0), UME_GATEWAY_PORT (8443), UME_ADMIN_PORT (9443)
+#   UME_OIDC_ROLE_CLAIM, UME_OIDC_DEPARTMENT_CLAIM, UME_OIDC_TEAM_CLAIM, UME_OIDC_GROUP_CLAIM, UME_OIDC_EXTRA_SCOPE,
+#   UME_OIDC_GROUPS_GATEWAY_ADMIN / _DEPARTMENT_ADMIN / _VIEWER / _TEAM_ADMIN  (see docs/runbook.md, "Identity provider")
+#   UME_OTEL_ENDPOINT         OTLP collector for logs, traces and security events (off when empty)
+#   UME_SOURCE_ADDRESS        client address kept for refused keys: Truncated (default), Full or None
+#   (behind a reverse proxy, list it under Settings > Trusted proxies in the admin UI; UME_FORWARDED_HEADERS is gone)
+#   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, UME_DATA_PORT 10443, UME_DATA_HOST,
+#                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md)
+#   UME_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
+#
+# The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
+# (<stack>_ume-config holds static configuration and is rewritten on every start).
+# Do not delete them: a restored database is unusable without the key pepper and the Data
+# Protection certificate (back up ume-secrets/.pepper and ume-certs/data-protection.pfx).
+# Ports: inside the containers the apps listen on 8443 and the health probe checks that; only
+# the host side of the mapping is configurable (see compose.prod.yaml for details).
+#
+# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
+# The same stack also runs Ume Rag: rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker,
+# rag-parser, rag-clamav and, with COMPOSE_PROFILES=render, rag-renderer. Its one-shot rag-bootstrap creates RAG's
+# certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first start. Keep the stack
+# name: the gateway's volumes are found by it.
+#
+# Required variables (besides the gateway's above)
+#   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
+#   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
+#                             citation links are absolute
+#   UME_RAG_GATEWAY_KEY_Eu    a gateway API key for RAG (created in the gateway's admin UI, residency Eu); without it
+#                             the stack starts but every model call fails. Change it and redeploy to rotate.
+# Recommended
+#   COMPOSE_PROFILES=data     the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
+#                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
+#                             with catalog.read
+#   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
+#                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (false)
+#   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
+#                             UME_OIDC_AUTHORITY (UME_RAG_OIDC_AUTHORITY to use another); redirect URIs
+#                             https://<UME_RAG_ADMIN_HOST>:<port>/signin-oidc and /signout-callback-oidc
+#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN / _DEPARTMENT_ADMIN / _PIPELINE_EDITOR / _REVIEWER / _VIEWER
+#                             groups that grant a RAG role (';'-separated); empty grants nothing
+# Optional
+#   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
+#   UME_RAG_GATEWAY_KEY_OnPrem / _External, UME_RAG_{API,ADMIN,WORKER}_GATEWAY_KEY_Eu (a key per service wins)
+#   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
+#   COMPOSE_PROFILES=data,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
+#                             ghcr.io as a registry in Portainer if the packages are private)
+# Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
+# without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
+# with pg_dump or volume snapshots.
+
+name: ume-gateway
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp]
+
+x-certs: &certs-mount
+  type: volume
+  source: ume-certs
+  target: /run/certs
+  read_only: true
+
+x-conf: &conf-mount
+  type: volume
+  source: ume-config
+  target: /run/config
+  read_only: true
+
+x-secrets: &secrets-mount
+  type: volume
+  source: ume-secrets
+  read_only: true
+
+x-rag-certs: &rag-certs-mount
+  type: volume
+  source: rag-certs
+  target: /run/certs
+  read_only: true
+
+x-rag-conf: &rag-conf-mount
+  type: volume
+  source: rag-config
+  target: /run/config
+  read_only: true
+
+x-rag-secrets: &rag-secrets-mount
+  type: volume
+  source: rag-secrets
+  target: /run/app-secrets
+  read_only: true
+
+services:
+  bootstrap:
+    image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
+    restart: "no"
+    entrypoint: [/bin/sh, /config/bootstrap.sh]
+    environment:
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:?Set UME_GATEWAY_HOST}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
+      UME_DATA_HOST: ${UME_DATA_HOST:-}
+      UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
+    configs:
+      - {source: bootstrap-script, target: /config/bootstrap.sh}
+      - {source: redis-acl-template, target: /config/users.acl.example}
+      - {source: redis-conf, target: /config/redis.conf}
+      - {source: postgres-init, target: /config/postgres-init.sql}
+      - {source: postgres-hba, target: /config/pg_hba.conf}
+      - {source: app-roles, target: /config/app-roles.sql}
+    volumes:
+      - ume-certs:/certs
+      - ume-secrets:/secrets
+      - ume-config:/conf
+    networks: [data]
+
+  postgres:
+    <<: *hardened
+    image: docker.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    user: "70:70"
+    restart: unless-stopped
+    tmpfs: [/tmp, "/var/run/postgresql:uid=70,gid=70,mode=0700"]
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/postgres-secrets/bootstrap_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+    command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/certs/postgres.crt, -c, ssl_key_file=/run/certs/postgres.key, -c, ssl_ca_file=/run/certs/ca.pem, -c, hba_file=/run/config/pg_hba.conf, -c, log_statement=none]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - {<<: *conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
+      - {<<: *conf-mount, volume: {subpath: postgres}}
+      - {<<: *certs-mount, volume: {subpath: postgres}}
+      - {<<: *secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    networks: [data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -d, gatewaydb]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    <<: *hardened
+    image: docker.io/library/redis:8.6@sha256:2f07354308a997554f9d676888ca927ada1293c7c2154dd01ae77f57dd9c6d5f
+    user: "999:999"
+    restart: unless-stopped
+    entrypoint: [redis-server]
+    command: [/run/config/redis.conf]
+    volumes:
+      - {<<: *conf-mount, volume: {subpath: redis}}
+      - {<<: *certs-mount, volume: {subpath: redis}}
+      - {<<: *secrets-mount, target: /run/redis-secrets, volume: {subpath: redis}}
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, "redis-cli --tls --cacert /run/certs/ca.pem -h redis PING | grep -q NOAUTH"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  migrations:
+    <<: *hardened
+    image: ${MIGRATIONS_IMAGE:?Set MIGRATIONS_IMAGE}
+    user: "1654:1654"
+    restart: "no"
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Migration__RolesSqlPath: /run/config/app-roles.sql
+      Seed__Enabled: "false"
+    volumes:
+      - {<<: *conf-mount, volume: {subpath: migrations}}
+      - {<<: *certs-mount, volume: {subpath: migrations}}
+      - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: migrations}}
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [data]
+
+  gateway:
+    <<: *hardened
+    image: ${GATEWAY_IMAGE:?Set GATEWAY_IMAGE}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    ports: ["${UME_GATEWAY_BIND:-0.0.0.0}:${UME_GATEWAY_PORT:-8443}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/gateway.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/gateway.key
+      Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: gateway
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - {<<: *certs-mount, volume: {subpath: gateway}}
+      - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: gateway}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrations: {condition: service_completed_successfully}
+    networks: [edge, data, llm]
+    healthcheck:
+      test: [CMD, dotnet, Ume.LlmGateway.Gateway.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  adminapi:
+    <<: *hardened
+    image: ${ADMINAPI_IMAGE:?Set ADMINAPI_IMAGE}
+    user: "1654:1654"
+    restart: unless-stopped
+    ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/adminapi.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/adminapi.key
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: adminapi
+      Oidc__Authority: ${UME_OIDC_AUTHORITY:?Set UME_OIDC_AUTHORITY (https URL)}
+      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-ume-admin}
+      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-roles}
+      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
+      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-teamCodes}
+      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-groups}
+      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-email}
+      Oidc__RoleGroups__gateway-admin: ${UME_OIDC_GROUPS_GATEWAY_ADMIN:-}
+      Oidc__RoleGroups__department-admin: ${UME_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
+      Oidc__RoleGroups__viewer: ${UME_OIDC_GROUPS_VIEWER:-}
+      Oidc__RoleGroups__team-admin: ${UME_OIDC_GROUPS_TEAM_ADMIN:-}
+      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:?Set UME_GATEWAY_PUBLIC_URL (https URL)}
+      DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
+      Gateway__OperationsUrl: https://gateway:8443
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *certs-mount, volume: {subpath: adminapi}}
+      - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: adminapi}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrations: {condition: service_completed_successfully}
+    networks: [edge, data]
+    healthcheck:
+      test: [CMD, dotnet, Ume.LlmGateway.AdminApi.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  # Optional read-only Data API for BI, management and security integrations (docs/data-access.md).
+  # Started only with the "data" profile: COMPOSE_PROFILES=data (or --profile data).
+  dataapi:
+    <<: *hardened
+    profiles: [data]
+    image: ${DATAAPI_IMAGE:-ume-llm-gateway/dataapi:latest}
+    user: "1654:1654"
+    restart: unless-stopped
+    ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Security__SecretsDirectory: /run/app-secrets
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/dataapi.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/dataapi.key
+      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY}}
+      DataApi__Audience: ${UME_DATA_AUDIENCE:-ume-data-api}
+      DataApi__MinimumGroupSize: ${UME_DATA_MINIMUM_GROUP_SIZE:-5}
+      DataApi__TimeZone: ${UME_DATA_TIME_ZONE:-Europe/Stockholm}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: dataapi
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *certs-mount, volume: {subpath: dataapi}}
+      - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: dataapi}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrations: {condition: service_completed_successfully}
+    networks: [edge, data]
+    healthcheck:
+      test: [CMD, dotnet, Ume.LlmGateway.DataApi.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-bootstrap:
+    image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
+    restart: "no"
+    entrypoint: [/bin/sh, /config/bootstrap.sh]
+    environment:
+      UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
+      UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      UME_RAG_GATEWAY_KEY_OnPrem: ${UME_RAG_GATEWAY_KEY_OnPrem:-}
+      UME_RAG_GATEWAY_KEY_Eu: ${UME_RAG_GATEWAY_KEY_Eu:-}
+      UME_RAG_GATEWAY_KEY_External: ${UME_RAG_GATEWAY_KEY_External:-}
+      UME_RAG_API_GATEWAY_KEY_Eu: ${UME_RAG_API_GATEWAY_KEY_Eu:-}
+      UME_RAG_ADMIN_GATEWAY_KEY_Eu: ${UME_RAG_ADMIN_GATEWAY_KEY_Eu:-}
+      UME_RAG_WORKER_GATEWAY_KEY_Eu: ${UME_RAG_WORKER_GATEWAY_KEY_Eu:-}
+      UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
+      UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
+    configs:
+      - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
+      - {source: rag-postgres-init, target: /config/postgres-init.sql}
+      - {source: rag-postgres-hba, target: /config/pg_hba.conf}
+      - {source: rag-postgres-conf, target: /config/postgresql.conf}
+      - {source: rag-app-roles, target: /config/app-roles.sql}
+    volumes:
+      - rag-certs:/certs
+      - rag-secrets:/secrets
+      - rag-config:/conf
+      - rag-blobs:/blobs
+      - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    network_mode: none
+
+  rag-postgres:
+    <<: *hardened
+    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.2.0@sha256:3e6b0818aba63e96b6fed69461f10f4b6856226d4f7a73cb6335b38f723433bb}
+    user: "999:999"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    tmpfs: [/tmp, "/var/run/postgresql:uid=999,gid=999,mode=0700"]
+    shm_size: 1g
+    cpus: 2.0
+    mem_reservation: 2g
+    mem_limit: 3g
+    pids_limit: 512
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/postgres-secrets/bootstrap_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+    # deploy/postgres/postgresql.conf (16 GB profile), without WAL archiving: this stack has no pgBackRest repository.
+    command: [postgres, -c, config_file=/run/config/postgresql.conf, -c, archive_mode=off]
+    volumes:
+      - rag-postgres-data:/var/lib/postgresql/data
+      - {<<: *rag-conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
+      - {<<: *rag-conf-mount, volume: {subpath: postgres}}
+      - {<<: *rag-certs-mount, volume: {subpath: postgres}}
+      - {<<: *rag-secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    networks: [rag-data]
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, ragdb]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  rag-migrate:
+    <<: *hardened
+    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.2.0@sha256:7943dbef6500fd2210a1cd420bed718b741a5eddf3a9cb8694adb65df09f25d3}
+    user: "1654:1654"
+    restart: "no"
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 128
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Migration__RolesSqlPath: /run/config/app-roles.sql
+      Seed__Enabled: "false"
+      # The platform embedding profile, seeded once (insert-if-absent) when the model is set.
+      EmbeddingProfile__GatewayModel: ${UME_RAG_EMBEDDING_MODEL:-}
+      EmbeddingProfile__Dimensions: ${UME_RAG_EMBEDDING_DIMENSIONS:-1024}
+      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-false}
+      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8192}
+      EmbeddingProfile__MaxResidency: ${UME_RAG_EMBEDDING_MAX_RESIDENCY:-Eu}
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *rag-conf-mount, volume: {subpath: migrations}}
+      - {<<: *rag-certs-mount, volume: {subpath: migrations}}
+      - {<<: *rag-secrets-mount, volume: {subpath: migrations}}
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+    networks: [rag-data]
+
+  rag-api:
+    <<: *hardened
+    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.2.0@sha256:3fbb166acc7495044329bf5b4f3c701b09487dd54a4a0716f53356f3f21f235c}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 2.0
+    mem_reservation: 384m
+    mem_limit: 1g
+    pids_limit: 512
+    ports: ["${UME_RAG_API_BIND:-0.0.0.0}:${UME_RAG_API_PORT:-8543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/api.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
+      Rag__Roles: knowledge,chat,mcp
+      BlobStore__Root: /data/blobs/rag
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
+      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL (https URL)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-api
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: api}}
+      - {<<: *rag-secrets-mount, volume: {subpath: api}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - {type: volume, source: rag-blobs, target: /data/blobs, read_only: true}
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      gateway: {condition: service_started}
+    networks:
+      rag-edge: {}
+      rag-data: {}
+      llm: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-admin:
+    <<: *hardened
+    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.2.0@sha256:2c8e3b12bbc3ed2118c87cc2a0612c74d3b76f95f935915bc728379c417638e2}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 1.0
+    mem_reservation: 256m
+    mem_limit: 512m
+    pids_limit: 256
+    ports: ["${UME_RAG_ADMIN_BIND:-0.0.0.0}:${UME_RAG_ADMIN_PORT:-9543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/admin.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
+      # The gateway's identity provider by default, with RAG's own client (never the gateway's).
+      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-${UME_OIDC_AUTHORITY}}
+      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
+      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-roles}
+      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
+      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-teamCodes}
+      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-groups}
+      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-email}
+      Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
+      Oidc__RoleGroups__rag-department-admin: ${UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
+      Oidc__RoleGroups__rag-pipeline-editor: ${UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR:-}
+      Oidc__RoleGroups__rag-reviewer: ${UME_RAG_OIDC_GROUPS_REVIEWER:-}
+      Oidc__RoleGroups__rag-viewer: ${UME_RAG_OIDC_GROUPS_VIEWER:-}
+      Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
+      Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
+      BlobStore__Root: /data/blobs/rag
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
+      # The gateway's Data API (COMPOSE_PROFILES=data): org sync and the model catalogue, with UME_RAG_ORG_SYNC_KEY.
+      OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-https://dataapi:8443}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-admin
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: admin}}
+      - {<<: *rag-secrets-mount, volume: {subpath: admin}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - rag-blobs:/data/blobs
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+    networks:
+      rag-edge: {}
+      rag-data: {}
+      llm: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-worker:
+    <<: *hardened
+    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.2.0@sha256:606e27dd997889b449c37e59ca96a259d768107f569962dc46741ddc4d5e1707}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 120s
+    cpus: 1.5
+    mem_reservation: 512m
+    mem_limit: 1.5g
+    pids_limit: 512
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
+      Parser__BaseUrl: https://rag-parser:8000
+      ClamAv__Host: rag-clamav
+      ClamAv__Port: "3310"
+      BlobStore__Root: /data/blobs/rag
+      TMPDIR: /data/blobs/spool
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-worker
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: worker}}
+      - {<<: *rag-secrets-mount, volume: {subpath: worker}}
+      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - rag-blobs:/data/blobs
+    depends_on:
+      rag-postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while.
+      rag-parser: {condition: service_started}
+      rag-clamav: {condition: service_started}
+    # rag-crawl holds the default route (the Internet); llm reaches the gateway.
+    networks:
+      rag-data: {}
+      llm: {}
+      rag-ingestion: {}
+      rag-parser: {}
+      rag-render: {}
+      rag-crawl: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-parser:
+    <<: *hardened
+    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.2.0@sha256:a3206d9b732bf91c329236a5ac9630748463875a50ccf98f6eb63e08ca6d9f50}
+    user: "10001:10001"
+    restart: unless-stopped
+    tmpfs: ["/tmp:size=1g"]
+    cpus: 2.0
+    mem_reservation: 2g
+    mem_limit: 3.5g
+    pids_limit: 256
+    environment:
+      PARSER_WORKERS: "1"
+      PARSER_THREADS: "2"
+      PARSER_SLOT_MAX_RSS_MB: "2200"
+      PARSER_TLS_CERT_FILE: /run/certs/parser.crt
+      PARSER_TLS_KEY_FILE: /run/certs/parser.key
+    volumes:
+      - {<<: *rag-certs-mount, volume: {subpath: parser}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    # Internal network only: no egress at all (parser design §11).
+    networks: [rag-parser]
+
+  rag-clamav:
+    <<: *hardened
+    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.2.0@sha256:88b90287deafedcdbc5209a9b3c485c72fc4c23ad395d9ff994d33b35cf1a0ec}
+    user: "1000:1000"
+    restart: unless-stopped
+    cpus: 1.0
+    mem_reservation: 1.2g
+    mem_limit: 1.5g
+    pids_limit: 128
+    volumes:
+      - rag-clamav-db:/var/lib/clamav
+    # rag-mirror: freshclam's download; rag-ingestion: the worker's INSTREAM on 3310.
+    networks: [rag-ingestion, rag-mirror]
+
+  # Chromium for JavaScript-rendered pages (connectors design §8.3). Off by default: add render to COMPOSE_PROFILES.
+  # Chromium's sandbox needs user namespaces, which Docker's default seccomp profile blocks, and Portainer cannot read
+  # images/renderer/seccomp.json from a file, so this service runs without Docker's seccomp filter (Chromium's own
+  # sandbox stays on). Without it, the worker refuses rendering and indexes the pages' HTML as served.
+  rag-renderer:
+    <<: *hardened
+    profiles: [render]
+    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.2.0@sha256:bdef11f13cf5bc15fc3950b7cb464726563773338548281c3d524e276be131ef}
+    user: "10002:10002"
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true, seccomp=unconfined]
+    init: true
+    tmpfs: ["/tmp:size=512m"]
+    cpus: 2.0
+    mem_reservation: 256m
+    mem_limit: 2g
+    pids_limit: 512
+    # The image reads its secret path only from the environment: read it from the volume, then start as the image does.
+    entrypoint: [/bin/sh, -c, 'UME_RAG_RENDER_WS_PATH="$$(cat /run/render/ws-path)" exec /srv/renderer/start.sh']
+    volumes:
+      - {type: volume, source: rag-secrets, target: /run/render, read_only: true, volume: {subpath: renderer}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+    networks: [rag-render]
+
+configs:
+  bootstrap-script:
+    content: |
+      #!/bin/sh
+      # One-shot bootstrap for compose.portainer.yaml: creates the internal CA, service certificates,
+      # Data Protection certificate, passwords, key pepper and Redis ACL in the ume-certs / ume-secrets
+      # volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
+      # certificate would break existing data); service certificates are re-issued when they expire
+      # within 30 days or the hostnames change. Inputs come from environment variables.
+      set -eu
+      umask 077
+      C=/certs
+      S=/secrets
+      : "$${UME_GATEWAY_HOST:?Set UME_GATEWAY_HOST (public hostname of the gateway API)}"
+      ADMIN_HOST="$${UME_ADMIN_HOST:-$$UME_GATEWAY_HOST}"
+      DATA_HOST="$${UME_DATA_HOST:-$$UME_GATEWAY_HOST}"
+      for d in postgres redis gateway adminapi dataapi migrations; do mkdir -p "$$C/$$d" "$$S/$$d"; done
+      rand() { openssl rand -hex 32; }
+      quiet() { "$$@" >/dev/null 2>&1; }
+
+      # A CA from an earlier version has no keyUsage, which strict clients (Python 3.13, newer Go and Java) refuse: it is
+      # replaced, and every certificate it issued is re-issued below because it no longer verifies.
+      if [ -f "$$C/ca.pem" ] && ! openssl x509 -noout -text -in "$$C/ca.pem" | grep -q "X509v3 Key Usage"; then
+        echo "bootstrap: replacing the internal CA (no keyUsage)"
+        mv "$$C/ca.pem" "$$C/ca.pem.old"; rm -f "$$C/ca.key"
+      fi
+      if [ ! -f "$$C/ca.pem" ]; then
+        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout "$$C/ca.key" -out "$$C/ca.pem" -days 3650 -subj /CN=ume-gateway-internal-ca \
+          -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+      fi
+
+      # issue SERVICE SAN-LIST: (re)issue unless a valid certificate for exactly these names, from the current CA, exists
+      issue() {
+        svc="$$1"; san="$$2"; dir="$$C/$$svc"
+        if [ -f "$$dir/$$svc.crt" ] && [ "$$(cat "$$dir/.san" 2>/dev/null)" = "$$san" ] &&
+           quiet openssl x509 -checkend 2592000 -noout -in "$$dir/$$svc.crt" && quiet openssl verify -CAfile "$$C/ca.pem" "$$dir/$$svc.crt"; then
+          return
+        fi
+        echo "bootstrap: issuing certificate for $$svc ($$san)"
+        quiet openssl req -newkey rsa:3072 -nodes -keyout "$$dir/$$svc.key" -out "/tmp/$$svc.csr" -subj "/CN=$$svc"
+        printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' \
+          "$$san" > "/tmp/$$svc.ext"
+        quiet openssl x509 -req -in "/tmp/$$svc.csr" -CA "$$C/ca.pem" -CAkey "$$C/ca.key" -CAcreateserial -CAserial /tmp/ca.srl \
+          -out "$$dir/$$svc.crt" -days 825 -extfile "/tmp/$$svc.ext"
+        printf '%s' "$$san" > "$$dir/.san"
+      }
+      issue postgres "DNS:postgres,DNS:localhost"
+      issue redis "DNS:redis,DNS:localhost"
+      issue gateway "DNS:gateway,DNS:localhost,DNS:$$UME_GATEWAY_HOST"
+      issue adminapi "DNS:adminapi,DNS:localhost,DNS:$$ADMIN_HOST"
+      issue dataapi "DNS:dataapi,DNS:localhost,DNS:$$DATA_HOST"
+
+      if [ ! -f "$$C/data-protection.pfx" ]; then
+        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout /tmp/dp.key -out /tmp/dp.crt -days 3650 -subj /CN=ume-gateway-data-protection
+        quiet openssl pkcs12 -export -inkey /tmp/dp.key -in /tmp/dp.crt -out "$$C/data-protection.pfx" -passout pass:
+      fi
+      for d in gateway adminapi migrations; do cp "$$C/data-protection.pfx" "$$C/$$d/data-protection.pfx"; done
+      for d in postgres redis gateway adminapi dataapi migrations; do cp "$$C/ca.pem" "$$C/$$d/ca.pem"; done
+
+      for role in bootstrap migrator gateway admin data; do
+        [ -f "$$S/postgres/$${role}_password" ] || rand > "$$S/postgres/$${role}_password"
+      done
+      [ -f "$$S/redis/redis_password" ] || rand > "$$S/redis/redis_password"
+      # The ACL is derived (password hash + the template's command list), so it is rewritten on every start: an upgrade that
+      # allows the gateway a new Redis command reaches existing deployments with a redeploy.
+      hash="$$(tr -d '\n' < "$$S/redis/redis_password" | openssl dgst -sha256 | awk '{print $$NF}')"
+      sed "s/REPLACE_WITH_SHA256_PASSWORD_HASH/$$hash/" /config/users.acl.example > "$$S/redis/users.acl"
+      [ -f "$$S/.pepper" ] || openssl rand -hex 48 > "$$S/.pepper"
+      for svc in gateway adminapi migrations; do
+        role="$$svc"; case "$$svc" in adminapi) role=admin;; migrations) role=migrator;; esac
+        printf '%s' "$$(cat "$$S/.pepper")" > "$$S/$$svc/Security__KeyPepper"
+        printf 'Host=postgres;Database=gatewaydb;Username=ume_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+          "$$role" "$$(cat "$$S/postgres/$${role}_password")" > "$$S/$$svc/ConnectionStrings__gatewaydb"
+        if [ "$$svc" != migrations ]; then
+          printf 'redis:6379,user=gateway,password=%s,ssl=true,sslHost=redis,abortConnect=false' \
+            "$$(cat "$$S/redis/redis_password")" > "$$S/$$svc/ConnectionStrings__redis"
+        fi
+      done
+      # Data API (optional, profile "data"): read-only role, no pepper, no Redis.
+      printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+        "$$(cat "$$S/postgres/data_password")" > "$$S/dataapi/ConnectionStrings__gatewaydb"
+      # Confidential OIDC client (optional); the file follows the variable, so removing it clears the secret.
+      if [ -n "$${UME_OIDC_CLIENT_SECRET:-}" ]; then
+        printf '%s' "$$UME_OIDC_CLIENT_SECRET" > "$$S/adminapi/Oidc__ClientSecret"
+      else
+        rm -f "$$S/adminapi/Oidc__ClientSecret"
+      fi
+
+      # Static configuration files (services run read-only, so they get them from a volume).
+      F=/conf
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/redis" "$$F/migrations"
+      cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
+      cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
+      cp /config/redis.conf "$$F/redis/redis.conf"
+      cp /config/app-roles.sql "$$F/migrations/app-roles.sql"
+      chmod -R a+rX "$$F"
+
+      chown -R 70:70 "$$C/postgres" "$$S/postgres"
+      chown -R 999:999 "$$C/redis" "$$S/redis"
+      chown -R 1654:1654 "$$C/gateway" "$$C/adminapi" "$$C/dataapi" "$$C/migrations" "$$S/gateway" "$$S/adminapi" "$$S/dataapi" "$$S/migrations"
+      chmod 755 "$$C" "$$S"
+      echo "bootstrap: certificates and secrets ready"
+  redis-acl-template:
+    content: |
+      user default off
+      user gateway on #REPLACE_WITH_SHA256_PASSWORD_HASH ~ume:* &ume:invalidate -@all +auth +hello +ping +echo +quit +client|setname +client|setinfo +client|id +info +get +mget +set +setex +psetex +incr +incrby +decr +decrby +expire +pexpire +del +zadd +zrem +zcard +zremrangebyscore +zrangebyscore +eval +evalsha +script|load +publish +subscribe +unsubscribe
+  redis-conf:
+    content: |
+      bind 0.0.0.0
+      protected-mode yes
+      port 0
+      tls-port 6379
+      tls-cert-file /run/certs/redis.crt
+      tls-key-file /run/certs/redis.key
+      tls-ca-cert-file /run/certs/ca.pem
+      tls-auth-clients no
+      aclfile /run/redis-secrets/users.acl
+      save ""
+      appendonly no
+      loglevel warning
+  postgres-init:
+    content: |
+      SET log_statement = 'none';
+      DO $$$$
+      BEGIN
+        EXECUTE format('CREATE ROLE ume_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/migrator_password'), E'\r\n '));
+        EXECUTE format('CREATE ROLE ume_gateway LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/gateway_password'), E'\r\n '));
+        EXECUTE format('CREATE ROLE ume_admin LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/admin_password'), E'\r\n '));
+        -- Read-only role for the optional Data API (docs/data-access.md); only when a password was provisioned.
+        -- Test one field: a record IS NOT NULL only when every field is, and some are always null on Linux.
+        IF (pg_stat_file('/run/postgres-secrets/data_password', true)).size IS NOT NULL THEN
+          EXECUTE format('CREATE ROLE ume_data LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+            btrim(pg_read_file('/run/postgres-secrets/data_password'), E'\r\n '));
+        END IF;
+        -- Optional Keycloak (deploy/keycloak, docs/keycloak.md): its own role and database, only when provisioned.
+        IF (pg_stat_file('/run/postgres-secrets/keycloak_password', true)).size IS NOT NULL THEN
+          EXECUTE format('CREATE ROLE ume_keycloak LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+            btrim(pg_read_file('/run/postgres-secrets/keycloak_password'), E'\r\n '));
+        END IF;
+      END $$$$;
+      SELECT 'CREATE DATABASE keycloak OWNER ume_keycloak' WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_keycloak')\gexec
+      CREATE DATABASE gatewaydb OWNER ume_migrator;
+      REVOKE ALL ON DATABASE gatewaydb FROM PUBLIC;
+      GRANT CONNECT ON DATABASE gatewaydb TO ume_gateway, ume_admin;
+      \connect gatewaydb
+      REVOKE ALL ON SCHEMA public FROM PUBLIC;
+      ALTER SCHEMA public OWNER TO ume_migrator;
+      GRANT USAGE ON SCHEMA public TO ume_gateway, ume_admin;
+      DO $$$$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_data') THEN
+          GRANT CONNECT ON DATABASE gatewaydb TO ume_data;
+          GRANT USAGE ON SCHEMA public TO ume_data;
+        END IF;
+      END $$$$;
+  postgres-hba:
+    content: |
+      local all all scram-sha-256
+      hostnossl all all all reject
+      hostssl gatewaydb ume_migrator,ume_gateway,ume_admin,ume_data all scram-sha-256
+      # Optional Keycloak (deploy/keycloak): its own database only.
+      hostssl keycloak ume_keycloak all scram-sha-256
+  app-roles:
+    content: |
+      -- Applied by the migration service on every start. The service roles' table privileges are revoked and granted again in
+      -- one transaction, so each role holds exactly what this file lists (a privilege removed here is removed from existing
+      -- installations too) and running services see either the old or the new grants, never none. Tables are named one by
+      -- one: a new table is readable by no service until it is added here (DatabaseRoleTests checks the effective grants).
+      -- No curly braces: the migration service runs this file with EF Core's ExecuteSqlRaw, which reads them as placeholders.
+      BEGIN;
+      REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ume_gateway, ume_admin;
+      REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ume_gateway, ume_admin;
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ume_gateway, ume_admin;
+
+      -- The settings row exists before any service runs, so the admin role needs no INSERT on it (an insert could set
+      -- UsageRetainedFrom, which only the retention function may move).
+      INSERT INTO "GatewaySettings" ("Id", "TrustedProxies", "AuditRetentionDays") VALUES (1, ARRAY[]::text[], 365) ON CONFLICT ("Id") DO NOTHING;
+      -- The same for the admin console's branding (organisation name and logo; the name's default is the column default).
+      INSERT INTO "Branding" ("Id") VALUES (1) ON CONFLICT ("Id") DO NOTHING;
+
+      -- Gateway (faces the clients): what it authenticates, routes and accounts with. Not the audit log or Data API keys. It reads
+      -- the Data Protection key ring but does not add keys (it only decrypts; the admin API creates and rotates them).
+      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
+        "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
+        "UsageRecords", "UsageMonthlyTotals", "AlertEvents", "AuthFailures", "DataProtectionKeys" TO ume_gateway;
+      GRANT INSERT ON "UsageRecords", "AlertEvents", "AuthFailures" TO ume_gateway;
+      GRANT UPDATE ("LastUsedAt") ON "VirtualKeys" TO ume_gateway;
+
+      -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
+      -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.
+      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
+        "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
+        "UsageRecords", "UsageMonthlyTotals", "AuditLog", "AlertEvents", "AuthFailures", "DataProtectionKeys",
+        "Branding", "__EFMigrationsHistory" TO ume_admin;
+      GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "ProviderAccounts",
+        "ModelDeployments", "ModelPrices", "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets",
+        "Budgets", "DataApiKeys" TO ume_admin;
+      GRANT UPDATE ("TrustedProxies", "LogAllRequests", "LogAllRequestsUntil", "UpdatedAt", "UsageRetentionDays", "AuditRetentionDays",
+        "RetentionLastRunAt", "RetentionLastRunDeleted", "RetentionLastRunError") ON "GatewaySettings" TO ume_admin;
+      GRANT UPDATE ("OrganisationName", "Logo", "LogoContentType", "UpdatedAt") ON "Branding" TO ume_admin;
+      GRANT INSERT ON "AuditLog", "DataProtectionKeys" TO ume_admin;
+      GRANT UPDATE ("Acknowledged") ON "AlertEvents" TO ume_admin;
+      -- Data retention: old rows are removed only through this function (owner's rights, minimum 90 days); the admin role
+      -- has no DELETE on usage, refused-credential, alert or audit rows.
+      GRANT EXECUTE ON FUNCTION ume_retention_step(integer) TO ume_admin;
+      -- Data API (optional): read-only, and column by column where a table holds secrets, so the role cannot
+      -- read key hashes, encrypted key secrets or provider credentials even through a bug. Skipped while the
+      -- role does not exist (it is created by init.sql on new installs; see docs/upgrade-guide.md for existing ones).
+      DO $$$$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_data') THEN
+          GRANT CONNECT ON DATABASE gatewaydb TO ume_data;
+          GRANT USAGE ON SCHEMA public TO ume_data;
+          GRANT SELECT ON "UsageRecords", "AuthFailures", "AuditLog", "Departments", "Teams", "ModelDeployments",
+            "ModelPrices", "Budgets", "UsageMonthlyTotals" TO ume_data;
+          GRANT SELECT ("UsageRetainedFrom") ON "GatewaySettings" TO ume_data;
+          GRANT SELECT ("Id", "TeamId", "Name", "Description", "Prefix", "IsEnabled", "CreatedAt", "CreatedBy", "ExpiresAt",
+            "RevokedAt", "GraceUntil", "RotatedToKeyId", "LastUsedAt", "AllowedModels", "AllowedResidencies", "AllowedProviders",
+            "AllowedIpRanges", "PiiPolicy", "AttachmentPolicy", "RequestsPerMinute", "TokensPerMinute", "AllowProviderTools",
+            "AllowProviderStorage", "MaxConcurrentRequests") ON "VirtualKeys" TO ume_data;
+          GRANT SELECT ("Id", "Name", "DisplayName", "Type", "Residency", "IsEnabled") ON "ProviderAccounts" TO ume_data;
+          -- Its own credentials: the key hash (SHA-256 of a 256-bit random key) to authenticate Data API keys, and the
+          -- only column it may write, the approximate last use.
+          GRANT SELECT ("Id", "Name", "Prefix", "KeyHash", "Permissions", "ExpiresAt", "RevokedAt", "LastUsedAt") ON "DataApiKeys" TO ume_data;
+          GRANT UPDATE ("LastUsedAt") ON "DataApiKeys" TO ume_data;
+        END IF;
+      END $$$$;
+      COMMIT;
+  rag-bootstrap-script:
+    content: |
+      #!/bin/sh
+      # One-shot bootstrap of the RAG part of compose.portainer.yaml (the gateway's stack plus RAG, one Portainer stack).
+      # The Portainer counterpart of deploy/init-deployment.sh, after the gateway's deploy/portainer/bootstrap.sh: creates
+      # RAG's internal CA, its service certificates, the Data Protection certificate, the database passwords, the key pepper,
+      # the api's keys, the worker's crawl key pepper, the renderer's WebSocket path and the blob master key in the rag-certs
+      # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
+      # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
+      # re-issued when they expire within 30 days or their host names change. Files that follow a variable (gateway keys,
+      # the Data API key, the OIDC client secret) are written again on every start, and removed when the variable is empty.
+      #
+      # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
+      # volume, mounted at /gateway-certs), so https://gateway:8443 and https://dataapi:8443 verify.
+      set -eu
+      umask 077
+      C=/certs
+      S=/secrets
+      F=/conf
+      : "$${UME_RAG_API_HOST:?Set UME_RAG_API_HOST (public hostname of rag-api)}"
+      ADMIN_HOST="$${UME_RAG_ADMIN_HOST:-$$UME_RAG_API_HOST}"
+      for d in postgres api admin worker parser migrations; do mkdir -p "$$C/$$d"; done
+      for d in postgres api admin worker migrations keys renderer; do mkdir -p "$$S/$$d"; done
+      rand() { openssl rand -hex 32; }
+      quiet() { "$$@" >/dev/null 2>&1; }
+
+      if [ ! -f "$$C/ca.pem" ]; then
+        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout "$$C/ca.key" -out "$$C/ca.pem" -days 3650 -subj /CN=ume-rag-internal-ca \
+          -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+      fi
+
+      # issue DIR SAN-LIST: (re)issue unless a valid certificate for exactly these names, from the current CA, exists
+      issue() {
+        svc="$$1"; san="$$2"; dir="$$C/$$svc"
+        if [ -f "$$dir/$$svc.crt" ] && [ "$$(cat "$$dir/.san" 2>/dev/null)" = "$$san" ] &&
+           quiet openssl x509 -checkend 2592000 -noout -in "$$dir/$$svc.crt" && quiet openssl verify -CAfile "$$C/ca.pem" "$$dir/$$svc.crt"; then
+          return
+        fi
+        echo "rag-bootstrap: issuing certificate for $$svc ($$san)"
+        quiet openssl req -newkey rsa:3072 -nodes -keyout "$$dir/$$svc.key" -out "/tmp/$$svc.csr" -subj "/CN=$$svc"
+        printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' \
+          "$$san" > "/tmp/$$svc.ext"
+        quiet openssl x509 -req -in "/tmp/$$svc.csr" -CA "$$C/ca.pem" -CAkey "$$C/ca.key" -CAcreateserial -CAserial /tmp/ca.srl \
+          -out "$$dir/$$svc.crt" -days 825 -extfile "/tmp/$$svc.ext"
+        printf '%s' "$$san" > "$$dir/.san"
+      }
+      issue postgres "DNS:rag-postgres,DNS:localhost"
+      issue api "DNS:rag-api,DNS:localhost,DNS:$$UME_RAG_API_HOST"
+      issue admin "DNS:rag-admin,DNS:localhost,DNS:$$ADMIN_HOST"
+      issue worker "DNS:rag-worker,DNS:localhost"
+      issue parser "DNS:rag-parser,DNS:localhost"
+
+      if [ ! -f "$$C/data-protection.pfx" ]; then
+        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout /tmp/dp.key -out /tmp/dp.crt -days 3650 -subj /CN=ume-rag-data-protection
+        quiet openssl pkcs12 -export -inkey /tmp/dp.key -in /tmp/dp.crt -out "$$C/data-protection.pfx" -passout pass:
+      fi
+      for d in api admin migrations; do cp "$$C/data-protection.pfx" "$$C/$$d/data-protection.pfx"; done
+      for d in postgres parser migrations; do cp "$$C/ca.pem" "$$C/$$d/ca.pem"; done
+      [ -f /gateway-certs/ca.pem ] || { echo "rag-bootstrap: the gateway's CA (/gateway-certs/ca.pem) is missing" >&2; exit 1; }
+      for d in api admin worker; do cat "$$C/ca.pem" /gateway-certs/ca.pem > "$$C/$$d/ca.pem"; done
+
+      # --- Database (connection pools per instance, data-model §1.1: api 12, admin 5, worker 10, migrator 2) ---------------
+      for role in bootstrap migrator api admin worker; do
+        [ -f "$$S/postgres/$${role}_password" ] || rand > "$$S/postgres/$${role}_password"
+      done
+      connection() {
+        printf 'Host=rag-postgres;Database=ragdb;Username=ume_rag_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable;Maximum Pool Size=%s' \
+          "$$1" "$$(tr -d '\r\n' < "$$S/postgres/$${1}_password")" "$$2"
+      }
+      connection migrator 2 > "$$S/migrations/ConnectionStrings__ragdb"
+      connection api 12 > "$$S/api/ConnectionStrings__ragdb"
+      connection admin 5 > "$$S/admin/ConnectionStrings__ragdb"
+      connection worker 10 > "$$S/worker/ConnectionStrings__ragdb"
+      [ -f "$$S/.pepper" ] || openssl rand -hex 48 > "$$S/.pepper"
+      for d in migrations api admin; do tr -d '\n' < "$$S/.pepper" > "$$S/$$d/Security__KeyPepper"; done
+
+      # --- The api's and the worker's own keys --------------------------------------------------------------------------
+      [ -f "$$S/api/Security__DownloadGrantKeys__k1" ] || rand > "$$S/api/Security__DownloadGrantKeys__k1"
+      [ -f "$$S/api/Security__CacheKeyPepper" ] || rand > "$$S/api/Security__CacheKeyPepper"
+      [ -f "$$S/api/Security__ConversationIdKeys__k1" ] || rand > "$$S/api/Security__ConversationIdKeys__k1"
+      # Open WebUI's user JWT secret: unused without Open WebUI, but rag-api expects the file (identity design §5.2).
+      [ -f "$$S/.openwebui-jwt-secret" ] || rand > "$$S/.openwebui-jwt-secret"
+      tr -d '\n' < "$$S/.openwebui-jwt-secret" > "$$S/api/OpenWebUi__JwtSecret"
+      [ -f "$$S/worker/Security__CrawlKeyPepper" ] || rand | tr -d '\n' > "$$S/worker/Security__CrawlKeyPepper"
+      # The renderer's secret WebSocket path (connectors design §8.3): the worker gets the endpoint only while the render
+      # profile is on, so without the renderer it refuses rendering instead of waiting for a browser that never starts.
+      [ -f "$$S/.render-ws-path" ] || rand > "$$S/.render-ws-path"
+      printf '/%s' "$$(tr -d '\r\n' < "$$S/.render-ws-path")" > "$$S/renderer/ws-path"
+      case ",$${COMPOSE_PROFILES:-}," in
+        *,render,*) printf 'ws://rag-renderer:3000/%s' "$$(tr -d '\r\n' < "$$S/.render-ws-path")" > "$$S/worker/Render__Endpoint" ;;
+        *) rm -f "$$S/worker/Render__Endpoint" ;;
+      esac
+      # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
+      if [ ! -f "$$S/keys/rag-blob-internal" ]; then
+        openssl rand -base64 32 > "$$S/keys/rag-blob-internal"
+        chmod 0400 "$$S/keys/rag-blob-internal"
+      fi
+
+      # --- Files that follow a variable ------------------------------------------------------------------------------
+      # put SERVICE NAME VALUE: the secret file NAME of SERVICE holds VALUE; an empty VALUE removes it.
+      put() {
+        if [ -n "$$3" ]; then printf '%s' "$$3" > "$$S/$$1/$$2"; else rm -f "$$S/$$1/$$2"; fi
+      }
+      # Gateway keys per level: the shared one for api, admin and worker, a service's own one wins. The worker never holds
+      # External (simplification pass §6).
+      for level in OnPrem Eu External; do
+        shared="$$(printenv "UME_RAG_GATEWAY_KEY_$$level" || true)"
+        for svc in api admin worker; do
+          [ "$$svc:$$level" = worker:External ] && continue
+          up="$$(echo "$$svc" | tr a-z A-Z)"
+          own="$$(printenv "UME_RAG_$${up}_GATEWAY_KEY_$$level" || true)"
+          put "$$svc" "Gateway__Keys__$$level" "$${own:-$$shared}"
+        done
+      done
+      put admin Oidc__ClientSecret "$${UME_RAG_OIDC_CLIENT_SECRET:-}"
+      put admin OrgSync__DataApiKey "$${UME_RAG_ORG_SYNC_KEY:-}"
+
+      # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations"
+      cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
+      cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
+      cp /config/postgresql.conf "$$F/postgres/postgresql.conf"
+      cp /config/app-roles.sql "$$F/migrations/app-roles.sql"
+      chmod -R a+rX "$$F"
+
+      # --- Blob container (issue #41): rag/ and the worker's spool, owned by the services' uid ----------------------------
+      mkdir -p /blobs/rag /blobs/spool
+      chown 1654:1654 /blobs/rag /blobs/spool
+      chmod 0750 /blobs/rag /blobs/spool
+
+      chown -R 999:999 "$$C/postgres" "$$S/postgres"
+      chown -R 10001:10001 "$$C/parser"
+      chown -R 10002:10002 "$$S/renderer"
+      chown -R 1654:1654 "$$C/api" "$$C/admin" "$$C/worker" "$$C/migrations" "$$S/api" "$$S/admin" "$$S/worker" "$$S/migrations" "$$S/keys"
+      chmod 755 "$$C" "$$S"
+      missing=""
+      for svc in api admin worker; do [ -e "$$S/$$svc/Gateway__Keys__Eu" ] || missing="$$missing $$svc"; done
+      [ -z "$$missing" ] || echo "rag-bootstrap: no Eu gateway key for$${missing}: set UME_RAG_GATEWAY_KEY_Eu (model calls fail until then)"
+      [ -e "$$S/admin/OrgSync__DataApiKey" ] || echo "rag-bootstrap: no UME_RAG_ORG_SYNC_KEY: the model catalogue and org sync stay off"
+      echo "rag-bootstrap: certificates and secrets ready"
+  rag-postgres-init:
+    content: |
+      -- Bootstrap, run once by the image entrypoint as the bootstrap superuser (mounted as
+      -- /docker-entrypoint-initdb.d/10-roles.sql; repo-and-deployment §5.2). Creates the login roles from secret files, the
+      -- database ragdb owned by the DDL role, the vector extension (not a trusted extension) and the role caps and defaults of
+      -- data-model §1.1. Schemas, tables and grants come from the migration service (migrations, then app-roles.sql).
+      SET log_statement = 'none';
+      DO $$$$
+      BEGIN
+        EXECUTE format('CREATE ROLE ume_rag_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/migrator_password'), E'\r\n '));
+        EXECUTE format('CREATE ROLE ume_rag_api LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/api_password'), E'\r\n '));
+        EXECUTE format('CREATE ROLE ume_rag_admin LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/admin_password'), E'\r\n '));
+        EXECUTE format('CREATE ROLE ume_rag_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+          btrim(pg_read_file('/run/postgres-secrets/worker_password'), E'\r\n '));
+      END $$$$;
+      CREATE DATABASE ragdb OWNER ume_rag_migrator;
+      REVOKE ALL ON DATABASE ragdb FROM PUBLIC;
+      GRANT CONNECT ON DATABASE ragdb TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+
+      -- Caps and timeouts (data-model §1.1). Pool sizes per instance: api 12, admin 5, worker 10, migrator 2, each + 1 LISTEN
+      -- connection; the limits leave room for a second api and admin instance and the worker's stop-then-start.
+      ALTER ROLE ume_rag_migrator CONNECTION LIMIT 3;
+      ALTER ROLE ume_rag_migrator IN DATABASE ragdb SET lock_timeout = '10s';
+      ALTER ROLE ume_rag_migrator IN DATABASE ragdb SET maintenance_work_mem = '1GB';   -- HNSW builds
+      ALTER ROLE ume_rag_api CONNECTION LIMIT 26;
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET statement_timeout = '5s';
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET lock_timeout = '1s';
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET idle_in_transaction_session_timeout = '10s';
+      ALTER ROLE ume_rag_admin CONNECTION LIMIT 12;
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET statement_timeout = '30s';
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET lock_timeout = '5s';
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET idle_in_transaction_session_timeout = '60s';
+      ALTER ROLE ume_rag_worker CONNECTION LIMIT 12;
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET statement_timeout = '60s';
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET lock_timeout = '5s';
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET idle_in_transaction_session_timeout = '60s';
+
+      -- Retrieval defaults (knowledge design §6.4): no retrieval statement runs SET LOCAL. The api searches, the worker runs
+      -- the retrieval evaluator, the admin runs the test panel.
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100;
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
+      ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.max_scan_tuples = 100000;
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET hnsw.ef_search = 100;
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
+      ALTER ROLE ume_rag_worker IN DATABASE ragdb SET hnsw.max_scan_tuples = 100000;
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET hnsw.ef_search = 100;
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
+      ALTER ROLE ume_rag_admin IN DATABASE ragdb SET hnsw.max_scan_tuples = 100000;
+
+      \connect ragdb
+      -- The public schema keeps only the extension (data-model §1).
+      CREATE EXTENSION vector;
+      REVOKE ALL ON SCHEMA public FROM PUBLIC;
+      ALTER SCHEMA public OWNER TO ume_rag_migrator;
+      GRANT USAGE ON SCHEMA public TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+  rag-postgres-hba:
+    content: |
+      # Client authentication for ume-rag/postgres (data-model §1.1), mounted as /run/config/pg_hba.conf. The first matching
+      # line wins. pgBackRest runs inside the container as the postgres OS user and connects over the Unix socket by peer
+      # (repo-and-deployment §7.4); every other local login needs a password. Over the network only TLS, only to ragdb and
+      # only for the four service roles; the bootstrap superuser never logs in over the network.
+      local   all     postgres                                                        peer
+      local   all     all                                                             scram-sha-256
+      hostnossl all   all     all                                                     reject
+      hostssl ragdb   ume_rag_migrator,ume_rag_admin,ume_rag_api,ume_rag_worker  all  scram-sha-256
+  rag-postgres-conf:
+    content: |
+      # PostgreSQL settings for ume-rag/postgres on the pilot host (repo-and-deployment §6.2). Mounted read-only and passed
+      # with `postgres -c config_file=/etc/postgresql/postgresql.conf`; the data directory still comes from PGDATA. It replaces
+      # the postgresql.conf that initdb writes, so every setting not listed here is the PostgreSQL built-in default.
+      # Values are the 16 GB host profile; the 24 GB values are in the comments. The P2 multi-host profile is §6.2 too.
+
+      # Connections. The initdb file sets listen_addresses = '*'; the built-in default would be localhost only.
+      listen_addresses = '*'
+      max_connections = 100                   # data-model §1.1 (role limits sum to 56)
+      superuser_reserved_connections = 3      # data-model §1.1 budget rule (the built-in default)
+
+      # TLS with the internal CA; paths as in the gateway's compose.prod.yaml (mounted from $${UME_RAG_CERTS_DIR}/postgres).
+      ssl = on
+      ssl_cert_file = '/run/certs/postgres.crt'
+      ssl_key_file = '/run/certs/postgres.key'
+      ssl_ca_file = '/run/certs/ca.pem'
+      hba_file = '/run/config/pg_hba.conf'    # deploy/postgres/pg_hba.conf, mounted as in the gateway
+
+      # Memory
+      shared_buffers = 768MB                  # 24 GB: 1536MB
+      effective_cache_size = 2GB              # 24 GB: 3500MB
+      work_mem = 8MB
+      maintenance_work_mem = 512MB            # 24 GB: 1GB (HNSW builds)
+      max_parallel_maintenance_workers = 2
+      max_worker_processes = 8
+
+      # WAL and continuous archiving with pgBackRest inside this container (§7.4): synchronous archive-push, no spool, and a
+      # segment switch at least every 60 s so the archive lags by at most a minute (RPO ≤ 5 min).
+      wal_level = replica
+      wal_compression = lz4
+      archive_mode = on
+      archive_command = 'pgbackrest --stanza=ragdb archive-push %p'
+      archive_timeout = 60
+
+      # Statistics and logging
+      shared_preload_libraries = 'pg_stat_statements'   # capacity metrics (§9)
+      log_statement = 'none'                            # as the gateway
+  rag-app-roles:
+    content: |
+      -- Applied by the migration service after every migration run (data-model §1.2, as the gateway's file). The service
+      -- roles' privileges are revoked and granted again in one transaction, so each role holds exactly what this file lists
+      -- (a privilege removed here is removed from existing installations too) and running services see either the old or the
+      -- new grants, never none. Tables are named one by one: a new table is readable by no service until it is added here
+      -- (DatabaseRoleTests checks the effective grants). Partitioned tables are granted on the parent only.
+      -- No curly braces: the migration service runs this file with EF Core's ExecuteSqlRaw, which reads them as placeholders.
+      BEGIN;
+      REVOKE ALL ON ALL TABLES IN SCHEMA config, content, chat, audit FROM ume_rag_api, ume_rag_admin, ume_rag_worker;
+      REVOKE ALL ON ALL SEQUENCES IN SCHEMA config, content, chat, audit FROM ume_rag_api, ume_rag_admin, ume_rag_worker;
+      REVOKE ALL ON SCHEMA config, content, chat, audit FROM ume_rag_api, ume_rag_admin, ume_rag_worker;
+
+      GRANT USAGE ON SCHEMA config, content, audit TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+      GRANT USAGE ON SCHEMA chat TO ume_rag_api, ume_rag_admin;
+
+      -- Sequences in the schemas each role writes.
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA config, content, audit TO ume_rag_admin;
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA config, chat, audit TO ume_rag_api;
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA content, audit TO ume_rag_worker;
+
+      -- config: the version row and the outbox are written only by the trigger function (owner's rights). The admin's
+      -- UPDATE on ConfigVersion exists only for the FOR UPDATE lock that serialises config writes (data-model §5).
+      GRANT SELECT ON config."ConfigVersion", config."ConfigOutbox" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+      GRANT UPDATE ON config."ConfigVersion" TO ume_rag_admin;
+      -- The admin creates and rotates the Data Protection keys; the others only decrypt.
+      GRANT SELECT ON config."DataProtectionKeys" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+      GRANT INSERT ON config."DataProtectionKeys" TO ume_rag_admin;
+      GRANT SELECT ON config."__EFMigrationsHistory" TO ume_rag_admin;
+      -- The gateway mirror (departments, teams): written by the admin's org sync, read by every service (scopes, audiences).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."Departments", config."Teams" TO ume_rag_admin;
+      GRANT SELECT ON config."Departments", config."Teams" TO ume_rag_api, ume_rag_worker;
+      -- Clients and keys: the admin manages them, the api authenticates with them; key use goes to KeyLastUse (api), so it
+      -- never bumps the config version. The worker holds no keys.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."Clients", config."Keys" TO ume_rag_admin;
+      GRANT SELECT ON config."Clients", config."Keys" TO ume_rag_api;
+      GRANT SELECT ON config."KeyLastUse" TO ume_rag_admin;
+      GRANT SELECT, INSERT, UPDATE ON config."KeyLastUse" TO ume_rag_api;
+      -- Admin BFF sessions: only the admin reads and writes them (data-model §2.1).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."AdminSessions" TO ume_rag_admin;
+      -- Ingestion config (data-model §1.2): the admin manages it; the worker reads all of it; the api reads what retrieval
+      -- needs. The api reads only the listed columns of Sources (knowledge design §6.3, §6.5), never Settings jsonb or
+      -- schedules, and no pipelines.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles",
+        config."Collections", config."Sources", config."Pipelines", config."PipelineVersions" TO ume_rag_admin;
+      GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections",
+        config."Sources", config."Pipelines", config."PipelineVersions" TO ume_rag_worker;
+      GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections" TO ume_rag_api;
+      GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText", "DemoteRules")
+        ON config."Sources" TO ume_rag_api;
+      -- Collection shares (data-model §1.2, admin design §3.2): the admin manages them; the api reads who may link a
+      -- collection; the worker never needs them.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."CollectionShares" TO ume_rag_admin;
+      GRANT SELECT ON config."CollectionShares" TO ume_rag_api;
+      -- Assistants and the gateway model mirror (data-model §1.2): the admin manages them; the api reads assistants,
+      -- audiences and models, and versions only through the view of published versions, never AssistantVersions itself, so a
+      -- draft cannot reach chat. The worker reads the model mirror (the evaluation's residency checks, #130) and, for the
+      -- index-health check, only which collections and topics active assistants' published versions link (knowledge design
+      -- §6.4; Decisions "M-2 open design calls": every HNSW-searched scope an assistant link uses is sampled).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
+        config."GatewayModels" TO ume_rag_admin;
+      -- Explain access (identity design 4.9) builds the api's policy snapshot in rag-admin, which reads the published view too.
+      GRANT SELECT ON config."PublishedAssistantVersions" TO ume_rag_admin;
+      GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
+        config."GatewayModels" TO ume_rag_api;
+      GRANT SELECT ON config."GatewayModels" TO ume_rag_worker;
+      GRANT SELECT ("AssistantId", "CollectionLinks") ON config."PublishedAssistantVersions" TO ume_rag_worker;
+      GRANT SELECT ("Id", "State") ON config."Assistants" TO ume_rag_worker;
+
+      -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
+      GRANT SELECT ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_admin;
+      GRANT INSERT ON content."Jobs" TO ume_rag_admin;
+      -- Ingestion content (data-model §1.2, §2.2): the worker writes it all, the admin reads it all (incl. the test panel).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON content."NodeManifest", content."WorkerNodeSupport", content."CrawlHosts",
+        content."SiteProfiles", content."SiteProfileVersions", content."CrawlFrontier", content."CrawlRuns",
+        content."ConnectorCheckpoints", content."Uploads", content."DeletionProposals", content."QuarantinedFiles",
+        content."Documents", content."NodeOutputs", content."ChunkSets", content."Chunks", content."EmbeddingCache",
+        content."Runs", content."ParseObservations", content."ParseProfiles", content."BlobTombstones" TO ume_rag_worker;
+      GRANT SELECT ON content."NodeManifest", content."WorkerNodeSupport", content."CrawlHosts", content."SiteProfiles",
+        content."SiteProfileVersions", content."CrawlFrontier", content."CrawlRuns", content."ConnectorCheckpoints",
+        content."Uploads", content."DeletionProposals", content."QuarantinedFiles", content."Documents", content."NodeOutputs",
+        content."ChunkSets", content."Chunks", content."EmbeddingCache", content."Runs", content."ParseObservations",
+        content."ParseProfiles", content."BlobTombstones" TO ume_rag_admin;
+      -- The admin tombstones the upload blobs it replaces or deletes, in the transaction of its own change (issue #34).
+      GRANT INSERT ON content."BlobTombstones" TO ume_rag_admin;
+      -- The api searches chunks and reads the documents' citation columns only (knowledge design §3.5); "Language" and
+      -- "FetchedAt" for statement D and the citation fields (knowledge design §6.3, §10.1); "CanonicalIdentity" (the upload
+      -- slot) and "ContentHash" for the blob key and ETag of the document content route (knowledge design §3.5).
+      GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
+      GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
+        "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
+        "CanonicalIdentity", "ContentHash")
+        ON content."Documents" TO ume_rag_api;
+      -- Evaluation and retrieval counters (data-model §1.2, §12.2, §12.3): the worker writes them; the admin reads them and
+      -- writes runs and results itself for the answer-level runs it executes (P2 kinds); the api counts retrievals only
+      -- through content.rag_count_retrievals.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns",
+        content."EvaluationResults", content."RetrievalStats" TO ume_rag_worker;
+      GRANT SELECT ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns", content."EvaluationResults",
+        content."RetrievalStats" TO ume_rag_admin;
+      GRANT INSERT, UPDATE ON content."EvaluationRuns", content."EvaluationResults" TO ume_rag_admin;
+
+      -- chat (data-model §1.2, §2.3): the api owns it; the admin reads it and marks feedback reviewed (admin design §8.1); the
+      -- worker has no access to the schema. P1 writes metadata and ratings only (weakness review §4).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources",
+        chat."Feedback", chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_api;
+      GRANT SELECT ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources", chat."Feedback",
+        chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_admin;
+      GRANT UPDATE ("ReviewState") ON chat."Feedback" TO ume_rag_admin;
+
+      -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
+      GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+      -- The HNSW index-health rebuild (knowledge design §6.4): REINDEX INDEX CONCURRENTLY needs MAINTAIN (Postgres 17).
+      GRANT MAINTAIN ON content."Chunks" TO ume_rag_worker;
+      GRANT SELECT ON audit."AuditLog" TO ume_rag_admin;
+
+      -- Functions (data-model §1.2). The keyword query function calls the aggregate with the caller's rights.
+      REVOKE ALL ON ALL FUNCTIONS IN SCHEMA config, content, chat, audit FROM ume_rag_api, ume_rag_admin, ume_rag_worker;
+      GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or_agg(tsquery)
+        TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+      GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
+      GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
+      GRANT EXECUTE ON FUNCTION chat.rag_retention_chat_step(integer) TO ume_rag_admin;
+      GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])
+        TO ume_rag_api;
+      COMMIT;
+
+networks:
+  edge: {driver: bridge}
+  data: {driver: bridge, internal: true}
+  llm: {driver: bridge}
+  rag-edge: {driver: bridge}
+  rag-data: {driver: bridge, internal: true}
+  rag-ingestion: {driver: bridge, internal: true}
+  rag-parser: {driver: bridge, internal: true}
+  rag-render: {driver: bridge, internal: true}
+  rag-crawl: {driver: bridge}
+  rag-mirror: {driver: bridge}
+
+volumes:
+  postgres-data:
+  ume-certs:
+  ume-secrets:
+  ume-config:
+  rag-postgres-data:
+  rag-certs:
+  rag-secrets:
+  rag-config:
+  rag-blobs:
+  rag-clamav-db:

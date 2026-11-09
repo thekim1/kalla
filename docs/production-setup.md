@@ -342,6 +342,12 @@ on the internal `ingestion` network, and the renderer's WebSocket (port 3000) is
 internal `render` network. Internal certificates last 825 days: re-issue them with
 `./deploy/init-deployment.sh --renew-certs`, which needs `ca.key` back on the host.
 
+## Portainer (gateway and RAG in one stack)
+
+No shell access on the host? `deploy/portainer/compose.portainer.yaml` is the gateway's own Portainer stack with Ume
+Rag added, configured only through environment variables: paste it over the gateway's stack, keep the stack name, and
+set the RAG variables listed at the top of the file. See the runbook, *Portainer and other hosts without shell access*.
+
 ## Reverse proxy and PKI
 
 The listeners default to loopback (`127.0.0.1:8543` and `:9543`). Behind the municipal reverse proxy, run
