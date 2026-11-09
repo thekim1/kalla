@@ -43,6 +43,18 @@ public sealed class DocumentContentTests : IDisposable
     }
 
     [Fact]
+    public void A_folder_uploads_download_is_named_by_its_last_path_segment()
+    {
+        // admin design §4.5: an upload's display name is its relative path; the download carries the file name only.
+        ContentHeaders.ContentDisposition(Content("application/pdf", "HR/Policys/semester ö.pdf"))
+            .ShouldBe("inline; filename=\"semester _.pdf\"; filename*=UTF-8''semester%20%C3%B6.pdf");
+        ContentHeaders.FileName("HR/Policys/semester.pdf").ShouldBe("semester.pdf");
+        ContentHeaders.FileName("semester.pdf").ShouldBe("semester.pdf");
+        ContentHeaders.FileName("HR/").ShouldBeNull();
+        ContentHeaders.FileName(null).ShouldBeNull();
+    }
+
+    [Fact]
     public void Fixed_headers_sandbox_everything_but_pdf()
     {
         var html = ContentHeaders.Fixed(Content("text/html", null)).ToDictionary();

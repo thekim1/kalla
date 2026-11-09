@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useId } from 'vue'
 
-defineProps<{ label: string; description?: string; modelValue: boolean; disabled?: boolean }>()
+/** `hideLabel` keeps the label for screen readers only (a row checkbox whose row already shows the name). */
+defineProps<{ label: string; description?: string; modelValue: boolean; disabled?: boolean; hideLabel?: boolean }>()
 defineEmits<{ (e: 'update:modelValue', value: boolean): void }>()
 const id = useId()
 </script>
@@ -16,7 +17,7 @@ const id = useId()
       :disabled="disabled"
       @change="$emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
     />
-    <span class="flex flex-col">
+    <span class="flex flex-col" :class="{ 'sr-only': hideLabel }">
       <span class="font-medium">{{ label }}</span>
       <span v-if="description" class="text-small text-fg-3">{{ description }}</span>
     </span>

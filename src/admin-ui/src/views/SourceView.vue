@@ -3,10 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
+import FilesPanel from '@/components/files/FilesPanel.vue'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
 import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
-import SourceFiles from '@/components/sources/SourceFiles.vue'
 import SourceQuarantine from '@/components/sources/SourceQuarantine.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -139,7 +139,7 @@ onMounted(load)
         </div>
       </UiCard>
       <SourceEditDrawer v-model:open="editing" :source="source.data.value" :collection="collection" @saved="saved" />
-      <SourceFiles v-if="source.data.value.type === 'upload'" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
+      <FilesPanel v-if="source.data.value.type === 'upload'" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
       <PipelineCard :source="source.data.value" class="mb-6" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
