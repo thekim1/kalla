@@ -57,6 +57,7 @@ public static class ContentHeaders
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
         "application/vnd.oasis.opendocument.presentation", "image/jpeg", "image/png", "image/tiff",
+        "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint", "application/rtf",
     };
 
     private static readonly HashSet<string> Inline = new(StringComparer.Ordinal) { "application/pdf", "image/png", "image/jpeg" };
@@ -69,6 +70,7 @@ public static class ContentHeaders
         ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = "xlsx", ["application/vnd.oasis.opendocument.text"] = "odt",
         ["application/vnd.oasis.opendocument.spreadsheet"] = "ods", ["application/vnd.oasis.opendocument.presentation"] = "odp",
         ["image/jpeg"] = "jpg", ["image/png"] = "png", ["image/tiff"] = "tiff",
+        ["application/msword"] = "doc", ["application/vnd.ms-excel"] = "xls", ["application/vnd.ms-powerpoint"] = "ppt", ["application/rtf"] = "rtf",
     };
 
     /// <summary>The sniffed type if allowed, else <c>application/octet-stream</c>.</summary>

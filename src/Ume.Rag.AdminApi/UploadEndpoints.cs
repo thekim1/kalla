@@ -36,16 +36,17 @@ public static class UploadEndpoints
     public const string FileNameHeader = "X-File-Name";
     public const string UploadIdHeader = "X-Upload-Id";
 
-    /// <summary>Extensions the worker accepts in P1 (connectors §9.2).</summary>
+    /// <summary>Extensions the worker accepts (connectors §9.2); legacy Word, Excel, PowerPoint and RTF are converted by the parser's LibreOffice.</summary>
     public static IReadOnlySet<string> Allowed { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".pdf", ".docx", ".pptx", ".xlsx", ".odt", ".ods", ".odp", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".txt", ".md", ".csv", ".html", ".htm",
+        ".doc", ".xls", ".ppt", ".rtf",
     };
 
-    /// <summary>Legacy formats deferred to P2 (connectors §9.2: <c>upload.format_deferred</c>).</summary>
+    /// <summary>E-mail, deferred to P2 (connectors §9.2: <c>upload.format_deferred</c>).</summary>
     public static IReadOnlySet<string> Deferred { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        ".doc", ".xls", ".ppt", ".rtf", ".eml", ".msg",
+        ".eml", ".msg",
     };
 
     public static RouteGroupBuilder MapUploads(this RouteGroupBuilder api)

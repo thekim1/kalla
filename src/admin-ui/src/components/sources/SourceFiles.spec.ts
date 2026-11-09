@@ -51,6 +51,51 @@ describe('Files (admin design §4.5, connectors §9)', () => {
     expect(wrapper.find('[data-test=pending]').exists()).toBe(false)
   })
 
+  it('takes a dropped folder, lists refused files as skipped, and splits the rest over batches of the API limits', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [], next: null })
+    const batch = vi.spyOn(api.sources, 'uploadBatch')
+      .mockResolvedValueOnce({ batchId: 'b1', maxFiles: 2, maxBytes: 500 })
+      .mockResolvedValueOnce({ batchId: 'b2', maxFiles: 2, maxBytes: 500 })
+    const put = vi.spyOn(api.uploads, 'put').mockResolvedValue({ n: 1, uploadId: 'x', operation: 'add', fileName: 'x', bytes: 1, sha256: '' })
+    const commit = vi.spyOn(api.uploads, 'commit').mockResolvedValue({ batchId: 'b', jobId: 'j', entries: 1 })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true } })
+    await flushPromises()
+
+    const entry = (f: File) => ({ isFile: true, isDirectory: false, name: f.name, file: (ok: (x: File) => void) => ok(f) })
+    let read = false
+    const folder = {
+      isFile: false, isDirectory: true, name: 'Blanketter',
+      createReader: () => ({ readEntries: (ok: (e: unknown[]) => void) => { ok(read ? [] : ['a.pdf', 'b.pdf', 'c.pdf', 'd.zip', '.DS_Store'].map((n) => entry(new File(['x'], n)))); read = true } }),
+    }
+    await wrapper.get('[data-test=drop-zone]').trigger('drop', { dataTransfer: { items: [{ kind: 'file', webkitGetAsEntry: () => folder }], files: [] } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=pending-summary]').text()).toContain('3 files ready')
+    expect(wrapper.get('[data-test=pending-summary]').text()).toContain('1 skipped')
+    expect(wrapper.get('[data-test=pending]').text()).toContain('d.zip')
+    expect(wrapper.get('[data-test=pending]').text()).not.toContain('.DS_Store')
+
+    await wrapper.get('[data-test=upload]').trigger('click')
+    await flushPromises()
+    expect(batch).toHaveBeenCalledTimes(2)
+    expect(put).toHaveBeenCalledTimes(3) // never the skipped zip
+    expect(put.mock.calls.map((c) => c.slice(0, 2))).toEqual([['b1', 1], ['b1', 2], ['b2', 1]])
+    expect(commit).toHaveBeenCalledWith('b1', { files: [1, 2], deletes: [] })
+    expect(commit).toHaveBeenCalledWith('b2', { files: [1], deletes: [] })
+    expect(wrapper.emitted('committed')).toHaveLength(1)
+    expect(wrapper.find('[data-test=pending]').exists()).toBe(false)
+  })
+
+  it('offers a folder picker', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [], next: null })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=folder-input]').attributes()).toHaveProperty('webkitdirectory')
+    await pick(wrapper, 'folder-input', [new File(['a'], 'a.pdf'), new File(['b'], 'Thumbs.db')])
+    expect(wrapper.get('[data-test=pending-summary]').text()).toContain('1 file ready')
+  })
+
   it('replaces a slot with new bytes and deletes selected slots after a confirmation', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [slot('u1', 'taxa.pdf', 'indexed'), slot('u2', 'gammal.doc', 'refused', 'upload.format_deferred')], next: null })

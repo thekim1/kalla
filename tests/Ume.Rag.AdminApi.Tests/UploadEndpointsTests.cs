@@ -123,7 +123,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         }
 
         (await PutFileAsync(admin, batch, 1, "again.pdf", pdf)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        using (var legacy = await PutFileAsync(admin, batch, 2, "gammal.doc", pdf))
+        using (var legacy = await PutFileAsync(admin, batch, 2, "mejl.msg", pdf))
         {
             legacy.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
             (await Json(legacy)).GetProperty("code").GetString().ShouldBe("upload_format_deferred");
