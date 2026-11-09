@@ -528,7 +528,8 @@ public sealed partial class KnowledgeService(
         Guid? assistantId, string? level = null)
     {
         var upload = document.IdentityKind == "upload";
-        var title = (upload ? document.DisplayName ?? document.Title : document.Title) is { Length: > 0 } t ? t : "Dokument utan titel";
+        // An upload's display name is its relative path; the title is the file name, the citation keeps the path.
+        var title = (upload ? ContentHeaders.FileName(document.DisplayName) ?? document.Title : document.Title) is { Length: > 0 } t ? t : "Dokument utan titel";
         var sourceType = document.IdentityKind switch { "url" => "web", "upload" => "file", var other => other };
         var downloadUrl = document.IdentityKind == "url" || who is null ? null : links.For(who, document.Id, collection.Id, assistantId, level ?? collection.Classification);
         return new Citation(document.Id, title, upload ? document.DisplayName : null, document.IdentityKind == "url" ? document.Url : null, downloadUrl,
