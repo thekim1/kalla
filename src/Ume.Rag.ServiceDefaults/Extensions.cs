@@ -134,6 +134,8 @@ public static class Extensions
         activity.SetTag("url.full", request.RequestUri is { } uri ? $"{uri.Scheme}://redacted{uri.AbsolutePath}" : null);
     }
 
+    private static readonly System.Text.Json.JsonSerializerOptions VersionJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+
     public static TBuilder AddDefaultHealthChecks<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
         builder.Services.AddOptions<ShutdownOptions>().BindConfiguration(ShutdownOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
@@ -156,14 +158,16 @@ public static class Extensions
         app.MapHealthChecks(HealthEndpoints.LivePath, new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") })
             .DisableHttpMetrics();
         app.MapHealthChecks(HealthEndpoints.ReadyPath).DisableHttpMetrics();
-        app.MapGet("/version", () => Results.Ok(new
+        // Fixed web (camelCase) options, not the service's own: rag-api names its JSON in snake_case for the
+        // OpenAI-compatible API, and /version has one shape in every service, as the gateway's (#497).
+        app.MapGet("/version", () => Results.Json(new
         {
             application = app.Environment.ApplicationName,
             version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(),
             informationalVersion = System.Reflection.Assembly.GetEntryAssembly()?
                 .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
                 .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion,
-        })).ExcludeFromDescription();
+        }, VersionJson)).ExcludeFromDescription();
         return app;
     }
 }
