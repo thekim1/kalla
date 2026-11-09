@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatNumber } from '@/utils/format'
 import { COLLECTIONS, LEVEL_LABEL, PAGE, SHARING_LABEL } from '@/utils/labels'
+import { problemMessage } from '@/utils/problem'
 
 // Knowledge bases (admin design §5.2, §5.3, §5.4 steps 1–2): the tabs Ours, Shared with us and All (`view=`, §4.5);
 // editors create one. A shared row is another department's: owner, level, sharing, documents and topics only.
@@ -52,9 +53,10 @@ function open(row: CollectionSummary): void {
   void router.push({ name: 'collection', params: { id: row.id } })
 }
 
-function created(collection: Collection): void {
-  ui.notify(COLLECTIONS.created(collection.name))
-  void router.push({ name: 'collection', params: { id: collection.id } })
+/** A knowledge base of files opens on its Files tab (§5.5.7); without its source (it failed) the tab offers Add files. */
+function created(collection: Collection, content: 'files' | 'web', filesError: unknown): void {
+  ui.notify(filesError ? COLLECTIONS.createdNoFiles(collection.name, problemMessage(filesError)) : COLLECTIONS.created(collection.name))
+  void router.push({ name: 'collection', params: { id: collection.id }, ...(content === 'files' ? { query: { tab: 'files' } } : {}) })
 }
 
 watch(view, () => void load())

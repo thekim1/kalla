@@ -25,6 +25,7 @@ nobody needs to read them end to end.
 | Tools (P2) | [`tools/design.md`](tools/design.md) | Skills, the tool hub, MCP |
 | Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, delegation, member groups in the LLM gateway |
 | Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: Ume.Rag's metering first, the gateway's delegated attribution as the goal |
+| Upload quality | [`platform/upload-quality-review.md`](platform/upload-quality-review.md) | Assessment (not binding): how well uploaded files are handled, the gaps U1–U7 and a proposed order |
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.

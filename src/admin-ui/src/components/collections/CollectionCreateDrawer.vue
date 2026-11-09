@@ -8,26 +8,36 @@ import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
+import { createUploadSource } from '@/components/files/files'
 import { useAuthStore } from '@/stores/auth'
 import { COLLECTIONS, COMMON, LEVEL_HELP, LEVEL_LABEL } from '@/utils/labels'
 
 // Admin design §5.4 step 2: name, department, contact (the creator by default) and the level as three explained options
 // with none preselected ("Vem får läsa innehållet?"). No team field: the API makes the creator's first team in the
-// department the owner team (Decisions "Organisation"). The slug is made from the name by the API.
+// department the owner team (Decisions "Organisation"). The slug is made from the name by the API. What goes in
+// (§5.5.7), also with none preselected: *Files I upload* creates the knowledge base and its upload source (named Files)
+// in the same submit; when the source fails the knowledge base still exists and `created` carries the error, so the page
+// that opens can offer Add files.
+type Content = 'files' | 'web'
 const props = defineProps<{ open: boolean; departments: Department[] }>()
-const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'created', collection: Collection): void }>()
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void
+  (e: 'created', collection: Collection, content: Content, filesError: unknown): void
+}>()
 
 const LEVELS: Level[] = ['public', 'internal', 'sensitive']
+const CONTENTS: Content[] = ['files', 'web']
 const name = ref('')
 const departmentId = ref('')
 const contactName = ref('')
 const contactEmail = ref('')
 const auth = useAuthStore()
 const level = ref<Level | ''>('')
+const content = ref<Content | ''>('')
 const saving = ref(false)
 const form = useFormErrors({
   name: 'collection-name', departmentId: 'collection-department', classification: 'collection-level-public', contactName: 'collection-contact',
-  contactEmail: 'collection-email',
+  contactEmail: 'collection-email', content: 'collection-content-files',
 })
 
 const departmentOptions = computed(() => props.departments.map((d) => ({ value: d.id, label: d.name })))
@@ -38,6 +48,7 @@ watch(
     if (!open) return
     name.value = ''
     level.value = ''
+    content.value = ''
     contactName.value = auth.user?.name ?? ''
     contactEmail.value = auth.user?.email ?? ''
     departmentId.value = props.departments.length === 1 ? props.departments[0]!.id : ''
@@ -50,6 +61,7 @@ async function save(): Promise<void> {
     name: !name.value.trim() && COLLECTIONS.nameRequired,
     departmentId: !departmentId.value && COLLECTIONS.departmentRequired,
     classification: !level.value && COLLECTIONS.levelRequired,
+    content: !content.value && COLLECTIONS.contentRequired,
   })) return
   saving.value = true
   try {
@@ -57,7 +69,9 @@ async function save(): Promise<void> {
       name: name.value.trim(), departmentId: departmentId.value, classification: level.value as Level,
       contactName: contactName.value.trim() || null, contactEmail: contactEmail.value.trim() || null,
     })
-    emit('created', created)
+    // The knowledge base exists from here: a failed source does not undo it.
+    const filesError = content.value === 'files' ? await createUploadSource(created).then(() => null, (e: unknown) => e) : null
+    emit('created', created, content.value as Content, filesError)
     emit('update:open', false)
   } catch (e) {
     form.applyServerError(e)
@@ -87,6 +101,17 @@ async function save(): Promise<void> {
           </span>
         </label>
         <p v-if="form.errors.classification" id="collection-level-error" class="text-small text-danger">{{ form.errors.classification }}</p>
+      </fieldset>
+      <fieldset class="grid gap-2" :aria-describedby="form.errors.content ? 'collection-content-error' : undefined">
+        <legend class="mb-1 font-medium">{{ COLLECTIONS.contentQuestion }}</legend>
+        <label v-for="c in CONTENTS" :key="c" class="flex cursor-pointer gap-3 rounded-card border border-border p-3" :data-test="`content-${c}`">
+          <input :id="`collection-content-${c}`" v-model="content" type="radio" name="content" :value="c" class="mt-1" />
+          <span>
+            <span class="block font-medium">{{ COLLECTIONS.content[c] }}</span>
+            <span class="block text-small text-fg-2">{{ COLLECTIONS.contentHelp[c] }}</span>
+          </span>
+        </label>
+        <p v-if="form.errors.content" id="collection-content-error" class="text-small text-danger">{{ form.errors.content }}</p>
       </fieldset>
       <InlineError v-if="form.formError.value" :message="form.formError.value" />
     </form>

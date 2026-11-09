@@ -121,7 +121,7 @@ public static partial class Metadata
             switch (rule.On)
             {
                 case "path":
-                    return path is not null && Glob(rule.Match).IsMatch(path) ? [] : null;
+                    return path is not null && GlobMatches(rule.Match, path, upload: input.Url is null) ? [] : null;
                 case "path-regex":
                     return path is null ? null : Groups(new Regex(rule.Match, RegexOptions.CultureInvariant, RegexTimeout).Match(path));
                 case "title-regex":
@@ -157,6 +157,16 @@ public static partial class Metadata
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// An upload's path is relative (its display name, <c>HR/Policys/semester.pdf</c>), so a rule written like a website path
+    /// (<c>/HR/**</c>) matches it as well as <c>HR/**</c>; a URL path is matched as it is.
+    /// </summary>
+    private static bool GlobMatches(string glob, string path, bool upload)
+    {
+        var regex = Glob(glob);
+        return regex.IsMatch(path) || (upload && regex.IsMatch("/" + path));
     }
 
     /// <summary>A glob over the path: <c>**</c> any characters, <c>*</c> within one segment, <c>?</c> one character.</summary>

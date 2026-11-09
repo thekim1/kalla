@@ -71,6 +71,18 @@ public sealed class UploadTests : IDisposable
     }
 
     [Fact]
+    public void A_folder_path_is_typed_by_its_file_name()
+    {
+        // admin design §4.5: the slot's file name may be a relative path; the extension is the last segment's, never a folder's.
+        using var text = new MemoryStream(Bytes("text"));
+        UploadTypeCheck.Check(FileTypeSniffer.Sniff(text, "Rutiner.v2/HR/anteckning.md"), "Rutiner.v2/HR/anteckning.md", "text/markdown")
+            .ShouldBe(new TypeVerdict(true, "text/markdown", null, DeclaredDiffers: false));
+        using var pdf = new MemoryStream(Bytes("pdf"));
+        UploadTypeCheck.Check(FileTypeSniffer.Sniff(pdf, "HR/Policys/semester.pdf"), "HR/Policys/semester.pdf", "application/pdf")
+            .ShouldBe(new TypeVerdict(true, "application/pdf", null, DeclaredDiffers: false));
+    }
+
+    [Fact]
     public void A_batch_adds_replaces_and_deletes_slots_and_skips_a_duplicate_add()
     {
         var sourceId = Guid.NewGuid();
