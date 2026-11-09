@@ -369,69 +369,41 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     }
 
     /// <summary>
-    /// Seven live slots and a deleted one, with the documents the worker leaves behind: the worker ends a fetched slot
-    /// <c>clean</c>, so indexed and ended files are read through their documents (§5.5.7 states).
+    /// Seven live slots and a deleted one, in the states the worker writes (connectors design §9.1, #533): an indexed slot
+    /// names its document, a refused or malware one carries its reason.
     /// </summary>
-    private async Task<(Guid Source, string Code, DateTimeOffset Now)> FilesAsync()
+    private async Task<(Guid Source, string Code, DateTimeOffset Now, Guid Document)> FilesAsync()
     {
         var (sourceId, code) = await UploadSourceAsync();
         var now = DateTimeOffset.UtcNow;
         await using var db = TestPostgres.Context(database.Connection(null));
-        var source = await db.Sources.AsNoTracking().SingleAsync(s => s.Id == sourceId, Ct);
-        var profile = await db.Collections.AsNoTracking().Where(c => c.Id == source.CollectionId).Select(c => c.EmbeddingProfileId).SingleAsync(Ct);
-        var version = new PipelineVersion { PipelineId = source.PipelineId, Number = 1, State = PipelineVersionStates.Published, Definition = "{}", PublishedAt = now };
-        var run = new Run { SourceId = sourceId, Classification = Classification.Internal, Kind = "sync", Trigger = "upload", State = RunStates.Succeeded, StartedAt = now };
-        db.AddRange(version, run);
-        await db.SaveChangesAsync(Ct);
-
         var bytes = 0;
-        Upload Slot(string name, string state, TimeSpan ago, string? reason = null) => new()
+        Upload Slot(string name, string state, TimeSpan ago, string? reason = null, Guid? documentId = null) => new()
         {
             SourceId = sourceId, Classification = Classification.Internal, BatchId = Guid.CreateVersion7(), FileName = name, Bytes = 1000 * ++bytes,
-            Sha256 = RandomNumberGenerator.GetBytes(32), State = state, Reason = reason, UploadedBy = "anna", UploadedAt = now - ago,
-        };
-        Document DocumentOf(Upload slot, byte[] contentHash, string? parseOutcome) => new()
-        {
-            SourceId = sourceId, Classification = Classification.Internal, IdentityKind = IdentityKinds.Upload, CanonicalIdentity = $"upload:{slot.Id:D}",
-            IdentityHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"upload:{slot.Id:D}")), ContentHash = contentHash, ParseOutcome = parseOutcome,
-            DisplayName = slot.FileName, FirstSeenAt = now, LastSeenAt = now,
-        };
-        ChunkSet SetOf(Document document, byte[] contentHash) => new()
-        {
-            DocumentId = document.Id, Classification = Classification.Internal, CollectionId = source.CollectionId, PipelineVersionId = version.Id,
-            EmbeddingProfileId = profile, ContentHash = contentHash, InputHash = RandomNumberGenerator.GetBytes(32), State = ChunkSetStates.Live, CreatedAt = now, LiveAt = now,
+            Sha256 = RandomNumberGenerator.GetBytes(32), State = state, Reason = reason, DocumentId = documentId, UploadedBy = "anna", UploadedAt = now - ago,
         };
 
-        var semester = Slot("HR/Policys/semester.pdf", UploadStates.Clean, TimeSpan.FromMinutes(5)); // live set of its bytes: indexed
-        var onboarding = Slot("HR/Rutiner/onboarding.docx", UploadStates.Received, TimeSpan.FromMinutes(1));
-        var plan = Slot("HRx-plan.pdf", UploadStates.Indexed, TimeSpan.FromMinutes(4));
-        var lista = Slot("HR-lista.pdf", UploadStates.Refused, TimeSpan.FromMinutes(3), "upload.type_mismatch");
-        var budget = Slot("Ekonomi/budget_2026.xlsx", UploadStates.Clean, TimeSpan.FromMinutes(2)); // processing ended: refused
-        var virus = Slot("Ekonomi/100%.pdf", UploadStates.Malware, TimeSpan.FromMinutes(6), "malware.found");
-        var annat = Slot("hr/annat.pdf", UploadStates.Clean, TimeSpan.FromSeconds(30)); // replaced: the live set is the old version's
-        var gone = Slot("gammal.pdf", UploadStates.Deleted, TimeSpan.FromMinutes(10));
+        var document = Guid.CreateVersion7();
+        db.Uploads.AddRange(
+            Slot("HR/Policys/semester.pdf", UploadStates.Indexed, TimeSpan.FromMinutes(5), documentId: document),
+            Slot("HR/Rutiner/onboarding.docx", UploadStates.Received, TimeSpan.FromMinutes(1)),
+            Slot("HRx-plan.pdf", UploadStates.Indexed, TimeSpan.FromMinutes(4), documentId: Guid.CreateVersion7()),
+            Slot("HR-lista.pdf", UploadStates.Refused, TimeSpan.FromMinutes(3), "upload.type_mismatch"),
+            Slot("Ekonomi/budget_2026.xlsx", UploadStates.Refused, TimeSpan.FromMinutes(2), "parser.encrypted", Guid.CreateVersion7()),
+            Slot("Ekonomi/100%.pdf", UploadStates.Malware, TimeSpan.FromMinutes(6), "malware.found"),
+            Slot("hr/annat.pdf", UploadStates.Clean, TimeSpan.FromSeconds(30)));
+        var gone = Slot("gammal.pdf", UploadStates.Deleted, TimeSpan.FromMinutes(10)); // the 8 000 bytes the summary leaves out
         gone.DeletedAt = now;
-        db.Uploads.AddRange(semester, onboarding, plan, lista, budget, virus, annat, gone);
-        var (semesterDoc, budgetDoc, annatDoc) = (DocumentOf(semester, semester.Sha256, "success"), DocumentOf(budget, budget.Sha256, "encrypted"),
-            DocumentOf(annat, annat.Sha256, "success"));
-        db.Documents.AddRange(semesterDoc, budgetDoc, annatDoc);
+        db.Uploads.Add(gone);
         await db.SaveChangesAsync(Ct);
-        var (semesterSet, annatSet) = (SetOf(semesterDoc, semester.Sha256), SetOf(annatDoc, RandomNumberGenerator.GetBytes(32)));
-        db.ChunkSets.AddRange(semesterSet, annatSet);
-        await db.SaveChangesAsync(Ct);
-        semesterDoc.LiveChunkSetId = semesterSet.Id;
-        annatDoc.LiveChunkSetId = annatSet.Id;
-        db.RunItems.AddRange(
-            new RunItem { RunId = run.Id, CreatedAt = now.AddMinutes(-1), Classification = Classification.Internal, DocumentId = budgetDoc.Id, Identity = budgetDoc.CanonicalIdentity, Outcome = "encrypted", Reason = "parser.encrypted" },
-            new RunItem { RunId = run.Id, CreatedAt = now.AddDays(-3), Classification = Classification.Internal, DocumentId = budgetDoc.Id, Identity = budgetDoc.CanonicalIdentity, Outcome = "failed", Reason = "parser.timeout" });
-        await db.SaveChangesAsync(Ct);
-        return (sourceId, code, now);
+        return (sourceId, code, now, document);
     }
 
     [Fact]
     public async Task The_files_list_searches_filters_by_state_and_pages_by_name_or_newest()
     {
-        var (sourceId, code, _) = await FilesAsync();
+        var (sourceId, code, _, document) = await FilesAsync();
         await using var factory = Factory();
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         async Task<JsonElement> Get(string query)
@@ -465,15 +437,14 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         Names(await All("sort=uploaded", 2))
             .ShouldBe(["hr/annat.pdf", "HR/Rutiner/onboarding.docx", "Ekonomi/budget_2026.xlsx", "HR-lista.pdf", "HRx-plan.pdf", "HR/Policys/semester.pdf", "Ekonomi/100%.pdf"]);
 
-        // The effective state: a clean slot whose live set holds its bytes is indexed, one whose processing ended is refused with the
-        // document's last reason; a clean slot with an older version live is still processing.
+        // State, reason and document are the slot's own, as the worker wrote them.
         var states = (await All("", 50)).ToDictionary(f => f.GetProperty("fileName").GetString()!, f => (f.GetProperty("state").GetString(),
             f.GetProperty("reason").ValueKind == JsonValueKind.Null ? null : f.GetProperty("reason").GetString()));
         states["HR/Policys/semester.pdf"].ShouldBe(("indexed", null));
         states["Ekonomi/budget_2026.xlsx"].ShouldBe(("refused", "parser.encrypted"));
         states["hr/annat.pdf"].ShouldBe(("clean", null));
         states["HR-lista.pdf"].ShouldBe(("refused", "upload.type_mismatch"));
-        (await All("", 50)).Single(f => f.GetProperty("fileName").GetString() == "HR/Policys/semester.pdf").GetProperty("documentId").ValueKind.ShouldBe(JsonValueKind.String);
+        (await All("", 50)).Single(f => f.GetProperty("fileName").GetString() == "HR/Policys/semester.pdf").GetProperty("documentId").GetGuid().ShouldBe(document);
 
         Names(await All("state=processing", 50)).ShouldBe(["hr/annat.pdf", "HR/Rutiner/onboarding.docx"]);
         Names(await All("state=indexed&sort=uploaded", 1)).ShouldBe(["HRx-plan.pdf", "HR/Policys/semester.pdf"]);
@@ -503,7 +474,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     [Fact]
     public async Task The_files_summary_counts_live_files_by_state()
     {
-        var (sourceId, code, now) = await FilesAsync();
+        var (sourceId, code, now, _) = await FilesAsync();
         await using var factory = Factory();
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "9" + code[1..]);

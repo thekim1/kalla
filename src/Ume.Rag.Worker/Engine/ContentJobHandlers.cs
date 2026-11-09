@@ -355,6 +355,7 @@ public sealed partial class EmbedJobHandler(
                     Strategy = document.ParseStrategy,
                     PipelineVersionId = payload.PipelineVersionId,
                     ExecutionId = payload.ExecutionId,
+                    ContentHash = contentHash,
                 }, cancellationToken);
                 if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, null, cancellationToken))
                 {

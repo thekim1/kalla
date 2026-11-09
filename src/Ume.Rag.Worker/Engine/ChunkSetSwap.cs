@@ -112,6 +112,7 @@ public sealed partial class ChunkSetSwap(
             Strategy = document.ParseStrategy,
             PipelineVersionId = swap.PipelineVersionId,
             ExecutionId = swap.ExecutionId,
+            ContentHash = swap.ContentHash,
         }, cancellationToken);
         if (swap.Job is not null && !await commit.CompleteJobAsync(queue, swap.Job.Id, identity.InstanceId, null, cancellationToken))
         {

@@ -32,6 +32,12 @@ public sealed record FetchCase(SourceContext Source, RunRow Run, PipelineRun Pip
 
     /// <summary>The crawl frontier row's sitemap <c>lastmod</c>, stored on the document with a 200.</summary>
     public DateTimeOffset? SitemapLastMod { get; init; }
+
+    /// <summary>
+    /// The bytes the fetch is for when they are known before it (an upload slot's SHA-256): its terminal items carry them, not
+    /// the known document's earlier content (<see cref="RunItemRow.ContentHash"/>).
+    /// </summary>
+    public byte[]? ContentHash { get; init; }
 }
 
 /// <summary>What <see cref="DocumentIngest.EnsureCurrentAsync"/> did with a document.</summary>
@@ -347,22 +353,32 @@ public sealed partial class DocumentIngest(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fetch);
-        return TerminalAsync(fetch.Source, fetch.Run.Id, fetch.Job, document, document?.CanonicalIdentity ?? fetch.Identity, outcome, reason,
-            fetch.Pipeline.VersionId, frontier, cancellationToken);
+        var item = TerminalItem(fetch.Source, fetch.Run.Id, document, document?.CanonicalIdentity ?? fetch.Identity, outcome, reason, fetch.Pipeline.VersionId);
+        return CommitTerminalAsync(fetch.Job, fetch.ContentHash is null ? item : item with { ContentHash = fetch.ContentHash }, frontier, cancellationToken);
     }
 
-    public async Task<JobResult> TerminalAsync(SourceContext source, Guid runId, LeasedJob? job, DocumentRow? document, string identityText, Outcome outcome,
+    public Task<JobResult> TerminalAsync(SourceContext source, Guid runId, LeasedJob? job, DocumentRow? document, string identityText, Outcome outcome,
         string? reason, Guid? pipelineVersionId, FrontierCompletion? frontier, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
-        await commit.AddRunItemAsync(new RunItemRow(runId, source.Classification, document?.Id, identityText, outcome)
+        return CommitTerminalAsync(job, TerminalItem(source, runId, document, identityText, outcome, reason, pipelineVersionId), frontier, cancellationToken);
+    }
+
+    private static RunItemRow TerminalItem(SourceContext source, Guid runId, DocumentRow? document, string identityText, Outcome outcome, string? reason,
+        Guid? pipelineVersionId) =>
+        new(runId, source.Classification, document?.Id, identityText, outcome)
         {
             Reason = reason,
             Strategy = document?.ParseStrategy,
             PipelineVersionId = pipelineVersionId,
             ExecutionId = document?.CurrentExecutionId,
-        }, cancellationToken);
+            ContentHash = document?.ContentHash,
+        };
+
+    private async Task<JobResult> CommitTerminalAsync(LeasedJob? job, RunItemRow item, FrontierCompletion? frontier, CancellationToken cancellationToken)
+    {
+        await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
+        await commit.AddRunItemAsync(item, cancellationToken);
         if (frontier is not null)
         {
             await commit.CompleteFrontierAsync(frontier, cancellationToken);
@@ -393,6 +409,7 @@ public sealed partial class DocumentIngest(
             Strategy = document.ParseStrategy,
             PipelineVersionId = pipelineVersionId,
             ExecutionId = document.CurrentExecutionId,
+            ContentHash = document.ContentHash,
         };
 
     private FrontierCompletion? Frontier(FetchCase fetch, short? status, Validators? validators, byte[]? contentHash) =>
