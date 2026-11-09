@@ -905,13 +905,13 @@ last attempt, or 24 h without a ClamAV verdict, §11).
 ### 9.2 Types
 
 - Allowed in P1 (simplification pass §1; answered 3 is the earlier subset): PDF, DOCX/PPTX/XLSX,
-  `.odt`/`.ods`/`.odp`, JPG/PNG/TIFF, TXT/MD/CSV, HTML.
-- **Deferred to P2** (postponed Z1; refused in P1 unless the pilot source inventory taken at P1 start shows them
-  common): `.doc`/`.xls`/`.ppt`, `.rtf`, `.eml`/`.msg` → `unsupported` `upload.format_deferred` (crawled:
-  `http.format_deferred`, before download). The detect stage refuses them too with `parser.format_deferred`; a format
+  `.odt`/`.ods`/`.odp`, JPG/PNG/TIFF, TXT/MD/CSV, HTML, and `.doc`/`.xls`/`.ppt`/`.rtf` (converted by LibreOffice in
+  the parser, parser §4; Decisions "Legacy Office and RTF uploads").
+- **Deferred to P2** (postponed Z1): `.eml`/`.msg` → `unsupported` `upload.format_deferred`. Crawled `.doc`/`.xls`/
+  `.ppt`/`.rtf`, `.eml` and `.msg` end `http.format_deferred`, before download. The detect stage refuses them too with `parser.format_deferred`; a format
   that is neither allowed nor deferred ends `parser.unsupported_format` (parser §3).
 - **Sniffed type wins** (magic bytes; OOXML `[Content_Types].xml` incl. `macroEnabled` content types; OLE root
-  CLSIDs, which recognise legacy Office and `.msg` to refuse them; text heuristics). Declared type and extension are
+  CLSIDs, which recognise legacy Office and `.msg`; text heuristics). Declared type and extension are
   compared: a mismatch is a fact; a declared allowed type whose sniffed type is not allowed → `unsupported`
   `upload.type_mismatch`.
 - Refused (Z1, postponed): zip/7z/rar/tar/gz that are not OOXML/ODF → `upload.archive`; `.docm`/`.xlsm`/`.pptm` →

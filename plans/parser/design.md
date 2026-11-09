@@ -54,7 +54,8 @@ decisions. Additions made here:
 | DOCX, PPTX, XLSX | parser | Docling declarative backends (no layout model) | blocks / tables | no |
 | .odt, .ods, .odp | parser | Docling's OpenDocument backend (native, no LibreOffice) | as OOXML | no |
 | JPG, PNG, TIFF | parser | Docling image input, OCR always | blocks | TIFF frames |
-| .doc, .xls, .ppt, .rtf, .eml, .msg | – | P2 (Z1): refused `format_deferred` | – | – |
+| .doc, .xls, .ppt, .rtf (uploads) | parser | LibreOffice converts to DOCX, XLSX or PPTX (§4), then the declarative backend; the result keeps the legacy format | as OOXML | no |
+| .eml, .msg | – | P2 (Z1): refused `format_deferred` | – | – |
 | zip, 7z, rar, tar, gz; .docm/.xlsm/.pptm; executables; unknown | – | refused: `unsupported_format` with a reason | – | – |
 
 Reasoning:
@@ -95,9 +96,15 @@ documents; an OCR-forced route (DOCX → PDF → OCR) needs LibreOffice and is P
 
 ## 4. LibreOffice conversion
 
-**Later (P2):** legacy `.doc`/`.xls`/`.ppt` and RTF (postponed Z1); the P1 image has no LibreOffice. The P2 starting point is Docling's own legacy → OOXML path with a sandboxed `soffice` wrapper (design in
-this document's history, step 5 review), with a separate container as the fallback if local file links cannot be
-shown harmless.
+Uploaded legacy `.doc`/`.xls`/`.ppt` and RTF are converted in the slot by `ume_parser/legacy.py` (Decisions "Legacy
+Office and RTF uploads"): `sniff_ole` names the format by the OLE root CLSID, else the main stream's name; RTF by its
+signature. LibreOffice from the image (`libreoffice-{writer,calc,impress}-nogui`) runs headless with the import filter
+forced, a fresh profile in the job directory, stdout and stderr discarded, in its own process group, killed at
+min(120 s, 60 % of the deadline) (`timeout`). No output gives `conversion_failed`. The DOCX, XLSX or PPTX it writes goes
+through the declarative backend, and the result keeps the sniffed format. `/v1/inspect` does not open these files. With
+its defaults, LibreOffice 25.2 reads no linked local file (linked Writer sections, RTF `INCLUDETEXT`, Calc external
+references; tested on #526). **Before go-live:** keep LibreOffice in the parser or move it to a separate converter
+container, decided together with the parser's sandbox question.
 
 ## 5. Email
 
@@ -708,7 +715,7 @@ In P1 the malicious fixtures (§15.3) cover the known attack shapes; crash findi
 |---|---|
 | **P0** | Image with Docling, Tesseract `swe` and models baked; size measured; supervisor with one slot and warm-up self-test; `/health/*`, `/v1/info` with `build_hash`; the five convert/inspect/info/error schemas in `contracts/parser/v1/`; `/v1/convert` for PDF (the text-layer fast path and Docling with OCR `auto`/`force`/`off`, table modes, page ranges with `partial`, per-page signals with the mojibake part of the garble detector, the error codes, the disconnect kill; other formats refused); `/v1/inspect` answered `501 not_implemented`; `test_offline.py` green with `--network none` |
 | **P1** | `/v1/inspect`; text-layer fast path; `/v1/ner` with `ner-0` and its two schemas (§7.8); all P1 formats (§3), legacy Office, RTF and email refused as `format_deferred`; OCR `auto`/`force`/`off`; tables `fast`/`accurate`; **page ranges** with `partial`; per-page signals and garble detector; every error code; limits and bomb checks; RSS watchdog, recycling, disconnect kill; OTel and metrics; fixture corpus and goldens; contract tests; OCR acceptance check (§9.3); licence inventory (postponed P2); `bench.py` report on the test host |
-| **P2** | Legacy Office and RTF via LibreOffice, email with child documents (Z1, §4, §5); picture crops with a describe-pictures node (worker → gateway, residency rules); OCR for pictures in DOCX/PPTX (route via PDF); PDF embedded files as child documents; decide archives and macro-enabled formats; fuzzing (§15.4); cross-page table merge and page-end hyphenation if the evaluation shows a need; adaptive range sizes (§8.1). A GPU image is a capacity trigger, not a P2 item (§12) |
+| **P2** | Legacy Office and RTF from crawled sources, email with child documents (Z1, §4, §5); picture crops with a describe-pictures node (worker → gateway, residency rules); OCR for pictures in DOCX/PPTX (route via PDF); PDF embedded files as child documents; decide archives and macro-enabled formats; fuzzing (§15.4); cross-page table merge and page-end hyphenation if the evaluation shows a need; adaptive range sizes (§8.1). A GPU image is a capacity trigger, not a P2 item (§12) |
 
 Page ranges and table modes are P1: the 20-page request limit of repo-and-deployment §5.3 requires ranges for any long
 PDF, and table modes are one option.
