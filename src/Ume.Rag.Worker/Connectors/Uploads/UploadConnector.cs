@@ -46,6 +46,13 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
 
     public static string IdentityOf(Guid uploadId) => "upload:" + uploadId.ToString("D");
 
+    /// <summary>The slot of an <c>upload:&lt;slot&gt;</c> identity, or null for any other identity.</summary>
+    public static Guid? SlotOf(string identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        return identity.StartsWith("upload:", StringComparison.Ordinal) && Guid.TryParse(identity.AsSpan("upload:".Length), out var slot) ? slot : null;
+    }
+
     /// <summary>
     /// The slot of an <c>upload:&lt;slot&gt;</c> identity; the hint carries only the slot id, since the fetch reads the slot's
     /// file name, hash and type again.
@@ -53,7 +60,7 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
     public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last)
     {
         ArgumentNullException.ThrowIfNull(canonicalIdentity);
-        return canonicalIdentity.StartsWith("upload:", StringComparison.Ordinal) && Guid.TryParse(canonicalIdentity.AsSpan("upload:".Length), out var slot)
+        return SlotOf(canonicalIdentity) is { } slot
             ? new WorkItem(IdentityKind.Upload, canonicalIdentity, null, 0, new WorkHints(Upload: new UploadHint(slot, string.Empty, string.Empty, null)))
             : null;
     }

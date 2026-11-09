@@ -1,11 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Uploads;
+using Ume.Rag.Worker.Processing.Persistence;
 using Ume.Rag.Worker.Tests.Engine;
 using Ume.Rag.Worker.Tests.Processing;
 
@@ -19,7 +21,9 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// come from the cache; a replace keeps the document and swaps its set; a delete removes the document and an add on the
 /// deleted slot revives it. An <c>internal</c> upload stored plain or with a damaged segment fails
 /// <c>upload.blob_damaged</c> once; a <c>public</c> upload is stored as received. A <c>path</c> rule of the
-/// <c>files</c> template matches the upload's display name and tags its chunks (processing design §7).
+/// <c>files</c> template matches the upload's display name and tags its chunks (processing design §7). Each slot ends in
+/// the state its bytes' processing reached (#533): <c>indexed</c> with its document (identical bytes again too),
+/// <c>refused</c> with the reason when the parse or the embed ended it.
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -60,7 +64,7 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             (await EngineKit.WaitForRunAsync(database, run)).ShouldBe(new RunCounters(RunStates.Degraded, 2, 0, 0, 0, 1, 0));
             (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(2);
             (await SlotStateAsync(virus)).ShouldBe(UploadStates.Malware);
-            (await SlotStateAsync(a)).ShouldBe(UploadStates.Clean);
+            (await SlotAsync(a)).ShouldBe((UploadStates.Indexed, null, (await DocumentAsync(seed, a)).Id));
             var stored = File.ReadAllBytes(UploadPath(seed, a, note));
             Encoding.ASCII.GetString(stored, 0, 4).ShouldBe("URB2", "an internal upload is stored encrypted, as the admin writes it");
             Contains(stored, marker).ShouldBeFalse("the stored upload holds no plaintext");
@@ -112,6 +116,7 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             var added = await CommitAsync(seed, (UploadOperation.Add, slot, "avfall.md", first), (UploadOperation.Add, keep, "taxa.md", Note("Taxa " + marker)));
             (await EngineKit.WaitForRunAsync(database, added)).ShouldBe(new RunCounters(RunStates.Succeeded, 2, 0, 0, 0, 0, 0));
             var (documentId, firstSet) = await DocumentAsync(seed, slot);
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, documentId));
 
             var replaced = await CommitAsync(seed, (UploadOperation.Replace, slot, "avfall.md", Note("Avfall " + marker, "Nya hämtdagar gäller från mars.")));
 
@@ -122,6 +127,14 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "State" FROM content."ChunkSets" WHERE "Id" = $1""", firstSet!.Value))
                 .ShouldBe("superseded");
             (await EngineKit.StrayChunksAsync(database, seed)).ShouldBe(0);
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, documentId));
+
+            // The same bytes again (connectors design §9.3): unchanged, and the slot, received again by the batch, ends indexed.
+            var again = await CommitAsync(seed, (UploadOperation.Replace, slot, "avfall.md", Note("Avfall " + marker, "Nya hämtdagar gäller från mars.")));
+
+            (await EngineKit.WaitForRunAsync(database, again)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 0, 1, 0, 0, 0));
+            (await DocumentAsync(seed, slot)).ShouldBe((documentId, secondSet));
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, documentId));
 
             var deleted = await CommitAsync(seed, (UploadOperation.Delete, slot, null, null));
 
@@ -135,6 +148,7 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
 
             (await EngineKit.WaitForRunAsync(database, restored)).State.ShouldBe(RunStates.Succeeded);
             (await DocumentAsync(seed, slot)).Id.ShouldBe(documentId);
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, documentId));
             (await EngineKit.DocumentsAsync(database, seed)).ShouldBe(2);
             (await EngineKit.DuplicateSetsAsync(database, seed)).ShouldBe(0);
         }
@@ -172,7 +186,7 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
                 .Order(StringComparer.Ordinal).Select(i => $"{i} {UploadConnector.BlobDamaged}")));
             (await SlotStateAsync(plain)).ShouldBe(UploadStates.Refused);
             (await SlotStateAsync(damaged)).ShouldBe(UploadStates.Refused);
-            (await SlotStateAsync(good)).ShouldBe(UploadStates.Clean);
+            (await SlotStateAsync(good)).ShouldBe(UploadStates.Indexed);
             foreach (var slot in new[] { plain, damaged })
             {
                 (await Sql.ScalarAsync<string>(database.Connection(null), """
@@ -205,7 +219,54 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             (await EngineKit.WaitForRunAsync(database, run)).ShouldBe(new RunCounters(RunStates.Succeeded, 1, 0, 0, 0, 0, 0));
             File.ReadAllBytes(UploadPath(seed, slot, note)).ShouldBe(note, "a public upload is not envelope-encrypted");
             (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(1);
-            (await SlotStateAsync(slot)).ShouldBe(UploadStates.Clean);
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, (await DocumentAsync(seed, slot)).Id));
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_file_whose_parse_ends_without_text_ends_refused_with_the_reason_and_its_document()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        var seed = await SeedUploadAsync();
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("unused"))));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, logs: _logs);
+        try
+        {
+            var (empty, good) = (Guid.NewGuid(), Guid.NewGuid());
+            var run = await CommitAsync(seed,
+                (UploadOperation.Add, empty, "rubrik.md", Encoding.UTF8.GetBytes($"# Bara en rubrik {marker}\n")),
+                (UploadOperation.Add, good, "taxa.md", Note("Taxa " + marker)));
+
+            (await EngineKit.WaitForRunAsync(database, run)).State.ShouldNotBe(RunStates.Running);
+            (await SlotAsync(empty)).ShouldBe((UploadStates.Refused, "parse.empty", (await DocumentAsync(seed, empty)).Id));
+            (await SlotAsync(good)).ShouldBe((UploadStates.Indexed, null, (await DocumentAsync(seed, good)).Id));
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_file_whose_embed_fails_ends_refused_with_the_reason()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        var seed = await SeedUploadAsync();
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("unused"))));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, logs: _logs,
+            services: services => services.AddSingleton<IEmbeddingProfileStore, NoEmbeddingProfiles>());
+        try
+        {
+            var slot = Guid.NewGuid();
+            var run = await CommitAsync(seed, (UploadOperation.Add, slot, "avfall.md", Note("Avfall " + marker)));
+
+            (await EngineKit.WaitForRunAsync(database, run)).Failed.ShouldBe(1);
+            (await DocumentAsync(seed, slot)).LiveSet.ShouldBeNull();
+            (await SlotAsync(slot)).ShouldBe((UploadStates.Refused, "embed.profile_unknown", (await DocumentAsync(seed, slot)).Id));
         }
         finally
         {
@@ -259,6 +320,16 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
     private Task<string> SlotStateAsync(Guid slot) =>
         Sql.ScalarAsync<string>(database.Connection(null), """SELECT "State" FROM content."Uploads" WHERE "Id" = $1""", slot);
 
+    /// <summary>The slot's state, reason and document, as the worker wrote them (#533).</summary>
+    private async Task<(string State, string? Reason, Guid? Document)> SlotAsync(Guid slot)
+    {
+        var row = await Sql.ScalarAsync<string>(database.Connection(null), """
+            SELECT "State" || '|' || coalesce("Reason", '') || '|' || coalesce("DocumentId"::text, '') FROM content."Uploads" WHERE "Id" = $1
+            """, slot);
+        var parts = row.Split('|');
+        return (parts[0], parts[1].Length == 0 ? null : parts[1], parts[2].Length == 0 ? null : Guid.Parse(parts[2]));
+    }
+
     private async Task<(Guid Id, Guid? LiveSet)> DocumentAsync(SourceSeed seed, Guid slot)
     {
         var id = await Sql.ScalarAsync<Guid>(database.Connection(null),
@@ -266,4 +337,13 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
         var set = await Sql.ScalarAsync<Guid?>(database.Connection(null), """SELECT "LiveChunkSetId" FROM content."Documents" WHERE "Id" = $1""", id);
         return (id, set);
     }
+}
+
+/// <summary>No embedding profile is known: every <c>embed</c> job ends <c>failed</c> <c>embed.profile_unknown</c>.</summary>
+internal sealed class NoEmbeddingProfiles : IEmbeddingProfileStore
+{
+    public Task<EmbeddingProfileRecord?> GetAsync(Guid profileId, CancellationToken cancellationToken) => Task.FromResult<EmbeddingProfileRecord?>(null);
+
+    public Task<IReadOnlyList<EmbeddingProfileRecord>> ActiveAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EmbeddingProfileRecord>>([]);
 }

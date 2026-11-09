@@ -187,5 +187,6 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
             Strategy = document.ParseStrategy,
             PipelineVersionId = pipelineVersionId,
             ExecutionId = document.CurrentExecutionId,
+            ContentHash = document.ContentHash,
         };
 }

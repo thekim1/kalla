@@ -93,7 +93,7 @@ public static class UploadEndpoints
                 if (!string.IsNullOrEmpty(state))
                 {
                     var states = FileStates.Of(state) ?? throw AdminFaults.Field("state", AdminErrorCodes.InvalidValue);
-                    query = query.Where(f => states.Contains(f.State));
+                    query = query.Where(f => states.Contains(f.Upload.State));
                 }
 
                 var cursor = after is { Length: > 0 } ? FileCursor.Read(after, order) : null;
@@ -121,13 +121,12 @@ public static class UploadEndpoints
 
                 var rows = await query.Take(take + 1).ToListAsync(ct);
                 var page = rows.Take(take).ToList();
-                var reasons = await FailureReasonsAsync(admin, page, ct);
                 var next = rows.Count > take
                     ? FileCursor.Write(order == FileSorts.Name
                         ? new FileCursor(order, page[^1].SortName, null, page[^1].Upload.Id)
                         : new FileCursor(order, null, page[^1].Upload.UploadedAt, page[^1].Upload.Id))
                     : null;
-                return new KeysetPage<UploadFileDto, string?>([.. page.Select(f => UploadFileDto.Of(f, reasons.GetValueOrDefault(f.Upload.Id)))], next);
+                return new KeysetPage<UploadFileDto, string?>([.. page.Select(f => UploadFileDto.Of(f.Upload))], next);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("ListSourceFiles")
             .WithSummary("A source's upload slots (keyset; q, state processing|indexed|failed, sort name|uploaded; deleted=true for deleted ones)");
@@ -135,7 +134,7 @@ public static class UploadEndpoints
         api.MapGet("/sources/{id:guid}/files/summary", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
                 _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                var groups = await Files(admin, id, deleted: false).GroupBy(f => f.State)
+                var groups = await Files(admin, id, deleted: false).GroupBy(f => f.Upload.State)
                     .Select(g => new { State = g.Key, Count = g.Count(), Bytes = g.Sum(f => f.Upload.Bytes), Last = g.Max(f => (DateTimeOffset?)f.Upload.UploadedAt) })
                     .ToListAsync(ct);
                 int InStates(IReadOnlyList<string> states) => groups.Where(g => states.Contains(g.State)).Sum(g => g.Count);
@@ -410,68 +409,25 @@ public static class UploadEndpoints
     /// </summary>
     private const string PathCollation = "C";
 
-    /// <summary>Document parse outcomes that mean its processing went on (<c>DriftSweep.SweptOutcomes</c>); any other ended it.</summary>
-    private static readonly string[] ProcessingOutcomes = ["pending", "success"];
-
-    /// <summary>Run item outcomes that end a document without a chunk set (<c>Runs</c> failed counts, plus <c>skipped</c>).</summary>
-    private static readonly string[] EndedOutcomes = ["unsupported", "too-large", "encrypted", "malware", "blocked", "failed", "skipped"];
-
     /// <summary>
-    /// A source's upload slots with their effective state. The worker leaves a fetched slot <c>clean</c> (connectors §9.1) and
-    /// never sets <c>indexed</c>, so a <c>clean</c> slot is read through its document (<c>upload:&lt;slot&gt;</c>): <c>indexed</c>
-    /// when the live chunk set was built from the slot's bytes (an upload's content hash is its SHA-256), <c>refused</c> when
-    /// processing of those bytes ended (the document's parse outcome), else still <c>clean</c> (processing).
+    /// A source's upload slots with their lower-cased path for the name sort. The worker writes each slot's state, reason and
+    /// document (connectors design §9.1): <c>indexed</c> when its bytes' chunk set went live, <c>refused</c> or
+    /// <c>malware</c> when their processing ended without one.
     /// </summary>
-    private static IQueryable<FileRow> Files(AdminContext admin, Guid sourceId, bool deleted)
-    {
-        var documents = admin.Db.Documents.Where(d => d.SourceId == sourceId && d.IdentityKind == IdentityKinds.Upload);
-        var sets = admin.Db.ChunkSets;
-        return admin.Db.Uploads.AsNoTracking()
+    private static IQueryable<FileRow> Files(AdminContext admin, Guid sourceId, bool deleted) =>
+        admin.Db.Uploads.AsNoTracking()
             .Where(u => u.SourceId == sourceId && (deleted ? u.DeletedAt != null : u.DeletedAt == null))
             .Select(u => new FileRow
             {
                 Upload = u,
-                DocumentId = u.DocumentId ?? documents.Where(d => d.CanonicalIdentity == "upload:" + u.Id.ToString()).Select(d => (Guid?)d.Id).FirstOrDefault(),
-                State = u.State != UploadStates.Clean ? u.State
-                    : documents.Any(d => d.CanonicalIdentity == "upload:" + u.Id.ToString() && sets.Any(s => s.Id == d.LiveChunkSetId && s.ContentHash == u.Sha256))
-                        ? UploadStates.Indexed
-                        : documents.Any(d => d.CanonicalIdentity == "upload:" + u.Id.ToString() && d.ContentHash == u.Sha256 && d.ParseOutcome != null
-                            && !ProcessingOutcomes.Contains(d.ParseOutcome))
-                            ? UploadStates.Refused
-                            : UploadStates.Clean,
 #pragma warning disable CA1304, CA1311 // translated to SQL lower(); no .NET culture is involved
                 SortName = u.FileName.ToLower(),
 #pragma warning restore CA1304, CA1311
             });
-    }
 
-    /// <summary>The reason of each listed slot whose processing ended: its document's last ended run item since the upload.</summary>
-    private static async Task<Dictionary<Guid, string>> FailureReasonsAsync(AdminContext admin, IReadOnlyList<FileRow> page, CancellationToken ct)
-    {
-        var ended = page.Where(f => f.Upload.State == UploadStates.Clean && f.State == UploadStates.Refused && f.DocumentId is not null).ToList();
-        if (ended.Count == 0)
-        {
-            return [];
-        }
-
-        var documentIds = ended.Select(f => f.DocumentId!.Value).ToList();
-        var since = ended.Min(f => f.Upload.UploadedAt) - TimeSpan.FromDays(1); // bounds the day-partitioned RunItems scan, with a day's slack
-        var reasons = await admin.Db.RunItems.AsNoTracking()
-            .Where(i => i.DocumentId != null && documentIds.Contains(i.DocumentId.Value) && i.CreatedAt >= since && i.Reason != null && EndedOutcomes.Contains(i.Outcome))
-            .GroupBy(i => i.DocumentId)
-            .Select(g => g.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id).Select(i => new { i.DocumentId, i.Reason }).First())
-            .ToListAsync(ct);
-        return ended.Select(f => (f.Upload.Id, reasons.FirstOrDefault(r => r.DocumentId == f.DocumentId)?.Reason))
-            .Where(r => r.Reason is not null).ToDictionary(r => r.Id, r => r.Reason!);
-    }
-
-    internal sealed class FileRow
+    private sealed class FileRow
     {
         public required Upload Upload { get; init; }
-        public Guid? DocumentId { get; init; }
-
-        /// <summary>The effective <see cref="UploadStates"/> value (<see cref="Files"/>).</summary>
-        public required string State { get; init; }
 
         public required string SortName { get; init; }
     }
@@ -641,21 +597,15 @@ public sealed class FileRequestSizeLimit : IRequestSizeLimitMetadata
     public long? MaxRequestBodySize => UploadEndpoints.FileRequestLimit;
 }
 
-/// <summary>
-/// An upload slot as the Files list shows it: its path, size, effective state (an indexed or ended <c>clean</c> slot reads
-/// <c>indexed</c> or <c>refused</c>) with its reason, the document, who and when.
-/// </summary>
+/// <summary>An upload slot as the Files list shows it: its path, size, state with its reason, the document, who and when.</summary>
 public sealed record UploadFileDto(Guid Id, string FileName, long Bytes, string State, string? Reason, Guid? DocumentId, string? UploadedBy, DateTimeOffset UploadedAt,
     DateTimeOffset? ReplacedAt, DateTimeOffset? DeletedAt)
 {
-    internal static UploadFileDto Of(UploadEndpoints.FileRow f, string? endedReason)
-    {
-        var u = f.Upload;
-        return new(u.Id, u.FileName, u.Bytes, f.State, u.Reason ?? endedReason, f.DocumentId, u.UploadedBy, u.UploadedAt, u.ReplacedAt, u.DeletedAt);
-    }
+    internal static UploadFileDto Of(Upload u) =>
+        new(u.Id, u.FileName, u.Bytes, u.State, u.Reason, u.DocumentId, u.UploadedBy, u.UploadedAt, u.ReplacedAt, u.DeletedAt);
 }
 
-/// <summary>The list's <c>state</c> filter (admin design §5.5.7): each value and the effective <see cref="UploadStates"/> it covers.</summary>
+/// <summary>The list's <c>state</c> filter (admin design §5.5.7): each value and the <see cref="UploadStates"/> it covers.</summary>
 public static class FileStates
 {
     public static IReadOnlyList<string> Processing { get; } = [UploadStates.Received, UploadStates.Clean];

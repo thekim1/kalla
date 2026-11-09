@@ -5,6 +5,7 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Persistence;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
@@ -66,6 +67,12 @@ public sealed record RunItemRow(Guid RunId, string Classification, Guid? Documen
     public int? DurationMs { get; init; }
 
     public decimal? CostUsd { get; init; }
+
+    /// <summary>
+    /// The content the outcome is about. An <c>upload:&lt;slot&gt;</c> item with it sets its slot's state while the slot still
+    /// holds these bytes (<see cref="EngineCommit.AddRunItemAsync"/>); without it the slot is left alone.
+    /// </summary>
+    public byte[]? ContentHash { get; init; }
 }
 
 /// <summary>The response facts the fetch writes to the source's frontier row, with <c>State = idle</c>.</summary>
@@ -385,6 +392,19 @@ public sealed class EngineCommit : IAsyncDisposable
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         """;
 
+    // The slot of an upload item (connectors design §9.1), while it holds the item's bytes and is not deleted: indexed when the
+    // document's live pointer names a set (live or held) built from those bytes, so a replace in between is never marked by the
+    // old bytes' set and a failed reprocess of indexed bytes leaves them indexed; else the failure's state ($4) and reason.
+    private const string UploadSlotSql = """
+        WITH live AS (
+            SELECT 1 FROM content."Documents" d JOIN content."ChunkSets" s ON s."Id" = d."LiveChunkSetId" WHERE d."Id" = $3 AND s."ContentHash" = $2)
+        UPDATE content."Uploads"
+           SET "State" = CASE WHEN EXISTS (SELECT 1 FROM live) THEN 'indexed' ELSE $4 END,
+               "Reason" = CASE WHEN EXISTS (SELECT 1 FROM live) THEN NULL ELSE $5 END,
+               "DocumentId" = coalesce($3, "DocumentId")
+         WHERE "Id" = $1 AND "Sha256" = $2 AND "DeletedAt" IS NULL AND (EXISTS (SELECT 1 FROM live) OR $4 IS NOT NULL)
+        """;
+
     private const string FrontierSql = """
         UPDATE content."CrawlFrontier"
            SET "State" = 'idle', "LastFetchedAt" = $5, "LastStatus" = $6, "ETag" = $7, "LastModified" = $8, "ContentHash" = coalesce($9, "ContentHash"),
@@ -479,7 +499,27 @@ public sealed class EngineCommit : IAsyncDisposable
             },
         };
         await command.ExecuteNonQueryAsync(cancellationToken);
+        // A superseded item leaves the slot to the newer execution; a deleted one's slot is closed by its batch.
+        if (item.ContentHash is { } contentHash && item.Outcome is not (Outcome.Superseded or Outcome.Deleted) && UploadConnector.SlotOf(item.Identity) is { } slotId)
+        {
+            await using var slot = new NpgsqlCommand(UploadSlotSql, Connection, Transaction)
+            {
+                Parameters = { Db.P(slotId), Db.P(contentHash), Db.P(item.DocumentId), Db.P(FailedSlotState(item.Outcome)), Db.P(EngineText.Cut(item.Reason, 500)) },
+            };
+            await slot.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
+
+    /// <summary>
+    /// An item's state for its upload slot when its bytes have no live set: <c>malware</c> or <c>refused</c> for a failure, null
+    /// for an indexing outcome (only <c>indexed</c> is written, <see cref="UploadSlotSql"/>).
+    /// </summary>
+    private static string? FailedSlotState(Outcome outcome) => outcome switch
+    {
+        Outcome.Added or Outcome.Updated or Outcome.Unchanged or Outcome.Degraded => null,
+        Outcome.Malware => Domain.Entities.UploadStates.Malware,
+        _ => Domain.Entities.UploadStates.Refused,
+    };
 
     public async Task CompleteFrontierAsync(FrontierCompletion completion, CancellationToken cancellationToken)
     {

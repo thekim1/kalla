@@ -13,8 +13,10 @@ namespace Ume.Rag.Worker.Engine;
 /// <summary>
 /// The engine's part of an <c>upload</c> source (connectors design §9): the commit's <c>sync</c> plans the batch (slots
 /// written, skips as run items, one <c>fetch</c> job per changed slot, dedup <c>fetch:{sourceId}:upload:{uploadId}</c>);
-/// the <c>fetch</c> job scans and sniffs the slot's blob, which is the document's raw content, and records the slot's state.
-/// Deleted slots become <c>upload.deleted</c> candidates in the reconcile phase.
+/// the <c>fetch</c> job scans and sniffs the slot's blob, which is the document's raw content, and marks a clean file
+/// <c>clean</c> before its processing. The slot's final state follows the run item that ends the processing of its bytes
+/// (<see cref="EngineCommit.AddRunItemAsync"/>: <c>indexed</c>, <c>refused</c> or <c>malware</c>, carried by
+/// <see cref="FetchCase.ContentHash"/> at the fetch). Deleted slots become <c>upload.deleted</c> candidates in the reconcile phase.
 /// </summary>
 public sealed class UploadSource(
     UploadConnector connector,
@@ -77,31 +79,16 @@ public sealed class UploadSource(
         var item = new WorkItem(IdentityKind.Upload, slot.Identity, null, 0,
             new WorkHints(Upload: new UploadHint(slot.Id, slot.Sha256, slot.FileName, slot.DeclaredMediaType)));
         var outcome = await connector.FetchAsync(new FetchContext(source.SourceId, source.Classification, run.Id, source.Settings, false), item, cancellationToken);
-        var fetch = new FetchCase(source, run, pipeline, job, IdentityKinds.Upload, slot.Identity, null) { DisplayName = slot.FileName };
-        var result = await ingest.HandleAsync(fetch, outcome, cancellationToken);
-        var state = outcome switch
+        if (outcome is FetchOutcome.Content)
         {
-            FetchOutcome.Content => UploadState.Clean,
-            FetchOutcome.Quarantined => UploadState.Malware,
-            FetchOutcome.Refused or FetchOutcome.Failed or FetchOutcome.Skipped => UploadState.Refused,
-            // Committed only as a failed item: the last attempt or 24 h without a ClamAV verdict.
-            FetchOutcome.Transient => UploadState.Refused,
-            _ => (UploadState?)null,
-        };
-        if (state is { } value && result is JobResult.Committed)
-        {
-            var reason = outcome switch
-            {
-                FetchOutcome.Quarantined q => q.Reason,
-                FetchOutcome.Refused r => r.Reason,
-                FetchOutcome.Failed f => f.Reason,
-                FetchOutcome.Skipped s => s.Reason,
-                FetchOutcome.Transient t => t.Reason,
-                _ => null,
-            };
-            await writer.SetStateAsync(slot.Id, value, null, reason, null, cancellationToken);
+            await writer.SetStateAsync(slot.Id, UploadState.Clean, null, null, null, cancellationToken);
         }
 
-        return result;
+        var fetch = new FetchCase(source, run, pipeline, job, IdentityKinds.Upload, slot.Identity, null)
+        {
+            DisplayName = slot.FileName,
+            ContentHash = Convert.FromHexString(slot.Sha256),
+        };
+        return await ingest.HandleAsync(fetch, outcome, cancellationToken);
     }
 }

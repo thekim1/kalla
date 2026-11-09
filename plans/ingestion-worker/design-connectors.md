@@ -898,9 +898,13 @@ host. Results in to-verify #29; the defaults of `Render:*` are set from them.
 `SourceId`, `Classification`, `BatchId` (last change), `FileName`, `DeclaredMediaType`, `SniffedMediaType`, `Bytes`,
 `Sha256` (current version), `State` (`received`/`clean`/`malware`/`refused`/`indexed`/`deleted`), `Reason`,
 `DocumentId`, `UploadedBy`, `UploadedAt`, `ReplacedAt`, `DeletedAt`. The admin reads it for the source's file list.
-When a slot's `fetch` commits, it sets the slot's state with the outcome's reason: `clean` for content, `malware` for
-quarantine, and `refused` for a refused, failed or skipped file and for a transient failure that ends the item (its
-last attempt, or 24 h without a ClamAV verdict, §11).
+A slot's `fetch` sets `clean` when the scan passes, before processing. The run item that ends the processing of the
+slot's bytes sets the final state in its own commit, only while the slot still holds those bytes (`Sha256`) and is not
+deleted: `indexed` with `DocumentId` when the document's live pointer names a set (live or held for personal data)
+built from those bytes; otherwise `malware` for a finding, or `refused` with the item's reason for a refused, failed or
+skipped file, a parse or embed failure, and a transient failure that ends the item (its last attempt, or 24 h without a
+ClamAV verdict, §11). A replace in between is never marked by the old bytes' outcome, and a failed reprocess of bytes
+that are live leaves the slot `indexed` (#533).
 
 ### 9.2 Types
 
