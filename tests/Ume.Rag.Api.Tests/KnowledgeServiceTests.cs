@@ -94,7 +94,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         Upload = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, IdentityKind = "upload",
-            CanonicalIdentity = "upload:" + UploadSlot, Title = "Taxa 2026", DisplayName = "taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
+            CanonicalIdentity = "upload:" + UploadSlot, Title = "Taxa 2026", DisplayName = "Bygglov/Taxor/taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
         }, [new FixtureChunk("Avgiften för bygglov för en altan beräknas enligt taxan för 2026.")]);
         await writer.ExecuteAsync($"""UPDATE content."Documents" SET "ContentHash" = '\x{Convert.ToHexString(UploadHash)}' WHERE "Id" = '{Upload.Id}'""");
         var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = BlobRoot }), TimeProvider.System);
@@ -519,7 +519,8 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         altan.Citation.ShouldBe(new Citation(db.Altan.Id, "Altan och uteplats", null, "https://www.umea.se/bygga/altan", null, "web", altan.Citation.DocumentType,
             "text/html", "sv", new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)));
         var upload = result.Results.Single(r => r.DocumentId == db.Upload.Id).Citation;
-        (upload.Title, upload.DisplayName, upload.Url, upload.SourceType).ShouldBe(("taxa-bygglov-2026.pdf", "taxa-bygglov-2026.pdf", null, "file"));
+        // A folder upload's display name is its relative path (admin design §4.5); the title is the file name.
+        (upload.Title, upload.DisplayName, upload.Url, upload.SourceType).ShouldBe(("taxa-bygglov-2026.pdf", "Bygglov/Taxor/taxa-bygglov-2026.pdf", null, "file"));
 
         service.MarkCited(result, [altan.Rank]);
         (await counter.FlushAsync(Ct)).ShouldBeGreaterThan(0);
@@ -668,7 +669,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
 
         var content = await service.FindContentAsync(grant, db.Upload.Id, Ct);
         content.ShouldBe(new DocumentContent(db.Upload.Id, new($"uploads/{db.PublicSource:D}/{db.UploadSlot:D}/ab{new string('0', 62)}"), Classification.Public,
-            "application/pdf", "taxa-bygglov-2026.pdf", KnowledgeFixture.UploadHash), new ContentComparer());
+            "application/pdf", "Bygglov/Taxor/taxa-bygglov-2026.pdf", KnowledgeFixture.UploadHash), new ContentComparer());
         (await service.GetDocumentAsync(grant, db.Upload.Id, Ct)).Citation.Title.ShouldBe("taxa-bygglov-2026.pdf");
         (await service.FindContentAsync(who, db.Upload.Id, Ct)).Key.ShouldBe(content.Key);
     }

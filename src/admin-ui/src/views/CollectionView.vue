@@ -8,6 +8,8 @@ import CollectionTopics from '@/components/collections/CollectionTopics.vue'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
 import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
+import FilesPanel from '@/components/files/FilesPanel.vue'
+import { createUploadSource } from '@/components/files/files'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -16,6 +18,7 @@ import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SelectField from '@/components/ui/SelectField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -27,10 +30,12 @@ import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { COLLECTION, COLLECTIONS, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
-// Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Källor, Dokument with the personal-data filter
-// (§4.5 documents), Topics, Testfrågor och kvalitet, Sökinställningar (§7.1) and Sharing (§3.2). A department the
-// knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count) and Topics.
-type Tab = 'overview' | 'sources' | 'documents' | 'topics' | 'evaluation' | 'retrieval' | 'sharing'
+// Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Filer (§5.5.7: the Files card of an upload
+// source, with a picker when there are several; shown when there is one, and Add files on Källor creates it), Källor,
+// Dokument with the personal-data filter (§4.5 documents), Topics, Testfrågor och kvalitet, Sökinställningar (§7.1) and
+// Sharing (§3.2). A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level,
+// document count) and Topics.
+type Tab = 'overview' | 'files' | 'sources' | 'documents' | 'topics' | 'evaluation' | 'retrieval' | 'sharing'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -46,7 +51,7 @@ const evaluation = ref<EvaluationOverview | null>(null)
 const documents = useLoadable<DocumentSummary[]>([])
 const next = ref<string | null>(null)
 const onlyPii = ref(false)
-const TABS: Tab[] = ['overview', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
+const TABS: Tab[] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
 /** `?tab=` opens a tab directly (the setup checklist links to them). */
 const fromQuery = (value: unknown): Tab => (TABS.includes(value as Tab) ? (value as Tab) : 'overview')
 const tab = ref<Tab>(fromQuery(route?.query.tab))
@@ -71,6 +76,13 @@ const quality = computed(() => {
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const adding = ref(false)
+const uploadSources = computed(() => sources.data.value.filter((s) => s.type === 'upload'))
+const fileSourceId = ref('')
+const fileSource = useLoadable<Source | null>(null)
+const addingFiles = ref(false)
+const addFilesError = ref<unknown>(null)
+/** `?tab=files` on a knowledge base without an upload source (its creation failed, or none was made): Add files says so. */
+const noFilesSource = ref(false)
 // Edit (§5.5.2, #446): the own fields, the level included.
 const editing = ref(false)
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
@@ -81,6 +93,7 @@ const tabs = computed(() => shared.value ? [
   { value: 'topics' as const, label: COLLECTION.tabs.topics },
 ] : [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
+  ...(uploadSources.value.length ? [{ value: 'files' as const, label: COLLECTION.tabs.files }] : []),
   // The count only once loaded (#279 review: no "(0)" while loading).
   { value: 'sources' as const, label: sources.loaded.value ? `${COLLECTION.tabs.sources} (${sources.data.value.length})` : COLLECTION.tabs.sources },
   { value: 'documents' as const, label: COLLECTION.tabs.documents },
@@ -122,9 +135,45 @@ async function load(): Promise<void> {
     return
   }
   await sources.run(() => api.collections.sources(props.id))
+  pickFileSource()
   evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
+}
+
+/** The upload source the Files tab shows: the one picked while it still exists, else the first; none sends Files to Sources. */
+function pickFileSource(): void {
+  if (!uploadSources.value.some((s) => s.id === fileSourceId.value)) fileSourceId.value = uploadSources.value[0]?.id ?? ''
+  if (tab.value === 'files' && !fileSourceId.value && sources.loaded.value) {
+    tab.value = 'sources'
+    noFilesSource.value = true
+  }
+}
+
+async function loadFileSource(): Promise<void> {
+  const id = fileSourceId.value
+  if (!id || fileSource.data.value?.id === id) return
+  await fileSource.run(() => api.sources.get(id))
+  // Another source picked meanwhile: its answer is the one to show.
+  if (fileSourceId.value !== id && !fileSource.error.value) await loadFileSource()
+}
+
+/** Add files (§5.5.7): the upload source a knowledge base of files gets, then its Files tab. */
+async function addFiles(): Promise<void> {
+  if (!collection.data.value) return
+  addingFiles.value = true
+  addFilesError.value = null
+  try {
+    const source = await createUploadSource(collection.data.value)
+    await sources.run(() => api.collections.sources(props.id))
+    fileSourceId.value = source.id
+    noFilesSource.value = false
+    tab.value = 'files'
+  } catch (e) {
+    addFilesError.value = e
+  } finally {
+    addingFiles.value = false
+  }
 }
 
 function edited(saved: Collection): void {
@@ -176,6 +225,11 @@ watch(tab, (t) => {
   if (t === 'documents' && !documents.loaded.value) void loadDocuments()
 })
 watch(onlyPii, () => void loadDocuments())
+watch([tab, fileSourceId], ([t]) => {
+  if (t !== 'files') return
+  if (sources.loaded.value && !fileSourceId.value) pickFileSource()
+  else void loadFileSource()
+})
 watch(() => route?.query.tab, (t) => {
   if (t !== undefined) tab.value = fromQuery(t)
 })
@@ -263,10 +317,36 @@ onMounted(load)
         </UiCard>
       </div>
 
+      <div v-else-if="tab === 'files'" id="collection-panel-files" role="tabpanel" aria-labelledby="collection-tab-files" class="grid gap-4">
+        <div v-if="uploadSources.length > 1" class="max-w-sm">
+          <SelectField
+            id="files-source" v-model="fileSourceId" :label="COLLECTION.filesSource" :options="uploadSources.map((s) => ({ value: s.id, label: s.name }))"
+          />
+        </div>
+        <AsyncState
+          :loading="sources.loading.value || (fileSource.loading.value && fileSource.data.value?.id !== fileSourceId)" :error="fileSource.error.value"
+          @retry="loadFileSource"
+        >
+          <FilesPanel
+            v-if="fileSource.data.value && fileSource.data.value.id === fileSourceId" :key="fileSource.data.value.id" :source="fileSource.data.value"
+            :can-edit="canEdit" topics-link :used-by="usedBy" @topics="tab = 'topics'"
+          />
+        </AsyncState>
+      </div>
+
       <div v-else-if="tab === 'sources'" id="collection-panel-sources" role="tabpanel" aria-labelledby="collection-tab-sources">
-        <div v-if="canEdit" class="mb-4 flex justify-end">
+        <div v-if="canEdit" class="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <p v-if="noFilesSource && sources.loaded.value && uploadSources.length === 0" class="mr-auto text-small text-fg-2" data-test="no-files-source">
+            {{ COLLECTION.noFilesSource }}
+          </p>
+          <UiButton
+            v-if="sources.loaded.value && uploadSources.length === 0" icon="upload_file" :loading="addingFiles" data-test="add-files" @click="addFiles"
+          >
+            {{ COLLECTION.addFiles }}
+          </UiButton>
           <UiButton variant="primary" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
         </div>
+        <InlineError v-if="addFilesError" :message="problemMessage(addFilesError)" class="mb-4" />
         <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
           <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" clickable @row-click="openSource">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
