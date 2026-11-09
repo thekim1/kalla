@@ -386,8 +386,8 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/runs/{id}/cancel` | Edit | `command` `cancel-run` |
 | `GET /api/runs/{id}/deletions` (+ `?format=csv`), `POST /api/runs/{id}/deletions/confirm`, `/reject` | Read / Manage | connectors §13.3–§13.5; body carries `proposedCount` seen by the user; 409 `deletion_superseded` if a newer run took over; the `GET` carries `guard` (the configured deletion-guard limits, for the card's text, so its readers need no Settings route; #487) |
 | `GET /api/sources/{id}/held`, `POST /api/sources/{id}/held/release` | Read / Manage | `command` `release-hold` |
-| `POST /api/sources/{id}/upload-batches` → `{ batchId }`; `PUT /api/upload-batches/{batchId}/files/{n}` (raw body, `X-File-Name`); `POST /api/upload-batches/{batchId}/commit`; `DELETE /api/upload-batches/{batchId}` | Edit | per-file progress and retry; extension pre-check 415; SHA-256 while streaming; commit writes the manifest and the `sync` job; uncommitted batches swept after 24 h. Identity is (source, upload slot), so replacing a file keeps the document id |
-| `GET /api/sources/{id}/files` (keyset; `deleted`), `POST /api/sources/{id}/files/restore` | Read / Edit (restore: platform admin, #489) | restore brings a deleted uploaded file back within its 14-day grace, else 409 `file_not_restorable`; crawled documents have no restore route; connectors §9.3; a delete is an upload batch whose commit carries `deletes` (upload slot ids; the same manifest, `sync` job (dedup `sync-upload:{batchId}`) and audit entry as an upload, so there is one write path) |
+| `POST /api/sources/{id}/upload-batches` → `{ batchId }`; `PUT /api/upload-batches/{batchId}/files/{n}` (raw body, `X-File-Name`); `POST /api/upload-batches/{batchId}/commit`; `DELETE /api/upload-batches/{batchId}` | Edit | per-file progress and retry; `X-File-Name` is a percent-encoded UTF-8 **relative path** (§5.5.7): `\` read as `/`, a leading `/` dropped, 1–10 segments of 1–255 characters, no `.` or `..` segment, no control characters, at most 300 characters in all; it is stored as the upload's file name, which is the document's display name, so path rules `on: path` match its folders; extension pre-check 415 on the last segment; SHA-256 while streaming; commit writes the manifest and the `sync` job; uncommitted batches swept after 24 h. Identity is (source, upload slot), so replacing a file keeps the document id |
+| `GET /api/sources/{id}/files` (`deleted`; `q` = case-insensitive substring of the path; `state` = `processing`, `indexed` or `failed` (§5.5.7); `sort` = `name` (default, path order, so a folder's files are together) or `uploaded` (newest first); opaque `after` cursor, `limit`), `GET /api/sources/{id}/files/summary` → `{ total, processing, indexed, failed, bytes, lastUploadAt }` (deleted files not counted), `POST /api/sources/{id}/files/restore` | Read / Edit (restore: platform admin, #489) | restore brings a deleted uploaded file back within its 14-day grace, else 409 `file_not_restorable`; crawled documents have no restore route; connectors §9.3; a delete is an upload batch whose commit carries `deletes` (upload slot ids; the same manifest, `sync` job (dedup `sync-upload:{batchId}`) and audit entry as an upload, so there is one write path) |
 | `GET /api/sources/{id}/quarantine` | Read | metadata only |
 | `GET /api/sources/{id}/pii-report` | Read | the web editors' personal-data report, a list per source: it applies only to a `piiMode: report` source in a `public` collection (any other answers `applies: false`); held documents first, then live documents whose live set is flagged, each with the non-zero counts per type, the number of fired rules and the fired types (numbers and type names only, never values) and the last `pii.flagged` run item; at most 500 documents (`truncated`) |
 
@@ -980,6 +980,37 @@ graph library, §10.2). Shared collections appear with their owning department; 
 version, draft-only links are marked "(utkast)". In the table, *Responsible* is the assistant's contact when the row
 has an assistant, else the knowledge base's; *Shared* is the own knowledge base's sharing level, "–" for one shared
 in. Source: `GET /api/organisation/departments/{id}/map`.
+
+#### 5.5.7 Filer: a knowledge base of uploaded files (user, 2026-11-09)
+
+Many knowledge bases hold only files someone uploads (a department's guidelines, a support team's instructions). The
+pages treat that as a first-class case, not as a crawl source without a crawl:
+
+1. **One step to start.** The *Create knowledge base* drawer asks what goes in: *Files I upload* or *A website or a
+   list of addresses*. *Files* creates the knowledge base and one upload source (named *Files*, the collection's
+   classification, default template) in the same submit, then opens the knowledge base on its **Files** tab. The other
+   choice keeps today's flow (the source drawer opens next).
+2. **A Files tab on the knowledge base.** Shown when the knowledge base has an upload source; with several, a picker
+   above it names the source. It holds the drop zone (files and folders), the list and the details below, so nobody
+   has to find the source page. The source page keeps the same card. A knowledge base without an upload source gets
+   *Add files* on its Sources tab, which creates the source and opens the tab.
+3. **Live progress.** A summary bar from `files/summary`: *120 files · 34 processing · 84 indexed · 2 failed*, with a
+   progress bar. While anything is processing, the summary and the visible rows refresh every 3 s; polling stops when
+   nothing is processing or the tab is hidden, and starts again after an upload commit.
+4. **A list for hundreds of files.** Search by name or path; state filter chips with their counts (*All*,
+   *Processing*, *Indexed*, *Failed*); sort by name (folders shown as group headers) or newest; select all loaded
+   rows; delete the selection; **Retry failed** (the source's `retry-failed`) when anything failed; *Load more*.
+   States: *processing* is `received` and `clean`; *indexed*; *failed* is `refused` and `malware`, each with its reason
+   in plain language (`messages.ts`).
+5. **Folders are kept.** A dropped or picked folder sends each file's relative path (`HR/Policys/semester.pdf`) in
+   `X-File-Name` (§4.5). The list groups by folder, and the tab says that a topic rule on the path
+   (`HR/**`, Topics tab) tags a folder's documents. Files picked one by one have no folder.
+6. **File details.** A row opens a panel: name and path, size, type, uploaded by and when, replaced when, state and
+   reason, a download link, and for an indexed file the document's chunks (`/api/documents/{id}`, `/chunks`) and the
+   assistants that use the knowledge base. *Replace* and *Delete* are there too.
+
+The main session owns this feature's code (user, 2026-11-09), on `main-session/` branches, in stream b's paths
+(`src/admin-ui/**`, `src/Ume.Rag.AdminApi/**`).
 
 ### 5.6 Empty and error states
 
