@@ -292,7 +292,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
 
         var first = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?limit=1", Ct));
         first.GetProperty("items").GetArrayLength().ShouldBe(1);
-        var next = first.GetProperty("next").GetGuid();
+        var next = first.GetProperty("next").GetString();
         var second = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?limit=1&after={next}", Ct));
         var live = first.GetProperty("items").EnumerateArray().Concat(second.GetProperty("items").EnumerateArray()).Select(f => f.GetProperty("fileName").GetString()).ToList();
         live.ShouldBe(["taxa-2026.pdf", "avgifter.docx"], ignoreOrder: true);
@@ -310,6 +310,216 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
 
         (await stranger.GetAsync($"/api/sources/{sourceId}/files", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await stranger.GetAsync($"/api/sources/{sourceId}/quarantine", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task A_folder_path_is_kept_as_its_file_name_and_unsafe_paths_are_refused()
+    {
+        // admin design §4.5, §5.5.7: X-File-Name is a relative path, stored (normalised) as the slot's file name.
+        var (sourceId, code) = await UploadSourceAsync();
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
+        var batch = (await Json(create)).GetProperty("batchId").GetGuid();
+        var pdf = "%PDF-1.7 policy"u8.ToArray();
+
+        var longest = new string('a', 200) + "/" + new string('b', 95) + ".pdf"; // 300 characters
+        var accepted = new[]
+        {
+            ("HR/Policys/semester.pdf", "HR/Policys/semester.pdf"),
+            (@"\HR\Rutiner\Introduktion.pdf", "HR/Rutiner/Introduktion.pdf"),
+            ("//Ekonomi/Budget 2026.pdf", "Ekonomi/Budget 2026.pdf"),
+            (" HR / Arkiv /gammal.pdf ", "HR/Arkiv/gammal.pdf"),
+            (longest, longest),
+        };
+        for (var i = 0; i < accepted.Length; i++)
+        {
+            using var put = await PutFileAsync(admin, batch, i + 1, accepted[i].Item1, pdf);
+            put.StatusCode.ShouldBe(HttpStatusCode.OK, accepted[i].Item1);
+            (await Json(put)).GetProperty("fileName").GetString().ShouldBe(accepted[i].Item2);
+        }
+
+        var refused = new[]
+        {
+            "../semester.pdf", "HR/../semester.pdf", "HR/./semester.pdf", "HR//semester.pdf", "HR/ /semester.pdf", "HR/", "", "   ",
+            string.Join('/', Enumerable.Repeat("a", 10)) + "/b.pdf", // 11 segments
+            new string('a', 200) + "/" + new string('b', 96) + ".pdf", // 301 characters
+            new string('a', 256) + ".pdf", // a segment over 255
+            "HR/semester\u0001.pdf", "HR\u0007/semester.pdf", "C:/semester.pdf", @"C:\HR\semester.pdf", "c:semester.pdf",
+        };
+        foreach (var name in refused)
+        {
+            using var put = await PutFileAsync(admin, batch, 10, name, pdf);
+            put.StatusCode.ShouldBe(HttpStatusCode.BadRequest, $"'{name}'");
+            (await Json(put)).GetProperty("errorCodes").GetProperty("X-File-Name")[0].GetProperty("code").GetString().ShouldBe("invalid_value", $"'{name}'");
+        }
+
+        // The extension pre-check reads the file's segment, not a folder's.
+        (await PutFileAsync(admin, batch, 10, "Rapport.pdf/readme", pdf)).StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+        (await PutFileAsync(admin, batch, 10, "Arkiv.v2/mejl.msg", pdf)).StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+
+        using (var commit = await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1, 2 } }, Ct))
+        {
+            commit.StatusCode.ShouldBe(HttpStatusCode.OK, await commit.Content.ReadAsStringAsync(Ct));
+        }
+
+        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
+        manifest.RootElement.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("fileName").GetString())
+            .ShouldBe(["HR/Policys/semester.pdf", "HR/Rutiner/Introduktion.pdf"]);
+    }
+
+    /// <summary>
+    /// Seven live slots and a deleted one, with the documents the worker leaves behind: the worker ends a fetched slot
+    /// <c>clean</c>, so indexed and ended files are read through their documents (§5.5.7 states).
+    /// </summary>
+    private async Task<(Guid Source, string Code, DateTimeOffset Now)> FilesAsync()
+    {
+        var (sourceId, code) = await UploadSourceAsync();
+        var now = DateTimeOffset.UtcNow;
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var source = await db.Sources.AsNoTracking().SingleAsync(s => s.Id == sourceId, Ct);
+        var profile = await db.Collections.AsNoTracking().Where(c => c.Id == source.CollectionId).Select(c => c.EmbeddingProfileId).SingleAsync(Ct);
+        var version = new PipelineVersion { PipelineId = source.PipelineId, Number = 1, State = PipelineVersionStates.Published, Definition = "{}", PublishedAt = now };
+        var run = new Run { SourceId = sourceId, Classification = Classification.Internal, Kind = "sync", Trigger = "upload", State = RunStates.Succeeded, StartedAt = now };
+        db.AddRange(version, run);
+        await db.SaveChangesAsync(Ct);
+
+        var bytes = 0;
+        Upload Slot(string name, string state, TimeSpan ago, string? reason = null) => new()
+        {
+            SourceId = sourceId, Classification = Classification.Internal, BatchId = Guid.CreateVersion7(), FileName = name, Bytes = 1000 * ++bytes,
+            Sha256 = RandomNumberGenerator.GetBytes(32), State = state, Reason = reason, UploadedBy = "anna", UploadedAt = now - ago,
+        };
+        Document DocumentOf(Upload slot, byte[] contentHash, string? parseOutcome) => new()
+        {
+            SourceId = sourceId, Classification = Classification.Internal, IdentityKind = IdentityKinds.Upload, CanonicalIdentity = $"upload:{slot.Id:D}",
+            IdentityHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"upload:{slot.Id:D}")), ContentHash = contentHash, ParseOutcome = parseOutcome,
+            DisplayName = slot.FileName, FirstSeenAt = now, LastSeenAt = now,
+        };
+        ChunkSet SetOf(Document document, byte[] contentHash) => new()
+        {
+            DocumentId = document.Id, Classification = Classification.Internal, CollectionId = source.CollectionId, PipelineVersionId = version.Id,
+            EmbeddingProfileId = profile, ContentHash = contentHash, InputHash = RandomNumberGenerator.GetBytes(32), State = ChunkSetStates.Live, CreatedAt = now, LiveAt = now,
+        };
+
+        var semester = Slot("HR/Policys/semester.pdf", UploadStates.Clean, TimeSpan.FromMinutes(5)); // live set of its bytes: indexed
+        var onboarding = Slot("HR/Rutiner/onboarding.docx", UploadStates.Received, TimeSpan.FromMinutes(1));
+        var plan = Slot("HRx-plan.pdf", UploadStates.Indexed, TimeSpan.FromMinutes(4));
+        var lista = Slot("HR-lista.pdf", UploadStates.Refused, TimeSpan.FromMinutes(3), "upload.type_mismatch");
+        var budget = Slot("Ekonomi/budget_2026.xlsx", UploadStates.Clean, TimeSpan.FromMinutes(2)); // processing ended: refused
+        var virus = Slot("Ekonomi/100%.pdf", UploadStates.Malware, TimeSpan.FromMinutes(6), "malware.found");
+        var annat = Slot("hr/annat.pdf", UploadStates.Clean, TimeSpan.FromSeconds(30)); // replaced: the live set is the old version's
+        var gone = Slot("gammal.pdf", UploadStates.Deleted, TimeSpan.FromMinutes(10));
+        gone.DeletedAt = now;
+        db.Uploads.AddRange(semester, onboarding, plan, lista, budget, virus, annat, gone);
+        var (semesterDoc, budgetDoc, annatDoc) = (DocumentOf(semester, semester.Sha256, "success"), DocumentOf(budget, budget.Sha256, "encrypted"),
+            DocumentOf(annat, annat.Sha256, "success"));
+        db.Documents.AddRange(semesterDoc, budgetDoc, annatDoc);
+        await db.SaveChangesAsync(Ct);
+        var (semesterSet, annatSet) = (SetOf(semesterDoc, semester.Sha256), SetOf(annatDoc, RandomNumberGenerator.GetBytes(32)));
+        db.ChunkSets.AddRange(semesterSet, annatSet);
+        await db.SaveChangesAsync(Ct);
+        semesterDoc.LiveChunkSetId = semesterSet.Id;
+        annatDoc.LiveChunkSetId = annatSet.Id;
+        db.RunItems.AddRange(
+            new RunItem { RunId = run.Id, CreatedAt = now.AddMinutes(-1), Classification = Classification.Internal, DocumentId = budgetDoc.Id, Identity = budgetDoc.CanonicalIdentity, Outcome = "encrypted", Reason = "parser.encrypted" },
+            new RunItem { RunId = run.Id, CreatedAt = now.AddDays(-3), Classification = Classification.Internal, DocumentId = budgetDoc.Id, Identity = budgetDoc.CanonicalIdentity, Outcome = "failed", Reason = "parser.timeout" });
+        await db.SaveChangesAsync(Ct);
+        return (sourceId, code, now);
+    }
+
+    [Fact]
+    public async Task The_files_list_searches_filters_by_state_and_pages_by_name_or_newest()
+    {
+        var (sourceId, code, _) = await FilesAsync();
+        await using var factory = Factory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
+        async Task<JsonElement> Get(string query)
+        {
+            using var response = await viewer.GetAsync($"/api/sources/{sourceId}/files?{query}", Ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, $"{query}: {await response.Content.ReadAsStringAsync(Ct)}");
+            return await Json(response);
+        }
+
+        async Task<List<JsonElement>> All(string query, int limit)
+        {
+            var items = new List<JsonElement>();
+            string? after = null;
+            do
+            {
+                var page = await Get($"{query}&limit={limit}" + (after is null ? "" : $"&after={Uri.EscapeDataString(after)}"));
+                page.GetProperty("items").GetArrayLength().ShouldBeLessThanOrEqualTo(limit);
+                items.AddRange(page.GetProperty("items").EnumerateArray());
+                after = page.GetProperty("next").GetString();
+            }
+            while (after is not null);
+            return items;
+        }
+
+        static List<string?> Names(IEnumerable<JsonElement> items) => [.. items.Select(f => f.GetProperty("fileName").GetString())];
+
+        // Name order is path order: a folder's files are together (HR/ apart from HR-lista and HRx-plan), case aside.
+        string[] byName = ["Ekonomi/100%.pdf", "Ekonomi/budget_2026.xlsx", "HR-lista.pdf", "hr/annat.pdf", "HR/Policys/semester.pdf", "HR/Rutiner/onboarding.docx", "HRx-plan.pdf"];
+        Names(await All("sort=name", 3)).ShouldBe(byName);
+        Names(await All("", 2)).ShouldBe(byName);
+        Names(await All("sort=uploaded", 2))
+            .ShouldBe(["hr/annat.pdf", "HR/Rutiner/onboarding.docx", "Ekonomi/budget_2026.xlsx", "HR-lista.pdf", "HRx-plan.pdf", "HR/Policys/semester.pdf", "Ekonomi/100%.pdf"]);
+
+        // The effective state: a clean slot whose live set holds its bytes is indexed, one whose processing ended is refused with the
+        // document's last reason; a clean slot with an older version live is still processing.
+        var states = (await All("", 50)).ToDictionary(f => f.GetProperty("fileName").GetString()!, f => (f.GetProperty("state").GetString(),
+            f.GetProperty("reason").ValueKind == JsonValueKind.Null ? null : f.GetProperty("reason").GetString()));
+        states["HR/Policys/semester.pdf"].ShouldBe(("indexed", null));
+        states["Ekonomi/budget_2026.xlsx"].ShouldBe(("refused", "parser.encrypted"));
+        states["hr/annat.pdf"].ShouldBe(("clean", null));
+        states["HR-lista.pdf"].ShouldBe(("refused", "upload.type_mismatch"));
+        (await All("", 50)).Single(f => f.GetProperty("fileName").GetString() == "HR/Policys/semester.pdf").GetProperty("documentId").ValueKind.ShouldBe(JsonValueKind.String);
+
+        Names(await All("state=processing", 50)).ShouldBe(["hr/annat.pdf", "HR/Rutiner/onboarding.docx"]);
+        Names(await All("state=indexed&sort=uploaded", 1)).ShouldBe(["HRx-plan.pdf", "HR/Policys/semester.pdf"]);
+        Names(await All("state=failed", 2)).ShouldBe(["Ekonomi/100%.pdf", "Ekonomi/budget_2026.xlsx", "HR-lista.pdf"]);
+
+        // q: a case-insensitive substring of the path, with %, _ and \ taken literally.
+        Names(await All("q=" + Uri.EscapeDataString("hr/"), 2)).ShouldBe(["hr/annat.pdf", "HR/Policys/semester.pdf", "HR/Rutiner/onboarding.docx"]);
+        Names(await All("q=" + Uri.EscapeDataString("100%"), 50)).ShouldBe(["Ekonomi/100%.pdf"]);
+        Names(await All("q=" + Uri.EscapeDataString("_"), 50)).ShouldBe(["Ekonomi/budget_2026.xlsx"]);
+        Names(await All("q=" + Uri.EscapeDataString("\\"), 50)).ShouldBeEmpty();
+        Names(await All("q=POLICY&state=indexed", 50)).ShouldBe(["HR/Policys/semester.pdf"]);
+
+        // Bad values are field errors; a cursor is valid only for the sort it was made with.
+        var byNameCursor = (await Get("limit=1")).GetProperty("next").GetString()!;
+        foreach (var (query, field) in new[]
+                 {
+                     ("state=queued", "state"), ("sort=size", "sort"), ("after=not-a-cursor", "after"), ("after=" + Uri.EscapeDataString("e30"), "after"),
+                     ($"sort=uploaded&after={byNameCursor}", "after"),
+                 })
+        {
+            using var response = await viewer.GetAsync($"/api/sources/{sourceId}/files?{query}", Ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, query);
+            (await Json(response)).GetProperty("errorCodes").GetProperty(field)[0].GetProperty("code").GetString().ShouldBe("invalid_value", query);
+        }
+    }
+
+    [Fact]
+    public async Task The_files_summary_counts_live_files_by_state()
+    {
+        var (sourceId, code, now) = await FilesAsync();
+        await using var factory = Factory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
+        using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "9" + code[1..]);
+
+        using var response = await viewer.GetAsync($"/api/sources/{sourceId}/files/summary", Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var summary = await Json(response);
+        (summary.GetProperty("total").GetInt32(), summary.GetProperty("processing").GetInt32(), summary.GetProperty("indexed").GetInt32(),
+            summary.GetProperty("failed").GetInt32(), summary.GetProperty("bytes").GetInt64()).ShouldBe((7, 2, 2, 3, 28_000L)); // the deleted 8 000 not counted
+        summary.GetProperty("lastUploadAt").GetDateTimeOffset().ShouldBe(now - TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(1));
+
+        var (empty, emptyCode) = await UploadSourceAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, emptyCode);
+        var none = await Json(await admin.GetAsync($"/api/sources/{empty}/files/summary", Ct));
+        (none.GetProperty("total").GetInt32(), none.GetProperty("bytes").GetInt64(), none.GetProperty("lastUploadAt").ValueKind).ShouldBe((0, 0L, JsonValueKind.Null));
+        (await stranger.GetAsync($"/api/sources/{sourceId}/files/summary", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]

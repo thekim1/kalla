@@ -1,13 +1,20 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
-import type { Collection, DocumentSummary } from '@/api/types'
+import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button } from '@/test/helpers'
 import CollectionView from './CollectionView.vue'
+
+// `?tab=` (the Files tab's `?tab=files`, §5.5.7) through a route the tests set.
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push: vi.fn() }) }))
+beforeEach(() => {
+  route.query = {}
+})
 
 const base: Collection = collection({ usedBy: [collectionUser({ published: false, draft: true })], version: '7' })
 
@@ -333,5 +340,101 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect((wrapper.get('#sharing-department').element as HTMLInputElement).disabled).toBe(true)
     expect(wrapper.find('[data-test=save-sharing]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Only a department administrator can change the sharing.')
+  })
+
+  describe('Files tab (§5.5.7)', () => {
+    const upload = (id: string, name: string): SourceListItem =>
+      ({ id, collectionId: 'c1', type: 'upload', name, classification: 'internal', state: 'active', documents: 0, lastRun: null })
+    const crawl: SourceListItem = { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se', classification: 'internal', state: 'active', documents: 0, lastRun: null }
+    const full = (id: string, name: string) => ({ ...upload(id, name), settings: {}, version: '1' }) as unknown as Source
+
+    function mockFiles() {
+      vi.spyOn(api.sources, 'filesSummary').mockResolvedValue({ total: 0, processing: 0, indexed: 0, failed: 0, bytes: 0, lastUploadAt: null })
+      return vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [], next: null })
+    }
+
+    it('is shown for an upload source, opens from ?tab=files, and shows a reader the list without the drop zone', async () => {
+      signIn(['rag-viewer'])
+      route.query = { tab: 'files' }
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([crawl, upload('s2', 'Files')])
+      const get = vi.spyOn(api.sources, 'get').mockResolvedValue(full('s2', 'Files'))
+      const files = mockFiles()
+
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+
+      expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(expect.arrayContaining(['Files']))
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Files')
+      expect(get).toHaveBeenCalledWith('s2')
+      expect(files).toHaveBeenCalledWith('s2', expect.anything())
+      expect(wrapper.find('[data-test=files]').exists()).toBe(true)
+      expect(wrapper.find('[data-test=drop-zone]').exists()).toBe(false) // Read only
+      expect(wrapper.find('#files-source').exists()).toBe(false) // one upload source: no picker
+    })
+
+    it('picks the upload source with a select when there are several, and links the folder hint to Topics', async () => {
+      signIn(['rag-editor'])
+      route.query = { tab: 'files' }
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([upload('s2', 'Files'), upload('s3', 'Blanketter')])
+      const get = vi.spyOn(api.sources, 'get').mockImplementation(async (id) => full(id, id === 's2' ? 'Files' : 'Blanketter'))
+      const files = mockFiles()
+      vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c1', topics: [] })
+
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      expect(wrapper.find('[data-test=drop-zone]').exists()).toBe(true)
+      await wrapper.get('#files-source').setValue('s3')
+      await flushPromises()
+      expect(get).toHaveBeenLastCalledWith('s3')
+      expect(files).toHaveBeenLastCalledWith('s3', expect.anything())
+
+      await wrapper.get('[data-test=topics-link]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Topics')
+    })
+
+    it('is not shown without an upload source; Add files on Sources creates one and opens the tab', async () => {
+      signIn(['rag-editor'])
+      route.query = { tab: 'files' } // e.g. after the source failed in the create drawer
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, classification: 'public' })
+      const list = vi.spyOn(api.collections, 'sources').mockResolvedValueOnce([crawl]).mockResolvedValue([crawl, upload('s2', 'Files')])
+      const addSource = vi.spyOn(api.collections, 'addSource').mockResolvedValue(full('s2', 'Files'))
+      vi.spyOn(api.sources, 'get').mockResolvedValue(full('s2', 'Files'))
+      mockFiles()
+
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      expect(wrapper.findAll('[role=tab]').map((t) => t.text())).not.toContain('Files')
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toContain('Sources')
+      expect(wrapper.get('[data-test=no-files-source]').text()).toContain('Add files creates it.')
+
+      await wrapper.get('[data-test=add-files]').trigger('click')
+      await flushPromises()
+      expect(addSource).toHaveBeenCalledWith('c1', { type: 'upload', name: 'Files', classification: 'public', settings: { piiMode: 'hold' } })
+      expect(list).toHaveBeenCalledTimes(2)
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Files')
+      expect(wrapper.find('[data-test=files]').exists()).toBe(true)
+    })
+
+    it('offers no Add files to a reader, nor once there is an upload source', async () => {
+      signIn(['rag-viewer'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([crawl])
+      const reader = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      await button(reader, 'Sources (1)').trigger('click')
+      expect(reader.find('[data-test=add-files]').exists()).toBe(false)
+
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([crawl, upload('s2', 'Files')])
+      const editor = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      await button(editor, 'Sources (2)').trigger('click')
+      expect(editor.find('[data-test=add-files]').exists()).toBe(false)
+      expect(editor.find('[data-test=add-source]').exists()).toBe(true)
+    })
   })
 })

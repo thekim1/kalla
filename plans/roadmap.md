@@ -79,7 +79,10 @@ work split is written when P1b is live.
 - **Storage:** embeddings stored as `halfvec` (#502; to-verify #117 found no recall cost), after repeating the check
   on the full crawl's evaluation set.
 - **Answer quality:** nightly answer judge, publish plans from effect tags, rerank (a separate gateway release with an
-  on-prem reranker), on-prem models when hardware exists (M2).
+  on-prem reranker), on-prem models when hardware exists (M2). Upload gaps U1–U7 (picture descriptions, e-mail,
+  spreadsheet questions, rerank on, contextual chunk headers, near-duplicates, OCR languages) and their proposed order:
+  [`platform/upload-quality-review.md`](platform/upload-quality-review.md) (2026-11-09; measure on the support-assistant
+  proof of concept first).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),
   `/mcp` with `search_knowledge`, the mock municipal server `ume-mcp-kommun`.
 - **Chat:** stored chat content when A1 allows it (history modes, content encryption, conversation review), chat

@@ -77,16 +77,22 @@ public static class ContentHeaders
     public static string ContentType(string? mediaType) => mediaType is not null && AllowedTypes.Contains(mediaType) ? mediaType : "application/octet-stream";
 
     /// <summary>
-    /// <c>inline</c> for PDF, PNG and JPEG, else <c>attachment</c>; <c>filename*=UTF-8''…</c> from the display name, else
-    /// <c>dokument-{id:N}.{ext}</c>.
+    /// The file name of an upload's display name, which is its relative path (<c>HR/Policys/semester.pdf</c>, admin design
+    /// §4.5): the last segment, or null for none.
+    /// </summary>
+    public static string? FileName(string? displayName) =>
+        displayName?[(displayName.LastIndexOf('/') + 1)..] is { Length: > 0 } name ? name : null;
+
+    /// <summary>
+    /// <c>inline</c> for PDF, PNG and JPEG, else <c>attachment</c>; <c>filename*=UTF-8''…</c> from the display name's file
+    /// name (its last path segment), else <c>dokument-{id:N}.{ext}</c>.
     /// </summary>
     public static string ContentDisposition(DocumentContent content)
     {
         ArgumentNullException.ThrowIfNull(content);
         var type = ContentType(content.MediaType);
-        var name = content.DisplayName is { Length: > 0 } display
-            ? display
-            : $"dokument-{content.DocumentId:N}{(Extensions.TryGetValue(type, out var ext) ? "." + ext : "")}";
+        var name = FileName(content.DisplayName)
+            ?? $"dokument-{content.DocumentId:N}{(Extensions.TryGetValue(type, out var ext) ? "." + ext : "")}";
         var ascii = new string([.. name.Select(c => c is >= ' ' and < (char)127 and not '"' and not '\\' and not ';' ? c : '_')]);
         return $"{(Inline.Contains(type) ? "inline" : "attachment")}; filename=\"{ascii}\"; filename*=UTF-8''{Uri.EscapeDataString(name)}";
     }

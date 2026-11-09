@@ -320,6 +320,22 @@ export interface UploadFile {
   deletedAt: IsoDateTime | null
 }
 
+/** The `state` filter of `GET /api/sources/{id}/files` (admin design §5.5.7): processing is received and clean, failed is refused and malware. */
+export type FileStateFilter = 'processing' | 'indexed' | 'failed'
+
+/** The `sort` of `GET /api/sources/{id}/files`: path order (a folder's files together) or newest first. */
+export type FileSort = 'name' | 'uploaded'
+
+/** `GET /api/sources/{id}/files/summary`: the source's files that are not deleted. */
+export interface UploadSummary {
+  total: number
+  processing: number
+  indexed: number
+  failed: number
+  bytes: number
+  lastUploadAt: IsoDateTime | null
+}
+
 /** `GET /api/sources/{id}/quarantine`: metadata only (connectors §11). */
 export interface QuarantinedFile {
   id: string
@@ -544,6 +560,28 @@ export interface DocumentDetail {
   title: string | null
   url: string | null
   displayName: string | null
+  mediaType: string | null
+  liveChunkSetId: string | null
+  chunkSets: { id: string; state: string; chunkCount: number }[]
+}
+
+/** `GET /api/documents/{id}/chunks`: the live chunk set's chunks (at most 1000; `truncated` when there are more). */
+export interface DocumentChunks {
+  documentId: string
+  chunkSetId: string | null
+  chunks: DocumentChunk[]
+  truncated: boolean
+}
+
+export interface DocumentChunk {
+  id: string
+  ordinal: number
+  headingPath: string | null
+  text: string
+  tokenCount: number
+  page: number | null
+  pageEnd: number | null
+  contentKind: string
 }
 
 export interface EvaluationOverview {

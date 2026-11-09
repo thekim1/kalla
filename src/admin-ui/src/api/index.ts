@@ -43,7 +43,10 @@ import type {
   EvaluationResult,
   EvaluationRun,
   GenerationForecast,
+  DocumentChunks,
   DocumentDetail,
+  FileSort,
+  FileStateFilter,
   Pipeline,
   Publication,
   PublicationStarted,
@@ -62,11 +65,13 @@ import type {
   UploadBatch,
   UploadedFile,
   UploadFile,
+  UploadSummary,
   SourceImpact,
   SourceUpdate,
   SourceListItem,
   SyncStarted,
 } from './types'
+import { encodeFileName } from '@/utils/uploads'
 
 /** The admin API, one function per endpoint (adapted from the gateway's api/index.ts). */
 export const api = {
@@ -102,13 +107,16 @@ export const api = {
   sources: {
     get: (id: string) => http.get<Source>(`/api/sources/${id}`),
     sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
+    retryFailed: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/retry-failed`),
     impact: (id: string, body: { settings: Record<string, unknown> }) => http.post<SourceImpact>(`/api/sources/${id}/impact`, body),
     update: (id: string, body: SourceUpdate) => http.put<Source>(`/api/sources/${id}`, body),
     runs: (id: string, after?: string) => http.get<KeysetPage<RunSummary>>(`/api/sources/${id}/runs`, { after, limit: 20 }),
     held: (id: string, after?: string) => http.get<KeysetPage<HeldDocument>>(`/api/sources/${id}/held`, { after, limit: 50 }),
     releaseHeld: (id: string) => http.post<{ jobId: string }>(`/api/sources/${id}/held/release`),
-    files: (id: string, query: { deleted?: boolean; after?: string; limit?: number } = {}) =>
+    /** `q`: part of the path; `after`: the opaque cursor of the previous page's `next` (admin design §4.5, §5.5.7). */
+    files: (id: string, query: { deleted?: boolean; q?: string; state?: FileStateFilter; sort?: FileSort; after?: string; limit?: number } = {}) =>
       http.get<KeysetPage<UploadFile>>(`/api/sources/${id}/files`, query),
+    filesSummary: (id: string) => http.get<UploadSummary>(`/api/sources/${id}/files/summary`),
     quarantine: (id: string, after?: string) => http.get<KeysetPage<QuarantinedFile>>(`/api/sources/${id}/quarantine`, { after, limit: 50 }),
     uploadBatch: (id: string) => http.post<UploadBatch>(`/api/sources/${id}/upload-batches`),
     /** Deleted files back within the 14-day grace (platform admin; connectors §9.3): a batch that re-adds the slots. */
@@ -119,10 +127,13 @@ export const api = {
       http.post<{ jobId: string }>('/api/sources/preflight', body),
   },
   uploads: {
-    /** One file of a batch, raw body; `replaces` names the slot whose bytes it replaces (same document). */
-    put: (batchId: string, n: number, file: File, replaces?: string) =>
+    /**
+     * One file of a batch, raw body. `path`: its relative path (`HR/Policys/semester.pdf`, or just the name), which becomes
+     * its name in the list; `replaces` names the slot whose bytes it replaces (same document).
+     */
+    put: (batchId: string, n: number, file: File, path: string, replaces?: string) =>
       request<UploadedFile>('PUT', `/api/upload-batches/${batchId}/files/${n}`, {
-        raw: file, headers: { 'X-File-Name': encodeURIComponent(file.name), ...(replaces ? { 'X-Upload-Id': replaces } : {}) },
+        raw: file, headers: { 'X-File-Name': encodeFileName(path), ...(replaces ? { 'X-Upload-Id': replaces } : {}) },
       }),
     commit: (batchId: string, body: { files: number[]; deletes: string[] }) =>
       http.post<{ batchId: string; jobId: string; entries: number }>(`/api/upload-batches/${batchId}/commit`, body),
@@ -235,5 +246,6 @@ export const api = {
     list: (query: { collectionId?: string; sourceId?: string; q?: string; pii?: string; after?: string; limit?: number }) =>
       http.get<KeysetPage<DocumentSummary>>('/api/documents', query),
     get: (id: string) => http.get<DocumentDetail>(`/api/documents/${id}`),
+    chunks: (id: string) => http.get<DocumentChunks>(`/api/documents/${id}/chunks`),
   },
 }

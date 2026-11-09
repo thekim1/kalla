@@ -520,6 +520,23 @@ public sealed class StageRuleTests
     }
 
     [Fact]
+    public void An_upload_path_rule_matches_its_folders_with_or_without_a_leading_slash()
+    {
+        // admin design §5.5.7: a folder upload's display name is its relative path, and a topic rule on the path tags its documents.
+        var rules = Metadata.ReadRules(System.Text.Json.JsonDocument.Parse("""
+            [ { "match": "HR/**", "on": "path", "tags": ["hr"] },
+              { "match": "/HR/Policys/*.pdf", "on": "path", "tags": ["policy"] },
+              { "match": "Ekonomi/**", "on": "path", "tags": ["ekonomi"] } ]
+            """).RootElement);
+        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "HR/Policys/semester.pdf" }).Tags.ShouldBe(["hr", "policy"]);
+        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "HR/Policys/Arkiv/gammal.pdf" }).Tags.ShouldBe(["hr"]);
+        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "semester.pdf" }).Tags.ShouldBeEmpty();
+
+        // A website path is matched as it is: HR/** does not match the URL path /HR/….
+        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { Url = new Uri("https://x.se/HR/Policys/semester.pdf") }).Tags.ShouldBe(["policy"]);
+    }
+
+    [Fact]
     public void Quality_facts_and_the_observation_score()
     {
         var parsed = QualityFacts.ForParsed(new ParsedDocument
