@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
+import CancelRunButton from '@/components/runs/CancelRunButton.vue'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
 import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
@@ -24,7 +25,7 @@ import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
-// Hämta nu, its runs (each opens the run page with the crawl report) and the personal-data report (§4.5 pii-report).
+// Hämta nu, Avbryt körning on an active run (#488 part 3), its runs (each opens the run page with the crawl report) and the personal-data report (§4.5 pii-report).
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -43,6 +44,8 @@ const piiTypeList = (types: string[]) => types.map(piiType).join(', ')
 const piiCountList = (counts: Record<string, number>) =>
   Object.entries(counts).map(([type, count]) => SOURCE_PAGE.piiCount(piiType(type), formatNumber(count))).join(', ')
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+// The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
+const activeRun = computed(() => runs.data.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
 
 const runColumns: Column[] = [
   { key: 'started', label: SOURCE_PAGE.started },
@@ -116,6 +119,7 @@ onMounted(load)
         <UiBadge :label="SOURCE_TYPE_LABEL[source.data.value.type]" />
         <UiBadge :label="LEVEL_LABEL[source.data.value.classification]" />
         <UiButton v-if="canEdit" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
+        <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
       </PageHeader>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
 

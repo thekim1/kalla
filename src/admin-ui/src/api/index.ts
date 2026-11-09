@@ -134,6 +134,8 @@ export const api = {
     deletionsCsvUrl: (id: string) => buildUrl(`/api/runs/${id}/deletions`, { format: 'csv' }),
     confirmDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/confirm`, { proposedCount }),
     rejectDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/reject`, { proposedCount }),
+    /** Queues `cancel-run` (409 run_not_active once the run has ended); the run is `cancelled` when that job succeeds. */
+    cancel: (id: string) => http.post<{ jobId: string; runId: string }>(`/api/runs/${id}/cancel`),
     items: (id: string, query: { outcome?: string; after?: number; limit?: number } = {}) =>
       http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
   },

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Run, RunItem } from '@/api/types'
+import CancelRunButton from '@/components/runs/CancelRunButton.vue'
 import DeletionDecision from '@/components/sources/DeletionDecision.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -23,7 +24,7 @@ import { jobMessage } from '@/utils/messages'
 // report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
 // §6.6, and for a browser source the rendered pages, those with no main text, render failures and pages kept from their
 // last good content, §8.6), the deletion decision when the guard held deletions back, and the run's documents with their
-// outcome and reason.
+// outcome and reason. Cancel run while it is running or waiting for the deletion decision (#488 part 3).
 const props = defineProps<{ id: string }>()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
@@ -65,6 +66,9 @@ async function loadItems(append = false): Promise<void> {
 }
 
 async function load(): Promise<void> {
+  // A reload after Cancel run replaces the running poll.
+  if (timer) clearTimeout(timer)
+  timer = null
   await run.run(() => api.runs.get(props.id))
   if (summary.value?.state === 'running') timer = setTimeout(() => void load(), pollDelay(Date.now() - started))
   else void loadItems()
@@ -83,6 +87,7 @@ onBeforeUnmount(() => {
       <PageHeader :title="`${RUN_PAGE.title} ${formatDateTime(summary.startedAt)}`">
         <UiBadge :label="RUN_STATE_LABEL[summary.state] ?? summary.state" data-test="state" />
         <RouterLink :to="{ name: 'source', params: { id: run.data.value.sourceId } }" class="text-accent-ink underline">{{ RUN_PAGE.back }}</RouterLink>
+        <CancelRunButton :run-id="summary.id" :state="summary.state" @cancelled="load" />
       </PageHeader>
       <div class="mb-6 grid grid-cols-5 gap-3 max-md:grid-cols-2" data-test="counts">
         <MetricTile :label="RUN_PAGE.added" :value="formatNumber(summary.added)" />

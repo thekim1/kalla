@@ -893,6 +893,19 @@ export const RUN_PAGE = {
   robotsIgnored: (reason: string) => `robots.txt ignored: ${reason}`,
 } as const
 
+/** Cancel run on the run and source pages (#488 part 3; engine design §10.1). */
+export const CANCEL_RUN = {
+  action: 'Cancel run',
+  cancelling: 'Cancelling the run…',
+  keep: 'Keep running',
+  title: 'Cancel this run?',
+  consequence:
+    'The run stops: its queued and running jobs are cancelled, and a document in progress is not saved. What the run has already saved stays. ' +
+    'The next scheduled run or Fetch now starts a new run.',
+  done: 'The run was cancelled.',
+  failed: (reason: string) => `The run could not be cancelled: ${reason}`,
+} as const
+
 /** Run item outcomes as the worker writes them; an unknown one is shown as written. */
 export const RUN_OUTCOME_LABEL: Record<string, string> = {
   added: 'New',
