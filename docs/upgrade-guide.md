@@ -12,6 +12,27 @@ exception, with its own steps.
 
 ## Unreleased
 
+## 0.3.0
+
+- **Rolling update: yes** from 0.2.0. No schema migration and no new grants or superuser steps; `rag-migrate` runs
+  and finds nothing to apply.
+- **Parser image:** legacy Word, Excel, PowerPoint and RTF uploads are converted with LibreOffice inside `rag-parser`
+  (#526), so the image is larger. Nothing to configure.
+- **New deployment options**, all opt-in; an existing single-slot Compose installation changes nothing:
+  - Updates without downtime: `init-deployment.sh --rolling` and `deploy/rolling-update.sh`
+    ([zero-downtime-updates.md](zero-downtime-updates.md)). The first rolling update stops slots that had no drain
+    configured, so a few requests can fail at that moment.
+  - Kubernetes: `deploy/kubernetes` ([kubernetes.md](kubernetes.md)).
+  - Portainer, gateway and RAG in one stack: the release asset `compose.portainer.yaml` (runbook, *Portainer and other
+    hosts without shell access*).
+  - SIEM: `deploy/otel/collector-siem.example.yaml`; Keycloak setups: [keycloak.md](keycloak.md).
+- **Apply (Compose):** replace `deploy/` with the bundle's (keep `.env`, `certs/`, `secrets/`), set the image pins, then
+  `dc up -d --wait`, or `./deploy/rolling-update.sh --pull` with two slots.
+- **Check:** `dc ps` all healthy; `/version` of rag-api and rag-admin says 0.3.0; an upload of a `.doc` file is
+  indexed.
+
+## 0.2.0
+
 ### Renderer (`rag-renderer`)
 
 - **Rolling update: yes.** No migration; a new container in the ingestion zone and a new network.
