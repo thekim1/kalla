@@ -346,8 +346,10 @@ that can read packages.
 
 The optional ones (ports, a separate admin host, per-service gateway keys, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image
 overrides `RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
-network and reach it at `https://gateway:8443` (the Data API at `https://dataapi:8443`), trusting the gateway's
-internal CA.
+network and reach it at `https://gateway:8443`, trusting the gateway's internal CA. The gateway's Data API is not on
+`llm`, so the stack adds one network to the gateway's part: `dataapi` joins `rag-dataapi` (internal), which only
+rag-admin shares, and rag-admin reaches it at `https://dataapi:8443`. That join is the only change to the gateway's
+file; a standalone gateway keeps its own.
 
 **Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
