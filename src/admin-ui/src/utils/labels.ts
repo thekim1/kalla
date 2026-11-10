@@ -699,7 +699,7 @@ export const PLATFORM = {
     organisation: {
       label: 'Organisation',
       description: 'Departments: their member groups and how their knowledge bases are shared',
-      keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'organisation'],
+      keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'organisation', 'municipality'],
     },
   },
   settingsSections: {

@@ -134,7 +134,7 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
 
   it('is found in search by English words', () => {
     const entries = searchEntries(navGroups)
-    for (const query of ['member groups', 'sharing', 'organisation']) {
+    for (const query of ['member groups', 'sharing', 'municipality']) {
       expect(filterEntries(entries, query).map((e) => e.label)).toContain(PLATFORM.resources.organisation.label)
     }
   })
