@@ -5,6 +5,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+### Fixed
+
+- Portainer stack: rag-admin reaches the gateway's Data API; `dataapi` joins the internal network `rag-dataapi`, so the
+  organisation and model sync no longer fail with `HttpRequestException` (#542).
+
 ## 0.3.0 (2026-11-10)
 
 Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, and the review fixes of
