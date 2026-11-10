@@ -1,0 +1,68 @@
+# Example overlay: copy this directory, change the values marked "change", then
+#   ./deploy/kubernetes/deploy.sh path/to/your-overlay
+# See docs/kubernetes.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ume-rag
+resources:
+  - namespace.yaml
+  - ../base
+  - ingress.yaml
+components:
+  # In-cluster Postgres (pgvector, pgBackRest). Remove this line to use your own (then edit the connection strings before
+  # running create-secrets.sh; see docs/kubernetes.md).
+  - ../components/datastores
+  # Worker, parser and ClamAV: crawling, uploads and parsing.
+  - ../components/ingestion
+  # The renderer for JavaScript-rendered pages (copy its seccomp profile to the nodes first; docs/kubernetes.md).
+  # - ../components/renderer
+  # NetworkPolicies for the flows in docs/network-and-ports.md; check the lines marked "change" in it first.
+  # - ../components/networkpolicies
+images:
+  # The released images. A release bundle already pins the base to them by digest, so these lines only matter when you
+  # deploy from the repository, or set newName to your own registry (pin by digest: digest: sha256:...).
+  - {name: ume-rag/api, newName: ghcr.io/thekim1/ume-rag/api, newTag: "latest"}
+  - {name: ume-rag/admin, newName: ghcr.io/thekim1/ume-rag/admin, newTag: "latest"}
+  - {name: ume-rag/migrations, newName: ghcr.io/thekim1/ume-rag/migrations, newTag: "latest"}
+  - {name: ume-rag/worker, newName: ghcr.io/thekim1/ume-rag/worker, newTag: "latest"}
+  - {name: ume-rag/parser, newName: ghcr.io/thekim1/ume-rag/parser, newTag: "latest"}
+  - {name: ume-rag/clamav, newName: ghcr.io/thekim1/ume-rag/clamav, newTag: "latest"}
+  - {name: ume-rag/renderer, newName: ghcr.io/thekim1/ume-rag/renderer, newTag: "latest"}
+  - {name: ume-rag/postgres, newName: ghcr.io/thekim1/ume-rag/postgres, newTag: "latest"}
+configMapGenerator:
+  - name: ume-rag-config
+    behavior: merge
+    literals:
+      # change: the gateway (HTTPS). Its keys are secret files (init-deployment.sh --gateway-key-file).
+      - Gateway__BaseUrl=https://llm.example.se
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
+  - name: ume-rag-api-config
+    behavior: merge
+    literals:
+      # change: the public address of rag-api (citation links are absolute).
+      - Knowledge__PublicBaseUrl=https://rag.example.se
+  - name: ume-rag-admin-config
+    behavior: merge
+    literals:
+      # change: your identity provider (docs/production-setup.md, Sign-in) and the gateway's Data API.
+      - Oidc__Authority=https://idp.example.se/realms/ume
+      - OrgSync__BaseUrl=https://llm-data.example.se
+      # - Oidc__RoleGroups__rag-platform-admin=GG-Rag-Admins
+      # - Oidc__TenantId=<Entra tenant id>
+  - name: ume-rag-migrations-config
+    behavior: merge
+    literals:
+      # change: the gateway's model id of the embedding model (seeded once as the platform profile).
+      - EmbeddingProfile__GatewayModel=embedding-model
+  - name: ume-rag-worker-config
+    behavior: merge
+    literals:
+      # Private ranges the crawler may fetch (municipal hosts), comma-separated.
+      - Crawl__AllowedPrivateRanges=
+patches:
+  # change: a ReadWriteMany storage class for the blob volume (rag-api, rag-admin and rag-worker mount it).
+  - target: {kind: PersistentVolumeClaim, name: rag-blobs}
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: nfs-client

@@ -1,0 +1,8 @@
+# Optional NetworkPolicies: deny all traffic to and from the stack's pods except the flows of docs/network-and-ports.md,
+# as the Compose networks and host firewall allow them. Needs a CNI that enforces NetworkPolicy (Calico, Cilium,
+# Antrea, recent kindnet...); others ignore it. Before enabling, check the lines marked "change" in
+# networkpolicies.yaml: where your Ingress controller runs, and the ports of the gateway, IdP and collector.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - networkpolicies.yaml

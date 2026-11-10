@@ -1,0 +1,8 @@
+# The ingestion zone: rag-worker (one replica), rag-parser and rag-clamav. Without it the base answers questions over
+# what is already indexed, but nothing is crawled or parsed. Add ../renderer for JavaScript-rendered pages.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - worker.yaml
+  - parser.yaml
+  - clamav.yaml

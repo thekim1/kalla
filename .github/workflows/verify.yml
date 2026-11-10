@@ -269,6 +269,24 @@ jobs:
           docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json | jq -e '
             (.services["rag-renderer"].networks | keys) == ["render"] and .networks.render.internal == true
             and ([.services | to_entries[] | select(.value.networks | has("render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
+      - name: Kubernetes manifests are up to date and render
+        # docs/kubernetes.md: the config copies match deploy/postgres, and the base, the example overlay and the overlay
+        # with every optional component render. The bundle step below checks they get pinned images.
+        # Kustomize from its pinned image: the self-hosted runner has no kubectl (Kustomize v5.7.1, as in kubectl 1.34).
+        run: |
+          kustomize() { docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo:ro" -v "$RUNNER_TEMP:/tmp/runner:ro" -w /repo \
+            registry.k8s.io/kustomize/kustomize:v5.7.1@sha256:937e7832dc0b09288b1398399dadb97382a27bbc35bee8fdcac47c7de4fff14d \
+            build "${1/#$RUNNER_TEMP//tmp/runner}"; }
+          sh deploy/kubernetes/sync-config.sh
+          git diff --exit-code -- deploy/kubernetes || { echo "Run deploy/kubernetes/sync-config.sh and commit the copies"; exit 1; }
+          kustomize deploy/kubernetes/base > /dev/null
+          kustomize deploy/kubernetes/example > /dev/null
+          cp -R deploy/kubernetes "$RUNNER_TEMP/k8s"
+          sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' \
+            -e 's|# - \.\./components/networkpolicies|- ../components/networkpolicies|' "$RUNNER_TEMP/k8s/example/kustomization.yaml"
+          kustomize "$RUNNER_TEMP/k8s/example" > "$RUNNER_TEMP/k8s.yaml"
+          for kind in NetworkPolicy Deployment StatefulSet Job; do printf '%s ' "$kind"; grep -c "^kind: $kind$" "$RUNNER_TEMP/k8s.yaml"; done
+          grep -q 'name: rag-renderer' "$RUNNER_TEMP/k8s.yaml"
       - name: Release bundle pins every image
         # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
         # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
@@ -296,6 +314,15 @@ jobs:
           images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
+          # Kubernetes: every image of the example overlay with every component is pinned by digest.
+          sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' "$b/kubernetes/example/kustomization.yaml"
+          k8s_images="$(docker run --rm -u "$(id -u):$(id -g)" -v "$b/kubernetes:/k:ro" \
+            registry.k8s.io/kustomize/kustomize:v5.7.1@sha256:937e7832dc0b09288b1398399dadb97382a27bbc35bee8fdcac47c7de4fff14d \
+            build /k/example | sed -n 's/^ *-\{0,1\} *image: //p' | sort -u)"
+          echo "$k8s_images"
+          if echo "$k8s_images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned Kubernetes images in the bundle"; exit 1; fi
+          # The Portainer stack asset: RAG's images pinned to the release.
+          grep -q "RAG_API_IMAGE:-ghcr.io/example/ume-rag/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
       - name: init-deployment.sh keeps its secrets on a re-run
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
         # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the

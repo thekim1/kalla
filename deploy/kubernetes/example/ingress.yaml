@@ -1,0 +1,52 @@
+# Public entry for rag-api and the admin UI. The pods speak HTTPS (certificates from create-secrets.sh), so the
+# controller must connect to them with TLS. The annotations are for ingress-nginx; for other controllers set the
+# equivalent (Traefik: a ServersTransport; Gateway API: an HTTPRoute with a BackendTLSPolicy). Pass the Host header
+# through unchanged (the admin UI builds its sign-in redirect from it) and do not buffer: streamed answers must reach
+# clients as they are produced. List the controller's pod network under the trusted proxies (admin UI, Settings,
+# Network), so rag-api reads the client address from X-Forwarded-For.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rag-api
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/proxy-body-size: 1m
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [rag.example.se]             # change
+      secretName: ume-rag-api-public-tls  # your certificate (or cert-manager's)
+  rules:
+    - host: rag.example.se                # change
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: rag-api, port: {name: https}}}
+---
+# Uploads are up to 60 MB, one file per request, passed straight through (admin design §2.2).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rag-admin
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/proxy-body-size: 60m
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [rag-admin.example.se]       # change
+      secretName: ume-rag-admin-public-tls
+  rules:
+    - host: rag-admin.example.se          # change
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: rag-admin, port: {name: https}}}

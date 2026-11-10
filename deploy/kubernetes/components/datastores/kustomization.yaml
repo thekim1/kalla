@@ -1,0 +1,11 @@
+# Single-instance Postgres inside the cluster: the same ume-rag/postgres image as Compose (pgvector, pgBackRest inside,
+# WAL archiving), TLS and separate roles. It is not replicated, so updating it is a short outage. For production prefer
+# your platform's Postgres (pgvector 0.8 or later) or an operator such as CloudNativePG (docs/kubernetes.md).
+# init.sql, pg_hba.conf and postgresql.conf are copies (../../sync-config.sh).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - postgres.yaml
+configMapGenerator:
+  - name: ume-rag-postgres-config
+    files: [init.sql, pg_hba.conf, postgresql.conf]

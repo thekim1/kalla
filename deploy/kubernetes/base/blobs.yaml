@@ -1,0 +1,14 @@
+# The blob store (uploads, raw crawled content, previews): a file tree that rag-admin and rag-worker write and rag-api
+# reads, so all three mount it. With more than one node it needs a ReadWriteMany storage class (NFS, CephFS, Azure
+# Files, Longhorn RWX); the overlay sets storageClassName. With ReadWriteOnce every pod that mounts it must run on one
+# node. Files are encrypted by the blob master key (secret ume-rag-blob-key) before they reach the volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rag-blobs
+  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: blobs}
+spec:
+  accessModes: [ReadWriteMany]
+  volumeMode: Filesystem
+  resources:
+    requests: {storage: 100Gi}

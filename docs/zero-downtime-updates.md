@@ -11,7 +11,7 @@ for an installation that does not ask for it. The design is [`repo-and-deploymen
 |---|---|---|
 | Docker Compose (`compose.prod.yaml`) | `dc up -d --wait` ([upgrade guide](upgrade-guide.md)) | `init-deployment.sh --rolling` and `rolling-update.sh` (below) |
 | Portainer (`deploy/portainer/compose.portainer.yaml`) | Update the stack | Not supported: Portainer recreates every container at once |
-| Kubernetes | – | Built in (deploy/kubernetes, coming) |
+| Kubernetes | – | Built in: see [Kubernetes](kubernetes.md) |
 
 `dc` stands for `docker compose --env-file deploy/.env`, as in the runbook.
 
