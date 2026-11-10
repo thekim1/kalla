@@ -186,5 +186,5 @@ in to the admin UI, ask a question, crawl a page).
 
 ## Tested
 
-The manifests render in CI (`kubectl kustomize` of the example overlay with every component). No cluster run is
+The manifests render in CI (Kustomize 5.7.1, the example overlay with every component). No cluster run is
 recorded yet; record the first in `plans/work/results-a.md`.
