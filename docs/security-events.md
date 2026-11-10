@@ -9,9 +9,10 @@ missing from the table below.
 ## Getting them to the SIEM
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `rag-api`, `rag-worker` and `rag-admin`. In an OpenTelemetry Collector, route
-log records whose category is `Ume.Rag.Security` to the SIEM, as the gateway does
-(`deploy/otel/collector-siem.example.yaml` in the gateway repository: syslog RFC 5424, with Splunk, Elastic and
-Sentinel alternatives). The event id is the record's `EventId`, the name its `EventName`, and each attribute below is
+log records whose category is `Ume.Rag.Security` to the SIEM:
+[`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) does (syslog RFC 5424, with
+Splunk, Elastic and Sentinel alternatives; copied from the gateway's). With Compose, set `UME_RAG_OTEL_ENDPOINT` in
+`deploy/.env`; on Kubernetes `OTEL_EXPORTER_OTLP_ENDPOINT` in the overlay. The event id is the record's `EventId`, the name its `EventName`, and each attribute below is
 a structured field.
 
 ## Rules
