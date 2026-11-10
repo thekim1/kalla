@@ -111,7 +111,7 @@ if [ -f "$portainer" ]; then
   for var in "${images[@]}"; do
     ref="${!var}"
     grep -q "\${RAG_${var}:-" "$out/compose.portainer.yaml" || die "RAG_$var is not used in $portainer"
-    sed -i -E 's#\$\{RAG_'"$var"':-[^}]*\}#${RAG_'"$var"':-'"$ref"'}#g' "$out/compose.portainer.yaml"
+    sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" "$out/compose.portainer.yaml"
   done
   echo "Wrote $out/compose.portainer.yaml"
 fi
