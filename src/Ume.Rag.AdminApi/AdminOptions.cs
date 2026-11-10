@@ -55,6 +55,13 @@ public sealed class AdminOptions
 
     /// <summary>How much of an admin's address the audit log and events keep (copied, identity design §1.4): <c>Full</c> by default.</summary>
     public SourceAddressMode AuditSourceAddress { get; set; } = SourceAddressMode.Full;
+
+    /// <summary>
+    /// The organisation's display name in the admin UI (header and sign-in page); <c>Umeå kommun</c> by default. Set to an
+    /// empty string, the UI words its texts without a name. Shown before sign-in, so it is not a secret.
+    /// </summary>
+    [StringLength(100)]
+    public string? OrganisationName { get; set; } = "Umeå kommun";
 }
 
 /// <summary>

@@ -21,7 +21,6 @@ export const TONE_CLASSES: Record<Tone, string> = {
 /** Product name N1 is open (admin design §5.1); "Knowledge platform" until it is decided. */
 export const APP = {
   name: 'Knowledge platform',
-  organisation: 'Umeå kommun',
   titleSuffix: 'Knowledge platform',
   loading: 'Loading …',
 } as const
@@ -43,7 +42,7 @@ export const DEPARTMENT_SOURCE_LABEL: Record<DepartmentSource, string> = {
 
 /** Where a model runs (the gateway's residencies, admin design §5.7 glossary). An unknown one is shown as written. */
 export const RESIDENCY_LABEL: Record<string, string> = {
-  OnPrem: 'Municipal servers',
+  OnPrem: 'Own servers',
   Eu: 'EU',
   External: 'Outside the EU',
 }
@@ -113,15 +112,19 @@ export const PALETTE = {
 
 export const SIGN_IN = {
   title: 'Sign in to the Knowledge platform',
-  lead: 'Administration of Umeå kommun’s knowledge bases and assistants. Sign in with your organisation account.',
+  /** `organisation` is `Admin:OrganisationName` (default Umeå kommun); set empty, the texts name no organisation. */
+  lead: (organisation: string | null) =>
+    `Administration of ${organisation ? `${organisation}’s` : 'the'} knowledge bases and assistants. Sign in with your organisation account.`,
   failed: 'Your sign-in could not be checked. Try again.',
   expired: 'Your session has expired. Sign in again.',
   button: 'Sign in',
   /** Identity design §1.7: why a sign-in was refused (`/?signin=refused&reason=…`). */
   refused: {
-    wrong_tenant: 'Your account does not belong to Umeå kommun’s organisation. Sign in with your organisation account.',
-    guest_refused: 'Guest accounts cannot sign in here. Sign in with your own Umeå kommun account.',
-  } as Record<string, string>,
+    wrong_tenant: (organisation: string | null) =>
+      `Your account does not belong to ${organisation ?? 'this organisation'}. Sign in with your organisation account.`,
+    guest_refused: (organisation: string | null) =>
+      `Guest accounts cannot sign in here. Sign in with your own ${organisation ? `${organisation} ` : 'organisation '}account.`,
+  } as Record<string, (organisation: string | null) => string>,
   refusedFallback: 'The sign-in was refused. Contact the platform team if you need access.',
 } as const
 
@@ -213,8 +216,8 @@ export const LEVEL_LABEL: Record<Level, string> = { public: 'Public', internal: 
 
 /** "Who may read the content?" (admin design §5.4 step 2): the three levels explained, none preselected. */
 export const LEVEL_HELP: Record<Level, string> = {
-  public: 'Everyone may read it, residents too. For example pages on umea.se.',
-  internal: 'Only people who work for the municipality may read it.',
+  public: 'Anyone may read it, also people outside the organisation. For example pages on a public website.',
+  internal: 'Only people in the organisation may read it.',
   sensitive: 'Only those who need it for their work may read it. Needs extra protection.',
 }
 
@@ -264,7 +267,7 @@ export const COLLECTIONS = {
 export const SHARING_LABEL: Record<SharingLevel, string> = {
   department: 'Only our department',
   selected: 'Selected departments',
-  municipality: 'Whole municipality',
+  municipality: 'Whole organisation',
 }
 
 export const COLLECTION = {
@@ -317,7 +320,7 @@ export const SHARING = {
   question: 'Who may use this knowledge base in their assistants?',
   only: (department: string) => `Only ${department}`,
   selected: 'Selected departments',
-  municipality: 'Whole municipality',
+  municipality: 'Whole organisation',
   departments: 'Departments',
   departmentsRequired: 'Choose at least one department.',
   readOnly: 'Shared use is read-only: other departments use the content in their assistants, not the sources.',
@@ -391,7 +394,7 @@ export const SOURCE = {
   startUrlsHint: 'One per line. The website is fetched from them, following links within the same website.',
   advanced: 'More settings',
   include: 'Only include',
-  includeHint: 'Patterns, one per line, for example www.umea.se/bygga/**. Empty means the whole website.',
+  includeHint: 'Patterns, one per line, for example www.example.org/building/**. Empty means the whole website.',
   exclude: 'Skip',
   excludeHint: 'Patterns, one per line. Skip wins over Only include.',
   maxPages: 'Maximum number of pages',
@@ -481,7 +484,7 @@ export const SOURCE_EDIT = {
   save: 'Save',
   saved: 'The source has been saved. The change applies from the next fetch.',
   demote: 'Demote',
-  demoteHint: 'One pattern per line, for example www.umea.se/bygga/**/arkiv/**, and after a space a factor between 0 and 1 (without a factor: 0,5). Results from those pages rank lower.',
+  demoteHint: 'One pattern per line, for example www.example.org/building/**/archive/**, and after a space a factor between 0 and 1 (without a factor: 0,5). Results from those pages rank lower.',
   demoteInvalid: 'Enter one pattern per line, optionally followed by a factor between 0 and 1, for example 0,5.',
   impactTitle: 'The change affects what is fetched',
   scope: (n: number) => `The scope changes. Of the source’s ${formatNumber(n)} searchable documents, those that end up outside are removed at the next fetch.`,
@@ -696,7 +699,7 @@ export const PLATFORM = {
     organisation: {
       label: 'Organisation',
       description: 'Departments: their member groups and how their knowledge bases are shared',
-      keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'municipality'],
+      keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'organisation'],
     },
   },
   settingsSections: {
@@ -769,14 +772,14 @@ export const PLATFORM = {
   politeness: {
     title: 'Host politeness',
     lead:
-      'How hard the crawler may fetch from one website. A host without a row gets the defaults: 1 request a second and 1 connection (municipal hosts 10 and 4), robots.txt respected, only in the source’s night window. Every change is in the audit log.',
+      'How hard the crawler may fetch from one website. A host without a row gets the defaults: 1 request a second and 1 connection (the organisation’s own websites 10 and 4), robots.txt respected, only in the source’s night window. Every change is in the audit log.',
     add: 'Add host',
     empty: 'No host has its own politeness. Every host gets the defaults.',
     columns: { host: 'Host', preset: 'Preset', differs: 'Differs from the preset', robots: 'robots.txt ignored because' },
     presets: {
       '': 'Default for the host',
       polite: 'Polite (1 request a second)',
-      municipal: 'Municipal (10 requests a second)',
+      municipal: 'Own website (10 requests a second)',
       fast: 'Fast (10 a second, any time)',
       custom: 'Custom',
     } as Record<string, string>,
@@ -801,7 +804,7 @@ export const PLATFORM = {
       renderPerHost: 'Pages rendered at once',
     },
     hints: {
-      host: 'The host name only, in lower case, such as www.umea.se: no https://, port or path.',
+      host: 'The host name only, in lower case, such as www.example.org: no https://, port or path.',
       preset: 'A preset fills every setting below; a setting you fill in overrides it. Empty settings follow the preset.',
       requestsPerSecond: 'Up to the deployment’s ceiling (50 by default).',
       maxConnections: 'Up to the deployment’s ceiling (16 by default).',
@@ -826,7 +829,7 @@ export const PLATFORM = {
     },
     apply: 'Apply',
     remove: 'Remove host',
-    hostInvalid: 'Enter a host name such as www.umea.se.',
+    hostInvalid: 'Enter a host name such as www.example.org.',
     hostTaken: 'This host already has a row.',
     reasonRequired: 'Say why robots.txt is ignored.',
     unsaved: 'Changes in the table are saved with the section.',
@@ -854,10 +857,10 @@ export const PLATFORM = {
     sharing: 'How its knowledge bases are shared',
     department: 'Only our department',
     selected: 'Selected departments',
-    municipality: 'Whole municipality',
+    municipality: 'Whole organisation',
     sharedWith: 'Departments shared with',
     summary: (department: number, selected: number, municipality: number) =>
-      `${department} own · ${selected} selected · ${municipality} municipality`,
+      `${department} own · ${selected} selected · ${municipality} whole organisation`,
   },
   form: {
     create: 'Create',
@@ -1062,8 +1065,8 @@ export const ASSISTANT = {
       help: 'When nothing is found, the answer starts with a note that it is based on general knowledge, and the contact links follow.',
     },
   } as Record<string, { label: string; help: string }>,
-  generalKnowledgePublicWarning: 'Not recommended for a public assistant: citizens may get general answers that are wrong for Umeå kommun.',
-  generalKnowledgeConfirm: 'This public assistant uses general knowledge. Citizens may get general answers that are wrong for Umeå kommun. Go ahead anyway?',
+  generalKnowledgePublicWarning: 'Not recommended for a public assistant: the public may get general answers that are wrong for your organisation.',
+  generalKnowledgeConfirm: 'This public assistant uses general knowledge. The public may get general answers that are wrong for your organisation. Go ahead anyway?',
   generalKnowledgeBadge: 'General knowledge',
   audience: 'Clients that offer the assistant',
   audienceHint: 'Users see the assistant in the clients you choose.',
@@ -1414,7 +1417,7 @@ export const EXPLAIN = {
   client: 'Client',
   chooseClient: 'Choose a client',
   kind: 'Who',
-  kinds: { 'owui-user': 'Open WebUI user', 'entra-user': 'Municipal account (Entra)', key: 'Application with a key' } as Record<string, string>,
+  kinds: { 'owui-user': 'Open WebUI user', 'entra-user': 'Organisation account (Entra)', key: 'Application with a key' } as Record<string, string>,
   id: 'Id',
   idLabels: { 'owui-user': 'Open WebUI user id', 'entra-user': 'Object id (oid)', key: 'Key id' } as Record<string, string>,
   idRequired: 'Enter the id.',

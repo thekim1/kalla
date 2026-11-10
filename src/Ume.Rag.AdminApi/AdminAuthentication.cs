@@ -237,6 +237,7 @@ public static class AdminAuthentication
             {
                 isAuthenticated = http.User.Identity?.IsAuthenticated == true,
                 environment = environment.EnvironmentName,
+                organisationName = string.IsNullOrWhiteSpace(admin.Value.OrganisationName) ? null : admin.Value.OrganisationName.Trim(),
                 name = http.User.Identity?.Name,
                 email = http.User.FindFirstValue("email"),
                 roles = http.User.FindAll(AdminClaims.Roles).Select(c => c.Value).ToArray(),
