@@ -5,6 +5,37 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.3.0 (2026-11-10)
+
+Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, and the review fixes of
+#499–#513. **Rolling update: yes** from 0.2.0 (no schema migration); see `docs/upgrade-guide.md`.
+
+### Added
+
+- Updates without downtime: a second `rag-api` and `rag-admin` (`compose.rolling.yaml`, `init-deployment.sh --rolling`),
+  `deploy/rolling-update.sh`, nginx retries on the other slot, and an end-to-end test that lost no request (#537).
+- Kubernetes manifests (`deploy/kubernetes`): base, in-cluster Postgres, ingestion, renderer, NetworkPolicies, an
+  example overlay, `create-secrets.sh` and `deploy.sh`; the release bundle pins them by digest (#538).
+- Portainer: the gateway's stack plus Ume Rag in one compose file, attached to the release as `compose.portainer.yaml`
+  (#536, #538).
+- An OpenTelemetry Collector example that sends security events to a SIEM, and a Keycloak guide (#538).
+- Upload knowledge bases: Files tab, one-step create, live progress, folder paths, drag-and-drop and folder upload
+  (#527, #532, #534).
+- Legacy Word, Excel, PowerPoint and RTF uploads, converted with LibreOffice in the parser (#526).
+- Cancel a run from the run and source pages (#531).
+
+### Changed
+
+- Statement K: one keyword statement with the search vector as a parameter (#509, #523).
+- Open WebUI user JWTs are validated with Microsoft.IdentityModel.JsonWebTokens (#512, #525).
+- Search statistics stay within their own server-side limit (#499, #516); less telemetry overhead (#503, #518).
+- `/version` has one camelCase shape in every service (#497, #529); the EF command log is at Warning everywhere (#522).
+
+### Fixed
+
+- A `readySelector` or `noiseSelector` that is not CSS is refused on save (#530).
+- The worker records an upload's outcome (indexed or refused) on its slot (#533, #534).
+
 ## 0.2.0 (2026-11-08)
 
 P1a and P1b code: crawl, upload, parse and embed; hybrid retrieval with citations; the chat API behind Open WebUI;
