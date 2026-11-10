@@ -214,7 +214,7 @@ public sealed class RenderFetcher : IRenderFetcher
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
         message.Options.Set(CrawlHttpClient.PurposeKey, EgressPurpose.Render);
-        message.Headers.TryAddWithoutValidation("User-Agent", _policy.Current.ProfileOf(url.Authority).UserAgent);
+        message.Headers.TryAddWithoutValidation("User-Agent", _policy.Current.UserAgentOf(url.Authority));
         if (body is not null)
         {
             message.Content = new ByteArrayContent(body);

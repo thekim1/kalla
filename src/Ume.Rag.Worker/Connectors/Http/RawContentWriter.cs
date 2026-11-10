@@ -34,6 +34,7 @@ public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
     /// <param name="noiseSelectors">The source's <c>noiseSelectors</c> (§12.2).</param>
     /// <param name="canonicalizer">The rules for the declared canonical.</param>
     /// <param name="extractLinks">Extract and store the page's links (a crawl).</param>
+    /// <param name="productToken">The crawler's product token for meta robots and <c>X-Robots-Tag</c> (<see cref="Hosts.CrawlPolicy.ProductToken"/>).</param>
     /// <param name="softNotFound">The host's soft-404 fingerprint for the run (<see cref="SoftNotFound"/>); null for none.</param>
     /// <param name="discovered">Links a rendered page found besides its <c>&lt;a href&gt;</c> (§8.3), added to its links.</param>
     /// <param name="cancellationToken">Cancels the step.</param>
@@ -44,6 +45,7 @@ public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
         IReadOnlyList<string> noiseSelectors,
         CanonicalizerOptions canonicalizer,
         bool extractLinks,
+        string productToken,
         string? softNotFound,
         IReadOnlyList<Uri> discovered,
         CancellationToken cancellationToken)
@@ -92,7 +94,7 @@ public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
 
             if (extractLinks)
             {
-                links = LinkExtractor.Extract(document, ok.FinalUrl, ok.RobotsTag).With(discovered);
+                links = LinkExtractor.Extract(document, ok.FinalUrl, ok.RobotsTag, productToken).With(discovered);
             }
 
             contentHash = HtmlNoiseNormalizer.Hash(HtmlNoiseNormalizer.Normalize(document, FetchDay(), noiseSelectors));

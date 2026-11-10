@@ -100,7 +100,7 @@ public sealed partial class PageFetcher(
                 var render = new RenderRequest(current.FinalUrl, current.Body, request.Settings.ReadySelector, limits)
                 {
                     ScrollToLoad = request.Settings.ScrollToLoad,
-                    UserAgent = policy.Current.ProfileOf(current.FinalUrl.Authority).UserAgent,
+                    UserAgent = policy.Current.UserAgentOf(current.FinalUrl.Authority),
                     SetCookies = current.SetCookies,
                 };
                 var started = time.GetTimestamp();
@@ -226,7 +226,7 @@ public sealed partial class PageFetcher(
     {
         var settings = request.Settings;
         var stored = await _writer.StoreAsync(request.Context, request.Blobs, ok, settings.NoiseSelectors, request.Http.Canonicalizer, request.ExtractLinks,
-            softNotFound, discovered, cancellationToken);
+            policy.Current.ProductToken, softNotFound, discovered, cancellationToken);
         var outcome = stored.Outcome is FetchOutcome.Content content ? content with { Facts = content.Facts with { FetchMode = fetchMode } } : stored.Outcome;
         return new PageResult(outcome, stored.Links);
     }

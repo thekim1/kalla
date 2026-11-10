@@ -156,7 +156,19 @@ public sealed class RobotsTxtTests
         robots.IsAllowed(Url("/late")).ShouldBeTrue();
     }
 
-    private static RobotsTxt Parse(string text) => RobotsTxt.Parse(Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n", StringComparison.Ordinal)));
+    [Fact]
+    public void Groups_are_matched_against_the_configured_product_token()
+    {
+        const string Text = "User-agent: ExampleBot\nDisallow: /a\n\nUser-agent: UmeaKommunBot\nDisallow: /b\n";
+
+        var robots = Parse(Text, "ExampleBot");
+
+        robots.IsAllowed(Url("/a")).ShouldBeFalse();
+        robots.IsAllowed(Url("/b")).ShouldBeTrue();
+    }
+
+    private static RobotsTxt Parse(string text, string productToken = "UmeaKommunBot") =>
+        RobotsTxt.Parse(Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n", StringComparison.Ordinal)), productToken);
 
     private static Uri Url(string path) => new("https://www.umea.se" + path);
 }

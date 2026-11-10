@@ -432,7 +432,11 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
 
 - `fast` = 10 requests a second, 4 connections, `Crawl-delay` and latency ignored, any time of day.
 - robots.txt can only be ignored per host and with a reason; its `Sitemap:` lines are still read. The User-Agent is
-  free per host; robots.txt rules are still matched against `UmeaKommunBot`.
+  free per host; robots.txt rules are still matched against the crawler's own product token.
+- The crawler's own User-Agent is `Crawl:UserAgent` on `rag-worker` (default `UmeaKommunBot/1.0`), e.g.
+  `Crawl__UserAgent="ExampleBot/1.0 (+https://www.example.org/bot)"`. Its product token, the part before the first `/` or
+  space (letters, `_` and `-` only), is the name robots.txt groups, meta robots and `X-Robots-Tag` are matched against.
+  The worker refuses to start with an invalid value.
 - The deployment caps every host at `Crawl:MaxHostRate` (50 requests a second) and `Crawl:MaxHostConnections` (16).
   Set them alike on `rag-admin` (which refuses more) and `rag-worker` (which clamps to them), e.g.
   `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (4) and, in effect, at the host's `maxConnections`.

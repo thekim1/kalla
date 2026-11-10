@@ -123,7 +123,7 @@ public sealed class CrawlRulesTests
             """;
         using var document = new HtmlParser().ParseDocument(html);
 
-        var links = LinkExtractor.Extract(document, new Uri("https://www.umea.se/page"), null);
+        var links = LinkExtractor.Extract(document, new Uri("https://www.umea.se/page"), null, "UmeaKommunBot");
 
         links.Links.ShouldBe(["https://www.umea.se/sv/start", "https://www.umea.se/sv/skola", "https://www.umea.se/omsorg", "https://other.example/", "https://www.umea.se/karta"]);
         links.NoIndex.ShouldBeFalse();
@@ -143,9 +143,21 @@ public sealed class CrawlRulesTests
     {
         using var document = new HtmlParser().ParseDocument($"<html><head>{meta}</head><body></body></html>");
 
-        var links = LinkExtractor.Extract(document, new Uri("https://www.umea.se/"), header);
+        var links = LinkExtractor.Extract(document, new Uri("https://www.umea.se/"), header, "UmeaKommunBot");
 
         (links.NoIndex, links.NoFollow).ShouldBe((noIndex, noFollow));
+    }
+
+    [Theory]
+    [InlineData("<meta name=\"ExampleBot\" content=\"noindex\">", null, true)]
+    [InlineData("<meta name=\"UmeaKommunBot\" content=\"noindex\">", null, false)]
+    [InlineData("", "examplebot: noindex", true)]
+    [InlineData("", "UmeaKommunBot: noindex", false)]
+    public void Directives_follow_the_configured_product_token(string meta, string? header, bool noIndex)
+    {
+        using var document = new HtmlParser().ParseDocument($"<html><head>{meta}</head><body></body></html>");
+
+        LinkExtractor.Extract(document, new Uri("https://www.example.org/"), header, "ExampleBot").NoIndex.ShouldBe(noIndex);
     }
 
     [Theory]
