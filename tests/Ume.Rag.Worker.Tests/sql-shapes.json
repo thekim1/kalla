@@ -72,6 +72,7 @@
   "Engine.IndexWriter.FindSql": ["Id uuid", "DocumentId uuid", "PipelineVersionId uuid", "SiteProfileVersionId uuid", "EmbeddingProfileId uuid", "ContentHash bytea", "State character varying", "InputHash bytea", "ChunkCount integer", "ParseRuleKey character varying"],
   "Engine.IndexWriter.LiveSql": ["Id uuid", "DocumentId uuid", "PipelineVersionId uuid", "SiteProfileVersionId uuid", "EmbeddingProfileId uuid", "ContentHash bytea", "State character varying", "InputHash bytea", "ChunkCount integer", "ParseRuleKey character varying"],
   "Engine.IndexWriter.LockDocumentSql": ["LiveChunkSetId uuid", "?column? boolean"],
+  "Engine.IndexWriter.ProfileGuardSql": ["rag_lock_profile_if_unchanged boolean"],
   "Engine.KeywordStatistics.CollectionsSql": ["Id uuid"],
   "Engine.KeywordStatistics.CountOneSql": ["count bigint"],
   "Engine.KeywordStatistics.CountsSql": ["EmbeddingProfileId uuid", "count bigint"],
