@@ -907,6 +907,9 @@ export interface GatewayModel {
    * gateway could not be asked (every model stays choosable).
    */
   available?: boolean | null
+  /** The model's limits in tokens (Decisions "Answer length from the model"); null when unknown, a platform admin enters them. */
+  contextWindow?: number | null
+  maxOutputTokens?: number | null
 }
 
 export interface AssistantTestResult {
@@ -920,7 +923,18 @@ export interface AssistantTestResult {
   }
   condense: { used: boolean; outcome: string | null }
   answer: { raw: string | null; delivered: string; outcome: string; language: string; citations: { number: number; documentId: string; title: string }[] }
-  gateway: { model: string; residency: string; latencyMs: number | null; inputTokens: number | null; outputTokens: number | null }
+  gateway: {
+    model: string
+    residency: string
+    latencyMs: number | null
+    inputTokens: number | null
+    outputTokens: number | null
+    /** The `max_tokens` sent, null when left out (admin design §4.9). */
+    maxTokens?: number | null
+    maxTokensSource?: 'override' | 'model' | 'provider' | null
+    /** `length`: the answer stopped at the limit. */
+    finishReason?: string | null
+  }
   durationMs: number
 }
 
