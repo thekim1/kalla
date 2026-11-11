@@ -60,8 +60,8 @@ run, `docs/ci-runner.md`). **A-21's done-when (the bundle smoke test with the ne
 **Stream b** has **B-30** (editable embedding profiles), **B-31** (answer length from the model) and **B-32** (chat
 prompt texts) queued, plus the live items B-L2, B-L3, B-L5. Review notes left for them: B-30 must lock the profile row
 against a concurrent first chunk-set build (#547): **#554 (B-30 API) has changes requested** for exactly that (lock
-the profile row in the PUT; the worker's set insert re-checks the profile under `FOR SHARE`); its UI part is #558; B-31 should weigh an optional platform-wide answer ceiling now that
-the 4,096 cap is gone (#548). **Stream b's machine also runs a main session** that writes design PRs on
+the profile row in the PUT; the worker's set insert re-checks the profile under `FOR SHARE`); its UI part is #558; B-31 now carries the optional platform-wide answer ceiling
+`Settings.Chat.MaxAnswerTokens` (the 4,096 cap went in #548). **Stream b's machine also runs a main session** that writes design PRs on
 `main-session/` branches (#547, #548); #550 told it where decisions go now.
 
 **Only the user can unblock:**

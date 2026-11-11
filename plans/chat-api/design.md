@@ -484,14 +484,16 @@ W = the model's ContextWindow from the GatewayModels mirror (null when unknown)
 O = the model's MaxOutputTokens from the mirror (null when unknown)
 C = context = QuerySteps.answer.contextTokens if set, else W, else 16,384;
     ≤ W when known (an override above it is lowered); ≤ Settings.Chat.MaxContextTokens when set
-R = output limit = QuerySteps.answer.maxOutputTokens if set (≤ O when known), else O, else unknown
+X = platform ceiling = Settings.Chat.MaxAnswerTokens (null when unset, the default)
+R = output limit = QuerySteps.answer.maxOutputTokens if set (≤ O when known), else O, else unknown;
+    ≤ X when set (an override above it is lowered); R = X when R is unknown and X is set
 F = answer reserve in the budget = R if set by the override, else 1,024
 M = frame + assistant system prompt + language line + question                 (mandatory)
 if M + F + 1,000 > C            → 400 context_length_exceeded
 S = sources budget  = min(8,000, C − F − M)            (filled first, §6.3 step 2)
 H = history budget  = min(4,000, C − F − M − S_used)   (filled second, step 3)
 P = M + S_used + H_used                                 (estimated prompt)
-max_tokens sent = override set: R;  else O known: min(O, C − P);  else: left out
+max_tokens sent = override set: R;  else R known: min(R, C − P);  else: left out
 ```
 
 **Output limit** (Decisions "Answer length from the model"). Without an override the answer may use what the model can
@@ -505,6 +507,13 @@ the gateway sets its key or team `MaxOutputTokens` when one exists (`RequestPoli
 default applies (the gateway's Anthropic adapter sends 4,096, `AnthropicTranslator.cs:14`; OpenAI and vLLM leave the
 room left in the window, to verify per provider, §22). A platform admin enters `O` and `W` on the mirror row until the
 catalogue carries them (admin §4.10, gateway-changes §7.3).
+
+**Platform ceiling** (`X`, same Decisions entry). A platform admin may set `Settings.Chat.MaxAnswerTokens` to bound the
+answer length, and with it the cost, of every assistant on every model. Unset (the default), nothing changes. Set, it
+lowers `R` for every assistant, an override included, and fills `R` when the model's limit is unknown, so `max_tokens`
+is always sent; the answer reserve `F` stays 1,024 unless an override sets it (and an override is capped at `X`). The
+test panel's `maxTokensSource` is then `ceiling` when `X` decided the value. Lowering `X` below an assistant's override
+is a warning on that assistant's draft, never a failed chat (admin V17).
 
 Order of allocation (decision):
 
@@ -676,7 +685,8 @@ traceparent: …
   `Pipeline/GatewayRequestHandler.cs:256`,
   `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
 - `max_tokens` as §6.3: the assistant's override, else the model's `MaxOutputTokens` minus the estimated prompt,
-  else left out (Decisions "Answer length from the model"). An answer that stops at it ends with
+  else left out, each capped by the platform ceiling `Settings.Chat.MaxAnswerTokens` when set (which also fills an
+  unknown limit) (Decisions "Answer length from the model"). An answer that stops at it ends with
   `finish_reason: length`, which is passed through and shown by the test panel.
 - `temperature` only when `QuerySteps.answer.temperature` is set (default unset: the model's own default; some models,
   e.g. the Claude models on the gateway, refuse it); no other sampling parameter.
@@ -1422,7 +1432,7 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
 | Document | Change |
 |---|---|
 | `platform/data-model.md` §2.1 `Assistants` | `NotFoundText` → `NotFound jsonb` (`sv`, `en`, `links[]{title,url}`, §10.1); `QuerySteps jsonb` schema: `{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: false (P2) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens: 16384, maxOutputTokens: 1024, temperature?: null, language: "auto" }, attachments: { enabled: false } (P2) }` |
-| `platform/data-model.md` §2.1 `Settings` | `Chat jsonb`: `CondenseModel` (on-prem alias, the only task model), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts`, `MessagesPerMinutePerUser` 20 |
+| `platform/data-model.md` §2.1 `Settings` | `Chat jsonb`: `CondenseModel` (on-prem alias, the only task model), `MaxContextTokens`, `MaxAnswerTokens`, default not-found texts sv/en, `AllowedLinkHosts`, `MessagesPerMinutePerUser` 20 |
 | `platform/data-model.md` §2.1 `Clients` | remove `TaskModel`, `TaskModelResidency` and `CK_Clients_TaskModel` (§4.2) |
 | `platform/data-model.md` §2.3 `Conversations` | unique index (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (§11.1); no tombstone (`DeletedByUserAt` removed; user delete deletes the row, §13.2); plain `Classification`, no composite keys; title from the first question |
 | `platform/data-model.md` §2.3, §7 `DataKeys` | bucket keys per (level, expiry month), unique per bucket (§12.3); content rows reference their bucket; no `Epoch`, no per-conversation keys, no conversation FK cascade |

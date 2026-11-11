@@ -164,3 +164,5 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
 - 2026-11-11, main session (user: "do each of these recommended steps"): the keyword stop list's statistics are kept
   by the worker in `KeywordStatistics`, scope sizes stay in rag-api ("Search cost at scale"; M-10, #499); chunk sets of
   ≤ 1,000 chunks are written in the swap transaction (engine §14 rule 2a, #501).
+- 2026-11-11, user: an optional platform-wide answer ceiling `Settings.Chat.MaxAnswerTokens` caps every answer's
+  `max_tokens`, overrides included, unset by default ("Answer length from the model"; from the review of #548).

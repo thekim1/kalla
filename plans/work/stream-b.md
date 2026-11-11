@@ -334,13 +334,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `min(O, C − P)`, else left out in `GatewayChatClient`); V17's new bounds and the run-time lowering of an override
   above a lowered model limit; the Utkast tab's *Use the model's limit* checkboxes with the model's limit shown; the
   Gateway models page edits both limits; the test panel returns and shows `maxTokens`, `maxTokensSource` and
-  `finishReason` ("The answer stopped at the length limit"). No compatibility step: the migration removes
+  `finishReason` ("The answer stopped at the length limit"); the optional platform ceiling
+  `Settings.Chat.MaxAnswerTokens` (`X` in §6.3: caps `R`, override included, fills an unknown `R`; on
+  `PUT /api/settings/chat` with its field on the Settings page; `maxTokensSource` `ceiling`; the Utkast tab shows it
+  when lower). No compatibility step: the migration removes
   `answer.maxOutputTokens` and `answer.contextTokens` from every development `QuerySteps`.
 - **Paths:** `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/**` (migration), `src/Ume.Rag.Answering/**`,
   `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Api/**` if the client's `max_tokens` cap moves, `src/Ume.Rag.FakeGateway/**`
   (echo the `max_tokens` it got, `finish_reason: length` on request), `src/admin-ui/**`, their tests.
 - **Done when:** unit tests for the §6.3 table (override; model limit known; unknown → no `max_tokens`; override above
-  the model limit lowered; `C − P` below `O`); a FakeGateway test sees no `max_tokens` for a model without limits;
+  the model limit lowered; `C − P` below `O`; the ceiling lowering an override, capping the model's limit and filling an
+  unknown one); a FakeGateway test sees no `max_tokens` for a model without limits;
   rules tests for V17's bounds; vitest for the checkboxes and the test panel's length notice.
 - **Waits on:** –
 - **Read:** Decisions "Answer length from the model"; chat §6.3, §8.1; admin §4.9, §4.10, V17, §5.5.4 (Utkast tab);
