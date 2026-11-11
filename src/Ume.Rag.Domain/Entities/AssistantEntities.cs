@@ -230,7 +230,15 @@ public sealed class GatewayModel
     public string Source { get; set; } = GatewayModelSources.Catalog;
     public bool SupportsTools { get; set; }
     public string SupportsToolsSource { get; set; } = GatewayModelSources.Manual;
+    /// <summary>The model's context window in tokens; manual (the Gateway models page) until the catalogue carries it, kept by the sync.</summary>
     public int? ContextWindow { get; set; }
+
+    /// <summary>
+    /// The longest output the model produces, in tokens (Decisions "Answer length from the model"; chat design §6.3): the
+    /// answer's <c>max_tokens</c> unless the assistant overrides it. Manual until the catalogue carries it, kept by the sync.
+    /// </summary>
+    public int? MaxOutputTokens { get; set; }
+
     public decimal? InputPerMillionUsd { get; set; }
     public decimal? CachedInputPerMillionUsd { get; set; }
     public decimal? OutputPerMillionUsd { get; set; }

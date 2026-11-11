@@ -350,7 +350,9 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
                      ("\"Residencies\" = ARRAY[]::varchar(10)[]", "CK_GatewayModels_Residencies"),
                      ("\"Kind\" = 'alias'", "CK_GatewayModels_Kind"),
                      ("\"Source\" = 'gateway'", "CK_GatewayModels_Source"),
-                     ("\"ContextWindow\" = 0", "CK_GatewayModels_ContextWindow"),
+                     ("\"ContextWindow\" = 0", "CK_GatewayModels_Limits"),
+                     ("\"MaxOutputTokens\" = 0", "CK_GatewayModels_Limits"),
+                     ("\"ContextWindow\" = 1000, \"MaxOutputTokens\" = 1001", "CK_GatewayModels_Limits"), // the output within the window
                  })
         {
             var error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, $"""UPDATE config."GatewayModels" SET {set} WHERE "Name" = '{name}'"""));

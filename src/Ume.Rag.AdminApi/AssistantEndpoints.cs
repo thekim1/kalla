@@ -630,7 +630,8 @@ public static class AssistantRules
         }
 
         problems.AddRange(await AudienceRulesAsync(admin, assistant, audience, ct));
-        problems.AddRange(QuerySteps(version.QuerySteps));
+        var model = await admin.Db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == version.GatewayModel, ct);
+        problems.AddRange(QuerySteps(version.QuerySteps, model));
         if (!confirmGeneralKnowledge && NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps))
         {
             problems.Add(new RuleProblem(AdminErrorCodes.GeneralKnowledgePublicUnconfirmed,
@@ -667,20 +668,29 @@ public static class AssistantRules
         return problems;
     }
 
+    /// <summary>The upper bound of <c>answer.maxOutputTokens</c> when the model's output limit is unknown (V17).</summary>
+    public const int UnknownOutputLimit = 1_000_000;
+
+    /// <summary>The upper bound of <c>answer.contextTokens</c> when the model's window is unknown (V17).</summary>
+    public const int UnknownContextWindow = 1_048_576;
+
     /// <summary>
     /// V17 (chat design §5–§6, §10.3): the types and ranges of the query steps that exist in P1a. The integer fields are
     /// checked with <see cref="Ume.Rag.Answering.Chat.AssistantChatSettings.TryInt"/>, the runtime's own reader, so a value
-    /// the runtime would replace by its default (a fraction, a string, <c>10.0</c>) is refused here.
+    /// the runtime would replace by its default (a fraction, a string, <c>10.0</c>) is refused here. The answer's two
+    /// overrides are bounded by the version's model row (Decisions "Answer length from the model"): absent means the model's
+    /// limit; set, at most the model's limit, or a wide bound when the mirror does not know it. A draft whose override is
+    /// above a limit lowered later gets the warning; the runtime lowers it to the limit.
     /// </summary>
-    private static IEnumerable<RuleProblem> QuerySteps(string json)
+    internal static IEnumerable<RuleProblem> QuerySteps(string json, GatewayModel? model)
     {
         var steps = JsonNode.Parse(json) as JsonObject ?? [];
         var problems = new List<string>();
         CheckInt(steps["retrieval"]?["topK"], 1, 50, "retrieval.topK");
         CheckInt(steps["history"]?["maxMessages"], 0, 20, "history.maxMessages");
         CheckInt(steps["history"]?["maxTokens"], 0, 8000, "history.maxTokens");
-        CheckInt(steps["answer"]?["maxOutputTokens"], 64, 4096, "answer.maxOutputTokens");
-        CheckInt(steps["answer"]?["contextTokens"], 4096, 131_072, "answer.contextTokens");
+        CheckInt(steps["answer"]?["maxOutputTokens"], 64, model?.MaxOutputTokens ?? UnknownOutputLimit, "answer.maxOutputTokens");
+        CheckInt(steps["answer"]?["contextTokens"], 4096, model?.ContextWindow ?? UnknownContextWindow, "answer.contextTokens");
         Check(steps["answer"]?["temperature"], 0, 1, "answer.temperature");
         if (steps["condense"]?["enabled"] is { } condense && !(condense is JsonValue c && c.GetValueKind() is JsonValueKind.True or JsonValueKind.False))
         {

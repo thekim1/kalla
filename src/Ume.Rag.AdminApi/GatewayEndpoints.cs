@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
@@ -111,7 +112,32 @@ public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList
 /// the requested ceiling, null when the gateway could not be asked (#447).
 /// </summary>
 public sealed record GatewayModelDto(string Name, string Kind, string ModelKind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
-    decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt, bool? Available);
+    int? MaxOutputTokens, decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt, bool? Available)
+{
+    public static GatewayModelDto Of(GatewayModel m, bool? available) => new(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow,
+        m.MaxOutputTokens, m.InputPerMillionUsd, m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt, available);
+}
+
+/// <summary>
+/// A mirror row's limits (admin design §4.5, §4.10; Decisions "Answer length from the model"): null clears one; both are
+/// integers 1–10,000,000 and the output limit is at most the window when both are set. Manual until the gateway's catalogue
+/// carries them; the sync keeps them.
+/// </summary>
+public sealed record GatewayModelLimitsRequest : AdminRequest, IValidatableObject
+{
+    public const int Max = 10_000_000;
+
+    [Range(1, Max)]
+    public int? ContextWindow { get; init; }
+
+    [Range(1, Max)]
+    public int? MaxOutputTokens { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) =>
+        ContextWindow is { } window && MaxOutputTokens is { } output && output > window
+            ? [new ValidationResult("At most the context window.", [nameof(MaxOutputTokens)])]
+            : [];
+}
 
 /// <summary>The gateway area (admin design §4.5): the model mirror, its sync, the key status per level and the embedding canary check.</summary>
 public static class GatewayEndpoints
@@ -135,11 +161,25 @@ public static class GatewayEndpoints
                 var ceiling = level is null ? PlatformModelRules.Ceiling : ResidencyCeiling.ForLevel(level);
                 var listed = await availability.ListedAsync(ceiling, ct);
                 return (await db.GatewayModels.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct))
-                    .Select(m => new GatewayModelDto(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow, m.InputPerMillionUsd,
-                        m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt, listed?.Contains(m.Name))).ToList();
+                    .Select(m => GatewayModelDto.Of(m, listed?.Contains(m.Name))).ToList();
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels")
             .WithSummary("The gateway model mirror with residencies, prices and whether the platform's key may use each model (?level=)");
+
+        // The limits of any row (Decisions "Answer length from the model"); manual rows and SupportsTools come later (§4.5).
+        // Model names hold slashes (ume/chat-eu): a catch-all segment, unescaped, so a client may send the slash or %2F.
+        gateway.MapPut("/models/{**name}", async (string name, GatewayModelLimitsRequest request, AdminContext admin, CancellationToken ct) =>
+                GatewayModelDto.Of(await admin.WriteAsync(async attempt =>
+                {
+                    name = Uri.UnescapeDataString(name);
+                    var row = await admin.Db.GatewayModels.SingleOrDefaultAsync(m => m.Name == name, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    var before = new { row.ContextWindow, row.MaxOutputTokens };
+                    row.ContextWindow = request.ContextWindow;
+                    row.MaxOutputTokens = request.MaxOutputTokens;
+                    return new AdminChange<GatewayModel>(row, "update", "gateway-model", row.Name, before, new { row.ContextWindow, row.MaxOutputTokens, row.Name });
+                }, ct), null))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateGatewayModel")
+            .WithSummary("Set a mirror row's context window and output limit (null clears); the sync keeps them");
 
         gateway.MapPost("/sync", async (HttpContext http, GatewayModelSync sync, CancellationToken ct) =>
             !sync.Enabled
