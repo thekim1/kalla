@@ -88,7 +88,8 @@ const SETTINGS_MODEL_FIELDS: Partial<Record<(typeof SETTINGS_SECTIONS)[number], 
     { name: 'evaluationModel', modelKind: 'chat' },
     { name: 'evaluationJudgeModel', modelKind: 'chat' },
   ],
-  chat: [{ name: 'condenseModel', modelKind: 'chat', in: 'value' }],
+  // The platform answer ceiling (Decisions "Answer length from the model", admin design §4.5): a number of its own above the JSON.
+  chat: [{ name: 'condenseModel', modelKind: 'chat', in: 'value' }, { name: 'maxAnswerTokens', kind: 'number', in: 'value' }],
   retrieval: [
     { name: 'rerankModel', modelKind: 'chat', in: 'value' },
     { name: 'gatewayRerankModel', modelKind: 'rerank', in: 'value' },
