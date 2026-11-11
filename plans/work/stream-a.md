@@ -296,7 +296,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** A-20.
 - **Read:** #507; AGENTS.md "7-day package rule".
 
-### [ ] A-28 Schema contract test for positional SQL readers (#510, harness)
+### [x] A-28 Schema contract test for positional SQL readers (#510, harness)
 - **Do:** a test that runs each SQL constant with `CommandBehavior.SchemaOnly` against the test database and checks the
   column names and types its reader expects; the worker's statements first. Stream b adds its stores' statements after
   it (a follow-up item when this lands).
