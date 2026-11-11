@@ -595,7 +595,8 @@ if [ "$proxy" = 1 ]; then
 Reverse proxy: $here/proxy/nginx.conf is ready for nginx (add your certificates). For another proxy: forward
 https://$api_host to https://$upstream_host:$api_port and https://$admin_host to https://$upstream_host:$admin_port,
 preserving the Host header; client_max_body_size 60m and proxy_request_buffering off on
-PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), 1 MB elsewhere.
+PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), 2 MB on the api host (chat history,
+and on Open WebUI's), 1 MB elsewhere.
 Restrict those ports to the proxy with the host firewall."
   [ "$rolling" = 0 ] || proxy_note="$proxy_note
 With --rolling, also list the second slots: $upstream_host:$((api_port + 1)) (rag-api) and
