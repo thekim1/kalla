@@ -681,6 +681,11 @@ export const PLATFORM = {
     condenseModel: 'Condense model',
     rerankModel: 'Rerank model (chat)',
     gatewayRerankModel: 'Rerank model (gateway)',
+    gatewayModel: 'Gateway model',
+    dimensions: 'Dimensions',
+    requestDimensions: 'Send dimensions',
+    maxInputTokens: 'Max input tokens',
+    maxResidency: 'Residency ceiling',
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
@@ -688,6 +693,10 @@ export const PLATFORM = {
       'Group names from the sign-in (or Entra object ids). The sign-in shares its groups with the AI gateway: a gateway group with the same name counts too. A member group gives department scope, never a role.',
     requestsPerMinute:
       'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. Open WebUI users always get the per-user limit.',
+    dimensions: 'The size of each vector. It must match what the model returns.',
+    requestDimensions:
+      'Sends the size on every call, for a model that can shorten its vectors (text-embedding-3-large at 1024). Leave it off for a model that cannot (BGE-M3).',
+    maxResidency: 'The highest residency the profile’s embedding calls may reach, at most Eu.',
   } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
@@ -1467,4 +1476,26 @@ export const MODEL_AVAILABILITY = {
   /** The platform settings' pickers (#466): V32 checks the model when the section is saved, not at a publish. */
   unknownOnSave: 'Availability unknown: the AI gateway could not be asked, so every model can be chosen. Saving checks it.',
   notListed: 'Not among the gateway’s models of this kind',
+} as const
+
+/** Embedding profiles on Platform → Gateway models (admin design §4.5, §5.8; Decisions "Editable embedding profiles before use"). */
+export const EMBEDDING_PROFILES = {
+  title: 'Embedding profiles',
+  lead: 'The embedding model that indexes the content and embeds the questions. A profile can be changed until content is indexed with it; after that only its residency ceiling. Every save first tests the new values against the AI gateway.',
+  name: 'Profile',
+  model: 'Model',
+  dimensions: 'Dimensions',
+  ceiling: 'Residency ceiling',
+  use: 'Use',
+  inUse: 'In use by content',
+  unused: 'Not used yet',
+  isDefault: 'Default',
+  edit: 'Edit',
+  editTitle: (name: string) => `Embedding profile ${name}`,
+  inUseNote: 'Content is indexed with this profile, so only the residency ceiling can change. A new model or size needs a profile migration.',
+  test: 'Test',
+  testing: 'Testing…',
+  testLead: 'Test runs one embedding with the values in the form. Nothing is saved.',
+  saved: 'Embedding profile saved',
+  none: 'There is no embedding profile yet. The migration service creates it from EmbeddingProfile:* in the deployment.',
 } as const

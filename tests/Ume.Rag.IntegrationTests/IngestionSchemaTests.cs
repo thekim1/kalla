@@ -369,7 +369,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         var name = "pilot-" + Guid.NewGuid().ToString("N");
         var options = new EmbeddingProfileSeedOptions
         {
-            Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu, RequestDimensions = true,
+            Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu,
         };
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         await EmbeddingProfileSeeder.SeedAsync(db, new EmbeddingProfileSeedOptions(), TimeProvider.System, logger, Ct); // no model: nothing
@@ -381,7 +381,8 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
 
         var profile = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Name == name, Ct);
         profile.GatewayModel.ShouldBe("eu-embed-1024");
-        profile.RequestDimensions.ShouldBeTrue(); // #142
+        profile.RequestDimensions.ShouldBeTrue(); // #142: the default, as the deployment knobs since #546
+        profile.MaxInputTokens.ShouldBe(8191); // Decisions "Pilot embedding model, U-b"
         profile.MaxResidency.ShouldBe(Residency.Eu);
         profile.CanaryText.ShouldBe(EmbeddingCanaryText.Default);
         (await Sql.ScalarAsync<string>(database.Connection(null), $"""

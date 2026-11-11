@@ -254,6 +254,15 @@ public static class AdminErrorCodes
     /// <summary>A file restore names a slot that is not deleted, past the 14-day grace, or whose bytes are gone (connectors §9.3).</summary>
     public static AdminErrorCode FileNotRestorable { get; } = new("file_not_restorable", 409, "The file {name} cannot be restored: it is not deleted, or its 14 days have passed.");
 
+    /// <summary>
+    /// A chunk set uses the embedding profile <c>{profile}</c>: only its <c>maxResidency</c> may change; a new model or dimension
+    /// count is the profile migration (P3; Decisions "Editable embedding profiles before use").
+    /// </summary>
+    public static AdminErrorCode ProfileInUse { get; } = new("profile_in_use", 409, "The embedding profile {profile} is in use: only its residency ceiling can change.");
+
+    /// <summary>The save's canary embedding with the new values failed (<c>{error}</c>); the problem's <c>test</c> holds the outcome.</summary>
+    public static AdminErrorCode ProfileTestFailed { get; } = new("profile_test_failed", 422, "The profile was not saved: the test embedding failed ({error}).");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -262,5 +271,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed];
 }

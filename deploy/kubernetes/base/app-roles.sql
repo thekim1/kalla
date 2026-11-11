@@ -118,6 +118,10 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA config, content, chat, audit FROM ume_rag_
 GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or_agg(tsquery)
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
+-- Editable embedding profiles (admin design 4.5): the admin resets an unused profile's cache and index after a change;
+-- the worker inserts a chunk set only while the profile still has the values it embedded with (row held FOR SHARE).
+GRANT EXECUTE ON FUNCTION content.rag_reset_profile(uuid) TO ume_rag_admin;
+GRANT EXECUTE ON FUNCTION content.rag_lock_profile_if_unchanged(uuid, text, integer, boolean) TO ume_rag_worker;
 GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION chat.rag_retention_chat_step(integer) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])

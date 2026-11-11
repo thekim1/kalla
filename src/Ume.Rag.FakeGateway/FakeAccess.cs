@@ -89,7 +89,8 @@ public static class FakeAccess
     /// <summary>
     /// Resolves <paramref name="modelName"/> for an endpoint serving <paramref name="kind"/>, selects its target within the
     /// call's ceiling and sets <c>x-ume-residency</c>: 404 <c>model_not_found</c> for an unknown model (a rerank model
-    /// while <see cref="FakeGatewayOptions.RerankEnabled"/> is off included), 400 <c>invalid_request</c> for a model of
+    /// while <see cref="FakeGatewayOptions.RerankEnabled"/> is off included), 403 <c>model_not_allowed</c> for a key whose
+    /// level is not in <see cref="FakeModel.KeyLevels"/>, 400 <c>invalid_request</c> for a model of
     /// another kind, then, with no candidate, 403 <c>max_residency_not_met</c> when no target is configured within the
     /// ceiling or 503 <c>no_eligible_provider</c> (with <c>Retry-After</c> only when a ceiling was sent) when the ones
     /// within it are drained; the candidates are tried in order, and when every one fails the answer is 502
@@ -103,6 +104,12 @@ public static class FakeAccess
         {
             error = Error(context, StatusCodes.Status404NotFound, "model_not_found",
                 $"The model '{modelName}' does not exist. See GET /v1/models for the models you can use.");
+            return null;
+        }
+
+        if (model.KeyLevels.Count > 0 && !model.KeyLevels.Contains(call.KeyLevel))
+        {
+            error = Error(context, StatusCodes.Status403Forbidden, "model_not_allowed", $"The API key may not use the model '{model.Name}'.");
             return null;
         }
 
