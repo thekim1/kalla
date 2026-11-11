@@ -326,7 +326,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Editable embedding profiles before use"; admin §4.5, §5.8; data-model §2.1; processing §11.
 
-### [ ] B-31 Answer length from the model
+### [x] B-31 Answer length from the model (#561, #564, #569, #571, #573, #574)
 - **Do:** add `GatewayModels.MaxOutputTokens` (migration, check constraint) and let `PUT /api/gateway/models/{name}`
   set `contextWindow` and `maxOutputTokens` on any row, kept by the sync; make `answer.maxOutputTokens` and
   `answer.contextTokens` optional (`AssistantChatSettings` with nullable values; new drafts write neither), resolve
@@ -350,7 +350,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "Answer length from the model"; chat §6.3, §8.1; admin §4.9, §4.10, V17, §5.5.4 (Utkast tab);
   data-model `GatewayModels`, `AssistantVersions`.
 
-### [ ] B-32 Chat prompt texts in settings
+### [x] B-32 Chat prompt texts in settings (#575, #576)
 - **Do:** `Settings.Chat.Prompts` (chat §7.3 table) read through the config snapshot; `PromptBuilder`, `Condenser`
   (both prompts), the follow-up prompt and the two caveats take each text from it with today's text as the built-in
   default, the locked lines staying in code (the follow-up prompt's locked lines after its editable block, chat §9.8);
