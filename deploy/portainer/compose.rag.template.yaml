@@ -2,7 +2,9 @@
 # the gateway's deploy/compose.portainer.yaml (taken unchanged) and inlines the "@INCLUDE path" lines, so the gateway
 # and RAG run as one Portainer stack. Every RAG name starts with rag- (services, networks, volumes, configs): nothing
 # of the gateway's is renamed, and its volumes keep their names. rag-api, rag-admin and rag-worker join the gateway's
-# llm network to reach https://gateway:8443 (and https://dataapi:8443), trusting the gateway's CA.
+# llm network to reach https://gateway:8443, trusting the gateway's CA. The gateway's Data API is not on llm (a
+# standalone gateway has no reason to put it there), so the "@JOIN service network" lines below add one RAG network to
+# a gateway service's networks: dataapi joins rag-dataapi, which only rag-admin shares (https://dataapi:8443).
 #
 # Differences from compose.prod.yaml + compose.ingestion.yaml, for a host without deploy/host/ and init-deployment.sh:
 # no fixed subnets and no host firewall, no ingestion slice (cgroup_parent), no pgBackRest (archive_mode off: back up
@@ -262,6 +264,7 @@ x-rag-secrets: &rag-secrets-mount
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
+      rag-dataapi: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 15s
@@ -401,8 +404,12 @@ x-rag-secrets: &rag-secrets-mount
     content: |
       @INCLUDE postgres/app-roles.sql
 
+@SECTION join
+@JOIN dataapi rag-dataapi
+
 @SECTION networks
   rag-edge: {driver: bridge}
+  rag-dataapi: {driver: bridge, internal: true}
   rag-data: {driver: bridge, internal: true}
   rag-ingestion: {driver: bridge, internal: true}
   rag-parser: {driver: bridge, internal: true}
