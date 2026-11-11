@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Globalization;
 using Npgsql;
 using NpgsqlTypes;
 using Ume.Rag.Domain.Retrieval;
@@ -15,13 +13,12 @@ namespace Ume.Rag.Worker.Evaluation;
 /// §3.2). Without the decompounder the chunker's <c>SearchText</c> is the chunk's <c>Text</c>, so the copy is the
 /// generated column's own expression over <c>"Text"</c>; it is computed in the statement for the chunks the stored vector
 /// matches, which are a superset (the parts are only appended to the text), so no table is written and nothing is left
-/// behind. Ranking, limits and the candidate columns are statement K's (<see cref="RetrievalStatements.Keyword"/>);
+/// behind. The statement is K itself with <see cref="KeywordVector.WithoutDecompounder"/> (#509), so ranking, limits and the
+/// candidate columns can't drift from production's;
 /// statement V is <paramref name="vectors"/>' unchanged. The evaluator searches whole collections without filters (processing design §13.5).
 /// </summary>
 public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISearchIndex vectors, TimeSpan statementTimeout) : ISearchIndex
 {
-    private static readonly ConcurrentDictionary<(Guid Profile, int Limit), string> Statements = new();
-
     public async Task<IReadOnlyList<Candidate>> KeywordAsync(
         SearchScope scope, string querySearchText, RetrievalFilters? filters, int limit, CancellationToken cancellationToken)
     {
@@ -34,7 +31,7 @@ public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISear
 
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 1000);
-        var sql = Statements.GetOrAdd((scope.EmbeddingProfileId, limit), static key => Keyword(key.Profile, key.Limit));
+        var sql = RetrievalStatements.Keyword(scope.EmbeddingProfileId, limit, FilterFragments.None, KeywordVector.WithoutDecompounder);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(statementTimeout);
         var candidates = new List<Candidate>();
@@ -81,38 +78,4 @@ public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISear
     public Task<IReadOnlyList<Candidate>> VectorAsync(
         SearchScope scope, ReadOnlyMemory<float> vector, RetrievalFilters? filters, int limit, VectorSearch search, CancellationToken cancellationToken) =>
         vectors.VectorAsync(scope, vector, filters, limit, search, cancellationToken);
-
-    /// <summary>
-    /// Statement K over the scratch copy: <c>scratch</c> is the chunks the stored vector matches (the partial GIN index),
-    /// each with <c>setweight(heading path, A) || setweight(text, B)</c>, the generated column with <c>"Text"</c> for
-    /// <c>"SearchText"</c> (migration <c>IngestionSchema</c>); then K's match, rank, order and limit on that vector. The
-    /// query drops the scope's keyword stop list (<c>$4</c>) as K does.
-    /// </summary>
-    internal static string Keyword(Guid profileId, int limit) => $"""
-        WITH q AS MATERIALIZED (
-            SELECT content.rag_or_query(ts_delete(to_tsvector('swedish', $1), $4::text[])) AS tsq
-        ), scratch AS MATERIALIZED (
-            SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
-                   c."DocumentType", c."SourceModifiedAt",
-                   setweight(to_tsvector('swedish'::regconfig, coalesce(c."HeadingPath", '')), 'A') ||
-                   setweight(to_tsvector('swedish'::regconfig, c."Text"), 'B') AS sv
-            FROM content."Chunks" c, q
-            WHERE c."SearchVector" @@ q.tsq
-              AND c."Kind" = 'child' AND c."DeletedAt" IS NULL
-              AND c."EmbeddingProfileId" = '{profileId.ToString("D", CultureInfo.InvariantCulture)}'::uuid
-              AND c."CollectionId" = ANY ($2)
-              AND c."Classification" = ANY ($3)
-        ), kw AS MATERIALIZED (
-            SELECT s."Id", s."DocumentId", s."ChunkSetId", s."Ordinal", s."TextHash", s."CollectionId", s."Classification",
-                   s."DocumentType", s."SourceModifiedAt",
-                   ts_rank_cd(s.sv, q.tsq)::double precision AS score
-            FROM scratch s, q
-            WHERE s.sv @@ q.tsq
-            ORDER BY score DESC, s."Id"
-            LIMIT {limit.ToString(CultureInfo.InvariantCulture)}
-        )
-        SELECT kw."Id", kw."DocumentId", kw."ChunkSetId", kw."Ordinal", kw."TextHash", kw."CollectionId", kw."Classification",
-               kw."DocumentType", kw."SourceModifiedAt", kw.score, d."IdentityKind", d."IdentityHash", d."SourceId", d."Url"
-        FROM kw JOIN content."Documents" d ON d."Id" = kw."DocumentId"
-        """;
 }
