@@ -41,7 +41,7 @@ public sealed record ChatCompletion(Guid MessageId, string Model, string Content
 /// call) or the prompt with everything the call and the citations need.
 /// </summary>
 public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Created, AssistantEntry Assistant, Residency Ceiling, AssistantChatSettings Settings,
-    int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,
+    int? MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,
     PlatformChatSettings Platform, CondenseOutcome? Condense = null)
 {
     /// <summary>
@@ -49,6 +49,9 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     /// (no retrieval). The follow-up call reads it (§9.8); it is never stored or logged.
     /// </summary>
     public string? Query { get; init; }
+
+    /// <summary>Where <see cref="MaxTokens"/> came from (<see cref="MaxTokensSources"/>); null is left out of the request.</summary>
+    public string MaxTokensSource { get; init; } = MaxTokensSources.Provider;
 
     /// <summary>The caveat line of a degraded answer (§10.2) or of a general-knowledge answer (§10.4), or null; written by us, first.</summary>
     public string? Caveat => Outcome == ChatOutcome.AnsweredGeneral

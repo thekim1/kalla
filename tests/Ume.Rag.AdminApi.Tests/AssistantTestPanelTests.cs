@@ -132,6 +132,27 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
             var call = result.GetProperty("gateway");
             (call.GetProperty("model").GetString(), call.GetProperty("residency").GetString()).ShouldBe(("ume/chat-eu", "Eu"));
             call.GetProperty("inputTokens").GetInt32().ShouldBeGreaterThan(0);
+            // B-31: the model's limit is unknown here, so max_tokens was left out and the provider's default applied.
+            call.GetProperty("maxTokens").ValueKind.ShouldBe(JsonValueKind.Null);
+            (call.GetProperty("maxTokensSource").GetString(), call.GetProperty("finishReason").GetString()).ShouldBe(("provider", "stop"));
+        }
+
+        // With the model's limits on its mirror row: its output limit (less the prompt within the window) is sent.
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO config."GatewayModels" ("Name", "Kind", "ModelKind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource", "ContextWindow", "MaxOutputTokens")
+            VALUES ('ume/chat-eu', 'model', 'chat', ARRAY['Eu']::varchar(10)[], 'catalog', false, 'manual', 32768, 2000)
+            ON CONFLICT ("Name") DO UPDATE SET "ContextWindow" = 32768, "MaxOutputTokens" = 2000
+            """, Ct);
+        try
+        {
+            using var limited = await editor.PostAsJsonAsync(path, new { question = $"Hur gör jag med {word}?" }, Ct);
+            limited.StatusCode.ShouldBe(HttpStatusCode.OK, await limited.Content.ReadAsStringAsync(Ct));
+            var call = (await limited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("gateway");
+            (call.GetProperty("maxTokens").GetInt32(), call.GetProperty("maxTokensSource").GetString()).ShouldBe((2000, "model"));
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = NULL, "MaxOutputTokens" = NULL WHERE "Name" = 'ume/chat-eu'""", Ct);
         }
 
         (await editor.PostAsJsonAsync(path, new { question = word, target = "Published" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);

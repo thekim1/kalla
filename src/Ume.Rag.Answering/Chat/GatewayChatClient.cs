@@ -34,14 +34,15 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
 
     /// <summary>
     /// <c>temperature</c> only when the assistant sets one (#275: the gateway refuses it for models that deprecate it, Claude
-    /// among them); a null property is left out of the request, as is <c>stream_options</c> on a non-streamed call.
+    /// among them); a null property is left out of the request, as is <c>stream_options</c> on a non-streamed call and
+    /// <c>max_tokens</c> when the limit is unknown (chat design §6.3, §8.1).
     /// </summary>
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
+    public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, string step, CancellationToken ct, string? reasoningEffort = null)
     {
         using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, reasoningEffort, ct);
@@ -54,7 +55,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     }
 
     /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
-    public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
+    public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, CancellationToken ct) =>
         SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", null, ct);
 
@@ -97,7 +98,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         }
     }
 
-    private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
+    private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, bool stream, string step, string? reasoningEffort, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);

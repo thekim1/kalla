@@ -86,6 +86,22 @@ public static partial class FakeContent
 
     public static int Tokens(string text) => Math.Max(1, text.Length / 4);
 
+    /// <summary>The response header that echoes the request's <c>max_tokens</c>, <c>none</c> when it was left out (B-31).</summary>
+    public const string MaxTokensHeader = "x-fake-max-tokens";
+
+    /// <summary>The text cut to at most <paramref name="tokens"/> by <see cref="Tokens"/>, at a word boundary when there is one.</summary>
+    public static string Truncate(string text, int tokens)
+    {
+        var length = Math.Max(1, tokens) * 4;
+        if (text.Length <= length)
+        {
+            return text;
+        }
+
+        var space = text.LastIndexOf(' ', length - 1, length);
+        return text[..(space > 0 ? space : length)];
+    }
+
     /// <summary>The answer split into stream events, one word each (copied from the gateway's FakeLlm).</summary>
     public static IEnumerable<string> StreamWords(string text)
     {

@@ -153,7 +153,8 @@ public sealed class LongQuestionTests
         fits.Sources.ShouldHaveSingleItem();
         var window = fits.Messages.Count - 2;
         window.ShouldBeInRange(1, history.Count - 1); // history trimmed, not dropped
-        fits.Messages.Sum(m => PromptBuilder.Tokens(m.Text)).ShouldBeLessThanOrEqualTo(AssistantChatSettings.Default.ContextTokens - AssistantChatSettings.Default.MaxOutputTokens);
+        // Without model limits the budget is C = 16,384 with the 1,024-token answer reserve (§6.3).
+        fits.Messages.Sum(m => PromptBuilder.Tokens(m.Text)).ShouldBeLessThanOrEqualTo(AnswerLimits.DefaultContext - AnswerLimits.DefaultReserve);
 
         // Without the long sources the same question keeps more history.
         var lean = PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "Var kortfattad.", "sv", question, history, AssistantChatSettings.Default),

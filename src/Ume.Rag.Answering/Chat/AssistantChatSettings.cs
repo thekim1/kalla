@@ -48,14 +48,16 @@ public static class GeneralKnowledgeLevels
 
 /// <summary>An assistant's chat settings from its published <c>QuerySteps</c> (chat design §15.2), with the defaults.</summary>
 /// <remarks>
+/// <see cref="ContextTokens"/> and <see cref="MaxOutputTokens"/> are the assistant's overrides, null (the default, *Use the
+/// model's limit*) taking the model's limits (Decisions "Answer length from the model"; resolved by <see cref="AnswerLimits"/>).
 /// <see cref="Temperature"/> null (the default) leaves <c>temperature</c> out of the gateway call (#275). <see cref="Rerank"/>
 /// (<c>retrieval.rerank</c>: <c>chat</c> or <c>gateway</c>, B-16) is the reranker of the fused candidates; null (absent,
 /// <c>off</c> or anything else) does not rerank (Decisions "Rerank pulled forward"; off by default).
 /// </remarks>
-public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double? Temperature,
+public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int? ContextTokens, int? MaxOutputTokens, double? Temperature,
     bool AlwaysSwedish, bool CondenseEnabled = true, GeneralKnowledge GeneralKnowledge = GeneralKnowledge.Off, RerankerKind? Rerank = null)
 {
-    public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, null, false);
+    public static AssistantChatSettings Default { get; } = new(10, 10, 4000, null, null, null, false);
 
     public static AssistantChatSettings Parse(string? querySteps)
     {
@@ -65,8 +67,8 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
             TryInt(json?["retrieval"]?["topK"]) ?? d.TopK,
             TryInt(json?["history"]?["maxMessages"]) ?? d.HistoryMaxMessages,
             TryInt(json?["history"]?["maxTokens"]) ?? d.HistoryMaxTokens,
-            TryInt(json?["answer"]?["contextTokens"]) ?? d.ContextTokens,
-            TryInt(json?["answer"]?["maxOutputTokens"]) ?? d.MaxOutputTokens,
+            TryInt(json?["answer"]?["contextTokens"]),
+            TryInt(json?["answer"]?["maxOutputTokens"]),
             json?["answer"]?["temperature"] is JsonValue t && t.GetValueKind() == JsonValueKind.Number ? t.GetValue<double>() : d.Temperature,
             json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv",
             json?["condense"]?["enabled"] is not JsonValue c || c.GetValueKind() != JsonValueKind.False,
