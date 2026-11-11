@@ -34,32 +34,33 @@ setting it up.
 
 **Since v0.3.0 on `main`** (Unreleased in the CHANGELOG): the Portainer Data API network fix (#542), neutral admin
 wording and `Admin:OrganisationName` (#544), `Crawl:UserAgent` (#545), embedding `dimensions` on by default in the
-deploy templates (#546), Aspire 13.6.5 for a security advisory (#549). A **v0.3.1 or v0.4.0** carrying #549 is worth
-cutting before the next deployment (full CI set plus a release dry run, `docs/ci-runner.md`).
+deploy templates (#546), Aspire 13.6.5 for a security advisory (#549), the 2 MB proxy body (#552), Postgres planner
+settings (#553), trace sampling and a 30 s health probe (#555). The advisory touches only the AppHost (development), not
+the shipped images, so the next release isn't urgent; cut it when there is more in it (full CI set plus a release dry
+run, `docs/ci-runner.md`). **A-21's done-when (the bundle smoke test with the new values) is checked in that dry run.**
 
 **Waiting on the user:**
 - **Whether to queue the upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, a P2 item
   brought forward, needs a decision entry) and rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a
   contextual-header trial (U5) and a near-duplicate warning (U6).
 - **Keys and budgets per assistant**: the options paper is committed (`af7e30f`); the user hasn't chosen.
+- **Ask-a-file workspaces** (P2): owned by teams and individuals, against "Organisation" (departments own all
+  content). Found in M-11; answer before P2 (`plans/work/main.md` M-11).
 - **LibreOffice placement** is decided again **before go-live**, with the parser sandbox question (Decisions "Parser").
 
 **Proposed next**, if the user doesn't choose:
-1. **SA-15**: the proxy's chat route still has `client_max_body_size 1m` (`deploy/proxy/nginx.conf.example:34`, `:67`);
-   the chat route accepts 2 MB. Also the printed routes and `docs/production-setup.md`.
-2. **M-11**: about 15 design-vs-decision contradictions found in the register rewrite (`plans/work/main.md`).
-3. **M-10**: settle #499 step 2 (who keeps scope sizes and the stop list) and #501 in the designs. The api role's 60 s
+1. **M-10**: settle #499 step 2 (who keeps scope sizes and the stop list) and #501 in the designs. The api role's 60 s
    limit is reached near 3.3M chunks, so step 2 is needed before about 2M chunks.
-4. **M-9**: write cost-attribution stage 1 into the designs and queue C1–C6 (depends on the keys/budgets choice).
-5. Stream a's cheap items: **A-22** (#500), **A-21** (#503/#504 Compose part), **A-23** (#505), **A-24** (#509).
-   Also drop the smoke test's snake_case fallback in `deploy/tests/release-smoke.sh:149` (#529 made `/version`
-   camelCase everywhere).
-6. Design hand-off from #544: `Admin:OrganisationName` isn't in repo-and-deployment's Admin settings or the operator
-   docs yet.
+2. **M-9**: write cost-attribution stage 1 into the designs and queue C1–C6 (depends on the keys/budgets choice).
+3. **A-23** (#505, idle cost: notification-driven job lanes, renderer behind a Compose profile): code in
+   `src/Ume.Rag.Worker/Jobs/**`, bigger than the other A items.
+4. Design hand-offs: `Admin:OrganisationName` (#544) isn't in repo-and-deployment's Admin settings or the operator docs;
+   B-30's deviation 1 (a used profile keeps its canary; `canary_mismatch` on a residency change) goes into admin §4.5.
 
 **Stream b** has **B-30** (editable embedding profiles), **B-31** (answer length from the model) and **B-32** (chat
 prompt texts) queued, plus the live items B-L2, B-L3, B-L5. Review notes left for them: B-30 must lock the profile row
-against a concurrent first chunk-set build (#547); B-31 should weigh an optional platform-wide answer ceiling now that
+against a concurrent first chunk-set build (#547): **#554 (B-30 API) has changes requested** for exactly that (lock
+the profile row in the PUT; the worker's set insert re-checks the profile under `FOR SHARE`); its UI part is #558; B-31 should weigh an optional platform-wide answer ceiling now that
 the 4,096 cap is gone (#548). **Stream b's machine also runs a main session** that writes design PRs on
 `main-session/` branches (#547, #548); #550 told it where decisions go now.
 
@@ -94,10 +95,22 @@ the 4,096 cap is gone (#548). **Stream b's machine also runs a main session** th
   ("Parser" updated for legacy Office/RTF, "Upload knowledge bases", "Editable embedding profiles before use", "Chat
   prompt texts configurable", "Answer length from the model") with dated log lines. **#550** told stream b.
 - **#502 closed** (halfvec answered by to-verify #117). The keys-and-budgets options paper committed.
+- **SA-15 (#552)**: 2 MB bodies on the api host and Open WebUI in the nginx example, the Kubernetes ingress, the
+  printed routes and production setup; case docs updated.
+- **M-11 (`319aef7`)**: 21 design-vs-decision points fixed (an agent's work, reviewed; one wrong claim about the
+  gateway's rerank release corrected: it shipped in v0.9.0). The admin design is now in English. Ask-a-file ownership
+  left for the user.
+- **A-22 (#553)**: `jit = off`, `random_page_cost = 1.1`, `effective_io_concurrency = 200`; at 55,000 chunks the plans
+  and timings are unchanged and no plan uses JIT (`results-a.md`). #500 closed.
+- **A-21 (#555)**: `OTEL_TRACES_SAMPLER` `parentbased_traceidratio` at 0.1 as knobs (the pinned SDK 1.19.1 reads them),
+  .NET health probe every 30 s with `start_interval` 5 s; the smoke test's snake_case fallback dropped. Ticked after
+  the dry run.
+- **A-24 (#557)**: the no-decompounder evaluation variant runs statement K; old and new identical on 494 rows. #509
+  closed. CHANGELOG lines for all of it: #556.
 
 ## Open
 
-- **#513** stays open until its items close; **#499** until M-10; **#503**/**#504** until A-21; **#509** until A-24.
+- **#513** stays open until its items close; **#499** until M-10; **#503**/**#504** until A-21's dry run; **#505** until A-23.
   **#535** (ClamAV `ClamAv:Mode = on | off`, user decision) has no PR yet. **#550** until stream b acknowledges.
 - The live block (M-4), in the roadmap's order.
 
