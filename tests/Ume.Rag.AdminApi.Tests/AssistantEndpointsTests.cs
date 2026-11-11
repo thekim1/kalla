@@ -225,8 +225,10 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task Publish_refuses_query_steps_the_runtime_would_replace_by_its_default()
     {
         // V17 (admin design §4.6): the integer fields are integers exactly as AssistantChatSettings.Parse reads them (a
-        // fraction, a string or 10.0 would silently become the default there), contextTokens is 4,096-131,072 and
-        // condense.enabled is a boolean. The steps go as raw JSON text so 10.0 reaches the database as written.
+        // fraction, a string or 10.0 would silently become the default there), condense.enabled is a boolean, and the answer's
+        // two overrides are bounded by the model's limits (Decisions "Answer length from the model"): contextTokens 4,096 to the
+        // model's window (1,048,576 when unknown), maxOutputTokens 64 to its output limit (1,000,000 when unknown). The steps go
+        // as raw JSON text so 10.0 reaches the database as written.
         var seed = await SeedAsync();
         await using var gateway = Gateway();
         await using var factory = Admin(gateway);
@@ -264,7 +266,9 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
                      ("""{"retrieval":{"topK":10.0}}""", "retrieval.topK"),
                      ("""{"condense":{"enabled":"false"}}""", "condense.enabled"),
                      ("""{"answer":{"contextTokens":1000}}""", "answer.contextTokens"),
-                     ("""{"answer":{"contextTokens":200000}}""", "answer.contextTokens"),
+                     ("""{"answer":{"contextTokens":1048577}}""", "answer.contextTokens"),
+                     ("""{"answer":{"maxOutputTokens":63}}""", "answer.maxOutputTokens"),
+                     ("""{"answer":{"maxOutputTokens":1000001}}""", "answer.maxOutputTokens"),
                  })
         {
             using var refused = await PublishAsync(steps);
@@ -274,8 +278,35 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             problem.GetProperty("params").GetProperty("field").GetString().ShouldBe(field, steps);
         }
 
-        using var published = await PublishAsync("""{"answer":{"contextTokens":24576},"condense":{"enabled":false}}""");
-        published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
+        // No fixed 4,096 output ceiling any more: an unknown limit allows a large override.
+        using (var large = await PublishAsync("""{"answer":{"contextTokens":200000,"maxOutputTokens":32000}}"""))
+        {
+            large.StatusCode.ShouldBe(HttpStatusCode.OK, await large.Content.ReadAsStringAsync(Ct));
+        }
+
+        // With the model's limits on its mirror row, they are the upper bounds.
+        await using var db = TestPostgres.Context(database.Connection(null));
+        await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = 32768, "MaxOutputTokens" = 8192 WHERE "Name" = {Model}""", Ct);
+        try
+        {
+            foreach (var (steps, field) in new[]
+                     {
+                         ("""{"answer":{"maxOutputTokens":8193}}""", "answer.maxOutputTokens"),
+                         ("""{"answer":{"contextTokens":32769}}""", "answer.contextTokens"),
+                     })
+            {
+                using var refused = await PublishAsync(steps);
+                refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, steps);
+                (await Json(refused)).GetProperty("params").GetProperty("field").GetString().ShouldBe(field, steps);
+            }
+
+            using var published = await PublishAsync("""{"answer":{"contextTokens":32768,"maxOutputTokens":8192},"condense":{"enabled":false}}""");
+            published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = NULL, "MaxOutputTokens" = NULL WHERE "Name" = {Model}""", Ct);
+        }
     }
 
     [Fact]

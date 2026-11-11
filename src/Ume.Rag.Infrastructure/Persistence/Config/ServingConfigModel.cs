@@ -109,7 +109,10 @@ internal static class ServingConfigModel
                 ValuesCheck(t, "GatewayModels", "SupportsToolsSource", GatewayModelSources.All);
                 t.HasCheckConstraint("CK_GatewayModels_Residencies",
                     $"cardinality(\"Residencies\") >= 1 AND \"Residencies\" <@ ARRAY[{SqlList(Enum.GetValues<Residency>().Select(ResidencyCeiling.ToHeader))}]::varchar(10)[]");
-                t.HasCheckConstraint("CK_GatewayModels_ContextWindow", "\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0");
+                // Decisions "Answer length from the model": both limits positive, the output within the window when both are known.
+                t.HasCheckConstraint("CK_GatewayModels_Limits",
+                    "(\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0) AND (\"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" > 0) " +
+                    "AND (\"ContextWindow\" IS NULL OR \"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" <= \"ContextWindow\")");
             });
             e.HasKey(x => x.Name);
             e.Property(x => x.Name).HasMaxLength(200);

@@ -2189,6 +2189,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ModelKind")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2224,9 +2227,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.ToTable("GatewayModels", "config", t =>
                         {
-                            t.HasCheckConstraint("CK_GatewayModels_ContextWindow", "\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0");
-
                             t.HasCheckConstraint("CK_GatewayModels_Kind", "\"Kind\" IN ('model', 'route')");
+
+                            t.HasCheckConstraint("CK_GatewayModels_Limits", "(\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0) AND (\"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" > 0) AND (\"ContextWindow\" IS NULL OR \"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" <= \"ContextWindow\")");
 
                             t.HasCheckConstraint("CK_GatewayModels_ModelKind", "\"ModelKind\" IN ('chat', 'embedding', 'rerank')");
 

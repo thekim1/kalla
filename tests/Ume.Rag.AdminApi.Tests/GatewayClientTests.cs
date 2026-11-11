@@ -105,6 +105,65 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task A_platform_admin_sets_a_models_limits_the_sync_keeps_them_and_a_bad_pair_is_refused()
+    {
+        // Decisions "Answer length from the model" (admin design §4.5, §4.10): ContextWindow and MaxOutputTokens on any mirror row,
+        // manual until the catalogue carries them.
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        await SyncedAsync(admin);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        const string Name = "ume/chat-eu";
+        var url = $"/api/gateway/models/{Name}";
+
+        using (var set = await platform.PutAsJsonAsync(url, new { contextWindow = 128_000, maxOutputTokens = 16_384 }, Ct))
+        {
+            set.StatusCode.ShouldBe(HttpStatusCode.OK, await set.Content.ReadAsStringAsync(Ct));
+            var row = (await set.Content.ReadFromJsonAsync<GatewayModelDto>(Ct))!;
+            row.ContextWindow.ShouldBe(128_000);
+            row.MaxOutputTokens.ShouldBe(16_384);
+        }
+
+        await SyncedAsync(admin);
+        var listed = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == Name);
+        (listed.ContextWindow, listed.MaxOutputTokens).ShouldBe((128_000, 16_384)); // kept by the sync
+
+        foreach (var body in new object[] { new { contextWindow = 4096, maxOutputTokens = 8192 }, new { contextWindow = 0 }, new { maxOutputTokens = 10_000_001 } })
+        {
+            using var refused = await platform.PutAsJsonAsync(url, body, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, JsonSerializer.Serialize(body));
+        }
+
+        using (var unknown = await platform.PutAsJsonAsync("/api/gateway/models/no-such-model", new { contextWindow = 1000 }, Ct))
+        {
+            unknown.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+
+        using (var reader = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Reviewer, "1000"))
+        using (var forbidden = await reader.PutAsJsonAsync(url, new { contextWindow = 1000 }, Ct))
+        {
+            forbidden.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        }
+
+        // The name may also come escaped.
+        using (var cleared = await platform.PutAsJsonAsync($"/api/gateway/models/{Uri.EscapeDataString(Name)}", new { contextWindow = (int?)null, maxOutputTokens = (int?)null }, Ct))
+        {
+            var row = (await cleared.Content.ReadFromJsonAsync<GatewayModelDto>(Ct))!;
+            (row.ContextWindow, row.MaxOutputTokens).ShouldBe((null, null));
+        }
+
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        var audit = await db.AuditLog.Where(a => a.EntityType == "gateway-model" && a.EntityId == Name).ToListAsync(Ct);
+        audit.Count.ShouldBe(2);
+        audit.ShouldAllBe(a => a.Action == "update");
+
+        // The table's own rule, whatever writes it.
+        var violation = await Should.ThrowAsync<Npgsql.PostgresException>(() => db.Database.ExecuteSqlAsync(
+            $"""UPDATE config."GatewayModels" SET "ContextWindow" = 1000, "MaxOutputTokens" = 2000 WHERE "Name" = {Name}""", Ct));
+        violation.ConstraintName.ShouldBe("CK_GatewayModels_Limits");
+    }
+
+    [Fact]
     public async Task A_gateway_rerank_model_is_mirrored_as_kind_rerank_and_goes_when_the_gateway_drops_it()
     {
         // B-16: Settings.Retrieval.gatewayRerankModel names a rerank row (V32); the gateway's catalogue Kind "Rerank".
