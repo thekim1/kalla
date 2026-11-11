@@ -9,7 +9,7 @@ import { fieldLabel, type FieldSpec } from './schema'
  */
 export interface ModelField {
   name: string
-  modelKind: 'chat' | 'rerank'
+  modelKind: 'chat' | 'rerank' | 'embedding'
   /** The JSON property the member lives in; absent for a property of its own. */
   in?: string
 }

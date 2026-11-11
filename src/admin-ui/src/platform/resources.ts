@@ -52,8 +52,8 @@ export interface PlatformResource {
   /** The values an edit starts from; the row itself when absent. */
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
-  /** A panel shown above the list. */
-  panel?: 'embedding-canary'
+  /** Panels shown above the list, in order. */
+  panels?: readonly ('embedding-profiles' | 'embedding-canary')[]
   /** A row whose edit is a form of its own instead of the generic one. */
   form?: (row: Row) => 'crawl-settings' | undefined
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
@@ -195,7 +195,7 @@ export const platformResources: PlatformResource[] = [
       { key: 'residencies', label: PLATFORM.columns.residencies },
       { key: 'source', label: PLATFORM.columns.source },
     ],
-    panel: 'embedding-canary',
+    panels: ['embedding-profiles', 'embedding-canary'],
   },
   {
     id: 'organisation',

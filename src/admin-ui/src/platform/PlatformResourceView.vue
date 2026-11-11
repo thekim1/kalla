@@ -18,6 +18,7 @@ import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
+import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
 import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
@@ -156,7 +157,10 @@ watch(() => props.resource, () => {
     <PageHeader :title="resource.label" :description="resource.description">
       <UiButton v-if="resource.create" variant="primary" icon="add" data-test="create" @click="create">{{ PLATFORM.form.create }}</UiButton>
     </PageHeader>
-    <EmbeddingCanaryPanel v-if="resource.panel === 'embedding-canary'" class="mb-6" />
+    <template v-for="panel in resource.panels ?? []" :key="panel">
+      <EmbeddingProfilesPanel v-if="panel === 'embedding-profiles'" class="mb-6" />
+      <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
+    </template>
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
         :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
