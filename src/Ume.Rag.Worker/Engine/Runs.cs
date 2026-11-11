@@ -256,7 +256,8 @@ public sealed class RunStore(JobDatabase database)
 /// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>. A finished
 /// <c>reprocess</c> run of a publish or rollback enqueues its <c>eval</c> <c>publish-report</c> in the same transaction, and
 /// a run that made more than 10 % of an embedding profile's live chunks live its <c>check-hnsw-index</c>
-/// (<see cref="HnswCheckTriggers.AfterRunAsync"/>, knowledge design §6.4).
+/// (<see cref="HnswCheckTriggers.AfterRunAsync"/>, knowledge design §6.4). After the commit, each finished run's collection gets
+/// its keyword statistics checked (<see cref="KeywordStatisticsService"/>, knowledge design §6.2).
 /// </summary>
 public sealed partial class RunFinalizer(
     JobDatabase database,
@@ -264,7 +265,8 @@ public sealed partial class RunFinalizer(
     EngineSettings settings,
     IOptions<WorkerOptions> options,
     TimeProvider time,
-    ILogger<RunFinalizer> logger) : BackgroundService
+    ILogger<RunFinalizer> logger,
+    KeywordStatisticsService? keywords = null) : BackgroundService
 {
     private const long LockKey = 0x5241_4731_0001;
 
@@ -348,6 +350,7 @@ public sealed partial class RunFinalizer(
         }
 
         var finished = 0;
+        var collections = new HashSet<Guid>();
         foreach (var run in idle)
         {
             // Rows still open with no job are released again by a fetch-phase continuation (URL lists and crawls).
@@ -402,6 +405,7 @@ public sealed partial class RunFinalizer(
             }
 
             finished++;
+            collections.Add(run.CollectionId);
             LogFinished(logger, run.Id, state, c.Added, c.Updated, c.Unchanged, c.Deleted, c.Failed);
             var checks = await HnswCheckTriggers.AfterRunAsync(connection, transaction, run.Id, run.SourceId, run.DepartmentId, run.CollectionClassification,
                 cancellationToken);
@@ -421,6 +425,11 @@ public sealed partial class RunFinalizer(
         }
 
         await transaction.CommitAsync(cancellationToken);
+        foreach (var collection in collections)
+        {
+            keywords?.Post(collection); // §6.2: the stop list's statistics after a run of the collection's sources
+        }
+
         return finished;
     }
 

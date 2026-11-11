@@ -10,7 +10,8 @@ namespace Ume.Rag.Worker.Jobs;
 /// 1,000. Rows still in <c>RunItems_default</c> afterwards mean maintenance lagged: a warning and the
 /// <c>rag.partitions.default_rows</c> gauge. Then the engine's sweeps: chunk sets never swapped or past the rollback window
 /// (<see cref="IndexWriter.SweepOrphansAsync"/>) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). The nightly
-/// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Content
+/// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Last, every
+/// collection's keyword statistics are checked (<see cref="KeywordStatistics.CheckAllAsync"/>, knowledge design §6.2). Content
 /// retention of cache rows is not built yet.
 /// </summary>
 public sealed partial class MaintenanceService(
@@ -20,7 +21,8 @@ public sealed partial class MaintenanceService(
     JobMetrics metrics,
     IOptions<WorkerOptions> options,
     TimeProvider time,
-    ILogger<MaintenanceService> logger) : BackgroundService
+    ILogger<MaintenanceService> logger,
+    KeywordStatistics? keywords = null) : BackgroundService
 {
     public static readonly TimeOnly RunAt = new(2, 0);
     public static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
@@ -87,6 +89,18 @@ public sealed partial class MaintenanceService(
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             LogStepFailed(logger, ex, "blob purge");
+        }
+
+        if (keywords is not null)
+        {
+            try
+            {
+                await keywords.CheckAllAsync(cancellationToken);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                LogStepFailed(logger, ex, "keyword statistics");
+            }
         }
     }
 
