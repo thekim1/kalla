@@ -53,7 +53,7 @@ export interface PlatformResource {
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
   /** Panels shown above the list, in order. */
-  panels?: readonly ('embedding-profiles' | 'embedding-canary')[]
+  panels?: readonly ('embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
   /** A row whose edit is a form of its own instead of the generic one. */
   form?: (row: Row) => 'crawl-settings' | undefined
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
@@ -148,6 +148,8 @@ export const platformResources: PlatformResource[] = [
     // The crawl section's host politeness is a table with a drawer per host, not JSON (admin design §5.8).
     form: (row) => (row.section === 'crawl' ? 'crawl-settings' : undefined),
     modelFields: (row) => SETTINGS_MODEL_FIELDS[row.section as (typeof SETTINGS_SECTIONS)[number]],
+    // The platform's prompt texts (chat design §7.3): the whole frame in order, saved into the chat section's prompts.
+    panels: ['prompt-texts'],
   },
   {
     id: 'data-protection',
