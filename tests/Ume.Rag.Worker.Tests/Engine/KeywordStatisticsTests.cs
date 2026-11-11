@@ -74,6 +74,38 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
         }
     }
 
+    [Fact]
+    public async Task The_service_checks_every_collection_at_start()
+    {
+        // An upgrade or a new installation: chunks exist, no rows yet, and no run finishes soon.
+        var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
+        try
+        {
+            await AddChunksAsync(seed, 120);
+            var statistics = new KeywordStatistics(database.Connection(RagDatabase.Worker), TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
+            using var service = new KeywordStatisticsService(statistics, NullLogger<KeywordStatisticsService>.Instance);
+            await service.StartAsync(Ct);
+            try
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(30);
+                while ((await RowsAsync(seed.CollectionId)).Count == 0 && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(100, Ct);
+                }
+
+                (await RowsAsync(seed.CollectionId)).Select(r => r.Lexeme).ShouldContain("kommun");
+            }
+            finally
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
     /// <summary>
     /// <paramref name="count"/> live child chunks in a new document: "kommun" and "bygglov" in each, "altan" in every fourth
     /// (25 %), and one word of its own (under 10 %).

@@ -33,7 +33,8 @@ model's limits. See `docs/upgrade-guide.md`.
 - Chat prompt texts as settings (`Settings.Chat.prompts`), each falling back to the built-in text; the citation and
   data-safety lines stay fixed (V38) (#575).
 - The worker keeps the keyword stop list's statistics in `content."KeywordStatistics"`, after each run and nightly
-  (#578, #579); rag-api reads them from B-33 on.
+  (#578, #579) and for every collection when it starts, and rag-api reads them instead of running `ts_stat` over
+  every search vector (#583, #499).
 
 ### Changed
 

@@ -206,6 +206,10 @@ public sealed partial class KeywordStatistics(string connectionString, TimeProvi
 /// <summary>
 /// Checks a collection's keyword statistics after a run of one of its sources ends (knowledge design §6.2), one collection at
 /// a time and off the finalizer's transaction. In process: a check lost to a restart is made by the nightly maintenance.
+/// At start it first checks every collection once (<see cref="KeywordStatistics.CheckAllAsync"/>), so a collection without
+/// rows (a new installation, an upgrade, rows lost) gets its stop list within minutes instead of at the next run or night;
+/// collections with current rows are only counted. Several workers starting at once skip each other's collections (the
+/// advisory lock).
 /// </summary>
 public sealed partial class KeywordStatisticsService(KeywordStatistics statistics, ILogger<KeywordStatisticsService> logger) : BackgroundService
 {
@@ -216,6 +220,16 @@ public sealed partial class KeywordStatisticsService(KeywordStatistics statistic
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await Task.Yield(); // never hold up the host's start
+        try
+        {
+            await statistics.CheckAllAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            LogStartCheckFailed(logger, ex);
+        }
+
         await foreach (var collection in _collections.Reader.ReadAllAsync(stoppingToken))
         {
             try
@@ -228,6 +242,9 @@ public sealed partial class KeywordStatisticsService(KeywordStatistics statistic
             }
         }
     }
+
+    [LoggerMessage(LogLevel.Warning, "The keyword statistics check of every collection at start failed; runs and the nightly maintenance check them again")]
+    private static partial void LogStartCheckFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(LogLevel.Warning, "The keyword statistics check of collection {CollectionId} after a run failed; the nightly maintenance checks it again")]
     private static partial void LogFailed(ILogger logger, Exception exception, Guid collectionId);
