@@ -153,3 +153,11 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
   ("JavaScript rendering").
 - 2026-11-08, user: shadow-DOM flattening and same-host iframe inlining come later, when a source needs them
   ("Crawlee review: ideas adopted"; connectors §8.3 already says "Later").
+- 2026-11-09, user: uploaded `.doc`, `.xls`, `.ppt` and `.rtf` are parsed now, through LibreOffice in the parser image;
+  parser or separate converter is decided before go-live ("Parser"; #526, #527).
+- 2026-11-09, user: knowledge bases of uploaded files are a first-class admin UI case, folder paths kept ("Upload
+  knowledge bases").
+- 2026-11-11, user: embedding profiles are editable until a chunk set uses it, each save tested first ("Editable
+  embedding profiles before use"; #547).
+- 2026-11-11, user: the platform's prompt texts are settings with locked safety lines ("Chat prompt texts
+  configurable"), and the answer length follows the model's limits ("Answer length from the model"; #548).

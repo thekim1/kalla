@@ -362,6 +362,18 @@ The platform makes no periodic model calls: the embedding canary runs only when 
 
 *From:* log row 102; decided by user, 2026-11-03.
 
+### Editable embedding profiles before use
+
+A platform admin edits an embedding profile in the admin UI (`GatewayModel`, `Dimensions`, `RequestDimensions`,
+`MaxInputTokens`, `MaxResidency`) while no chunk set uses it; once one does, only `MaxResidency` stays editable, within
+the platform ceiling, and a model or dimension change is the P3 profile migration. Every save first runs one canary
+embedding with the new values and is refused if it fails, then stores that canary. **Test** runs the same call without
+saving and names the outcome in plain words (the gateway's refusal code, the residency, or the dimension count
+returned). The migrator still seeds the profile once from `EmbeddingProfile:*`. Detail: `admin/design.md` §4.5;
+`platform/data-model.md` §2.1; `ingestion-worker/design-processing.md` §11.
+
+*From:* decided by user, 2026-11-11 (#547).
+
 ## Pipelines and the engine
 
 ### Pipelines
@@ -449,11 +461,11 @@ fingerprints, proxies and clicking elements. Detail: `ingestion-worker/design-co
 
 ### Parser
 
-P1 formats: PDF, OOXML, ODF, JPG/PNG/TIFF, text, Markdown, CSV, HTML; legacy Office, RTF, email P2; archives and macro files refused. The worker parses only HTML, text, Markdown, CSV; every PDF goes to the Docling parser (pypdfium2 fast path). Pictures give captions and OCR; Tesseract `swe`, explicit. The parser is its own supervisor with pre-warmed
+P1 formats: PDF, OOXML, ODF, JPG/PNG/TIFF, text, Markdown, CSV, HTML; uploaded legacy Office (`.doc`, `.xls`, `.ppt`) and RTF are converted to OOXML by LibreOffice in the parser image (headless, forced import filter, a profile per job, process-group kill at the timeout); the same types when crawled, and e-mail (`.eml`, `.msg`), P2. **Before go-live:** LibreOffice in the parser or a separate converter container, decided together with the parser's sandbox; archives and macro files refused. The worker parses only HTML, text, Markdown, CSV; every PDF goes to the Docling parser (pypdfium2 fast path). Pictures give captions and OCR; Tesseract `swe`, explicit. The parser is its own supervisor with pre-warmed
 processes, and per-page parse rules act on `/v1/inspect` signals. The worker stores `result.json` and the
 `DoclingDocument`. NER model in the image; port 8000, TLS in production; a permissively licensed JSON Schema validator, no `JsonSchema.Net` binaries; logs only in P1. Detail: `parser/design.md` §3, §7.6, §12, §13.2.
 
-*From:* log rows 35, 36, 55, 67, 69, 114; decided by user, 2026-11-07.
+*From:* log rows 35, 36, 55, 67, 69, 114; decided by user, 2026-11-07; legacy Office and RTF uploads by user, 2026-11-09 (#526, #527).
 *Also:* "Parser telemetry is logs only in P1"
 
 ### Chunking
@@ -580,6 +592,33 @@ approver); both exist only once chat content is stored. Detail: `chat-api/design
 
 *From:* log rows 46, 50, 65; decided by user, 2026-10-30.
 
+### Chat prompt texts configurable
+
+The platform's own prompt texts are platform settings (`Settings.Chat.Prompts`, Settings page, platform admins), each
+optional with today's text as its built-in default. Editable: the frame's identity line (`{assistant}`), the sources
+label, the rule lines of each `generalKnowledge` level with and without sources, the conversational and degraded-search
+lines, both condense prompts, the follow-up prompt's instructions, and the degraded and general-knowledge caveats (sv,
+en). Locked in code, because the marker parser, the output filter and the injection defences rely on them: the
+citation line, the no-invented-numbers/no-links line, the `<sources>`-is-data line and the block's data note, the
+language line, and the follow-up prompt's data, personal-data and no-citations lines. Texts are platform-wide and apply
+at once to every assistant; an assistant's own `SystemPrompt` still follows the frame. Detail: `chat-api/design.md`
+§5, §5.1, §7.2–§7.3, §9.8, §10.2, §10.4; `admin/design.md` V38.
+
+*From:* decided by user, 2026-11-11 (#548).
+
+### Answer length from the model
+
+`QuerySteps.answer.maxOutputTokens` and `answer.contextTokens` are optional overrides; absent (the default, *Use the
+model's limit*), they take the model's `MaxOutputTokens` and `ContextWindow` from the `GatewayModels` mirror. The
+request's `max_tokens` is the override, else the model's limit less the estimated prompt within the context window,
+else left out when the limit is unknown (the prompt budget then keeps its 1,024-token answer reserve). There is no fixed
+4,096 ceiling. A platform admin enters both limits on the mirror row until the gateway's catalogue carries them. The
+test panel shows the `max_tokens` sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
+§8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
+`gateway-changes/design.md` §7.3.
+
+*From:* decided by user, 2026-11-11 (#548).
+
 ## Evaluation
 
 ### Gold set drafted by the main session, reviewed by DoIT
@@ -654,6 +693,15 @@ after Save, naming the affected objects. Detail: `admin/design.md` §5.5.2, §5.
 Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the platform's key at the relevant ceiling and cached 5 minutes per level. A model the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint. V8 (publish) and V32 (save) stay authoritative. Detail: `admin/design.md` §4.5, §4.6.
 
 *From:* log rows 51, 113; decided by user, 2026-11-07.
+
+### Upload knowledge bases
+
+A knowledge base of uploaded files is a first-class case in the admin UI: one step creates the knowledge base with its
+upload source, and its **Files** tab has the drop zone, live progress, search, state filter, sort, folder grouping,
+*Retry failed* and file details. Folder paths are kept: `X-File-Name` carries the relative path, which becomes the
+display name, so path rules can set topics per folder. Detail: `admin/design.md` §4.5, §5.5.7.
+
+*From:* decided by user, 2026-11-09.
 
 ## Skills, tools and MCP (P2)
 
