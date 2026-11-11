@@ -1,7 +1,7 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-09, end of session 27 (`main` at `c4cef5d` plus this
-file; last release `v0.2.0`). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
+State of the Ume.Rag work for the next session. Rewritten 2026-11-11, end of session 28 (`main` after #551 plus this file;
+last release `v0.3.0`). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
 `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
 
@@ -14,46 +14,54 @@ sink" monolith. Design and code live in this repo.
 
 ## Where to read
 
-1. [`plans/decisions.md`](plans/decisions.md): the decisions in force (every entry binds).
+1. [`plans/decisions.md`](plans/decisions.md): the decisions in force (every entry binds). **New since #521**: the old
+   `01-general-idea.md` §10 table is `plans/archive/decisions-log.md` (verbatim, doesn't bind). Record a decision by
+   changing or adding an entry, then a dated line under the log's *Later decisions* (header of `decisions.md`).
 2. **`plans/roadmap.md`**: done, what is left before go-live, the live block, waiting on people, P2/P3. One page.
 3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md`; results in `results-a.md`/`results-b.md`.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
-6. **New this session:** `plans/platform/upload-quality-review.md` (an assessment, not binding: how well uploads are
-   handled, gaps U1–U7, a proposed order) and admin design **§5.5.7** (upload knowledge bases).
+6. Not binding, for decisions still to take: `plans/platform/upload-quality-review.md` (upload gaps U1–U7) and
+   `plans/platform/assistant-keys-and-budgets-options.md` (keys and budgets per assistant; reopens cost-attribution
+   option A).
 
 ## Start here
 
-**P1b code is done and released** as `v0.2.0`. What is left of P1b is the **live block (M-4)**, which waits on people
-(roadmap "Waiting on people"). Since v0.2.0, `main` has gained the upload work below plus stream b's B-25–B-29, #529,
-#530 and #531, so a **v0.3.0** is due before anything is deployed. A release needs the full CI set plus a release dry
-run (`docs/ci-runner.md`).
+**v0.3.0 is released** (2026-11-10, from stream b's machine: Portainer stack #536, rolling updates #537, Kubernetes
+manifests and SIEM collector #538, upgrade guide #539). P1b's remaining work is the **live block (M-4)**, which waits on
+people (roadmap "Waiting on people"). A Portainer test stack runs on the other machine; #542, #546 and #547 came from
+setting it up.
+
+**Since v0.3.0 on `main`** (Unreleased in the CHANGELOG): the Portainer Data API network fix (#542), neutral admin
+wording and `Admin:OrganisationName` (#544), `Crawl:UserAgent` (#545), embedding `dimensions` on by default in the
+deploy templates (#546), Aspire 13.6.5 for a security advisory (#549). A **v0.3.1 or v0.4.0** carrying #549 is worth
+cutting before the next deployment (full CI set plus a release dry run, `docs/ci-runner.md`).
 
 **Waiting on the user:**
-- **#521, the decisions register** (`main-session/decisions-register`, worktree `../rag-docs`). It was held for the
-  user's review because it rewrites what binds. CI is green, and two reviewers' fixes are in `fd2d9de`. Rebase it on
-  `main` before merging: since it was opened, two Decisions rows have been added to `01-general-idea.md` §10 ("Legacy
-  Office and RTF uploads", "Upload knowledge bases"), and they must move into the register and the log. It also adds
-  M-11 (about 15 design-vs-decision contradictions, not fixed).
 - **Whether to queue the upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, a P2 item
-  brought forward, which needs a Decisions row) and rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml`
-  (U2), a contextual-header trial (U5) and a near-duplicate warning (U6).
-- **LibreOffice placement** is decided for now (stays in the parser) and is decided again **before go-live**, together
-  with the parser sandbox question (Decisions "Legacy Office and RTF uploads", roadmap go-live step 7).
+  brought forward, needs a decision entry) and rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a
+  contextual-header trial (U5) and a near-duplicate warning (U6).
+- **Keys and budgets per assistant**: the options paper is committed (`af7e30f`); the user hasn't chosen.
+- **LibreOffice placement** is decided again **before go-live**, with the parser sandbox question (Decisions "Parser").
 
 **Proposed next**, if the user doesn't choose:
-1. **SA-15**: a 2 MB body on the chat route in the generated proxy configuration (`deploy/proxy/nginx.conf.example`,
-   the printed routes, `docs/production-setup.md`). The support-assistant case wants it before the pilot.
-2. **M-10**: settle #499 step 2 (who keeps scope sizes and the stop list) and #501 in the designs. B-25's measurement is
-   in: the api role's 60 s limit is reached near 3.3M chunks, so step 2 is needed before about 2M chunks.
-3. **M-9**: write cost-attribution stage 1 into the designs and queue C1–C6.
-4. Stream a's cheap items: **A-22** (#500), **A-21** (#503/#504 Compose part), **A-23** (#505), **A-24** (#509
-   evaluation part, unblocked by B-28). Also drop the smoke test's snake_case fallback in
-   `deploy/tests/release-smoke.sh:149` now that #529 has merged (rag-api's `/version` is camelCase).
-5. **v0.3.0** (CHANGELOG, full CI set, dry run, tag).
+1. **SA-15**: the proxy's chat route still has `client_max_body_size 1m` (`deploy/proxy/nginx.conf.example:34`, `:67`);
+   the chat route accepts 2 MB. Also the printed routes and `docs/production-setup.md`.
+2. **M-11**: about 15 design-vs-decision contradictions found in the register rewrite (`plans/work/main.md`).
+3. **M-10**: settle #499 step 2 (who keeps scope sizes and the stop list) and #501 in the designs. The api role's 60 s
+   limit is reached near 3.3M chunks, so step 2 is needed before about 2M chunks.
+4. **M-9**: write cost-attribution stage 1 into the designs and queue C1–C6 (depends on the keys/budgets choice).
+5. Stream a's cheap items: **A-22** (#500), **A-21** (#503/#504 Compose part), **A-23** (#505), **A-24** (#509).
+   Also drop the smoke test's snake_case fallback in `deploy/tests/release-smoke.sh:149` (#529 made `/version`
+   camelCase everywhere).
+6. Design hand-off from #544: `Admin:OrganisationName` isn't in repo-and-deployment's Admin settings or the operator
+   docs yet.
 
-**Stream b** has nothing left in its queue except the live items (B-L2, B-L3, B-L5). If it asks for work, M-10's
-outcome or the upload gaps are candidates.
+**Stream b** has **B-30** (editable embedding profiles), **B-31** (answer length from the model) and **B-32** (chat
+prompt texts) queued, plus the live items B-L2, B-L3, B-L5. Review notes left for them: B-30 must lock the profile row
+against a concurrent first chunk-set build (#547); B-31 should weigh an optional platform-wide answer ceiling now that
+the 4,096 cap is gone (#548). **Stream b's machine also runs a main session** that writes design PRs on
+`main-session/` branches (#547, #548); #550 told it where decisions go now.
 
 **Only the user can unblock:**
 - **Support-assistant proof of concept** (`plans/cases/support-assistant/07-rollout.md` §0b, steps P1–P8). It needs the
@@ -62,54 +70,35 @@ outcome or the upload gaps are candidates.
   also the first real measurement of upload quality. The local model mirror has no `gpt-6-luna` row: add one or use
   `claude-haiku-5-5` as condense model.
 - The live block's inputs: gold set with DoIT, G1/DPIA, test host, U1, pilot accounts on the gateway.
+- **The gateway** (`~/git/llmgateway` `origin/main`) still pins Aspire 13.6.4, affected by GHSA-f7vh-h5g3-7jrh; nothing
+  filed there.
 - **CI runners** (proposal only, user: "write it down, change nothing yet"): `ume-rag` and `ume-rag2` share one Docker
   daemon, so jobs collide. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners.
 - **#511** (split the worker into libraries): only if it keeps growing in P2.
 
-## Done in session 27 (2026-11-09)
+## Done in session 28 (2026-11-11)
 
-- **Stream b's B-29 reviewed** (security: the Open WebUI JWT through `Microsoft.IdentityModel.JsonWebTokens`). Nothing
-  wrong: the library's 32-byte minimum key size can't cause an outage, because `OpenWebUiUserJwt.cs:64` already
-  requires `OpenWebUi:JwtSecret` ≥ 32 characters. **#512 closed.**
-- **Legacy Office and RTF uploads** (user request for the 2026-11-10 demo; stream b's agent wrote both PRs):
-  - **#526**: the parser converts `.doc`, `.xls`, `.ppt` and `.rtf` with LibreOffice 25.2 (forced import filter, a
-    profile per job, a process-group kill), then reads the OOXML result.
-  - **Linked-file reads tested**, with the exact command, offline: a linked Writer section, an RTF `INCLUDETEXT` field
-    and a Calc external reference all kept their cached text (Calc shows `Err:540`). So the defaults read no linked
-    local file.
-  - **#527**: drag-and-drop and folder upload, and the four types allowed in the admin API.
-  - **Decision** (user approved stream b's lean): LibreOffice stays in the parser, and parser vs separate converter
-    container is decided before go-live (`e2baf57`).
-- **Upload knowledge bases** (user: the main session owns this feature, in stream b's paths):
-  - **Design `1264ad3`**: admin §5.5.7, the §4.5 `files` contract, Decisions row "Upload knowledge bases". **#528**
-    told stream b; closed after the merge.
-  - **#532 merged**: *Create knowledge base* → "Files I upload" creates the knowledge base and its upload source in one
-    step. A **Files** tab carries the drop zone, live progress (3 s polling while anything is processing), search, state
-    chips, sort, folder grouping, *Retry failed* and a details drawer with passages.
-  - **Folder paths kept**: `X-File-Name` carries a relative path, which is checked and becomes the display name. A
-    path rule `HR/**` (or `/HR/**`) tags a folder.
-  - Checked in the browser on the local stack; three problems found there were fixed (visible checkbox labels, raw
-    uploader id, "1 kB" for an empty file).
-  - Known gaps: no download link in the details (the admin API has no route for an upload's content), and no uploader
-    name (only the actor id is stored).
-- **#533 / #534**: the worker now records an upload slot's outcome in the run item's commit. It writes `indexed` with
-  `DocumentId` when the live set was built from the slot's bytes, else `refused` or `malware` with the reason, guarded by
-  `Sha256`, so a replace is never marked by old bytes. The admin API reads the row; connectors §9.1 is updated.
-  Checked live. **Development data:** slots uploaded before #534 stay `clean`; the SQL fix is in #534's body. It was
-  run on this machine.
-- **`plans/platform/upload-quality-review.md`** (user asked for it): text-heavy uploads are handled to best practice
-  (structure-aware parsing, heading-path chunks, tables row by row, hybrid search with RRF, built-in evaluation). The
-  gaps are pictures (U1), e-mail and archives (U2), spreadsheet calculations (U3), rerank off (U4), thin context
-  without headings (U5), near-duplicates (U6) and OCR languages (U7). Upload answer quality is unmeasured until the
-  proof of concept.
-- Stream b merged #529 (`/version` one shape, #497), #530 (refuse a non-CSS `readySelector` on save, #488 part 1) and
-  #531 (Cancel run, #488 part 3); #530's AngleSharp reference was already pinned centrally.
+- **Security: Aspire 13.6.5 (#549).** GHSA-f7vh-h5g3-7jrh (CVE-2026-120006, high) was published 2026-11-10 23:24 for
+  `Aspire.Hosting(.AppHost)` < 13.6.5 and turned every backend job red through the package audit. All `Aspire.*` pins and
+  the AppHost SDK went to 13.6.5; `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL` 13.6.5 needs EF Core ≥ 10.0.14, so the
+  10.0.13 package family went to 10.0.14 (the runtime base image is unchanged). Local full suite 3212 tests, 1 load flake
+  (`SettingsEffectsTests.Lowering_max_depth_or_max_pages_deletes_nothing`, 3/3 green alone). CHANGELOG line: #551 (merged).
+- **Reviewed and merged stream b's work:** #542/#543 (Portainer: `dataapi` joins the internal `rag-dataapi` network shared
+  only with rag-admin), #544 (neutral wording, password-manager opt-outs, `Admin:OrganisationName`), #545
+  (`Crawl:UserAgent`; robots.txt, meta robots and `X-Robots-Tag` match its product token), #546 (deploy templates send
+  `dimensions`, `MaxInputTokens` 8191).
+- **Design PRs from the other main session merged** (user: use the main session's recommendation): #547 (embedding
+  profiles editable until a chunk set uses them; B-30) and #548 (prompt texts as `Settings.Chat.Prompts` with locked
+  safety lines; answer length from the model's limits; B-31, B-32).
+- **#521, the decisions register, merged** after a rebase. The five decisions added since it was opened are entries
+  ("Parser" updated for legacy Office/RTF, "Upload knowledge bases", "Editable embedding profiles before use", "Chat
+  prompt texts configurable", "Answer length from the model") with dated log lines. **#550** told stream b.
+- **#502 closed** (halfvec answered by to-verify #117). The keys-and-budgets options paper committed.
 
 ## Open
 
-- **#521** (above). **#513** stays open until its items close; **#499** until M-10; **#503**/**#504** until A-21;
-  **#509** until A-24. **#502** is answered (halfvec storage in P2, to-verify #117 found no recall cost) and can be
-  closed with an evidence comment.
+- **#513** stays open until its items close; **#499** until M-10; **#503**/**#504** until A-21; **#509** until A-24.
+  **#535** (ClamAV `ClamAv:Mode = on | off`, user decision) has no PR yet. **#550** until stream b acknowledges.
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
@@ -157,7 +146,9 @@ outcome or the upload gaps are candidates.
   (pre-#526), `ume-rag.local/postgres:ci`.
 - `~/git/llmgateway`'s working tree is at v0.9.0; `origin/main` is fetched at v0.9.2 (`df6bf5e`). Read the current
   gateway with `git show origin/main:<path>` or pull first.
-- Worktrees: only `../rag-docs` (#521) besides the main clone.
+- Worktrees: none besides the main clone.
+- The AppHost is on Aspire 13.6.5 since #549; the local stack wasn't started this session, so the CLI path above
+  (13.6.1) is untested against it. Install the 13.6.5 CLI if `aspire start` complains.
 
 ## How we work (user preferences, binding)
 
@@ -197,6 +188,11 @@ main session needs:
 - The `implementor` agent refuses git writes (commit, rebase): review its diff, commit and rebase yourself.
 - **`gh pr merge --delete-branch` also removes the branch's local worktree.** Stop any stack running from that
   worktree first (`aspire stop --all`), and merge without `--delete-branch` while an agent still reads it.
+- **The auto-mode classifier** blocks force-pushing another session's branch and approving a PR that contains your
+  own commit. To bring stream b's PR up to date, push a plain merge commit (or `gh pr update-branch <n>`); then the
+  merge needs the user's go-ahead or stream b.
+- A new GitHub advisory turns every backend job red through `dotnet list package --vulnerable` (NU1903) with no code
+  change: check the audit step first when an unrelated PR fails.
 - Squash-merged branches look unmerged to git: check the PR state (`gh pr list --state all`) and `git rev-list
   --count main..<branch>` before `git branch -D`.
 - When editing a stream's queue on `main`, `pull --rebase` first: stream B edits queues too.
