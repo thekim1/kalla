@@ -32,7 +32,8 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
         var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
         try
         {
-            var statistics = new KeywordStatistics(database.Connection(RagDatabase.Worker), TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
+            await using var dataSource = Npgsql.NpgsqlDataSource.Create(database.Connection(RagDatabase.Worker));
+            var statistics = new KeywordStatistics(dataSource, TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
             var collection = seed.CollectionId;
 
             // 99 chunks: under the floor, nothing is written.
@@ -67,6 +68,39 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
             await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Chunks" SET "DeletedAt" = now() WHERE "DocumentId" = $1""", first);
             (await statistics.CheckAsync(collection, Ct)).ShouldBe(new KeywordStatisticsCheck(0, 0, 1));
             (await RowsAsync(collection)).ShouldBeEmpty();
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task The_service_checks_every_collection_at_start()
+    {
+        // An upgrade or a new installation: chunks exist, no rows yet, and no run finishes soon.
+        var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
+        try
+        {
+            await AddChunksAsync(seed, 120);
+            await using var dataSource = Npgsql.NpgsqlDataSource.Create(database.Connection(RagDatabase.Worker));
+            var statistics = new KeywordStatistics(dataSource, TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
+            using var service = new KeywordStatisticsService(statistics, NullLogger<KeywordStatisticsService>.Instance);
+            await service.StartAsync(Ct);
+            try
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(30);
+                while ((await RowsAsync(seed.CollectionId)).Count == 0 && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(100, Ct);
+                }
+
+                (await RowsAsync(seed.CollectionId)).Select(r => r.Lexeme).ShouldContain("kommun");
+            }
+            finally
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
         }
         finally
         {

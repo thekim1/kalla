@@ -34,8 +34,11 @@ exception, with its own steps.
   `POSTGRES_IMAGE`. On a two-slot installation it can wait for the next window: nothing depends on it.
   **Check:** `dc exec -T postgres psql -U postgres -d ragdb -Atc 'SHOW jit'` says `off`.
 - **Keyword statistics (A-29):** the worker writes `content."KeywordStatistics"` after each finished run and in the
-  nightly maintenance. The first check of a large collection reads its search vectors once, on the maintenance
-  session. rag-api still computes its own statistics in this release. Nothing to configure.
+  nightly maintenance, and rag-api reads them (no `ts_stat` in rag-api any more, #499). The first check of a large
+  collection reads its search vectors once, on the maintenance session. The worker checks every collection once when
+  it starts, so after the upgrade each collection has its stop list within minutes (until then K runs with every
+  term). Nothing to configure. **Check:** `SELECT count(DISTINCT "CollectionId") FROM content."KeywordStatistics"`
+  is above 0 a few minutes after `dc up` on an installation with collections of at least 100 chunks.
 - **New knobs**, all with defaults: `UME_RAG_ORGANISATION_NAME` (`Admin:OrganisationName`, default `Umeå kommun`),
   `Crawl:UserAgent` (default `UmeaKommunBot/1.0`), and `Settings.Chat.prompts` (prompt texts, built-in when absent).
 - **Apply (Compose):** as for 0.3.0. Replace `deploy/` with the bundle's (keep `.env`, `certs/`, `secrets/`), set the

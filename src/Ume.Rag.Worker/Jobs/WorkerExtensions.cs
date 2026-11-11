@@ -88,8 +88,9 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<HnswIndexMetrics>();
         builder.Services.TryAddSingleton(sp => new HnswIndexHealth(sp.GetRequiredService<NpgsqlDataSource>(),
             HnswIndexHealth.ConnectionString(builder.Configuration), sp.GetRequiredService<HnswIndexMetrics>(), sp.GetRequiredService<ILogger<HnswIndexHealth>>()));
-        // The keyword stop list's statistics (knowledge design §6.2): on the maintenance session, as the HNSW rebuild.
-        builder.Services.TryAddSingleton(sp => new KeywordStatistics(HnswIndexHealth.ConnectionString(builder.Configuration), sp.GetRequiredService<TimeProvider>(),
+        // The keyword stop list's statistics (knowledge design §6.2): on the worker's pool, so they stay inside the role's
+        // connection budget (data-model §1.1); statement_timeout = 0 is SET LOCAL in the refresh's transaction.
+        builder.Services.TryAddSingleton(sp => new KeywordStatistics(sp.GetRequiredService<NpgsqlDataSource>(), sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<KeywordStatistics>>()));
         builder.Services.TryAddSingleton<KeywordStatisticsService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<KeywordStatisticsService>());
