@@ -16,7 +16,8 @@ import { fromInput, InputError, toInput, type FieldSpec } from './schema'
 // One request of a platform object as a form (admin design §5.8): the fields of its request schema, prefilled from
 // `initial`; `version` goes back as read. The server validates; its field errors land on the fields. A `model` field picks
 // from `models` (the gateway mirror, #466); one with a `parent` is a member of that JSON field, edited above it and
-// merged back into it on save.
+// merged back into it on save. The `extra` slot gets `collect()`, the body as it would be sent (null when a field cannot be
+// read), for an action on unsaved values.
 const props = withDefaults(
   defineProps<{ formId: string; fields: FieldSpec[]; initial: Record<string, unknown>; method: 'post' | 'put'; url: string; submitLabel: string; models?: GatewayModel[] }>(),
   { models: () => [] },
@@ -43,7 +44,8 @@ function hint(field: FieldSpec): string | undefined {
   return [field.help, extra, picked].filter(Boolean).join(' ') || undefined
 }
 
-async function save(): Promise<void> {
+/** The request body from the controls, or null after marking the fields that cannot be read. */
+function collect(): Record<string, unknown> | null {
   const body: Record<string, unknown> = {}
   const problems: Record<string, string> = {}
   const members: Record<string, Record<string, unknown>> = {}
@@ -65,8 +67,14 @@ async function save(): Promise<void> {
     if (isObject(rest)) body[parent] = { ...rest, ...members[parent] }
     else problems[parent] ??= PLATFORM.form.invalidJson
   }
-  if (!form.validate(problems)) return
+  if (!form.validate(problems)) return null
   if (props.initial.version !== undefined && props.initial.version !== null) body.version = props.initial.version
+  return body
+}
+
+async function save(): Promise<void> {
+  const body = collect()
+  if (!body) return
   saving.value = true
   try {
     emit('saved', await request(props.method.toUpperCase() as 'POST' | 'PUT', props.url, { body }))
@@ -103,6 +111,8 @@ async function save(): Promise<void> {
         :error="form.errors[field.name]" :inputmode="field.kind === 'number' ? 'decimal' : undefined" autocomplete="off"
       />
     </template>
+    <!-- Extra controls that act on the values as entered (an embedding profile's Test), before the form's own error. -->
+    <slot name="extra" :collect="collect" />
     <InlineError v-if="form.formError.value" :message="form.formError.value" />
     <div class="flex gap-2">
       <UiButton variant="primary" type="submit" :loading="saving" data-test="save">{{ submitLabel }}</UiButton>

@@ -39,7 +39,7 @@ export interface FieldSpec {
   nullable: boolean
   options?: string[]
   /** A `model` field's kind: its picker offers the gateway mirror's models of this kind (modelFields.ts). */
-  modelKind?: 'chat' | 'rerank'
+  modelKind?: 'chat' | 'rerank' | 'embedding'
   /** Set on a member of a JSON field: the field it is edited out of and sent back in. */
   parent?: string
 }
