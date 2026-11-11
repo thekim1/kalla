@@ -99,12 +99,14 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 
 ### [ ] M-9 Cost attribution stage 1: settle the design and queue the streams
 - **Do:** write stage 1 of [`../platform/cost-attribution.md`](../platform/cost-attribution.md) §5 into the designs it names
-  (chat §17 and the `AssistantDailyTotals` columns or a per-step table, admin §4.9 and a cost subsection under §8,
-  processing §11/§14, engine §10), then queue C1–C6 in `stream-a.md` and `stream-b.md` with paths and done-whens.
-  Bring Q1–Q3 of the plan's §7 to the user.
-- **Done when:** the design sections state stage 1's rules, the queue items exist, and the user has answered Q1–Q3
-  (or confirmed the defaults).
-- **Waits on:** nothing. Stage 2 (delegation, gateway release 2) is P2 and waits on the gateway's release.
+  (chat §8.3, §17 and the `AssistantDailyTotals` columns or a per-step table, admin §4.9 and a cost subsection under
+  §8, processing §11/§14, engine §10): the cost of each call is the gateway's (`x-ume-cost-usd`, the stream comment
+  from gateway phase 2, the Integration API's usage by run id from phase 3), estimated from the mirror's prices only
+  where none is given, and split per step on `x-ume-run-id`/`x-ume-step`. Then queue C1–C6 in `stream-a.md` and
+  `stream-b.md` with paths and done-whens. Bring Q3 of the plan's §7 to the user (Q1, Q2 and Q4 are answered by #580).
+- **Done when:** the design sections state stage 1's rules, the queue items exist, and the user has answered Q3 (or
+  confirmed the default).
+- **Waits on:** nothing for the `x-ume-cost-usd` part; the stream cost and the read-back follow M-12's phases.
 
 ### [x] M-10 Settle #499 step 2 and #501 in the designs
 - **Do:** #499 step 2: who maintains scope sizes and the keyword stop list (the worker at the chunk-set swap, a
@@ -146,3 +148,36 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Waits on:** the decisions register (this PR).
 - **Left for the user:** who owns "Ask-a-file workspaces" (teams and individuals) against "Organisation" (departments
   only); answer before P2.
+
+### [ ] M-12 Gateway integration (#580): queue the stream items when the gateway's phase PRs exist
+- **Do:** when a gateway integration phase is merged in `~/git/llmgateway` (phase 1 is draft PR thekim1/llmgateway#81),
+  pin its OpenAPI document in `contracts/gateway/`, check the designs against what was built (gateway-changes §5 is
+  Ume.Rag's view, the gateway's `docs/integrations.md` wins), and queue that phase's items in `stream-a.md` (worker)
+  and `stream-b.md` (api, admin, FakeGateway) with done-whens from cost-attribution §6:
+  - **Phase 1** (B2–B4): one credential key per service (`Gateway:Key`) in place of the per-level keys, and the
+    residency handler's service maximum (`src/Ume.Rag.Infrastructure/Gateway/GatewayOptions.cs`,
+    `ResidencyCeilingHandler.cs`, `GatewayApi.cs`; `deploy/init-deployment.sh`; `docs/production-setup.md`); the
+    context and model sync with `ETag` and the `GatewayKeys` mirror, the manual model limit fields replaced by the
+    gateway's (`src/Ume.Rag.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`, `GatewayEndpoints.cs`;
+    `src/Ume.Rag.Domain/Entities/`, a migration in `src/Ume.Rag.Infrastructure/Persistence/Migrations/`,
+    `deploy/postgres/app-roles.sql`); `GatewayKeyId` on assistants and collections with the key picker and V39
+    (`AssistantEndpoints.cs`, `CollectionEndpoints.cs`, `src/admin-ui/src/views/AssistantView.vue`,
+    `CollectionView.vue`, `labels.ts`, `messages.ts`); the FakeGateway's `/v1/ume/context`, `ume` model fields and
+    contract test (`src/Ume.Rag.FakeGateway/**`, `tests/Ume.Rag.ContractTests/**`).
+  - **Phase 2** (B5–B6): `x-ume-on-behalf-of` from the object's key with the echo check on every call
+    (`src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.Answering/Chat/GatewayChatClient.cs`,
+    `GatewayStreamLine.cs`, `src/Ume.Rag.Answering/GatewayQueryEmbedder.cs`, `src/Ume.Rag.Retrieval/GatewayReranker.cs`,
+    `src/Ume.Rag.Api/ChatStreaming.cs`, `src/Ume.Rag.AdminApi/AssistantTestEndpoints.cs`,
+    `src/Ume.Rag.Worker/Processing/Embedding/EmbeddingClient.cs`, `src/Ume.Rag.Worker/Evaluation/Generation/EvalModelClient.cs`);
+    run headers stored; the stream cost read and never forwarded; `assistant_unavailable`, the worker's
+    `gateway.key_unavailable` and the attention item; save checks as the key; publish needs a key; the FakeGateway's
+    acting, echo, drop-echo and budget modes and the stream cost comment.
+  - **Phase 3** (B7): the Integration API read-back (`usage.read` on `rag-admin`'s key, `Gateway:IntegrationApiUrl`):
+    cost and budget status per assistant and knowledge base (`src/Ume.Rag.AdminApi/**`, the two views); the
+    FakeGateway's `/integration/v1`.
+- **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
+- **Waits on:** the gateway's phase PRs (user). Open with the gateway owner on #580: the residency bound on acted
+  requests (review point 1) and every department with its member groups in the context (gateway-changes §5.5).
+- **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
+  cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
+  repo-and-deployment §4.3.

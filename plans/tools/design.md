@@ -103,7 +103,7 @@ network hop.
 | `rag-api` (chat role) → hosted MCP servers | internal network `mcp` | `client-credentials` token of the tool identity (§4.6) | tool calls (MCP over Streamable HTTP) |
 | `rag-admin` → hosted MCP servers | `mcp` | same | discovery, connection test, drift polling (leader), P2 agent test-panel tool calls (admin design §4.9), skill gate tool calls (read-only, §3.7) |
 | hosted MCP server → wrapped system | one network per server `mcp-<name>-egress`, firewall to its systems only | the server's own credential | – |
-| `rag-admin` → gateway | `llm` (existing) | its delegating keys of every level | skill gate model calls |
+| `rag-admin` → gateway | `llm` (existing) | its credential key (until the gateway's integration phase 1 its keys of every level), as the assistant's gateway key | skill gate model calls |
 
 **Bulkheads** (`ServerBulkhead`, per server and process): at most `ToolServers.MaxConcurrentCalls` (proposed 8) calls in
 flight per instance, further calls wait ≤ 1 s then `unavailable`; the call timeout of §4.7; a circuit that opens after

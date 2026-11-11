@@ -166,3 +166,10 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
   ≤ 1,000 chunks are written in the swap transaction (engine §14 rule 2a, #501).
 - 2026-11-11, user: an optional platform-wide answer ceiling `Settings.Chat.MaxAnswerTokens` caps every answer's
   `max_tokens`, overrides included, unset by default ("Answer length from the model"; from the review of #548).
+- 2026-11-11, user (#580): an assistant and a knowledge base each run on an assigned gateway key of their department,
+  chosen by id; each service authenticates with one credential key and sends `x-ume-on-behalf-of` with the echo check;
+  organisation and models come from `GET /v1/ume/context` and `GET /v1/models` (member groups from the Data API until
+  the context carries them); each setting has one owner; cost is the gateway's ("Cost attribution", "Gateway keys",
+  "Gateway releases", "Model pickers show what the key may use", "Answer length from the model"; "Residency per level"
+  and "Evaluation models at the collection's ceiling" now say the worker never sends `External`). Replaces team
+  delegation, per-level keys and stage 1's estimate from mirrored prices.

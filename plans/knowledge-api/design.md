@@ -9,7 +9,7 @@ the evaluator of [`../ingestion-worker/design-processing.md`](../ingestion-worke
 [`../ingestion-worker/design-connectors.md`](../ingestion-worker/design-connectors.md) (§3.4, §9.4); the
 parse-output layout and index writer of [`../ingestion-worker/design-engine.md`](../ingestion-worker/design-engine.md)
 (§8, §14); `RagPrincipal`, `IAccessPolicy`, keys, tokens and security events of
-[`../identity/design.md`](../identity/design.md) (§3, §4, §6, §7, §8, §10); delegation, residency ceiling and FakeLlm of
+[`../identity/design.md`](../identity/design.md) (§3, §4, §6, §7, §8, §10); acting as a gateway key, residency ceiling and FakeLlm of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §6, §7.1); projects, roles and observability of
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §8, §9). Changes needed
 elsewhere: §18; questions: §19; unverified facts: §20; removed or deferred: §21.
@@ -460,8 +460,8 @@ explicit `x-ume-max-residency` and checks that the key matches it:
 
 ```http
 POST {Gateway:BaseUrl}/v1/embeddings
-Authorization: Bearer <rag-api key of the profile's ceiling>
-x-ume-on-behalf-of: <team id>               (from gateway release 2, P2; not sent in P1)
+Authorization: Bearer <rag-api's credential key>
+x-ume-on-behalf-of: <gateway key id>        (from gateway phase 2; none when the object has no key)
 x-ume-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
 x-ume-run-id: <RunId or retrieval id>
 x-ume-step: query-embed
@@ -474,10 +474,10 @@ traceparent: …
 | Topic | Rule |
 |---|---|
 | Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (data-model §2.1). The pilot profile is `text-embedding-3-large` from an `Eu` provider at **1024** dimensions, requested with `dimensions` (Decisions "Pilot embedding model, U-b"); an on-prem BGE-M3 profile (register M2, once on-prem hardware exists; moving to it re-embeds every chunk) never sends `dimensions` (gateway design §6) |
-| Attribution | from gateway release 2 (P2); in P1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). Then: chat: the assistant's `OwnerTeamId` (identity §4.7); integration key: `Keys.TeamId`; token callers and MCP: the first searched collection's `OwnerTeamId`; test panel: the assistant's or collection's owner team |
+| Attribution | the call runs as a gateway key (cost-attribution §4.1; identity §4.7): chat and the assistant test panel: the assistant's `GatewayKeyId`; integration keys, token callers and MCP: the first searched collection's `GatewayKeyId`; the retrieval test: the collection's. An object without a key, and every call until gateway phase 2, runs as the credential key. Until the gateway's integration phase 1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). The key must allow the profile's model (admin V39) |
 | Residency | the profile's `EmbeddingProfiles.MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile until M2, `OnPrem` for an on-prem profile (Decisions "M2 and test hosting"); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
-| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); from release 2, the `x-ume-on-behalf-of` echo must match when `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
-| Key | the `Gateway:Keys` entry of the profile's ceiling (secret files `Gateway__Keys__<ceiling>`), chosen and checked by the `ResidencyCeilingHandler`: until release 2 the pilot team's own key of that level (`RequireMaxResidency`, `AllowedIpRanges`), whose team keeps no request policy; from release 2 a delegating key. Delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so its `PiiPolicy` must be `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); checked at startup by one canary embedding (§5.6) |
+| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); when `x-ume-on-behalf-of` was sent, its echo must match while `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
+| Key | rag-api's credential key (`Gateway__Key`; until the gateway's integration phase 1 the pilot team's own key of the profile's ceiling, `Gateway__Keys__<ceiling>`), checked by the `ResidencyCeilingHandler`. The `PiiPolicy` that applies is the acting key's: an assigned key used for chat or search must have `PiiPolicy` `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); the credential key's own is checked at startup by one canary embedding (§5.6), an assigned key's by the `x-ume-pii` check above on every call and shown on the assistant page (admin §5.5.4) |
 | Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-ume-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
 
 ### 5.3 Timeouts, retries, circuit
@@ -635,8 +635,10 @@ kept per collection (collections of at least 100 chunks, lexemes in at least 10 
 limit near 3.3M). The worker recomputes a collection's rows with `ts_stat` over its live child chunks when it has at
 least 100 of them and no rows yet, when its live child count differs by more than 10 % from the `ChunkCount` stored
 with its rows, or when the rows are older than 7 days. It checks this at the end of each sync run of the collection's
-sources and in the nightly maintenance, one collection at a time on `ConnectionStrings:ragdb-maintenance` (else
-`ragdb`) with `statement_timeout = 0`, and replaces the collection's rows in one transaction; a collection that falls
+sources, for every collection when the worker starts (so an upgrade or a new installation has its stop lists within
+minutes), and in the nightly maintenance, one collection at a time on a connection of the worker's pool (inside the
+role's connection budget, data-model §1.1) with `SET LOCAL statement_timeout = 0` in that transaction, and replaces the
+collection's rows in one transaction; a collection that falls
 below 100 chunks loses its rows. A share is the row's `Ndoc` over its stored `ChunkCount`; a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
 a term. A collection linked with topics counts with its whole chunk count here (floor and share alike), since the
 statistics are per whole collection and a topic's count would inflate the shares; only the §6.4 size count is
@@ -1231,7 +1233,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/repo-and-deployment.md` §1, §2.2 | test project `tests/Ume.Rag.Retrieval.Tests`; `tests/Ume.Rag.Benchmarks` (`RetrievalBenchmarks`, `InteractionAudit` copy); `ModelContextProtocol`/`.AspNetCore` **2.3.0** (checked); `PGVECTOR_VERSION` **0.8.7** (stock image tag) |
 | `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the blob container **read-only** and reads the `rag-blob-<level>` master key files of non-`public` levels; secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches` 4, `ExpandNeighbourChunks`); data source pool 12 per instance |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway, §9 | a fake rerank endpoint (P1, for the `IReranker` seam); metrics of §15 and dashboard panels |
-| `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the `OnPrem`-only delegating key used for query embeddings has `RequireMaxResidency`, `ApplyTeamPolicy` false and `PiiPolicy` `Off` or `Allow` (§5.2) |
+| `platform/repo-and-deployment.md` §4.4 / gateway setup notes | rag-api's credential key has `RequireMaxResidency` and `PiiPolicy` `Off` or `Allow`; an assigned key used for chat or search needs `PiiPolicy` `Off` or `Allow` for embeddings (§5.2) |
 | `archive/area-plans/gateway-changes.md`, `design.md` | P2 item: a rerank endpoint serving `bge-reranker-v2-m3` on-prem (contract to define), honouring `x-ume-max-residency` |
 | (capacity) | retrieval concurrency 4 on a pool of 12 per instance (⌊(pool − 3) ÷ 2⌋); `hnsw.max_scan_tuples` is a role default (100,000), no per-query `SET LOCAL` from selectivity; `max_connections = 100` (`deploy/postgres/postgresql.conf`) |
 | `archive/area-plans/tools.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document` and `document://` P3; MCP download grants 1 hour |
@@ -1324,7 +1326,7 @@ Removed or deferred, with where each went:
 | MCP `get_document`, `document://`, per-skill endpoints in P2; ceiling raisable to `internal` | P3; P2 ceiling `public` (§14) |
 | Pool 25, minimum 8 | pool 12, 4 searches by the same formula (§6.6) |
 | Strict 10 s fail-closed on an unconfirmed snapshot | grace window `Config:MaxUnconfirmedSeconds` (§4.1) |
-| Interim team linked key for query embeddings | `OnPrem`-only delegating key with explicit ceiling (§5.2) |
+| Interim team linked key for query embeddings | rag-api's credential key, acting as the object's gateway key, with explicit ceiling (§5.2) |
 | Attachments as child documents (`ParentDocumentId`, `attachment` identity kind, `parent` citation field, "Bilaga *name* i *subject*", separate caps) | P2 with email (Z1, §10.3) |
 | `DocumentKeys` per-document blob keys | data key in the blob header (data-model §7, §3.5) |
 | Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and, for downloads, the in-process rate limiter (§5.4, §3.5) |
@@ -1336,4 +1338,4 @@ Removed (reasoning: [weakness review §5](../archive/passes/weakness-review.md#5
 
 | Item | Where it went |
 |---|---|
-| `x-ume-on-behalf-of` on query embeddings and its echo check in P1 (§5.2) | P2 with gateway release 2; P1 uses the pilot team's `OnPrem` key |
+| `x-ume-on-behalf-of` on query embeddings and its echo check in P1 (§5.2) | from the gateway's integration phase 2; until phase 1 the pilot team's key of the profile's ceiling |

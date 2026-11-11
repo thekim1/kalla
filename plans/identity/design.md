@@ -240,7 +240,9 @@ stay until release 2.
 - **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
   The admin API's `OrgSync` job reads `/v1/catalog/departments` and `/teams` every **5 minutes** and on demand
   (*Sync now* on our organisation page), with a gateway **Data API key** (`ume-dk-…`, permission `catalog.read` only;
-  secret file `secrets/admin/OrgSync__DataApiKey`). A key needs no IdP registration, which keeps the "no registration
+  secret file `secrets/admin/OrgSync__DataApiKey`), until the gateway's `GET /v1/ume/context` lists every active
+department with its member groups; then the sync reads them there with the admin's credential key and the Data API
+key goes (gateway design §5.5, admin design §4.10). A key needs no IdP registration, which keeps the "no registration
   before the pilot" rule (plan §2). Only changed rows are written, so an unchanged sync does not bump the config version
   (data-model §2.1). From release 2, member groups are never edited in our admin UI; it links to the gateway's page.
   Before it (P1), a platform admin enters them on our department record through the admin API
@@ -535,26 +537,45 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 `MaxResidency` comes from the **level of the data in the call** (platform plan §6), not from the client, and is
 **always explicit**:
 
-| Effective level | `x-ume-max-residency` | Gateway key |
-|---|---|---|
-| `public` | `External` | open |
-| `internal` | `Eu` | `Eu`-max |
-| `sensitive` | `OnPrem` | `OnPrem`-only |
+| Effective level | `x-ume-max-residency` |
+|---|---|
+| `public` | `External` (the worker: `Eu`) |
+| `internal` | `Eu` |
+| `sensitive` | `OnPrem` |
 
 The deployment knob **`Gateway:MaxResidency`** (api and admin; unset by default) caps the ladder: every call's ceiling is
 `min(ForLevel(level), cap)`, for chat (and its condense call) and the admin's V8 `/v1/models` check and test panel. It
 implements register M2 (every model call EU-hosted until on-prem hardware exists): the pilot sets `Eu`, so a `public`
-assistant is checked and answered at `Eu` with the `Eu` key. It only lowers a ceiling, and is unset (or `External`)
-once External routes and keys exist. A call whose ceiling has no key in this service is refused before sending
-(admin `gateway_key_missing`, admin design §4.6 V8).
+assistant is checked and answered at `Eu`. It only lowers a ceiling, and is unset (or `External`) once External routes
+exist. The worker's ceilings never exceed `Eu`. A call whose ceiling is above the service's maximum is refused before
+sending (admin `gateway_key_missing`, admin design §4.6 V8).
 
-The keys are delegating gateway keys per level, issued per deployable that needs them, with `AllowedIpRanges`,
-`RequireMaxResidency` (the gateway refuses a request without the header) and `ApplyTeamPolicy = false` (gateway
-design §13.4); the worker never holds the open key. **Until gateway release 2 (P1)** they are the pilot department's
-team's own keys per level, with `AllowedIpRanges` and `RequireMaxResidency` but no delegation (weakness review §5,
-gateway design §13.4). A `DelegatingHandler` in the gateway client refuses any request
-without an explicit ceiling and checks that the key it uses belongs to that level; it is unit-tested for every call
-site (chat, condense, judge, evaluation generation, NER/LLM stages).
+**Keys.** From the gateway's integration phase 1 (gateway design §5.1, §13.4) each service holds **one credential key**
+of the integration *Ume.Rag* (`rag-api`, `rag-admin`, `rag-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
+and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow every
+residency the platform uses; the worker's `[OnPrem, Eu]`. **Until phase 1** (P1) they are the pilot department's
+team's own keys per level (`Gateway:Keys:OnPrem`, `Eu`, `External`), with `AllowedIpRanges` and `RequireMaxResidency`;
+the worker never holds the open key (weakness review §5).
+
+**Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
+assistant or a knowledge base that has a `GatewayKeyId` also sends `x-ume-on-behalf-of: <that key id>` (cost-attribution
+§4.1 says which object a call belongs to); a call without an object, or for an object without a key, sends none and
+runs as the credential key. The answer must echo the id sent: a missing or different `x-ume-on-behalf-of` aborts the
+call before a byte is used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an
+older gateway instance during a rolling update ignores the header and would charge the credential key).
+
+**What Ume.Rag relies on, and what is pending.** The ceiling header and the `x-ume-residency` check are Ume.Rag's
+residency rule on every call, acted or not, and hold whatever a key's admins change. As the gateway's design stands,
+the credential key's own `RequireMaxResidency` and `AllowedResidencies` do not apply to a request made as an assigned
+key, which then gets the assigned key's residencies. Ume.Rag asked that both keep bounding acted requests (the
+effective residencies the assigned key's ∩ the credential key's): **requested in #580, pending the gateway's answer**
+(gateway design §5.3). Until it is granted, the handler below is the only guard that keeps an acted call within its
+level, so it is required on every gateway client and tested at every call site.
+
+A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
+ceiling, or with a ceiling above the service's maximum (the worker: `Eu`; until phase 1: the ceiling must match the
+level of the key it uses), sets `x-ume-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
+for every call site (chat, condense, follow-ups, query embedding, rerank, judge, evaluation generation, NER/LLM stages).
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
 validated on save); for condense calls inside a conversation the same. For a client that keeps history (Open WebUI)
@@ -563,11 +584,9 @@ from another assistant, so model and residency do not change between turn 1 and 
 plan §6). For P2 agent runs it is fixed at the run's start and never rises: tool servers are bounded by clearance
 (assistant level ≤ clearance) and result level (result level ≤ assistant level) (tools design §5.3).
 
-The Chat API sends the header from `AccessDecision.MaxResidency` and, from gateway release 2 (P2),
-`x-ume-on-behalf-of` = the assistant's team **id** (gateway design §5.2; codes can change). A missing echo of that
-header fails closed (5011) when `Gateway:RequireDelegationEcho` is on (default `true`; the FakeGateway echoes too).
-In P1 no `x-ume-on-behalf-of` is sent and no echo is checked: delegation, the echo check and 5011 are built with
-release 2 (weakness review §5). Header values are the gateway's
+The Chat API sends the header from `AccessDecision.MaxResidency` and, from phase 2, `x-ume-on-behalf-of` = the
+assistant's `GatewayKeyId` on every call of the turn (gateway design §5.2; the FakeGateway echoes too). Header values
+are the gateway's
 `DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-ume-residency` is
 checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). Retries are
 chat-api §8.3's (`GatewayRetryHandler`): a gateway `502`/`504` is sent once more with the same ceiling; a `503` with
@@ -575,10 +594,10 @@ chat-api §8.3's (`GatewayRetryHandler`): a gateway `502`/`504` is sent once mor
 try again; `403 max_residency_not_met` (no target configured within the ceiling) is never retried.
 
 **Model validation on publish**: when an assistant version is published (and when its level or audience is saved), the
-admin calls the gateway's `GET /v1/models` with the key and ceiling of the assistant's effective level (for an
-audience client that keeps history, max(level, client ceiling)) on behalf of its team, and refuses the action if the
-version's model is not listed (gateway design §3.4). In P1 the call goes with the pilot team's key of that level,
-without `x-ume-on-behalf-of` (weakness review §5).
+admin calls the gateway's `GET /v1/models` with its credential key and the ceiling of the assistant's effective level
+(for an audience client that keeps history, max(level, client ceiling)), from phase 2 as the assistant's key
+(`x-ume-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
+admin design V8, V39). Until phase 1 the call goes with the pilot team's key of that level (weakness review §5).
 
 ### 4.8 Internal callers
 
@@ -978,7 +997,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
-| 5011 | `rag.gateway.delegation_missing` | api (Warning) | the response lacks the `x-ume-on-behalf-of` echo of the team sent and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId`, `TeamId`, `GatewayRequestId` |
+| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | the response lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
 | 5012 | `rag.tool.definition_changed` | api, admin (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
 | 5013 | `rag.tool.upstream_refused` | api, admin (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
 | 5014 | `rag.content.tag_neutralised` | api, admin (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
@@ -1461,7 +1480,7 @@ Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplificatio
 | `ResolveUsersByEmail` (Open WebUI e-mail → Entra `oid` via Graph, `ume-rag:owui-oid:*`) | dropped; group audiences through Open WebUI wait for E1 (§5.4) |
 | Audit actor `sub` | `oid`, fallback `sub` (§1.1) |
 | Strict 10 s config confirmation, readiness failing at once | grace window `Config:MaxUnconfirmedSeconds` (90 s) (§4.3 step 0, §4.5) |
-| No ceiling header for `public`; interim linked keys and the `onprem` key; "echo required once release A is in use" | `External` always sent, keys per level, `Gateway:RequireDelegationEcho` (§4.7) |
+| No ceiling header for `public`; interim linked keys and the `onprem` key; "echo required once release A is in use" | `External` always sent, one credential key per service, `Gateway:RequireDelegationEcho` (§4.7) |
 | Follow-up-only rule for history-keeping clients | same effective level from the first turn (§4.7) |
 | `rag-tools` as a P2 service (mTLS hop from the chat and admin roles, tool credential held by it) | P3 with the first external, OBO or write tool; P2 tool calls run in the in-process hub of `rag-api` and `rag-admin`, which hold the `ume-rag-tools` certificate (§9.2, §12.1) |
 | SIEM alert on any 5105; admin audit action `gate.override` | removed (§10) |
@@ -1476,6 +1495,6 @@ Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-crit
 | Removed or deferred | Where it went |
 |---|---|
 | Group-derived department scope from the gateway's catalogue in P1 (§2) | P2 with gateway release 2; P1 scope from the `departmentCodes` claim plus member groups entered by hand on our department record (weakness review §5, "settled while applying"; Keycloak group names, §2.2) |
-| Delegating keys, `x-ume-on-behalf-of`, echo check and event 5011 in P1 (§4.7) | P2 with release 2; P1 uses the pilot team's per-level keys |
+| Delegating keys, `x-ume-on-behalf-of`, echo check and event 5011 in P1 (§4.7) | acting as an assigned key from the gateway's integration phase 2; until phase 1 the pilot team's per-level keys |
 | Gateway tenant/guest refusal (§1.7) | gateway release 2 (P2); our own refusal is unchanged in P1 |
 | E1 test (§9.4) | P2 with Entra (Decisions table "P1b briefs", O3); the W3 spike in P1b; one Open WebUI instance per department until W3 and E1 are solved (§5.2) |

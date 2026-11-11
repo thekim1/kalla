@@ -252,12 +252,19 @@ ticked on a green run. Detail: `platform/repo-and-deployment.md`
 
 ### Cost attribution
 
-First, Ume.Rag meters every model call per assistant, knowledge base, step and client (reporting only). Goal:
-delegated attribution in gateway release 2, with `x-ume-on-behalf-of` = the assistant's or knowledge base's owner
-team. No gateway key per assistant: a per-assistant budget is, by convention, a gateway team per
-assistant, and usage records carry no free tag. Ume.Rag meters with the mirror's prices; the gateway stays the record. Detail: `platform/cost-attribution.md` §4–§6.
+Every assistant and every knowledge base runs on an **assigned gateway key** of its own department, chosen by id from
+the department's assigned keys; Ume.Rag stores the key's id, never a secret. Every call of a chat turn (condense, query
+embedding, rerank, answer, follow-ups) and the admin's test panel run as the assistant's key; indexing, re-embedding and
+evaluation of a knowledge base run as the knowledge base's key. The gateway charges, limits and budgets each call as
+that key, its team and department, and is the record of cost: Ume.Rag takes the cost from `x-ume-cost-usd`, from the
+stream comment it asks for with `x-ume-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
+finer split per step, joined on `x-ume-run-id` and `x-ume-step`. A per-assistant budget is the key's budget in the
+gateway, shown read-only in Ume.Rag; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
+the service's credential key and is charged to the integration's owner team; once the gateway's `features` contain
+`act-as-key`, publishing an assistant needs a key. Detail: `platform/cost-attribution.md` §4–§6;
+`gateway-changes/design.md` §5.
 
-*From:* log row 120; decided by user, 2026-11-08.
+*From:* log row 120; decided by user, 2026-11-11 (#580).
 
 ## Sign-in and roles
 
@@ -300,15 +307,31 @@ Master keys are protected files (file key provider) while no `sensitive` data ex
 
 ### Gateway keys
 
-Ume.Rag holds one gateway key per level and deployable as a secret file, with `AllowedIpRanges` and `RequireMaxResidency`; the worker never holds the open key. Until gateway release 2 these are the pilot team's own keys. From release 2 they are delegating keys owned by the platform team (`ApplyTeamPolicy = false`): only the key's request policy applies, the effective team and department are charged, and the key's budget and rate limit cap the total. No gateway key per assistant. Detail: `gateway-changes/design.md` §5.3, §5.4, §13.4.
+Each Ume.Rag service (api, admin, worker) holds **one credential key** of the gateway integration *Ume.Rag*, as a secret
+file, with `AllowedIpRanges` and `RequireMaxResidency`. A call for an assistant or a knowledge base sends
+`x-ume-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
+usage record); the answer's echo of the header is checked, and a missing or different echo fails closed
+(`Gateway:RequireDelegationEcho`). Every call still sends `x-ume-max-residency` from the data's level, and the worker
+never sends `External`. Ume.Rag relies on the gateway keeping `RequireMaxResidency` on acted requests and bounding them
+by the credential key's `AllowedResidencies`: requested in #580, pending the gateway's answer. An assigned key cannot
+authenticate by itself, so nothing per assistant is copied, stored or rotated in Ume.Rag. Each setting has one owner:
+departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,
+rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
+retrieval and answer settings, who may call an assistant and the content's level are Ume.Rag's. Configuration comes
+from the gateway's data plane with the credential key, not the Data API: the gateway's features, the assigned keys and
+the models with their limits and prices from `GET /v1/ume/context` and `GET /v1/models`, polled with `If-None-Match`;
+departments, teams and member groups stay on the Data API (`OrgSync:DataApiKey`) until the context lists every active
+department with its member groups. Detail:
+`gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
-*From:* log rows 33, 55, 66, 120; decided by user, 2026-11-08.
+*From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580).
 
 ### Gateway releases
 
-The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-ume-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal, delegation with `x-ume-on-behalf-of`. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §13.
+The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-ume-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/ume/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-ume-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Ume.Rag tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
 
-*From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06.
+*From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06; the integration phases decided by user, 2026-11-11
+(#580).
 *Also:* "Gateway release 1 and shared Keycloak as built"
 
 ### Interim gateway for P1a
@@ -328,7 +351,7 @@ Levels are `public`, `internal` and `sensitive`; `sensitive`, the municipality's
 ### Residency per level
 
 Every model call sends an explicit ceiling from its data's level: `public` `External`, `internal` `Eu`, `sensitive`
-`OnPrem`. The worker holds no `External` key, so its calls run `public` at `Eu`; embedding calls use the profile's
+`OnPrem`. The worker never sends `External`, so its calls run `public` at `Eu`; embedding calls use the profile's
 `MaxResidency`. Each client in the registry has its own classification ceiling. `Gateway:MaxResidency` only lowers it; under register M2 it is `Eu`, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
 
 *From:* log rows 14, 17, 25, 55, 77, 100; decided by user, 2026-10-30.
@@ -615,13 +638,16 @@ request's `max_tokens` is the override, else the model's limit less the estimate
 else left out when the limit is unknown (the prompt budget then keeps its 1,024-token answer reserve). There is no fixed
 4,096 ceiling. An optional platform-wide ceiling, `Settings.Chat.MaxAnswerTokens` (unset by default), guards against
 long, costly answers on models with large output limits: when set, it caps every answer's `max_tokens`, override
-included, and `max_tokens` is then always sent, also when the model's limit is unknown. A platform admin enters both limits on the mirror row until the gateway's catalogue carries them. The
-test panel shows the `max_tokens` sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
+included, and `max_tokens` is then always sent, also when the model's limit is unknown. A platform admin enters both
+limits on the mirror row until the gateway sends them (`ume.context_window`, `ume.max_output_tokens` on
+`GET /v1/models`); then the sync fills them and the manual fields go. The assistant's gateway key's output cap
+(`max_output_tokens` in `/v1/ume/context`), when set, caps every answer too. The test panel shows the `max_tokens`
+sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
 
 *From:* decided by user, 2026-11-11 (#548); the platform ceiling decided by user, 2026-11-11, from the main session's
-review of #548.
+review of #548; the limits from the gateway and the key's output cap decided by user, 2026-11-11 (#580).
 
 ## Evaluation
 
@@ -640,7 +666,7 @@ Go-live and the pilot's end need hand-graded answers: correct ≥ 80 %, citation
 
 Retrieval evaluation is advisory and never blocks: no gates, no `building` state, no floor. Questions point at
 documents; generated sets (up to 100 judge-filtered questions) are made and judged at the collection's ceiling
-(`sensitive` `OnPrem`, `internal` and `public` `Eu`, as the worker has no `External` key; lowered by
+(`sensitive` `OnPrem`, `internal` and `public` `Eu`, as the worker never sends `External`; lowered by
 `Gateway:MaxResidency`) by any gateway chat model listed there (`Settings.EvaluationModel`, `EvaluationJudgeModel`),
 without `temperature`, JSON output, a fenced reply accepted. recall@10 and MRR run on the full collection after each
 publish and nightly; question embeddings come from the cache. Feedback enters only as editor-rewritten questions without personal data; answer judging is P2.
@@ -694,9 +720,13 @@ after Save, naming the affected objects. Detail: `admin/design.md` §5.5.2, §5.
 
 ### Model pickers show what the key may use
 
-Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the platform's key at the relevant ceiling and cached 5 minutes per level. A model the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint. V8 (publish) and V32 (save) stay authoritative. Detail: `admin/design.md` §4.5, §4.6.
+Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the service's
+credential key at the relevant ceiling and, for an assistant or knowledge base with a gateway key, as that key
+(`x-ume-on-behalf-of`, once the gateway's `features` contain `act-as-key`), cached 5 minutes per ceiling and key. A model
+the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint.
+V8 (publish), V32 (save) and V39 (the object's key) stay authoritative. Detail: `admin/design.md` §4.5, §4.6, §4.10.
 
-*From:* log rows 51, 113; decided by user, 2026-11-07.
+*From:* log rows 51, 113; decided by user, 2026-11-07; the object's key decided by user, 2026-11-11 (#580).
 
 ### Upload knowledge bases
 

@@ -344,8 +344,9 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Parser `timeout`, `worker_crashed`, `resource_limit` / `ocr_failed`, `conversion_failed` | half the range inside the job; a single page that still fails is a **missing page** (`degraded` while ≤ 10 % and ≤ 20 pages, else fatal; 6c §3.3) / transient once, then as before | – / yes | – / back-off |
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429, or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
-| Gateway 402 (budget used up) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted` |
-| Gateway 403 `max_residency_not_met`, `delegation_not_allowed`; 400 | fatal, reason `gateway.<code>` | – | – |
+| Gateway 402 (budget used up: the knowledge base's key, its team or department) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
+| The knowledge base's gateway key unusable: gateway `403 delegation_not_allowed` or `403` with the key's code (`key_disabled`, …) | transient | yes | as 402, reason `gateway.key_unavailable` |
+| Gateway 403 `max_residency_not_met`; 400 | fatal, reason `gateway.<code>` | – | – |
 | Gateway answer above the residency ceiling (`x-ume-residency`) | fatal, result discarded, event 5003 | – | – |
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |
 | Stage version not supported here (§5.2) | transient | no | 30 s |
@@ -422,21 +423,25 @@ data-model §1.1) serves ~20 concurrent jobs.
 ### 7.7 Gateway calls
 
 Every call from a stage goes through `IGatewayClient` with headers set by the engine, never by the stage. The worker
-holds the per-level delegating keys `OnPrem` and `Eu` (never the open key, simplification pass §6); the client's
-`DelegatingHandler` refuses a call without an explicit ceiling or with a key that does not match it. **Until gateway
-release 2** (P1, weakness review §5) these are the pilot department's team's own `OnPrem` and `Eu` keys, every call
-is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is checked).
+holds one credential key (`Gateway__Key`, gateway-changes §5.1; `AllowedResidencies` `[OnPrem, Eu]`) and never sends
+`External`; the client's `DelegatingHandler` refuses a call without an explicit ceiling or with one above `Eu`. Every
+call of a job runs as the **knowledge base's gateway key** (`Collections.GatewayKeyId`): indexing, re-embedding and
+evaluation are charged, limited and budgeted as that key (cost-attribution §4.1). A collection without a key, and
+every call before the gateway's `features` contain `act-as-key`, runs as the credential key. **Until the gateway's
+integration phase 1** (P1, weakness review §5) the worker holds the pilot department's team's own `OnPrem` and `Eu`
+keys, every call is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is checked).
 
 | Header | Value |
 |---|---|
-| `x-ume-on-behalf-of` | from gateway release 2 (P2): the owning team of the document's collection (`Collections.OwnerTeamId`; gateway design §5.2) |
-| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker has no `External` key) |
+| `x-ume-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
+| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
 | `x-ume-run-id`, `x-ume-step` | `RunId` (GUID) and stage **type** (`embed`, `eval-judge`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 
 The response is checked before anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when
 `x-ume-on-behalf-of` was sent, its echo must match (`Gateway:RequireDelegationEcho`), else fatal
-`gateway.delegation_not_applied`. `x-ume-cost-usd` is added to the stage's `NodeUsage`.
+`gateway.delegation_not_applied` (event 5011). `x-ume-cost-usd`, the gateway's cost of the call, is added to the
+stage's `NodeUsage`.
 
 HTTP clients come from `IHttpClientFactory`, one per downstream: the named gateway clients (`AddGatewayClient`) with
 the residency handler and no standard resilience handler, the typed `ParserClient` with the parser's timeout, and the
@@ -1152,4 +1157,4 @@ Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-crit
 
 | Item | Where it went |
 |---|---|
-| `x-ume-on-behalf-of` on worker calls and the `gateway.delegation_not_applied` echo check in P1 (§7.7) | P2 with gateway release 2; P1 uses the pilot team's `OnPrem` and `Eu` keys |
+| `x-ume-on-behalf-of` on worker calls and the `gateway.delegation_not_applied` echo check in P1 (§7.7) | from the gateway's integration phase 2, as the knowledge base's key; until phase 1 the pilot team's `OnPrem` and `Eu` keys |

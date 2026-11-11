@@ -23,10 +23,10 @@ nobody needs to read them end to end.
 | Chat | [`chat-api/design.md`](chat-api/design.md) | OpenAI-compatible chat, frames, condense, feedback, history |
 | Admin | [`admin/design.md`](admin/design.md) | The admin API, validation rules (V-numbers), every admin page |
 | Tools (P2) | [`tools/design.md`](tools/design.md) | Skills, the tool hub, MCP |
-| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, delegation, member groups in the LLM gateway |
-| Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: Ume.Rag's metering first, the gateway's delegated attribution as the goal |
+| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Ume.Rag relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
+| Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: each assistant and knowledge base on its own assigned gateway key, the gateway's cost as the record, Ume.Rag's split per step |
 | Upload quality | [`platform/upload-quality-review.md`](platform/upload-quality-review.md) | Assessment (not binding): how well uploaded files are handled, the gaps U1–U7 and a proposed order |
-| Keys and budgets per assistant | [`platform/assistant-keys-and-budgets-options.md`](platform/assistant-keys-and-budgets-options.md) | Options for a decision (not binding): Ume.Rag keys scoped to an assistant, and how a per-assistant budget works with the gateway |
+| Keys and budgets per assistant | [`platform/assistant-keys-and-budgets-options.md`](platform/assistant-keys-and-budgets-options.md) | Options paper (not binding); its outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open |
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.

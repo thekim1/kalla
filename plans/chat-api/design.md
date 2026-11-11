@@ -6,7 +6,7 @@ redesigning: `IRetriever`, `RetrievalResult`, `Coverage`, `MarkCited`, download 
 the latency budget of [`../knowledge-api/design.md`](../knowledge-api/design.md) (§2.2, §3.6, §4.6, §5, §5.5, §9, §10,
 §11, §15, §16); `RagPrincipal`, the client registry, `IAccessPolicy`, the OpenAI error shape, the residency ceiling,
 Open WebUI trust, keys and security events of [`../identity/design.md`](../identity/design.md) (§3–§7, §10);
-delegation, residency ceiling, key flags, run headers and the two releases of
+acting as an assigned key, residency ceiling, key flags, run headers, the stream cost and the releases of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §7.1, §13); the `chat` tables, config
 versioning, envelope encryption with bucket keys, retention and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.1, §2.3, §5, §7, §8, §11, §12.23) and level policies of
@@ -34,7 +34,7 @@ package source had to be checked for this step.
 | 6 | History window | Last **10 messages, ≤ 4,000 tokens**, oldest dropped first, old markers stripped, sources never resent; per assistant (§6.3, answered 2) |
 | 7 | Prompt budget | Character estimate (÷ 3, Swedish-safe) against the assistant's `ContextTokens`; fixed priority: frame + question + answer reserve, then sources, then history (§6.3) |
 | 8 | Sources | In the final user message as `<source n="…">` blocks marked untrusted; numbered per document by best rank (knowledge §10.4); `</source` neutralised (§7) |
-| 9 | Residency | Explicit ceiling on **every** call (`External`/`Eu`/`OnPrem`), enforced by a `DelegatingHandler` that also checks the per-level key; `x-ume-residency` and the delegation echo checked **before our first byte**; history-keeping clients run every turn at max(assistant level, client ceiling) (§8) |
+| 9 | Residency | Explicit ceiling on **every** call (`External`/`Eu`/`OnPrem`), enforced by a `DelegatingHandler` that also sets the assistant's gateway key (`x-ume-on-behalf-of`) and refuses a ceiling above the service's maximum; `x-ume-residency` and the key's echo checked **before our first byte**; history-keeping clients run every turn at max(assistant level, client ceiling) (§8) |
 | 10 | Citations | Streamed `[n]` markers parsed across chunks and **renumbered in order of first citation**; Open WebUI gets one `source` event per cited document just before the marker, other clients `url_citation` annotations; uncited sources never shown (§9) |
 | 11 | Output filter | Markdown/HTML images removed; links to hosts outside the allow-list de-linked; bounded look-ahead transducer (§9.4) |
 | 12 | Not found | Coverage `Low` (vector and keyword both weak) → with `generalKnowledge` `off` (default) or `supplement` the assistant's fixed Swedish or English text + contact links, no model call; with `fallback` or `open` a model answer without sources behind a fixed caveat line (`answered-general`, §10.4); conversational messages skip retrieval and the gate; a failed condense never yields the not-found text; `Unknown` → model answer from keyword results with a caveat, or a "search unavailable" text when nothing was found (§6.2, §10, answered 3) |
@@ -56,7 +56,7 @@ package source had to be checked for this step.
 | Project | Owns (chat) | Notes |
 |---|---|---|
 | `Ume.Rag.Domain` | `ChatTurn`, `AssistantChatSettings` (parsed `QuerySteps`), `AnswerEvent`, `IAnswerStrategy`, `ConversationKey`, `Language` | pure; table-driven unit tests |
-| `Ume.Rag.Infrastructure` | `IGatewayClient.OpenChatStreamAsync` / `CompleteChatAsync` (shared with the worker, 6a §7.7), `ResidencyCeilingHandler` (`DelegatingHandler`, §8.1), `SseReader` + `SseEvent` (copied, `ProviderModels.cs:200-238`, `:277-335`), `ChatCipher` (AES-GCM rows, data-model §7), `IKeyProvider`, `GatewayKeySource` (delegating key per level), `RateLimiter` (Lua, gateway pattern) | `Microsoft.Extensions.AI.OpenAI` is **not** used by chat: its streaming API hides the response headers the residency check needs (§20) |
+| `Ume.Rag.Infrastructure` | `IGatewayClient.OpenChatStreamAsync` / `CompleteChatAsync` (shared with the worker, 6a §7.7), `ResidencyCeilingHandler` (`DelegatingHandler`, §8.1), `SseReader` + `SseEvent` (copied, `ProviderModels.cs:200-238`, `:277-335`), `ChatCipher` (AES-GCM rows, data-model §7), `IKeyProvider`, `GatewayKeySource` (the service's credential key; the pilot team's keys per level until gateway phase 1), `RateLimiter` (Lua, gateway pattern) | `Microsoft.Extensions.AI.OpenAI` is **not** used by chat: its streaming API hides the response headers the residency check needs (§20) |
 | `Ume.Rag.Answering` (admin design §2.1) | chat answer core: `RagAnswerStrategy`, `MessageKind` (conversational check), `Condenser`, `PromptBuilder`, `TokenBudget`, `AnswerFilter` (markers, images, links), `CitationEmitter`, `LanguageGuess` (P2 `AgentAnswerStrategy`) | no HTTP; referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi`, so the admin test panel runs the exact chat path in process |
 | `Ume.Rag.Api` role `chat` | endpoint group, `ChatPipeline`, `ChatStreamWriter`, `ConversationWriter` (BackgroundService), `FeedbackImporter` (BackgroundService), `ConversationIds` | OpenAPI document `chat` |
 | `Ume.Rag.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Ume.Rag.Answering`) | called in process (knowledge §2.1–§2.2) |
@@ -226,13 +226,14 @@ Swedish user-facing variants only in the fixed texts of §10.
 | 400 | `invalid_request`, `unsupported_parameter`, `tools_not_supported`, `attachments_not_supported`, `continue_not_supported`, `question_too_long`, `comment_not_stored` | §3.2, §3.5; an invalid `ume` member (`param` `ume` or `ume.<member>`, §3.8) |
 | 400 | `context_length_exceeded` | the question plus the mandatory prompt parts do not fit the assistant's context (§6.3); also mapped from the gateway's code (`GatewayErrors.cs:27`) |
 | 401 | identity §5.2/§6.3 reasons (`invalid_key`, `user_jwt_missing`, …) | `WWW-Authenticate: Bearer` |
-| 402 | `budget_exceeded` | gateway 402 mapped (the team's budget, `GatewayErrors.cs:34`) |
+| 402 | `budget_exceeded` | gateway 402 mapped (the budget of the assistant's gateway key, its team or department: the scope the gateway names, `GatewayErrors.cs:34`); the turn's outcome is `unavailable` |
 | 403 | `client_disabled`, `credential_not_allowed`, `subject_not_allowed`, `permission_missing` | identity §4.3 steps 1–4 |
 | 404 | `model_not_found`, `conversation_not_found`, `message_not_found` | identity steps 5–10; foreign or forged conversation ids (§11.1) |
 | 413 | `request_too_large` | body > 2 MB |
 | 429 | `rate_limited` | per-user limit (§4.1 step 4) or the gateway's 429 (its `Retry-After` passed on) |
-| 502 | `upstream_error` | gateway 5xx other than 503, malformed answer, a failed residency or delegation check (§8.2; the message never names the residency); gateway `403 max_residency_not_met` (no configured target within the ceiling: a configuration fault the save-time model validation should prevent; logged at Error) |
+| 502 | `upstream_error` | gateway 5xx other than 503, malformed answer, a failed residency or key-echo check (§8.2; the message never names the residency); gateway `403 max_residency_not_met` (no configured target within the ceiling: a configuration fault the save-time model validation should prevent; logged at Error) |
 | 503 | `config_unconfirmed`, `membership_unavailable`, `search_unavailable`, `upstream_unavailable` | identity steps 0/11, knowledge §3.6, gateway unreachable or `503 no_eligible_provider` (in-ceiling targets drained or circuit-open; its `Retry-After` passed on) |
+| 503 | `assistant_unavailable` | the assistant's gateway key is unusable: not `Active`, its owner inactive or missing from `GatewayKeys` (checked at step 7, before any model call), or the gateway refuses it (`403 delegation_not_allowed` or `403` with the key's code, gateway-changes §5.7); the message names the reason without the key's name; the turn's outcome is `unavailable` and the admin raises the attention item (admin §5.5.1) |
 
 After the first byte only an SSE error chunk is possible (§9.6).
 
@@ -322,7 +323,7 @@ data: [DONE]
 | 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). Keyed per (client, subject), the subject being the key id for key callers and the user with the Open WebUI JWT; `Settings.Chat.messagesPerMinutePerUser` and `allowedLinkHosts` fall back to the deployment knobs `Chat:MessagesPerMinutePerUser` and `Chat:AllowedLinkHosts` when unsaved. From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute. **Per key** (Decisions "Chat rate limit per key"): when the key itself is the subject (`SubjectKind.Application`: `integration` and `internal` clients, where one shared app key serves every user of the app), the limit is the key's `Keys.RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser`; the window key stays (client, subject). Open WebUI users (subject from the JWT) always get the per-user value; their connection key's `RequestsPerMinute` does not apply. A key edit empties the key cache (identity §6.3 step 1), so a new value applies at once; a rotated key copies the value (`KeyRotation.cs:44`) and starts its own window | 429 |
 | 5 | Policy | `IAccessPolicy.Decide(who, assistant, Chat)` at the current snapshot, within the config grace window (identity §4.3 steps 0–11) | 404 `model_not_found` (+5002/5005), 503 |
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
-| 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
+| 7 | Effective level and key | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); the ceiling header from it. The assistant's `GatewayKeyId` from the snapshot: every model call of the turn runs as it (§8.1); a key the `GatewayKeys` mirror shows unusable refuses the turn | 503 `assistant_unavailable` |
 | 8 | Language | `LanguageGuess` on the question (§10.3) | – |
 | 9 | Condense | follow-ups that are not self-contained (§5); a question over 2,000 characters on every turn instead (§5.1) | `Chat:CondenseTimeout` (1,200 ms on the EU route) → raw question; `Chat:LongQuestionCondenseTimeout` (3 s) → its first 2,000 characters |
 | 10 | Retrieve | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, TopK, Hybrid, filters, Section, Chat, true, RunId: messageId))` (knowledge §2.2) | `RetrievalDeniedException` → OpenAI code; 503 `search_unavailable` |
@@ -485,8 +486,9 @@ O = the model's MaxOutputTokens from the mirror (null when unknown)
 C = context = QuerySteps.answer.contextTokens if set, else W, else 16,384;
     ≤ W when known (an override above it is lowered); ≤ Settings.Chat.MaxContextTokens when set
 X = platform ceiling = Settings.Chat.MaxAnswerTokens (null when unset, the default)
+K = the assistant's gateway key's output cap, GatewayKeys.MaxOutputTokens (null when unset or without a key)
 R = output limit = QuerySteps.answer.maxOutputTokens if set (≤ O when known), else O, else unknown;
-    ≤ X when set (an override above it is lowered); R = X when R is unknown and X is set
+    ≤ X and ≤ K when set (an override above either is lowered); when R is unknown, the lower of X and K that is set
 F = answer reserve in the budget = R if set by the override, else 1,024
 M = frame + assistant system prompt + language line + question                 (mandatory)
 if M + F + 1,000 > C            → 400 context_length_exceeded
@@ -506,7 +508,9 @@ holds (the estimate errs high, so the real room is a little larger). The gateway
 the gateway sets its key or team `MaxOutputTokens` when one exists (`RequestPolicy.cs:170`), else the provider's
 default applies (the gateway's Anthropic adapter sends 4,096, `AnthropicTranslator.cs:14`; OpenAI and vLLM leave the
 room left in the window, to verify per provider, §22). A platform admin enters `O` and `W` on the mirror row until the
-catalogue carries them (admin §4.10, gateway-changes §7.3).
+gateway sends them on `GET /v1/models` (admin §4.10, gateway-changes §7.3). The key's cap `K` is the gateway's guard
+rail (Decisions "Answer length from the model"): the assistant's answer length never exceeds it, and the test panel's
+`maxTokensSource` is `key` when `K` decided the value.
 
 **Platform ceiling** (`X`, same Decisions entry). A platform admin may set `Settings.Chat.MaxAnswerTokens` to bound the
 answer length, and with it the cost, of every assistant on every model. Unset (the default), nothing changes. Set, it
@@ -666,8 +670,9 @@ it separately and the frame is prepended at run time). P2: each linked skill's b
 
 ```http
 POST {Gateway:BaseUrl}/v1/chat/completions
-Authorization: Bearer <rag-api delegating key of the ceiling>
-x-ume-on-behalf-of: <assistant OwnerTeamId>              (from gateway release 2, P2; not sent in P1)
+Authorization: Bearer <rag-api's credential key>
+x-ume-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2, features act-as-key; none without a key)
+x-ume-stream-cost: 1                                     (streamed calls, from gateway phase 2, features stream-cost)
 x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
 x-ume-step: answer | condense | assistant-test   (assistant-test: test runs in rag-admin, admin design §7.4)
@@ -691,21 +696,21 @@ traceparent: …
 - `temperature` only when `QuerySteps.answer.temperature` is set (default unset: the model's own default; some models,
   e.g. the Claude models on the gateway, refuse it); no other sampling parameter.
 
-**Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
-three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
-delegation, so the gateway also applies that team's request policy, which stays empty), and every call is charged to
-the pilot team. From release 2 (P2) they are delegating keys:
-
-| Ceiling | Key (`rag-api`, with `AllowedIpRanges`, `RequireMaxResidency`, `ApplyTeamPolicy` false) | Used for |
-|---|---|---|
-| `OnPrem` | `OnPrem`-only delegating key | `sensitive` answers, condense (every level, once on-prem exists), query embeddings of an on-prem profile (knowledge §5.2) |
-| `Eu` | `Eu`-max delegating key | `internal` answers; `public` answers in history-keeping clients with ceiling `internal` |
-| `External` | open delegating key | `public` answers in clients without history |
+**Keys and ceiling** (gateway design §5, §13.4; identity §4.7). **Every call of a turn runs as the assistant's
+gateway key**: the answer, condense and long-question condense, the query embedding (knowledge §5.2), rerank and the
+follow-up suggestions, so a turn's cost, limits and budget are the assistant's key's (cost-attribution §4.1). rag-api
+authenticates with its one credential key; from gateway phase 2 each call adds `x-ume-on-behalf-of` with the
+assistant's `GatewayKeyId`, and an assistant without a key runs as the credential key. **Until the gateway's
+integration phase 1** (P1; reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control))
+rag-api holds the pilot department's team's own keys per level (`OnPrem`-only, `Eu`-max, open; `AllowedIpRanges`,
+`RequireMaxResidency`), picks the one of the call's ceiling, and every call is charged to the pilot team.
 
 `ResidencyCeilingHandler`, a `DelegatingHandler` on every gateway `HttpClient`, refuses (throws before sending) any
-request without an explicit `x-ume-max-residency` or whose key does not belong to that ceiling; unit-tested for every
-call site (answer, condense, judge, evaluation generation; the worker's NER/LLM stages use the same handler). Keys are
-secret files, never logged; the worker never holds the open key. The
+request without an explicit `x-ume-max-residency` or with a ceiling above the service's maximum (until phase 1: whose
+key does not belong to that ceiling), sets `x-ume-on-behalf-of` from the call's object key and checks its echo;
+unit-tested for every call site (answer, condense, follow-ups, query embedding, rerank, judge, evaluation generation;
+the worker's NER/LLM stages use the same handler). Keys are secret files, never logged; the worker never sends
+`External`. The
 handler exempts `GET /v1/models` from the `x-ume-residency` check of §8.2, because the gateway sets that header only
 when a deployment answers; the ceiling and key checks still apply.
 
@@ -719,11 +724,11 @@ The call uses `HttpCompletionOption.ResponseHeadersRead`; nothing is written to 
    case-insensitively and compared by `OnPrem < Eu < External` with the call's ceiling. Missing or above → abort
    (dispose the response, which cancels the gateway stream), event **5003** `rag.residency.refused`, 502
    `upstream_error`. `public` calls carry `External`, so the check always applies.
-3. **Delegation echo** (from gateway release 2, P2; when `Gateway:RequireDelegationEcho` is set): `x-ume-on-behalf-of` equals the team id sent;
-   else abort, new event **5011** `rag.gateway.delegation_missing`, 502.
+3. **Key echo** (when `x-ume-on-behalf-of` was sent and `Gateway:RequireDelegationEcho` is set): the answer's
+   `x-ume-on-behalf-of` equals the key id sent; else abort, event **5011** `rag.gateway.delegation_missing`, 502.
 4. **PII header** (`GatewayHeaders.cs:36`): recorded and counted (`rag.chat.gateway.pii{action}`); `blocked` arrives as
-   an error status. Delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so each key's
-   PII policy is the gateway owner's choice (knowledge §5.2 note).
+   an error status. The PII policy is the assistant's key's, set by its department in the gateway and shown read-only
+   on the assistant page (admin §5.5.4).
 
 **Effective level with history (decision).** A client that keeps history (`Clients.StoresHistory`, Open WebUI) resends
 earlier turns and lets a user switch the model mid-chat; the earlier turns may come from an assistant of a higher
@@ -746,7 +751,7 @@ WebUI use EU or on-prem models.
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | one 502/504 retry with the same ceiling and key after `Gateway:RetryDelay` (250 ms) (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
 | Client disconnect | `HttpContext.RequestAborted` cancels the gateway read and disposes the response; the gateway accounts it as `ClientCancelled` 499 (`GatewayRequestHandler.cs:418-422`); the partial answer is recorded with `Outcome = cancelled` (§12) |
-| Usage | from the final chunk's `usage` (stream) or the JSON body; `x-ume-cost-usd` exists only on complete JSON answers (`GatewayHeaders.cs:20-21`), so streamed `CostUsd` stays null in P1 and is reconciled from the gateway's usage feed by run id in P2 (§12.4) |
+| Usage and cost | tokens from the final chunk's `usage` (stream) or the JSON body; cost from `x-ume-cost-usd` on complete JSON answers (`GatewayHeaders.cs:20-21`) and, on a stream sent with `x-ume-stream-cost: 1` (gateway phase 2), from the SSE comment `: ume-cost-usd=<usd>` the gateway writes after the provider's last event. `SseReader` reads the comment as the call's cost and **never forwards it** to rag-api's clients (§9.1); an aborted stream has none and its cost comes from the gateway's usage by run id (§12.4) |
 
 ## 9. Streaming and citations
 
@@ -755,7 +760,8 @@ WebUI use EU or on-prem models.
 As the gateway's `StreamAsync` (`Pipeline/GatewayRequestHandler.cs:375-416`): `DisableBuffering()`, `200`,
 `text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-store`, `X-Accel-Buffering: no`, `StartAsync`, each
 event written with `SseEvent.WriteTo(writer)` and **one flush per event**. Our chunks are re-serialised (content is
-rewritten), with a source-generated serializer into the pipe:
+rewritten), with a source-generated serializer into the pipe; SSE comment lines from the gateway (the stream cost,
+§8.3) are consumed and never written to our client:
 
 ```text
 data: {"id":"chatcmpl-0193…","object":"chat.completion.chunk","created":1764000123,"model":"bygglov","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
@@ -1064,10 +1070,11 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
 - Crash (no drain): turns queued or in the uncommitted batch are lost: normally ≤ 250 ms of traffic; during a database
   outage up to the capacity. The answer was delivered; what is lost is our record, its statistics and the possibility
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
-- `CostUsd` for streamed answers (P2): a job reads the gateway Data API usage feed (`/v1/usage/records`, cursor by id,
-  permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2, gateway
-  design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then the writer stores `CostUsd` 0
-  and TTFT null (the chat path measures neither), and cost is visible in the gateway's own reports per team.
+- `CostUsd`: from the answer itself (`x-ume-cost-usd`, or the stream cost comment from gateway phase 2, §8.3). For a
+  call that carries neither (an aborted stream), a job in `rag-admin` reads the gateway's Integration API usage by run
+  id (`GET /integration/v1/usage?runId=`, scope `usage.read`, gateway phase 3; gateway-changes §5.6) and fills
+  `Messages.CostUsd` and the daily totals. Until then the writer stores `CostUsd` 0 for such calls and TTFT null (the
+  chat path measures neither), and cost is visible in the gateway's own reports per key.
 - **No sticky sessions**: the chat path keeps no per-instance state a request depends on. The history is the client's,
   the config snapshot is per instance (90 s grace, then 503), conversation ids are signed and verified without SQL,
   rate limits are per instance in P1 (Redis from P2), and `Seq` is assigned under the conversation row lock, correct
@@ -1278,7 +1285,7 @@ totals).
   traces, metrics, problem bodies or cache keys.
 - **Security events**: 5001 (credentials, JWT), 5002 (denials incl. `conversation_not_owned`), 5003 (residency on
   answer or condense call), 5004, 5005, new **5011** `rag.gateway.delegation_missing` (Warning; `Step`,
-  `AssistantId`, `TeamId`, `GatewayRequestId`); SIEM alerts on any 5003 or 5011 from the chat role.
+  `AssistantId`, `GatewayKeyId`, `GatewayRequestId`); SIEM alerts on any 5003 or 5011 from the chat role.
 - **Dashboard** *Data plane*: TTFT and overhead p50/p95, outcome shares per level, condense outcomes, citation
   validity, writer queue, feedback import health; per assistant (from the daily totals): not-found and
   `uncited_answer` rates (§18.8).
@@ -1293,8 +1300,10 @@ totals).
 - Request parsing table: every field of §3.2 (accepted, ignored, refused), content parts, sizes, last-message rule.
 - `MessageKind`: greetings and thanks (sv/en) conversational; short questions with one content word (`bygglov?`) not;
   condense skip heuristic on a labelled set of follow-ups.
-- `ResidencyCeilingHandler`: a request without `x-ume-max-residency` is refused before sending; a key of another
-  ceiling is refused; every call site (answer per level, condense, judge) sends the expected ceiling and key.
+- `ResidencyCeilingHandler`: a request without `x-ume-max-residency` is refused before sending; a ceiling above the
+  service's maximum is refused; every call site (answer per level, condense, follow-ups, query embedding, rerank,
+  judge) sends the expected ceiling and, for an assistant with a key, its `x-ume-on-behalf-of`; a missing or different
+  echo aborts with 5011; the stream cost comment is read and never reaches the client.
 - Coverage handling (§6.2): `Low` → not-found; `Low` after condense timeout → model answer; conversational → no
   retrieval, no-sources frame.
 - General knowledge (§6.2, §7.3, §10.4): per level the frame lines (golden prompt files); `Low` with `off`/`supplement`
@@ -1449,7 +1458,7 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
 | `ingestion-worker/design-engine.md` job classes | P2 class `attachment` (high priority, concurrency 2; scan → parse → chunk → PII → embed → post to API) |
 | `ingestion-worker/design-processing.md` §14.8 | answer-level evaluation (§18.8) runs in `rag-admin` (run kind `answers`), judge `Settings.EvaluationJudgeModel`; the worker references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` |
 | `platform/repo-and-deployment.md` §2.2, §3 | `Microsoft.Extensions.AI.OpenAI` not needed by the chat role; settings `Chat:*` (`PublishApiReference`, `CondenseTimeout` 600 ms, `GatewayHeadersTimeout` 15 s, `StreamIdleTimeout`, `MaxAnswerDuration`, `WriterEnqueueTimeout`, `CharsPerToken`), `Gateway:RequireDelegationEcho`, `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey`; `Gateway:AttributionMode` and `Gateway:SendResidencyCeiling` removed (always on) |
-| `platform/repo-and-deployment.md` §6.1, §6.3, §7.1 | egress `rag-api` → Open WebUI host (feedback import and pruning); secrets: the `OnPrem`, `Eu` and open delegating keys of `rag-api` (and `rag-admin` for the test panel and §18.8), `OpenWebUi__AdminApiKey`, `Security__ConversationIdKeys__<kid>` (made by `init-deployment.sh`, except the Open WebUI key which an operator creates) |
+| `platform/repo-and-deployment.md` §6.1, §6.3, §7.1 | egress `rag-api` → Open WebUI host (feedback import and pruning); secrets: the credential key of `rag-api` (and of `rag-admin` for the test panel and §18.8; until the gateway's integration phase 1 the `OnPrem`, `Eu` and open keys of each), `OpenWebUi__AdminApiKey`, `Security__ConversationIdKeys__<kid>` (made by `init-deployment.sh`, except the Open WebUI key which an operator creates) |
 | `platform/repo-and-deployment.md` §1, §4.1, §12.8 | `tests/Ume.Rag.Benchmarks/ChatTurnBenchmarks.cs`; overhead run under `benchmarks/release-test`; `compose.openwebui.yaml` env of §4.3; no pruning sidecar |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway | streams with configurable usage chunk, broken stream, stall, missing `[DONE]`; echoes `x-ume-session`; refuses requests without `x-ume-max-residency`; modes `503` + `Retry-After` and `403 max_residency_not_met` |
 | `platform/repo-and-deployment.md` §9 | metrics of §17 |
@@ -1576,7 +1585,7 @@ Removed or deferred, with where each went:
 | Per-conversation data keys, 7-day epochs, epoch race index, tombstones (`DeletedByUserAt`), in-process conversation key cache | bucket keys per (level, expiry month) (§12.3); user delete deletes rows (§13.2) |
 | Crypto-shredding on retention and user delete | switched off until A1; retention deletes rows (§13) |
 | Tier resolver, per-tier writer batches, tier-local tables, composite `(Id, Classification)` conflict targets | one database, plain `Classification` (§12.2) |
-| Keys per gateway release (linked keys, B → C → A), no ceiling for `public` | per-level delegating keys, `ResidencyCeilingHandler`, `External` for `public`, one combined release (§8.1) |
+| Keys per gateway release (linked keys, B → C → A), no ceiling for `public` | one credential key per service with the assistant's gateway key, `ResidencyCeilingHandler`, `External` for `public` (§8.1) |
 | Effective level raised only when the request carries earlier assistant turns | max(assistant level, client ceiling) on every turn for history-keeping clients (§8.2) |
 | `Low` coverage from vector distance alone; not-found after a failed condense | vector and keyword both weak; conversational skip; condense failure never yields the not-found text (§6.2) |
 | Condense on every follow-up with a 1.2 s budget | skip heuristic and 600 ms (§5) |
@@ -1608,4 +1617,4 @@ Reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilo
 
 | Item | Where it went |
 |---|---|
-| `x-ume-on-behalf-of`, the delegation echo check (§8.2 step 3) and event 5011 in P1 | P2 with gateway release 2; P1 uses the pilot team's per-level keys (§8.1) |
+| `x-ume-on-behalf-of`, the delegation echo check (§8.2 step 3) and event 5011 in P1 | the assistant's gateway key from the gateway's integration phase 2; until phase 1 the pilot team's per-level keys (§8.1) |

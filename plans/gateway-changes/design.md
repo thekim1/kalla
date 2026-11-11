@@ -1,6 +1,7 @@
 # Gateway changes: detailed design
 
-Detail step 4 of the Ume.Rag design. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
+Detail step 4 of the Ume.Rag design. Feature A (§5) is the gateway's integrations design (`docs/integrations.md` in
+the gateway repository, decided by user, 2026-11-11, #580); this document keeps only what Ume.Rag relies on from it. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
 gateway side of [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10 (feature C and the
 tenant/guest refusal are designed there for both systems; this document only turns them into gateway work). The ADR
 rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
@@ -19,15 +20,15 @@ Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5), s
 **Two releases**, each rolling-update safe; the gateway's own release practice decides the numbers (reasoning:
 [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).
 **Release 1, in P1b before the Ume.Rag pilot goes live**: feature B and the FakeLlm `dimensions` addition (with the
-tool passthrough tests). **Later (P2): release 2**, before the first second-department or group audience: features C
-and A (with the run grouping headers). Until release 1, P1a runs against the gateway as it is (v0.8.5) on an interim
+tool passthrough tests). **Later (P2): release 2**, before the first second-department or group audience: feature C.
+Feature A (with the run metadata) follows the gateway's own integration phases 1–3 (§5). Until release 1, P1a runs against the gateway as it is (v0.8.5) on an interim
 test/dev instance (§13.4). The letters name features:
 
 | Feature | Content | Migration | RAG platform afterwards |
 |---|---|---|---|
 | **B** (release 1) | Residency ceiling `x-ume-max-residency`, key flag `RequireMaxResidency`, 403/503 rule (§3) | `KeyResidencyCeiling` | sends an explicit ceiling on every call (`External` for `public`), with the pilot team's per-level keys until release 2 (§13.4) |
 | **C** (release 2) | Department member groups from the group claim, `/bff/user` `departmentSources` (§4); tenant and guest refusal for admin sign-in and Data API tokens (§4.6); `code` on catalog teams | `DepartmentMemberGroups` | syncs `memberGroups` and team codes; same group rule as the gateway; same `TenantId`/`RefuseGuests` |
-| **A** (release 2) | Delegated attribution `x-ume-on-behalf-of`, key flag `ApplyTeamPolicy` (§5); run grouping headers (§7.1) | `KeyDelegation`, `UsageDelegationAndRuns` | per-level delegating keys per deployable (§13.4) |
+| **A** (gateway integration phases 1–3) | Integration with credential and assigned keys, `GET /v1/ume/context` and the model facts on `GET /v1/models`; acting as an assigned key with `x-ume-on-behalf-of`; run metadata (§7.1); stream cost; Integration API (§5) | the gateway's own (`Integrations`, `UsageRunMetadata`) | one credential key per service; each assistant and knowledge base as its own assigned key (§13.4) |
 | Development (release 1) | FakeLlm embedding dimensions (§6); tool passthrough tests (§7.2) | none | local development against a real gateway with FakeLlm (optional; the FakeGateway is the default) |
 
 Not in either release's scope: the optional rerank endpoint (§7.4, thekim1/llmgateway#68), which shipped alongside
@@ -42,38 +43,37 @@ Current order in `GatewayRequestHandler.HandleAsync` (`GatewayRequestHandler.cs:
 | # | Step (current) | Citation | New |
 |---|---|---|---|
 | 1 | Authenticate key; status, owner active, address list | `GatewayRequestHandler.cs:64-71`, `GatewayRequestHandler.Stages.cs:21-77` | – |
-| **1b** | – | – | **Read request headers** (§2.1): ceiling and `RequireMaxResidency` (B), delegation (A), run grouping (A). A malformed or missing required value or a refused delegation is answered here, before the body is read |
+| **1b** | – | – | **Read request headers** (§2.1): ceiling and `RequireMaxResidency` (B), run grouping (A). A malformed or missing required value is answered here, before the body is read. Acting as an assigned key (A) is the gateway's own stage after authentication (`docs/integrations.md`, §5) |
 | 2 | Parse body, model name | `GatewayRequestHandler.cs:73-96` | – |
-| 2b–c | Attachment policy, provider tools/storage (key) | `:98-115` | applies the delegating key's settings (A) |
+| 2b–c | Attachment policy, provider tools/storage (key) | `:98-115` | the assigned key's settings on an acted request (A, §5.3) |
 | 3 | Resolve model; key model/provider allow-lists; endpoint | `:117-128`, `RouteResolver.cs:58-90` | – (the ceiling is not checked here: a routing rule may still send the request on-prem) |
-| 4 | Rate limit (key) | `:130-140`, `GatewayRequestHandler.Stages.cs:83-116` | key's limit also under delegation (A) |
+| 4 | Rate limit (key) | `:130-140`, `GatewayRequestHandler.Stages.cs:83-116` | the assigned key's limit on an acted request (A) |
 | 5 | PII guard → `restrictTo = OnPrem` | `:142-173` | – |
 | 5b | Content guard (key) | `:175-180` | – |
-| 6 | Routing rules (scoped by key lineage, team, department) | `:182-189`, `GatewayRequestHandler.Stages.cs:122-139`, `:361-415` | team and department = effective team's (A); rules can read the new headers like any header |
+| 6 | Routing rules (scoped by key lineage, team, department) | `:182-189`, `GatewayRequestHandler.Stages.cs:122-139`, `:361-415` | the assigned key's, its team's and department's on an acted request (A); rules can read the new headers like any header |
 | 7 | Plan + candidate selection: provider list, residency, PII restriction, endpoint, circuit order, streaming, context window | `:191-201`, `GatewayRequestHandler.Stages.cs:169-205`, `RouteResolver.cs:143-188` | **ceiling intersected with the key's residencies and `restrictTo`**; 403/503 rule on the failure path (B) |
-| 7b | Request policy (team + key) | `:203-213` | delegated request: the key's policy only, unless `ApplyTeamPolicy` (A) |
-| 8 | Budget reservation (key lineage, team, department) | `:215-230`, `BudgetService.cs:56-67` | effective team and department (A) |
-| 9–10 | Attempts with fallback and retry; accounting | `:232-243`, `:251-373`, `GatewayRequestHandler.Accounting.cs:24-134` | usage record fields (A) |
+| 7b | Request policy (team + key) | `:203-213` | the assigned key's and its team's on an acted request (A) |
+| 8 | Budget reservation (key lineage, team, department) | `:215-230`, `BudgetService.cs:56-67` | the assigned key, its team and department on an acted request (A) |
+| 9–10 | Attempts with fallback and retry; accounting | `:232-243`, `:251-373`, `GatewayRequestHandler.Accounting.cs:24-134` | run metadata on the usage record (A, §7.1) |
 
 The same steps run in `HandleRealtimeAsync` (`GatewayRequestHandler.Realtime.cs:24-110`) and, for authentication and
-eligibility only, in `ListModelsAsync` (`GatewayRequestHandler.Models.cs:10-22`); step 1b is added to both (§3.4,
-§5.11).
+eligibility only, in `ListModelsAsync` (`GatewayRequestHandler.Models.cs:10-22`); step 1b is added to both (§3.4).
 
 ### 2.1 Request headers (new)
 
 All are read once in step 1b by a new `GatewayRequestHeaders.Read(HttpRequest)` (`Pipeline/GatewayRequestHeaders.cs`)
-that returns a `readonly record struct RequestDirectives(DataResidency? MaxResidency, string? OnBehalfOf, string? RunId,
-string? Step, GatewayError? Error)`. Absent headers cost one `HeaderDictionary` lookup each and allocate nothing;
+that returns a `readonly record struct RequestDirectives(DataResidency? MaxResidency, string? RunId, string? Step,
+GatewayError? Error)`; `x-ume-on-behalf-of` is read by the gateway's own integration stage (§5.2). Absent headers cost one `HeaderDictionary` lookup each and allocate nothing;
 `StringValues` from Kestrel is used as is.
 
 | Header | Feature | Value | Malformed → |
 |---|---|---|---|
 | `x-ume-max-residency` | B | `OnPrem`, `Eu` or `External`, case-insensitive (§3.1); required when the key has `RequireMaxResidency` | `400 invalid_request` (also when required and missing) |
-| `x-ume-on-behalf-of` | A | team id (GUID, `D` format) or team code, 1–100 characters, no control characters (§5.2) | `400 invalid_request` |
+| `x-ume-on-behalf-of` | A | assigned key id (GUID) (§5.2) | `400 invalid_request` |
 | `x-ume-run-id`, `x-ume-step` | A | opaque metadata, trimmed, at most 100 characters kept, control characters replaced (§7.1) | never refused |
 
 More than one value (repeated header or a comma-separated list) for the first two is `400 invalid_request`: two
-ceilings or two teams have no safe meaning. No client header is forwarded to providers today except `OpenAI-Beta` on
+ceilings or two keys have no safe meaning. No client header is forwarded to providers today except `OpenAI-Beta` on
 live sessions (`GatewayRequestHandler.Realtime.cs:21-22`, `:139-140`), so none of these leaves the gateway.
 
 Constants go into `GatewayHeaders` (`GatewayHeaders.cs:6-40`): `MaxResidency`, `OnBehalfOf`, `RunId`, `Step`.
@@ -182,7 +182,7 @@ answer: during the rolling update an older instance ignores the request header.
 | `src/Ume.LlmGateway.Domain/Services/RouteSelector.cs:213-223` | overload with `ceiling`; bit-mask intersection, returns a precomputed array or null |
 | `src/Ume.LlmGateway.Domain/Entities/Entities.cs:158-166` | `IndexAllowLists` also stores `AllowedResidencyMask` (private field like the model index) |
 | `Entities.cs:46-116` (`VirtualKey`) | `public bool RequireMaxResidency { get; set; }` (column in migration `KeyResidencyCeiling`, release 1, §8.1); copied by `KeyRotation.Rotate` (`KeyRotation.cs:64-87`, an explicit field list) |
-| `src/Ume.LlmGateway.AdminApi/KeyEndpoints.cs:11-56` (`KeyRequest`), `KeyDto`, key form | `requireMaxResidency`; a checkbox *Require residency header* on the key form; on a delegating key only gateway admins change it (§5.7) |
+| `src/Ume.LlmGateway.AdminApi/KeyEndpoints.cs:11-56` (`KeyRequest`), `KeyDto`, key form | `requireMaxResidency`; a checkbox *Require residency header* on the key form; on a credential key only gateway admins change it (§5.1) |
 | `Pipeline/GatewayRequestHeaders.cs` (new) | §2.1 |
 | `Pipeline/RouteResolver.cs:49-50`, `:143-188` | `ceiling` parameter; 403/503 rule on the failure path (§3.3) |
 | `Pipeline/GatewayRequestHandler.cs`, `.Stages.cs`, `.Realtime.cs`, `.Models.cs` | step 1b; pass the ceiling; 503 + `Retry-After` when every attempted candidate was circuit-open (`:251-373`) |
@@ -204,7 +204,7 @@ answer: during the rolling update an older instance ignores the request header.
 | PII reroute + ceiling `Eu` → on-prem; PII reroute with no on-prem target → 503 with the PII message | `Gateway.Tests` |
 | Streaming: 403 before any SSE byte; `x-ume-residency` on success | `Gateway.Tests` |
 | Every endpoint in the table of §3.4 honours it (theory over `GatewayEndpoints.All`) incl. `/v1/models` listing and realtime upgrade | `Gateway.Tests`, `RealtimeTests.cs` |
-| `/v1/models` with a delegating `[OnPrem, Eu]` key: ceiling `OnPrem` lists only models with an on-prem target and `ume.residencies = [OnPrem]`; no header on a `RequireMaxResidency` key → 400; `x-ume-on-behalf-of` of a listed team → same list | `Gateway.Tests` |
+| `/v1/models` with an `[OnPrem, Eu]` key: ceiling `OnPrem` lists only models with an on-prem target and `ume.residencies = [OnPrem]`; no header on a `RequireMaxResidency` key → 400 | `Gateway.Tests` |
 | Malformed header → 400 in OpenAI and Anthropic shapes; accounted with `invalid_request` | `Gateway.Tests` |
 | Token quota limited to `External` not reserved when the ceiling is `Eu` | `Gateway.Tests/TokenQuotaTests.cs` |
 
@@ -290,7 +290,7 @@ affected.
 
 - `GET /v1/catalog/departments` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`.
 - `GET /v1/catalog/teams` (`:143-145`) adds `code`. **Gap found**: Ume.Rag's `Teams` mirror has a `Code` column
-  (data-model §2.1) that the catalog does not deliver today. Not needed for delegation (§5.2), but cheap and useful
+  (data-model §2.1) that the catalog does not deliver today. Not needed for acting as a key (§5.2), but cheap and useful
   for display; Ume.Rag's `OrgSync` reads it from release 2 on.
 - `docs/data-access.md:162` (catalog row) updated.
 
@@ -330,212 +330,136 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 3. **Event ids**: the RAG platform logs its refusal as 5001 with a `Reason`; the gateway has no equivalent sign-in
    failure event, so it gets 2008 `admin.signin.refused` and 3003 `data.token.refused`.
 
-## 5. Feature A: delegated attribution
+## 5. Feature A: acting as an assigned key (gateway integrations)
+
+Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
+in `~/git/llmgateway` (main at `7579c20`; phase 1 built in draft PR thekim1/llmgateway#81, whose field names are
+snake_case as built), with its ADRs 020 and 021. This section states only what Ume.Rag relies on; where it and the
+gateway's document differ, the gateway's document wins and this section is a bug to report. Which call runs as which
+key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`](../platform/cost-attribution.md) §4,
+§6. The gateway delivers it in phases, each additive within `v1` and safe for a rolling update:
+
+| Gateway phase | Content | Ume.Rag can then |
+|---|---|---|
+| 1 (built in #81, not merged) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
+| 2 | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
+| 3 | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
 
 ### 5.1 Model
 
-**Later (P2):** release 2. Until then Ume.Rag uses the pilot team's per-level keys and sends no `x-ume-on-behalf-of`
-(§13.4). Delegation is the long-term goal of cost attribution (Decisions "Cost attribution", 2026-11-08): which call
-is charged to which team, the owner-team rules and the order of work are in
-[`../platform/cost-attribution.md`](../platform/cost-attribution.md) §4, §6.
+- The gateway holds an **integration** *Ume.Rag*, made by gateway admins, with an owner team. Its keys have one of two
+  roles:
+  - **Credential keys**: one per Ume.Rag service (`rag-api`, `rag-admin`, `rag-worker`), in the owner team, with a
+    secret, `AllowedIpRanges`, an expiry and rotation. Their settings, scopes included, are changed by gateway admins
+    only. A call without `x-ume-on-behalf-of` runs as the credential key itself and is charged to the owner team
+    (the syncs, the canary, model checks without a key, and every call of an object without a key).
+  - **Assigned keys**: ordinary keys that a department's or team's admins make in their own team and mark *used
+    through: Ume.Rag*. One assistant or knowledge base runs on one; its models, residencies, PII policy, content guard,
+    rate limits, output cap and budget are set there. An assigned key cannot authenticate by itself (`403
+    integration_only`); its secret is never shown or kept, so there is nothing to copy or rotate per assistant.
+- Ume.Rag stores the assigned key's **id** on the object (data-model `Assistants`, `Collections`: `GatewayKeyId`) and
+  mirrors the assigned keys from the context (§5.5; data-model `GatewayKeys`). It holds no team lists, makes no team
+  per assistant, and needs no new budget scope.
 
-- `VirtualKey` (`Entities.cs:46-116`) gains `public List<Guid> DelegatedTeamIds { get; set; } = [];` (empty = not
-  delegating). An array, like `AllowedModels`/`AllowedResidencies` (`:76-82`) and `RoutingRule.ScopeIds`: no join
-  table, so the key loads, rotates and audits as one row.
-- `VirtualKey` also gains `public bool ApplyTeamPolicy { get; set; }` (default `false`), read only on delegated
-  requests (§5.3); `RequireMaxResidency` (§3.1) comes earlier, with release 1.
-- Migration `KeyDelegation` (release 2): `ALTER TABLE "VirtualKeys" ADD "DelegatedTeamIds" uuid[] NOT NULL DEFAULT
-  '{}'`, `ADD "ApplyTeamPolicy" boolean NOT NULL DEFAULT false`. No index (the only query by team is the rare delete guard, §5.8, over a small table).
-- **Delegated views.** Following the existing pattern of read-only indexes on cached keys (`IndexAllowLists`,
-  `Entities.cs:145-166`), `VirtualKey` gets, not mapped to the database (`[NotMapped]`/`Ignore` in
-  `GatewayDbContext.cs:62-70`):
-  - `public Team? OwnerTeam { get; private set; }` – null on a stored key; on a view, the key's real team;
-  - private `FrozenDictionary<string, VirtualKey>` (team code, `Ordinal`) and `FrozenDictionary<Guid, VirtualKey>`;
-  - `public void IndexDelegations(IReadOnlyList<Team> teams)` builds, once per cache load, one **view** per listed
-    team: a shallow copy of the key (same `Id`, `Prefix`, allow-lists and their indexes, rate limits, policies) whose
-    `Team`/`TeamId` are the listed team and `OwnerTeam` the real one;
-  - `public VirtualKey? DelegateFor(string value)` – GUID (`Guid.TryParseExact(value, "D")`) or code lookup.
-- A request for a team is then processed with the view as its key. Everything downstream that reads `key.Team`,
-  `key.TeamId` or `key.Team.DepartmentId` (request policy, budgets, rules, accounting, security events) gets the
-  effective team without changes; everything that reads the key's own settings or `key.Id` (allow-lists, PII,
-  attachments, provider tools/storage, content guard, rate and concurrency limits, live-session slots, `LastUsedAt`,
-  key budgets) still gets the delegating key's. One dictionary lookup per request, no allocation.
+### 5.2 Header, resolution and echo
 
-### 5.2 Header and resolution
+`x-ume-on-behalf-of: <assigned key id>` (a GUID) on a request authenticated by a credential key:
 
-- `x-ume-on-behalf-of: <team id | team code>`. A GUID in `D` format (any case) is looked up as a team id, anything else
-  as a team code (exact, `Ordinal`, like the unique index on `Teams.Code`). 1–100 characters, no control characters,
-  one value (§2.1).
-- **Ume.Rag sends the team id** (its `Teams` mirror stores the gateway id, data-model §2.1). Team codes can be changed
-  or cleared by department admins (`OrganisationEndpoints.cs:91-100`, `Code` optional, `Entities.cs:29-32`), so a code
-  is a poor long-lived reference; ids never change. Codes stay accepted for hand-written clients.
-- Resolution runs in step 1b, after authentication (the key's own status, owner team and address checks stay as they
-  are, `GatewayRequestHandler.Stages.cs:53-74`):
-
-| Case | Result |
+| Case | Gateway answer |
 |---|---|
-| No header | the key as today, `Delegated = false` |
-| Header, key has an empty list | `403 delegation_not_allowed`, reason `not_delegating` |
-| Value matches no listed team (id or code) | 403, reason `team_not_listed` (also for teams that do not exist: the gateway does not reveal which; the event says `team_not_listed` either way, as the view dictionary only holds listed teams) |
-| Listed team inactive, or its department inactive | 403, reason `team_inactive` (same code; message names the team as inactive) |
-| Listed, active | `state.Key = view`; response header `x-ume-on-behalf-of: <team id>` |
+| No header | the credential key itself, as any key |
+| Header malformed or repeated | `400 invalid_request` |
+| Caller not a credential key, or the id not an assigned key of the same integration (unknown ids answer the same) | `403 delegation_not_allowed` |
+| Assigned key disabled, revoked or expired, or its team or department inactive | `403` with the key's ordinary code (`key_disabled`, …) |
+| Usable | the request runs as the assigned key; the answer echoes `x-ume-on-behalf-of` with the resolved id |
 
-  The refusal is answered with `RejectAsync` before the body is read and accounted against the key's own team with
-  `ErrorCode = delegation_not_allowed`.
-- **Response header** `x-ume-on-behalf-of` echoes the resolved team id on every answer after resolution (success and
-  later refusals). A caller can verify that the gateway applied the delegation: an instance that predates the release
-  ignores the request header and sends no echo (§13.2).
+- Ume.Rag sends the key's id, never a name, and only once the latest context's `gateway.features` contains
+  `act-as-key` (phase 2). From then on every answer must echo the id it sent; a missing or different echo fails closed
+  before anything is used (`Gateway:RequireDelegationEcho`, default `true`; identity §4.7, event 5011), because an older
+  gateway instance during a rolling update ignores the header and would charge the credential key.
+- Every endpoint that reaches a model honours the header, and `GET /v1/models` with the header lists the assigned
+  key's models (§5.5).
 
-### 5.3 What applies to a delegated request
+### 5.3 What applies to a request made as an assigned key
 
-| Aspect | Source | Citation (current code that reads it) |
-|---|---|---|
-| Model allow-list, provider allow-list, residency allow-list | delegating key (teams have none, so the intersection is the key's lists) | `RouteResolver.cs:73-82`, `:149-155` |
-| Residency ceiling (B) | request header, intersected | §3.2 |
-| PII policy, attachment policy, provider tools/storage, content guard | delegating key | `GatewayRequestHandler.cs:98-180` |
-| Rate limits, tokens per minute, concurrency, live-session slots | delegating key (overall cap) | `GatewayRequestHandler.Stages.cs:83-116`, `GatewayRequestHandler.Realtime.cs:89` |
-| Request policy | **the delegating key's only**: `Merge(null, key)`; with `ApplyTeamPolicy`, `Merge(effective team, key)`. Neither the effective team's nor the platform team's policy applies by default | `GatewayRequestHandler.cs:205` (today `RequestPolicy.Merge(key.Team?.RequestPolicy, key.RequestPolicy)`, which on a view would merge the effective team's), `src/Ume.LlmGateway.Domain/Services/RequestPolicy.cs:46-65` |
-| Routing rules | key-scoped rules of the delegating key's lineage, team and department rules of the **effective** team, global rules; `team_*`/`department_*` variables are the effective team's | `GatewayRequestHandler.Stages.cs:397-414` |
-| Budgets and token quotas | delegating key's lineage + effective team + effective department (§5.4) | `BudgetService.cs:56-67` |
-| Session affinity | scoped to the key id (unchanged) | `GatewayRequestHandler.Stages.cs:155` |
-
-Delegation can never widen access: every allow-list is the key's; teams carry no allow-lists of their own
-(`Entities.cs:21-40`); rules never widen (ADR 013). What changes is *whose* money and rules apply. The team's request
-policy (system prompt, parameter defaults and overrides) is written for the team's own clients; applied to a calling
-platform it would silently change that platform's prompts, so a gateway admin opts in per key with `ApplyTeamPolicy`.
-
-### 5.4 Budgets, rate limits and rotation
-
-Per plan answered question 3:
-
-- `BudgetService.ApplicableBudgets(snapshot, view)` (`BudgetService.cs:56-67`) returns, unchanged in code,
-  `KeyLineage(key.Id)` key budgets + `Team` budgets of the view's team + `Department` budgets of its department. The
-  delegating key's **own team's and department's** budgets are not charged: that team is the platform's, not the
-  requester's.
-- Reservation and reconciliation stay one Lua script each (`BudgetService.cs:95-137`, `:166-204`); only the counter
-  list differs. A 402 names the scope that ran out (`GatewayErrors.cs:140-158`), e.g. *"The team's budget … is used
-  up"*, which the caller maps for its users.
-- Rate limits are per key only today (`RedisKeys.RateRequests(keyId, …)`), so the key's limits cap the platform's
-  total traffic; there is no per-team rate limit, and none is added (per-user limits stay in Ume.Rag, plan answered
-  question 2).
-- **Seeding agrees with the counters**: cold counters are summed from usage (`GatewayQueries.cs:59-91`) by
-  `TeamId`/`DepartmentId` for team/department budgets and by `VirtualKeyId` over the rotation descendants for key
-  budgets. Delegated records carry the effective team and department and the delegating key id (§5.5), so a seeded
-  counter equals what the live counter would have been. Monthly totals group by key, team and department
-  (`Migrations/20261012060353_DataRetention.cs:141-152`), so this also holds after retention.
-- **Rotation (ADR 007)**: `KeyRotation.Rotate` (`src/Ume.LlmGateway.Domain/Services/KeyRotation.cs:64-87`) copies
-  `DelegatedTeamIds`, `ApplyTeamPolicy` and `RequireMaxResidency`. Key budgets already follow the lineage (`GatewayCatalog.cs:110-111`); during a 24 h grace both
-  keys delegate to the same teams and share the key budgets.
-
-### 5.5 Usage records and reports
-
-- `UsageRecord` (`Entities.cs:574-643`): `VirtualKeyId` = delegating key, `TeamId`/`DepartmentId` = effective team and
-  its department (as today they come from `key.Team`, `GatewayRequestHandler.Accounting.cs:67-69`, now the view's),
-  new `Delegated bool` (`NOT NULL DEFAULT false`, set from `key.OwnerTeam is not null`). No content, no end-user id.
-  The delegating key's owner team is `VirtualKeys.TeamId` of `VirtualKeyId`, so it is not stored again.
-- Migration `UsageDelegationAndRuns` adds `Delegated` and the two run columns of §7.1. Adding a column with a constant
-  default is metadata-only in Postgres 11+, so the big table is not rewritten.
-- `UsageRecordCopy.Columns` (`src/Ume.LlmGateway.Infrastructure/Persistence/UsageRecordCopy.cs:19-25`) and the COPY
-  writes gain the three columns (the existing test that compares `Columns` with the EF model catches omissions).
-- Admin reports already join the team by `u.TeamId` (`src/Ume.LlmGateway.AdminApi/ReportEndpoints.cs:195-200`,
-  `:252-256`) and scope by `u.DepartmentId` (`AdminContext.cs:132-135`), so delegated use shows under the effective
-  team and department, visible to that department's admins and viewers, with the platform key's name. *Usage →
-  Requests* (`/api/usage/requests`, `ReportEndpoints.cs:55-70`) gains `delegated=true|false`; the existing `keyId`
-  filter gives "everything this platform key did". The request list shows a *delegated* badge.
-- Data API aggregate privacy rule: departments with fewer than `MinimumGroupSize` distinct keys in a period are folded
-  (`DataEndpoints.cs:210-214`). A department whose only use is through the platform key counts as one key and is
-  folded. Accepted: conservative, and the rule's purpose (no single-person view) still holds; documented.
-
-### 5.6 Errors, response headers, security events
-
-| Item | Value |
+| From the credential key and the request | From the assigned key |
 |---|---|
-| Error | `403 delegation_not_allowed` (new `GatewayErrorCodes.DelegationNotAllowed`): *"The API key may not act for team '<value>'."* / *"… is not allowed to act for other teams."* / *"The team '<value>' or its department is deactivated."*; malformed header `400 invalid_request` |
-| Response header | `x-ume-on-behalf-of: <team id>` (new `GatewayHeaders.OnBehalfOf`) |
-| New event 1006 `gateway.delegation.refused` (Warning) | `RequestId`, `Reason` (`not_delegating`, `team_not_listed`, `team_inactive`), `OnBehalfOf` (the header value, `Printable`, ≤ 100), `Endpoint`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId` (the key's own); one per refused request, like 1003 |
-| 1002 `gateway.pii.action`, 1003 `gateway.request.refused`, 1005 `gateway.content.flagged` | `TeamId`/`DepartmentId` are now the effective team's (they come from `key`, `GatewayRequestHandler.Accounting.cs:106-116`, `GatewayRequestHandler.Guard.cs:58-59`, `:111-112`); new attribute `Delegated` (attributes are only added, `SecurityEvents.cs:7-11`) |
-| Data API security feed | `RefusalCodes` (`DataEndpoints.cs:62`) gains `delegation_not_allowed` |
+| the client address list; the ceiling header `x-ume-max-residency` (§3), which still narrows every request | models, providers, residencies, PII policy, attachments, provider tools and storage, content guard; rate, token and concurrency limits; the request policy of the key, its team and department; routing rules; budgets and token quotas; the usage record and security events (which log the credential key's id too) |
 
-### 5.7 Admin API, admin UI, audit
+The assigned key's team's request policy applies, so a team system prompt would change Ume.Rag's prompts; the admin
+warns when the chosen key has one (`has_system_prompt`, admin §5.5.4).
 
-- **Setting the list: gateway admins only.** New `PUT /api/keys/{id}/delegation` `{ teamIds: Guid[], applyTeamPolicy:
-  bool }` → `VirtualKey`, `RequireAuthorization(AdminPolicies.Admin)`; at most 1 000 ids, each an existing team (404
-  otherwise), inactive teams allowed (they are refused per request until reactivated); 409 for a revoked key. Audit
-  `Update VirtualKey` with `KeyAudit` (`AuditSnapshots.cs:75-84`) gaining `DelegatedTeamIds`, `ApplyTeamPolicy` and
-  `RequireMaxResidency`; invalidation `Keys`. `KeyRequest` (`KeyEndpoints.cs:11-56`) does **not** carry the list or
-  `ApplyTeamPolicy`, so the ordinary key form cannot change them.
-- **Changing a delegating key: gateway admins only** (decision, open question 2). `PUT /api/keys/{id}`
-  (`KeyEndpoints.cs:93-100`) answers 403 *"Only gateway admins can change a key that acts for other teams."* when the
-  key has a non-empty list and the user is not a gateway admin: its models, residencies, PII and limits apply to every
-  listed team, across departments, while key managers of the platform team are scoped to one department. Rotate and
-  revoke stay with the key's managers (operations, never a widening).
-- `KeyDto` (`Contracts.cs:29`) gains `delegatedTeamIds`, `applyTeamPolicy`, `requireMaxResidency`; the UI resolves
-  names from the teams store.
-- UI (`src/admin-ui/src/components/keys/KeyDetailDrawer.vue`, new `KeyDelegationDrawer.vue`): a *Acts for teams*
-  section on the key detail (read-only for others), an *Edit teams* drawer for gateway admins with a filterable team
-  checklist grouped by department (the rules page's owner picker, `composables/useRuleOwners.ts`, is the model); a
-  badge *Delegating* in the key list; the key form shows a notice instead of the save button for non-admins.
-- Docs: `docs/admin-api.md` *Virtual keys* (`:95-126`).
+**Residency bound on acted requests: requested in #580, pending the gateway's answer.** As the gateway's design stands,
+the credential key's own model and residency lists do not apply to a request made as an assigned key. Ume.Rag asked
+(review point 1 on #580) that:
 
-### 5.8 Team deactivation and deletion
+1. the credential key's `RequireMaxResidency` keeps applying to acted requests (`400` without the header);
+2. the credential key's `AllowedResidencies` stays an **upper bound**: the effective residencies are the assigned
+   key's intersected with the credential key's (the credential key's model list may stay out of it).
 
-- **Deactivated** team or department: the list is kept; requests for it get `403 delegation_not_allowed` reason
-  `team_inactive`; reactivation restores delegation. Team and department updates already publish `Keys`
-  (`OrganisationEndpoints.cs:65`, `:98`), so the cached views refresh at once.
-- **Deleted** team: `DELETE /api/teams/{id}` (`OrganisationEndpoints.cs:101-110`) is refused with 409 *"Key '<name>'
-  acts for this team; a gateway admin must remove the team from its delegation list first."* when a non-revoked key
-  lists it, next to the existing "has keys" guard (`:104`). Unlike routing rules (ADR 014), a delegation is a grant held
-  by a gateway admin, not something the team owns, so it is neither orphaned nor silently dropped; the caller (Ume.Rag)
-  must also move its assistants first. Revoked keys keep stale ids (harmless, and the audit stays true).
-- Departments cannot be deleted while they have teams (`:71`), so no department rule is needed.
+With both, the worker's `Eu`-capped credential key keeps the worker below `External` at the gateway too, and a stolen
+credential reaches no more than its own residencies. Until the gateway answers, Ume.Rag does not count on either:
+its own ceiling header and `x-ume-residency` check carry the residency rule alone (identity §4.7).
 
-### 5.9 Data API
+### 5.4 Budgets, rate limits and cost
 
-| Endpoint | Change |
+- **Budgets** are the assigned key's, its team's and its department's; a spent one answers `402 budget_exceeded`
+  naming the scope. Ume.Rag shows the assistant as unavailable with the reason (chat §3.6, admin §5.5.4) and a worker
+  job waits (engine §7.3).
+- **Rate limits** are the assigned key's, so each assistant and each knowledge base has its own; indexing and chat
+  already hit different limits. Ume.Rag asks for no platform-wide cap (review point 4 on #580); the worker keeps its
+  own embedding concurrency limit (processing §11).
+- **Cost**: `x-ume-cost-usd` on complete answers. A streamed call sends `x-ume-stream-cost: 1` and the gateway writes
+  one Server-Sent Events comment after the provider's last event, `: ume-cost-usd=<usd>` (phase 2; `features`
+  `stream-cost`); an aborted stream has none, and the gateway's usage record stays the record. rag-api reads the
+  comment and never forwards it to its own clients (chat §8.3). Run metadata: §7.1. Read-back: §5.6.
+
+### 5.5 Discovery: `GET /v1/ume/context` and `GET /v1/models`
+
+Both are answered from the gateway's memory with an `ETag`; Ume.Rag polls with `If-None-Match` (usually `304`), and
+neither is accounted as a model request. The admin's sync is admin §4.10.
+
+- **`GET /v1/ume/context`** (phase 1, a credential key). What Ume.Rag reads: `gateway` (`version`, `admin_url`,
+  `features`), `integration`, `key`, `departments` (`id`, `name`, `cost_center_code`, `is_active`), `teams` (`id`,
+  `department_id`, `name`, `code`, `is_active`) and `assigned_keys` (`id`, `name`, `team_id`, `department_id`,
+  `status`, `owner_active`, `expires_at`, `allowed_models`, `allowed_residencies`, `pii_policy`,
+  `content_guard_policy`, `requests_per_minute`, `tokens_per_minute`, `max_concurrent_requests`, `max_output_tokens`,
+  `has_system_prompt`). Revoked keys are not listed; disabled and expired ones are, with their `status`.
+  `departments` and `teams` are those of the assigned keys plus the owner team. Department member groups are not in it
+  yet (feature C, §4).
+- **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
+  `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
+  `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
+  With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models: the key's model picker and the save checks
+  (admin §4.6 V8, V39).
+- **Open for Ume.Rag** (to raise on #580): the context lists only the departments and teams of assigned keys, while
+  Ume.Rag's sharing with the whole municipality (admin §3.2) and its sign-in scope need every active department. Until
+  the context lists every department with its member groups, the admin keeps reading departments, teams and member
+  groups from the Data API catalogue (admin §4.10).
+
+### 5.6 Integration API (phase 3)
+
+`/integration/v1` on the gateway's Admin API, authenticated with a credential key that carries the scope `usage.read`;
+only `rag-admin`'s credential key gets it, so the keys that serve chat can read nothing.
+
+| Endpoint | Ume.Rag uses it for |
 |---|---|
-| `/v1/usage/records` (`DataEndpoints.cs:67-81`, `UsageRecordItem` `:10-16`) | `delegated`, `runId`, `step` appended (JSON fields added; CSV columns appended at the end) |
-| `/v1/security/keys` (`:121-137`, `KeyInventoryItem` `:30-35`) | `delegatedTeamIds` |
-| `/v1/catalog/keys` (`:146-148`) | `delegatedTeamIds` (ids only; lets Ume.Rag warn when an assistant's team is not on its key's list, with its `catalog.read`-only key) |
-| `/v1/security/requests` | includes `delegation_not_allowed` refusals (§5.6) |
+| `GET /integration/v1/usage?from=&to=&groupBy=day,key,model,step&keyId=&runId=` | the gateway's requests, tokens and cost per assistant's and knowledge base's key, by day, model and step (cost-attribution §5) |
+| `GET /integration/v1/budgets?keyId=` | limit, spent and period of the budgets that apply to a key (its own, its team's, its department's): the budget status on the assistant and knowledge base pages (admin §5.5.4) |
 
-`deploy/postgres/app-roles.sql:50-53` and `deploy/kubernetes/base/app-roles.sql`: `"DelegatedTeamIds"` added to the
-`ume_data` column grant on `VirtualKeys`. `UsageRecords` is granted whole-table (`:47`). `DatabaseRoleTests` updated.
+Keys and budgets are never created through it; they are made in the gateway by the people responsible for the money.
 
-### 5.10 Caching and invalidation
+### 5.7 Errors and security events
 
-- `KeyAuthenticator.LoadAsync` (`KeyAuthenticator.cs:157-193`): when `DelegatedTeamIds` is non-empty, one more query
-  loads those teams with their departments (`AsNoTracking`, `Include(t => t.Department)`), then
-  `key.IndexDelegations(teams)` after `IndexAllowLists` (`:181`). Only on a cold or background load; the request path
-  keeps zero Postgres calls (`docs/performance.md:9-11`).
-- Invalidation: the delegation endpoint publishes `Keys`; team updates already publish `Keys`
-  (`OrganisationEndpoints.cs:98`), department updates `Config` + `Keys` (`:65`); team creation needs nothing (a new
-  team is on no list). The existing generation token (`KeyAuthenticator.cs:45-51`, `:195-200`) drops views with
-  their key. TTL refresh (`Gateway:KeyCacheSeconds`, `:87-97`) reloads them too.
-- `FindCached` for throttled addresses (`:76-77`) returns the same cached key with its views.
-
-### 5.11 Endpoints
-
-All endpoints that run step 1b honour the header: the JSON and multipart endpoints (`HandleAsync`) and live sessions
-(`HandleRealtimeAsync`, budget at `GatewayRequestHandler.Realtime.cs:122`, slots per key id at `:89`). `GET /v1/models`
-validates it (a misconfigured client learns at start-up) but lists the same models, because teams have no allow-lists.
-
-### 5.12 Tests
-
-| Test | Project |
+| Gateway answer | Ume.Rag |
 |---|---|
-| Views: same `Id`/allow-list indexes, `Team` swapped, `OwnerTeam` set; lookup by id (any case) and code; no allocation on lookup | `Domain.Tests/KeyTests.cs` |
-| Rotation copies `DelegatedTeamIds` and both flags; key budget over the lineage charged for delegated use during grace | `Domain.Tests`, `Gateway.Tests/AccountingTests.cs` |
-| Header from a non-delegating key, unknown team, unlisted team, inactive team, inactive department → 403 + 1006 with the right `Reason`; accounted against the owner team | `Gateway.Tests/DataPlaneTests.cs`, `SecurityEventTests.cs` |
-| Delegated request: effective team's and department's budgets and the key's budget reserved and reconciled; the platform team's budgets untouched; 402 from the team budget | `Gateway.Tests/AccountingTests.cs`, `TokenQuotaTests.cs` (Redis store via Testcontainers) |
-| Seeding: cold counters after delegated traffic equal the live counters | `Gateway.Tests` (Redis + Postgres) |
-| Key rate limit caps delegated traffic for all teams together | `Gateway.Tests` |
-| Team request policy (output cap, system prompt) **not** applied with `ApplyTeamPolicy = false`, applied when true; key's policy and model/residency/PII/attachment settings applied (intersection) | `Gateway.Tests` |
-| Team-scoped routing rule of the effective team applies; one of the platform team does not | `Gateway.Tests/RoutingRuleGatewayTests.cs` |
-| Usage record: key id, effective team/department, `Delegated`; COPY column list matches EF | `Gateway.Tests`, `IntegrationTests` |
-| Invalidation: team deactivated → next request 403 without waiting for the TTL; team code change resolves the new code at once | `Gateway.Tests` |
-| Admin: only gateway admins set the list; non-admin PUT on a delegating key 403; team delete 409; audit before/after | `AdminApi.Tests/AdminApiTests.cs` |
-| Data API fields; `ume_data` can read `DelegatedTeamIds` and still not `KeyHash` | `DataApi.Tests`, `IntegrationTests/DatabaseRoleTests.cs` |
-| UI: gateway admin edits the list; department admin sees it read-only and cannot save the key | e2e `journeys.spec.ts`, Vitest `KeyDetailDrawer.spec.ts`, `KeyFormDrawer.spec.ts`; `accessibility.spec.ts` |
+| `400 invalid_request` on the header | a bug in Ume.Rag: logged at Error, never retried |
+| `403 delegation_not_allowed`, or `403` with the assigned key's code | final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1) |
+| `402 budget_exceeded` | as above, with the scope the gateway names |
+| a missing or different echo | 5011 `rag.gateway.delegation_missing`, the call aborted before use (identity §10) |
+
+The gateway logs its refusals as security event 1006 `gateway.delegation.refused` (`Reason`, `OnBehalfOf`, `KeyId`,
+`KeyPrefix`, `TeamId`, `DepartmentId`).
 
 ## 6. FakeLlm: embedding dimensions (plan §3c)
 
@@ -561,21 +485,21 @@ validates it (a misconfigured client learns at start-up) but lists the same mode
 
 ## 7. Small additions (plan §3a)
 
-### 7.1 Run grouping headers (feature A, release 2)
+### 7.1 Run grouping headers (feature A, gateway phase 2)
 
-**Later (P2):** stored from release 2 on; Ume.Rag already sends them and a release-1 gateway ignores them.
+Stored from gateway phase 2 on (`features` `run-metadata`); Ume.Rag already sends them and an older gateway ignores
+them.
 
 - `x-ume-run-id` and `x-ume-step`: any key may send them. Trimmed; at most 100 characters kept (longer values are
   truncated, never refused: metadata must not fail a model call); control characters replaced
   (`SecurityEvents.Printable`, `SecurityEvents.cs:30-49`, which allocates nothing when there is nothing to replace).
-- Stored on `UsageRecord` as `RunId varchar(100) NULL`, `Step varchar(100) NULL` (migration `UsageDelegationAndRuns`,
-  §5.5). Not in monthly totals (retention summarises without them). No index: the admin filter `runId=` on
+- Stored on `UsageRecord` as `RunId varchar(100) NULL`, `Step varchar(100) NULL` (the gateway's migration
+  `UsageRunMetadata`). Not in monthly totals (retention summarises without them). No index: the admin filter `runId=` on
   `/api/usage/requests` runs inside the time range like the other filters.
-- Exposed on `/v1/usage/records` (`runId`, `step`) and in the admin request list (column hidden by default).
+- Exposed on `/v1/usage/records` (`runId`, `step`), in the admin request list (column hidden by default) and on the
+  Integration API's `usage` (`groupBy=step`, `runId=`, §5.6), where Ume.Rag joins its per-step split.
 - Documented as **opaque ids only**: no names, no content, no user ids (ADR 003). Ume.Rag sends GUIDs and step names
   such as `condense`, `answer`, `judge`.
-- Shares migration `UsageDelegationAndRuns` with `Delegated`, so `UsageRecords` gets one migration and one COPY
-  change.
 
 ### 7.2 Tool passthrough guarantee (tests only)
 
@@ -593,26 +517,15 @@ provider unchanged and in order, and that tool-call answers (JSON and streamed d
 Order matters: a test with three tools and interleaved `tool` messages compares the upstream body's arrays element by
 element. They guard the paths Ume.Rag depends on, next to the routing change of feature B.
 
-### 7.3 `contextWindow` and `features` on `/v1/catalog/models` (optional, a later release)
+### 7.3 Model facts on `GET /v1/models` (gateway integration phase 1)
 
-Not needed for P1. The catalog model entry (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`) has no context size,
-so the RAG admin cannot prefill an assistant's `QuerySteps.answer.contextTokens` (chat design §6.3) and editors type
-it. Small item for any later release: add `ModelDeployment.ContextWindow` (already `int?` on the entity,
-`src/Ume.LlmGateway.Domain/Entities/Entities.cs:309`) to the projection as `contextWindow` (null when unset), and
-`ModelDeployment.Features` (`Entities.cs:310-311`) as `features` (tags incl. `tools`), so the RAG admin's
-`GatewayModels` sync sets `SupportsTools` for agent assistants without a manual flag (tools design §6.4). Additive
-fields, no migration.
-
-**`maxOutputTokens`** next to them (Decisions "Answer length from the model", 2026-11-11): the longest output the
-deployment's model produces. Unlike `ContextWindow` the gateway has no such field yet, so this one is a new nullable
-`ModelDeployment.MaxOutputTokens` (one migration), set in the gateway's model form or from its model list as
-`ContextWindow` is (`ModelList.cs:260`), and projected as `maxOutputTokens` (null when unset). Ume.Rag then fills
-`GatewayModels.ContextWindow` and `MaxOutputTokens` from the catalogue and the manual entries go (admin §4.10). Until
-then a platform admin enters both on the RAG mirror. Optional for the gateway, but it removes a manual step per model.
-
-Optional item next to these (admin design §4.10): `GET /v1/catalog/routes` (route alias name, kind, target model ids),
-so the RAG admin syncs route aliases and their targets' residencies instead of platform admins keeping manual
-`GatewayModels` rows for them. Additive route, `catalog.read` scope.
+The model limits and features Ume.Rag needs come from `GET /v1/models` under `ume` (§5.5), not from the Data API
+catalogue: `context_window`, `max_output_tokens` (a new nullable `ModelDeployment.MaxOutputTokens` in the gateway),
+`features` (tags incl. `tools`), `kind`, the residencies and `pricing`. The admin's sync fills
+`GatewayModels.ContextWindow`, `MaxOutputTokens` and `SupportsTools` from them and the manual entries go (admin §4.10;
+Decisions "Answer length from the model"); until the gateway sends them, a platform admin enters them on the RAG
+mirror. Route aliases are listed on `GET /v1/models` with their targets' residencies (`ume.residencies`), so the sync
+takes them from there too and no manual route rows remain.
 
 ### 7.4 Rerank endpoint (its own release after release 1; #390, thekim1/llmgateway#68)
 
@@ -638,16 +551,14 @@ verified when the provider is set up. The FakeGateway serves `/v1/rerank` in thi
 |---|---|---|---|
 | C (release 2) | `DepartmentMemberGroups` | `Departments.MemberGroups varchar(256)[] NOT NULL DEFAULT '{}'` | additive with default; old code does not select it |
 | B (release 1) | `KeyResidencyCeiling` | `VirtualKeys.RequireMaxResidency boolean NOT NULL DEFAULT false` | same; an old admin API updating a key leaves the column untouched |
-| A (release 2) | `KeyDelegation` | `VirtualKeys.DelegatedTeamIds uuid[] NOT NULL DEFAULT '{}'`, `ApplyTeamPolicy boolean NOT NULL DEFAULT false` | same; an old admin API updating a key leaves the columns untouched |
-| A (release 2) | `UsageDelegationAndRuns` | `UsageRecords.Delegated boolean NOT NULL DEFAULT false`, `RunId varchar(100) NULL`, `Step varchar(100) NULL` | old usage writer's COPY names its columns (`UsageRecordCopy.cs:27-28`), new columns take their defaults |
 
-Grant changes only for A (§5.9). The migration service re-applies `app-roles.sql` on every start
+Feature A's migrations (`Integrations`, `UsageRunMetadata`) and grants are the gateway's own (`docs/integrations.md`). The migration service re-applies `app-roles.sql` on every start
 (`deploy/postgres/app-roles.sql:1-5`).
 
 ### 8.2 Redis
 
-No new keys: delegated budgets use the existing `ume:spend:*`/token counters of the effective team and department,
-rate limits the existing per-key keys, and feature C reads only the token.
+No new keys: feature B and C need none, and acting as an assigned key uses that key's existing budget and rate-limit
+counters (gateway `docs/integrations.md`).
 
 ## 9. Settings
 
@@ -658,8 +569,8 @@ rate limits the existing per-key keys, and feature C reads only the token.
 | `DataApi:TenantId` | `UME_DATA_TENANT_ID` | C | `UME_OIDC_TENANT_ID` |
 | `DataApi:RefuseGuests` | `UME_DATA_REFUSE_GUESTS` | C | `UME_OIDC_REFUSE_GUESTS` |
 
-B and A need no settings: the ceiling is per request; delegation, `ApplyTeamPolicy` and `RequireMaxResidency` per key.
-No `Gateway:*` setting is added; header length limits (100) and the delegation list limit (1 000) are constants,
+B needs no settings: the ceiling is per request and `RequireMaxResidency` per key. Feature A's settings (e.g.
+`Gateway:AdminUrl` for `admin_url`) are the gateway's own. The run-header length limit (100) is a constant,
 documented. `Retry-After` reuses `CircuitBreaker:BreakDuration` (§3.3).
 
 ## 10. Security events
@@ -669,13 +580,12 @@ Names and attributes are only added (`docs/data-access.md:58-62`).
 
 | Id | Name | Feature | When | Attributes |
 |---|---|---|---|---|
-| 1002, 1003, 1005 | existing | A | – | **+ `Delegated`**; `TeamId`/`DepartmentId` = effective team |
-| 1006 | `gateway.delegation.refused` | A | §5.6 | `RequestId`, `Reason`, `OnBehalfOf`, `Endpoint`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId` |
+| 1006 | `gateway.delegation.refused` | A | §5.7 (the gateway's design) | `Reason`, `OnBehalfOf`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId` |
 | 2008 | `admin.signin.refused` | C | tenant or guest refusal | `Reason` (`wrong_tenant`, `guest_refused`), `Actor`, `SourceAddress` |
 | 3003 | `data.token.refused` | C | Data API token refused by tenant/guest check, once a minute per (client, reason) | `Reason`, `Client`, `Count` |
 
-SIEM alerts to add to `docs/security-events.md:28-34`: any 1006 with `team_not_listed` (a delegating key probing
-teams, or a caller out of sync); any 2008 (a guest or foreign account was assigned to the application).
+SIEM alerts to add to `docs/security-events.md:28-34`: any 2008 (a guest or foreign account was assigned to the
+application). Alerts on 1006 are the gateway's integrations design's.
 
 ## 11. Performance and benchmarks
 
@@ -688,46 +598,44 @@ after (`docs/performance.md:9-21`); allocation and call counts are the regressio
 | B, header absent | 1 header lookup; 1 flag read (`RequireMaxResidency`) | 0 B | unchanged |
 | B, header present | + span compare of ≤ 8 chars, bit-mask intersection, precomputed array | 0 B | unchanged |
 | B, failure path | + re-check of the plan's targets (only when candidates come out empty) | small, failure path only | unchanged |
-| A, header absent | 1 header lookup | 0 B | unchanged |
-| A, header present | + `FrozenDictionary` lookup (code) or `Guid.TryParseExact` + lookup | 0 B (views built at cache load) | unchanged: same Lua scripts, 1–3 more counters in the budget script |
-| A, response header | 1 header write (team id string cached on the view) | 0 B | – |
+| A | one header lookup, one frozen-dictionary lookup when present (gateway `docs/integrations.md`, *Request path cost*) | – | unchanged |
 | Run headers | 2 header lookups; `Printable` | 0 B unless a value is over 100 characters or has control characters | – |
-| Usage record | + 3 COPY values in the background writer | – | – |
+| Usage record | + 2 COPY values in the background writer | – | – |
 | C | admin sign-in only (1 query) | – | none on the data plane |
 
 Expected added time per request: well under 1 µs, against 196 µs in-memory / 1.65 ms Redis for a chat completion
-(`docs/performance.md:237`). Cold key load for a delegating key: one more Postgres statement (the "key and
-catalogue invalidated" audit scenario goes from 9 to 10 statements for such a key, by design).
+(`docs/performance.md:237`). Feature A's benchmarks are the gateway's integrations design's.
 
 Benchmarks:
 
 | Benchmark | Expectation |
 |---|---|
 | `PipelineBenchmarks` (chat, stream, embeddings; `benchmarks/Ume.LlmGateway.Benchmarks/PipelineBenchmarks.cs`) | unchanged within noise; allocated bytes unchanged (no headers sent) |
-| `PipelineBenchmarks` new case *Chat completion, delegated + ceiling + run id* | ≤ +1 % time, ≤ +200 B allocated vs. plain chat (the response header value and the larger usage record) |
+| `PipelineBenchmarks` new case *Chat completion, ceiling + run id* | ≤ +1 % time, ≤ +200 B allocated vs. plain chat (the larger usage record) |
 | `RoutingBenchmarks.SelectCandidates` (`RoutingBenchmarks.cs:70`) + new case with ceiling | 0 B more than without |
-| `audit` | every scenario: 0 Postgres on the request path, same Redis command count; new scenario *Delegated chat, warm caches* identical to *Chat, warm caches* |
+| `audit` | every scenario: 0 Postgres on the request path, same Redis command count |
 | `benchmarks/compare` | not rerun for this release unless `PipelineBenchmarks` moves; the 2026-10-27 baseline stays the published one |
 
-Compatible with improvement-plan item 2 (one Redis round trip, `docs/performance-improvement-plan.md:56-70`): the
-effective team is known right after authentication, before the rate-limit call.
+Compatible with improvement-plan item 2 (one Redis round trip, `docs/performance-improvement-plan.md:56-70`).
 
 ## 12. Gateway docs to update
 
 | Page | Feature | Change |
 |---|---|---|
-| `docs/admin-api.md` (data plane `:360-415`, keys `:95-125`, organisation `:73-94`) | B, C, A | request headers `x-ume-max-residency`, `x-ume-on-behalf-of`, `x-ume-run-id`, `x-ume-step`; response headers incl. the missing `x-ume-residency` and the echo; codes `max_residency_not_met`, `delegation_not_allowed`, the 403/503 rule; `/v1/models` with a ceiling; `memberGroups`; `PUT /api/keys/{id}/delegation`; `delegatedTeamIds`, `applyTeamPolicy`, `requireMaxResidency`; `/bff/user` `departmentSources` |
-| `docs/routing-rules.md` (`:181-206`) | B, A | ceiling as a hard constraint after rules (*Rules never widen access*); example rule on the header; team/department of a delegated request |
+| `docs/admin-api.md` (data plane `:360-415`, keys `:95-125`, organisation `:73-94`) | B, C | request headers `x-ume-max-residency`, `x-ume-run-id`, `x-ume-step`; response headers incl. the missing `x-ume-residency`; codes `max_residency_not_met`, the 403/503 rule; `/v1/models` with a ceiling; `memberGroups`; `requireMaxResidency`; `/bff/user` `departmentSources` |
+| `docs/routing-rules.md` (`:181-206`) | B | ceiling as a hard constraint after rules (*Rules never widen access*); example rule on the header |
 | `docs/providers-and-models.md` | B | residency section: what callers can enforce per request, `RequireMaxResidency`, what `x-ume-residency` reports |
-| `docs/identity-and-roles.md` (`:26-35`, Entra `:160-186`, check `:217-229`) | C, A | department scope from member groups in the group claim (how to make Entra emit them); tenant and guest refusal; check-the-setup steps for `departmentSources`; delegating keys editable by gateway admins only; team request policy not applied to delegated requests |
-| `docs/data-access.md` (events `:64-77`, permissions `:159-162`, aggregate rule `:237`) | C, A | events 1006, 2008, 3003, new attributes; new fields; delegated use and `MinimumGroupSize` |
-| `docs/security-events.md` (`:20-46`) | C, A | SIEM alerts of §10; guests refused by default |
+| `docs/identity-and-roles.md` (`:26-35`, Entra `:160-186`, check `:217-229`) | C | department scope from member groups in the group claim (how to make Entra emit them); tenant and guest refusal; check-the-setup steps for `departmentSources` |
+| `docs/data-access.md` (events `:64-77`, permissions `:159-162`, aggregate rule `:237`) | C | events 2008, 3003; new fields |
+| `docs/security-events.md` (`:20-46`) | C | SIEM alerts of §10; guests refused by default |
 | `docs/runbook.md` (*Identity provider* `:68-121`, *Data API* `:342-372`) | C | member groups not applied (group claim missing or overage), tenant/guest settings |
-| `docs/admin-ui.md` | C, A | Organisation member groups; key delegation section and flags; usage *delegated* filter and run id column |
-| `docs/performance.md` | A | delegated key cold load (+1 statement); new benchmark case |
+| `docs/admin-ui.md` | C | Organisation member groups |
+| `docs/performance.md` | B | new benchmark case |
 | `docs/upgrade-guide.md`, `CHANGELOG.md` | all | §13 |
-| `docs/adr.md` | all | rows 018, 019, 020 (`adr-drafts.md`) |
+| `docs/adr.md` | B, C | rows 018, 019 (`adr-drafts.md`); 020 and 021 are the gateway's integrations ADRs |
 | `docs/local-development.md` | development, C | FakeLlm dimensions; Keycloak `group-member` user |
+
+Feature A's pages (`docs/integrations.md` and what it lists) are updated by the gateway's integration phases.
 | `README.md` header list, if it repeats the response headers | B | as admin-api |
 
 ## 13. Release plan
@@ -740,27 +648,25 @@ Two releases, so the pilot waits only for the smallest change a production gatew
 - **Release 1, in P1b before go-live** (built in a separate session in the gateway repo): §3 (feature B), §6 (FakeLlm `dimensions`), §7.2 (tool passthrough tests), ADR 018,
   the docs of §12 for B, and the upgrade-guide entry (§13.3).
 - **Later (P2): release 2**, before the first second-department or group audience: §4 (feature C with the tenant/guest
-  refusal), §5 (feature A), §7.1 (run grouping headers), ADRs 019–020, the remaining docs of §12, settings in compose,
-  Portainer and Kubernetes examples, and the Keycloak realm.
+  refusal), ADR 019, the remaining docs of §12, settings in compose, Portainer and Kubernetes examples, and the
+  Keycloak realm.
+- **Feature A** (§5, with §7.1) comes in the gateway's integration phases 1–3, each its own release, independent of
+  release 2.
 
 The optional rerank endpoint (§7.4) is in neither release's scope: it shipped in gateway v0.9.0 (thekim1/llmgateway#68),
 pulled forward from P2, and is no go-live gate (Decisions "Rerank pulled forward").
 
 ### 13.2 Migrations and rolling update
 
-**Migrations**: release 1 `KeyResidencyCeiling`; release 2 `DepartmentMemberGroups`, `KeyDelegation`,
-`UsageDelegationAndRuns` and the `app-roles.sql` grant. **Rolling update: yes** for both, with these rules in the
-upgrade guide:
+**Migrations**: release 1 `KeyResidencyCeiling`; release 2 `DepartmentMemberGroups`. Feature A's are the gateway's
+integration phases'. **Rolling update: yes** for both, with these rules in the upgrade guide:
 
 1. Set `RequireMaxResidency` on a key only after every gateway instance runs release 1: an old instance ignores
-   `x-ume-max-residency` (callers must check `x-ume-residency`). Release 2: set a delegation list or
-   `ApplyTeamPolicy` only after every instance runs release 2: an old instance ignores `x-ume-on-behalf-of` (charges
-   the key's own team, no echo header).
-2. Do not rotate a key with `RequireMaxResidency` (release 1) or a delegating key (release 2) until the admin API is
-   fully upgraded: an old instance's rotation does not copy the list or the flags.
-3. Release 2: a usage-journal batch written by a new instance and replayed by an old one (only after a database
-   outage during the rollout, `UsageWriter.cs:288`, `:373`) loses `delegated`, `runId` and `step` for those records.
-4. Release 2: during the window an old admin API instance signs users in without group-derived scope and without the
+   `x-ume-max-residency` (callers must check `x-ume-residency`). The same holds for `x-ume-on-behalf-of` in the
+   integration phase 2: an old instance ignores it and sends no echo, which is why Ume.Rag checks the echo (§5.2).
+2. Do not rotate a key with `RequireMaxResidency` until the admin API is fully upgraded: an old instance's rotation
+   does not copy the flag.
+3. Release 2: during the window an old admin API instance signs users in without group-derived scope and without the
    tenant/guest checks; sessions are fixed at sign-in, so affected admins sign in again after the rollout.
 
 ### 13.3 Upgrade-guide outline
@@ -772,16 +678,14 @@ ceiling; `x-ume-residency` now documented; key flag `RequireMaxResidency`; FakeL
 
 **Release 2.** *Rolling update: yes* (rules above). *Check before upgrading*: guests are now refused at sign-in by
 default (`acct = 1` or a foreign `idp`): set `UME_OIDC_REFUSE_GUESTS=false` to keep admitting them; set
-`UME_OIDC_TENANT_ID` on Entra. New request header `x-ume-on-behalf-of` and error code `delegation_not_allowed`;
-delegating keys with `ApplyTeamPolicy`, editable by gateway admins only; team deletion refused while a key acts for the
-team. *Opt in*: member groups on *Organisation* (the IdP must emit them in the group claim). New `/bff/user` field,
-Data API `memberGroups`, team `code`, usage and key fields, events 1006/2008/3003 and attribute `Delegated`; run
-headers (opaque ids only). Nothing changes for clients that send none of the new headers.
+`UME_OIDC_TENANT_ID` on Entra. *Opt in*: member groups on *Organisation* (the IdP must emit them in the group claim).
+New `/bff/user` field, Data API `memberGroups`, team `code`, events 2008/3003. The integration phases have their own
+upgrade-guide entries (gateway `docs/integrations.md`).
 
 ### 13.4 Ume.Rag afterwards
 
 CI and tests run on the FakeGateway (`../platform/repo-and-deployment.md` §4.3), which implements the release-1
-contract (and the release-2 echo).
+contract and the integration contract of §5 (built against the gateway's published OpenAPI document).
 
 **P1a, before release 1** (Decisions "P1a plan answers", "Interim gateway for P1a"): Ume.Rag calls the gateway as it
 is (v0.8.5), on an interim **test/dev gateway instance** on a fixed host (HTTPS, public certificate) with EU-hosted
@@ -793,7 +697,7 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
 (`ResidencyCeilingHandler`); v0.8.5 ignores the request header, so until release 1 the ceiling rests on the keys'
 `AllowedResidencies` and that check. `GET /v1/models` is not yet filtered by the ceiling.
 
-**With release 1, in P1b before go-live:**
+**With release 1, in P1b before go-live (until the gateway's integration phase 1):**
 
 - **Keys per level of the pilot department's team** (plan §4): ordinary team keys `OnPrem`-only (`AllowedResidencies = [OnPrem]`), `Eu`-max (`[OnPrem, Eu]`) and open
   (all), each issued per deployable that needs it with `AllowedIpRanges` of that deployable's hosts (`Entities.cs:89`)
@@ -804,37 +708,45 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
   The worker's keys also carry the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`), so a
   misconfigured worker cannot starve chat (processing design §11).
 - Every call carries `x-ume-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
-  from release 2 on; release 1 ignores them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
+  from the integration phase 2 on; older gateways ignore them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
 - `OrgSync` with a `catalog.read` Data API key reads departments and teams (no `memberGroups` or team `code` yet).
 - Saving an assistant calls `GET /v1/models` with the level's key and `x-ume-max-residency` = the level's ceiling,
   and refuses a model that is not listed (§3.4, admin design §4.6 V8).
 
-**Later (P2), with release 2:**
+**With the gateway's integration phases** (§5; cost-attribution §6 orders Ume.Rag's work):
 
-- **Delegating keys per level** replace the pilot team's keys: same levels, deployables and `AllowedIpRanges`,
-  `RequireMaxResidency = true`, `ApplyTeamPolicy = false`, owned by the platform team, list = teams with assistants;
-  the pilot team's keys are revoked.
-- Every call also carries `x-ume-on-behalf-of: <team id>`; the echo is verified (a missing echo fails closed under
-  `Gateway:RequireDelegationEcho`, identity design §4.7).
-- `OrgSync` reads `memberGroups` and team codes; the same `TenantId`/`RefuseGuests` as the gateway.
-- `GET /v1/models` on assistant save is sent on behalf of the assistant's team.
+- **Phase 1:** a gateway admin makes the integration *Ume.Rag* and one credential key per service (`rag-api`,
+  `rag-admin`, `rag-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
+  worker's has `AllowedResidencies = [OnPrem, Eu]` (it is an upper bound only if the gateway grants #580's request,
+  §5.3). They replace the per-level keys, which are revoked. Every call still carries `x-ume-max-residency`; calls
+  run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned
+  keys and the models from `GET /v1/ume/context` and `GET /v1/models` (admin §4.10); departments, teams and member
+  groups still come from the Data API until the context lists every department with its member groups (§5.5).
+  Department admins make assigned keys, and editors choose them on assistants and knowledge bases.
+- **Phase 2** (`features` `act-as-key`): every call of an assistant or knowledge base with a key sends
+  `x-ume-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
+  check models with `GET /v1/models` as the object's key (admin §4.6 V8, V39); publishing an assistant needs a key.
+- **Phase 3:** `rag-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
+  per assistant and knowledge base (§5.6).
+- With release 2 (feature C): `OrgSync` takes `memberGroups` from wherever the gateway publishes them for
+  integrations; the same `TenantId`/`RefuseGuests` as the gateway.
 
 ## 14. Changes to other documents in this repo
 
 What this design needs from the other documents of this repo, and they state:
 
-1. **`../identity/*`**: two releases, claims-only feature C, keys per level, explicit ceiling incl. `External`,
-   `Gateway:RequireDelegationEcho` (from release 2).
+1. **`../identity/*`**: two releases, claims-only feature C, one credential key per service, explicit ceiling incl.
+   `External`, `Gateway:RequireDelegationEcho` (from the integration phase 2).
 2. **`../archive/area-plans/chat-api.md`, `../chat-api/design.md`**: no attribution modes or linked keys; `External` for `public`;
    a `503` with `Retry-After` from the gateway is retryable, `403 max_residency_not_met` is not.
-3. **`../archive/area-plans/platform.md`** §6–§7: keys per level and deployable (the pilot team's until release 2, delegating
-   after); no linked keys; two gateway releases.
+3. **`../archive/area-plans/platform.md`** §6–§7: keys per level and deployable (the pilot team's until the gateway's
+   integration phase 1, then one credential key per service); no linked keys; two gateway releases.
 4. **`../platform/data-model.md`** §2.1: no `GatewayKeyLinks`; no GIN index on `Departments.MemberGroups`;
    `Teams.Code` from `/v1/catalog/teams` `code` (release 2).
 5. **`../platform/repo-and-deployment.md`** §4.3 FakeGateway: `RequireMaxResidency` behaviour (400 without the
    header), the 403/503 rule with `Retry-After`; §4.4 FakeLlm `dimensions` with release 1.
-6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: delegation after release 2; worker
-   keys never include the open key.
+6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: acting as an assigned key from the
+   integration phase 2; the worker never sends `External`.
 7. **`../archive/decisions-log.md`** rows "Gateway changes" and "Weakness review 5": features, release
    split, key flags, 503 rule.
 8. **`../to-verify.md`**: rows 82 and 86 (Graph) in P2; the rows of §16.
@@ -845,25 +757,22 @@ What this design needs from the other documents of this repo, and they state:
 
 1. **Guests refused by default for every adopter**: yes, `Oidc:RefuseGuests` and `DataApi:RefuseGuests` default to
    `true`, with a prominent *Check before upgrading* in the upgrade guide (§13.3).
-2. **Delegating keys editable by gateway admins only**: yes, every change except rotate and revoke (§5.7).
+2. **Who may change a key that acts for others**: gateway admins only, for credential keys (their managers may rotate
+   and revoke them); an assigned key is managed by its own team's and department's admins (§5.1).
 
 ## 16. To verify
 
 - `TokenValidatedContext.Properties.Items` set in `OnTokenValidated` reach the cookie ticket and
   `CookieSigningInContext.Properties` (expected from the OIDC handler's sign-in, not checked in code).
 - `ctx.Fail(...)` in `OnTokenValidated` + `OnRemoteFailure` with `HandleResponse()` gives a clean redirect on .NET 10.
-- EF Core maps the new non-mapped `VirtualKey` members only if ignored explicitly; whether `GatewayDbContext`
-  (`:62-70`) needs `e.Ignore(...)` for `OwnerTeam`.
 - Entra `acct` and `idp` values for B2B guests and members in ID tokens and in delegated access tokens for the Data
   API; whether a member's ID token ever carries `idp` equal to the v1 issuer form.
 - Docker Compose nested default `${A:-${B:-true}}` (one level is already used at `deploy/compose.prod.yaml:181`).
 - The OpenAI .NET SDK's default `encoding_format` for embeddings (base64 or float).
 - Ollama's OpenAI-compatible `/v1/embeddings` and a `dimensions` parameter (only matters if a caller sends it to real
   BGE-M3; Ume.Rag does not).
-- That no gateway code path reads `key.TeamId` meaning "the key's owner" after step 1b besides those listed in §5.1
-  (grep at implementation time; `AuthFailureRecorder.cs:57` runs before step 1b and keeps the owner).
 - Realtime: whether WebSocket clients used by adopters can set custom headers on the upgrade request (server SDKs can;
-  browsers cannot, which only matters for features B and A, not for Ume.Rag).
+  browsers cannot, which only matters for feature B, not for Ume.Rag).
 - The attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection
   (the selection's `CircuitStatus`, `Stores.cs:175`, is available after `SelectCandidatesAsync`), for the 503 of §3.3.
 - Entra emits member groups in the admin registration's group claim with the chosen `groupMembershipClaims`
@@ -877,11 +786,11 @@ Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplificatio
 
 | Removed or deferred | Where it went |
 |---|---|
-| Releases B → C → A (three upgrade windows, per-release upgrade guides, ADR rows per release) | two releases: B in release 1, C and A in release 2 (§13, §18) |
+| Releases B → C → A (three upgrade windows, per-release upgrade guides, ADR rows per release) | two releases: B in release 1, C in release 2; A in the gateway's integration phases (§5, §13, §18) |
 | Graph `checkMemberGroups` lookup (`Oidc:GroupLookup`, `GraphTokenClient`, `IGroupMembershipSource`), `GroupMember.Read.All`, Redis `ume:groups:{oid}`, circuit, event 2007, `departmentLookup` on `/bff/user`, attribute `DepartmentLookup` on 2002, the "failed" banner, directory group search endpoints | P2, with data-plane audiences and approval package 2 (identity plan §2); P1 member groups are entered as group claim values |
-| Effective team's request policy on delegated requests | removed; key's policy only, opt-in `ApplyTeamPolicy` (§5.3) |
+| Effective team's request policy on delegated requests | replaced by acting as an assigned key: that key's and its team's request policy apply (§5.3) |
 | `403 max_residency_not_met` while in-ceiling targets are only drained | `503 no_eligible_provider` + `Retry-After` (§3.3) |
-| Ume.Rag interim: per-team linked keys `GatewayKeyLinks`, `onprem` keys, the "platform service key" (one key) | removed; FakeGateway in CI and tests, the interim test/dev gateway in P1a, the pilot team's keys per level and deployable until release 2, then delegating keys (§13.4) |
+| Ume.Rag interim: per-team linked keys `GatewayKeyLinks`, `onprem` keys, the "platform service key" (one key) | removed; FakeGateway in CI and tests, the interim test/dev gateway in P1a, the pilot team's keys per level and deployable until the gateway's integration phase 1, then one credential key per service and an assigned key per assistant and knowledge base (§13.4) |
 
 ## 18. Deferred or removed (weakness review)
 
@@ -889,6 +798,6 @@ Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-crit
 
 | Removed or deferred | Where it went |
 |---|---|
-| One combined release before the pilot (B, C, A; ADRs 018–020 together) | release 1 (B, FakeLlm `dimensions`, tool passthrough tests, ADR 018) before the pilot; release 2 (C with tenant/guest refusal, A, run headers, ADRs 019–020) in P2 (§13) |
+| One combined release before the pilot (B, C, A; ADRs 018–020 together) | release 1 (B, FakeLlm `dimensions`, tool passthrough tests, ADR 018) before the pilot; release 2 (C with tenant/guest refusal, ADR 019) in P2; A and the run headers in the gateway's integration phases (§5, §13) |
 | `RequireMaxResidency` in migration `KeyDelegation` | its own migration `KeyResidencyCeiling` in release 1 (§8.1) |
-| Ume.Rag on delegating keys from the pilot on | the pilot team's per-level keys until release 2 (§13.4) |
+| Ume.Rag on delegating keys from the pilot on | the pilot team's per-level keys until the gateway's integration phase 1 (§13.4) |
