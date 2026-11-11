@@ -449,7 +449,8 @@ public sealed class ReadOnlyEmbeddingCache(IEmbeddingCache inner) : IEmbeddingCa
     public Task<IReadOnlyDictionary<string, float[]>> GetAsync(string classification, Guid profileId, IReadOnlyCollection<string> textHashes,
         CancellationToken cancellationToken) => inner.GetAsync(classification, profileId, textHashes, cancellationToken);
 
-    public Task PutAsync(string classification, Guid profileId, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now, CancellationToken cancellationToken) =>
+    public Task PutAsync(string classification, EmbeddingProfileRecord embeddedWith, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now,
+        CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
     public Task TouchAsync(string classification, Guid profileId, IReadOnlyCollection<string> textHashes, DateTimeOffset now, CancellationToken cancellationToken) =>

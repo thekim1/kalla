@@ -66,8 +66,13 @@ public interface IEmbeddingCache
     /// <summary>One <c>SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)</c>.</summary>
     Task<IReadOnlyDictionary<string, float[]>> GetAsync(string classification, Guid profileId, IReadOnlyCollection<string> textHashes, CancellationToken cancellationToken);
 
-    /// <summary>Its own short transaction, <c>ON CONFLICT DO NOTHING</c>.</summary>
-    Task PutAsync(string classification, Guid profileId, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>
+    /// Its own short transaction, <c>ON CONFLICT DO NOTHING</c>, keyed by <paramref name="embeddedWith"/>'s id. Written only while
+    /// the profile still has the model, size and <c>RequestDimensions</c> the vectors were embedded with (B-30, #559 review);
+    /// otherwise nothing is written.
+    /// </summary>
+    Task PutAsync(string classification, EmbeddingProfileRecord embeddedWith, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now,
+        CancellationToken cancellationToken);
 
     /// <summary><c>LastUsedAt</c> touched at most once a day per row.</summary>
     Task TouchAsync(string classification, Guid profileId, IReadOnlyCollection<string> textHashes, DateTimeOffset now, CancellationToken cancellationToken);

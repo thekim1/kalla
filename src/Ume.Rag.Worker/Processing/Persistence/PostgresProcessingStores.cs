@@ -188,9 +188,16 @@ public sealed class PostgresEmbeddingCache(JobDatabase database) : IEmbeddingCac
         return vectors;
     }
 
-    public async Task PutAsync(string classification, Guid profileId, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now,
+    /// <summary>
+    /// The guard <c>content.rag_lock_profile_if_unchanged</c> and the insert in one transaction: the profile row is held FOR SHARE
+    /// until the rows commit, so an admin save (FOR UPDATE, then <c>content.rag_reset_profile</c>, which deletes the profile's
+    /// cache) either waits and deletes them, or commits first and nothing is written here. The cache is keyed by profile id,
+    /// not model, so a vector cached after the change would come back on the retry under the new model (#559 review).
+    /// </summary>
+    public async Task PutAsync(string classification, EmbeddingProfileRecord embeddedWith, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(embeddedWith);
         ArgumentNullException.ThrowIfNull(vectors);
         if (vectors.Count == 0)
         {
@@ -198,15 +205,32 @@ public sealed class PostgresEmbeddingCache(JobDatabase database) : IEmbeddingCac
         }
 
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(PutSql, connection)
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var guard = new NpgsqlCommand("SELECT content.rag_lock_profile_if_unchanged($1, $2, $3, $4)", connection, transaction)
+        {
+            Parameters = { Db.P(embeddedWith.Id), Db.P(embeddedWith.GatewayModel), Db.P(embeddedWith.Dimensions), Db.P(embeddedWith.RequestDimensions) },
+        })
+        {
+            if (await guard.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return;
+            }
+        }
+
+        await using (var command = new NpgsqlCommand(PutSql, connection, transaction)
         {
             Parameters =
             {
-                Db.P(classification), Db.P(profileId), Db.P(vectors.Keys.Select(Db.Bytes).ToArray()),
+                Db.P(classification), Db.P(embeddedWith.Id), Db.P(vectors.Keys.Select(Db.Bytes).ToArray()),
                 Db.P(vectors.Values.Select(v => VectorText.Format(v)).ToArray()), Db.P(now.ToUniversalTime()),
             },
-        };
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        })
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task TouchAsync(string classification, Guid profileId, IReadOnlyCollection<string> textHashes, DateTimeOffset now,

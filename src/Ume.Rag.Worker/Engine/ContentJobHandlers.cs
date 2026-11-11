@@ -309,7 +309,6 @@ public sealed partial class EmbedJobHandler(
         var profile = await profiles.GetAsync(source.EmbeddingProfileId, cancellationToken)
             ?? throw new StageFatalException(Outcome.Failed, "embed.profile_unknown");
         var embedded = await embed.RunAsync(draft, document.Classification, profile.Id, new EmbeddingCall(payload.RunId), cancellationToken);
-        await index.EnsureProfileIndexAsync(profile.Id, profile.Dimensions, cancellationToken);
         var values = await settings.GetAsync(cancellationToken);
         var counts = draft.Pii ?? new PiiCounts();
         var set = new ChunkSetRecord(Guid.CreateVersion7(), key, document.Classification, source.CollectionId, inputRow.InputHash)
@@ -325,7 +324,8 @@ public sealed partial class EmbedJobHandler(
         var now = time.GetUtcNow();
         var rows = draft.Chunks.Select((c, i) => new ChunkRecord(Guid.CreateVersion7(), set.Id, document.Id, source.CollectionId, document.Classification, c.Ordinal, c,
             profile.Id, embedded.Vectors[i]) { DeletedAt = now }).ToList();
-        await index.WriteInvisibleAsync(set, rows, cancellationToken);
+        // Guarded: an admin may have changed the profile while this document was embedded (B-30, #554 review).
+        await index.WriteInvisibleAsync(set, rows, profile, cancellationToken);
         return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken);
     }
 

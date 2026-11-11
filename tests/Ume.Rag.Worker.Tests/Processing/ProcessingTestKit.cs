@@ -320,11 +320,12 @@ public sealed class InMemoryEmbeddingCache : IEmbeddingCache
         return Task.FromResult(hits);
     }
 
-    public Task PutAsync(string classification, Guid profileId, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now, CancellationToken cancellationToken)
+    public Task PutAsync(string classification, EmbeddingProfileRecord embeddedWith, IReadOnlyDictionary<string, float[]> vectors, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         foreach (var (hash, vector) in vectors)
         {
-            Rows.TryAdd((classification, profileId, hash), vector);
+            Rows.TryAdd((classification, embeddedWith.Id, hash), vector);
         }
 
         return Task.CompletedTask;
