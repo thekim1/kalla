@@ -237,7 +237,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   follows it.
 - **Read:** #506; repo-and-deployment §8.
 
-### [ ] A-21 Compose knobs for telemetry and health checks (#503, #504, Compose part)
+### [x] A-21 Compose knobs for telemetry and health checks (#503, #504, Compose part)
 - **Do:** `OTEL_TRACES_SAMPLER` (`parentbased_traceidratio`) and its ratio as deployment knobs in Compose; the .NET
   health-check interval from B-27's measurement (30–60 s).
 - **Paths:** `deploy/**`, `docs/production-setup.md`.
@@ -253,7 +253,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #500; performance pass §3.3 (P-52).
 
-### [ ] A-23 Idle cost: notification-driven job lanes, renderer as a profile (#505)
+### [x] A-23 Idle cost: notification-driven job lanes, renderer as a profile (#505)
 - **Do:** a lane waits for `rag_jobs` or the class's next `AvailableAt`, capped at about 30 s, instead of polling every
   2 s; `rag-renderer` behind a Compose profile that `init-deployment.sh` enables, with `render.not_configured` for
   `browser` sources when it is off (as the AppHost's `Render:Mode` `off`).
