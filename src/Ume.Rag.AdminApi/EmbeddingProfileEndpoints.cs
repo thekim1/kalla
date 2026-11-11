@@ -188,8 +188,9 @@ public static class EmbeddingProfileEndpoints
 
     /// <summary>
     /// The save (admin design §4.5): field rules, <c>profile_in_use</c> for a used profile's fixed fields, the test with the new
-    /// values (<c>profile_test_failed</c> with its outcome), then in one write: the fields, the new canary (its last check
-    /// cleared), and the index rebuilt at the new size when the dimension count changed. A used profile keeps its canary,
+    /// values (<c>profile_test_failed</c> with its outcome), then in one write under the profile's row lock: the fields, the new
+    /// canary (its last check cleared), and, when the model, size or <c>RequestDimensions</c> changed, the profile's cached
+    /// embeddings removed and its index rebuilt at the new size (<c>content.rag_reset_profile</c>). A used profile keeps its canary,
     /// and its test must match it, so a new ceiling cannot reach a provider that serves another model.
     /// </summary>
     private static async Task<EmbeddingProfileDto> UpdateAsync(Guid id, EmbeddingProfileUpdateRequest request, AdminContext admin,
@@ -220,6 +221,10 @@ public static class EmbeddingProfileEndpoints
 
         await admin.WriteAsync(async attempt =>
         {
+            // The row lock first (#554 review): a worker inserts a chunk set only while it holds this row FOR SHARE with the
+            // values it embedded with (content.rag_lock_profile_if_unchanged), so the in-use check below sees its set, or the
+            // worker sees these values once this commits and inserts nothing.
+            await db.Database.ExecuteSqlAsync($"""SELECT 1 FROM config."EmbeddingProfiles" WHERE "Id" = {id} FOR UPDATE""", attempt);
             var profile = await db.EmbeddingProfiles.SingleOrDefaultAsync(p => p.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
             admin.ExpectVersion(profile, request.Version);
             var usedNow = await db.ChunkSets.AnyAsync(c => c.EmbeddingProfileId == id, attempt);
@@ -229,7 +234,7 @@ public static class EmbeddingProfileEndpoints
             }
 
             var before = Audit(profile);
-            var resized = profile.Dimensions != request.Dimensions;
+            var vectorsChange = FixedVectorFieldsChange(profile, request);
             profile.GatewayModel = request.GatewayModel;
             profile.Dimensions = request.Dimensions;
             profile.RequestDimensions = request.RequestDimensions;
@@ -249,21 +254,26 @@ public static class EmbeddingProfileEndpoints
             {
                 var text = GatewayModelSync.VectorText(vector!);
                 await db.Database.ExecuteSqlAsync($"""UPDATE config."EmbeddingProfiles" SET "CanaryEmbedding" = {text}::vector WHERE "Id" = {id}""", attempt);
-                if (resized)
+                if (vectorsChange)
                 {
-                    await db.Database.ExecuteSqlAsync($"SELECT content.rag_reset_profile_index({id})", attempt);
+                    // Cached embeddings and the index were made with the old values.
+                    await db.Database.ExecuteSqlAsync($"SELECT content.rag_reset_profile({id})", attempt);
                 }
             }
 
             return new AdminChange<bool>(true, "update", AuditEntityTypes.EmbeddingProfile, id, before,
-                new { After = Audit(profile), Residency = test.Residency, CanaryReplaced = !usedNow, IndexRebuilt = !usedNow && resized });
+                new { After = Audit(profile), Residency = test.Residency, CanaryReplaced = !usedNow, Reset = !usedNow && vectorsChange });
         }, ct);
 
         return await GetAsync(db, id, ct);
     }
 
     private static bool FixedFieldsChange(EmbeddingProfile p, EmbeddingProfileUpdateRequest r) =>
-        p.GatewayModel != r.GatewayModel || p.Dimensions != r.Dimensions || p.RequestDimensions != r.RequestDimensions || p.MaxInputTokens != r.MaxInputTokens;
+        FixedVectorFieldsChange(p, r) || p.MaxInputTokens != r.MaxInputTokens;
+
+    /// <summary>The values a vector depends on, as the worker's insert guard compares them.</summary>
+    private static bool FixedVectorFieldsChange(EmbeddingProfile p, EmbeddingProfileUpdateRequest r) =>
+        p.GatewayModel != r.GatewayModel || p.Dimensions != r.Dimensions || p.RequestDimensions != r.RequestDimensions;
 
     private static object Audit(EmbeddingProfile p) => new
     {

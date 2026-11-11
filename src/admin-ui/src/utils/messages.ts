@@ -249,6 +249,7 @@ export const JOB_MESSAGES: Record<string, string> = {
   'sample.too_small': 'Too few pages had a sitemap date to judge whether the dates can be trusted.',
   'embed.bad_vector': 'The AI gateway returned an unusable embedding. Contact the platform team if it happens again.',
   'embed.canary_mismatch': 'The embedding model gives different results than before, so embedding is paused. Contact the platform team.',
+  'embed.profile_changed': 'The embedding profile was changed while this document was being embedded. It is embedded again with the new profile.',
   'embed.input_missing': 'The text to embed was not found. Process the document again.',
   'embed.input_rejected': 'The AI gateway refused the text to embed.',
   'embed.profile_unknown': 'The knowledge base’s embedding model does not exist. Contact the platform team.',

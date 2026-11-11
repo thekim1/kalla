@@ -57,8 +57,10 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         return await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == profile.Id, Ct);
     }
 
-    /// <summary>One chunk set names the profile: from now on it is in use.</summary>
-    private async Task UseAsync(Guid profileId)
+    private sealed record SeededDocument(Guid DocumentId, Guid CollectionId, Guid PipelineVersionId);
+
+    /// <summary>A collection on the profile with one document and no chunk set yet.</summary>
+    private async Task<SeededDocument> DocumentAsync(Guid profileId)
     {
         var code = "E" + Random.Shared.Next(100_000, 999_999);
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -84,9 +86,17 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         };
         db.Add(document);
         await db.SaveChangesAsync(Ct);
+        return new SeededDocument(document.Id, collection.Id, version.Id);
+    }
+
+    /// <summary>One chunk set names the profile: from now on it is in use.</summary>
+    private async Task UseAsync(Guid profileId)
+    {
+        var seeded = await DocumentAsync(profileId);
+        await using var db = TestPostgres.Context(database.Connection(null));
         db.Add(new ChunkSet
         {
-            DocumentId = document.Id, Classification = Classification.Public, CollectionId = collection.Id, PipelineVersionId = version.Id,
+            DocumentId = seeded.DocumentId, Classification = Classification.Public, CollectionId = seeded.CollectionId, PipelineVersionId = seeded.PipelineVersionId,
             EmbeddingProfileId = profileId, ContentHash = RandomNumberGenerator.GetBytes(32), InputHash = RandomNumberGenerator.GetBytes(32),
             State = ChunkSetStates.Held, CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -272,6 +282,90 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
 
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == profile.Id, Ct)).Version.ShouldBe(profile.Version); // nothing stored
+    }
+
+    [Fact]
+    public async Task A_model_change_removes_the_profiles_cached_embeddings_and_the_workers_guard_sees_the_new_values()
+    {
+        var profile = await ProfileAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var cached = Vector("Ett cachat stycke.", 1024);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO content."EmbeddingCache" ("Classification", "EmbeddingProfileId", "TextHash", "LastUsedAt", "Embedding")
+                VALUES ('public', {profile.Id}, {RandomNumberGenerator.GetBytes(32)}, now(), {cached}::vector)
+                """, Ct);
+        }
+
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        using var response = await platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}",
+            Body(profile, dimensions: 768, requestDimensions: true), Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+
+        await using var worker = new Npgsql.NpgsqlConnection(database.Connection(RagDatabase.Worker));
+        await worker.OpenAsync(Ct);
+        async Task<bool> GuardAsync(int dims, bool request)
+        {
+            await using var command = new Npgsql.NpgsqlCommand("SELECT content.rag_lock_profile_if_unchanged($1, $2, $3, $4)", worker)
+            {
+                Parameters = { new() { Value = profile.Id }, new() { Value = "bge-m3" }, new() { Value = dims }, new() { Value = request } },
+            };
+            return (bool)(await command.ExecuteScalarAsync(Ct))!;
+        }
+
+        (await GuardAsync(1024, false)).ShouldBeFalse(); // a worker that embedded with the old values inserts nothing
+        (await GuardAsync(768, true)).ShouldBeTrue();
+        await using var count = new Npgsql.NpgsqlCommand("""SELECT count(*) FROM content."EmbeddingCache" WHERE "EmbeddingProfileId" = $1""", worker)
+        {
+            Parameters = { new() { Value = profile.Id } },
+        };
+        ((long)(await count.ExecuteScalarAsync(Ct))!).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_save_waits_for_a_worker_inserting_a_chunk_set_and_then_refuses_with_profile_in_use()
+    {
+        // #554 review: the worker holds the profile row FOR SHARE from its guard to its commit; the save's FOR UPDATE waits,
+        // and its in-use check then sees the set.
+        var profile = await ProfileAsync();
+        var seeded = await DocumentAsync(profile.Id);
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+
+        await using var worker = new Npgsql.NpgsqlConnection(database.Connection(RagDatabase.Worker));
+        await worker.OpenAsync(Ct);
+        await using var transaction = await worker.BeginTransactionAsync(Ct);
+        await using (var insert = new Npgsql.NpgsqlCommand("""
+            INSERT INTO content."ChunkSets" ("Id", "DocumentId", "Classification", "CollectionId", "PipelineVersionId", "EmbeddingProfileId",
+                                            "ContentHash", "InputHash", "State", "PiiFlagged", "ChunkCount")
+            SELECT $1, $2, 'public', $3, $4, $5, $6, $7, 'writing', false, 0
+            WHERE content.rag_lock_profile_if_unchanged($5, 'bge-m3', 1024, false)
+            """, worker, transaction)
+        {
+            Parameters =
+            {
+                new() { Value = Guid.CreateVersion7() }, new() { Value = seeded.DocumentId }, new() { Value = seeded.CollectionId },
+                new() { Value = seeded.PipelineVersionId }, new() { Value = profile.Id }, new() { Value = RandomNumberGenerator.GetBytes(32) },
+                new() { Value = RandomNumberGenerator.GetBytes(32) },
+            },
+        })
+        {
+            (await insert.ExecuteNonQueryAsync(Ct)).ShouldBe(1);
+        }
+
+        var save = platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile, model: "fake-eu-embed"), Ct);
+        await Task.Delay(TimeSpan.FromSeconds(2), Ct);
+        save.IsCompleted.ShouldBeFalse(); // blocked on the row lock
+        await transaction.CommitAsync(Ct);
+
+        using var response = await save;
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync(Ct));
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe("profile_in_use");
+        await using var db = TestPostgres.Context(database.Connection(null));
+        (await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == profile.Id, Ct)).GatewayModel.ShouldBe("bge-m3");
     }
 
     [Fact]
