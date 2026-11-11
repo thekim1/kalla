@@ -263,7 +263,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #505; engine §9; connectors §8.
 
-### [ ] A-24 The no-decompounder variant on statement K (#509, evaluation part)
+### [x] A-24 The no-decompounder variant on statement K (#509, evaluation part)
 - **Do:** `NoDecompounderSearchIndex` uses B-28's statement with the variant's expression; its own copy goes.
 - **Paths:** `src/Ume.Rag.Worker/Evaluation/**`.
 - **Done when:** the variant's evaluation results are unchanged on the smoke set.
