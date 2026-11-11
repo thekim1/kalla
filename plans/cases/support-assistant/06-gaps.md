@@ -31,7 +31,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 | SA-12 | A readable view of uploaded non-PDF documents | M | b + main | no |
 | SA-13 | `.markdown` extension refused on upload | S | b | no |
 | SA-14 | Push-triggered refresh (webhook or API "sync now") | M | b + a | no |
-| SA-15 | Proxy body-size guidance (1 MB) below the chat route's 2 MB | S | a | no |
+| SA-15 | Proxy body-size guidance (1 MB) below the chat route's 2 MB: **done** (#552) | S | a | no |
 
 ## SA-1 Related documents in the chat answer
 
@@ -163,6 +163,9 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 - **Size M.**
 
 ## SA-15 Proxy body size
+
+**Done** (#552, 2026-11-11): the nginx example, the Kubernetes ingress, the printed routes and the production setup allow
+2 MB on the api host and on Open WebUI's; the upgrade guide tells operators with a generated `nginx.conf` to raise it.
 
 - **Missing.** The proxy configuration that `init-deployment.sh --proxy` writes (#470, from
   `deploy/proxy/nginx.conf.example`) sets `client_max_body_size 1m` on the whole api host, and the printed and

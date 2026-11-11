@@ -41,7 +41,7 @@ in … in P1 is not settled").
 | Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Ume.Rag.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
 | Route the app's backend host to rag-api | operator | reverse proxy and firewall: `/v1/models`, `/v1/chat/completions`, `/v1/feedback` from the app's backend only; `/v1/documents/*` from the staff network (identity §5.3; knowledge §4.6) |
 | Absolute citation links | operator | `Knowledge:PublicBaseUrl` = rag-api's staff-network address (set from `UME_RAG_API_PUBLIC_URL`, `deploy/compose.prod.yaml:157`) |
-| Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Ume.Rag.Api/ChatEndpoints.cs:19`); the printed proxy routes allow 1 MB outside uploads ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"), so raise it on this route (gap SA-15) |
+| Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Ume.Rag.Api/ChatEndpoints.cs:19`); the generated proxy configuration and the printed routes allow it since #552 ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"); a proxy configured before 0.3.1/0.4.0 needs `client_max_body_size 2m` on the api host |
 
 The proxy and the firewall still restrict the routes; the key's allow-list is the second line, so a leaked key is
 useless outside the app's backend.

@@ -96,7 +96,7 @@ The gaps chosen before the pilot are built. What remains is configuration and pe
 
 - **Configuration:** the app's `integration` client and key with `requestsPerMinute` (e.g. 200) and `allowedIpRanges`
   = the app backend's addresses; `Settings.TrustedProxies` = the reverse proxy's addresses; the proxy route with a
-  2 MB chat body (SA-15); `Settings.Chat.condenseModel` `gpt-6-luna` with `Chat:LongQuestionCondenseTimeout` 4 s and
+  2 MB chat body (in the generated configuration since #552); `Settings.Chat.condenseModel` `gpt-6-luna` with `Chat:LongQuestionCondenseTimeout` 4 s and
   `Chat:FollowUpTimeout` 3 s ([`04-assistant.md`](04-assistant.md) §2); the knowledge base, the assistant and its audience.
 - **People:** the DPIA (G1) for pasted tickets and the app's store; the named editor, department admin, frontend
   contact and reviewers; the gold set from real tickets; the frontend team's build against
@@ -106,8 +106,7 @@ The gaps chosen before the pilot are built. What remains is configuration and pe
 
 - **The source inventory** (rollout 0.5): which intranet sections, which folders of Word, PDF and Markdown files, and
   whether the intranet is reachable from where the proof of concept runs.
-- **Suggestions before the pilot** (main session, 2026-11-08): close SA-15 in the printed proxy configuration (a
-  2 MB body on `/v1/chat/completions`, stream a, size S) so the operator does not have to remember it; SA-13
-  (`.markdown` uploads) only if the Markdown files use that extension.
+- **Suggestions before the pilot** (main session, 2026-11-08): SA-13 (`.markdown` uploads) only if the Markdown files
+  use that extension. SA-15 is done (#552).
 - **Legacy Office files** (`.doc`, `.xls`, `.ppt`) in the collection? They wait for P2 (postponed item Z1); until
   then they are converted to `.docx`/`.xlsx`/`.pptx` before upload.
