@@ -61,6 +61,13 @@ jobs:
         working-directory: src/parser
     steps:
       - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # The runners share one user's ~/.docker/config.json, which can hold an expired ghcr.io login from a tag release;
+        # Docker then sends it for this public image and the pull fails ("error from registry: denied", 0.4.0 dry run 3).
+        # A config in RUNNER_TEMP is this job's alone, so the pull stays anonymous (as release.yml's build job).
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Install uv from the image the Dockerfile pins
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -97,6 +104,11 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # The Dockerfile starts FROM ghcr.io/astral-sh/uv: as in the parser job, no shared ghcr.io login may reach it.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Build the image's test target (runs the tests without network)
         run: docker build --target test -t ume-rag.local/parser-test:ci src/parser
       - name: Disk left
@@ -116,6 +128,11 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
+      - name: A Docker client config of this job's own
+        # The Dockerfile starts FROM ghcr.io/astral-sh/uv: as in the parser job, no shared ghcr.io login may reach it.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Build the parser image
         # Straight into the Docker daemon that Testcontainers uses, from the runner's local layer cache (see parser-image).
         # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.

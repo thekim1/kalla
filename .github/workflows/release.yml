@@ -77,6 +77,17 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # The runners share one user's ~/.docker/config.json, where a tag release's `docker login ghcr.io` used to leave
+        # its GITHUB_TOKEN behind. Once expired, buildx still sent it for ghcr.io and the dry run of 0.4.0 failed pulling
+        # the public ghcr.io/astral-sh/uv ("failed to fetch oauth token: denied"). A config in RUNNER_TEMP is this
+        # job's alone and goes with it, so a login never outlives the job; anonymous pulls stay anonymous.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
+          # No build-record artifact per image (docker/build-push-action's post step): nothing reads them, and during
+          # GitHub's artifact outage of 2026-11-11 each upload retried for ten minutes (40 minutes for the four images).
+          echo "DOCKER_BUILD_RECORD_UPLOAD=false" >> "$GITHUB_ENV"
       - name: Resolve version and registry
         id: version
         env:
@@ -120,6 +131,12 @@ jobs:
         with:
           # The builder pushes to localhost:5000 in a dry run.
           driver-opts: network=host
+      - name: Build cache on the runner's disk
+        # The buildx builder above starts empty in every run, so each image would build from scratch and, with new layer
+        # digests, push every layer again. One local cache per image, kept in the runner user's home (both runners share
+        # it; releases don't run in parallel), read by each build and replaced after it (mode=max keeps the build
+        # stages' layers too), so an unchanged Dockerfile and context rebuild in seconds and push only the new layers.
+        run: echo "BUILD_CACHE=$HOME/.cache/ume-rag-release-buildx" >> "$GITHUB_ENV"
       - name: Install Syft
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -186,6 +203,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/postgres:${{ steps.version.outputs.version }}
           push: true
           provenance: false
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}/postgres
+          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/postgres-new,mode=max
       - name: Build and push ume-rag/clamav
         id: clamav
         uses: docker/build-push-action@v7
@@ -197,6 +216,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/clamav:${{ steps.version.outputs.version }}
           push: true
           provenance: false
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}/clamav
+          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/clamav-new,mode=max
       - name: Build and push ume-rag/renderer
         id: renderer
         uses: docker/build-push-action@v7
@@ -208,9 +229,10 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/renderer:${{ steps.version.outputs.version }}
           push: true
           provenance: false
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}/renderer
+          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/renderer-new,mode=max
       - name: Build and push ume-rag/parser
         id: parser
-        # The layers parser.yml's contract job built from this commit (same REVISION), from the Actions cache.
         uses: docker/build-push-action@v7
         with:
           context: src/parser
@@ -220,9 +242,15 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/parser:${{ steps.version.outputs.version }}
           push: true
           provenance: false
-          cache-from: |
-            type=gha,scope=parser-runtime
-            type=gha,scope=parser-test
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}/parser
+          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/parser-new,mode=max
+      - name: Rotate the build cache
+        # A local cache only grows when written over itself: keep each image's new cache and drop the old one.
+        run: |
+          for name in postgres clamav renderer parser; do
+            if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "$BUILD_CACHE/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
+          done
+          du -sh "$BUILD_CACHE"/* 2>/dev/null || true
       - name: Image pins and SBOMs of the other images
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -253,15 +281,11 @@ jobs:
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
       - name: Smoke test the bundle
         # The self-hosted runner has no sudo (docs/ci-runner.md): init-deployment.sh's chown runs as root in a
-        # throwaway container of the bundle's postgres image.
+        # throwaway container of the bundle's postgres image. --render boots with the renderer, then switches it off as
+        # the upgrade guide says, so one boot covers both (#505).
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker
-      - name: Smoke test the bundle with the renderer (profile render)
-        # The default install has no renderer since #505; this boots the bundle again with init-deployment.sh --render.
-        run: |
-          bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke-render" --chown-with-docker --render
+            --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker --render
       - uses: actions/upload-artifact@v7
         with:
           name: release
