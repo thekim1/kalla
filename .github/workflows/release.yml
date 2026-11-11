@@ -85,6 +85,9 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/docker-config"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
+          # No build-record artifact per image (docker/build-push-action's post step): nothing reads them, and during
+          # GitHub's artifact outage of 2026-11-11 each upload retried for ten minutes (40 minutes for the four images).
+          echo "DOCKER_BUILD_RECORD_UPLOAD=false" >> "$GITHUB_ENV"
       - name: Resolve version and registry
         id: version
         env:
