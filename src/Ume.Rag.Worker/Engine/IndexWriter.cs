@@ -5,6 +5,7 @@ using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
@@ -174,6 +175,53 @@ public sealed class IndexWriter(JobDatabase database)
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await WriteChunksAsync(connection, chunks, cancellationToken);
+    }
+
+    /// <summary>
+    /// Rule 2 for vectors embedded with <paramref name="embeddedWith"/>: the set is inserted only while the profile still has that
+    /// model, size and <c>RequestDimensions</c>, with the profile row held FOR SHARE until the insert commits
+    /// (<c>content.rag_lock_profile_if_unchanged</c>; admin design §4.5, Decisions "Editable embedding profiles before use"). An
+    /// admin save locks the row FOR UPDATE before its in-use check, so either it sees this set and refuses, or it committed
+    /// first and nothing is inserted here: <c>embed.profile_changed</c>, requeued without an attempt to embed with the new
+    /// values. Once the set exists the profile cannot change, so its index is ensured at the profile's size after the insert.
+    /// </summary>
+    /// <exception cref="StageTransientException"><c>embed.profile_changed</c>.</exception>
+    public async Task WriteInvisibleAsync(ChunkSetRecord set, IReadOnlyList<ChunkRecord> chunks, EmbeddingProfileRecord embeddedWith,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(chunks);
+        ArgumentNullException.ThrowIfNull(embeddedWith);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using (var transaction = await connection.BeginTransactionAsync(cancellationToken))
+        {
+            await using (var guard = new NpgsqlCommand("SELECT content.rag_lock_profile_if_unchanged($1, $2, $3, $4)", connection, transaction)
+            {
+                Parameters = { Db.P(embeddedWith.Id), Db.P(embeddedWith.GatewayModel), Db.P(embeddedWith.Dimensions), Db.P(embeddedWith.RequestDimensions) },
+            })
+            {
+                if (await guard.ExecuteScalarAsync(cancellationToken) is not true)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    throw new StageTransientException("embed.profile_changed", null, countsAttempt: false);
+                }
+            }
+
+            await using (var insert = InsertSet(set, connection, transaction))
+            {
+                await insert.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        await EnsureProfileIndexAsync(embeddedWith.Id, embeddedWith.Dimensions, cancellationToken);
+        await WriteChunksAsync(connection, chunks, cancellationToken);
+    }
+
+    private static async Task WriteChunksAsync(NpgsqlConnection connection, IReadOnlyList<ChunkRecord> chunks, CancellationToken cancellationToken)
+    {
         foreach (var batch in chunks.Chunk(BatchSize))
         {
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
