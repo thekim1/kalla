@@ -287,6 +287,8 @@ Platform-wide tool values (agent defaults and hard caps, skill gate model) live 
 
 Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cross-links to the gateway admin UI),
 `Admin:RequestsPerMinute` (120), `Admin:MaxSessionHours` (12), `Admin:AuditSourceAddress` (`Full`) (identity design §1.4),
+`Admin:OrganisationName` (`Umeå kommun`; the admin UI's header and sign-in texts, empty names no organisation; not
+secret, it is shown before sign-in),
 `Admin:Retention` (above); `OrgSync:*` for the organisation and `GatewayModels` sync (interval 5 min, Data API base URL,
 P2 `OrgSync:MaxAgeHours` 24 with the Graph member-group lookup (identity design §2.1); key `OrgSync__DataApiKey`, §6.3).
 
