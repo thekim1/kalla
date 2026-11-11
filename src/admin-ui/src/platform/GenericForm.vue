@@ -19,8 +19,18 @@ import { fromInput, InputError, toInput, type FieldSpec } from './schema'
 // merged back into it on save. The `extra` slot gets `collect()`, the body as it would be sent (null when a field cannot be
 // read), for an action on unsaved values.
 const props = withDefaults(
-  defineProps<{ formId: string; fields: FieldSpec[]; initial: Record<string, unknown>; method: 'post' | 'put'; url: string; submitLabel: string; models?: GatewayModel[] }>(),
-  { models: () => [] },
+  defineProps<{
+    formId: string
+    fields: FieldSpec[]
+    initial: Record<string, unknown>
+    method: 'post' | 'put'
+    url: string
+    submitLabel: string
+    models?: GatewayModel[]
+    /** Fields shown but not editable (an embedding profile in use, #565); they are still sent back as loaded. */
+    readOnly?: readonly string[]
+  }>(),
+  { models: () => [], readOnly: () => [] },
 )
 const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void }>()
 
@@ -90,16 +100,23 @@ async function save(): Promise<void> {
   <form :id="formId" class="grid gap-5" novalidate @submit.prevent="save">
     <template v-for="field in fields" :key="field.name">
       <div v-if="field.kind === 'switch'" class="grid gap-1">
-        <UiSwitch v-model="values[field.name] as boolean" :label="field.label" />
-        <p v-if="field.help" class="text-small text-fg-3">{{ field.help }}</p>
+        <!-- A visible label that also names the switch (#565; WCAG 2.5.3 Label in Name, 3.3.2 Labels or Instructions). -->
+        <div class="flex items-center gap-3">
+          <UiSwitch
+            v-model="values[field.name] as boolean" :labelledby="`${idOf(field.name)}-label`" :describedby="field.help ? `${idOf(field.name)}-help` : undefined"
+            :disabled="readOnly.includes(field.name)"
+          />
+          <span :id="`${idOf(field.name)}-label`" class="font-medium">{{ field.label }}</span>
+        </div>
+        <p v-if="field.help" :id="`${idOf(field.name)}-help`" class="text-small text-fg-3">{{ field.help }}</p>
       </div>
       <SelectField
-        v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
+        v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
         :options="[...(field.required ? [] : [{ value: '', label: PLATFORM.form.none }]), ...(field.options ?? []).map((o) => ({ value: o, label: o }))]"
         :hint="field.help" :error="form.errors[field.name]"
       />
       <SelectField
-        v-else-if="field.kind === 'model'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
+        v-else-if="field.kind === 'model'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
         :options="modelOptions(field, models, values[field.name] as string)" :hint="modelHint(field, models)" :error="form.errors[field.name]"
       />
       <TextAreaField
@@ -107,7 +124,7 @@ async function save(): Promise<void> {
         :hint="hint(field)" :error="form.errors[field.name]" :rows="field.kind === 'json' ? 8 : 3" mono
       />
       <TextField
-        v-else :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.help"
+        v-else :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.help" :disabled="readOnly.includes(field.name)"
         :error="form.errors[field.name]" :inputmode="field.kind === 'number' ? 'decimal' : undefined" autocomplete="off"
       />
     </template>
