@@ -260,13 +260,18 @@ jobs:
           done
           # The upload copy job (profile backup).
           docker compose -f deploy/compose.prod.yaml --profile backup config --quiet
+          # The renderer only with its profile (#505); the worker's dependency on it is optional.
+          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile render config --quiet
+          if docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --services | grep -qx rag-renderer; then
+            echo "rag-renderer runs without the render profile"; exit 1
+          fi
           # deploy/host/docker-user-firewall.sh targets each network by its subnet.
           { docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json
             docker compose -f deploy/compose.openwebui.yaml config --format json; } \
             | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
           bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
           # The renderer is on the internal render network only, which it shares with the worker (§5.4, §6.1).
-          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json | jq -e '
+          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile render config --format json | jq -e '
             (.services["rag-renderer"].networks | keys) == ["render"] and .networks.render.internal == true
             and ([.services | to_entries[] | select(.value.networks | has("render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
       - name: Kubernetes manifests are up to date and render
@@ -311,7 +316,7 @@ jobs:
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "${v}_IMAGE"; done
-          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup config --images)"
+          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup --profile render config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
           # Kubernetes: every image of the example overlay with every component is pinned by digest.
@@ -327,7 +332,7 @@ jobs:
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
         # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the
         # per-deployable gateway keys land where they belong (never External in the worker); the Open WebUI files render
-        # with the generated deploy/.env.
+        # with the generated deploy/.env; --render turns the renderer's profile and the worker's endpoint on together.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
           for k in eu worker-eu external owui-key owui-secret data-api; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
@@ -347,8 +352,8 @@ jobs:
               "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
               "$s"/openwebui/webui_secret_key "$d"/deploy/certs/data-protection.pfx
           }
-          init > "$d/init.log"; generated > "$d/first"
-          init > "$d/init.log"; generated > "$d/second"
+          init --render > "$d/init.log"; generated > "$d/first"
+          init --render > "$d/init.log"; generated > "$d/second"
           diff -u "$d/first" "$d/second"
           s="$d/deploy/secrets"
           [ "$(wc -c < "$s/worker/Security__CrawlKeyPepper")" = 64 ]
@@ -383,6 +388,16 @@ jobs:
           grep -q "Without --proxy, Open WebUI can't reach rag-api" "$d/init.log"
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
+          # The renderer (#505): with --render its profile is in deploy/.env and the worker has the endpoint; without, neither.
+          grep -qx 'COMPOSE_PROFILES=render' "$d/deploy/.env"
+          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer
+          init > "$d/init.log"
+          [ ! -e "$s/worker/Render__Endpoint" ]
+          grep -qx 'COMPOSE_PROFILES=' "$d/deploy/.env"
+          grep -q 'Renderer: off' "$d/init.log"
+          if docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer; then
+            echo "rag-renderer runs without --render"; exit 1
+          fi
       - name: init-deployment.sh --proxy writes an nginx config that nginx accepts
         # deploy/proxy/nginx.conf.example in the gateway's shape (#468): rendered for rag-api, rag-admin and Open WebUI,
         # then nginx -t with throwaway certificates (the pinned image of the AppHost's fixture site).

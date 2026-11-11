@@ -11,7 +11,10 @@ namespace Ume.Rag.Worker.Jobs;
 /// Fills this instance's job slots (engine design §9.3, data-model §4.2). One loop per class it runs, each with
 /// <c>Worker:Concurrency:&lt;class&gt;</c> slots; a free slot probes the departments with ready jobs in ascending order of
 /// the jobs this instance already runs for them (ties: higher priority, then older), one dequeue statement per probe, the
-/// first hit wins. Loops wake on a local signal or every <c>Worker:PollSeconds</c>.
+/// first hit wins. A loop that finds nothing waits for a wake-up of its class (<see cref="JobWakeUps"/>: a local signal or a
+/// <c>rag_jobs</c> notification) or until the class's next queued job is due, at most <c>Worker:IdleWaitSeconds</c>
+/// (30 s), so an idle worker issues no queue statement between notifications (#505); after a job or a wake-up it looks
+/// again at once.
 /// </summary>
 /// <remarks>
 /// Each job runs in its own scope under the <c>ConfigVersion</c> log scope. Capacity refusals (an unconfirmed config, a
@@ -101,7 +104,7 @@ public sealed partial class JobDispatcher(
 
     private async Task RunLaneAsync(Lane lane, CancellationToken dispatching, CancellationToken stoppingToken)
     {
-        var poll = TimeSpan.FromSeconds(options.Value.PollSeconds);
+        var idleCap = TimeSpan.FromSeconds(options.Value.IdleWaitSeconds);
         var failures = 0;
         try
         {
@@ -109,9 +112,10 @@ public sealed partial class JobDispatcher(
             {
                 await lane.Slots.WaitAsync(dispatching);
                 LeasedJob? job;
+                TimeSpan? nextReadyIn;
                 try
                 {
-                    job = await TryDequeueAsync(lane.Policy, dispatching);
+                    (job, nextReadyIn) = await TryDequeueAsync(lane.Policy, dispatching);
                     failures = 0;
                 }
                 catch (Exception ex) when (!dispatching.IsCancellationRequested)
@@ -126,8 +130,9 @@ public sealed partial class JobDispatcher(
 
                 if (job is null)
                 {
+                    // A wake-up that came while probing or running jobs is still pending, so this returns at once.
                     lane.Slots.Release();
-                    await wakeUps.WaitAsync(lane.Policy.Class, poll, dispatching);
+                    await wakeUps.WaitAsync(lane.Policy.Class, IdleWait(nextReadyIn, idleCap), dispatching);
                     continue;
                 }
 
@@ -145,11 +150,14 @@ public sealed partial class JobDispatcher(
         }
     }
 
-    /// <summary>Per-department fairness (data-model §4.2): fewest running here first, then priority, then age.</summary>
-    private async Task<LeasedJob?> TryDequeueAsync(JobClassPolicy policy, CancellationToken cancellationToken)
+    /// <summary>
+    /// Per-department fairness (data-model §4.2): fewest running here first, then priority, then age. Without a hit, how
+    /// long until the class's next queued job is due.
+    /// </summary>
+    private async Task<(LeasedJob? Job, TimeSpan? NextReadyIn)> TryDequeueAsync(JobClassPolicy policy, CancellationToken cancellationToken)
     {
         var ready = await queue.ReadyDepartmentsAsync(policy.Class, cancellationToken);
-        foreach (var department in ready
+        foreach (var department in ready.Departments
                      .OrderBy(d => running.CountFor(policy.Class, d.DepartmentId))
                      .ThenByDescending(d => d.MaxPriority)
                      .ThenBy(d => d.OldestAvailableAt)
@@ -159,12 +167,19 @@ public sealed partial class JobDispatcher(
             var job = await queue.DequeueAsync(new DequeueRequest(policy.Class, department.DepartmentId, identity.InstanceId, policy.Lease), CancellationToken.None);
             if (job is not null)
             {
-                return job;
+                return (job, null);
             }
         }
 
-        return null;
+        return (null, ready.NextReadyIn);
     }
+
+    /// <summary>
+    /// Until the next queued job is due, rounded up to a whole millisecond and at least one (a timer that fires a little
+    /// early costs one more probe), and at most <paramref name="cap"/>.
+    /// </summary>
+    internal static TimeSpan IdleWait(TimeSpan? nextReadyIn, TimeSpan cap) =>
+        nextReadyIn is { } next && next < cap ? TimeSpan.FromMilliseconds(Math.Ceiling(Math.Max(next.TotalMilliseconds, 1))) : cap;
 
     private async Task RunJobAsync(RunningJob entry, Lane lane, CancellationToken stoppingToken)
     {

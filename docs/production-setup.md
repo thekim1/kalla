@@ -1,9 +1,9 @@
 # Production setup
 
-The pilot runs on one Linux host with Docker Compose: seven long-running containers (`postgres` with pgBackRest inside,
-`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer`) and the one-shot `rag-migrate`, all in the Compose
-project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and control zone, `deploy/compose.ingestion.yaml` the
-ingestion zone; `init-deployment.sh` lists both (and the overlays your options need) in `COMPOSE_FILE` in `deploy/.env`,
+The pilot runs on one Linux host with Docker Compose: six long-running containers (`postgres` with pgBackRest inside,
+`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`), with `--render` a seventh (`rag-renderer`, below), and
+the one-shot `rag-migrate`, all in the Compose project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and
+control zone, `deploy/compose.ingestion.yaml` the ingestion zone; `init-deployment.sh` lists both (and the overlays your options need) in `COMPOSE_FILE` in `deploy/.env`,
 so every command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory
 that holds `deploy/`.
 
@@ -25,9 +25,9 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
   `up` fails. `deploy/host/docker-user-firewall.sh --print-subnets` lists them.
 - **Docker's iptables integration** (the default), so the `DOCKER-USER` chain exists; not the nftables firewall
   backend. The firewall is IPv4 only (the networks have no IPv6).
-- **Unprivileged user namespaces** for the renderer's Chromium sandbox (`rag-renderer`, below). On Ubuntu 23.10 and
-  later AppArmor may restrict them (`sysctl kernel.apparmor_restrict_unprivileged_userns`): check that the renderer
-  becomes healthy after the first `up` (*Renderer*, below).
+- **Unprivileged user namespaces** for the renderer's Chromium sandbox (`rag-renderer`, with `--render`, below). On
+  Ubuntu 23.10 and later AppArmor may restrict them (`sysctl kernel.apparmor_restrict_unprivileged_userns`): check that
+  the renderer becomes healthy after the first `up` (*Renderer*, below).
 - **An encrypted disk** for the Docker volumes (`postgres-data`, `rag-blobs`, `clamav-db`) and `deploy/secrets`.
 - **The backup target**, agreed with IT: a share mounted on the host, or an S3-compatible store (below).
 - **Escrow media** for the long-lived keys (runbook, *Key escrow*).
@@ -128,11 +128,11 @@ and certificates for postgres, the worker, the parser and the two public listene
 the database passwords and connection strings; the key pepper; the api's download-grant, cache-key and
 conversation-id keys; the Open WebUI JWT secret; the worker's crawl key pepper (`Security__CrawlKeyPepper`, the HMAC key
 of the host hash in security event 5101); the renderer's secret WebSocket path (`.render-ws-path`, written for the
-worker as `worker/Render__Endpoint` and for the renderer as `renderer.env`); the blob master key `keys/rag-blob-internal`;
-the pgBackRest passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings only). Secrets and
-certificates reach the RAG services as read-only files, never as environment variables (Open WebUI and the renderer are
-the exceptions: they read their secrets only from their environment, so they come from `secrets/openwebui.env` and
-`secrets/renderer.env`, which `docker compose` reads).
+renderer as `renderer.env` and, with `--render`, for the worker as `worker/Render__Endpoint`); the blob master key
+`keys/rag-blob-internal`; the pgBackRest passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings
+only). Secrets and certificates reach the RAG services as read-only files, never as environment variables (Open WebUI
+and the renderer are the exceptions: they read their secrets only from their environment, so they come from
+`secrets/openwebui.env` and `secrets/renderer.env`, which `docker compose` reads).
 
 It is safe to re-run: existing secrets, keys and the Data Protection certificate are never overwritten (a new one would
 break existing data or backups). Connection strings and other derived files are written again, and a re-run without
@@ -160,6 +160,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--crawl-allow CIDR[,CIDR]` | – | private ranges the crawler may fetch (municipal hosts): `UME_RAG_CRAWL_ALLOW`, used by the worker and the firewall |
 | `--host-memory 16\|24` | 16 | the host profile; 24 adds `compose.host-24g.yaml` and the ClamAV confs |
 | `--freshclam-proxy HOST:PORT` | – | freshclam reaches `database.clamav.net` through this HTTP proxy |
+| `--render` | – | runs `rag-renderer` for sources with fetch mode `browser`: `COMPOSE_PROFILES=render` in `deploy/.env` and the worker's `secrets/worker/Render__Endpoint`. Without it neither, and those sources wait with `render.not_configured` (*Renderer*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--openwebui-host HOST` | – | the optional Open WebUI stack (below); the options below need it |
 | `--openwebui-oidc-client-id ID` | `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`) |
 | `--openwebui-oidc-client-secret-file FILE` | – | that client's secret: `OAUTH_CLIENT_SECRET` in `secrets/openwebui.env` |
@@ -301,6 +302,15 @@ itself with the crawler's guard (connectors design §8.3). The worker finds it t
 (`ws://rag-renderer:3000/<secret path>`, the secret file `secrets/worker/Render__Endpoint`); without that file `browser`
 sources wait with `render.not_configured`. Rotate the path by deleting `secrets/.render-ws-path`, re-running
 `init-deployment.sh` and restarting `rag-renderer` and `rag-worker`.
+
+It is **off unless you ask for it**: the service has the Compose profile `render`, and `init-deployment.sh --render`
+puts `COMPOSE_PROFILES=render` in `deploy/.env` and writes the worker's endpoint file; a run without `--render` removes
+both. Keep the two together: the profile without the endpoint leaves the browser idle, the endpoint without the
+profile makes every render fail as `render.unavailable` instead of waiting with `render.not_configured`. To turn it on
+or off later, re-run `init-deployment.sh` with your options, with or without `--render`, then `docker compose --env-file
+deploy/.env up -d --wait` and `docker compose --env-file deploy/.env restart rag-worker`: the worker reads its secret
+files only at start. When turning it off, `docker compose --env-file deploy/.env rm -sf rag-renderer` stops the
+renderer (`up` leaves a container of a profile that is off alone).
 
 It runs hardened like the others, plus a seccomp profile of its own (`images/renderer/seccomp.json`: Docker's default
 with `clone`, `unshare` and `chroot` allowed), so Chromium's own sandbox can create its user namespaces. Without them

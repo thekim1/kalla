@@ -408,7 +408,7 @@ internal sealed class RecordingJobQueue : IJobQueue
         }
     }
 
-    public Task<IReadOnlyList<ReadyDepartment>> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<ReadyDepartments> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<LeasedJob?> DequeueAsync(DequeueRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 

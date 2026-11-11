@@ -25,7 +25,7 @@ public sealed class WorkerOptionsTests
         options.ConcurrencyOf(JobClasses.Fetch).ShouldBe(32);
         options.ConcurrencyOf(JobClasses.Embed).ShouldBe(4);
         options.ConcurrencyOf(JobClasses.Eval).ShouldBe(1);
-        (options.HeartbeatSeconds, options.InstanceTimeoutSeconds, options.ReaperSeconds, options.PollSeconds).ShouldBe((10, 30, 10, 2));
+        (options.HeartbeatSeconds, options.InstanceTimeoutSeconds, options.ReaperSeconds, options.IdleWaitSeconds).ShouldBe((10, 30, 10, 30));
     }
 
     [Fact]

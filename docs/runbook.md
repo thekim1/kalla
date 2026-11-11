@@ -299,8 +299,8 @@ dc stop rag-worker              # it gets its stop grace period (120 s) before i
 dc up -d --wait rag-worker
 ```
 
-`dc restart rag-worker` also stops it before it starts. The parser, ClamAV and the renderer can be restarted on their
-own: the worker reports them in its own health and retries (a render that loses the renderer fails as
+`dc restart rag-worker` also stops it before it starts. The parser, ClamAV and the renderer (when its `render` profile
+is on) can be restarted on their own: the worker reports them in its own health and retries (a render that loses the renderer fails as
 `render.unavailable` and keeps the page's last good content).
 
 **After any change to the gateway's models** (a new deployment behind an alias, a provider switch, a gateway upgrade),
@@ -533,6 +533,8 @@ Also for G1 and W2:
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
 | `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
 | `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `secrets/renderer.env` is missing: re-run `init-deployment.sh` (it keeps every other secret) |
+| Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh` with your options plus `--render`, then `dc up -d --wait` and `dc restart rag-worker` |
+| Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `secrets/worker/Render__Endpoint` but `COMPOSE_PROFILES` in `deploy/.env` lacks `render`: re-run `init-deployment.sh` with or without `--render`, so the two match, then `dc up -d --wait` and `dc restart rag-worker` |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
 | Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, Platform → Gateway models). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 

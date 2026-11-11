@@ -8,6 +8,8 @@
 # that CA through SSL_CERT_FILE. clamd has no TLS or authentication, so it stays on the internal ingestion network.
 # The renderer (Chromium behind Playwright's launch-server, §5.4) has plain WebSocket on 3000 with a secret path, on
 # the internal render network only: the worker fetches every request the browser makes (connectors design §8.3).
+# It runs only with the render profile (COMPOSE_PROFILES=render in deploy/.env, from init-deployment.sh --render, which
+# also gives the worker its endpoint); without it `browser` sources wait with render.not_configured (#505).
 
 x-hardened: &hardened
   read_only: true
@@ -67,7 +69,8 @@ services:
       # reports them in its own health and retries.
       rag-parser: {condition: service_started}
       rag-clamav: {condition: service_started}
-      rag-renderer: {condition: service_started}
+      # Only with the render profile.
+      rag-renderer: {condition: service_started, required: false}
     # crawl: the only network with Internet egress, filtered by the host firewall (§6.1). All egress leaves through the
     # network that holds the default route, so gw_priority pins it to crawl, whose allow-list also has the gateway.
     networks:
@@ -139,6 +142,8 @@ services:
 
   rag-renderer:
     <<: *hardened
+    # Off by default: an idle Chromium still holds memory and wakes up, and only `browser` sources need it.
+    profiles: [render]
     image: ${RENDERER_IMAGE:-ume-rag/renderer:latest}
     user: "10002:10002"
     restart: unless-stopped

@@ -16,7 +16,7 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 
 | Component | Where | What it is to Ume.Rag |
 |---|---|---|
-| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
+| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav` and, with `init-deployment.sh --render` (profile `render`), `rag-renderer` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
 | **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call), its Data API (catalogue for the admin's sync), and in the pilot the **shared Keycloak** (realm `ume`). Ume.Rag reaches each by URL only |
 | **Municipal reverse proxy** | in front of the RAG host (and the gateway host) | terminates public TLS and re-encrypts to the RAG listeners (`init-deployment.sh --proxy`) |
 | **Identity provider** | the shared Keycloak (pilot), a standalone Keycloak, or Entra ID / AD FS directly | OIDC for the admin UI and Open WebUI |

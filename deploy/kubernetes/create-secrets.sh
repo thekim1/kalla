@@ -5,13 +5,14 @@
 #   ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
 #       --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
 #       --gateway-key-file Eu=rag-eu.key --org-sync-url https://llm-data.example.se --org-sync-key-file data.key \
-#       --backup-target s3://... --allow-file-keys
+#       --backup-target s3://... --allow-file-keys [--render]
 #   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag [--datastores] [--renderer]
 #
 #   --namespace NS     namespace of the overlay (created if missing)
 #   --datastores       also the secrets of components/datastores (in-cluster Postgres and its pgBackRest repository)
-#   --renderer         also the renderer's WebSocket path (components/renderer); without it the worker's
-#                      Render__Endpoint is left out, so the worker refuses rendering instead of waiting for a renderer
+#   --renderer         also the renderer's WebSocket path (components/renderer; init-deployment.sh --render writes the
+#                      worker's Render__Endpoint); without it the endpoint is left out, so the worker refuses rendering
+#                      instead of waiting for a renderer
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
 # Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb) and
@@ -28,7 +29,7 @@ while [ $# -gt 0 ]; do
     --renderer) renderer=1; shift;;
     --certs-dir) certs="$2"; shift 2;;
     --secrets-dir) secrets="$2"; shift 2;;
-    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done
@@ -52,6 +53,8 @@ for svc in api admin migrations; do
   secret "ume-rag-$svc-certs" "$certs/$svc"
 done
 if [ "$renderer" = 1 ]; then
+  [ -r "$secrets/worker/Render__Endpoint" ] || {
+    echo "error: $secrets/worker/Render__Endpoint is missing. Run deploy/init-deployment.sh with --render first." >&2; exit 1; }
   secret ume-rag-worker-secrets "$secrets/worker"
   apply ume-rag-renderer-env --from-env-file="$secrets/renderer.env"
 else

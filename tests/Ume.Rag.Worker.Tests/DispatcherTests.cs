@@ -52,11 +52,11 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
     [Fact]
     public async Task A_job_enqueued_by_another_process_wakes_the_worker_through_rag_jobs()
     {
-        // The poll is 60 s and the admin's queue has its own data source and JobWakeUps, as in another process: a start well
-        // inside the poll interval can only come from the rag_jobs notification on the config monitor's connection.
+        // The idle wait is 60 s and the admin's queue has its own data source and JobWakeUps, as in another process: a start
+        // well inside it can only come from the rag_jobs notification on the config monitor's connection.
         var handler = new BlockingCommand(released: true);
         await using var worker = await WorkerHost.StartAsync(database, s => s.AddSingleton<ICommandHandler>(handler),
-            new Dictionary<string, string?> { ["Worker:PollSeconds"] = "60", ["Worker:Classes"] = JobClasses.Command });
+            new Dictionary<string, string?> { ["Worker:IdleWaitSeconds"] = "60", ["Worker:Classes"] = JobClasses.Command });
         // The monitor confirms its first version after its LISTEN statements; then let the lane make its first, empty probe.
         var config = worker.Services.GetRequiredService<ConfigVersionState>();
         await WaitUntilAsync(() => Task.FromResult(config.LastConfirmedAt is not null));
@@ -68,7 +68,7 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
 
         var latency = startedAt - enqueuedAt;
         TestContext.Current.TestOutputHelper?.WriteLine(string.Create(CultureInfo.InvariantCulture, $"started {latency.TotalMilliseconds:F0} ms after the enqueue"));
-        latency.ShouldBeLessThan(TimeSpan.FromSeconds(30), "woken by the notification, not the 60 s poll");
+        latency.ShouldBeLessThan(TimeSpan.FromSeconds(30), "woken by the notification, not the 60 s idle wait");
         await WaitForStateAsync(database, job, JobStates.Succeeded);
     }
 
@@ -119,7 +119,7 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
             SELECT extract(epoch FROM j."AvailableAt" - w."LastHeartbeatAt")::float8
             FROM content."Jobs" j, content."WorkerInstances" w WHERE j."Id" = $1 AND w."InstanceId" = $2
             """, job, a.InstanceId);
-        // Then at the next reaper pass, and dequeued at once (the reaper wakes the dispatcher) or within a poll.
+        // Then at the next reaper pass, and dequeued at once: the reaper wakes the dispatcher.
         var downtime = restartedAt - killedAt;
         TestContext.Current.TestOutputHelper?.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"killed worker's job restarted after {downtime.TotalSeconds:F2} s; silent {silence:F2} s at the reclaim"));

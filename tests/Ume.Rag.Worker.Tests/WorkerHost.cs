@@ -26,8 +26,9 @@ namespace Ume.Rag.Worker.Tests;
 
 /// <summary>
 /// A worker as Program.cs builds it, on the test server, as <c>ume_rag_worker</c>, with short timings: heartbeat 1 s,
-/// instance timeout 3 s, reaper 1 s, poll 1 s, stop grace 5 s, no maintenance loop, the test run's blob master keys
-/// (<see cref="TestBlobKeys"/>); with <c>engine</c> also the pipeline
+/// instance timeout 3 s, reaper 1 s, stop grace 5 s, no maintenance loop; the dispatcher's idle wait is the production
+/// one (30 s), so a job that only an idle lane's timeout would find shows as a slow test; and the test run's blob master
+/// keys (<see cref="TestBlobKeys"/>); with <c>engine</c> also the pipeline
 /// engine as Program.cs adds it (<c>AddRagEngine</c>). <see cref="KillAsync"/> tears it down
 /// without a clean stop, as a crash would: no lease is released and the instance row stays.
 /// </summary>
@@ -36,7 +37,6 @@ internal sealed class WorkerHost : IAsyncDisposable
     public const int HeartbeatSeconds = 1;
     public const int InstanceTimeoutSeconds = 3;
     public const int ReaperSeconds = 1;
-    public const int PollSeconds = 1;
 
     private readonly WebApplication _app;
     private bool _gone;
@@ -61,7 +61,6 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Worker:HeartbeatSeconds"] = Invariant(HeartbeatSeconds),
             ["Worker:InstanceTimeoutSeconds"] = Invariant(InstanceTimeoutSeconds),
             ["Worker:ReaperSeconds"] = Invariant(ReaperSeconds),
-            ["Worker:PollSeconds"] = Invariant(PollSeconds),
             ["Worker:StopGraceSeconds"] = "5",
             ["Worker:Maintenance"] = "false",
             ["KeyProvider:Directory"] = TestBlobKeys.Directory,
