@@ -370,7 +370,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** G1 finished.
 - **Read:** chat §13.3; `docs/runbook.md`.
 
-### [ ] A-29 Keyword statistics kept by the worker (#499 step 2, worker part)
+### [x] A-29 Keyword statistics kept by the worker (#499 step 2, worker part) (#578, #579; taken by stream b)
 - **Do:** table `content."KeywordStatistics"` (data-model §2.2; migration, `S` for `ume_rag_api` in `app-roles.sql` and
   its Kubernetes copy) and the worker's refresh of knowledge §6.2: per collection with ≥ 100 live child chunks,
   `ts_stat` on `ConnectionStrings:ragdb-maintenance` (else `ragdb`) with `statement_timeout = 0` when it has no rows,
