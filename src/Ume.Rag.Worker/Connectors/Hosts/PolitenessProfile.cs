@@ -1,5 +1,4 @@
 using Ume.Rag.Pipelines.Crawl;
-using Ume.Rag.Worker.Connectors.Http;
 
 namespace Ume.Rag.Worker.Connectors.Hosts;
 
@@ -49,7 +48,8 @@ public sealed record PolitenessProfile
     /// <summary>Set when robots.txt is ignored for the host: the platform admin's reason. Its <c>Sitemap:</c> lines are still read.</summary>
     public string? RobotsIgnoredReason { get; init; }
 
-    public string UserAgent { get; init; } = HttpFetcher.UserAgent;
+    /// <summary>The admin's User-Agent for the host; null: the crawler's own (<see cref="CrawlPolicy.UserAgent"/>).</summary>
+    public string? UserAgent { get; init; }
 
     public int RenderPerHost { get; init; } = 1;
 
@@ -134,7 +134,7 @@ public sealed record PolitenessProfile
                         breaker.PauseMinutes is { } minutes ? TimeSpan.FromMinutes(Math.Clamp(minutes, 1, HostPolitenessRules.MaxPauseMinutes)) : BreakerRule.Default.Pause),
                 },
                 RobotsIgnoredReason = stored.Robots is { Mode: PolitenessValues.Ignore, Reason: { } reason } && !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : null,
-                UserAgent = HostPolitenessRules.IsValidUserAgent(stored.UserAgent) ? stored.UserAgent! : HttpFetcher.UserAgent,
+                UserAgent = HostPolitenessRules.IsValidUserAgent(stored.UserAgent) ? stored.UserAgent : null,
                 RenderPerHost = stored.RenderPerHost ?? profile.RenderPerHost,
             };
         }
