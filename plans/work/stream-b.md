@@ -304,7 +304,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #512; identity §5.
 
-### [ ] B-30 Editable embedding profiles before use
+### [x] B-30 Editable embedding profiles before use (#554, #559, #558)
 - **Do:**
   - The three endpoints `GET /api/embedding-profiles[/{id}]`, `PUT /api/embedding-profiles/{id}` and
     `POST /api/embedding-profiles/{id}/test`, as admin design §4.5 lists them: the `inUse` rule, the test before each
