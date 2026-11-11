@@ -55,8 +55,8 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
 
     /// <summary>The caveat line of a degraded answer (§10.2) or of a general-knowledge answer (§10.4), or null; written by us, first.</summary>
     public string? Caveat => Outcome == ChatOutcome.AnsweredGeneral
-        ? (Language == LanguageGuess.English ? FixedTexts.GeneralCaveatEn : FixedTexts.GeneralCaveatSv) + "\n\n"
-        : Degraded ? (Language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" : null;
+        ? Platform.Texts[Language == LanguageGuess.English ? PromptTexts.CaveatGeneralEn : PromptTexts.CaveatGeneralSv] + "\n\n"
+        : Degraded ? Platform.Texts[Language == LanguageGuess.English ? PromptTexts.CaveatDegradedEn : PromptTexts.CaveatDegradedSv] + "\n\n" : null;
 
     /// <summary>What follows the model's text: the contact links of a general-knowledge answer (§10.4), else empty.</summary>
     public string Trailer => Outcome == ChatOutcome.AnsweredGeneral ? FixedTexts.ContactLinks(Assistant.Published?.NotFound, Platform.NotFound) : "";

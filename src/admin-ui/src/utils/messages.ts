@@ -74,6 +74,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   file_not_restorable: 'The file {name} cannot be brought back: it is not deleted, or its 14 days have passed.',
   profile_in_use: 'The embedding profile {profile} is already used by indexed content, so only its residency ceiling can change. A new model or size needs a profile migration.',
   profile_test_failed: 'The profile was not saved because the test embedding failed ({error}). Run Test to see what to fix.',
+  prompt_text_invalid: 'The prompt text {field} cannot be saved: {problem}.',
   evaluation_model_unset: 'No model is chosen for creating test questions. A platform administrator chooses it under Settings.',
   version_not_restorable: 'Version {number} is the draft or the published version and cannot be restored.',
   retention_outside_policy: 'The information class {level} allows history {modes} and at most {maxDays} days.',
