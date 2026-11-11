@@ -12,6 +12,38 @@ exception, with its own steps.
 
 ## Unreleased
 
+## 0.4.0
+
+- **Rolling update: yes** from 0.3.0. Three migrations, all of which 0.3.0 runs against:
+  - `ProfileIndexReset` adds `content.rag_reset_profile` and `content.rag_lock_profile_if_unchanged` (editable
+    embedding profiles, #554).
+  - `AnswerLengthFromModel` adds `config."GatewayModels"."MaxOutputTokens"` and removes `answer.maxOutputTokens` and
+    `answer.contextTokens` from every assistant version's `QuerySteps`, published ones included. 0.3.0 then uses its
+    defaults (16,384 and 1,024 tokens).
+  - `KeywordStatistics` adds `content."KeywordStatistics"`.
+
+  The new grants are in `app-roles.sql`, which `rag-migrate` applies. There are no superuser steps and no role changes.
+- **Answer length now follows the model (B-31).** After the upgrade every assistant answers up to its model's output
+  limit, in a context of the model's window. A model with no limit on the mirror gets no `max_tokens`, so the
+  provider's default applies. **Apply:** enter *Context window* and *Longest output* for each chat model on Platform →
+  Gateway models. Optionally, set a ceiling for every assistant under Settings → *Longest answer, all assistants*.
+  Re-enter an override on an assistant's Draft tab only where one is wanted.
+- **PostgreSQL settings (A-22):** `postgresql.conf` sets `jit = off`, `random_page_cost = 1.1` and
+  `effective_io_concurrency = 200`. The file is bind-mounted, so postgres reads the new one only after a restart:
+  `dc restart postgres` in the window (a short outage of every service), unless `dc up` recreates postgres for a new
+  `POSTGRES_IMAGE`. On a two-slot installation it can wait for the next window: nothing depends on it.
+  **Check:** `dc exec -T postgres psql -U postgres -d ragdb -Atc 'SHOW jit'` says `off`.
+- **Keyword statistics (A-29):** the worker writes `content."KeywordStatistics"` after each finished run and in the
+  nightly maintenance. The first check of a large collection reads its search vectors once, on the maintenance
+  session. rag-api still computes its own statistics in this release. Nothing to configure.
+- **New knobs**, all with defaults: `UME_RAG_ORGANISATION_NAME` (`Admin:OrganisationName`, default `Umeå kommun`),
+  `Crawl:UserAgent` (default `UmeaKommunBot/1.0`), and `Settings.Chat.prompts` (prompt texts, built-in when absent).
+- **Apply (Compose):** as for 0.3.0. Replace `deploy/` with the bundle's (keep `.env`, `certs/`, `secrets/`), set the
+  image pins, re-run `init-deployment.sh` with your options (plus `--render` with `browser` sources, below), then
+  `dc up -d --wait`, or `./deploy/rolling-update.sh --pull` with two slots. Then follow the notes below.
+- **Check:** `dc ps` all healthy; `/version` of rag-api and rag-admin says 0.4.0; `dc logs rag-migrate` lists the three
+  migrations; a question in an assistant's test panel shows the answer length it sent.
+
 - **Telemetry and health checks:** traces are now sampled at 10 % of the requests that start at a service
   (`UME_RAG_OTEL_TRACES_SAMPLER_ARG`, `always_on` for all); logs and metrics are unchanged. The .NET containers' health
   probe runs every 30 s (every 5 s while starting) instead of every 15 s, and a container is unhealthy after 3 failed
