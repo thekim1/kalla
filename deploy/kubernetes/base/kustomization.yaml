@@ -35,8 +35,8 @@ configMapGenerator:
   - name: ume-rag-migrations-config
     literals:
       - EmbeddingProfile__Dimensions=1024
-      - EmbeddingProfile__RequestDimensions=false
-      - EmbeddingProfile__MaxInputTokens=8192
+      - EmbeddingProfile__RequestDimensions=true
+      - EmbeddingProfile__MaxInputTokens=8191
       - EmbeddingProfile__MaxResidency=Eu
   # Used only with ../components/ingestion; generated here because an overlay merges its values before components apply.
   - name: ume-rag-worker-config
