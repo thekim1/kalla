@@ -10,6 +10,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - Portainer stack: rag-admin reaches the gateway's Data API; `dataapi` joins the internal network `rag-dataapi`, so the
   organisation and model sync no longer fail with `HttpRequestException` (#542).
 
+### Security
+
+- Aspire 13.6.5 for GHSA-f7vh-h5g3-7jrh (CVE-2026-120006, elevation of privilege in `Aspire.Hosting` < 13.6.5), with the
+  .NET packages at 10.0.14 that it requires (#549).
+
 ## 0.3.0 (2026-11-10)
 
 Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, and the review fixes of
