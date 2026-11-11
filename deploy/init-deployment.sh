@@ -546,6 +546,9 @@ UME_RAG_CRAWL_ALLOW=$crawl_allow
 # freshclam's HTTP proxy (host firewall: the mirror network reaches only this).
 UME_RAG_FRESHCLAM_PROXY=$freshclam_proxy
 # UME_RAG_OTEL_ENDPOINT=
+# The share of requests traced (default parentbased_traceidratio at 0.1; always_on traces every request):
+# UME_RAG_OTEL_TRACES_SAMPLER=parentbased_traceidratio
+# UME_RAG_OTEL_TRACES_SAMPLER_ARG=0.1
 # Empty where deploy/host/rag-ingestion.slice is not installed (a developer machine):
 # UME_RAG_INGESTION_SLICE=
 # Pin images by digest once pushed to your registry (the release bundle does this), for example:

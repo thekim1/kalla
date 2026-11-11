@@ -436,6 +436,9 @@ services:
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL (https URL)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      # Traces: a share of the requests that start here (#503); a parent's decision wins.
+      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
@@ -454,10 +457,11 @@ services:
       llm: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
-      interval: 15s
+      interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
-      retries: 5
+      start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
+      retries: 3
 
   rag-admin:
     <<: *hardened
@@ -499,6 +503,9 @@ services:
       # The gateway's Data API (COMPOSE_PROFILES=data): org sync and the model catalogue, with UME_RAG_ORG_SYNC_KEY.
       OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-https://dataapi:8443}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      # Traces: a share of the requests that start here (#503); a parent's decision wins.
+      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-admin
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
@@ -517,10 +524,11 @@ services:
       rag-dataapi: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
-      interval: 15s
+      interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
-      retries: 5
+      start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
+      retries: 3
 
   rag-worker:
     <<: *hardened
@@ -547,6 +555,9 @@ services:
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      # Traces: a share of the requests that start here (#503); a parent's decision wins.
+      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-worker
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
@@ -570,10 +581,11 @@ services:
       rag-crawl: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
-      interval: 15s
+      interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
-      retries: 5
+      start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
+      retries: 3
 
   rag-parser:
     <<: *hardened

@@ -161,6 +161,9 @@ services:
       OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
       OpenWebUi__FeedbackImportInterval: ${UME_RAG_OPENWEBUI_FEEDBACK_IMPORT_INTERVAL:-00:15:00}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
+      # Traces: a share of the requests that start here (#503); a parent's decision wins.
+      OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${UME_RAG_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
@@ -182,10 +185,11 @@ services:
       llm: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
-      interval: 15s
+      interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
-      retries: 5
+      start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
+      retries: 3
 
   rag-admin:
     <<: *hardened
@@ -229,6 +233,9 @@ services:
       # The gateway's Data API (org sync and model catalogue sync, #453); empty binds as unset, so both syncs stay off.
       OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
+      # Traces: a share of the requests that start here (#503); a parent's decision wins.
+      OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${UME_RAG_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-admin
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
@@ -250,10 +257,11 @@ services:
       llm: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
-      interval: 15s
+      interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
-      retries: 5
+      start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
+      retries: 3
 
   # The upload copy (§7.4): deploy/backup-uploads.sh runs it from rag-upload-backup.timer with `docker compose run`;
   # the profile keeps `up` from starting it. It copies new files below uploads/ to the backup target and never

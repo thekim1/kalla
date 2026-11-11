@@ -375,7 +375,10 @@ for the chain).
 
 The services export OpenTelemetry (logs, metrics, traces) only when an endpoint is set: add
 `UME_RAG_OTEL_ENDPOINT=<collector>` to `deploy/.env` (the firewall then allows it from the `llm` and `crawl` networks)
-and run `up -d` again. Health-check requests are not traced, and query strings are removed from HTTP spans. The
+and run `up -d` again. Health-check requests are not traced, and query strings are removed from HTTP spans. Traces
+are sampled: a tenth of the requests that start at a service (`UME_RAG_OTEL_TRACES_SAMPLER`, default
+`parentbased_traceidratio`, and `UME_RAG_OTEL_TRACES_SAMPLER_ARG`, default `0.1`; `always_on` records every request),
+and a request that arrives with a sampled parent is always recorded. Logs and metrics are not sampled. The
 backup scripts write Prometheus text files to `/var/lib/ume-rag/` (runbook, *Backups*).
 
 Security events (logger category `Ume.Rag.Security`, [security-events.md](security-events.md)) go to the SIEM through a
