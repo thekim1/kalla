@@ -567,6 +567,22 @@ public sealed class EmbeddingCacheEntry
     public DateTimeOffset LastUsedAt { get; set; }
 }
 
+/// <summary>
+/// One frequent lexeme of a collection's live child chunks for one embedding profile (<c>content."KeywordStatistics"</c>,
+/// data-model §2.2; knowledge design §6.2): <see cref="Ndoc"/> chunks contain it, out of <see cref="ChunkCount"/> when
+/// <see cref="ComputedAt"/>. Only lexemes in at least 10 % of the chunks are kept. Written only by the worker; rag-api
+/// builds its keyword stop list from it and runs no <c>ts_stat</c> (#499).
+/// </summary>
+public sealed class KeywordStatistic
+{
+    public Guid EmbeddingProfileId { get; set; }
+    public Guid CollectionId { get; set; }
+    public required string Lexeme { get; set; }
+    public int Ndoc { get; set; }
+    public int ChunkCount { get; set; }
+    public DateTimeOffset ComputedAt { get; set; }
+}
+
 /// <summary>Run kinds (engine design §10.1).</summary>
 public static class RunKinds
 {

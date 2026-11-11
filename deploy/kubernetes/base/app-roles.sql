@@ -86,6 +86,9 @@ GRANT INSERT ON content."BlobTombstones" TO ume_rag_admin;
 -- "FetchedAt" for statement D and the citation fields (knowledge design §6.3, §10.1); "CanonicalIdentity" (the upload
 -- slot) and "ContentHash" for the blob key and ETag of the document content route (knowledge design §3.5).
 GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
+-- The keyword stop list's statistics (knowledge design 6.2, #499): the worker keeps them, rag-api and the admin read them.
+GRANT SELECT, INSERT, UPDATE, DELETE ON content."KeywordStatistics" TO ume_rag_worker;
+GRANT SELECT ON content."KeywordStatistics" TO ume_rag_api, ume_rag_admin;
 GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
   "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
   "CanonicalIdentity", "ContentHash")
