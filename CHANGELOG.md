@@ -5,6 +5,14 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.4.0 (2026-11-11)
+
+Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics kept by the
+worker, lower idle and telemetry cost, and Aspire 13.6.5. **Rolling update: yes** from 0.3.0; migrations
+`ProfileIndexReset`, `AnswerLengthFromModel` and `KeywordStatistics` add functions, a column and a table, and
+`AnswerLengthFromModel` removes every assistant version's stored answer length and context size, so each follows its
+model's limits. See `docs/upgrade-guide.md`.
+
 ### Added
 
 - `Admin:OrganisationName` (default `Umeå kommun`; empty names no organisation) for the admin UI's header and sign-in
@@ -17,6 +25,15 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   mid-embedding (#554, #559, #558).
 - Models' context window and output limit can be entered on the gateway model mirror; V17 is bounded by them (#561).
 - `UME_RAG_ORGANISATION_NAME` sets `Admin:OrganisationName` in Compose, Portainer and Kubernetes (#566).
+- Answer length from the model: an assistant's *Longest answer* and *Context size* use the model's limits unless
+  overridden, and the test panel shows the `max_tokens` sent and when an answer stopped at the length limit (#564, #569,
+  #571).
+- An optional platform ceiling for every answer, `Settings.Chat.MaxAnswerTokens` (Settings → *Longest answer, all
+  assistants*) (#573, #574).
+- Chat prompt texts as settings (`Settings.Chat.prompts`), each falling back to the built-in text; the citation and
+  data-safety lines stay fixed (V38) (#575).
+- The worker keeps the keyword stop list's statistics in `content."KeywordStatistics"`, after each run and nightly
+  (#578, #579); rag-api reads them from B-33 on.
 
 ### Changed
 
@@ -31,6 +48,8 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   instead of polling every 2 s; `Worker:PollSeconds` is gone (#563).
 - `rag-renderer` runs only with the Compose profile `render` (`init-deployment.sh --render`); without it, `browser`
   sources wait with `render.not_configured` (#563). The release smoke test boots the bundle both ways (#567).
+- Release workflow: a build cache per image, one smoke boot for the renderer on and off, and a Docker client config
+  per job, so an expired registry login on the runners can't break a build (#572).
 
 ### Fixed
 
