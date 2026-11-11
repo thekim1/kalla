@@ -99,7 +99,7 @@ public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore pr
             }
 
             var fresh = batch.Select((c, i) => (c.TextHash, Vector: embedded[i])).ToDictionary(x => x.TextHash, x => x.Vector, StringComparer.Ordinal);
-            await cache.PutAsync(classification, profile.Id, fresh, clock.GetUtcNow(), cancellationToken);
+            await cache.PutAsync(classification, profile, fresh, clock.GetUtcNow(), cancellationToken);
             foreach (var (hash, vector) in fresh)
             {
                 vectors[hash] = vector;

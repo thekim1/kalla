@@ -45,7 +45,7 @@ public sealed class EvaluationQueryEmbedder(EmbeddingClient client, IEmbeddingCa
                 throw new QueryEmbeddingUnavailableException(reason, e.Reason, e);
             }
 
-            await cache.PutAsync(classification, profile.Id, new Dictionary<string, float[]>(StringComparer.Ordinal) { [hash] = vector }, time.GetUtcNow(),
+            await cache.PutAsync(classification, profile, new Dictionary<string, float[]>(StringComparer.Ordinal) { [hash] = vector }, time.GetUtcNow(),
                 cancellationToken);
             return vector;
         };

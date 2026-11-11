@@ -12,7 +12,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// B-30 (#554 review; admin design §4.5, Decisions "Editable embedding profiles before use"): the engine's set insert checks
 /// that the profile still has the model, size and <c>RequestDimensions</c> it embedded with, under the profile's row lock. A
 /// change an admin saved while the document was being embedded refuses the insert with <c>embed.profile_changed</c>,
-/// requeued without an attempt, and leaves no set.
+/// requeued without an attempt, and leaves no set; the embedding cache's put is guarded the same way and writes nothing.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class IndexWriterProfileGuardTests(RagDatabaseFixture database) : IAsyncLifetime
@@ -51,6 +51,39 @@ public sealed class IndexWriterProfileGuardTests(RagDatabaseFixture database) : 
             var (set, chunk) = Set(seed, document);
             await writer.WriteInvisibleAsync(set, [chunk], embeddedWith, Ct);
             (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Chunks" WHERE "ChunkSetId" = $1""", set.Id)).ShouldBe(1);
+        }
+        finally
+        {
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."EmbeddingProfiles" SET "GatewayModel" = $2 WHERE "Id" = $1""",
+                EngineKit.ProfileId, model);
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_cache_put_after_the_profile_changed_writes_nothing_and_an_unchanged_one_writes()
+    {
+        // #559 review: the cache is keyed by profile id, not model; a batch embedded with the old model and cached after the
+        // admin's reset would come back on the retry under the new model.
+        var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
+        var model = await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "GatewayModel" FROM config."EmbeddingProfiles" WHERE "Id" = $1""",
+            EngineKit.ProfileId);
+        var cache = new PostgresEmbeddingCache(database.Database(RagDatabase.Worker));
+        var embeddedWith = (await new PostgresEmbeddingProfileStore(database.Database(RagDatabase.Worker)).GetAsync(EngineKit.ProfileId, Ct))!;
+        var stale = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+        var fresh = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+        var vector = Enumerable.Repeat(0.5f, EngineKit.Dimensions).ToArray();
+        try
+        {
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."EmbeddingProfiles" SET "GatewayModel" = 'another-model' WHERE "Id" = $1""",
+                EngineKit.ProfileId);
+            await cache.PutAsync(Classification.Public, embeddedWith, new Dictionary<string, float[]> { [stale] = vector }, DateTimeOffset.UtcNow, Ct);
+            (await cache.GetAsync(Classification.Public, EngineKit.ProfileId, [stale], Ct)).ShouldBeEmpty();
+
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."EmbeddingProfiles" SET "GatewayModel" = $2 WHERE "Id" = $1""",
+                EngineKit.ProfileId, model);
+            await cache.PutAsync(Classification.Public, embeddedWith, new Dictionary<string, float[]> { [fresh] = vector }, DateTimeOffset.UtcNow, Ct);
+            (await cache.GetAsync(Classification.Public, EngineKit.ProfileId, [fresh], Ct)).Keys.ShouldBe([fresh]);
         }
         finally
         {
