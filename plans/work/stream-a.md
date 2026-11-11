@@ -271,12 +271,13 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** #509; processing §14.
 
 ### [ ] A-25 Write each chunk once (#501)
-- **Do:** as M-10 settles engine §12 and data-model §3.2: a chunk set within one batch is copied visible inside the
-  swap transaction; larger sets keep today's path.
+- **Do:** engine §14 rule 2a: a chunk set of at most 1,000 chunks is inserted (set row and chunks) inside the swap
+  transaction, visible at commit; larger sets keep today's path.
 - **Paths:** `src/Ume.Rag.Worker/Engine/**`.
 - **Done when:** about half the WAL bytes and dead chunk tuples for the same re-crawl (`pg_stat_wal`,
   `pg_stat_user_tables`); swap, rollback and fencing tests pass.
-- **Waits on:** M-10.
+- **Waits on:** – (M-10 settled it: engine §14 rule 2a, data-model §3.2; respect the profile guard of processing §11
+  inside the transaction, #554/#559).
 - **Read:** #501; engine §12, §14.
 
 ### [ ] A-26 One stage runner for engine and preview (#508)
@@ -368,3 +369,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** the runbook names one route, tried once on the pilot Open WebUI (#172, #173).
 - **Waits on:** G1 finished.
 - **Read:** chat §13.3; `docs/runbook.md`.
+
+### [ ] A-29 Keyword statistics kept by the worker (#499 step 2, worker part)
+- **Do:** table `content."KeywordStatistics"` (data-model §2.2; migration, `S` for `ume_rag_api` in `app-roles.sql` and
+  its Kubernetes copy) and the worker's refresh of knowledge §6.2: per collection with ≥ 100 live child chunks,
+  `ts_stat` on `ConnectionStrings:ragdb-maintenance` (else `ragdb`) with `statement_timeout = 0` when it has no rows,
+  its live child count moved by more than 10 % from the stored `ChunkCount`, or its rows are over 7 days old; checked
+  at the end of each sync run of the collection's sources and in the nightly maintenance; one collection at a time; its
+  rows replaced in one transaction; a collection under 100 chunks loses its rows.
+- **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Infrastructure/Persistence/**` (migration), `deploy/postgres/app-roles.sql`,
+  `deploy/kubernetes/base/app-roles.sql`, tests.
+- **Done when:** a test shows rows written at the first run, kept on a run that changes < 10 %, recomputed past 10 %,
+  removed under 100 chunks; the rows equal `RetrievalStatements.FrequentLexemes`' result on the same data.
+- **Waits on:** –. B-33 reads the table.
+- **Read:** #499; knowledge §6.2, §6.4; data-model §2.2; results-b B-25.

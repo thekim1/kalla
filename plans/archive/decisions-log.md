@@ -161,3 +161,6 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
   embedding profiles before use"; #547).
 - 2026-11-11, user: the platform's prompt texts are settings with locked safety lines ("Chat prompt texts
   configurable"), and the answer length follows the model's limits ("Answer length from the model"; #548).
+- 2026-11-11, main session (user: "do each of these recommended steps"): the keyword stop list's statistics are kept
+  by the worker in `KeywordStatistics`, scope sizes stay in rag-api ("Search cost at scale"; M-10, #499); chunk sets of
+  ≤ 1,000 chunks are written in the swap transaction (engine §14 rule 2a, #501).

@@ -363,6 +363,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "Chat prompt texts configurable"; chat §5, §5.1, §7.2–§7.4, §9.8, §10.2, §10.4; admin §4.5
   (`chat` section), V38; data-model `Settings`.
 
+### [ ] B-33 rag-api reads the keyword statistics (#499 step 2, api part)
+- **Do:** `ScopeSizeCache` builds the stop list from `content."KeywordStatistics"` (knowledge §6.2: share = `Ndoc` /
+  the row's `ChunkCount`, the same floors and the multi-collection lower bound) instead of `FrequentLexemes`;
+  `RetrievalStatements.FrequentLexemes` and its `SET LOCAL statement_timeout` leave rag-api (the worker's A-29 owns the
+  statement). `CountChunks` stays.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Api/**` if needed, their tests.
+- **Done when:** rag-api runs no `ts_stat` (`pg_stat_statements` on a test database, or a test that the api role
+  issues none); the stop list on the evaluation collection equals today's.
+- **Waits on:** A-29 (the table).
+- **Read:** #499; knowledge §6.2.
+
 ## Live (the live block, see the roadmap)
 
 ### [x] B-L1 Status green against the real gateway

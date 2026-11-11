@@ -106,12 +106,15 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
   (or confirmed the defaults).
 - **Waits on:** nothing. Stage 2 (delegation, gateway release 2) is P2 and waits on the gateway's release.
 
-### [ ] M-10 Settle #499 step 2 and #501 in the designs
+### [x] M-10 Settle #499 step 2 and #501 in the designs
 - **Do:** #499 step 2: who maintains scope sizes and the keyword stop list (the worker at the chunk-set swap, a
   statistics table rag-api reads) in knowledge §6.4, §20 and data-model; #501: chunk sets written visible inside the
   swap transaction in engine §12 and data-model §3.2. Then queue the code items (A-25 waits on this).
 - **Done when:** the design sections say it and the items are queued.
 - **Waits on:** B-25's measurement (for #499).
+- **Settled (2026-11-11):** scope sizes stay in rag-api (cheap); the stop list's statistics move to the worker
+  (`KeywordStatistics`, knowledge §6.2); sets ≤ 1,000 chunks are written in the swap transaction (engine §14 rule 2a).
+  Queued: A-29, B-33, A-25.
 
 ### [x] M-11 Design documents that contradict the decisions (found in the rewrite, 2026-11-08)
 - **Do:** align each design with [`../decisions.md`](../decisions.md), or bring the call to the user where the decision

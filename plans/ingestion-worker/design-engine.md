@@ -42,7 +42,7 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 | 11 | Runs | Run items written only at a terminal outcome; the finalizer derives counters from items; degraded when > 5 % of processed items fail (§10) |
 | 12 | Preview | Same engine with a preview context: no DB access for stages, blobs only under `previews/{jobId}/`, *Index* never runs, *Embed* estimates by default; produces personal-data state like any execution (§11) |
 | 13 | Publish | Plan → re-process (new sets written next to the live ones, swapped per document) → evaluation report → keep or roll back; previous sets kept 14 days for one-click rollback (§12) |
-| 14 | Index writer | New set written **invisible** (`Chunks.DeletedAt` set, state `writing`) in batches of ≤ 1,000 chunks in their own short transactions, then **one short swap transaction** per document (fence, `LiveChunkSetId`, clear `DeletedAt` on the new set's chunks, set it on the old set's, old set `superseded`); an orphan sweep removes sets never swapped (§14) |
+| 14 | Index writer | A set of ≤ 1,000 chunks is inserted **inside the swap transaction**, visible at commit (written once, #501); a larger set is written **invisible** (`Chunks.DeletedAt` set, state `writing`) in batches of ≤ 1,000 chunks in their own short transactions, then **one short swap transaction** per document (fence, `LiveChunkSetId`, clear `DeletedAt` on the new set's chunks, set it on the old set's, old set `superseded`); an orphan sweep removes sets never swapped (§14) |
 | 15 | Config | Each execution resolves the published version at its start and carries it through its continuations; security-relevant reads use the config grace window at job start **and** at the swap (§15) |
 
 ## 2. Engine model
@@ -412,7 +412,7 @@ UPDATE content."Jobs" SET "State" = 'succeeded', "CompletedAt" = now(), "Result"
 | `Documents` facts (media type, language, page count, strategy, parse cache key, site-profile version) | segment commit, fenced | last fenced writer wins; the fence rejects stale executions |
 | Continuation jobs | same transaction, `DedupKey` (`parse:{doc}:{exec}`, `embed:{doc}:{exec}:{pipelineVersion}`) | `INSERT … ON CONFLICT DO NOTHING` on the partial unique `DedupKey` index (data-model §4.2) |
 | `EmbeddingCache` | own short transaction, `ON CONFLICT DO NOTHING` | cache |
-| Invisible chunk batches | own short transactions (§14) | the chunks carry `DeletedAt` until the swap; a retried execution writes a new set, the orphan sweep removes the old one |
+| Invisible chunk batches (sets over 1,000 chunks) | own short transactions (§14) | the chunks carry `DeletedAt` until the swap; a retried execution writes a new set, the orphan sweep removes the old one; a set of ≤ 1,000 chunks is written in the swap transaction and leaves nothing behind |
 | Swap, run item, job completion | one short fenced transaction (§14); the engine completes the job inside its own transaction and returns `JobResult.Committed`, so the dispatcher does not complete it again | unique key on `ChunkSets`; the swap sets the live pointer and set states and flips `DeletedAt` on the two sets' chunks |
 | Gateway cost | charged by the gateway per call; a retried call is charged again | bounded by caches (parse, embedding) and attempts |
 
@@ -868,9 +868,11 @@ uploaded HTML uses the built-in presets only (no host). Supported media types pe
 ```csharp
 public interface IIndexWriter
 {
-    // Writes the chunks of a new set with DeletedAt set (invisible), in batches of ≤ 1,000 rows, each batch its own
-    // short transaction.
+    // A set of more than 1,000 chunks: writes its chunks with DeletedAt set (invisible), in batches of ≤ 1,000 rows,
+    // each batch its own short transaction.
     Task<Guid> WriteInvisibleAsync(ChunkSetWrite write, CancellationToken ct);
+    // A set of at most 1,000 chunks: inserts the set and its chunks and swaps, all in the one swap transaction (rule 2a).
+    Task<IndexWriteResult> WriteAndSwapAsync(ChunkSetWrite write, ExecutionFence fence, CancellationToken ct);
     // One short transaction: fence, swap (new set live or held, old set superseded, DeletedAt flipped on both sets'
     // chunks), live pointer, run item, job completion.
     Task<IndexWriteResult> SwapAsync(Guid chunkSetId, ExecutionFence fence, CancellationToken ct);
@@ -902,6 +904,12 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    `vector`, each batch a short transaction of its own (well under the worker's 60 s `statement_timeout`; to-verify
    #21, #119). Each chunk carries the scalar `CollectionId` of its source's collection and the `SearchText`
    computed by the worker (6c §6.5). Keyword and vector candidates never include chunks of a `writing` set.
+   **2a. A set of at most 1,000 chunks** skips the invisible write (#501): the swap transaction (rule 3) inserts the
+   `ChunkSets` row directly as `live` or `held` and its chunks with `DeletedAt` null (`held`: set), so each chunk is
+   written once and the swap updates only the previous set's chunks. Every check of rule 3 (fence, published version,
+   the profile guard of processing §11) runs first in the same transaction; a refusal rolls it back and nothing is
+   left for the orphan sweep. One `INSERT … SELECT FROM unnest(…)` of ≤ 1,000 rows stays well under the 60 s
+   `statement_timeout`. The threshold is the batch size (`IndexWriter.BatchSize`).
 3. **Swap** (one short transaction per document): fence (§7.5); confirm at the swap that the source's published
    version (config snapshot within the grace window, §15) is still the write's, else the set stays `writing` for the
    orphan sweep and `EnsureCurrent` runs, so a slow write of an old version never overtakes a newer one;

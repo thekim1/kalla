@@ -500,10 +500,11 @@ cached, query text is never stored, and a failed embedding degrades to keyword-o
 A scope of up to 10,000 chunks, counted after topic filters, is searched exactly, a larger one through HNSW, whose
 recall the worker samples per enumerable scope and restores by rebuild on `ConnectionStrings:ragdb-maintenance`, never through a
 pooler. The keyword search drops lexemes found in more
-than 30 % of the scope's chunks. Latency over budget at 100,000 chunks in one scope is accepted for the pilot and
-re-measured in R1. Detail: `knowledge-api/design.md` §6.2, §6.4.
+than 30 % of the scope's chunks; the worker keeps the per-collection statistics for it (`KeywordStatistics`), so
+rag-api runs no corpus-wide `ts_stat`, while the cheap scope-size count stays in rag-api. Latency over budget at
+100,000 chunks in one scope is accepted for the pilot and re-measured in R1. Detail: `knowledge-api/design.md` §6.2, §6.4.
 
-*From:* log rows 73, 87, 119; decided by user, 2026-11-07.
+*From:* log rows 73, 87, 119; decided by user, 2026-11-07; statistics in the worker: main session at the user's go-ahead, 2026-11-11 (M-10).
 *Also:* "Keyword stop list before the pilot crawl", "M-2 open design calls"
 
 ### Rerank pulled forward

@@ -629,13 +629,20 @@ words only gives `NULL` and K returns nothing.
 (measured 375–659 ms p95 at 100k chunks against the 30 ms budget of §11, to-verify #5; Decisions "Keyword stop list
 before the pilot crawl"). .NET chooses the stop list and passes it as `$4`; Postgres removes those lexemes from the
 query vector with `ts_delete`, since only its `swedish` stemmer knows the query text's lexemes. The statistics are
-kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks, read
-with the §6.4 chunk counts); a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
+kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks) in
+`content."KeywordStatistics"` (data-model §2.2), which **the worker maintains** and rag-api only reads: rag-api runs no
+`ts_stat` (#499: measured as `ume_rag_api`, `ts_stat` costs about 18 ms per 1,000 chunks, 18 s at 1M, past the 60 s
+limit near 3.3M). The worker recomputes a collection's rows with `ts_stat` over its live child chunks when it has at
+least 100 of them and no rows yet, when its live child count differs by more than 10 % from the `ChunkCount` stored
+with its rows, or when the rows are older than 7 days. It checks this at the end of each sync run of the collection's
+sources and in the nightly maintenance, one collection at a time on `ConnectionStrings:ragdb-maintenance` (else
+`ragdb`) with `statement_timeout = 0`, and replaces the collection's rows in one transaction; a collection that falls
+below 100 chunks loses its rows. A share is the row's `Ndoc` over its stored `ChunkCount`; a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
 a term. A collection linked with topics counts with its whole chunk count here (floor and share alike), since the
 statistics are per whole collection and a topic's count would inflate the shares; only the §6.4 size count is
 topic-filtered. Scopes under 1,000 chunks get no stop list: K is cheap there and a share says little. A query of stop
-lexemes only gives no candidates, like stop words. No Postgres configuration changes. The api reads the counts and
-statistics once at start: readiness waits for that attempt, read or failed, for at most 60 s. With no statistics held, a
+lexemes only gives no candidates, like stop words. No Postgres configuration changes. The api reads the §6.4 counts
+and the `KeywordStatistics` rows once at start: readiness waits for that attempt, read or failed, for at most 60 s. With no statistics held, a
 failed read is retried after 1 minute, not by each search, and K runs with every term meanwhile; with statistics held,
 they are kept until the next 10-minute read (#338).
 
@@ -697,7 +704,9 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
 
 - `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
   `SELECT "EmbeddingProfileId", "CollectionId", "Tags", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND
-  "Kind" = 'child' GROUP BY 1, 2, 3` every 10 minutes, so a scope's share *s* of its profile's index is known. A
+  "Kind" = 'child' GROUP BY 1, 2, 3` every 10 minutes, so a scope's share *s* of its profile's index is known. The
+  count stays in rag-api (#499 step 2): it is cheap (116 ms at 1M chunks as `ume_rag_api`, B-25) and runs with its own
+  `SET LOCAL statement_timeout`; it moves to the worker only if the scale test (R1) shows it near its limit. A
   collection linked with topics counts only its chunks carrying one of the link's tags (a chunk with two of them counts
   once), so a narrow topic in a large collection falls under the exact-search limit (Decisions "M-2 open design calls").
 - Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a
@@ -709,8 +718,8 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
 - HNSW runs on the half-precision expression index `("Embedding"::halfvec(1024))` from P1 (column stays `vector`, so
   the exact variant keeps full precision); its recall against exact is measured with the evaluation sets before the
   first large collection (§20).
-- **Index health.** Every chunk enters the index through the swap's `UPDATE` (chunks are written hidden, data-model
-  §3.2), and re-processing leaves dead entries behind; on the pilot (10,074 chunks after re-crawls) the walk at
+- **Index health.** Re-processing leaves dead index entries behind (a superseded set's chunks are updated, and a set
+  over 1,000 chunks enters through the swap's `UPDATE`, data-model §3.2); on the pilot (10,074 chunks after re-crawls) the walk at
   `ef_search` 100 returned a best distance of 0.454 where the exact best was 0.246, and `REINDEX` restored it (measured
   2026-11-02). So the worker checks the index of each profile with more than `exactScanMaxChunks` live chunks in
   total (no other can have an HNSW-searched scope): nightly, and after a sync run that made more than 10 % of the
