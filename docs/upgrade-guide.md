@@ -12,6 +12,11 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **Reverse proxy:** the api host (and Open WebUI's) now allows 2 MB request bodies, matching rag-api's chat route;
+  with 1 MB, long conversations were refused by the proxy (SA-15). A generated `deploy/proxy/nginx.conf` doesn't
+  change by itself: set `client_max_body_size 2m;` in its api (and Open WebUI) server block, or `proxy-body-size: 2m`
+  on the `rag-api` ingress, then reload the proxy.
+
 ## 0.3.0
 
 - **Rolling update: yes** from 0.2.0. No schema migration and no new grants or superuser steps; `rag-migrate` runs
