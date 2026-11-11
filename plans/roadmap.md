@@ -1,7 +1,7 @@
 # Roadmap
 
 Where Ume.Rag stands and what comes next, on one page. The binding rules are in the Decisions table
-([`../01-general-idea.md`](../01-general-idea.md) §10) and the design documents ([`README.md`](README.md)); the work
+([`decisions.md`](decisions.md)) and the design documents ([`README.md`](README.md)); the work
 itself is in [`work/`](work/). Updated by the main session when a phase step lands.
 
 ## Done

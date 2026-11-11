@@ -1,0 +1,743 @@
+# Decisions
+
+The decisions in force for Ume.Rag: one entry per topic, in the present tense. Every entry binds and wins over the
+design documents; where a design says otherwise, the design is a bug to report. Cite an entry by its name
+(`Decisions "Cost attribution"`); an older name is on the entry's *Also* line. *From* names the rows of the dated
+history, [`archive/decisions-log.md`](archive/decisions-log.md), that the entry was written from (on 2026-11-08, from
+the table that stood in `01-general-idea.md` §10). Paths are relative to `plans/`, except root files (`AGENTS.md`,
+`NOTICE`, the root `README.md`) and `docs/`, `deploy/` and `.github/`.
+
+**Recording a decision:** change the entry in place, or add one under its area, with a Detail link and who decided it
+when; then add a line under *Later decisions* at the end of the log (date, who, entry, what changed). Decisions put
+off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
+
+## Phases and planning
+
+### First version
+
+The pilot covers URL lists, a website crawl and uploads, the Chat and Knowledge APIs, and Open WebUI for one pilot
+department. Detail: `roadmap.md` "Done", "Now".
+
+*From:* log row 5; decided by user, 2026-10-29.
+
+### Code first, live testing last
+
+P1 code is built against FakeGateway, fixtures and the dev Keycloak first; the live block (real gateway and EU routes,
+umea.se crawl, gold set, shared Keycloak, first pilot answer, test-host deploy and restore drill) runs at the end in
+one go. Detail: `roadmap.md` "Now", track 2.
+
+*From:* log row 85; decided by user, 2026-10-31.
+
+### Two streams
+
+The code lives in this repository. Stream A owns the platform and worker side, stream B the serving side and all admin
+UI and admin API work; they meet on written contracts in `contracts/`. Items that need other people are the user's.
+Detail: `AGENTS.md` "Working in a stream"; `.github/stream-ownership.txt`.
+
+*From:* log rows 61, 76; decided by user, 2026-10-30.
+
+### Phase-start rule
+
+Every item that blocks the next phase has a named person and a date before that phase starts. Detail:
+`postponed-decisions.md` (header).
+
+*From:* log row 66; decided by user, 2026-10-30.
+
+### M2 and test hosting
+
+Until on-prem model hardware exists (M2), every model call is EU-hosted through the gateway; moving to on-prem BGE-M3
+re-embeds every chunk, and the on-prem capacity run waits for the hardware. Tests use the cheapest host; the test-host
+deploy, restore drill, R1 and the cgroup v2 check (to-verify #90) run before go-live. Detail: `platform/repo-and-deployment.md` §11 (#14, #16, #22);
+`postponed-decisions.md` M2.
+
+*From:* log rows 66, 77; decided by user, 2026-10-30.
+
+### P1a plan answers
+
+Accepted risk: with no on-prem hardware, a DPIA refusal of EU processing leaves the pilot waiting for hardware or
+another provider. The embedding ceiling is `EmbeddingProfiles.MaxResidency`. Detail: `identity/design.md` §4.1;
+`platform/data-model.md` §2.1.
+
+*From:* log row 78; decided by user, 2026-10-30.
+
+### Pilot set-up inputs, P1a item 20
+
+The pilot collection is `Turkos` (`public`), owned by DoIT, with `piiMode: report`. Scope patterns match the URL
+before the site profile's identity rule. Detail: `ingestion-worker/design-connectors.md` §5.2.
+
+*From:* log row 93; decided by user, 2026-11-01.
+
+### P1b briefs
+
+E1 moves to P2 with Entra and the W3 spike runs in P1b (O3); `evaluation.yml` uses the deployment's own profile (O4);
+the `lastmod` sample starts once U1 is done (O5); H8 is no P1b gate (O6); the preview kind is `stage-preview` (O9);
+the go-live host (O7) is open. Until W3 and E1
+are solved, each department gets an Open WebUI of its own. Detail: `identity/design.md` §16; `roadmap.md` "Waiting on people".
+
+*From:* log rows 66, 86; decided by main session, 2026-10-31.
+
+### M-3 settlements
+
+The test panel is as built; its extras (collection subset, condense detail, token budget, filtered texts, `ttftMs`,
+`costUsd`), the Overview attention items and editors' site-profile read access are P2. The interaction-audit
+benchmark is dropped. Retrieval latency over budget at 100,000 chunks in one scope is accepted for the pilot. Detail:
+`admin/design.md` §4.9; `chat-api/design.md` §16.2.
+
+*From:* log row 119; decided by user, 2026-11-07.
+
+### P0 as built
+
+P0's deviations are written into the designs as built: blob keys use only `a–z0–9-_.`, and blob tombstones are
+database rows. Open for P2 (H7): `Group.Create` or `Group.ReadWrite.All` for the Entra deployer. Detail:
+`platform/data-model.md` §9; `identity/design.md` §12.4.
+
+*From:* log rows 79, 80; decided by main session, 2026-10-31.
+*Also:* "P0 integration, stream A", "P0 integration, stream B"
+
+## Development rules
+
+### Design documents: one layer
+
+These decisions and the area's design document bind; archived passes do not, except the performance pass's
+capacity model, its §3 tables, scaling triggers and scale tests. Design text keeps no PR history; section numbers and linked headings never change, and a
+file moves only by a scripted rewrite of its links, checked by `scripts/check-doc-refs.py`. Open checks:
+`to-verify.md`. Detail: `AGENTS.md`; `README.md`; `archive/doc-restructure.md`.
+
+*From:* log rows 52, 97; decided by user, 2026-11-01; file moves, 2026-11-08.
+
+### Settings rule
+
+Deployment knobs are `Section:Key`; run-time values are `Settings.<Section>.<Key>` (database, admin UI). Detail:
+`AGENTS.md` "Conventions".
+
+*From:* log row 52; decided by user, 2026-10-30.
+
+### No backward compatibility before production
+
+Until the user declares production, schemas, contracts, payloads, APIs and config keys change in one step: no
+expand/contract, fallbacks, tolerant readers or shims; development data is rebuilt. The gateway's real API still binds,
+and each PR lists the changes and hand-offs. Detail: `platform/data-model.md` §10; `AGENTS.md`.
+
+*From:* log row 96; decided by user, 2026-11-01.
+
+### 7-day rule in development
+
+Until the first production deployment newer releases may be pinned, still as exact versions and digests; before
+go-live every pin younger than 7 days is reviewed. Detail: `platform/repo-and-deployment.md` §2.3.
+
+*From:* log rows 70, 81; decided by user, 2026-10-31.
+
+### Admin UI in English
+
+Admin UI text is English (`lang="en"`), every string in `utils/labels.ts` and `utils/messages.ts`, so Swedish is a
+later translation of those files; no i18n library. Swedish names are marked `lang="sv"`. Dates and numbers follow the
+gateway's `format.ts`; `x-labels` show their `en` text. Open WebUI is unaffected.
+Detail: `admin/design.md` §1 (row 3).
+
+*From:* log row 99; decided by user, 2026-11-02.
+
+### Licence
+
+Ume.Rag is EUPL-1.2; the repository stays private until then. It takes effect on publication or distribution, which waits for the municipality's approval (the
+third-party notices are in `NOTICE`); the gateway is to get the same licence. Detail: the root `README.md` "Licence"; `NOTICE`.
+
+*From:* log row 82; decided by user, 2026-10-31.
+
+### Low CPU during development
+
+Base Compose files cap every container at 2 CPUs or less; `compose.host-24g.yaml` carries the pilot caps, which R1
+re-sets before go-live. Detail: `platform/repo-and-deployment.md` §6.2.
+
+*From:* log row 84; decided by user, 2026-10-31.
+
+## Database and hosting
+
+### Postgres hosting
+
+Ume.Rag has its own Postgres, never the gateway's: the digest-pinned stock pgvector image plus pgBackRest (WAL archiving,
+point-in-time restore), or managed Postgres with pgvector ≥ 0.8, which is not planned for now. CI's `backend` job builds the image and runs
+integration tests on it. Blobs are write-once and long-lived keys escrowed. A standby (D1) is required before
+production beyond the pilot. Detail: `platform/repo-and-deployment.md` §5.2, §7.4, §8.2.
+
+*From:* log rows 7, 13, 55, 58, 68; decided by user, 2026-10-30; managed Postgres not planned, 2026-11-08.
+
+### Data model
+
+One `ragdb` with schemas `config`/`content`/`chat`/`audit` and one role per service. Swedish compounds are split in
+.NET with the `sv_SE` word list. Config changes go through a versioned outbox, serialised, failing closed after a 90 s
+grace window. The HNSW rebuild runs on `ConnectionStrings:ragdb-maintenance`. No data tiers: `sensitive` isolation would be a separate deployment. Embeddings are stored as `vector` with a `halfvec` HNSW index; `halfvec` storage follows in P2 (after to-verify #117). Search is Postgres only;
+OpenSearch only when a measured trigger (O1) fires. Detail: `platform/data-model.md` §1, §3.1, §5, §6;
+`knowledge-api/design.md` §13.
+
+*From:* log rows 6, 24, 30, 55, 73; decided by user, 2026-10-30; `halfvec` storage in P2, 2026-11-08.
+
+### Scale-out
+
+Target ≈ 10× the pilot on 3–5 hosts, beyond by measured triggers: Compose per host with roles, one shared Postgres,
+Redis and S3-compatible object store, the queue behind `IJobQueue`, no PgBouncer up to five hosts. The queue stays in Postgres (a broker only
+on a trigger), blobs are files on a single host and an S3-compatible store beyond it (the municipality's, or SeaweedFS;
+never MinIO), Kubernetes is optional later, and the BGE-M3 query lane comes on a trigger. The worker's gateway key
+carries a `MaxConcurrentRequests` cap. In P2 Open WebUI
+gets its own VM. Detail: `platform/repo-and-deployment.md` §6.4; performance pass §2, §6, §7.
+
+*From:* log rows 52, 53, 54; decided by user, 2026-10-30.
+
+## Containers and images
+
+### Pilot containers
+
+Seven long-running containers (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer`,
+`postgres`) and the one-shots `rag-migrate` and `rag-blobs-init`; no Redis until the first multi-host deployment, and then
+Ume.Rag's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
+process behind `IRateLimitStore`/`ISharedCache`; pgBackRest runs inside the Postgres image, not as a sidecar. Merging
+containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. Detail:
+`docs/production-setup.md`; `platform/repo-and-deployment.md` §6.2.
+
+*From:* log rows 13, 58, 115; decided by user, 2026-11-07.
+
+### Repo and deployment
+
+`Ume.Rag.Api` is one binary with roles; tests use `Ume.Rag.FakeGateway`. Production Compose has resource zones and
+fixed networks with firewall egress rules; releases ship a digest-pinned bundle. Detail: `platform/repo-and-deployment.md` §3,
+§4.3, §6, §7.
+
+*From:* log rows 17, 31; decided by user, 2026-10-30.
+
+### .NET runtime settings
+
+Every .NET container sets `DOTNET_GCHeapHardLimitPercent=0x4B` (hexadecimal). `AuditLog.Service` is the OTel service
+name; the query-embedding step is `x-ume-step: query-embed`. Detail: `platform/repo-and-deployment.md` §6.2;
+`platform/data-model.md` §2.4.
+
+*From:* log row 70; decided by main session, 2026-10-30.
+
+### ClamAV updates
+
+freshclam updates from `database.clamav.net`; no internal mirror. Detail: `platform/repo-and-deployment.md` §5.5.
+
+*From:* log row 11; decided by user, 2026-10-29.
+
+## CI/CD, releases and tests
+
+### CI/CD
+
+GitHub Actions run build, test and release. RAG's own Entra registrations are Bicep with the Graph extension, applied
+by `entra.yml`. Pinning actions by commit SHA with automated pin bumps (A-20, A-27) is postponed until before go-live. Detail: `platform/repo-and-deployment.md` §8.1.
+
+*From:* log rows 8, 10, 31; decided by user, 2026-10-29; SHA pins postponed, 2026-11-08.
+
+### CI on the self-hosted runner
+
+Every workflow runs on the self-hosted runners; `verify.yml` and `parser.yml` run on every non-draft PR, each job only
+when its paths change, and the full set before a release. Agents run only the test projects
+they touch. The main session
+merges on local evidence, then checks `main` after a batch; a red `main` is fixed first. `perf.yml` and
+`evaluation.yml` schedules stay off until the test host; its runner awaits IT security. Detail:
+`platform/repo-and-deployment.md` §8, §12 (#4).
+
+*From:* log rows 12, 88, 90, 91; decided by user, 2026-10-31; path-filtered jobs, 2026-11-05.
+*Also:* "CI on the self-hosted runner for every pull request", "Merge on local evidence, then check main".
+
+### E2E optional on release
+
+`e2e.yml` never runs on PRs, pushes or a schedule; it runs by hand or from `release.yml` when asked (`RELEASE_E2E`, the
+dry run's `e2e` input). A skipped run lets the release go on; a failed one stops it. A done-when that needs the browser tests is
+ticked on a green run. Detail: `platform/repo-and-deployment.md`
+§8.2.
+
+*From:* log rows 104, 105; decided by user, 2026-11-06.
+*Also:* "E2E only on release or by hand".
+
+## Cost attribution
+
+### Cost attribution
+
+First, Ume.Rag meters every model call per assistant, knowledge base, step and client (reporting only). Goal:
+delegated attribution in gateway release 2, with `x-ume-on-behalf-of` = the assistant's or knowledge base's owner
+team. No gateway key per assistant: a per-assistant budget is, by convention, a gateway team per
+assistant, and usage records carry no free tag. Ume.Rag meters with the mirror's prices; the gateway stays the record. Detail: `platform/cost-attribution.md` §4–§6.
+
+*From:* log row 120; decided by user, 2026-11-08.
+
+## Sign-in and roles
+
+### Identity model
+
+Ume.Rag copies the gateway's identity model (OIDC code + PKCE BFF, claims, `UME_RAG_OIDC_*` keys, key and Data API patterns, security events) with its own clients and secrets (`ume-rag-admin`). Member groups are group claim values; if they cannot be read, scope narrows to claims only, never fails open. Policy denials above the ceiling or outside the audience answer 404. The audit actor is `oid` on Entra, else `sub`. Detail: `identity/design.md` §1.1, §1.3–§1.6, §2.6, §4.3.
+
+*From:* log rows 29, 32, 55; decided by user, 2026-10-30.
+
+### Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later
+
+In production AD and Entra ID must both work, brokered through Keycloak (Entra ID as an OIDC provider, AD by LDAP federation or AD FS) and directly through `Oidc:*`; the brokered route is tested with a stand-in upstream provider. Entra ID comes in P2 as configuration, not code, with the Graph group lookup; On-Behalf-Of is designed now and
+built later. Ume.Rag's realm part needs only the `departmentCodes` and `teamCodes` claims from the base realm, so Ume.Rag can run standalone. Detail: `identity/design.md` §11.2, §11.3.
+
+*From:* log rows 21, 55, 71, 72; decided by user, 2026-11-05.
+
+### P1 pilot sign-in
+
+The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `ume` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Ume.Rag delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
+Keycloak's database is `keycloak` in the gateway's Postgres, under its backups; each repo keeps its own dev Keycloak in
+its AppHost. `ume-rag-api` is an audience only. Detail: `identity/design.md` §11.2.
+
+*From:* log rows 71, 73, 74, 83; decided by user, 2026-11-06.
+
+### Shared sign-in with the gateway
+
+One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Ume.Rag's role groups keep the `rag-` names. The two
+products are separate Compose projects with the same layout, and Ume.Rag's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
+
+*From:* log rows 74, 118; decided by user, 2026-11-07.
+
+## Keys and the gateway
+
+### Key service
+
+Master keys are protected files (file key provider) while no `sensitive` data exists; Azure Key Vault is the target, adopted later with a re-wrap. Long-lived keys are escrowed offline. `public` blobs are not encrypted. Client keys are `ume-rag-sk-…`
+(secret) and `ume-rag-pk-…` (public). Detail: `postponed-decisions.md` K1.
+
+*From:* log rows 9, 30, 55; decided by user, 2026-10-30.
+
+### Gateway keys
+
+Ume.Rag holds one gateway key per level and deployable as a secret file, with `AllowedIpRanges` and `RequireMaxResidency`; the worker never holds the open key. Until gateway release 2 these are the pilot team's own keys. From release 2 they are delegating keys owned by the platform team (`ApplyTeamPolicy = false`): only the key's request policy applies, the effective team and department are charged, and the key's budget and rate limit cap the total. No gateway key per assistant. Detail: `gateway-changes/design.md` §5.3, §5.4, §13.4.
+
+*From:* log rows 33, 55, 66, 120; decided by user, 2026-11-08.
+
+### Gateway releases
+
+The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-ume-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal, delegation with `x-ume-on-behalf-of`. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §13.
+
+*From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06.
+*Also:* "Gateway release 1 and shared Keycloak as built"
+
+### Interim gateway for P1a
+
+A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `ume` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
+
+*From:* log rows 78, 83; decided by user, 2026-10-31.
+
+## Classification and residency
+
+### Classification
+
+Levels are `public`, `internal` and `sensitive`; `sensitive`, the municipality's highest category, uses on-prem models only. Rows carry a plain `Classification`; there are no data tiers, and `sensitive` data would get a separate deployment (T1). The pilot holds no `sensitive` data. Detail: `platform/data-model.md` §6.
+
+*From:* log rows 9, 14, 22, 55; decided by user, 2026-10-30.
+
+### Residency per level
+
+Every model call sends an explicit ceiling from its data's level: `public` `External`, `internal` `Eu`, `sensitive`
+`OnPrem`. The worker holds no `External` key, so its calls run `public` at `Eu`; embedding calls use the profile's
+`MaxResidency`. Each client in the registry has its own classification ceiling. `Gateway:MaxResidency` only lowers it; under register M2 it is `Eu`, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
+
+*From:* log rows 14, 17, 25, 55, 77, 100; decided by user, 2026-10-30.
+
+## Chat history and data protection
+
+### Chat history
+
+History mode, retention, encryption and review rules are set per level within platform-admin limits; retention defaults to 90 days per assistant. Until A1 (archive law) is answered the pilot runs history mode `none` (metadata and ratings only): no bucket keys, content encryption, crypto-shredding or conversation review are built. Stored content will use one data key per (level, expiry month), with key destruction off until A1 allows it. Detail: `chat-api/design.md` §11.2, §12.3, §13.
+
+*From:* log rows 4, 23, 55, 65; decided by user, 2026-10-30.
+*Also:* "Weakness review 4"
+
+### DPIA and the pilot client
+
+The DPIA (G1), owned by the user with the data protection officer, is finished before go-live. It covers Open WebUI's store as the primary copy of pilot chats and decides W2; public-records requests are answered from that copy; a fixed Open WebUI banner warns against confidential input. The pilot client keeps `internal` only for EU providers under a processor agreement listed in G1, otherwise on-prem models only; with no on-prem hardware the pilot then waits. Detail: `chat-api/design.md` §13.3; `identity/design.md` §4.1.
+
+*From:* log rows 65, 77, 78; decided by user, 2026-10-30.
+
+## Model routes
+
+### Pilot embedding model, U-b
+
+The pilot profile is `text-embedding-3-large` from an `Eu` account at 1024 dimensions, `MaxInputTokens` 8191, with `EmbeddingProfiles.MaxResidency` as its ceiling. Every call for the profile (embed, canaries, query embedding, evaluation) sends `dimensions`; a BGE-M3 profile never does. Moving to on-prem BGE-M3 re-embeds every chunk. Detail: `ingestion-worker/design-processing.md` §11; `platform/data-model.md` §2.1.
+
+*From:* log rows 77, 78, 89; decided by user, 2026-10-31.
+
+### Embedding canary on demand
+
+The platform makes no periodic model calls: the embedding canary runs only when a platform admin asks (`POST /api/gateway/canary-check`). The result is stored on the profile; cosine below 0.999 refuses the profile in the worker until a later check passes. The canary is recorded once per profile after the model sync; check after every gateway model change. Detail: `ingestion-worker/design-processing.md` §11.
+
+*From:* log row 102; decided by user, 2026-11-03.
+
+### Editable embedding profiles before use
+
+A platform admin edits an embedding profile in the admin UI (`GatewayModel`, `Dimensions`, `RequestDimensions`,
+`MaxInputTokens`, `MaxResidency`) while no chunk set uses it; once one does, only `MaxResidency` stays editable, within
+the platform ceiling, and a model or dimension change is the P3 profile migration. Every save first runs one canary
+embedding with the new values and is refused if it fails, then stores that canary. **Test** runs the same call without
+saving and names the outcome in plain words (the gateway's refusal code, the residency, or the dimension count
+returned). The migrator still seeds the profile once from `EmbeddingProfile:*`. Detail: `admin/design.md` §4.5;
+`platform/data-model.md` §2.1; `ingestion-worker/design-processing.md` §11.
+
+*From:* decided by user, 2026-11-11 (#547).
+
+## Pipelines and the engine
+
+### Pipelines
+
+Ingestion runs one fixed linear pipeline per source type: template + parameters, no graph or user-added stages. The query side is a fixed linear step sequence per assistant, set in a form with a test panel. The platform team owns templates; department admins pick one and set parameters; `rag-pipeline-editor` edits their parameters. A visual builder is P3 behind trigger C2 (two departments, or a recurring platform-team request, need a flow parameters cannot express). Detail: `ingestion-worker/design-engine.md` §3, §13.
+
+*From:* log rows 1, 2, 55, 57; decided by user, 2026-10-30.
+
+### Ingestion engine
+
+A document belongs to one source; reuse across sources is by content-addressed caches only. Work is reconciliation (`EnsureCurrent` + nightly drift sweep) with an execution-id fence, at-least-once with effectively-once effects, per-department fairness, short chunk-write transactions and counters derived from run items. Cron with per-source jitter; defaults: URL lists nightly, crawls weekly at night. Detail: `ingestion-worker/design-engine.md` §2.3, §7, §9, §10.
+
+*From:* log rows 37, 38, 55; decided by user, 2026-10-30.
+
+### Preview, publish and rollback
+
+Preview (`stage-preview`) runs the engine isolated: no index or cache writes. A publish re-processes every live document of the affected sources (unchanged stages come from cache), then shows an advisory evaluation report; the owner keeps it or rolls back in one click. Rollback is never gated; superseded sets are kept 14 days. Plans from effect tags are P2. Detail: `ingestion-worker/design-engine.md` §11, §12.
+
+*From:* log rows 38, 55, 62, 86; decided by main session, 2026-10-31.
+
+## Site profiles and learning
+
+### Site profiles
+
+A versioned profile per (level, host) sets HTML extraction, identity rule, excluded types (images and video by default) and `lastmod` reliability, set only after a 500-URL sample passes. HTML goes by the profile, PDFs by `/v1/inspect`. In P1 profiles are manual (umea.se: the hand-checked Sitevision preset), edited and rolled back by platform admins. Nothing is learned and applied automatically: site-profile learning and parse-strategy proposals are P2, as is editors' read access. Detail: `ingestion-worker/design-connectors.md` §5.6; `ingestion-worker/design-processing.md` §3.5.
+
+*From:* log rows 55, 56, 62, 64, 119; decided by user, 2026-11-07.
+*Also:* "Learning"
+
+## Crawler and connectors
+
+### Crawler
+
+Own crawler, not Firecrawl or Crawlee; a hosted service only as an `IRenderer` backend for anti-bot sites. User agent `UmeaKommunBot/1.0 (+about page)`, robots.txt honoured (both changeable per host). `noindex`/`nofollow` honoured on external hosts, ignored on municipal ones. Defaults 10,000 pages, depth 10; off-site links only when an `include` names the host, as leaves. P1 has one frontier per source; the shared frontier is P2. Detail: `ingestion-worker/design-connectors.md` §5.1, §5.2, §6.0.
+
+*From:* log rows 39, 40, 41, 62, 116, 117; decided by user, 2026-11-07.
+*Also:* "Crawler (step 6b questions)", "Crawler build vs buy"
+
+### Configurable politeness per host
+
+Politeness rules (rate, connections, `Crawl-delay`, latency throttle, night window, back-off, breaker, robots.txt, User-Agent, renders per host) are defaults. A platform admin may change them per host in `Settings.Crawl.HostOverrides` (presets, audited) within `Crawl:MaxHostRate` 50 req/s and `Crawl:MaxHostConnections` 16; robots.txt may be ignored only with a reason (its groups are still
+matched against `UmeaKommunBot`); the User-Agent is free. 429/503 are honoured up to a configurable cap. Detail: `ingestion-worker/design-connectors.md` §6.6.
+
+*From:* log rows 53, 116; decided by user, 2026-11-07.
+
+### Document identity
+
+A URL's identity is its final URL after redirects, mapped by the profile's identity rule only when verified; `rel=canonical` folds an alias only on equal content hash. The worker's `UrlCanonicalizer` normalises; the admin refuses exact duplicates only. Scope patterns match before the identity rule. An upload is (source, slot) with the content hash as version; uploads need no topics. Detail: `ingestion-worker/design-connectors.md` §3, §4, §9.
+
+*From:* log rows 41, 55, 56, 73, 93; decided by user, 2026-11-05.
+
+### Freshness and deletions
+
+Scheduled crawls are full traversals with conditional GETs. A traversal is complete at ≥ 99 % of seeds resolved; failed seeds are never deletion candidates in that run, and deletions pass a guarded reconcile phase. URLs leaving the sitemap are re-requested, `Gone` on 404/410. Retrieval has per-collection age decay (on for PDFs in `website`) and `demote` patterns. Detail: `ingestion-worker/design-connectors.md` §5.4, §13; `knowledge-api/design.md` §6.5.
+
+*From:* log rows 41, 56, 64; decided by user, 2026-10-30.
+
+### Egress guard and ClamAV
+
+Fetches go through a DNS-pinned egress guard, with the host firewall and a startup canary behind it. ClamAV scans every upload and every fetched file other than HTML, text and CSV, fail-closed; the UI shows malware metadata only. SharePoint ACLs are not mirrored (P2). Detail: `ingestion-worker/design-connectors.md` §7, §11.
+
+*From:* log row 41; decided by main session, 2026-10-29.
+
+### JavaScript rendering
+
+A `browser` source (`fetchMode`, optional `readySelector`) is rendered by `rag-renderer`, a browser-only container with no route out, driven by the worker, which fetches every browser request through its guard. Fresh context per page; images, fonts, media, trackers blocked; a page is ready when no routed request has been open for `Render:QuietPeriod`, and with a `readySelector` once the
+selector holds text and then that quiet rule holds; up to 4 renders per worker (`Render:MaxConcurrent`) and per host
+its `renderPerHost` (default 1) up to its `maxConnections`, a slot taken only when free. Scripts and stylesheets are cached in the worker per run. There is no fallback to the raw shell: a failed render
+keeps the last good content and links; `browser` pages render every traversal. The preflight compares raw and
+rendered text as a hint only. The renderer is no go-live gate for the server-rendered umea.se pilot. Detail: `ingestion-worker/design-connectors.md` §8.
+
+*From:* log rows 41, 55, 115; decided by user, 2026-11-07; render cap and ready rule by user, 2026-11-08.
+
+### Crawlee review: ideas adopted
+
+Adopted: meta refresh as a redirect hop; `redirect.cookie_required`; sniffing a missing or `octet-stream` type; per-host soft-404 fingerprint; challenge pages transient, never evaded; sitemap retries, text sitemaps, `/sitemap_index.xml`; in the renderer bounded operations, navigations, popups and downloads as hops or links, per-page cookies, `scrollToLoad`. Shadow-DOM flattening and same-host iframe inlining
+come later, when a source needs them: its rendered text falls well short of what a browser shows because of web
+components or same-host iframes (none of the measured sites does). Detection by counted verdicts comes later. Not
+adopted: its URL normalisation, retries without backoff, fail-open robots, in-memory per-host delay, sessions,
+fingerprints, proxies and clicking elements. Detail: `ingestion-worker/design-connectors.md` §3.2, §5.3, §8.3.
+
+*From:* log row 117; decided by main session, 2026-11-07; shadow DOM and iframes later, user, 2026-11-08.
+
+## Parser and processing
+
+### Parser
+
+P1 formats: PDF, OOXML, ODF, JPG/PNG/TIFF, text, Markdown, CSV, HTML; uploaded legacy Office (`.doc`, `.xls`, `.ppt`) and RTF are converted to OOXML by LibreOffice in the parser image (headless, forced import filter, a profile per job, process-group kill at the timeout); the same types when crawled, and e-mail (`.eml`, `.msg`), P2. **Before go-live:** LibreOffice in the parser or a separate converter container, decided together with the parser's sandbox; archives and macro files refused. The worker parses only HTML, text, Markdown, CSV; every PDF goes to the Docling parser (pypdfium2 fast path). Pictures give captions and OCR; Tesseract `swe`, explicit. The parser is its own supervisor with pre-warmed
+processes, and per-page parse rules act on `/v1/inspect` signals. The worker stores `result.json` and the
+`DoclingDocument`. NER model in the image; port 8000, TLS in production; a permissively licensed JSON Schema validator, no `JsonSchema.Net` binaries; logs only in P1. Detail: `parser/design.md` §3, §7.6, §12, §13.2.
+
+*From:* log rows 35, 36, 55, 67, 69, 114; decided by user, 2026-11-07; legacy Office and RTF uploads by user, 2026-11-09 (#526, #527).
+*Also:* "Parser telemetry is logs only in P1"
+
+### Chunking
+
+In P1, flat heading-split chunks, by default 400 tokens including the breadcrumb › heading prefix and ~15 %
+whole-sentence overlap (template parameters `chunkTokens`, `overlapPercent`), tables as row groups, BGE-M3 tokenizer in .NET; the Knowledge API expands sections. A noise-only change re-keys the live set. Detail: `ingestion-worker/design-processing.md` §6, §12.
+
+*From:* log rows 37, 43, 55; decided by user, 2026-10-30.
+
+### Personal data
+
+Published municipal content is public information. .NET patterns run on every chunk set; KBLab BERT NER (`/v1/ner`) only when names can change the flag, inside the job. Counts, fired types and flag live on the set, never values. Source `piiMode`: `hold` (default) holds a flagged set in a `public` collection; `report` lets it go live, raising 5103 for the editors' report, except personnummer and samordningsnummer. The umea.se source uses `report`. `Settings.Engine.PiiOwnDomains` is set to `umea.se`, `vakin.se`,
+`umeaenergi.se`, `visitumea.se` in the admin, subdomains included (the seed has `umea.se` only). Detail: `ingestion-worker/design-processing.md` §9.
+
+*From:* log rows 37, 42, 43, 55, 73, 92, 93, 94; decided by user, 2026-11-05.
+*Also:* "Personal data on the municipality's own published site", "Municipal companies' e-mail domains, `PiiOwnDomains`"
+
+## Retrieval
+
+### Knowledge API (step 7)
+
+Retrieval is hybrid in the shared `Ume.Rag.Retrieval` engine, used unchanged by the knowledge API, the evaluator and
+the test panel: keyword and vector candidates, RRF in .NET, then per-collection age decay (off by default) and source
+`demote` patterns, at most 3 chunks per document by default (1–10). Top-k is 10 (max 50), the query is used as given, results are not
+cached, query text is never stored, and a failed embedding degrades to keyword-only. Detail: `knowledge-api/design.md`
+§1, §6.
+
+*From:* log rows 44, 45, 64; decided by user, 2026-10-30.
+
+### Search cost at scale
+
+A scope of up to 10,000 chunks, counted after topic filters, is searched exactly, a larger one through HNSW, whose
+recall the worker samples per enumerable scope and restores by rebuild on `ConnectionStrings:ragdb-maintenance`, never through a
+pooler. The keyword search drops lexemes found in more
+than 30 % of the scope's chunks. Latency over budget at 100,000 chunks in one scope is accepted for the pilot and
+re-measured in R1. Detail: `knowledge-api/design.md` §6.2, §6.4.
+
+*From:* log rows 73, 87, 119; decided by user, 2026-11-07.
+*Also:* "Keyword stop list before the pilot crawl", "M-2 open design calls"
+
+### Rerank pulled forward
+
+Rerank is optional everywhere and no go-live gate: with no rerank model configured there is no call and no degraded
+status. An assistant turns it on (`chat` or `gateway`) when the gold set shows a gain over hybrid; the reranker scores
+the top 20 fused candidates at the turn's ceiling within 3 s (`ChatModelReranker`) or 1.5 s (`GatewayReranker`), and
+an error keeps the fused order. `ChatModelReranker` uses a small chat model chosen in the platform settings,
+without `temperature`; `GatewayReranker` calls the gateway's optional, Cohere-compatible `POST /v1/rerank` (Berget AI
+`bge-reranker-v2-m3` at `Eu` until on-prem), which answers 404 or 400 when no rerank model is configured. Detail: `knowledge-api/design.md` §6.7.
+
+*From:* log rows 74, 75, 110; decided by user, 2026-11-06.
+*Also:* "Gateway rerank time limit 1.5 s"
+
+## Chat
+
+### Chat API (step 8)
+
+The client's messages are authoritative for the prompt (last 10, at most 4,000 tokens; no SQL on the hot path).
+Residency is checked before the first byte, and a history-keeping client runs every turn at max(assistant level,
+client ceiling). Only cited sources are shown, renumbered by first citation, linked to the public URL or a 7-day signed
+download grant. An output filter removes images and de-links hosts outside the allow-list; clients other than Open WebUI get signed
+conversation ids. Grant links work on the staff network only, and access is re-checked at every download. Open
+WebUI's own task generation is off; attachments are refused in P1. Detail: `chat-api/design.md`
+§1, §8, §9.
+
+*From:* log rows 44, 46, 47, 55; decided by user, 2026-10-30.
+
+### Condense on the EU route
+
+Condense rewrites a follow-up that is not self-contained into a search query, for retrieval only, at `Eu` until
+on-prem models exist and never above the turn's ceiling: `Settings.Chat.CondenseModel` is set to `gpt-6-luna` with
+`reasoning_effort` `none` (`Settings.Chat.CondenseReasoningEffort`, sent only when set), no `temperature`, `max_tokens`
+96, within `Chat:CondenseTimeout` 1,200 ms; on a timeout the raw question is searched. A question over 2,000 characters
+(up to 16,000) is condensed on every turn within 3 s, else cut to 2,000 characters; the answer model always gets the
+full question. A failed condense never yields the not-found text. Detail: `chat-api/design.md` §5, §5.1.
+
+*From:* log rows 46, 77, 98, 108; decided by user, 2026-11-06.
+*Also:* "Long questions condensed into the search query"
+
+### Not-found gate
+
+Coverage is `low` only when vector and keyword side are both weak (the vector side alone until the keyword floor is
+calibrated), with both thresholds set from answerable and unanswerable gold-set questions. Then the assistant gives its
+fixed text with contact links and no model call, unless its general-knowledge level says otherwise. Detail:
+`knowledge-api/design.md` §7; `chat-api/design.md` §6.2, §10.
+
+*From:* log rows 46, 55, 63; decided by user, 2026-10-30.
+
+### General knowledge per assistant
+
+`answer.generalKnowledge` is `off` (default), `supplement`, `fallback` or `open`, a versioned draft field set by anyone with `edit` on the
+assistant, each with a locked frame; no level
+allows invented municipal facts or cites general knowledge. With `supplement` the answer says which parts do not rest on the sources, and coverage `low` still gives
+the not-found text; with `fallback` and `open`, coverage `low` gets an answer without sources behind a fixed platform
+caveat, stored as `answered-general` and counted apart from not-found. "Search unavailable" is the fixed text at every
+level. On a `public` assistant a level other than `off` is a warning and needs
+explicit confirmation on publish, restore and a level change to `public` (V36). Detail: `chat-api/design.md` §7.3,
+§10.4; `admin/design.md` §4.6.
+
+*From:* log rows 103, 111; decided by user, 2026-11-07.
+*Also:* "General knowledge on a public assistant"
+
+### Related documents and the `ume` chat extension
+
+A client other than Open WebUI may add `ume` to a chat request to get the turn's `outcome` and `degraded`, plus on
+request `related_documents` (1–10, from the same retrieval, empty on coverage `low`) and `follow_ups` (1–5, one
+condense-model call within 2 s, never stored, lines with markers, links or personal data dropped). Unknown members are
+refused. Detail: `chat-api/design.md` §3.8, §9.7, §9.8.
+
+*From:* log rows 106, 107; decided by user, 2026-11-06.
+*Also:* "Follow-up suggestions"
+
+### Chat rate limit per key
+
+A key that is itself the chat subject is limited by `Keys.RequestsPerMinute`, else by the per-user value; Open WebUI
+users always get the per-user value. Knowledge routes do not read it in P1. Detail: `chat-api/design.md` §4.1 step 4.
+
+*From:* log row 109; decided by user, 2026-11-06.
+
+### Feedback and conversation review
+
+Ratings come through `POST /v1/feedback` and an Open WebUI import. Comments are read only by `rag-reviewer` and
+`rag-department-admin` after an audited reason, whole conversations only by `rag-reviewer` (`sensitive`: a second
+approver); both exist only once chat content is stored. Detail: `chat-api/design.md` §14; `admin/design.md` §8.
+
+*From:* log rows 46, 50, 65; decided by user, 2026-10-30.
+
+### Chat prompt texts configurable
+
+The platform's own prompt texts are platform settings (`Settings.Chat.Prompts`, Settings page, platform admins), each
+optional with today's text as its built-in default. Editable: the frame's identity line (`{assistant}`), the sources
+label, the rule lines of each `generalKnowledge` level with and without sources, the conversational and degraded-search
+lines, both condense prompts, the follow-up prompt's instructions, and the degraded and general-knowledge caveats (sv,
+en). Locked in code, because the marker parser, the output filter and the injection defences rely on them: the
+citation line, the no-invented-numbers/no-links line, the `<sources>`-is-data line and the block's data note, the
+language line, and the follow-up prompt's data, personal-data and no-citations lines. Texts are platform-wide and apply
+at once to every assistant; an assistant's own `SystemPrompt` still follows the frame. Detail: `chat-api/design.md`
+§5, §5.1, §7.2–§7.3, §9.8, §10.2, §10.4; `admin/design.md` V38.
+
+*From:* decided by user, 2026-11-11 (#548).
+
+### Answer length from the model
+
+`QuerySteps.answer.maxOutputTokens` and `answer.contextTokens` are optional overrides; absent (the default, *Use the
+model's limit*), they take the model's `MaxOutputTokens` and `ContextWindow` from the `GatewayModels` mirror. The
+request's `max_tokens` is the override, else the model's limit less the estimated prompt within the context window,
+else left out when the limit is unknown (the prompt budget then keeps its 1,024-token answer reserve). There is no fixed
+4,096 ceiling. A platform admin enters both limits on the mirror row until the gateway's catalogue carries them. The
+test panel shows the `max_tokens` sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
+§8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
+`gateway-changes/design.md` §7.3.
+
+*From:* decided by user, 2026-11-11 (#548).
+
+## Evaluation
+
+### Gold set drafted by the main session, reviewed by DoIT
+
+The pilot gold set leads every report: about 120–150 answerable, 30–50 unanswerable and at least 10 temporal
+questions, drafted by the main session in residents' wording and stored as `human` questions once DoIT approves them.
+Go-live and the pilot's end need hand-graded answers: correct ≥ 80 %, citation precision ≥ 90 %, false not-found
+≤ 10 %, off-topic not-found ≥ 80 %. Hybrid and the decompounder stay only if they beat vector-only. The full Swedish benchmark stays postponed. Detail:
+`ingestion-worker/design-processing.md` §13.4, §14.
+
+*From:* log rows 15, 63, 95; decided by user, 2026-11-01.
+*Also:* "Weakness review 2"
+
+### Evaluation models at the collection's ceiling
+
+Retrieval evaluation is advisory and never blocks: no gates, no `building` state, no floor. Questions point at
+documents; generated sets (up to 100 judge-filtered questions) are made and judged at the collection's ceiling
+(`sensitive` `OnPrem`, `internal` and `public` `Eu`, as the worker has no `External` key; lowered by
+`Gateway:MaxResidency`) by any gateway chat model listed there (`Settings.EvaluationModel`, `EvaluationJudgeModel`),
+without `temperature`, JSON output, a fenced reply accepted. recall@10 and MRR run on the full collection after each
+publish and nightly; question embeddings come from the cache. Feedback enters only as editor-rewritten questions without personal data; answer judging is P2.
+Detail: `ingestion-worker/design-processing.md` §13, §14.
+
+*From:* log rows 27, 42, 43, 55, 62, 100; decided by user, 2026-11-02.
+
+## Admin and assistants
+
+### Admin API and UI
+
+The admin copies the gateway's BFF and CSP; a write is one transaction with `xmin` concurrency and cross-rules in
+`ConfigRules`. UI text is English, all in `labels.ts` and `messages.ts`, so Swedish can be added later; WCAG 2.2 AA, with one NVDA
+pass of the pilot journey before the pilot. Pilot department admins set up their own collections and assistants,
+with the platform team pairing.
+P1 has pages for the department journey only, platform objects use generic forms and Scalar. The test panel runs
+chat's code on the draft, unpublished collections included; its extra detail and the Overview attention items are P2.
+Detail: `admin/design.md` §1, §4.9, §5.
+
+*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07.
+
+### Assistants
+
+An assistant's knowledge is only its own collection links, never skills. There is one assistant type; it runs the agent
+loop (P2) when a linked skill has tools. Edits go to a draft; publish, history and restore are in P1, with a
+description and contact per assistant; diff, test questions, templates, copy and owner-team scoping are P2. Detail:
+`admin/design.md` §1, §5.5.4.
+
+*From:* log rows 60, 62; decided by user, 2026-10-30.
+*Also:* "Weakness review 1"
+
+### Organisation
+
+Departments own all content; the platform team owns none. A knowledge base, with a contact person, is shared with its
+own department (default), selected departments or the whole municipality, used read-only through the linking department's assistants,
+and that department sees only its name, owner, level, contact and topics; "whole municipality" means every active
+department in the gateway's catalogue (municipal companies only when it lists them); narrowing is refused while another department's published assistant links
+it. Topics are path-rule tags, optional on links and uploads. Teams are hidden in create forms: the owner team is the creator's first team in the department,
+changeable under ⋯. The Map is a table in P1b. Detail: `admin/design.md`
+§3.2, §5.5.6.
+
+*From:* log rows 62, 73, 86, 101; decided by user, 2026-11-05.
+*Also:* "M-2 open design calls", "Organisation: department-owned, municipality-shared knowledge bases with topics"
+
+### Level change in the edit drawer
+
+A level is changed in the item's edit drawer under `edit`; the API's checks run as before and their refusals show
+after Save, naming the affected objects. Detail: `admin/design.md` §5.5.2, §5.5.4.
+
+*From:* log row 112; decided by user, 2026-11-07.
+
+### Model pickers show what the key may use
+
+Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the platform's key at the relevant ceiling and cached 5 minutes per level. A model the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint. V8 (publish) and V32 (save) stay authoritative. Detail: `admin/design.md` §4.5, §4.6.
+
+*From:* log rows 51, 113; decided by user, 2026-11-07.
+
+### Upload knowledge bases
+
+A knowledge base of uploaded files is a first-class case in the admin UI: one step creates the knowledge base with its
+upload source, and its **Files** tab has the drop zone, live progress, search, state filter, sort, folder grouping,
+*Retry failed* and file details. Folder paths are kept: `X-File-Name` carries the relative path, which becomes the
+display name, so path rules can set topics per folder. Detail: `admin/design.md` §4.5, §5.5.7.
+
+*From:* decided by user, 2026-11-09.
+
+## Skills, tools and MCP (P2)
+
+### Skills
+
+Skills come in P2; P1 assistants are instructions plus collections. A skill is know-how and tools in the Agent Skills
+format (no scripts), with one served version for every linking assistant, an advisory gate, sharing with named
+departments and a department grant per tool link; the platform team owns platform skills. Detail: `tools/design.md`
+§1, §3.
+
+*From:* log rows 18, 28, 48, 49, 55; decided by user, 2026-10-30.
+
+### Tools and MCP
+
+Tools are read-only first; write tools later always need the user's confirmation. Policy is deny by default, a run's
+level is fixed at its start, and a composition that would combine private data, third-party text and an outbound
+channel is refused. Tool definitions are pinned with drift checks: a pre-registered change is pinned, any other needs
+a two-person re-approval. Agent limits per user message are 8 calls, 60 s, $0.05 (caps 20, 120 s, $0.25). Tool calls
+raise security events 5012–5015. The platform serves `/mcp`, calls MCP tools through an in-process hub, and hosts .NET municipal servers (hosted only, the first `ume-mcp-kommun`); an MCP
+client's ceiling is `public`, raisable to `internal`, never `sensitive`. Detail: `tools/design.md` §1, §5–§8.
+
+*From:* log rows 19, 20, 26, 48, 49, 55; decided by user, 2026-10-30.
+
+### Ask-a-file workspaces
+
+In P2, knowledge bases from uploaded files, owned by teams and individuals, are a light kind of collection on the
+whole pipeline, managed in a self-service area open to all staff (`Kind = workspace`, not Open WebUI's built-in Knowledge). Each
+workspace appears to its members as a model in Open WebUI, with whole-document tasks from the start: per-document
+summaries made on-prem at indexing, and full-text mode when a workspace fits the context. Detail:
+`archive/area-plans/workspaces.md` (plan only).
+
+*From:* log row 59; decided by user, 2026-10-30.
+
+## Not carried over
+
+Rows of the log with nothing left that binds:
+
+- row 3 "Learning": replaced by the simplification pass; what holds is in "Site profiles".
+- row 16 "Plans": the first plan layout; replaced by "Design documents: one layer".

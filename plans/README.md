@@ -2,7 +2,7 @@
 
 Ume.Rag's plans in three layers. Read them in this order:
 
-1. **Decisions** — [`../01-general-idea.md`](../01-general-idea.md) §10. Rows with status `current` bind and win over
+1. **Decisions** — [`decisions.md`](decisions.md): one entry per topic, every entry binds, and they win over
    everything below.
 2. **Roadmap** — [`roadmap.md`](roadmap.md): what is done, what is left before go-live, what P2 and P3 hold, and what
    waits on people. One page.

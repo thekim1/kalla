@@ -190,7 +190,7 @@ install.
 
 ### 3. Sign-in (OIDC)
 
-**The pilot signs in with the Keycloak shared with the gateway** (`01-general-idea.md` §10 "P1 pilot sign-in";
+**The pilot signs in with the Keycloak shared with the gateway** (`plans/decisions.md` "P1 pilot sign-in";
 identity design §11.2): the gateway repo runs it and its realm `ume`; RAG's realm additions (`deploy/keycloak/`) add the
 clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` roles and the `departmentCodes` attribute. Point
 `--oidc-authority` at `https://<keycloak host>/realms/ume`; Open WebUI's provider URL follows from it.

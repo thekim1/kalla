@@ -1,20 +1,21 @@
 # Ume.Rag
 
 RAG, crawling and chat platform for Umeå kommun, built as small .NET 10 services on top of the team's LLM gateway.
-This repo holds the design (`01-general-idea.md`, `plans/`; background research on other platforms, not binding, in
-`platforms/`) and, from P0, the code in the layout of
+This repo holds the design (`plans/`, with the goal and principles in `01-general-idea.md`; background research on
+other platforms, not binding, in `platforms/`) and, from P0, the code in the layout of
 `plans/platform/repo-and-deployment.md` §1.
 
 ## Where the truth is
 
 Two layers, read in this order:
 
-1. `01-general-idea.md` §10 **Decisions table**. Rows with status `current` bind; a `partly superseded` row binds for
-   what its status says; a `superseded` row doesn't bind.
+1. `plans/decisions.md`, the **decisions** in force: one entry per topic, in the present tense, and every entry binds.
+   A decision is cited by its entry's name (`Decisions "Cost attribution"`); an older name is in the entry's *Also*
+   line. The dated history is `plans/archive/decisions-log.md` and doesn't bind.
 2. The detail document for your area (`plans/*/design*.md`, `plans/platform/data-model.md`,
    `plans/platform/repo-and-deployment.md`). `plans/README.md` maps areas to documents. It states every rule that
-   applies, in the present tense; where it and the Decisions table differ, the table wins and the document is a bug
-   to report.
+   applies, in the present tense; where it and a decision differ, the decision wins and the document is a bug to
+   report.
 
 The cross-cutting passes and the finished phase plans are in `plans/archive/` and no longer bind (each pass ends with a
 ledger of where its rules went), except the performance pass's capacity model, scaling triggers and scale tests, which

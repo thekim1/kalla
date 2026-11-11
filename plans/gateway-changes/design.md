@@ -831,7 +831,7 @@ What this design needs from the other documents of this repo, and they state:
    header), the 403/503 rule with `Retry-After`; §4.4 FakeLlm `dimensions` with release 1.
 6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: delegation after release 2; worker
    keys never include the open key.
-7. **`../../01-general-idea.md`** §10 Decisions rows "Gateway changes" and "Weakness review 5": features, release
+7. **`../archive/decisions-log.md`** rows "Gateway changes" and "Weakness review 5": features, release
    split, key flags, 503 rule.
 8. **`../to-verify.md`**: rows 82 and 86 (Graph) in P2; the rows of §16.
 9. **`../platform/repo-and-deployment.md`** §4.3 FakeGateway: `/v1/models` filtered by `x-ume-max-residency`; a rerank

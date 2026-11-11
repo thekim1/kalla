@@ -8,7 +8,7 @@ what changes then.
 
 Background: [`docs/production-setup.md`](production-setup.md) (the full production install),
 [`docs/test-host.md`](test-host.md) (the pilot test host), [`docs/p1a-local-run.md`](p1a-local-run.md) §4 (the same
-milestone on a developer machine), and the Decisions table in [`01-general-idea.md`](../01-general-idea.md) §10, rows
+milestone on a developer machine), and the decisions in [`plans/decisions.md`](../plans/decisions.md), entries
 "Interim gateway for P1a" and "Pilot embedding model, U-b".
 
 ## 0. Rules for whoever runs this
