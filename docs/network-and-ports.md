@@ -415,6 +415,7 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | Open WebUI host | `--openwebui-host` | `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OPENWEBUI_BASE_URL` | `OpenWebUi__BaseUrl` and the firewall (`llm`), both from `..._BASE_URL`, so a hand edit moves both (#453) |
 | Reverse proxy sources | `--proxy-address` | `UME_RAG_PROXY_SOURCES` | the firewall: the published ports accept only these |
 | OTLP endpoint | edit `deploy/.env` | `UME_RAG_OTEL_ENDPOINT` | `OTEL_EXPORTER_OTLP_ENDPOINT` (api, admin, worker), the firewall (`llm`, `crawl`) |
+| Organisation name (admin UI) | edit `deploy/.env` | `UME_RAG_ORGANISATION_NAME` (`Umeå kommun`; empty: none) | `Admin__OrganisationName` (admin) |
 | Trace sampling | edit `deploy/.env` | `UME_RAG_OTEL_TRACES_SAMPLER` (`parentbased_traceidratio`), `UME_RAG_OTEL_TRACES_SAMPLER_ARG` (`0.1`) | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` (api, admin, worker) |
 | Municipal crawl ranges | `--crawl-allow` | `UME_RAG_CRAWL_ALLOW` | `Crawl__AllowedPrivateRanges` (worker), the firewall (`crawl`) |
 | Extra crawl ports | admin UI | `Settings.Crawl.AllowedPorts` (database) | the worker's egress guard |

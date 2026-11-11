@@ -35,6 +35,8 @@ configMapGenerator:
       - Oidc__GroupClaim=groups
       - Oidc__ExtraScopes__0=email
       - Oidc__RefuseGuests=true
+      # The organisation the admin UI names in its header and sign-in texts; empty names none (#544).
+      - Admin__OrganisationName=Umeå kommun
   - name: ume-rag-migrations-config
     literals:
       - EmbeddingProfile__Dimensions=1024

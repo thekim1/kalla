@@ -237,6 +237,8 @@ services:
       OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
       OTEL_TRACES_SAMPLER_ARG: ${UME_RAG_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-admin
+      # The organisation the admin UI names in its header and sign-in texts; empty names none (#544).
+      Admin__OrganisationName: ${UME_RAG_ORGANISATION_NAME-Umeå kommun}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
