@@ -613,12 +613,15 @@ at once to every assistant; an assistant's own `SystemPrompt` still follows the 
 model's limit*), they take the model's `MaxOutputTokens` and `ContextWindow` from the `GatewayModels` mirror. The
 request's `max_tokens` is the override, else the model's limit less the estimated prompt within the context window,
 else left out when the limit is unknown (the prompt budget then keeps its 1,024-token answer reserve). There is no fixed
-4,096 ceiling. A platform admin enters both limits on the mirror row until the gateway's catalogue carries them. The
+4,096 ceiling. An optional platform-wide ceiling, `Settings.Chat.MaxAnswerTokens` (unset by default), guards against
+long, costly answers on models with large output limits: when set, it caps every answer's `max_tokens`, override
+included, and `max_tokens` is then always sent, also when the model's limit is unknown. A platform admin enters both limits on the mirror row until the gateway's catalogue carries them. The
 test panel shows the `max_tokens` sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
 
-*From:* decided by user, 2026-11-11 (#548).
+*From:* decided by user, 2026-11-11 (#548); the platform ceiling decided by user, 2026-11-11, from the main session's
+review of #548.
 
 ## Evaluation
 
