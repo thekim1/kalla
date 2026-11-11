@@ -5,6 +5,24 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+### Added
+
+- `Admin:OrganisationName` (default `Umeå kommun`; empty names no organisation) for the admin UI's header and sign-in
+  texts; admin UI wording works for any organisation, and admin forms opt out of browser autofill and password managers
+  (#544).
+- `Crawl:UserAgent` on rag-worker (default `UmeaKommunBot/1.0`): robots.txt, meta robots and `X-Robots-Tag` are matched
+  against its product token (#545).
+
+### Changed
+
+- Deployment templates request `dimensions` from the embedding model by default and set `MaxInputTokens` 8191 (#546).
+- Reverse proxy: the api host and Open WebUI allow 2 MB request bodies, as rag-api's chat route does; with 1 MB, long
+  conversations were refused by the proxy (#552).
+- PostgreSQL: `jit = off`, `random_page_cost = 1.1`, `effective_io_concurrency = 200` for SSD storage and short
+  queries (#553).
+- Traces are sampled (`UME_RAG_OTEL_TRACES_SAMPLER`, default `parentbased_traceidratio` at `0.1`), and the .NET
+  containers' health probe runs every 30 s (every 5 s while starting) (#555).
+
 ### Fixed
 
 - Portainer stack: rag-admin reaches the gateway's Data API; `dataapi` joins the internal network `rag-dataapi`, so the
