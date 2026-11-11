@@ -12,6 +12,7 @@
 #   - pgbackrest stanza-create and check in the postgres container
 #   - parser /v1/info from the worker container (the worker image's own probe pointed at the parser: HTTPS through the
 #     internal CA, 2xx; the image has no shell or curl)
+#   - the renderer: with --render, rag-renderer runs healthy (COMPOSE_PROFILES=render); without, it doesn't run (#505)
 #
 #   deploy/tests/release-smoke.sh BUNDLE.tar.gz [options]
 #
@@ -23,6 +24,7 @@
 #   --wait-timeout SECONDS  for `up --wait` [900]: the parser warms up and freshclam downloads the signatures first
 #   --chown-with-docker     without root or passwordless sudo (a developer machine): init-deployment.sh's chown runs
 #                           as root in a throwaway container of the bundle's postgres image, and so does the clean-up
+#   --render                init-deployment.sh --render: the Compose profile `render` with rag-renderer (#505)
 #   --keep                  leave the stack running and the files in place
 #
 # Needs Docker with Compose v2, curl, jq and openssl; the containers read their secrets as their own users, so
@@ -30,7 +32,7 @@
 # Exit 0 when every check that exists in this phase passed; the steps not built yet are listed at the end.
 set -euo pipefail
 
-bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; docker_chown=0; keep=0
+bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; docker_chown=0; keep=0; render=""
 usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
     --admin-port) admin_port="$2"; shift 2;;
     --wait-timeout) wait_timeout="$2"; shift 2;;
     --chown-with-docker) docker_chown=1; shift;;
+    --render) render=1; shift;;
     --keep) keep=1; shift;;
     -h|--help) usage 0;;
     -*) echo "unknown option: $1" >&2; usage 1;;
@@ -115,7 +118,7 @@ PATH="$init_path" "$deploy/init-deployment.sh" \
   --gateway-url https://llm.smoke.test \
   --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
   --api-port "$api_port" --admin-port "$admin_port" \
-  --backup-target local --allow-file-keys --yes > "$work/init.log" \
+  --backup-target local --allow-file-keys ${render:+--render} --yes > "$work/init.log" \
   || { cat "$work/init.log" >&2; fail "init-deployment.sh failed"; }
 grep -q 'Run as root first' "$work/init.log" && { cat "$work/init.log" >&2; fail "init-deployment.sh could not chown"; }
 ok "init-deployment.sh wrote $(basename "$deploy")/.env, certs and secrets"
@@ -179,6 +182,18 @@ echo "== parser from the worker"
 dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Ume.Rag.Worker.dll --health-check \
   || fail "the worker could not reach the parser's /v1/info"
 ok "parser /v1/info answered 2xx to the worker (HTTPS, internal CA)"
+
+echo "== renderer"
+renderer="$(dc ps --format '{{.Service}} {{.Health}}' | awk '$1 == "rag-renderer" {print $2}')"
+if [ -n "$render" ]; then
+  [ "$renderer" = healthy ] || fail "rag-renderer is '${renderer:-not running}' with --render, expected healthy"
+  grep -qx 'COMPOSE_PROFILES=render' "$deploy/.env" || fail "--render did not set COMPOSE_PROFILES=render in .env"
+  ok "rag-renderer healthy with COMPOSE_PROFILES=render"
+else
+  [ -z "$renderer" ] || fail "rag-renderer runs without --render"
+  grep -qx 'COMPOSE_PROFILES=' "$deploy/.env" || fail "COMPOSE_PROFILES is not empty in .env without --render"
+  ok "no rag-renderer without --render (browser sources: render.not_configured)"
+fi
 
 echo
 echo "Smoke test passed for $name."

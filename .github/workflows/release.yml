@@ -257,6 +257,11 @@ jobs:
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
             --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker
+      - name: Smoke test the bundle with the renderer (profile render)
+        # The default install has no renderer since #505; this boots the bundle again with init-deployment.sh --render.
+        run: |
+          bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
+            --work-dir "$RUNNER_TEMP/smoke-render" --chown-with-docker --render
       - uses: actions/upload-artifact@v7
         with:
           name: release
