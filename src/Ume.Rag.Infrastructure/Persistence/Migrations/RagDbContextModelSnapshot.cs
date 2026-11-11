@@ -2370,6 +2370,36 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("KeyLastUse", "config");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.KeywordStatistic", b =>
+                {
+                    b.Property<Guid>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Lexeme")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ChunkCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Ndoc")
+                        .HasColumnType("integer");
+
+                    b.HasKey("EmbeddingProfileId", "CollectionId", "Lexeme");
+
+                    b.HasIndex("CollectionId");
+
+                    b.ToTable("KeywordStatistics", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_KeywordStatistics_Counts", "\"Ndoc\" > 0 AND \"ChunkCount\" >= \"Ndoc\"");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Message", b =>
                 {
                     b.Property<Guid>("Id")

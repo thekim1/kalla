@@ -63,6 +63,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ChunkSet> ChunkSets => Set<ChunkSet>();
     public DbSet<Chunk> Chunks => Set<Chunk>();
     public DbSet<EmbeddingCacheEntry> EmbeddingCache => Set<EmbeddingCacheEntry>();
+    public DbSet<KeywordStatistic> KeywordStatistics => Set<KeywordStatistic>();
     public DbSet<Run> Runs => Set<Run>();
     public DbSet<ParseObservation> ParseObservations => Set<ParseObservation>();
     public DbSet<ParseProfile> ParseProfiles => Set<ParseProfile>();

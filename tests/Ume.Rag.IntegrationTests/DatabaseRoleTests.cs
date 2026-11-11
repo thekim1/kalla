@@ -49,7 +49,8 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
             .Select(t => "chat." + t)];
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, "content.ChunkSets", "content.Chunks", .. chat], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, "content.ChunkSets", "content.Chunks",
+            "content.KeywordStatistics", .. chat], ignoreOrder: true); // the keyword stop list's statistics (#499)
         (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
@@ -76,6 +77,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     /// <summary>The content tables of P1 item 2 (data-model §2.2, issue #34).</summary>
     private static readonly string[] IngestionContentTables =
     [
+        "KeywordStatistics", // kept by the worker (knowledge design §6.2, #499)
         "NodeManifest", "WorkerNodeSupport", "CrawlHosts", "SiteProfiles", "SiteProfileVersions", "CrawlFrontier", "CrawlRuns",
         "ConnectorCheckpoints", "Uploads", "DeletionProposals", "QuarantinedFiles", "Documents", "NodeOutputs", "ChunkSets",
         "Chunks", "EmbeddingCache", "Runs", "ParseObservations", "ParseProfiles", "BlobTombstones",

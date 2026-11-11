@@ -259,6 +259,17 @@ internal static class IngestionContentModel
             e.HasIndex(x => x.LastUsedAt);
         });
 
+        // data-model §2.2: no FK, so a deleted collection's rows go with the worker's next check (knowledge design §6.2).
+        modelBuilder.Entity<KeywordStatistic>(e =>
+        {
+            e.ToTable("KeywordStatistics", ContentSchema, t =>
+            {
+                t.HasCheckConstraint("CK_KeywordStatistics_Counts", "\"Ndoc\" > 0 AND \"ChunkCount\" >= \"Ndoc\"");
+            });
+            e.HasKey(x => new { x.EmbeddingProfileId, x.CollectionId, x.Lexeme });
+            e.HasIndex(x => x.CollectionId);
+        });
+
         modelBuilder.Entity<Run>(e =>
         {
             e.ToTable("Runs", ContentSchema, t =>
