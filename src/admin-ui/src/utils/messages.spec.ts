@@ -72,7 +72,7 @@ const WORKER_CODES = [
   'document.concurrent_insert', 'job.exception', 'node.fatal', 'node.transient', 'command.unknown_kind',
   'run.cancelled', 'sync.invalid_payload', 'sync.unsupported', 'sync.run_in_progress', 'parse.invalid_payload',
   'embed.invalid_payload', 'deletion.rejected', 'deletion.superseded', 'sample.too_small', 'embed.bad_vector',
-  'embed.canary_mismatch', 'embed.input_missing', 'embed.input_rejected', 'embed.profile_unknown', 'gateway.timeout',
+  'embed.canary_mismatch', 'embed.profile_changed', 'embed.input_missing', 'embed.input_rejected', 'embed.profile_unknown', 'gateway.timeout',
   'gateway.unreachable', 'gateway.unavailable', 'gateway.rate_limited', 'gateway.budget_exhausted',
   'gateway.residency_above_ceiling', 'gateway.forbidden', 'eval.embedding_profile_unknown',
   'eval.embedding_unavailable', 'eval.model_not_at_ceiling', 'eval.model_unknown', 'eval.no_key',
