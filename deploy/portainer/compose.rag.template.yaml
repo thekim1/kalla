@@ -28,7 +28,7 @@
 #                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
 #                             with catalog.read
 #   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
-#                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (false)
+#                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (true)
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
 #                             UME_OIDC_AUTHORITY (UME_RAG_OIDC_AUTHORITY to use another); redirect URIs
 #                             https://<UME_RAG_ADMIN_HOST>:<port>/signin-oidc and /signout-callback-oidc
@@ -147,8 +147,8 @@ x-rag-secrets: &rag-secrets-mount
       # The platform embedding profile, seeded once (insert-if-absent) when the model is set.
       EmbeddingProfile__GatewayModel: ${UME_RAG_EMBEDDING_MODEL:-}
       EmbeddingProfile__Dimensions: ${UME_RAG_EMBEDDING_DIMENSIONS:-1024}
-      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-false}
-      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8192}
+      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-true}
+      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8191}
       EmbeddingProfile__MaxResidency: ${UME_RAG_EMBEDDING_MAX_RESIDENCY:-Eu}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:

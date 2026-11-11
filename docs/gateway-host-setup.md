@@ -163,7 +163,8 @@ Expected: `HTTP 200`, `dims=1024`, `x-ume-residency: Eu`. Repeat with `api-eu.ke
 | Result | Meaning | What to do |
 |---|---|---|
 | 401 | the key is wrong, disabled or expired | ask the gateway admin |
-| 403 `max_residency_not_met` | the model's provider is not marked `Eu`, or the key doesn't allow `Eu` | ask the gateway admin; the pilot may only use EU-hosted models |
+| 403 `model_not_allowed` | the key has an allowed-models list without this model, or an allowed-providers list without the model's provider | ask the gateway admin to add the model (or provider) to each of the three RAG keys |
+| 403 `max_residency_not_met` | the model's deployment (or, without its own residency, its provider) is not marked `Eu`, or the key doesn't allow `Eu` | ask the gateway admin; the pilot may only use EU-hosted models |
 | 400 `context_length_exceeded` | the gateway is older than v0.9.0 and checks the whole batch against the deployment's `ContextWindow` | ask for the gateway to be upgraded, or the `ContextWindow` cleared until then (§3) |
 | `dims=3072` | the gateway didn't pass `dimensions` | report; the gateway should forward the body unchanged |
 | a TLS error | the certificate isn't publicly trusted | §7 needs `--ca-file` with the gateway's CA chain |
@@ -437,7 +438,8 @@ The run book for that step comes with the chat API.
 | §8.3 times out | the firewall blocks the gateway (an old firewall script without the `INPUT` exception, or the gateway's name resolves to an address not in the rules) | `sudo iptables -S UME-RAG-INPUT`, `sudo iptables -S UME-RAG-EGRESS \| grep 172.30.3.0`; re-run `sudo systemctl start rag-firewall.service`; compare with §4.5 |
 | Runs fail with `embed.input_rejected` | the gateway refused a batch (`context_length_exceeded`) | a gateway older than v0.9.0 checks the whole batch: §3, upgrade it or clear the deployment's `ContextWindow`; on v0.9.0 or later, report it (a chunk is far below the window) |
 | Runs fail at the embed step on dimensions, or **Check embedding canary** reports the wrong number of dimensions | 3072 values came back: `RequestDimensions` isn't set or gate #142 isn't in the image | §7's `.env` lines, rebuild after #142 |
-| 403 from the gateway in the worker log | the key doesn't allow `Eu`, or the model's provider isn't `Eu` | §4.4 |
+| 403 from the gateway in the worker or admin log (`model_not_allowed`, `max_residency_not_met`) | the key doesn't allow the model or `Eu`, or the model's deployment isn't `Eu` | §4.4, for the admin and worker keys both |
+| The profile is still wrong after you changed `deploy/.env` (`RequestDimensions`, ceiling, model, dimensions) | the migrator seeds the profile once; for an existing one it only logs "exists with another model, dimension count or ceiling" | before anything is embedded, set `RequestDimensions` or `MaxResidency` on the row in `ragdb` as the `postgres` user in `rag-postgres` (`UPDATE config."EmbeddingProfiles" SET "RequestDimensions" = true WHERE "Name" = 'pilot-embedding';`; its config trigger reloads the services). A different model or dimension count: start again with an empty volume |
 | Pages end `skipped` with `robots.*` | robots.txt disallows the path | pick other pages |
 | Everything else | | collect the output below and report |
 

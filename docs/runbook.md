@@ -341,7 +341,7 @@ that can read packages.
 | `UME_RAG_GATEWAY_KEY_Eu` | a gateway API key for RAG (gateway admin UI, residency Eu); without it every model call fails, so deploy once, create the key, add it and update the stack |
 | `COMPOSE_PROFILES` | include `data` (the gateway's Data API, which RAG's admin reads for the model catalogue and org sync); `data,render` adds the renderer |
 | `UME_RAG_ORG_SYNC_KEY` | a Data API key with `catalog.read`; without it model settings cannot be saved |
-| `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024) |
+| `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024; `UME_RAG_EMBEDDING_REQUEST_DIMENSIONS`, default `true`, sends `dimensions`: set `false` for a model without that parameter, such as `bge-m3`). Seeded once: changing these later does not change the profile (`docs/gateway-host-setup.md` §13). Every RAG gateway key must allow this model, and its deployment must be marked `Eu` |
 | `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group that grants platform admin (the other roles: `_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER`, `_VIEWER`) |
 
 The optional ones (ports, a separate admin host, per-service gateway keys, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image
