@@ -36,6 +36,8 @@ export interface BffUser {
   isAuthenticated: boolean
   /** ASP.NET Core environment name of the admin API, for example Development or Production. */
   environment?: string
+  /** `Admin:OrganisationName` (default Umeå kommun), shown in the header and on the sign-in page; null when set empty. */
+  organisationName?: string | null
   name: string | null
   email: string | null
   roles: string[]

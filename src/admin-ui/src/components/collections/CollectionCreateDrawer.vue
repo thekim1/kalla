@@ -89,8 +89,8 @@ async function save(): Promise<void> {
         id="collection-department" v-model="departmentId" :label="COLLECTIONS.department" :options="departmentOptions"
         :error="form.errors.departmentId" :placeholder="COLLECTIONS.departmentRequired"
       />
-      <TextField id="collection-contact" v-model="contactName" :label="COLLECTIONS.contactName" :hint="COLLECTIONS.contactHint" :error="form.errors.contactName" autocomplete="name" />
-      <TextField id="collection-email" v-model="contactEmail" :label="COLLECTIONS.contactEmail" type="email" inputmode="email" autocomplete="email" :error="form.errors.contactEmail" />
+      <TextField id="collection-contact" v-model="contactName" :label="COLLECTIONS.contactName" :hint="COLLECTIONS.contactHint" :error="form.errors.contactName" />
+      <TextField id="collection-email" v-model="contactEmail" :label="COLLECTIONS.contactEmail" type="email" inputmode="email" :error="form.errors.contactEmail" />
       <fieldset class="grid gap-2" :aria-describedby="form.errors.classification ? 'collection-level-error' : undefined">
         <legend class="mb-1 font-medium">{{ COLLECTIONS.levelQuestion }}</legend>
         <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3" :data-test="`level-${l}`">
