@@ -1,6 +1,6 @@
 # Identity, authentication and authorisation: detailed design
 
-Detail step 3 of the Ume.Rag design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (binding, incl. its answered questions) and the
+Detail step 3 of the Ume.Rag design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
 Decisions table in [`../decisions.md`](../decisions.md). Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
@@ -17,8 +17,9 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 | Phase | Provider | RAG's part |
 |---|---|---|
 | Dev and CI | each repo's own Keycloak in its AppHost, realm `ume` from `dev/keycloak/ume-realm.json`, with test users | §11.1 |
-| **P1 (pilot)** | **one Keycloak shared with the LLM gateway**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `ume` with both systems' clients and roles; local accounts (admins with OTP), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**` (stream B, P1 item 16 → J8), no test users (§11.2) |
+| **P1 (pilot)** | **one Keycloak shared with the LLM gateway**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `ume` with both systems' clients and roles; local accounts without OTP (MFA returns with brokered Entra ID or AD), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**` (stream B, P1 item 16 → J8), no test users (§11.2) |
 | **P2** | Entra ID, approval package 1 (`infra/entra/`; kept, not yet submitted) | §12 |
+| **Production** | AD and Entra ID, both: brokered through Keycloak or directly through `Oidc:*` (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later") | §11.2 |
 
 The code path is the same in every phase: OIDC code + PKCE for the admin and Open WebUI, JWT bearer for RAG API
 tokens, configured by `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings. Moving from Keycloak to Entra is
@@ -566,9 +567,10 @@ header fails closed (5011) when `Gateway:RequireDelegationEcho` is on (default `
 In P1 no `x-ume-on-behalf-of` is sent and no echo is checked: delegation, the echo check and 5011 are built with
 release 2 (weakness review §5). Header values are the gateway's
 `DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-ume-residency` is
-checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). A gateway `503`
-with `Retry-After` (in-ceiling targets drained or circuit-open) is retryable; `403 max_residency_not_met` (no target
-configured within the ceiling) is not.
+checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). Retries are
+chat-api §8.3's (`GatewayRetryHandler`): a gateway `502`/`504` is sent once more with the same ceiling; a `503` with
+`Retry-After` (in-ceiling targets drained or circuit-open) is not retried but passed on, so the caller can wait and
+try again; `403 max_residency_not_met` (no target configured within the ceiling) is never retried.
 
 **Model validation on publish**: when an assistant version is published (and when its level or audience is saved), the
 admin calls the gateway's `GET /v1/models` with the key and ceiling of the assistant's effective level (for an
@@ -1087,6 +1089,13 @@ federation provider in the realm, with an LDAP *user-attribute-mapper* for `depa
 or groups for roles (`docs/identity-and-roles.md:143`, `:149-150`). No app change; what happens to the pilot's local
 accounts is open (§16).
 
+**Production: AD and Entra ID** (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone
+later"). Both must work, by either route: **brokered** through Keycloak (Entra ID as an OIDC identity provider; AD by
+the LDAP federation above or by AD FS) or **directly** through `Oidc:*` (Entra, §12). Brokered accounts bring MFA back
+(the OTP row above). The brokered route is tested with a stand-in upstream identity provider (§13.3). Ume.Rag's realm
+part needs nothing from the gateway's base realm except the `departmentCodes` and `teamCodes` claims, so Ume.Rag can
+run standalone (`deploy/keycloak/standalone/`, §11.3).
+
 **P2: Entra.** The same clients become the Entra registrations of §12 (`ume-rag-admin`, `ume-rag-open-webui`; package 2
 for `rag-api`); switching is `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings.
 
@@ -1273,6 +1282,9 @@ membership of the pilot groups is maintained by IT, not by IaC.
   to a minimal `ume` realm (standing in for the gateway's base realm) without collisions; a sign-in through `ume-rag-admin`
   shows the `rag-*` roles and `departmentCodes` in `/bff/user`, and its ID token carries no gateway role (full scope
   off); the file contains no users.
+- **Brokered sign-in** (Decisions "Identity providers"; not built yet): a stand-in upstream identity provider brokered
+  by the test realm; a sign-in through it reaches `ume-rag-admin` with `rag-*` roles and `departmentCodes` mapped from
+  the upstream claims.
 - Token from `ume-rag-api-dev` (client credentials) calls search with `Knowledge.Read.All`; the same token on chat
   without `Chat.Invoke.All` gets 403 `permission_missing`.
 - Delegated token from `ume-rag-chat-dev` with `Chat.Use` lists only assistants allowed for client `ume-rag-chat-dev`.

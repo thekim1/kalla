@@ -5,8 +5,8 @@
 skills or tools.
 
 Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
-§10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (binding, incl. its answered questions 2–4
-and the recommendation of question 1, and §14 here) and the Decisions table in
+§10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (archived: history, not binding; this design states
+every rule, the plan's answered questions and its recommendation for question 1 in §14) and the Decisions table in
 [`../decisions.md`](../decisions.md). All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
 budget, prompt frame, injection defences, gateway call, residency and echo checks, streaming, citations, output filter,

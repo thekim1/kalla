@@ -113,7 +113,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Done when:** the design sections say it and the items are queued.
 - **Waits on:** B-25's measurement (for #499).
 
-### [ ] M-11 Design documents that contradict the decisions (found in the rewrite, 2026-11-08)
+### [x] M-11 Design documents that contradict the decisions (found in the rewrite, 2026-11-08)
 - **Do:** align each design with [`../decisions.md`](../decisions.md), or bring the call to the user where the decision
   itself looks wrong:
   - engine §13.1 says `files` has no `pathRules` (it has them, "Organisation"); connectors §5.1 says robots.txt is
@@ -141,3 +141,5 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     does not have (it is the host's `renderPerHost`, capped by `Render:MaxConcurrent`).
 - **Done when:** each point is fixed in its design or answered by the user, and `check-doc-refs.py` passes.
 - **Waits on:** the decisions register (this PR).
+- **Left for the user:** who owns "Ask-a-file workspaces" (teams and individuals) against "Organisation" (departments
+  only); answer before P2.

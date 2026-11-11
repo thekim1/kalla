@@ -1,6 +1,6 @@
 # Parser sidecar: detailed design
 
-Detail step 5 of the Ume.Rag design. Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (binding, incl. its answered items 3–5) within
+Detail step 5 of the Ume.Rag design. Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (archived: history, not binding; this design states every rule, the plan's answered items in §18) within
 the limits set by [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §2.4, §5.3, §6 and §9,
 [`../platform/data-model.md`](../platform/data-model.md) §2.2 and §9, and [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md)
 §4–§8. Built in `src/parser/` (P0 and P1a); items still to come are marked with their phase. Removed and deferred

@@ -1,6 +1,7 @@
 # Ingestion worker, part B: connectors, crawl frontier, change detection, deletion guard
 
-Detail step 6b of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (binding, incl. answered items 1–14)
+Detail step 6b of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (archived: history, not binding; this design
+states every rule, the plan's answered items in §21)
 and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): fetch stages `http-fetch`, `crawl` and
 `upload`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift sweep (§2.3),
 run outcomes (§10.2), the index writer (§14), config rules (§15) and the execution-id fence (§7.5). Limits come from
@@ -292,7 +293,8 @@ only the headers are read).
   worker instance (`RobotsCache`; the `CrawlHosts` row and the blob are not used for it yet); an unreachable answer
   is kept for 10 minutes only, so the next run asks again. A guard-refused robots.txt is not kept at all: the guard
   follows `Settings.Crawl`, so a port allowed or a host unblocked there counts from the next request (#360).
-  robots.txt is always honoured (answered 4, 11), also on municipal hosts; it is re-checked per redirect hop.
+  robots.txt is honoured by default (answered 4, 11), also on municipal hosts, unless the host's profile says `ignore`
+  (§6.6); it is re-checked per redirect hop.
 - `Crawl-delay` is honoured only when it **lowers** our rate, capped at 60 s.
 - **Sitemaps**: `XmlReader` with `DtdProcessing.Prohibit` and no resolver; gzip allowed; sitemap index depth ≤ 2;
   ≤ 50,000 URLs and ≤ 50 MB uncompressed per file (sitemaps.org limits) and ≤ `maxPages` in total; out-of-scope
@@ -817,7 +819,8 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   this, the content with it.)
 - **Limits:** at most `Render:MaxRequests` (50) and `Render:MaxBytes` (20 MB) per page; past them the remaining
   requests get 204 (fact `truncated`). A page is kept only when it reached **ready**.
-- **Capacity:** `Render:MaxConcurrent` (4; the renderer peaked at 294 MiB with one open page and 453 MiB with four, ≈ +55 MiB a page, against 2 GB) renders per worker and `Render:MaxPerHost` (1) per host, to tune from
+- **Capacity:** `Render:MaxConcurrent` (4; the renderer peaked at 294 MiB with one open page and 453 MiB with four, ≈ +55 MiB a page, against 2 GB) renders per worker and, per host, the host's
+  `renderPerHost` (default 1, at most `Render:MaxConcurrent`, used up to its `maxConnections`; §6.6), to tune from
   measurements. A fetch job **takes a render slot only when one is free**; otherwise it is released back to the queue
   (`render.busy`, a short delay, no attempt counted), so browser work never holds the `fetch` slots that HTTP sources
   need. The frontier, host budgets, retries and run reporting stay as they are.

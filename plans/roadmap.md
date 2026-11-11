@@ -48,7 +48,7 @@ gateway's delegated attribution, follows in P2 before a second department.
 
 | What | Who | Blocks |
 |---|---|---|
-| Gold set (100–150 answerable, 30–50 unanswerable, ≥ 10 temporal) and the reviewers who grade | user + DoIT | thresholds, go-live gate |
+| Gold set (about 120–150 answerable, 30–50 unanswerable, ≥ 10 temporal) and the reviewers who grade | user + DoIT | thresholds, go-live gate |
 | G1 DPIA with the data protection officer (EU processor agreement, W2, banner, public-records route) | user | banner/route, go-live |
 | Gateway: v0.9.1 is deployed and release 1 is verified live (B-L4, #441: status green, `/v1/models` per ceiling; the Cohere reranker on Foundry, #421). Left: pilot accounts and the interim key allowing the model `turkos` is published on (`claude-opus-5-5` is refused today). Admin OTP is off for the pilot (user, 2026-11-06), which G1 records | user (gateway repo) | pilot accounts, `turkos` in Open WebUI |
 | Test host, backup target, key-escrow location; where the pilot runs at go-live (O7) | user | deploy, restore drill, R1 |
@@ -78,8 +78,9 @@ work split is written when P1b is live.
   subrequests and a renderer asset cache kept across runs (A-13, user 2026-11-07).
 - **Storage:** embeddings stored as `halfvec` (#502; to-verify #117 found no recall cost), after repeating the check
   on the full crawl's evaluation set.
-- **Answer quality:** nightly answer judge, publish plans from effect tags, rerank (a separate gateway release with an
-  on-prem reranker), on-prem models when hardware exists (M2). Upload gaps U1–U7 (picture descriptions, e-mail,
+- **Answer quality:** nightly answer judge, publish plans from effect tags, an on-prem reranker behind the gateway's
+  `/v1/rerank` (rerank itself is built and optional, pulled forward from P2: Decisions "Rerank pulled forward"), on-prem
+  models when hardware exists (M2). Upload gaps U1–U7 (picture descriptions, e-mail,
   spreadsheet questions, rerank on, contextual chunk headers, near-duplicates, OCR languages) and their proposed order:
   [`platform/upload-quality-review.md`](platform/upload-quality-review.md) (2026-11-09; measure on the support-assistant
   proof of concept first).

@@ -1,7 +1,7 @@
 # Chat API: detailed design
 
-Detail step 8 of the Ume.Rag design. Details [`../archive/area-plans/chat-api.md`](../archive/area-plans/chat-api.md) (binding, incl. its answered questions 1–3 and §21
-here) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
+Detail step 8 of the Ume.Rag design. Details [`../archive/area-plans/chat-api.md`](../archive/area-plans/chat-api.md) (archived: history, not binding; this design states
+every rule, the plan's answered questions in §21) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: `IRetriever`, `RetrievalResult`, `Coverage`, `MarkCited`, download grants, degraded retrieval, citations and
 the latency budget of [`../knowledge-api/design.md`](../knowledge-api/design.md) (§2.2, §3.6, §4.6, §5, §5.5, §9, §10,
 §11, §15, §16); `RagPrincipal`, the client registry, `IAccessPolicy`, the OpenAI error shape, the residency ceiling,

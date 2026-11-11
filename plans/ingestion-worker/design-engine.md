@@ -1,7 +1,7 @@
 # Ingestion worker, part A: pipeline engine, stages, jobs, runs, preview and publish
 
-Detail step 6a of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (binding, incl. answered items
-1–8) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
+Detail step 6a of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
+this design states every rule, the plan's answered items in §22) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. The engine runs fixed
 linear pipelines, documents and chunk sets per source, per-stage cache keys, short chunk-write transactions and
@@ -817,8 +817,8 @@ back directly (§2.3).
 
 Platform templates (`Pipelines.DepartmentId = null`; data-model §2.1 has no `IsTemplate` column), seeded by the
 migration service from `src/Ume.Rag.MigrationService/Templates/*.json` (§3.2). The three files below are embedded in
-`Ume.Rag.Pipelines` (`TemplateCatalog.BuiltIn`). `url-list` and `website` share the `pathRules` subschema (≤ 100
-rules); `files` has no `pathRules`. Only `website` has `collectionDefaults`.
+`Ume.Rag.Pipelines` (`TemplateCatalog.BuiltIn`). All three share the `pathRules` subschema (≤ 100 rules); on `files`
+a rule matches the upload's folder path (admin §5.5.7). Only `website` has `collectionDefaults`.
 
 Seeding: the migration service's `PipelineTemplateSeeder` runs in every environment after the migrations. Per template name it inserts one platform `Pipelines` row if absent (`Name` = `TemplateId` =
 the template name) and, per template version not yet seeded (matched by `template` + `templateVersion` in the stored
@@ -831,7 +831,7 @@ only on first deploy and on a new template version.
 |---|---|---|---|
 | `website` | crawl | fetch → detect → parse → clean → chunk → personal data → embed → index | `ocr` (`auto`), `tables` (`accurate`), `chunkTokens` (400), `overlapPercent` (15), `pathRules` (`[]`) |
 | `url-list` | URL list | as `website` | as `website` |
-| `files` | upload | fetch → **scan** → detect → parse → … → index | `ocr`, `tables`, `chunkTokens`, `overlapPercent` |
+| `files` | upload | fetch → **scan** → detect → parse → … → index | `ocr`, `tables`, `chunkTokens`, `overlapPercent`, `pathRules` |
 
 **Collection default** (reasoning: [weakness review §3](../archive/passes/weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
 the `website` template also carries a default for its collection's `RetrievalSettings.recency`, age decay for PDFs

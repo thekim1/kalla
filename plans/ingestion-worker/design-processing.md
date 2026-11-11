@@ -1,6 +1,7 @@
 # Ingestion worker, part C: processing stages, personal data, embedding and evaluation
 
-Detail step 6c of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (binding, incl. answered items 1–26) and
+Detail step 6c of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
+states every rule, the plan's answered items in §20) and
 specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a) marks "6c" in its stage table
 (`design-engine.md` §6). It consumes, without redesigning: the stage values (6a §2.2), the stage interface and results
 (6a §5, §7.3), segments and job classes (6a §7.4, §9.1), cache classes (6a §8), preview (6a §11), the publish flow
@@ -794,8 +795,8 @@ exists.
 ### 14.8 Nightly runs
 
 - **Retrieval**: nightly per published collection: full set, kind `nightly`; feeds the trend on the admin
-  evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). Alert (admin overview) when recall@10
-  falls 5 points below the median of the last 28 days. Enqueued at 03:30 Europe/Stockholm under advisory lock
+  evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). From P2, an Overview attention item when
+  recall@10 falls 5 points below the median of the last 28 days (attention items are P2, Decisions "M-3 settlements"). Enqueued at 03:30 Europe/Stockholm under advisory lock
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
 - **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through

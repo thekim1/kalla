@@ -1,6 +1,6 @@
 # Gateway changes: detailed design
 
-Detail step 4 of the Ume.Rag design. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (binding, incl. its answered questions) and the
+Detail step 4 of the Ume.Rag design. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
 gateway side of [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10 (feature C and the
 tenant/guest refusal are designed there for both systems; this document only turns them into gateway work). The ADR
 rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
@@ -30,7 +30,10 @@ test/dev instance (§13.4). The letters name features:
 | **A** (release 2) | Delegated attribution `x-ume-on-behalf-of`, key flag `ApplyTeamPolicy` (§5); run grouping headers (§7.1) | `KeyDelegation`, `UsageDelegationAndRuns` | per-level delegating keys per deployable (§13.4) |
 | Development (release 1) | FakeLlm embedding dimensions (§6); tool passthrough tests (§7.2) | none | local development against a real gateway with FakeLlm (optional; the FakeGateway is the default) |
 
-Not in either release: the rerank endpoint, a separate P2 change (§7.4).
+Not in either release's scope: the optional rerank endpoint (§7.4, thekim1/llmgateway#68), which shipped alongside
+release 1's residency ceiling in gateway v0.9.0 (Foundry rerankers in v0.9.1).
+It is pulled forward from P2 but is no go-live gate: with no rerank model configured Ume.Rag makes no rerank call
+(Decisions "Rerank pulled forward").
 
 ## 2. Where the changes sit in the request pipeline
 
@@ -740,7 +743,8 @@ Two releases, so the pilot waits only for the smallest change a production gatew
   refusal), §5 (feature A), §7.1 (run grouping headers), ADRs 019–020, the remaining docs of §12, settings in compose,
   Portainer and Kubernetes examples, and the Keycloak realm.
 
-The rerank endpoint (§7.4) is in neither: it is a separate P2 release.
+The optional rerank endpoint (§7.4) is in neither release's scope: it shipped in gateway v0.9.0 (thekim1/llmgateway#68),
+pulled forward from P2, and is no go-live gate (Decisions "Rerank pulled forward").
 
 ### 13.2 Migrations and rolling update
 
@@ -864,7 +868,7 @@ What this design needs from the other documents of this repo, and they state:
   (the selection's `CircuitStatus`, `Stores.cs:175`, is available after `SelectCandidatesAsync`), for the 503 of §3.3.
 - Entra emits member groups in the admin registration's group claim with the chosen `groupMembershipClaims`
   setting (identity design §2.5), and how often pilot admins hit the overage limit.
-- (P1, before the FakeGateway fake is fixed): the P2 rerank endpoint's path and request shape, and which
+- (P1, before the FakeGateway fake is fixed): the rerank endpoint's path and request shape, and which
   on-prem runtime serves `bge-reranker-v2-m3` behind it (§7.4).
 
 ## 17. Deferred or removed (simplification pass)
