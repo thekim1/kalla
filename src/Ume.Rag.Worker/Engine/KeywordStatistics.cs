@@ -14,11 +14,12 @@ public sealed record KeywordStatisticsCheck(int Recomputed, int Kept, int Remove
 /// <see cref="ScopeSizeCache.KeywordStatisticsMinChunks"/> live child chunks, the rows are recomputed with <c>ts_stat</c> when
 /// there are none, when the live count moved by more than <see cref="MovedShare"/> from the stored <c>ChunkCount</c>, or when
 /// they are older than <see cref="MaxAge"/>; otherwise kept. Under 100 chunks (or no chunks: a deleted collection) the rows go.
-/// One collection at a time, on <c>ConnectionStrings:ragdb-maintenance</c> (else <c>ragdb</c>, unpooled) with
-/// <c>statement_timeout = 0</c>: <c>ts_stat</c> reads every search vector of the collection. A collection's rows are replaced in
+/// One collection at a time, on a connection of the worker's pool (inside the role's connection budget, data-model §1.1),
+/// with <c>SET LOCAL statement_timeout = 0</c> in the refresh's transaction: <c>ts_stat</c> reads every search vector of the
+/// collection. A collection's rows are replaced in
 /// one transaction under an advisory lock, so two workers never refresh the same collection at once (the second skips).
 /// </summary>
-public sealed partial class KeywordStatistics(string connectionString, TimeProvider time, ILogger<KeywordStatistics> logger)
+public sealed partial class KeywordStatistics(NpgsqlDataSource dataSource, TimeProvider time, ILogger<KeywordStatistics> logger)
 {
     /// <summary>A live count that moved by more than this share of the stored one is recomputed.</summary>
     public const double MovedShare = 0.10;
@@ -60,8 +61,7 @@ public sealed partial class KeywordStatistics(string connectionString, TimeProvi
     /// <summary>Checks one collection's rows and refreshes them as needed.</summary>
     public async Task<KeywordStatisticsCheck> CheckAsync(Guid collectionId, CancellationToken cancellationToken)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         var counts = await ReadAsync(connection, CountsSql, collectionId, r => (r.GetGuid(0), r.GetInt64(1)), cancellationToken);
         var stored = (await ReadAsync(connection, StoredSql, collectionId, r => (r.GetGuid(0), (Count: (long)r.GetInt32(1), At: r.GetFieldValue<DateTimeOffset>(2))),
             cancellationToken)).ToDictionary(x => x.Item1, x => x.Item2);
@@ -106,9 +106,8 @@ public sealed partial class KeywordStatistics(string connectionString, TimeProvi
     public async Task<int> CheckAllAsync(CancellationToken cancellationToken)
     {
         List<Guid> collections;
-        await using (var connection = new NpgsqlConnection(connectionString))
+        await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken))
         {
-            await connection.OpenAsync(cancellationToken);
             await using var command = new NpgsqlCommand(CollectionsSql, connection);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             collections = [];

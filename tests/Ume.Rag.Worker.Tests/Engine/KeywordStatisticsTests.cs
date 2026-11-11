@@ -32,7 +32,8 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
         var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
         try
         {
-            var statistics = new KeywordStatistics(database.Connection(RagDatabase.Worker), TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
+            await using var dataSource = Npgsql.NpgsqlDataSource.Create(database.Connection(RagDatabase.Worker));
+            var statistics = new KeywordStatistics(dataSource, TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
             var collection = seed.CollectionId;
 
             // 99 chunks: under the floor, nothing is written.
@@ -82,7 +83,8 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
         try
         {
             await AddChunksAsync(seed, 120);
-            var statistics = new KeywordStatistics(database.Connection(RagDatabase.Worker), TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
+            await using var dataSource = Npgsql.NpgsqlDataSource.Create(database.Connection(RagDatabase.Worker));
+            var statistics = new KeywordStatistics(dataSource, TimeProvider.System, NullLogger<KeywordStatistics>.Instance);
             using var service = new KeywordStatisticsService(statistics, NullLogger<KeywordStatisticsService>.Instance);
             await service.StartAsync(Ct);
             try

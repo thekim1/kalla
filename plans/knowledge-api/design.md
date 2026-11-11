@@ -635,8 +635,7 @@ kept per collection (collections of at least 100 chunks, lexemes in at least 10 
 limit near 3.3M). The worker recomputes a collection's rows with `ts_stat` over its live child chunks when it has at
 least 100 of them and no rows yet, when its live child count differs by more than 10 % from the `ChunkCount` stored
 with its rows, or when the rows are older than 7 days. It checks this at the end of each sync run of the collection's
-sources, for every collection when the worker starts (so an upgrade or a new installation has its stop lists within
-minutes), and in the nightly maintenance, one collection at a time on `ConnectionStrings:ragdb-maintenance` (else
+sources and in the nightly maintenance, one collection at a time on `ConnectionStrings:ragdb-maintenance` (else
 `ragdb`) with `statement_timeout = 0`, and replaces the collection's rows in one transaction; a collection that falls
 below 100 chunks loses its rows. A share is the row's `Ndoc` over its stored `ChunkCount`; a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
 a term. A collection linked with topics counts with its whole chunk count here (floor and share alike), since the
