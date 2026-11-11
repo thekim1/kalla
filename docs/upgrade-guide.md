@@ -12,6 +12,11 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **Telemetry and health checks:** traces are now sampled at 10 % of the requests that start at a service
+  (`UME_RAG_OTEL_TRACES_SAMPLER_ARG`, `always_on` for all); logs and metrics are unchanged. The .NET containers' health
+  probe runs every 30 s (every 5 s while starting) instead of every 15 s, and a container is unhealthy after 3 failed
+  probes (90 s) instead of 5 (75 s). Nothing to configure.
+
 - **Reverse proxy:** the api host (and Open WebUI's) now allows 2 MB request bodies, matching rag-api's chat route;
   with 1 MB, long conversations were refused by the proxy (SA-15). A generated `deploy/proxy/nginx.conf` doesn't
   change by itself: set `client_max_body_size 2m;` in its api (and Open WebUI) server block, or `proxy-body-size: 2m`

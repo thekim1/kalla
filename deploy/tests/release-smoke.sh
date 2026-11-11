@@ -146,8 +146,7 @@ https() { curl -sS --cacert "$ca" --max-time 15 "$@"; }
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/health/ready")"
 [ "$status" = 200 ] || fail "rag-api /health/ready answered $status"
 ok "rag-api /health/ready = 200 (TLS verified against the internal CA)"
-# rag-api writes JSON in snake_case (its OpenAI-compatible chat API), so its /version says informational_version.
-reported="$(https "https://localhost:$api_port/version" | jq -r '.informationalVersion // .informational_version')"
+reported="$(https "https://localhost:$api_port/version" | jq -r '.informationalVersion')"
 case "$reported" in "$version"|"$version+"*) ok "rag-api /version = $reported";; *) fail "rag-api /version is $reported, expected $version";; esac
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/v1/models")"
 case "$status" in
