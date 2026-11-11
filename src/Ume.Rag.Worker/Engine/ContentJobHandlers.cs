@@ -324,15 +324,21 @@ public sealed partial class EmbedJobHandler(
         var now = time.GetUtcNow();
         var rows = draft.Chunks.Select((c, i) => new ChunkRecord(Guid.CreateVersion7(), set.Id, document.Id, source.CollectionId, document.Classification, c.Ordinal, c,
             profile.Id, embedded.Vectors[i]) { DeletedAt = now }).ToList();
+        if (rows.Count <= IndexWriter.BatchSize)
+        {
+            // Rule 2a (#501): the swap transaction inserts the set and its chunks once, after the profile guard.
+            return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken, new SetWrite(rows, profile));
+        }
+
         // Guarded: an admin may have changed the profile while this document was embedded (B-30, #554 review).
         await index.WriteInvisibleAsync(set, rows, profile, cancellationToken);
         return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken);
     }
 
     private async Task<JobResult> SwapAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash,
-        ChunkSetRecord set, ChunkSetRow? live, bool swappedBack, CancellationToken cancellationToken) =>
+        ChunkSetRecord set, ChunkSetRow? live, bool swappedBack, CancellationToken cancellationToken, SetWrite? write = null) =>
         await swaps.SwapAsync(new SwapRequest(source, document, payload.ExecutionId, contentHash, payload.PipelineVersionId, payload.RunId, set, live,
-            swappedBack, job), cancellationToken) switch
+            swappedBack, job, write), cancellationToken) switch
         {
             SwapResult.Swapped => new JobResult.Committed(),
             SwapResult.LeaseLost => new JobResult.Success(),

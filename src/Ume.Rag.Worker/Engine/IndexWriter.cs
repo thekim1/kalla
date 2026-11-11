@@ -15,10 +15,13 @@ public sealed record ChunkSetRow(Guid Id, ChunkSetKey Key, string State, byte[] 
 
 /// <summary>
 /// The index writer of engine design §14 (data-model §2.2, §3.2). A chunk is searchable iff <c>Chunks."DeletedAt"</c> is
-/// null: a new set is written <b>invisible</b> (<c>writing</c>, chunks deleted) in batches of ≤ 1,000 rows, each its own
-/// short transaction, and goes live in <b>one short swap</b> inside the caller's fenced transaction
-/// (<see cref="SwapInAsync"/>): the live pointer moves, the new set becomes <c>live</c> (chunks visible) or <c>held</c>
-/// (chunks stay deleted), the previous set becomes <c>superseded</c> with its chunks deleted. A set with the wanted key that
+/// null. A set of at most <see cref="BatchSize"/> chunks is written <b>once</b>, inside the caller's fenced swap transaction
+/// (<see cref="WriteAndSwapInAsync"/>, rule 2a, #501): the set row goes in as <c>live</c> or <c>held</c> and its chunks
+/// visible (or deleted when held), so the swap updates only the previous set's chunks. A larger set is written
+/// <b>invisible</b> (<c>writing</c>, chunks deleted) in batches of ≤ 1,000 rows, each its own short transaction, and goes
+/// live in <b>one short swap</b> inside the caller's fenced transaction (<see cref="SwapInAsync"/>): the live pointer moves,
+/// the new set becomes <c>live</c> (chunks visible) or <c>held</c> (chunks stay deleted), the previous set becomes
+/// <c>superseded</c> with its chunks deleted. A set with the wanted key that
 /// is <c>superseded</c> (rollback within 14 days) is swapped back without a write; a noise-only change re-keys the live set
 /// in one row. Sets never swapped (a crash between the batches and the swap) stay invisible until the orphan sweep removes
 /// them. Vectors are written as pgvector text through <c>unnest</c> (the <c>vector</c> column is not in the EF model);
@@ -36,8 +39,8 @@ public sealed class IndexWriter(JobDatabase database)
     private const string InsertSetSql = """
         INSERT INTO content."ChunkSets" ("Id", "DocumentId", "Classification", "CollectionId", "PipelineVersionId", "SiteProfileVersionId",
                                         "EmbeddingProfileId", "ContentHash", "InputHash", "StageKeys", "State", "PiiFlagged", "PiiCounts", "ChunkCount",
-                                        "ParseRuleKey")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb, $14, $15)
+                                        "ParseRuleKey", "LiveAt")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb, $14, $15, $16)
         """;
 
     private const string InsertChunksSql = """
@@ -69,6 +72,8 @@ public sealed class IndexWriter(JobDatabase database)
         """;
 
     private const string DeleteWritingSql = """DELETE FROM content."ChunkSets" WHERE "Id" = $1 AND "State" = 'writing'""";
+
+    private const string ProfileGuardSql = "SELECT content.rag_lock_profile_if_unchanged($1, $2, $3, $4)";
 
     private const string LockDocumentSql = """SELECT "LiveChunkSetId", "DeletedAt" IS NOT NULL FROM content."Documents" WHERE "Id" = $1 FOR UPDATE""";
 
@@ -196,16 +201,10 @@ public sealed class IndexWriter(JobDatabase database)
         await using var connection = await database.OpenAsync(cancellationToken);
         await using (var transaction = await connection.BeginTransactionAsync(cancellationToken))
         {
-            await using (var guard = new NpgsqlCommand("SELECT content.rag_lock_profile_if_unchanged($1, $2, $3, $4)", connection, transaction)
+            if (!await ProfileUnchangedAsync(connection, transaction, embeddedWith, cancellationToken))
             {
-                Parameters = { Db.P(embeddedWith.Id), Db.P(embeddedWith.GatewayModel), Db.P(embeddedWith.Dimensions), Db.P(embeddedWith.RequestDimensions) },
-            })
-            {
-                if (await guard.ExecuteScalarAsync(cancellationToken) is not true)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    throw new StageTransientException("embed.profile_changed", null, countsAttempt: false);
-                }
+                await transaction.RollbackAsync(cancellationToken);
+                throw ProfileChanged();
             }
 
             await using (var insert = InsertSet(set, connection, transaction))
@@ -242,29 +241,107 @@ public sealed class IndexWriter(JobDatabase database)
     public static async Task SwapInAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid documentId, Guid chunkSetId, string state,
         Guid? pipelineVersionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        Guid? previous;
-        bool documentDeleted;
-        await using (var lockDocument = new NpgsqlCommand(LockDocumentSql, connection, transaction) { Parameters = { Db.P(documentId) } })
-        await using (var reader = await lockDocument.ExecuteReaderAsync(cancellationToken))
-        {
-            if (!await reader.ReadAsync(cancellationToken))
-            {
-                throw new InvalidOperationException("Unknown document.");
-            }
+        var (previous, documentDeleted) = await LockDocumentAsync(connection, transaction, documentId, cancellationToken);
+        var at = now.ToUniversalTime();
+        await SupersedeAsync(connection, transaction, previous, chunkSetId, at, cancellationToken);
+        await ApplyStateAsync(connection, transaction, chunkSetId, state, at, documentDeleted, cancellationToken);
+        await PointAsync(connection, transaction, documentId, chunkSetId, pipelineVersionId, cancellationToken);
+    }
 
-            previous = Db.Nullable<Guid>(reader, 0);
-            documentDeleted = reader.GetBoolean(1);
+    /// <summary>
+    /// Rule 2a (#501) inside the caller's fenced transaction, after its fence and published-version checks: the profile guard
+    /// (as <see cref="WriteInvisibleAsync(ChunkSetRecord, IReadOnlyList{ChunkRecord}, EmbeddingProfileRecord, CancellationToken)"/>),
+    /// the profile's HNSW index, the set inserted as <paramref name="state"/> and its chunks inserted once (visible when
+    /// <c>live</c> and the document is not soft-deleted, else deleted), the previous set superseded and the live pointer moved.
+    /// At most <see cref="BatchSize"/> chunks: one <c>INSERT … SELECT FROM unnest</c>. Returns false, having written nothing,
+    /// when the profile changed (<c>embed.profile_changed</c>); the caller rolls back. Call <see cref="Committed"/> after the
+    /// commit, so a profile index created here is remembered only once it exists.
+    /// </summary>
+    public async Task<bool> WriteAndSwapInAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, ChunkSetRecord set, string state,
+        IReadOnlyList<ChunkRecord> chunks, EmbeddingProfileRecord embeddedWith, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(chunks);
+        ArgumentNullException.ThrowIfNull(embeddedWith);
+        if (chunks.Count > BatchSize)
+        {
+            throw new ArgumentException($"A set of more than {BatchSize} chunks is written invisible first (rule 2).", nameof(chunks));
+        }
+
+        var (previous, documentDeleted) = await LockDocumentAsync(connection, transaction, set.Key.DocumentId, cancellationToken);
+        if (!await ProfileUnchangedAsync(connection, transaction, embeddedWith, cancellationToken))
+        {
+            return false;
+        }
+
+        if (!_profileIndexes.ContainsKey(embeddedWith.Id))
+        {
+            await using var ensure = new NpgsqlCommand("SELECT content.rag_ensure_profile_index($1, $2)", connection, transaction)
+            {
+                Parameters = { Db.P(embeddedWith.Id), Db.P(embeddedWith.Dimensions) },
+            };
+            await ensure.ExecuteNonQueryAsync(cancellationToken);
         }
 
         var at = now.ToUniversalTime();
+        await SupersedeAsync(connection, transaction, previous, set.Id, at, cancellationToken);
+        await using (var insert = InsertSet(set with { State = state }, connection, transaction, state == ChunkSetState.Live ? at : null))
+        {
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var deletedAt = state == ChunkSetState.Live && !documentDeleted ? (DateTimeOffset?)null : at;
+        if (chunks.Count > 0)
+        {
+            await using var insertChunks = InsertChunks([.. chunks.Select(c => c with { DeletedAt = deletedAt })], connection, transaction);
+            await insertChunks.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await PointAsync(connection, transaction, set.Key.DocumentId, set.Id, set.Key.PipelineVersionId, cancellationToken);
+        return true;
+    }
+
+    /// <summary>After the commit of <see cref="WriteAndSwapInAsync"/>: the profile's index exists from now on.</summary>
+    public void Committed(Guid embeddingProfileId) => _profileIndexes[embeddingProfileId] = true;
+
+    internal static StageTransientException ProfileChanged() => new("embed.profile_changed", null, countsAttempt: false);
+
+    private static async Task<bool> ProfileUnchangedAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, EmbeddingProfileRecord profile,
+        CancellationToken cancellationToken)
+    {
+        await using var guard = new NpgsqlCommand(ProfileGuardSql, connection, transaction)
+        {
+            Parameters = { Db.P(profile.Id), Db.P(profile.GatewayModel), Db.P(profile.Dimensions), Db.P(profile.RequestDimensions) },
+        };
+        return await guard.ExecuteScalarAsync(cancellationToken) is true;
+    }
+
+    private static async Task<(Guid? Previous, bool DocumentDeleted)> LockDocumentAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        Guid documentId, CancellationToken cancellationToken)
+    {
+        await using var lockDocument = new NpgsqlCommand(LockDocumentSql, connection, transaction) { Parameters = { Db.P(documentId) } };
+        await using var reader = await lockDocument.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("Unknown document.");
+        }
+
+        return (Db.Nullable<Guid>(reader, 0), reader.GetBoolean(1));
+    }
+
+    private static async Task SupersedeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid? previous, Guid chunkSetId, DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
         if (previous is { } old && old != chunkSetId)
         {
             await ExecuteAsync(connection, transaction, SupersedeSetSql, cancellationToken, Db.P(old), Db.P(at));
             await ExecuteAsync(connection, transaction, HideChunksSql, cancellationToken, Db.P(old), Db.P(at));
         }
+    }
 
-        await ApplyStateAsync(connection, transaction, chunkSetId, state, at, documentDeleted, cancellationToken);
-
+    private static async Task PointAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid documentId, Guid chunkSetId,
+        Guid? pipelineVersionId, CancellationToken cancellationToken)
+    {
         await using var pointer = new NpgsqlCommand(PointerSql, connection, transaction)
         {
             Parameters = { Db.P(documentId), Db.P(chunkSetId), Db.P(pipelineVersionId) },
@@ -364,7 +441,7 @@ public sealed class IndexWriter(JobDatabase database)
         }
     }
 
-    internal static NpgsqlCommand InsertSet(ChunkSetRecord set, NpgsqlConnection connection, NpgsqlTransaction? transaction) =>
+    internal static NpgsqlCommand InsertSet(ChunkSetRecord set, NpgsqlConnection connection, NpgsqlTransaction? transaction, DateTimeOffset? liveAt = null) =>
         new(InsertSetSql, connection, transaction)
         {
             Parameters =
@@ -372,7 +449,7 @@ public sealed class IndexWriter(JobDatabase database)
                 Db.P(set.Id), Db.P(set.Key.DocumentId), Db.P(set.Classification), Db.P(set.CollectionId), Db.P(set.Key.PipelineVersionId),
                 Db.P(set.Key.SiteProfileVersionId), Db.P(set.Key.EmbeddingProfileId), Db.P(set.Key.ContentHash), Db.P(set.InputHash),
                 Db.P(set.StageKeys), Db.P(set.State), Db.P(set.PiiFlagged), Db.P(set.PiiCounts is null ? null : ContractJson.Serialize(set.PiiCounts)),
-                Db.P(set.ChunkCount), Db.P(set.Key.ParseRuleKey),
+                Db.P(set.ChunkCount), Db.P(set.Key.ParseRuleKey), Db.P(Db.Utc(liveAt)),
             },
         };
 
