@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Ume.Rag.Domain;
-using Ume.Rag.Retrieval.Postgres;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Processing;
@@ -13,8 +12,8 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <summary>
 /// A-29 (knowledge design §6.2; #499 step 2): the worker keeps <c>content."KeywordStatistics"</c>. Rows are written at the
 /// first check of a collection of at least 100 live child chunks, kept while the count moves by at most 10 %, recomputed
-/// past it or after 7 days, and removed under 100; they equal <see cref="RetrievalStatements.FrequentLexemes"/> on the
-/// same data.
+/// past it or after 7 days, and removed under 100; they equal the lexemes counted one by one (<c>unnest</c>, not <c>ts_stat</c>)
+/// on the same data.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsyncLifetime
@@ -114,23 +113,30 @@ public sealed class KeywordStatisticsTests(RagDatabaseFixture database) : IAsync
         return rows;
     }
 
-    /// <summary>rag-api's statement until B-33, on the same data: this collection's rows.</summary>
+    /// <summary>
+    /// The reference: this collection's lexemes in at least 10 % of its live child chunks, counted with <c>unnest</c> over the
+    /// search vectors (independent of the worker's <c>ts_stat</c>).
+    /// </summary>
     private async Task<List<(string, long)>> FrequentLexemesAsync(Guid collection)
     {
+        const string sql = """
+            WITH live AS (
+                SELECT "SearchVector" FROM content."Chunks"
+                WHERE "CollectionId" = $1 AND "Kind" = 'child' AND "DeletedAt" IS NULL AND "EmbeddingProfileId" IS NOT NULL
+            )
+            SELECT u.lexeme, count(*)
+            FROM live, unnest(live."SearchVector") u
+            GROUP BY u.lexeme
+            HAVING count(*) >= (SELECT count(*) FROM live) * 0.10
+            """;
         var rows = new List<(string, long)>();
         await using var connection = new Npgsql.NpgsqlConnection(database.Connection(null));
         await connection.OpenAsync(Ct);
-        await using var command = new Npgsql.NpgsqlCommand(RetrievalStatements.FrequentLexemes, connection)
-        {
-            Parameters = { new() { Value = 100L }, new() { Value = 0.10 } },
-        };
+        await using var command = new Npgsql.NpgsqlCommand(sql, connection) { Parameters = { new() { Value = collection } } };
         await using var reader = await command.ExecuteReaderAsync(Ct);
         while (await reader.ReadAsync(Ct))
         {
-            if (reader.GetGuid(1) == collection)
-            {
-                rows.Add((reader.GetString(2), reader.GetInt64(3)));
-            }
+            rows.Add((reader.GetString(0), reader.GetInt64(1)));
         }
 
         return rows;

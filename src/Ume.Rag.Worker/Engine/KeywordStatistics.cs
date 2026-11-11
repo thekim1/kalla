@@ -17,7 +17,6 @@ public sealed record KeywordStatisticsCheck(int Recomputed, int Kept, int Remove
 /// One collection at a time, on <c>ConnectionStrings:ragdb-maintenance</c> (else <c>ragdb</c>, unpooled) with
 /// <c>statement_timeout = 0</c>: <c>ts_stat</c> reads every search vector of the collection. A collection's rows are replaced in
 /// one transaction under an advisory lock, so two workers never refresh the same collection at once (the second skips).
-/// The same statement as <see cref="Ume.Rag.Retrieval.Postgres.RetrievalStatements.FrequentLexemes"/>, one collection at a time.
 /// </summary>
 public sealed partial class KeywordStatistics(string connectionString, TimeProvider time, ILogger<KeywordStatistics> logger)
 {
