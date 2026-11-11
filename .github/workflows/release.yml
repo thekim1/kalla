@@ -77,6 +77,14 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # The runners share one user's ~/.docker/config.json, where a tag release's `docker login ghcr.io` used to leave
+        # its GITHUB_TOKEN behind. Once expired, buildx still sent it for ghcr.io and the dry run of 0.4.0 failed pulling
+        # the public ghcr.io/astral-sh/uv ("failed to fetch oauth token: denied"). A config in RUNNER_TEMP is this
+        # job's alone and goes with it, so a login never outlives the job; anonymous pulls stay anonymous.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Resolve version and registry
         id: version
         env:
