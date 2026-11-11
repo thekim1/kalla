@@ -7,6 +7,7 @@ import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
+import { formatNumber } from '@/utils/format'
 import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
 
@@ -160,6 +161,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.text()).toContain('Enter a number from 1 to 50, or leave it empty.')
 
     await wrapper.get('#assistant-top-k').setValue('12')
+    await wrapper.get('[data-test=use-model-output] input').setValue(false)
     await wrapper.get('#assistant-max-tokens').setValue('800')
     await wrapper.get('#assistant-temperature').setValue('0,2')
     await wrapper.get('[data-test=condense] input').setValue(false)
@@ -528,5 +530,118 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const answer = wrapper.get('[data-test=answer]').text()
     expect(answer).toContain('Answered from general knowledge')
     expect(answer).toContain('Jag hittar inget om detta i kommunens källor.')
+  })
+
+  describe('answer length (Decisions "Answer length from the model", admin design §5.5.4)', () => {
+    function withLimits() {
+      vi.spyOn(api.gateway, 'models').mockResolvedValue([
+        { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], contextWindow: 128_000, maxOutputTokens: 16_384 },
+        { name: 'ume/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
+      ])
+    }
+
+    it('uses the model\'s limits by default, shows them, and stores no value while checked', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      withLimits()
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+
+      expect((wrapper.get('[data-test=use-model-output] input').element as HTMLInputElement).checked).toBe(true)
+      expect((wrapper.get('[data-test=use-model-context] input').element as HTMLInputElement).checked).toBe(true)
+      expect(wrapper.find('#assistant-max-tokens').exists()).toBe(false)
+      expect(wrapper.get('[data-test=model-output-limit]').text()).toBe(ASSISTANT.modelLimit(formatNumber(16_384)))
+      expect(wrapper.get('[data-test=model-context-limit]').text()).toBe(ASSISTANT.modelLimit(formatNumber(128_000)))
+
+      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await flushPromises()
+      const steps = save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }
+      expect(steps.answer).not.toHaveProperty('maxOutputTokens')
+      expect(steps.answer).not.toHaveProperty('contextTokens')
+    })
+
+    it('unchecked, takes a number up to the model\'s limit', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      withLimits()
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+
+      await wrapper.get('[data-test=use-model-output] input').setValue(false)
+      await wrapper.get('#assistant-max-tokens').setValue('20000')
+      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await flushPromises()
+      expect(save).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain(ASSISTANT.rangeInvalid(64, 16_384))
+
+      await wrapper.get('#assistant-max-tokens').setValue('8000')
+      await wrapper.get('[data-test=use-model-context] input').setValue(false)
+      await wrapper.get('#assistant-context-tokens').setValue('32768')
+      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await flushPromises()
+      expect((save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }).answer).toMatchObject({ maxOutputTokens: 8000, contextTokens: 32768 })
+    })
+
+    it('opens a stored override unchecked, drops it when checked again, and says when the model\'s limit is unknown', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', querySteps: { answer: { maxOutputTokens: 800 } } })
+      const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+
+      expect((wrapper.get('[data-test=use-model-output] input').element as HTMLInputElement).checked).toBe(false)
+      expect((wrapper.get('#assistant-max-tokens').element as HTMLInputElement).value).toBe('800')
+      expect(wrapper.get('[data-test=model-output-limit]').text()).toBe(ASSISTANT.modelLimitUnknown)
+
+      await wrapper.get('[data-test=use-model-output] input').setValue(true)
+      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await flushPromises()
+      expect((save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }).answer).not.toHaveProperty('maxOutputTokens')
+    })
+
+    it('the test panel says when the answer stopped at the length limit, and what limit was sent', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      vi.spyOn(api.assistants, 'test').mockResolvedValue({
+        target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+        retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
+        answer: { raw: 'Ett långt svar', delivered: 'Ett långt svar', outcome: 'answered', language: 'sv', citations: [] },
+        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length' },
+      })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+      await button(wrapper, 'Test').trigger('click')
+      await wrapper.get('#assistant-question').setValue('Berätta allt om bygglov.')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      expect(wrapper.get('[data-test=length-stopped]').text()).toBe(ASSISTANT.lengthStopped)
+      expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(formatNumber(2000), ASSISTANT.maxTokensSources.model!))
+    })
+
+    it('the test panel shows no length notice for a complete answer, and the provider\'s default when no limit was sent', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      vi.spyOn(api.assistants, 'test').mockResolvedValue({
+        target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+        retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
+        answer: { raw: 'Kort.', delivered: 'Kort.', outcome: 'answered', language: 'sv', citations: [] },
+        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop' },
+      })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+      await button(wrapper, 'Test').trigger('click')
+      await wrapper.get('#assistant-question').setValue('Hej?')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      expect(wrapper.find('[data-test=length-stopped]').exists()).toBe(false)
+      expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(null, ASSISTANT.maxTokensSources.provider!))
+    })
   })
 })

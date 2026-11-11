@@ -25,7 +25,7 @@ import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatNumber } from '@/utils/format'
 import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -53,9 +53,24 @@ const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
 const generalKnowledge = ref<GeneralKnowledge>('off')
 // The query settings under "Advanced" (admin design §5.5.4; chat design §5–§6, V17); empty = the key is left out.
-const advanced = ref({ topK: '', rerank: '', condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
+// Answer length (Decisions "Answer length from the model"): each limit has "Use the model's limit", checked by default and
+// stored as no value; unchecked, a number up to the model's limit (V17; a wide bound when the mirror does not know it).
+const advanced = ref({
+  topK: '', rerank: '', condense: true, maxMessages: '', useModelOutput: true, maxOutputTokens: '', useModelContext: true, contextTokens: '',
+  temperature: '', language: '',
+})
 const advancedErrors = ref<Record<string, string | undefined>>({})
-const LIMITS = { topK: [1, 50], maxMessages: [0, 20], maxOutputTokens: [64, 4096], temperature: [0, 1] } as const
+const UNKNOWN_OUTPUT_LIMIT = 1_000_000
+const UNKNOWN_CONTEXT_WINDOW = 1_048_576
+const chosenModel = computed(() => models.value.find((m) => m.name === model.value))
+const limits = computed(() => ({
+  topK: [1, 50],
+  maxMessages: [0, 20],
+  maxOutputTokens: [64, chosenModel.value?.maxOutputTokens ?? UNKNOWN_OUTPUT_LIMIT],
+  contextTokens: [4096, chosenModel.value?.contextWindow ?? UNKNOWN_CONTEXT_WINDOW],
+  temperature: [0, 1],
+}) as const)
+const limitHint = (tokens: number | null | undefined) => (tokens ? ASSISTANT.modelLimit(formatNumber(tokens)) : ASSISTANT.modelLimitUnknown)
 const languageOptions = ['', 'auto', 'sv'].map((v) => ({ value: v, label: ASSISTANT.languages[v]! }))
 const GENERAL_KNOWLEDGE_LEVELS: GeneralKnowledge[] = ['off', 'supplement', 'fallback', 'open']
 const audience = ref<string[]>([])
@@ -154,7 +169,9 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
     topK: text(steps.retrieval?.topK),
     rerank: rerankOf(steps.retrieval?.rerank), condense: steps.condense?.enabled !== false,
     maxMessages: text(steps.history?.maxMessages),
-    maxOutputTokens: text(steps.answer?.maxOutputTokens), temperature: text(steps.answer?.temperature),
+    useModelOutput: typeof steps.answer?.maxOutputTokens !== 'number', maxOutputTokens: text(steps.answer?.maxOutputTokens),
+    useModelContext: typeof steps.answer?.contextTokens !== 'number', contextTokens: text(steps.answer?.contextTokens),
+    temperature: text(steps.answer?.temperature),
     language: typeof steps.answer?.language === 'string' ? steps.answer.language : '',
   }
   advancedErrors.value = {}
@@ -163,7 +180,8 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
 /** Checks the Advanced fields; true when every one is empty or in range. */
 function checkAdvanced(): boolean {
   const errors: Record<string, string | undefined> = {}
-  for (const [key, [min, max]] of Object.entries(LIMITS) as [keyof typeof LIMITS, readonly [number, number]][]) {
+  for (const [key, [min, max]] of Object.entries(limits.value) as [keyof typeof limits.value, readonly [number, number]][]) {
+    if ((key === 'maxOutputTokens' && advanced.value.useModelOutput) || (key === 'contextTokens' && advanced.value.useModelContext)) continue
     const raw = advanced.value[key].trim().replace(',', '.')
     const value = Number(raw)
     const whole = key !== 'temperature'
@@ -189,7 +207,9 @@ function stepsToSave(): Record<string, unknown> {
   if (advanced.value.rerank) retrieval.rerank = advanced.value.rerank
   else delete retrieval.rerank
   set(history, 'maxMessages', advanced.value.maxMessages)
-  set(answer, 'maxOutputTokens', advanced.value.maxOutputTokens)
+  // Checked: no value, so the version follows its model's limit (also after a model change).
+  set(answer, 'maxOutputTokens', advanced.value.useModelOutput ? '' : advanced.value.maxOutputTokens)
+  set(answer, 'contextTokens', advanced.value.useModelContext ? '' : advanced.value.contextTokens)
   set(answer, 'temperature', advanced.value.temperature)
   if (advanced.value.language) answer.language = advanced.value.language
   else delete answer.language
@@ -411,7 +431,24 @@ onMounted(load)
             />
             <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
             <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" :error="advancedErrors.maxMessages" />
-            <TextField id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens" inputmode="numeric" :error="advancedErrors.maxOutputTokens" />
+            <fieldset class="grid gap-2" data-test="answer-length">
+              <legend class="font-medium">{{ ASSISTANT.maxOutputTokens }}</legend>
+              <CheckField v-model="advanced.useModelOutput" :label="ASSISTANT.useModelLimit" data-test="use-model-output" />
+              <p class="text-small text-fg-3" data-test="model-output-limit">{{ limitHint(chosenModel?.maxOutputTokens) }}</p>
+              <TextField
+                v-if="!advanced.useModelOutput" id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens"
+                inputmode="numeric" :error="advancedErrors.maxOutputTokens"
+              />
+            </fieldset>
+            <fieldset class="grid gap-2" data-test="context-size">
+              <legend class="font-medium">{{ ASSISTANT.contextTokens }}</legend>
+              <CheckField v-model="advanced.useModelContext" :label="ASSISTANT.useModelLimit" data-test="use-model-context" />
+              <p class="text-small text-fg-3" data-test="model-context-limit">{{ limitHint(chosenModel?.contextWindow) }}</p>
+              <TextField
+                v-if="!advanced.useModelContext" id="assistant-context-tokens" v-model="advanced.contextTokens" :label="ASSISTANT.contextTokens"
+                inputmode="numeric" :error="advancedErrors.contextTokens"
+              />
+            </fieldset>
             <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" :error="advancedErrors.temperature" />
             <SelectField id="assistant-language" v-model="advanced.language" :label="ASSISTANT.language" :options="languageOptions" />
           </div>
@@ -430,6 +467,13 @@ onMounted(load)
             <p class="whitespace-pre-wrap">{{ result.answer.delivered }}</p>
             <details v-if="result.answer.raw" class="mt-3"><summary class="cursor-pointer text-small">{{ ASSISTANT.raw }}</summary><p class="whitespace-pre-wrap text-small text-fg-2">{{ result.answer.raw }}</p></details>
             <p class="mt-3 text-small text-fg-3">{{ ASSISTANT.gateway(result.gateway.model, result.gateway.residency, String(Math.round(result.durationMs))) }}</p>
+            <p v-if="result.gateway.maxTokensSource" class="text-small text-fg-3" data-test="max-tokens-sent">
+              {{ ASSISTANT.maxTokensSent(result.gateway.maxTokens == null ? null : formatNumber(result.gateway.maxTokens),
+                                         ASSISTANT.maxTokensSources[result.gateway.maxTokensSource] ?? result.gateway.maxTokensSource) }}
+            </p>
+            <p v-if="result.gateway.finishReason === 'length'" role="status" class="mt-2 font-medium text-warn" data-test="length-stopped">
+              {{ ASSISTANT.lengthStopped }}
+            </p>
           </UiCard>
           <UiCard :title="ASSISTANT.sources">
             <ol class="grid gap-3">

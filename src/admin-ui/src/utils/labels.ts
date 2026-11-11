@@ -686,6 +686,8 @@ export const PLATFORM = {
     requestDimensions: 'Send dimensions',
     maxInputTokens: 'Max input tokens',
     maxResidency: 'Residency ceiling',
+    contextWindow: 'Context window, in tokens',
+    maxOutputTokens: 'Longest output, in tokens',
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
@@ -697,6 +699,10 @@ export const PLATFORM = {
     requestDimensions:
       'Sends the size on every call, for a model that can shorten its vectors (text-embedding-3-large at 1024). Leave it off for a model that cannot (BGE-M3).',
     maxResidency: 'The highest residency the profile’s embedding calls may reach, at most Eu.',
+    contextWindow:
+      'The most tokens the model reads in one call, from the model’s documentation. Empty: unknown, so assistants budget 16,384. The AI gateway’s catalogue does not carry it yet.',
+    maxOutputTokens:
+      'The longest answer the model can write, from its documentation. Assistants that use the model’s limit ask for this much (less the prompt). Empty: unknown, so the provider’s default applies.',
   } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
@@ -1015,6 +1021,15 @@ export const ASSISTANT = {
   condense: 'Rewrite follow-up questions so that they can be searched on their own',
   historyMessages: 'Earlier messages the model sees',
   maxOutputTokens: 'Longest answer, in tokens',
+  contextTokens: 'Context size, in tokens',
+  /** Answer length (Decisions "Answer length from the model", admin design §5.5.4). */
+  useModelLimit: 'Use the model’s limit',
+  modelLimit: (tokens: string) => `Model limit: ${tokens} tokens`,
+  modelLimitUnknown: 'Model limit unknown: the provider’s default applies. A platform administrator can enter it under Gateway models.',
+  lengthStopped: 'The answer stopped at the length limit.',
+  maxTokensSent: (tokens: string | null, source: string) =>
+    tokens === null ? 'Answer length: the provider’s default (no limit sent)' : `Answer length: at most ${tokens} tokens (${source})`,
+  maxTokensSources: { override: 'the assistant’s setting', model: 'the model’s limit', provider: 'the provider’s default' } as Record<string, string>,
   temperature: 'Temperature (0 to 1; lower gives more predictable answers)',
   language: 'Answer language',
   languages: { '': 'Platform default', auto: 'The language of the question', sv: 'Always Swedish' } as Record<string, string>,
