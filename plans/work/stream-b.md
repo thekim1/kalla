@@ -304,6 +304,28 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** #512; identity §5.
 
+### [ ] B-30 Editable embedding profiles before use
+- **Do:**
+  - The three endpoints `GET /api/embedding-profiles[/{id}]`, `PUT /api/embedding-profiles/{id}` and
+    `POST /api/embedding-profiles/{id}/test`, as admin design §4.5 lists them: the `inUse` rule, the test before each
+    save, the canary stored on save, and the index rebuilt on a dimension change.
+  - In the admin UI: the profile on Platform → Gateway models (generic form, §5.8), with a **Test** button whose outcome
+    names the fix on the gateway side.
+  - The seeder's "exists with another model" warning points to the admin UI.
+  - The seeder's code defaults follow the Decisions row "Pilot embedding model, U-b" (`RequestDimensions` true,
+    `MaxInputTokens` 8191), as the deployment defaults have done since #546.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**`, `src/Ume.Rag.MigrationService/EmbeddingProfileSeeder.cs`,
+  `tests/Ume.Rag.AdminApi.Tests/**`, `tests/Ume.Rag.IntegrationTests/**`.
+- **Done when:** tests show all of these:
+  - An unused profile's model, dimensions and `RequestDimensions` change, and its canary is recorded again.
+  - A save whose test fails is refused with 422 `profile_test_failed`, and the profile is unchanged.
+  - A profile with a chunk set refuses every field but `MaxResidency` with 409 `profile_in_use`.
+  - **Test** against FakeGateway reports `model_not_allowed`, `max_residency_not_met` and a wrong dimension count in
+    plain words.
+  - After a dimension change the profile has exactly one HNSW index, at the new size.
+- **Waits on:** –
+- **Read:** Decisions "Editable embedding profiles before use"; admin §4.5, §5.8; data-model §2.1; processing §11.
+
 ### [ ] B-31 Answer length from the model
 - **Do:** add `GatewayModels.MaxOutputTokens` (migration, check constraint) and let `PUT /api/gateway/models/{name}`
   set `contextWindow` and `maxOutputTokens` on any row, kept by the sync; make `answer.maxOutputTokens` and

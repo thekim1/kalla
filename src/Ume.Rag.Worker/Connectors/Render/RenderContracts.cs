@@ -35,7 +35,7 @@ public sealed record RenderRequest(Uri Url, FetchedBody MainDocument, string? Re
     public bool ScrollToLoad { get; init; }
 
     /// <summary>The page host's politeness User-Agent (§6.6), also what page script sees.</summary>
-    public string UserAgent { get; init; } = HttpFetcher.UserAgent;
+    public string UserAgent { get; init; } = CrawlerIdentity.DefaultUserAgent;
 
     /// <summary>The main document's <c>Set-Cookie</c> values, handed to the page's context only (§8.3).</summary>
     public IReadOnlyList<string> SetCookies { get; init; } = [];

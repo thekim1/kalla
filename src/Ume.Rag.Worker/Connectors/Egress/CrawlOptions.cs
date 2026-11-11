@@ -47,6 +47,13 @@ public sealed class CrawlOptions
     /// </summary>
     public int MaxRenderPerHost { get; set; } = PolitenessCeilings.DefaultMaxRenderPerHost;
 
+    /// <summary>
+    /// The crawler's User-Agent (<c>Crawl:UserAgent</c>, connectors design §4), for example
+    /// <c>ExampleBot/1.0 (+https://www.example.org/bot)</c>. Its product token, up to the first <c>/</c> or space, is the
+    /// name robots.txt rules address (§5.1). A host's politeness profile may send another (§6.6).
+    /// </summary>
+    public string UserAgent { get; set; } = Http.CrawlerIdentity.DefaultUserAgent;
+
     /// <summary>The ceilings the worker clamps host profiles to.</summary>
     public PolitenessCeilings Ceilings() => new(MaxHostRate, MaxHostConnections, MaxRenderPerHost);
 
@@ -82,6 +89,11 @@ public sealed class CrawlOptionsValidator : IValidateOptions<CrawlOptions>
         if (!(options.MaxHostRate >= HostPolitenessRules.MinRequestsPerSecond && options.MaxHostRate <= MaxHostRateLimit))
         {
             failures.Add(string.Create(CultureInfo.InvariantCulture, $"Crawl:MaxHostRate must be between {HostPolitenessRules.MinRequestsPerSecond} and {MaxHostRateLimit}."));
+        }
+
+        if (!Http.CrawlerIdentity.IsValid(options.UserAgent))
+        {
+            failures.Add($"Crawl:UserAgent must be 1–{HostPolitenessRules.MaxUserAgentLength} printable ASCII characters and start with a product token of letters, '_' or '-', such as ExampleBot/1.0.");
         }
 
         if (options.MaxHostConnections is < 1 or > MaxHostConnectionsLimit)

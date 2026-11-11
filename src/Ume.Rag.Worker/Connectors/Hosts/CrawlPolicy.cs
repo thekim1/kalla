@@ -25,6 +25,15 @@ public sealed record CrawlPolicy(IReadOnlyList<string> MunicipalHosts, IReadOnly
     /// <summary><c>Settings.Crawl.IncompleteRunsAlert</c>: incomplete traversals in a row that raise the alert (§5.4).</summary>
     public int IncompleteRunsAlert { get; init; } = Deletion.TraversalCompleteness.DefaultAlertThreshold;
 
+    /// <summary><c>Crawl:UserAgent</c>: sent to every host whose profile sets none (§4, §6.6).</summary>
+    public string UserAgent { get; init; } = Http.CrawlerIdentity.DefaultUserAgent;
+
+    /// <summary>What robots.txt groups, meta robots and <c>X-Robots-Tag</c> prefixes are matched against (§5.1), whatever a host sends.</summary>
+    public string ProductToken => Http.CrawlerIdentity.ProductTokenOf(UserAgent);
+
+    /// <summary>The User-Agent sent to <paramref name="host"/>: its profile's, else the crawler's own.</summary>
+    public string UserAgentOf(string host) => ProfileOf(host).UserAgent ?? UserAgent;
+
     /// <summary>Whether <paramref name="host"/> (lower-case A-label, a <c>:port</c> ignored) is a municipal host.</summary>
     public HostKind KindOf(string host)
     {

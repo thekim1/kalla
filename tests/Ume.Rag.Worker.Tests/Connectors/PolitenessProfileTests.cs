@@ -17,6 +17,22 @@ public sealed class PolitenessProfileTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    public void A_host_without_its_own_user_agent_gets_the_configured_one()
+    {
+        var policy = new CrawlPolicy([], new Dictionary<string, HostPoliteness>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["shop.example"] = new() { UserAgent = "Mozilla/5.0 (X11; Linux x86_64)" },
+        })
+        { UserAgent = "ExampleBot/2.0 (+https://www.example.org/bot)" };
+
+        policy.UserAgentOf("www.example.org").ShouldBe("ExampleBot/2.0 (+https://www.example.org/bot)");
+        policy.UserAgentOf("shop.example").ShouldBe("Mozilla/5.0 (X11; Linux x86_64)");
+        policy.ProductToken.ShouldBe("ExampleBot"); // robots.txt keeps naming the crawler, whatever a host is sent
+        CrawlPolicy.Default.UserAgentOf("www.example.org").ShouldBe(CrawlerIdentity.DefaultUserAgent);
+        CrawlPolicy.Default.ProductToken.ShouldBe("UmeaKommunBot");
+    }
+
+    [Fact]
     public void Presets_fill_the_members_and_explicit_members_override_them()
     {
         PolitenessProfile.Resolve(HostKind.External, null, PolitenessCeilings.Default).ShouldBe(PolitenessProfile.Polite);
@@ -28,7 +44,7 @@ public sealed class PolitenessProfileTests
         fast.Backoff.ShouldBe(BackoffLimits.Default);
         fast.Breaker.ShouldBe(BreakerRule.Default);
         fast.IgnoresRobots.ShouldBeFalse();
-        fast.UserAgent.ShouldBe(HttpFetcher.UserAgent);
+        fast.UserAgent.ShouldBeNull(); // the crawler's own
 
         var custom = PolitenessProfile.Resolve(HostKind.Municipal, new HostPoliteness
         {

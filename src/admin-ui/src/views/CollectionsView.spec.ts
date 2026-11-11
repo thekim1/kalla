@@ -40,7 +40,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'shared' }))
     expect(wrapper.text()).toContain('umea.se')
     expect(wrapper.text()).toContain('Kommunikation')
-    expect(wrapper.text()).toContain('Whole municipality')
+    expect(wrapper.text()).toContain('Whole organisation')
     expect(wrapper.text()).toMatch(/2\s323/)
     expect(wrapper.text()).toContain('Topics: bygglov, politik')
     expect(wrapper.find('[data-test=shared]').exists()).toBe(true)

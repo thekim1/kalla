@@ -99,14 +99,11 @@ public abstract record HttpFetchResult
 /// the URL's extension and the <c>Content-Disposition</c> file name; a challenge or WAF block page is
 /// <see cref="HttpFetchResult.Challenge"/> (§5.3). Response headers within 15 s, the body within 30 s (HTML) or 120 s
 /// (files). Cookies are never sent or stored. Each hop sends the User-Agent of its host's politeness profile (§6.6;
-/// <see cref="UserAgent"/> by default).
+/// <see cref="CrawlPolicy.UserAgent"/> by default).
 /// </summary>
 public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, ICrawlPolicySource policy, TimeProvider time)
 {
     public const int MaxRedirects = 5;
-
-    /// <summary>The default User-Agent (§4); robots.txt groups are matched against its product token (§5.1) whatever a host sends. The about-page URL joins it with to-verify #94.</summary>
-    public const string UserAgent = "UmeaKommunBot/1.0";
 
     public static readonly TimeSpan HeaderTimeout = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan HtmlBodyTimeout = TimeSpan.FromSeconds(30);
@@ -197,7 +194,7 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, ICra
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
         message.Options.Set(CrawlHttpClient.PurposeKey, request.Purpose);
-        message.Headers.TryAddWithoutValidation("User-Agent", policy.Current.ProfileOf(url.Authority).UserAgent);
+        message.Headers.TryAddWithoutValidation("User-Agent", policy.Current.UserAgentOf(url.Authority));
         message.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
         if (request.Validators is { ETag: { } etag })
         {

@@ -93,7 +93,7 @@ async function signOut(): Promise<void> {
         </span>
         <span class="hidden min-w-0 lg:block">
           <span class="block truncate text-body font-semibold text-fg">{{ APP.name }}</span>
-          <span class="block truncate text-caption text-fg-3">{{ APP.organisation }}</span>
+          <span v-if="auth.user?.organisationName" class="block truncate text-caption text-fg-3">{{ auth.user.organisationName }}</span>
         </span>
       </div>
 

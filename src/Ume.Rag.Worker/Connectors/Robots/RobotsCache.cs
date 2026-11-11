@@ -117,7 +117,7 @@ public sealed class RobotsCache(HttpFetcher fetcher, ICrawlPolicySource policy, 
                     await using var stream = ok.Body.OpenRead();
                     using var buffer = new MemoryStream();
                     await stream.CopyToAsync(buffer, cancellationToken);
-                    return new(RobotsTxt.Parse(buffer.GetBuffer().AsSpan(0, (int)buffer.Length)), RobotsStatus.Ok, now);
+                    return new(RobotsTxt.Parse(buffer.GetBuffer().AsSpan(0, (int)buffer.Length), policy.Current.ProductToken), RobotsStatus.Ok, now);
                 }
 
             case HttpFetchResult.Refused { Outcome: RunItemOutcome.Blocked, Reason: var reason } when reason.StartsWith("egress.", StringComparison.Ordinal):

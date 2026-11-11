@@ -102,6 +102,21 @@ public sealed class EgressGuardTests
         result.FailureMessage.ShouldContain("10.0.0.300/8");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("/1.0")]
+    [InlineData("Umeå Bot/1.0")]
+    [InlineData("Example.Bot/1.0")]
+    public void An_invalid_user_agent_fails_validation(string userAgent) =>
+        new CrawlOptionsValidator().Validate(null, new CrawlOptions { UserAgent = userAgent }).FailureMessage!.ShouldContain("Crawl:UserAgent");
+
+    [Theory]
+    [InlineData("UmeaKommunBot/1.0")]
+    [InlineData("Example-Bot/2.0 (+https://www.example.org/bot)")]
+    [InlineData("ExampleBot")]
+    public void A_user_agent_with_a_product_token_passes_validation(string userAgent) =>
+        new CrawlOptionsValidator().Validate(null, new CrawlOptions { UserAgent = userAgent }).Succeeded.ShouldBeTrue();
+
     [Fact]
     public async Task Refuses_a_host_when_any_resolved_address_is_blocked()
     {

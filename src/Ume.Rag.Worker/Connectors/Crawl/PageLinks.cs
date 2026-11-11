@@ -97,10 +97,11 @@ public static class LinkExtractor
 
     private static readonly string[] SkippedSchemes = ["javascript:", "mailto:", "tel:", "data:", "ftp:", "sms:"];
 
-    public static PageLinks Extract(IHtmlDocument document, Uri pageUrl, string? robotsTag)
+    public static PageLinks Extract(IHtmlDocument document, Uri pageUrl, string? robotsTag, string productToken)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageUrl);
+        ArgumentException.ThrowIfNullOrEmpty(productToken);
         var baseUrl = pageUrl;
         if (document.QuerySelector("base[href]")?.GetAttribute("href") is { } declaredBase && Uri.TryCreate(pageUrl, declaredBase.Trim(), out var resolved))
         {
@@ -131,7 +132,7 @@ public static class LinkExtractor
         foreach (var meta in document.QuerySelectorAll("meta[name][content]"))
         {
             var name = meta.GetAttribute("name")!.Trim();
-            if (name.Equals("robots", StringComparison.OrdinalIgnoreCase) || name.Equals(Robots.RobotsTxt.ProductToken, StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("robots", StringComparison.OrdinalIgnoreCase) || name.Equals(productToken, StringComparison.OrdinalIgnoreCase))
             {
                 Apply(meta.GetAttribute("content")!.Split(','), ref noIndex, ref noFollow);
             }
@@ -139,7 +140,7 @@ public static class LinkExtractor
 
         if (robotsTag is not null)
         {
-            ApplyHeader(robotsTag, ref noIndex, ref noFollow);
+            ApplyHeader(robotsTag, productToken, ref noIndex, ref noFollow);
         }
 
         return new PageLinks(links, noIndex, noFollow);
@@ -147,9 +148,9 @@ public static class LinkExtractor
 
     /// <summary>
     /// <c>X-Robots-Tag</c>: comma-separated directives, a <c>name:</c> prefix scoping the following ones to that crawler
-    /// (only <c>UmeaKommunBot</c> counts besides unprefixed ones).
+    /// (only <paramref name="productToken"/> counts besides unprefixed ones).
     /// </summary>
-    private static void ApplyHeader(string header, ref bool noIndex, ref bool noFollow)
+    private static void ApplyHeader(string header, string productToken, ref bool noIndex, ref bool noFollow)
     {
         var forUs = true;
         foreach (var raw in header.Split(','))
@@ -158,7 +159,7 @@ public static class LinkExtractor
             var colon = part.IndexOf(':', StringComparison.Ordinal);
             if (colon > 0 && !part.StartsWith("unavailable_after", StringComparison.OrdinalIgnoreCase))
             {
-                forUs = part[..colon].Trim().Equals(Robots.RobotsTxt.ProductToken, StringComparison.OrdinalIgnoreCase);
+                forUs = part[..colon].Trim().Equals(productToken, StringComparison.OrdinalIgnoreCase);
                 part = part[(colon + 1)..];
             }
 

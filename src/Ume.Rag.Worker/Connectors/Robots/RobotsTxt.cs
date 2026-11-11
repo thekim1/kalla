@@ -5,15 +5,12 @@ using Ume.Rag.Worker.Connectors.Urls;
 namespace Ume.Rag.Worker.Connectors.Robots;
 
 /// <summary>
-/// A parsed robots.txt (RFC 9309; connectors design §5.1). The groups naming <see cref="ProductToken"/> apply, else the
+/// A parsed robots.txt (RFC 9309; connectors design §5.1). The groups naming the crawler's product token apply, else the
 /// <c>*</c> groups; the longest matching rule wins and <c>Allow</c> beats <c>Disallow</c> on a tie; <c>*</c> and
 /// <c>$</c> are supported; only the first 500 KiB are parsed. <c>Crawl-delay</c> and <c>Sitemap:</c> lines are read as well.
 /// </summary>
 public sealed class RobotsTxt
 {
-    /// <summary>The group name the crawler answers to, case-insensitive (§5.1).</summary>
-    public const string ProductToken = "UmeaKommunBot";
-
     /// <summary>RFC 9309 §2.5: a crawler must parse at least 500 KiB.</summary>
     public const int MaxBytes = 500 * 1024;
 
@@ -40,8 +37,10 @@ public sealed class RobotsTxt
     /// <summary>Every <c>Sitemap:</c> line, whatever its group.</summary>
     public IReadOnlyList<string> Sitemaps { get; }
 
-    public static RobotsTxt Parse(ReadOnlySpan<byte> content)
+    /// <summary>Parses <paramref name="content"/> for the crawler named <paramref name="productToken"/> (<see cref="Hosts.CrawlPolicy.ProductToken"/>).</summary>
+    public static RobotsTxt Parse(ReadOnlySpan<byte> content, string productToken)
     {
+        ArgumentException.ThrowIfNullOrEmpty(productToken);
         if (content.Length > MaxBytes)
         {
             content = content[..MaxBytes];
@@ -114,7 +113,7 @@ public sealed class RobotsTxt
         }
 
         // RFC 9309 §2.2.1: every group naming the crawler applies, combined; otherwise every "*" group.
-        var applying = groups.Where(g => g.Agents.Any(NamesUs)).ToList();
+        var applying = groups.Where(g => g.Agents.Any(a => NamesUs(a, productToken))).ToList();
         if (applying.Count == 0)
         {
             applying = [.. groups.Where(g => g.Agents.Contains("*", StringComparer.Ordinal))];
@@ -155,12 +154,10 @@ public sealed class RobotsTxt
         return best?.Allow ?? true;
     }
 
-    private static bool NamesUs(string agent)
+    private static bool NamesUs(string agent, string productToken)
     {
-        // "UmeaKommunBot/1.0" and "UmeaKommunBot" both name us; the token is letters only, so compare up to '/' or space.
-        var end = agent.IndexOfAny(['/', ' ']);
-        var token = end < 0 ? agent : agent[..end];
-        return string.Equals(token, ProductToken, StringComparison.OrdinalIgnoreCase);
+        // "ExampleBot/1.0" and "ExampleBot" both name us; the token has no '/' or space, so compare up to them.
+        return string.Equals(Http.CrawlerIdentity.ProductTokenOf(agent), productToken, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Patterns are compared in the canonicaliser's percent-encoding, so <c>/ö</c> and <c>/%c3%b6</c> are one path.</summary>

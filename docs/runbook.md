@@ -346,8 +346,10 @@ that can read packages.
 
 The optional ones (ports, a separate admin host, per-service gateway keys, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image
 overrides `RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
-network and reach it at `https://gateway:8443` (the Data API at `https://dataapi:8443`), trusting the gateway's
-internal CA.
+network and reach it at `https://gateway:8443`, trusting the gateway's internal CA. The gateway's Data API is not on
+`llm`, so the stack adds one network to the gateway's part: `dataapi` joins `rag-dataapi` (internal), which only
+rag-admin shares, and rag-admin reaches it at `https://dataapi:8443`. That join is the only change to the gateway's
+file; a standalone gateway keeps its own.
 
 **Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
@@ -432,7 +434,11 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
 
 - `fast` = 10 requests a second, 4 connections, `Crawl-delay` and latency ignored, any time of day.
 - robots.txt can only be ignored per host and with a reason; its `Sitemap:` lines are still read. The User-Agent is
-  free per host; robots.txt rules are still matched against `UmeaKommunBot`.
+  free per host; robots.txt rules are still matched against the crawler's own product token.
+- The crawler's own User-Agent is `Crawl:UserAgent` on `rag-worker` (default `UmeaKommunBot/1.0`), e.g.
+  `Crawl__UserAgent="ExampleBot/1.0 (+https://www.example.org/bot)"`. Its product token, the part before the first `/` or
+  space (letters, `_` and `-` only), is the name robots.txt groups, meta robots and `X-Robots-Tag` are matched against.
+  The worker refuses to start with an invalid value.
 - The deployment caps every host at `Crawl:MaxHostRate` (50 requests a second) and `Crawl:MaxHostConnections` (16).
   Set them alike on `rag-admin` (which refuses more) and `rag-worker` (which clamps to them), e.g.
   `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (4) and, in effect, at the host's `maxConnections`.
