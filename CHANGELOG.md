@@ -12,6 +12,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   (#544).
 - `Crawl:UserAgent` on rag-worker (default `UmeaKommunBot/1.0`): robots.txt, meta robots and `X-Robots-Tag` are matched
   against its product token (#545).
+- Embedding profiles can be edited on Platform → Gateway models until content is indexed with them (then only the
+  residency ceiling), with **Test** and a test before every save; worker writes are guarded against a profile changed
+  mid-embedding (#554, #559, #558).
+- Models' context window and output limit can be entered on the gateway model mirror; V17 is bounded by them (#561).
+- `UME_RAG_ORGANISATION_NAME` sets `Admin:OrganisationName` in Compose, Portainer and Kubernetes (#566).
 
 ### Changed
 
@@ -22,11 +27,16 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   queries (#553).
 - Traces are sampled (`UME_RAG_OTEL_TRACES_SAMPLER`, default `parentbased_traceidratio` at `0.1`), and the .NET
   containers' health probe runs every 30 s (every 5 s while starting) (#555).
+- Idle job lanes wait for a `rag_jobs` notification or their next due job (at most `Worker:IdleWaitSeconds`, 30 s)
+  instead of polling every 2 s; `Worker:PollSeconds` is gone (#563).
+- `rag-renderer` runs only with the Compose profile `render` (`init-deployment.sh --render`); without it, `browser`
+  sources wait with `render.not_configured` (#563). The release smoke test boots the bundle both ways (#567).
 
 ### Fixed
 
 - Portainer stack: rag-admin reaches the gateway's Data API; `dataapi` joins the internal network `rag-dataapi`, so the
   organisation and model sync no longer fail with `HttpRequestException` (#542).
+- Portainer stack: the grants for the embedding profile functions were missing from the generated file (#566).
 
 ### Security
 
