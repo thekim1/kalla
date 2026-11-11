@@ -32,10 +32,12 @@ public sealed class ReaperTests(RagDatabaseFixture database) : IAsyncLifetime
         (await Sql.JobAsync(database.Connection(null), job.Id)).State.ShouldBe(JobStates.Running);
 
         await SilenceAsync(instance, TimeSpan.FromSeconds(31));
+        await using var listener = await RagJobsListener.StartAsync(database.Connection(null));
         var result = await reaper.ReapAsync(InstanceTimeout, Ct);
 
         result.Ran.ShouldBeTrue();
         result.Reclaimed.ShouldBe([new ReclaimedJob(job.Id, JobClasses.Command, JobStates.Queued, 1)]);
+        (await listener.NextAsync(TimeSpan.FromSeconds(5))).ShouldBe(JobClasses.Command, "idle workers elsewhere take the reclaimed job at once");
         var row = await Sql.JobAsync(database.Connection(null), job.Id);
         row.State.ShouldBe(JobStates.Queued);
         row.Attempts.ShouldBe((short)0);

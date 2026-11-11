@@ -17,6 +17,20 @@ exception, with its own steps.
   probe runs every 30 s (every 5 s while starting) instead of every 15 s, and a container is unhealthy after 3 failed
   probes (90 s) instead of 5 (75 s). Nothing to configure.
 
+- **Renderer behind a profile (#505):** `rag-renderer` (Chromium) now runs only with the Compose profile `render`, and
+  the worker gets its `Render__Endpoint` only then; without them sources with fetch mode `browser` wait with
+  `render.not_configured`. **Apply:** an installation with `browser` sources re-runs `init-deployment.sh` with its
+  options plus `--render` (it keeps every secret, adds `COMPOSE_PROFILES=render` to `deploy/.env` and keeps
+  `secrets/worker/Render__Endpoint`), then `dc up -d --wait`. Without `browser` sources, re-run it without `--render`
+  (it removes the endpoint), then `dc up -d --wait`, `dc restart rag-worker` (it reads its secret files at start) and
+  `dc rm -sf rag-renderer` (`up` leaves a running container of a profile that is now off alone). Kubernetes: `create-secrets.sh --renderer` now needs `init-deployment.sh --render`
+  first. **Check:** `dc ps rag-renderer` is healthy with the profile, absent without it.
+
+- **Idle job lanes (#505):** an idle worker no longer probes the queue every 2 s per job class: a lane waits for a
+  `rag_jobs` notification, its class's next due job, or at most `Worker:IdleWaitSeconds` (30 s). `Worker:PollSeconds`
+  is gone (a `Worker__PollSeconds` you set is ignored). A requeued job (a transient failure, a release, a reclaim) now
+  notifies `rag_jobs` too. Nothing to configure.
+
 - **Reverse proxy:** the api host (and Open WebUI's) now allows 2 MB request bodies, matching rag-api's chat route;
   with 1 MB, long conversations were refused by the proxy (SA-15). A generated `deploy/proxy/nginx.conf` doesn't
   change by itself: set `client_max_body_size 2m;` in its api (and Open WebUI) server block, or `proxy-body-size: 2m`

@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Npgsql;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 
 namespace Ume.Rag.Infrastructure.Jobs;
@@ -7,7 +8,8 @@ namespace Ume.Rag.Infrastructure.Jobs;
 /// <summary>
 /// <see cref="IJobQueue"/> over <c>content."Jobs"</c> (data-model §4.1–§4.3): dedup by the partial unique index on
 /// <c>DedupKey</c>, one job per dequeue statement under <c>FOR UPDATE SKIP LOCKED</c>, leases and back-off on the
-/// database clock. Statements hold a pooled connection only while they run; nothing sets session state.
+/// database clock. Statements hold a pooled connection only while they run; nothing sets session state. Every change
+/// that queues a job (enqueue, a transient failure, a release) notifies <c>rag_jobs</c> at its commit.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "The IJobQueue implementation; the name is fixed by the design (data-model §4).")]
 public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) : IJobQueue
@@ -24,12 +26,15 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
         RETURNING "Id", "Class"
         """;
 
-    private const string NotifySql = """SELECT pg_notify('rag_jobs', c) FROM unnest($1::text[]) AS c""";
-
+    // One pass over the class's queued jobs: the ready ones per department, and how long until the next one that is
+    // not ready yet, on the database clock. A department with only later jobs has a null priority.
     private const string ReadyDepartmentsSql = """
-        SELECT "DepartmentId", max("Priority"), min("AvailableAt")
+        SELECT "DepartmentId",
+               max("Priority") FILTER (WHERE "AvailableAt" <= now()),
+               min("AvailableAt") FILTER (WHERE "AvailableAt" <= now()),
+               min("AvailableAt") FILTER (WHERE "AvailableAt" > now()) - now()
         FROM content."Jobs"
-        WHERE "State" = 'queued' AND "Class" = $1 AND "AvailableAt" <= now()
+        WHERE "State" = 'queued' AND "Class" = $1
         GROUP BY "DepartmentId"
         """;
 
@@ -74,7 +79,7 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
             "LeaseUntil" = CASE WHEN $4 OR "Attempts" >= "MaxAttempts" THEN "LeaseUntil" END,
             "LastError" = $3
         WHERE "Id" = $1 AND "State" = 'running' AND "LeaseOwner" = $2
-        RETURNING "State"
+        RETURNING "State", "Class"
         """;
 
     private const string ReleaseSql = """
@@ -82,6 +87,7 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
             "State" = 'queued', "Attempts" = greatest("Attempts" - 1, 0), "AvailableAt" = now() + $4::interval,
             "LeaseOwner" = NULL, "LeaseUntil" = NULL, "LastError" = $3
         WHERE "Id" = $1 AND "State" = 'running' AND "LeaseOwner" = $2
+        RETURNING "State", "Class"
         """;
 
     private const string CancelRunSql = """
@@ -121,18 +127,27 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
         return inserted;
     }
 
-    public async Task<IReadOnlyList<ReadyDepartment>> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken)
+    public async Task<ReadyDepartments> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(ReadyDepartmentsSql, connection) { Parameters = { JobDatabase.Parameter(jobClass) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var departments = new List<ReadyDepartment>();
+        TimeSpan? nextReadyIn = null;
         while (await reader.ReadAsync(cancellationToken))
         {
-            departments.Add(new ReadyDepartment(reader.GetGuid(0), reader.GetInt16(1), reader.GetFieldValue<DateTimeOffset>(2)));
+            if (!reader.IsDBNull(1))
+            {
+                departments.Add(new ReadyDepartment(reader.GetGuid(0), reader.GetInt16(1), reader.GetFieldValue<DateTimeOffset>(2)));
+            }
+
+            if (!reader.IsDBNull(3) && reader.GetFieldValue<TimeSpan>(3) is var readyIn && (nextReadyIn is null || readyIn < nextReadyIn))
+            {
+                nextReadyIn = readyIn;
+            }
         }
 
-        return departments;
+        return new ReadyDepartments(departments, nextReadyIn);
     }
 
     public async Task<LeasedJob?> DequeueAsync(DequeueRequest request, CancellationToken cancellationToken)
@@ -217,27 +232,15 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
 
     public async Task<string?> FailAsync(Guid jobId, Guid owner, string error, bool fatal, TimeSpan? retryAfter, CancellationToken cancellationToken)
     {
-        await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(FailSql, connection)
-        {
-            Parameters =
-            {
-                JobDatabase.Parameter(jobId),
-                JobDatabase.Parameter(owner),
-                JobDatabase.Parameter(Truncate(error)),
-                JobDatabase.Parameter(fatal),
-                JobDatabase.Parameter(retryAfter),
-            },
-        };
-        return await command.ExecuteScalarAsync(cancellationToken) as string;
+        var row = await FailOrReleaseAsync(FailSql, cancellationToken,
+            JobDatabase.Parameter(jobId), JobDatabase.Parameter(owner), JobDatabase.Parameter(Truncate(error)), JobDatabase.Parameter(fatal),
+            JobDatabase.Parameter(retryAfter));
+        return row?.State;
     }
 
-    public async Task<bool> ReleaseAsync(Guid jobId, Guid owner, string reason, TimeSpan delay, CancellationToken cancellationToken)
-    {
-        await using var connection = await database.OpenAsync(cancellationToken);
-        return await ExecuteAsync(connection, null, ReleaseSql, cancellationToken,
-            JobDatabase.Parameter(jobId), JobDatabase.Parameter(owner), JobDatabase.Parameter(Truncate(reason)), JobDatabase.Parameter(delay)) == 1;
-    }
+    public async Task<bool> ReleaseAsync(Guid jobId, Guid owner, string reason, TimeSpan delay, CancellationToken cancellationToken) =>
+        await FailOrReleaseAsync(ReleaseSql, cancellationToken,
+            JobDatabase.Parameter(jobId), JobDatabase.Parameter(owner), JobDatabase.Parameter(Truncate(reason)), JobDatabase.Parameter(delay)) is not null;
 
     public async Task<int> CancelRunAsync(Guid runId, string reason, Guid? exceptJobId, CancellationToken cancellationToken)
     {
@@ -275,12 +278,42 @@ public sealed class PostgresJobQueue(JobDatabase database, JobWakeUps wakeUps) :
             }
         }
 
-        if (classes.Count > 0)
+        await JobDatabase.NotifyAsync(connection, transaction, classes, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs a <see cref="FailSql"/> or <see cref="ReleaseSql"/> update; a job back in the queue wakes its class here and,
+    /// at the commit, in every worker: the idle lanes may sleep past its new <c>AvailableAt</c> otherwise. Null when the
+    /// lease was lost.
+    /// </summary>
+    private async Task<(string State, string Class)?> FailOrReleaseAsync(string sql, CancellationToken cancellationToken, params NpgsqlParameter[] parameters)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        (string State, string Class)? row = null;
+        await using (var command = new NpgsqlCommand(sql, connection, transaction))
         {
-            // Delivered at commit (data-model §4.3).
-            await using var notify = new NpgsqlCommand(NotifySql, connection, transaction) { Parameters = { JobDatabase.Parameter(classes.ToArray()) } };
-            await notify.ExecuteNonQueryAsync(cancellationToken);
+            command.Parameters.AddRange(parameters);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                row = (reader.GetString(0), reader.GetString(1));
+            }
         }
+
+        var requeued = row is { State: JobStates.Queued } ? row.Value.Class : null;
+        if (requeued is not null)
+        {
+            await JobDatabase.NotifyAsync(connection, transaction, [requeued], cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        if (requeued is not null)
+        {
+            wakeUps.Signal(requeued);
+        }
+
+        return row;
     }
 
     private static async Task<int> ExecuteAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string sql,

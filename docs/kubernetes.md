@@ -53,6 +53,7 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    ```
 
    Leave out `--datastores` if you bring your own Postgres (below), and `--renderer` without the renderer component.
+   `--renderer` needs the worker's endpoint file, which `init-deployment.sh` writes only with `--render`.
    The script can run again after `init-deployment.sh --renew-certs` or a new gateway key; restart the deployments
    afterwards (`kubectl rollout restart`). Keep `deploy/certs/ca.key` offline between renewals.
 

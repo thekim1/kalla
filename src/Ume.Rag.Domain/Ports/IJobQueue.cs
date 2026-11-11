@@ -19,8 +19,12 @@ public interface IJobQueue
     /// </summary>
     Task<IReadOnlySet<Guid>> EnqueueAsync(IReadOnlyList<JobRequest> jobs, DbTransaction? transaction, CancellationToken cancellationToken);
 
-    /// <summary>The departments with a job of <paramref name="jobClass"/> ready now, for per-department fairness (data-model §4.2).</summary>
-    Task<IReadOnlyList<ReadyDepartment>> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken);
+    /// <summary>
+    /// The departments with a job of <paramref name="jobClass"/> ready now, for per-department fairness (data-model §4.2),
+    /// and, from the same statement, how long until the class's next queued job becomes ready, so an idle dispatcher
+    /// knows how long it may sleep.
+    /// </summary>
+    Task<ReadyDepartments> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken);
 
     /// <summary>
     /// Leases the next ready job of one class and department (highest priority, then oldest), or null. Sets the lease and
@@ -40,13 +44,15 @@ public interface IJobQueue
     /// <summary>
     /// Records a failure that counts the attempt. Fatal: <c>failed</c> at once. Transient: back to <c>queued</c> after
     /// <paramref name="retryAfter"/>, or the back-off <c>least(10 s · 2^Attempts, 1 h) ± 20 %</c>; <c>dead</c> once the attempts
-    /// are used up. Returns the new state, or null when the lease was lost.
+    /// are used up. A job back in the queue wakes the workers of its class, as an enqueue does, so they wait for its
+    /// new <c>AvailableAt</c>. Returns the new state, or null when the lease was lost.
     /// </summary>
     Task<string?> FailAsync(Guid jobId, Guid owner, string error, bool fatal, TimeSpan? retryAfter, CancellationToken cancellationToken);
 
     /// <summary>
     /// Puts a running job back without counting the attempt (<c>Attempts − 1</c>): capacity refusals, shutdown
-    /// (data-model §4.2). <paramref name="reason"/> is kept in <c>LastError</c>. False when the lease was lost.
+    /// (data-model §4.2). <paramref name="reason"/> is kept in <c>LastError</c>. Wakes the workers of the job's class, as an
+    /// enqueue does. False when the lease was lost.
     /// </summary>
     Task<bool> ReleaseAsync(Guid jobId, Guid owner, string reason, TimeSpan delay, CancellationToken cancellationToken);
 
@@ -78,6 +84,12 @@ public sealed record JobRequest(string Class, Guid DepartmentId, string Classifi
 
 /// <summary>A department with ready jobs of a class: its best priority and its oldest ready job.</summary>
 public sealed record ReadyDepartment(Guid DepartmentId, short MaxPriority, DateTimeOffset OldestAvailableAt);
+
+/// <summary>
+/// The ready departments of a class, and how long until its next queued job that is not ready yet becomes ready, on the
+/// database clock (<see cref="NextReadyIn"/>; null when every queued job of the class is ready or there are none).
+/// </summary>
+public sealed record ReadyDepartments(IReadOnlyList<ReadyDepartment> Departments, TimeSpan? NextReadyIn);
 
 /// <summary>What to lease: one job of <see cref="Class"/> and <see cref="DepartmentId"/> for <see cref="Owner"/>.</summary>
 public sealed record DequeueRequest(string Class, Guid DepartmentId, Guid Owner, TimeSpan Lease);

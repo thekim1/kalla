@@ -83,10 +83,14 @@ public sealed class ClamAvWaitEngineTests(RagDatabaseFixture database, FakeGatew
             SELECT count(*) FROM content."Jobs" WHERE "RunId" = $1 AND "Class" = 'fetch' AND "State" = 'queued' AND "LastError" = 'clamav.unavailable'
             """, runId);
 
-    private Task MakeDueAsync(Guid runId) =>
-        Sql.ExecuteAsync(database.Connection(null), """
+    private async Task MakeDueAsync(Guid runId)
+    {
+        await Sql.ExecuteAsync(database.Connection(null), """
             UPDATE content."Jobs" SET "AvailableAt" = now() WHERE "RunId" = $1 AND "Class" = 'fetch' AND "State" = 'queued'
             """, runId);
+        // The idle fetch lane waits for the requeue's 30 s: wake it, as a requeue does.
+        await Sql.ExecuteAsync(database.Connection(null), "SELECT pg_notify('rag_jobs', 'fetch')");
+    }
 
     /// <summary>The run's failed items as <c>identity reason</c>, one per line; null when there are none.</summary>
     private Task<string?> FailedItemsAsync(Guid runId) =>

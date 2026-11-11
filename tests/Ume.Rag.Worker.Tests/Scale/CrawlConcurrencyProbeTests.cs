@@ -288,7 +288,7 @@ public sealed class CrawlConcurrencyProbeTests(RagDatabaseFixture database, Fake
     }
 
     /// <summary>
-    /// The worker as deployed but for the renderer: the production poll, heartbeat and reaper timings (the kit's short
+    /// The worker as deployed but for the renderer: the production heartbeat and reaper timings (the kit's short
     /// ones are for fast tests; a 1 s heartbeat under this load could reap the worker's own jobs), no scheduler ticks.
     /// </summary>
     private static Dictionary<string, string?> Settings(ProbeKnobs knobs) => new()
@@ -296,7 +296,6 @@ public sealed class CrawlConcurrencyProbeTests(RagDatabaseFixture database, Fake
         ["Render:Endpoint"] = RenderTestKit.Options().Endpoint,
         ["Render:MaxConcurrent"] = Invariant(knobs.RenderSlots),
         ["Worker:Concurrency:fetch"] = Invariant(knobs.FetchLanes),
-        ["Worker:PollSeconds"] = Invariant(new WorkerOptions().PollSeconds),
         ["Worker:HeartbeatSeconds"] = Invariant(new WorkerOptions().HeartbeatSeconds),
         ["Worker:InstanceTimeoutSeconds"] = Invariant(new WorkerOptions().InstanceTimeoutSeconds),
         ["Worker:ReaperSeconds"] = Invariant(new WorkerOptions().ReaperSeconds),

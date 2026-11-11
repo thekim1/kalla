@@ -1,4 +1,5 @@
 using Npgsql;
+using Ume.Rag.Domain.Entities;
 
 namespace Ume.Rag.Infrastructure.Jobs;
 
@@ -14,7 +15,8 @@ public sealed record ReapResult(bool Ran, IReadOnlyList<ReclaimedJob> Reclaimed,
 /// (<c>Attempts − 1</c>, undoing the dequeue's count) and with <c>Reclaims + 1</c>; at the third reclaim it is
 /// dead-lettered as a poison suspect (<c>LastError = 'poison-suspect'</c>), so a document that kills its worker dies
 /// instead of looping. Instances silent for 5 minutes are removed. Any instance may run it: one pass at a time under a
-/// transaction-scoped advisory lock (pooler-safe).
+/// transaction-scoped advisory lock (pooler-safe). The classes of the requeued jobs are notified on <c>rag_jobs</c> at the
+/// commit, so idle workers elsewhere take them at once; the caller wakes its own process.
 /// </summary>
 public sealed class JobReaper(JobDatabase database)
 {
@@ -77,6 +79,9 @@ public sealed class JobReaper(JobDatabase database)
                 reclaimed.Add(new ReclaimedJob(reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetInt16(3)));
             }
         }
+
+        await JobDatabase.NotifyAsync(connection, transaction,
+            [.. reclaimed.Where(j => j.State == JobStates.Queued).Select(j => j.Class).Distinct(StringComparer.Ordinal)], cancellationToken);
 
         int removed;
         await using (var remove = new NpgsqlCommand(RemoveSilentSql, connection, transaction)

@@ -178,7 +178,8 @@ public sealed class ChunkSetSaltTests(RagDatabaseFixture database, FakeGatewayFa
 
     /// <summary>
     /// Makes the <c>reprocess</c> sync the command enqueued available now instead of after its settle delay (this worker's
-    /// rule cache was dropped by the command itself) and returns its id, which is its run's.
+    /// rule cache was dropped by the command itself), wakes the worker's idle sync lane as a requeue would, and returns its
+    /// id, which is its run's.
     /// </summary>
     private async Task<Guid> ReleaseSyncAsync(SourceSeed seed)
     {
@@ -188,6 +189,7 @@ public sealed class ChunkSetSaltTests(RagDatabaseFixture database, FakeGatewayFa
             RETURNING "Id"
             """, seed.SourceId.ToString());
         job.ShouldNotBe(Guid.Empty, "the command enqueued the source's reprocess sync");
+        await Sql.ExecuteAsync(database.Connection(null), "SELECT pg_notify('rag_jobs', 'sync')");
         return job;
     }
 

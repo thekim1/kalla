@@ -5,11 +5,13 @@ using Ume.Rag.Infrastructure.Config;
 namespace Ume.Rag.Infrastructure.Jobs;
 
 /// <summary>
-/// Wakes this process's dispatcher for a job class (data-model §4.3). Signalled by local enqueues and, as the
-/// <c>rag_jobs</c> <see cref="INotificationListener"/> on the config monitor's listening connection (data-model §1.1,
-/// issue #21), by every other process's enqueue, whose notification payload is the job class. The dispatcher also polls
-/// every <c>Worker:PollSeconds</c> (2 s), so a missed notification costs at most one poll. Signals collapse: one pending
-/// wake-up per class at most.
+/// Wakes this process's dispatcher for a job class (data-model §4.3). Signalled by local enqueues, requeues and reclaims
+/// and, as the <c>rag_jobs</c> <see cref="INotificationListener"/> on the config monitor's listening connection
+/// (data-model §1.1, issue #21), by every other process's, whose notification payload is the job class. An idle lane
+/// waits for a signal until its class's next queued job is due, and at most <c>Worker:IdleWaitSeconds</c> (30 s), so a
+/// notification missed while the listening connection was down costs at most that. Signals collapse: one pending
+/// wake-up per class at most, kept until the lane next waits, so a signal that arrives while it probes or is busy is not
+/// lost.
 /// </summary>
 public sealed class JobWakeUps(TimeProvider time) : INotificationListener
 {

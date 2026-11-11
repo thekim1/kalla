@@ -42,9 +42,13 @@ public sealed class WorkerOptions
     [Range(1, 300)]
     public int ReaperSeconds { get; set; } = 10;
 
-    /// <summary>Dispatcher poll per class when no wake-up arrives (2 s, data-model §4.3).</summary>
-    [Range(1, 60)]
-    public int PollSeconds { get; set; } = 2;
+    /// <summary>
+    /// The longest an idle dispatcher lane waits before it looks at the queue again (30 s, #505). It wakes sooner on a
+    /// <c>rag_jobs</c> notification or local signal for its class, or when the class's next queued job is due; this cap
+    /// bounds the cost of a notification lost while the listening connection was down.
+    /// </summary>
+    [Range(1, 300)]
+    public int IdleWaitSeconds { get; set; } = 30;
 
     /// <summary>On stop, running jobs get this long to finish before they are cancelled and released (90 s).</summary>
     [Range(0, 600)]

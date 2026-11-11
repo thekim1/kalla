@@ -201,6 +201,44 @@ public sealed class JobQueueTests(RagDatabaseFixture database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ready_departments_leave_out_later_jobs_and_say_when_the_next_one_is_due()
+    {
+        var queue = database.Queue(RagDatabase.Worker);
+        var ready = Guid.NewGuid();
+        var later = Guid.NewGuid();
+        await queue.EnqueueAsync([Job(ready) with { Priority = 3 }, Job(ready) with { Delay = TimeSpan.FromMinutes(5) },
+            Job(later) with { Delay = TimeSpan.FromMinutes(2) }, Job(later) with { Delay = TimeSpan.FromMinutes(10) }], null, Ct);
+
+        var result = await queue.ReadyDepartmentsAsync(JobClasses.Sync, Ct);
+
+        result.Departments.ShouldHaveSingleItem().DepartmentId.ShouldBe(ready);
+        result.Departments[0].MaxPriority.ShouldBe((short)3);
+        result.NextReadyIn.ShouldNotBeNull().TotalSeconds.ShouldBeInRange(115, 120);
+        var none = await queue.ReadyDepartmentsAsync(JobClasses.Fetch, Ct);
+        none.Departments.ShouldBeEmpty();
+        none.NextReadyIn.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_requeue_notifies_rag_jobs_and_a_terminal_failure_does_not()
+    {
+        // Another worker's idle lane may be waiting past the job's new AvailableAt; the notification makes it look again.
+        var (queue, owner, job) = await LeasedAsync();
+        await using var listener = await RagJobsListener.StartAsync(database.Connection(null));
+
+        (await queue.ReleaseAsync(job.Id, owner, "busy", TimeSpan.FromSeconds(5), Ct)).ShouldBeTrue();
+        (await listener.NextAsync(TimeSpan.FromSeconds(5))).ShouldBe(JobClasses.Sync);
+
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Jobs" SET "State" = 'running', "LeaseOwner" = $2 WHERE "Id" = $1""", job.Id, owner);
+        (await queue.FailAsync(job.Id, owner, "gateway.timeout", fatal: false, retryAfter: null, Ct)).ShouldBe(JobStates.Queued);
+        (await listener.NextAsync(TimeSpan.FromSeconds(5))).ShouldBe(JobClasses.Sync);
+
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Jobs" SET "State" = 'running', "LeaseOwner" = $2 WHERE "Id" = $1""", job.Id, owner);
+        (await queue.FailAsync(job.Id, owner, "command.unknown_kind", fatal: true, retryAfter: null, Ct)).ShouldBe(JobStates.Failed);
+        (await listener.NextAsync(TimeSpan.FromMilliseconds(500))).ShouldBeNull();
+    }
+
+    [Fact]
     public async Task The_lease_heartbeat_renews_held_jobs_and_reports_lost_ones()
     {
         var (queue, owner, job) = await LeasedAsync();
