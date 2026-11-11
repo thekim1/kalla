@@ -1103,6 +1103,13 @@ configs:
       max_parallel_maintenance_workers = 2
       max_worker_processes = 8
 
+      # Planner and I/O for SSD storage and short queries (#500; performance pass P-52). JIT compiles a statement whose
+      # estimated cost passes jit_above_cost, which K and V over a large scope can, for tens of ms per run that a 100 ms
+      # search can't afford. The built-in page cost (4) and I/O concurrency (1 in PostgreSQL 17) are for spinning disks.
+      jit = off
+      random_page_cost = 1.1
+      effective_io_concurrency = 200
+
       # WAL and continuous archiving with pgBackRest inside this container (§7.4): synchronous archive-push, no spool, and a
       # segment switch at least every 60 s so the archive lags by at most a minute (RPO ≤ 5 min).
       wal_level = replica
