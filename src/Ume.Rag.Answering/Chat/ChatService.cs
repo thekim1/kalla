@@ -68,7 +68,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var platform = resolved.Platform;
         var limits = AnswerLimits.Resolve(settings, snapshot.ModelLimits.GetValueOrDefault(assistant.Published.GatewayModel), platform.MaxAnswerTokens);
         // §7.1: the answer model reads the question's prompt form, line breaks kept; everything before it reads the query form.
-        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings, limits);
+        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings, limits, platform.Texts);
         CondenseOutcome? condense = null;
         string? query = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded)
@@ -157,7 +157,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             return (chat.Question, skipped, false);
         }
 
-        var (rewritten, outcome) = await CallCondenseAsync(Condenser.Messages(chat.History, chat.Question), Condenser.Step, options.Value.CondenseTimeout, platform,
+        var (rewritten, outcome) = await CallCondenseAsync(Condenser.Messages(chat.History, chat.Question, platform.Texts), Condenser.Step, options.Value.CondenseTimeout, platform,
             ceiling, messageId, ct);
         Count(FollowUpKind, outcome);
         return (rewritten ?? chat.Question, outcome, rewritten is null);
@@ -175,7 +175,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var outcome = CondenseOutcome.Disabled;
         if (settings.CondenseEnabled && platform.CondenseModel is not null && ceiling != Residency.OnPrem)
         {
-            (rewritten, outcome) = await CallCondenseAsync(Condenser.LongMessages(chat.History, chat.Question), Condenser.LongStep,
+            (rewritten, outcome) = await CallCondenseAsync(Condenser.LongMessages(chat.History, chat.Question, platform.Texts), Condenser.LongStep,
                 options.Value.LongQuestionCondenseTimeout, platform, ceiling, messageId, ct);
         }
 
@@ -283,7 +283,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(cited);
-        var messages = FollowUps.Messages(count, plan.Language, plan.Query!, FollowUps.Answer(plan, delivered), FollowUps.Titles(plan.Prompt?.Sources ?? [], cited));
+        var messages = FollowUps.Messages(count, plan.Language, plan.Query!, FollowUps.Answer(plan, delivered), FollowUps.Titles(plan.Prompt?.Sources ?? [], cited),
+            plan.Platform.Texts);
         var (answer, failure) = await CallTaskModelAsync(messages, FollowUps.Step, FollowUps.TokensPerQuestion * count, options.Value.FollowUpTimeout,
             plan.Platform, plan.Ceiling, plan.MessageId, ct);
         IReadOnlyList<string> suggestions = answer is null ? [] : FollowUps.Accept(answer.Text, count, question, plan.Query);

@@ -16,7 +16,7 @@ namespace Ume.Rag.Answering.Chat;
 /// model otherwise spends its 96 tokens on hidden reasoning); null sends nothing. <c>maxAnswerTokens</c> is the platform
 /// ceiling <c>X</c> of every answer (chat design §6.3, Decisions "Answer length from the model"); null (the default) sets none.</remarks>
 public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<string> AllowedLinkHosts, int MessagesPerMinutePerUser, string? NotFound,
-    string? CondenseReasoningEffort = null, int? MaxAnswerTokens = null)
+    string? CondenseReasoningEffort = null, int? MaxAnswerTokens = null, PromptTexts? Prompts = null)
 {
     public static PlatformChatSettings Parse(string? settingsChat, ChatOptions fallback)
     {
@@ -39,7 +39,8 @@ public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<s
             json?["messagesPerMinutePerUser"] is JsonValue r && r.GetValueKind() == JsonValueKind.Number && r.TryGetValue<int>(out var rate) ? rate : fallback.MessagesPerMinutePerUser,
             json?["notFound"] is JsonObject notFound ? notFound.ToJsonString() : null,
             json?["condenseReasoningEffort"] is JsonValue e && e.GetValueKind() == JsonValueKind.String && e.GetValue<string>() is { Length: > 0 and <= 20 } effort ? effort : null,
-            AssistantChatSettings.TryInt(json?[MaxAnswerTokensKey]) is { } ceiling and > 0 ? ceiling : null);
+            AssistantChatSettings.TryInt(json?[MaxAnswerTokensKey]) is { } ceiling and > 0 ? ceiling : null,
+            PromptTexts.Parse(json?[PromptsKey]));
     }
 
     /// <summary>The <c>Settings.Chat</c> member of the platform ceiling (admin design §4.5, <c>PUT /api/settings/chat</c>).</summary>
@@ -63,6 +64,12 @@ public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<s
             return null;
         }
     }
+
+    /// <summary>The <c>Settings.Chat</c> member of the prompt texts (chat design §7.3, admin V38).</summary>
+    public const string PromptsKey = "prompts";
+
+    /// <summary>The platform's prompt texts, each at its default unless set (Decisions "Chat prompt texts configurable").</summary>
+    public PromptTexts Texts => Prompts ?? PromptTexts.Default;
 }
 
 /// <summary>Why condense did not rewrite (chat design §5, §5.1): counted, and a failed rewrite never yields the not-found text.</summary>
@@ -104,19 +111,7 @@ public static partial class Condenser
     private const int FallbackWordWindow = 200;
     private const int TranscriptMaxChars = 4000;
 
-    private const string Instructions =
-        "Du skriver om en följdfråga till en fristående sökfråga.\n" +
-        "Använd samtalet bara för att lösa upp syftningar (det, den, där, samma, hen) och utelämnade ämnen.\n" +
-        "Lägg inte till fakta, svara inte på frågan, behåll språket i användarens fråga.\n" +
-        "Skriv endast den omskrivna frågan på en rad. Är frågan redan fristående: upprepa den oförändrad.";
 
-    private const string LongInstructions =
-        "Du får ett långt meddelande, ofta ett supportärende med e-posttråd eller loggar.\n" +
-        "Skriv en kort sökfråga som beskriver det problem eller den fråga som ska besvaras.\n" +
-        "Ta med felkoder, felmeddelanden och namn på system och program ordagrant.\n" +
-        "Ta aldrig med namn på personer, personnummer, e-postadresser, telefonnummer eller andra personuppgifter.\n" +
-        "Lägg inte till fakta, svara inte på frågan, behåll språket i meddelandet.\n" +
-        "Skriv endast sökfrågan på en rad.";
 
     private static readonly HashSet<string> Anaphora = new(StringComparer.Ordinal)
     {
@@ -144,7 +139,7 @@ public static partial class Condenser
     }
 
     /// <summary>The condense messages (§5 "Input"): the last ≤ 6 messages, cut and cleaned, then the question; ≤ 4,000 characters.</summary>
-    public static IReadOnlyList<ChatMessageIn> Messages(IReadOnlyList<ChatMessageIn> history, string question)
+    public static IReadOnlyList<ChatMessageIn> Messages(IReadOnlyList<ChatMessageIn> history, string question, PromptTexts? texts = null)
     {
         var body = Transcript(history);
         var tail = "\nFöljdfråga: " + question;
@@ -153,18 +148,18 @@ public static partial class Condenser
             body = body[^Math.Max(0, TranscriptMaxChars - tail.Length)..];
         }
 
-        return [new ChatMessageIn("system", Instructions), new ChatMessageIn("user", body + tail)];
+        return [new ChatMessageIn("system", (texts ?? PromptTexts.Default)[PromptTexts.Condense]), new ChatMessageIn("user", body + tail)];
     }
 
     /// <summary>
     /// The long-question condense messages (§5.1 "Input"): the §5 transcript of the last ≤ 6 messages (its cuts keep it under
     /// 4,000 characters), then <c>Meddelande: </c> and the question's query form, which is never cut.
     /// </summary>
-    public static IReadOnlyList<ChatMessageIn> LongMessages(IReadOnlyList<ChatMessageIn> history, string question)
+    public static IReadOnlyList<ChatMessageIn> LongMessages(IReadOnlyList<ChatMessageIn> history, string question, PromptTexts? texts = null)
     {
         ArgumentNullException.ThrowIfNull(question);
         var body = Transcript(history);
-        return [new ChatMessageIn("system", LongInstructions), new ChatMessageIn("user", (body.Length > 0 ? body + "\n" : "") + "Meddelande: " + question)];
+        return [new ChatMessageIn("system", (texts ?? PromptTexts.Default)[PromptTexts.CondenseLong]), new ChatMessageIn("user", (body.Length > 0 ? body + "\n" : "") + "Meddelande: " + question)];
     }
 
     /// <summary>

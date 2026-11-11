@@ -263,6 +263,9 @@ public static class AdminErrorCodes
     /// <summary>The save's canary embedding with the new values failed (<c>{error}</c>); the problem's <c>test</c> holds the outcome.</summary>
     public static AdminErrorCode ProfileTestFailed { get; } = new("profile_test_failed", 422, "The profile was not saved: the test embedding failed ({error}).");
 
+    /// <summary>V38: a member of <c>Settings.Chat.prompts</c> (<c>{field}</c>) breaks a rule (<c>{problem}</c>, chat design §7.3).</summary>
+    public static AdminErrorCode PromptTextInvalid { get; } = new("prompt_text_invalid", 400, "The prompt text {field} is not valid: {problem}.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -271,5 +274,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid];
 }

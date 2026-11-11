@@ -32,21 +32,36 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
     /// <summary>The rerank calls the panel sent (B-16), on the rerankers' gateway client.</summary>
     private int _rerankCalls;
 
+    /// <summary>The bodies of the panel's chat calls to the gateway, in order (B-32: what the answer model was sent).</summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _chatBodies = new();
+
     private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway) => database.HeaderFactory().WithWebHostBuilder(web =>
     {
         web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
         web.UseSetting("Gateway:Keys:Eu", EuKey);
         web.ConfigureTestServices(services =>
         {
-            foreach (var name in new[] { GatewayChatClient.HttpClientName, GatewayQueryEmbedder.HttpClientName })
-            {
-                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
-            }
+            services.AddHttpClient(GatewayChatClient.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new Recording(gateway.Server.CreateHandler(), _chatBodies));
+            services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
 
             services.AddHttpClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new Counting(gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _rerankCalls)));
         });
     });
+
+    private sealed class Recording(HttpMessageHandler inner, System.Collections.Concurrent.ConcurrentQueue<string> bodies) : DelegatingHandler(inner)
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Content is not null)
+            {
+                bodies.Enqueue(await request.Content.ReadAsStringAsync(cancellationToken));
+            }
+
+            return await base.SendAsync(request, cancellationToken);
+        }
+    }
 
     private sealed class Counting(HttpMessageHandler inner, Action counted) : DelegatingHandler(inner)
     {
@@ -165,6 +180,34 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         (await stranger.PostAsJsonAsync(path, new { question = word }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await db.AuditLog.AsNoTracking().CountAsync(Ct)).ShouldBe(auditBefore);
         (await db.Conversations.AsNoTracking().CountAsync(c => c.AssistantId == assistant.Id, Ct)).ShouldBe(0);
+
+        // B-32: the platform's prompt texts apply to the test panel at once (chat §7.3): an edited identity line is what the model gets.
+        using (var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin))
+        {
+            var chat = await (await platform.GetAsync("/api/settings/chat", Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
+            var original = System.Text.Json.Nodes.JsonNode.Parse(chat.GetProperty("value").GetRawText())!.AsObject();
+            var edited = original.DeepClone().AsObject();
+            edited["prompts"] = new System.Text.Json.Nodes.JsonObject { ["identity"] = "Hej, här svarar {assistant} i testpanelen." };
+            using var saved = await platform.PutAsJsonAsync("/api/settings/chat", new { value = edited, version = chat.GetProperty("version").GetString() }, Ct);
+            saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
+            try
+            {
+                _chatBodies.Clear();
+                using var answered = await editor.PostAsJsonAsync(path, new { question = $"Hur gör jag med {word}?" }, Ct);
+                answered.StatusCode.ShouldBe(HttpStatusCode.OK, await answered.Content.ReadAsStringAsync(Ct));
+                var system = _chatBodies.Select(b => JsonDocument.Parse(b).RootElement).Single(b => b.GetProperty("stream").ValueKind is JsonValueKind.False)
+                    .GetProperty("messages")[0].GetProperty("content").GetString()!;
+                system.ShouldStartWith($"Hej, här svarar {assistant.Name} i testpanelen.\n");
+                system.ShouldContain(PromptTexts.Locked.Citation); // the locked lines stay
+            }
+            finally
+            {
+                var now = await (await platform.GetAsync("/api/settings/chat", Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
+                using var restored = await platform.PutAsJsonAsync("/api/settings/chat", new { value = original, version = now.GetProperty("version").GetString() }, Ct);
+                restored.StatusCode.ShouldBe(HttpStatusCode.OK);
+            }
+        }
+
     }
 
     [Fact]

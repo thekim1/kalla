@@ -395,6 +395,11 @@
       "code": "profile_test_failed",
       "status": 422,
       "message": "The profile was not saved: the test embedding failed ({error})."
+    },
+    {
+      "code": "prompt_text_invalid",
+      "status": 400,
+      "message": "The prompt text {field} is not valid: {problem}."
     }
   ]
 }

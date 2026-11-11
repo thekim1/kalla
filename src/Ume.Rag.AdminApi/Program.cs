@@ -152,6 +152,7 @@ api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();
 api.MapSettings();
+api.MapPromptTexts();
 api.MapDataProtection();
 api.MapTemplates();
 app.MapOpenApi().RequireAuthorization(AdminPolicies.Admin);

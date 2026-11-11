@@ -1519,3 +1519,49 @@ export const EMBEDDING_PROFILES = {
   saved: 'Embedding profile saved',
   none: 'There is no embedding profile yet. The migration service creates it from EmbeddingProfile:* in the deployment.',
 } as const
+
+/** The Settings page's Prompt texts panel (admin design §4.5; chat design §7.3; Decisions "Chat prompt texts configurable"). */
+export const PROMPT_TEXTS = {
+  title: 'Prompt texts',
+  lead: 'The texts the platform sends to the AI model around each assistant’s own instructions. Locked lines keep citations, links and the defences against instructions in the sources working, so they cannot be changed.',
+  note: 'Saving changes the answers of every assistant at once, from the next question.',
+  locked: 'Locked',
+  reset: 'Reset to default',
+  edited: 'Changed',
+  save: 'Save prompt texts',
+  saved: 'Prompt texts saved',
+  placeholders: {
+    '{assistant}': '{assistant} is replaced by the assistant’s name.',
+    '{N}': '{N} is replaced by the number of suggestions asked for.',
+  } as Record<string, string>,
+  maxLength: (n: string) => `At most ${n} characters.`,
+  sections: {
+    frame: 'Frame with sources',
+    general: 'Without sources (general knowledge: fallback and open)',
+    conversational: 'Conversational messages',
+    sources: 'Sources block',
+    condense: 'Rewriting a follow-up question',
+    condenseLong: 'Rewriting a long question',
+    followUps: 'Follow-up suggestions',
+    caveats: 'Notices above an answer',
+  } as Record<string, string>,
+  members: {
+    identity: 'First line',
+    'rules.off': 'Rules, general knowledge off',
+    'rules.supplement': 'Rules, supplement and fallback',
+    'rules.open': 'Rules, open',
+    'rules.fallbackGeneral': 'Rules without sources, fallback',
+    'rules.openGeneral': 'Rules without sources, open',
+    conversational: 'Conversational line',
+    degraded: 'Line when the search is simplified',
+    sourcesLabel: 'Label of the sources',
+    condense: 'Instructions',
+    condenseLong: 'Instructions',
+    followUps: 'Instructions',
+    'caveats.degraded.sv': 'Simplified search, Swedish',
+    'caveats.degraded.en': 'Simplified search, English',
+    'caveats.general.sv': 'General knowledge answer, Swedish',
+    'caveats.general.en': 'General knowledge answer, English',
+  } as Record<string, string>,
+} as const
+

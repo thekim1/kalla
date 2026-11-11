@@ -73,6 +73,8 @@ public static class SettingsEndpoints
                     throw AdminFaults.Field(PlatformChatSettings.MaxAnswerTokensKey, AdminErrorCodes.InvalidValue);
                 }
 
+                // V38: the platform's prompt texts (chat §7.3, Decisions "Chat prompt texts configurable").
+                PromptTextRules.Ensure(r.Value[Ume.Rag.Answering.Chat.PlatformChatSettings.PromptsKey]);
                 return PlatformModelRules.EnsureAsync(db, models,
                     [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct);
             });
