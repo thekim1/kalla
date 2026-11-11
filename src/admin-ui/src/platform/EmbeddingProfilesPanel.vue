@@ -44,6 +44,8 @@ interface TestResult {
 }
 
 const UPDATE_PATH = '/api/embedding-profiles/{id}'
+/** A profile in use changes only its ceiling (admin design §4.5): the other fields are shown read-only (#565). */
+const FIXED_WHEN_IN_USE = ['gatewayModel', 'dimensions', 'requestDimensions', 'maxInputTokens'] as const
 /** The ceilings a profile may have: at most the platform ceiling Eu (until M2). */
 const CEILINGS = ['OnPrem', 'Eu']
 
@@ -168,6 +170,7 @@ onMounted(load)
       <GenericForm
         v-else-if="selected && fields.length > 0" :key="formKey" form-id="embedding-profile" :fields="fields" :initial="{ ...selected }"
         method="put" :url="`/api/embedding-profiles/${encodeURIComponent(selected.id)}`" :submit-label="PLATFORM.form.save" :models="models"
+        :read-only="selected.inUse ? FIXED_WHEN_IN_USE : []"
         @saved="saved" @cancel="drawerOpen = false"
       >
         <template #extra="{ collect }">

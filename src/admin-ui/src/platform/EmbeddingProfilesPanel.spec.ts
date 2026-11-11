@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { EMBEDDING_PROFILES as E } from '@/utils/labels'
+import { EMBEDDING_PROFILES as E, PLATFORM } from '@/utils/labels'
 import { ERROR_MESSAGES, embeddingTestMessage } from '@/utils/messages'
 import PlatformResourceView from './PlatformResourceView.vue'
 import { resetOpenApiCache } from './schema'
@@ -128,6 +128,29 @@ describe('Gateway models: embedding profiles editable before use (admin design Â
     )
     expect(q('[data-test=profile-test-result]')!.textContent).toContain('3072 dimensions')
     expect(fetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows a used profile\'s fixed fields read-only, so the ceiling is the only field to change (#565)', async () => {
+    stub()
+    const wrapper = await open('used')
+    expect(q<HTMLSelectElement>('select#embedding-profile-gatewayModel')!.disabled).toBe(true)
+    expect(q<HTMLInputElement>('input#embedding-profile-dimensions')!.disabled).toBe(true)
+    expect(q<HTMLInputElement>('input#embedding-profile-maxInputTokens')!.disabled).toBe(true)
+    expect(q<HTMLButtonElement>('button[role=switch]')!.disabled).toBe(true)
+    expect(q<HTMLSelectElement>('select#embedding-profile-maxResidency')!.disabled).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('names the dimensions switch by a visible label (#565)', async () => {
+    stub()
+    const wrapper = await open('pilot-embedding')
+    const toggle = q<HTMLButtonElement>('button[role=switch]')!
+    expect(toggle.disabled).toBe(false)
+    const label = document.getElementById(toggle.getAttribute('aria-labelledby')!)!
+    expect(label.textContent).toBe(PLATFORM.fields.requestDimensions)
+    expect(toggle.hasAttribute('aria-label')).toBe(false)
+    expect(document.getElementById(toggle.getAttribute('aria-describedby')!)!.textContent).toBe(PLATFORM.fieldHints.requestDimensions)
     wrapper.unmount()
   })
 
