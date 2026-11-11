@@ -560,9 +560,13 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
   (`JobWakeUps`) live in `Ume.Rag.Infrastructure`.
 
 ```sql
-SELECT "DepartmentId", max("Priority"), min("AvailableAt")
+-- Ready departments, and how long until the class's next not-yet-ready job (the idle lane's wait, #505).
+SELECT "DepartmentId",
+       max("Priority") FILTER (WHERE "AvailableAt" <= now()),
+       min("AvailableAt") FILTER (WHERE "AvailableAt" <= now()),
+       min("AvailableAt") FILTER (WHERE "AvailableAt" > now()) - now()
 FROM content."Jobs"
-WHERE "State" = 'queued' AND "Class" = $1 AND "AvailableAt" <= now()
+WHERE "State" = 'queued' AND "Class" = $1
 GROUP BY "DepartmentId";
 
 WITH next AS (
@@ -582,15 +586,16 @@ RETURNING j.*;
 
 | Channel | Payload | Sent by | Listened by |
 |---|---|---|---|
-| `rag_jobs` | class name (`preview`, …); other payloads are ignored | enqueue transaction (`pg_notify` delivers at commit) | worker (registered by `AddRagWorker` only) |
+| `rag_jobs` | class name (`preview`, …); other payloads are ignored | enqueue, a transient failure or release that requeues, and the reaper's reclaim (`pg_notify` in the transaction, delivered at commit) | worker (registered by `AddRagWorker` only) |
 | `rag_config` | config version (§5) | config trigger | api, worker, admin |
 
 Each instance holds one dedicated listening connection (counted in its role's limit, opened from its own connection
 string `ConnectionStrings__ragdb-listen`, so a later pooler never sees it): the config monitor's, which carries
-`rag_config` and, in the worker, `rag_jobs` too. It still polls every 2 s (jobs) and 2 s
-(config version), so a missed notification costs seconds. From P2 (first multi-host deployment) a process sends
+`rag_config` and, in the worker, `rag_jobs` too. An idle job lane waits for `rag_jobs` or until its class's next
+queued job is due, at most `Worker:IdleWaitSeconds` (30 s); the config version is still polled every 2 s. So a missed
+`rag_jobs` notification costs at most 30 s. From P2 (first multi-host deployment) a process sends
 `rag_jobs` for a class at most once per 200 ms (none when it handles the job locally), and receivers coalesce
-wake-ups per class (at most one probe per 50 ms, ignored without a free slot; the 2 s poll stays the safety net;
+wake-ups per class (at most one probe per 50 ms, ignored without a free slot; the idle wait's cap stays the safety net;
 [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4).
 
 ### 4.4 Partitions and job cleanup

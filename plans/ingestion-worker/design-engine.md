@@ -499,7 +499,7 @@ the deployment value `Worker:Concurrency:<class>` (repo-and-deployment §3 setti
 `Worker:Classes` lists the classes an instance runs as a comma list (`parse,embed`; empty = every class; an unknown
 class fails at start; `crawl` is not a class: discovery is part of `sync`/`fetch`). The other timing knobs are
 deployment values too: `Worker:HeartbeatSeconds` (10), `Worker:InstanceTimeoutSeconds` (30), `Worker:ReaperSeconds`
-(10), `Worker:PollSeconds` (2) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4).
+(10), `Worker:IdleWaitSeconds` (30) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4).
 
 **Payload contracts**: one schema per class and kind in `contracts/jobs/v1/` (`{class}.{kind}.payload.schema.json`, with results beside them), generated from the
 records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
@@ -563,15 +563,18 @@ site-profile change, §12) iterates the source's live documents and calls `Ensur
 One dispatcher loop per class an instance runs (classes in the order `preview`, P2 `attachment`, `command`, `sync`,
 `fetch`, `parse`, `embed`, `eval`), each filling that class's own `Worker:Concurrency:<class>` slots; since slots are
 per class, this behaves as one loop per instance. A free slot dequeues one job per statement (data-model §4.2 query),
-within a class by `Priority` and age. A loop wakes on a `rag_jobs` notification for its class, on a local enqueue, or
-every `Worker:PollSeconds` (2 s); wake-ups collapse to at most one pending signal per class (`JobWakeUps`), and each
+within a class by `Priority` and age. A loop that finds nothing waits for a `rag_jobs` notification for its class or
+a local signal, or until the class's next queued job is due (the probe returns it, on the database clock), at most
+`Worker:IdleWaitSeconds` (30 s), so an idle worker issues no queue statement between notifications (#505); after a job
+or a wake-up it probes again at once, and a wake-up that arrives while it probes or works stays pending; wake-ups collapse to at most one pending signal per class (`JobWakeUps`), and each
 class's free slots are a `SemaphoreSlim` of `Worker:Concurrency:<class>`. `rag_jobs` arrives on the config monitor's
 listening connection, not a second one, which the worker's 12-connection cap has no room for (data-model §1.1, §4.3);
 `AddRagWorker` registers the listener, because only the worker dispatches, and payloads outside the job-class list
 (`CK_Jobs_Class`) are ignored.
 
 **Per-department fairness** is in from P0: a free slot reads the departments with ready jobs of its class
-(`IJobQueue.ReadyDepartmentsAsync`, a `GROUP BY "DepartmentId"` over the ready jobs) and probes them in ascending
+(`IJobQueue.ReadyDepartmentsAsync`, a `GROUP BY "DepartmentId"` over the class's queued jobs, which also returns
+how long until the next not-yet-ready one is due) and probes them in ascending
 order of the jobs this instance already runs for them, then by best priority, then by oldest ready job; the first hit
 wins (data-model §4.2). Fairness is per instance and approximate. **Later (P2):** at 20+ departments the
 recursive-CTE loose index scan builds the department list every 5 s, shared per instance, with a per-department cap of
