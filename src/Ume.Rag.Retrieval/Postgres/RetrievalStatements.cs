@@ -143,24 +143,13 @@ public static class RetrievalStatements
         """;
 
     /// <summary>
-    /// The keyword stop list's statistics (knowledge design §6.2, §20): per (profile, collection) of at least <c>$1</c>
-    /// searchable child chunks, the lexemes of <c>SearchVector</c> in at least <c>$2</c> of them. <c>ts_stat</c> takes its
-    /// rows as statement text, so the ids are quoted into it with <c>format('%L')</c> from the grouped rows (uuids, never
-    /// user input). It reads every search vector of those collections: run it in the background, not per search.
+    /// The keyword stop list's statistics (knowledge design §6.2, §20): the rows the worker keeps in
+    /// <c>content."KeywordStatistics"</c> (A-29). A small table (lexemes in at least 10 % of a collection's chunks), read
+    /// every 10 minutes; rag-api runs no <c>ts_stat</c> (#499 step 2).
     /// </summary>
-    public const string FrequentLexemes = """
-        WITH counts AS (
-            SELECT "EmbeddingProfileId" AS profile, "CollectionId" AS collection, count(*) AS chunks
-            FROM content."Chunks"
-            WHERE "DeletedAt" IS NULL AND "Kind" = 'child' AND "EmbeddingProfileId" IS NOT NULL
-            GROUP BY 1, 2
-            HAVING count(*) >= $1
-        )
-        SELECT counts.profile, counts.collection, s.word, s.ndoc::bigint
-        FROM counts, LATERAL ts_stat(format(
-            'SELECT "SearchVector" FROM content."Chunks" WHERE "Kind" = ''child'' AND "DeletedAt" IS NULL AND "EmbeddingProfileId" = %L AND "CollectionId" = %L',
-            counts.profile, counts.collection)) s
-        WHERE s.ndoc >= counts.chunks * $2
+    public const string KeywordStatistics = """
+        SELECT "EmbeddingProfileId", "CollectionId", "Lexeme", "Ndoc", "ChunkCount"
+        FROM content."KeywordStatistics"
         """;
 
     /// <summary>

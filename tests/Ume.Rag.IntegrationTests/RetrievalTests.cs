@@ -156,10 +156,13 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
             xylofon.UnionWith(spec.Select((n, i) => (n, i)).Where(p => p.n % 10 == 0).Select(p => doc.ChunkIds[p.i]));
         }
 
+        await _writer.RefreshKeywordStatisticsAsync(collection, Ct);
         var (engine, index, sizes) = Engine();
         using var e = engine;
         using var s = sizes;
-        var lexemes = (await index.FrequentLexemesAsync(100, 0.10, Ct)).Where(l => l.CollectionId == collection).ToDictionary(l => l.Lexeme, l => l.Chunks);
+        var rows = (await index.KeywordStatisticsAsync(Ct)).Where(l => l.CollectionId == collection).ToList();
+        rows.ShouldAllBe(l => l.ChunkCount == 1200);
+        var lexemes = rows.ToDictionary(l => l.Lexeme, l => l.Ndoc);
         lexemes["kommun"].ShouldBe(1200);
         lexemes["simhall"].ShouldBe(400);
         lexemes["xylofon"].ShouldBe(120);
@@ -537,11 +540,8 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         (await WhileLockedAsync(async () => counts = await index.CountChunksAsync(Ct))).ShouldBeGreaterThan(TimeSpan.FromMilliseconds(1500));
         counts.Where(c => c.CollectionId == collection).Sum(c => c.Chunks).ShouldBe(120);
 
-        var lexemes = Array.Empty<FrequentLexeme>() as IReadOnlyList<FrequentLexeme>;
-        (await WhileLockedAsync(async () => lexemes = await index.FrequentLexemesAsync(100, 0.10, Ct))).ShouldBeGreaterThan(TimeSpan.FromMilliseconds(1500));
-        lexemes.Where(l => l.CollectionId == collection).Select(l => l.Lexeme).ShouldContain("kommun");
-
-        // The search statements keep the role's limit: the transaction and SET LOCAL are the statistics' only.
+        // The search statements keep the role's limit: the transaction and SET LOCAL are the chunk count's only (the keyword
+        // statistics are the worker's table since B-33).
         await using (var holder = new NpgsqlConnection(database.Connection(null)))
         {
             await holder.OpenAsync(Ct);

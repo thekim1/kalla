@@ -95,10 +95,10 @@ public sealed class RetrievalWarmupTests
         public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CollectionChunkCount>>([new(Profile, Collection, 10_000)]);
 
-        public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken)
         {
             await Release.Task;
-            return Fails ? throw new TimeoutException("ts_stat") : [new FrequentLexeme(Profile, Collection, "umeå", 9_000)];
+            return Fails ? throw new TimeoutException("KeywordStatistics") : [new FrequentLexeme(Profile, Collection, "umeå", 9_000, 10_000)];
         }
     }
 }

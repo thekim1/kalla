@@ -76,10 +76,9 @@ public class PostgresRetrievalBenchmarks
     [Benchmark(Description = "K: common terms, no stop list")]
     public Task<IReadOnlyList<Candidate>> KeywordCommonNoStopList() => _db.Index.KeywordAsync(_scope, _common, null, 100, CancellationToken.None);
 
-    /// <summary>The stop list's statistics (ts_stat over every search vector): every 10 minutes in the background, and on a cold cache the first search waits for it.</summary>
-    [Benchmark(Description = "Stop-list statistics (ts_stat)")]
-    public Task<IReadOnlyList<FrequentLexeme>> StopListStatistics() =>
-        _db.Index.FrequentLexemesAsync(ScopeSizeCache.KeywordStatisticsMinChunks, ScopeSizeCache.KeywordStatisticsShare, CancellationToken.None);
+    /// <summary>The stop list's statistics (the worker's KeywordStatistics rows): every 10 minutes in the background, and on a cold cache the first search waits for it.</summary>
+    [Benchmark(Description = "Stop-list statistics (KeywordStatistics)")]
+    public Task<IReadOnlyList<FrequentLexeme>> StopListStatistics() => _db.Index.KeywordStatisticsAsync(CancellationToken.None);
 
     [Benchmark(Description = "V: exact (top-N sort)")]
     public Task<IReadOnlyList<Candidate>> VectorExact() => _db.Index.VectorAsync(_scope, _query, null, 100, VectorSearch.Exact, CancellationToken.None);
@@ -124,6 +123,7 @@ public class PostgresRetrievalBenchmarks
                 })]);
         }
 
+        await writer.RefreshKeywordStatisticsAsync(collection); // the worker's A-29 rows the stop list reads
         await using (var superuser = new NpgsqlConnection(database.Connection(null)))
         {
             await superuser.OpenAsync();

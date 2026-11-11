@@ -119,7 +119,7 @@ public class RetrievalBenchmarks
         public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CollectionChunkCount>>([new CollectionChunkCount(profile, collection, 50_000)]);
 
-        public Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<FrequentLexeme>>([new FrequentLexeme(profile, collection, "kommun", 40_000)]);
+        public Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FrequentLexeme>>([new FrequentLexeme(profile, collection, "kommun", 40_000, 50_000)]);
     }
 }

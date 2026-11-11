@@ -13,8 +13,9 @@ namespace Ume.Rag.Retrieval;
 /// </para>
 /// <para>
 /// Also the keyword stop list (§6.2, §20; Decisions "Keyword stop list before the pilot crawl"): the frequent lexemes
-/// per collection, read with the same interval. Reading them scans the collections' search vectors, so a stale list is
-/// refreshed in the background while searches use the previous one; only the first search waits for it, unless
+/// per collection from <c>content."KeywordStatistics"</c>, which the worker keeps (A-29; rag-api runs no <c>ts_stat</c>,
+/// #499 step 2), read with the same interval. A stale list is refreshed in the background while searches use the
+/// previous one; only the first search waits for it, unless
 /// <see cref="WarmAsync"/> read them at start. A failed read keeps the previous statistics until the next interval; with
 /// none yet it is retried after <see cref="FailedReadRetry"/>, not by every search (#333: each search used to wait for
 /// the failing read again, up to the role's statement timeout).
@@ -38,13 +39,13 @@ public sealed partial class ScopeSizeCache(
     public const long KeywordStopMinChunks = 1_000;
 
     /// <summary>
-    /// Lexemes are kept per collection from this share up, so a scope of several collections can add up a lexeme's
+    /// The worker keeps lexemes per collection from this share up, so a scope of several collections can add up a lexeme's
     /// chunks: a lexeme under this share in a collection counts as absent there (the sum is a lower bound, so the list
     /// only errs towards keeping a term).
     /// </summary>
     public const double KeywordStatisticsShare = 0.10;
 
-    /// <summary>Collections below this many chunks get no lexeme statistics (they move a scope's shares little).</summary>
+    /// <summary>Collections below this many chunks get no lexeme statistics from the worker (they move a scope's shares little).</summary>
     public const long KeywordStatisticsMinChunks = 100;
 
     private readonly SemaphoreSlim _refresh = new(1, 1);
@@ -77,8 +78,11 @@ public sealed partial class ScopeSizeCache(
 
     /// <summary>
     /// The lexemes statement K drops for <paramref name="scope"/>: those in more than <see cref="KeywordStopShare"/> of
-    /// the scope's chunks, in a scope of at least <see cref="KeywordStopMinChunks"/>. Sorted, so the list is the same for
-    /// the same statistics. Empty while no statistics could be read (K then runs with every term).
+    /// the scope's chunks, in a scope of at least <see cref="KeywordStopMinChunks"/> live chunks. A share is the rows'
+    /// <c>Ndoc</c> over their stored <c>ChunkCount</c>, summed over the scope's collections (§6.2); a collection without
+    /// rows (under 100 chunks, not computed yet, or no lexeme at 10 %) adds its live count and no chunks of any lexeme.
+    /// Sorted, so the list is the same for the same statistics. Empty while no statistics could be read (K then runs with
+    /// every term).
     /// </summary>
     public async ValueTask<IReadOnlyList<string>> StopLexemesAsync(SearchScope scope, CancellationToken cancellationToken)
     {
@@ -105,18 +109,25 @@ public sealed partial class ScopeSizeCache(
         }
 
         var chunks = new Dictionary<string, long>(StringComparer.Ordinal);
+        long statisticsChunks = 0;
         foreach (var id in scope.CollectionIds)
         {
-            if (lexemes.ByCollection.TryGetValue((scope.EmbeddingProfileId, id), out var counts))
+            var key = (scope.EmbeddingProfileId, id);
+            if (lexemes.ByCollection.TryGetValue(key, out var statistics))
             {
-                foreach (var (lexeme, count) in counts)
+                statisticsChunks += statistics.ChunkCount;
+                foreach (var (lexeme, count) in statistics.Lexemes)
                 {
                     chunks[lexeme] = chunks.GetValueOrDefault(lexeme) + count;
                 }
             }
+            else
+            {
+                statisticsChunks += snapshot.ByCollection.GetValueOrDefault(key);
+            }
         }
 
-        var limit = KeywordStopShare * scopeChunks;
+        var limit = KeywordStopShare * statisticsChunks;
         return [.. chunks.Where(c => c.Value > limit).Select(c => c.Key).Order(StringComparer.Ordinal)];
     }
 
@@ -307,11 +318,11 @@ public sealed partial class ScopeSizeCache(
         LexemeSnapshot? next;
         try
         {
-            var rows = await source.FrequentLexemesAsync(KeywordStatisticsMinChunks, KeywordStatisticsShare, CancellationToken.None);
+            var rows = await source.KeywordStatisticsAsync(CancellationToken.None);
             next = new LexemeSnapshot(
                 time.GetUtcNow(),
                 rows.GroupBy(r => (r.EmbeddingProfileId, r.CollectionId))
-                    .ToDictionary(g => g.Key, g => (IReadOnlyList<(string, long)>)[.. g.Select(r => (r.Lexeme, r.Chunks))]));
+                    .ToDictionary(g => g.Key, g => new CollectionLexemes(g.Max(r => r.ChunkCount), [.. g.Select(r => (r.Lexeme, r.Ndoc))])));
         }
 #pragma warning disable CA1031 // Any failure leaves K without a stop list (or with the previous one), never fails a search.
         catch (Exception e)
@@ -319,7 +330,7 @@ public sealed partial class ScopeSizeCache(
         {
             if (logger is not null)
             {
-                LogReadFailed(logger, e, "FrequentLexemes", previous is null ? "none yet" : "the previous ones");
+                LogReadFailed(logger, e, "KeywordStatistics", previous is null ? "none yet" : "the previous ones");
             }
 
             next = previous is null ? null : previous with { ReadAt = time.GetUtcNow() };
@@ -348,7 +359,10 @@ public sealed partial class ScopeSizeCache(
     [LoggerMessage(Level = LogLevel.Warning, Message = "The search statistics statement {Statement} failed; searches keep {Kept}")]
     private static partial void LogReadFailed(ILogger logger, Exception exception, string statement, string kept);
 
-    private sealed record LexemeSnapshot(DateTimeOffset ReadAt, Dictionary<(Guid Profile, Guid Collection), IReadOnlyList<(string Lexeme, long Chunks)>> ByCollection);
+    private sealed record LexemeSnapshot(DateTimeOffset ReadAt, Dictionary<(Guid Profile, Guid Collection), CollectionLexemes> ByCollection);
+
+    /// <summary>One (profile, collection)'s rows: the stored chunk count and each lexeme's <c>Ndoc</c>.</summary>
+    private sealed record CollectionLexemes(long ChunkCount, IReadOnlyList<(string Lexeme, long Ndoc)> Lexemes);
 
     private sealed record Snapshot(
         DateTimeOffset ReadAt,

@@ -7,8 +7,8 @@ using Ume.Rag.Retrieval;
 namespace Ume.Rag.Answering;
 
 /// <summary>
-/// Reads the chunk counts and the keyword stop list's statistics when the api starts (#333 finding 2), so the first
-/// search does not wait for <c>ts_stat</c> over every search vector (250 ms at 50,000 chunks, linear). The host does
+/// Reads the chunk counts and the keyword stop list's statistics (the worker's <c>content."KeywordStatistics"</c>) when
+/// the api starts (#333 finding 2), so the first search does not wait for them. The host does
 /// not wait for it; readiness (<c>retrieval-warmup</c>) does, until the one attempt ends, read or failed, and at most
 /// <see cref="MaxWait"/>, so a database that cannot give the statistics never keeps the api from serving.
 /// </summary>
