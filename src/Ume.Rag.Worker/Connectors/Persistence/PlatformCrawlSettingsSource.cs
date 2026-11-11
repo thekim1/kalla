@@ -19,7 +19,7 @@ public sealed partial class PlatformCrawlSettingsSource(JobDatabase database, IO
 
     private const string ReadSql = """SELECT "Crawl"::text FROM config."Settings" ORDER BY "Id" LIMIT 1""";
 
-    private volatile Policies _current = new(EgressPolicy.Default, CrawlPolicy.Default with { Ceilings = options.Value.Ceilings() });
+    private volatile Policies _current = new(EgressPolicy.Default, CrawlPolicy.Default with { Ceilings = options.Value.Ceilings(), UserAgent = options.Value.UserAgent });
 
     EgressPolicy IEgressPolicySource.Current => _current.Egress;
 
@@ -34,7 +34,7 @@ public sealed partial class PlatformCrawlSettingsSource(JobDatabase database, IO
             await using var command = new NpgsqlCommand(ReadSql, connection);
             var json = await command.ExecuteScalarAsync(cancellationToken) as string;
             var (egress, crawl) = PlatformCrawlSettings.Parse(json, options.Value.Ceilings());
-            _current = new Policies(egress, crawl);
+            _current = new Policies(egress, crawl with { UserAgent = options.Value.UserAgent });
             return true;
         }
         catch (Exception e) when (e is NpgsqlException or System.Text.Json.JsonException or TimeoutException)

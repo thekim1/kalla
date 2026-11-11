@@ -1,5 +1,6 @@
 # GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it
-# from the gateway's deploy/compose.portainer.yaml (below, unchanged) and deploy/portainer/compose.rag.template.yaml.
+# from the gateway's deploy/compose.portainer.yaml (below, unchanged but: its dataapi joins rag-dataapi)
+# and deploy/portainer/compose.rag.template.yaml.
 # Do not edit it by hand; the gateway's own note below refers to the gateway's part.
 #
 # GENERATED FILE: edit compose.portainer.template.yaml (and the files it includes), then run
@@ -308,7 +309,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       migrations: {condition: service_completed_successfully}
-    networks: [edge, data]
+    networks: [edge, data, rag-dataapi]
     healthcheck:
       test: [CMD, dotnet, Ume.LlmGateway.DataApi.dll, --health-check]
       interval: 15s
@@ -513,6 +514,7 @@ services:
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
+      rag-dataapi: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 15s
@@ -1245,6 +1247,7 @@ networks:
   data: {driver: bridge, internal: true}
   llm: {driver: bridge}
   rag-edge: {driver: bridge}
+  rag-dataapi: {driver: bridge, internal: true}
   rag-data: {driver: bridge, internal: true}
   rag-ingestion: {driver: bridge, internal: true}
   rag-parser: {driver: bridge, internal: true}

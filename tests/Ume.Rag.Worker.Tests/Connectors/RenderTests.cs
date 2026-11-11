@@ -77,7 +77,7 @@ public sealed class RenderTests : IAsyncLifetime
         var main = _renderer.Requests.First(r => r.Url.AbsolutePath == "/");
         _renderer.MainDocuments["/"].ShouldContain("Laddar");
         main.SetCookies.ShouldContain(c => c.StartsWith("session=1", StringComparison.Ordinal));
-        main.UserAgent.ShouldBe(HttpFetcher.UserAgent);
+        main.UserAgent.ShouldBe(CrawlerIdentity.DefaultUserAgent);
         main.Limits.ShouldBe(RenderTestKit.Options().Limits());
     }
 

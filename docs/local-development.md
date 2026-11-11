@@ -6,7 +6,7 @@ You need:
   latestFeature`; CI uses 10.0.401);
 - Docker 28+ (Docker Desktop on Windows, or Docker Engine on Linux and WSL);
 - PowerShell 7 (`pwsh`) for the start scripts in `scripts/`;
-- the Aspire CLI 13.6 on `PATH` as `aspire`: `dotnet tool install --global Aspire.Cli --version 13.6.4`. The AppHost
+- the Aspire CLI 13.6 on `PATH` as `aspire`: `dotnet tool install --global Aspire.Cli --version 13.6.5`. The AppHost
   sets `AspireUseCliBundle`, so a restore also puts a copy in the NuGet cache
   (`~/.nuget/packages/aspire.cli.<rid>/13.6.1/tools/net10.0/<rid>/aspire`), which you can call by that path;
 - [uv](https://docs.astral.sh/uv/) for the parser, and Node 24.15+ once the admin UI (`src/admin-ui`) exists.

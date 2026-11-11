@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FormField from './FormField.vue'
+import { NO_PASSWORD_MANAGER } from './noAutofill'
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +35,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>()
       :placeholder="placeholder"
       :disabled="disabled"
       :autocomplete="autocomplete ?? 'off'"
+      v-bind="autocomplete ? {} : NO_PASSWORD_MANAGER"
       :min="min"
       :max="max"
       :aria-invalid="invalid ? 'true' : undefined"

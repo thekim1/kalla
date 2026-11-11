@@ -133,9 +133,32 @@ public sealed class BffTests(AdminDatabaseFixture database)
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         json.RootElement.GetProperty("isAuthenticated").GetBoolean().ShouldBeFalse();
         json.RootElement.GetProperty("departmentSources").GetArrayLength().ShouldBe(0);
+        json.RootElement.GetProperty("organisationName").GetString().ShouldBe("Umeå kommun"); // the default
         var cookies = response.Headers.GetValues("Set-Cookie").ToList();
         cookies.ShouldContain(c => c.StartsWith(AdminCookies.XsrfToken + "=", StringComparison.Ordinal));
         cookies.ShouldContain(c => c.StartsWith(AdminCookies.Antiforgery + "=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_user_document_carries_the_configured_organisation_name_before_sign_in()
+    {
+        await using var factory = database.Factory().WithWebHostBuilder(web => web.UseSetting("Admin:OrganisationName", " Exempelstad "));
+        using var client = AdminDatabaseFixture.HttpsClient(factory);
+        using var response = await client.GetAsync("/bff/user", Ct);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        json.RootElement.GetProperty("organisationName").GetString().ShouldBe("Exempelstad");
+    }
+
+    [Fact]
+    public async Task An_empty_organisation_name_is_sent_as_null()
+    {
+        await using var factory = database.Factory().WithWebHostBuilder(web => web.UseSetting("Admin:OrganisationName", ""));
+        using var client = AdminDatabaseFixture.HttpsClient(factory);
+        using var response = await client.GetAsync("/bff/user", Ct);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        json.RootElement.GetProperty("organisationName").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]

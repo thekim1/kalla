@@ -267,7 +267,7 @@ public sealed class FetchPathTests : IAsyncLifetime
         (await FetchAsync(_site.Url("/cookie"))).ShouldBeOfType<FetchOutcome.Content>();
 
         _site.Requests["/cookie-check"].ContainsKey("Cookie").ShouldBeFalse();
-        _site.Requests["/cookie-check"]["User-Agent"].ToString().ShouldBe(HttpFetcher.UserAgent);
+        _site.Requests["/cookie-check"]["User-Agent"].ToString().ShouldBe(CrawlerIdentity.DefaultUserAgent);
     }
 
     [Fact]

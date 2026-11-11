@@ -28,7 +28,7 @@ milestone on a developer machine), and the Decisions table in [`01-general-idea.
   steps. If a step would touch the gateway's Compose project (`ume-gateway`), its networks, its volumes or its proxy
   configuration, stop and ask.
 - **Be polite to umea.se.** Seed a handful of pages (five is plenty). The worker identifies itself as
-  `UmeaKommunBot/1.0`, reads robots.txt and keeps a per-host budget (all changeable per host by a platform admin, see
+  `UmeaKommunBot/1.0` (`Crawl:UserAgent`), reads robots.txt and keeps a per-host budget (all changeable per host by a platform admin, see
   the runbook's "Crawl politeness per host"; leave them at the defaults here), but a large crawl of umea.se needs the
   web editors' go-ahead (register item U1) first.
 - **Commands run from the checkout's root** (the directory with `deploy/` and `src/`), as a user in the `docker` group

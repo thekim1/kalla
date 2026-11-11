@@ -10,12 +10,13 @@ import { SIGN_IN } from '@/utils/labels'
 defineProps<{ failed?: boolean }>()
 const auth = useAuthStore()
 const route = useRoute()
+const organisation = computed(() => auth.user?.organisationName ?? null)
 const href = computed(() => auth.loginUrl(route.path))
 const expired = computed(() => auth.user !== null && !auth.user.isAuthenticated && !!auth.user.name)
 const refused = computed(() => {
   if (route.query.signin !== 'refused') return null
   const reason = typeof route.query.reason === 'string' ? route.query.reason : ''
-  return SIGN_IN.refused[reason] ?? SIGN_IN.refusedFallback
+  return SIGN_IN.refused[reason]?.(organisation.value) ?? SIGN_IN.refusedFallback
 })
 </script>
 
@@ -25,7 +26,7 @@ const refused = computed(() => {
       <span class="flex h-11 w-11 items-center justify-center rounded-control bg-fg text-on-fg" aria-hidden="true"><AppIcon name="hub" /></span>
       <div>
         <h1 id="page-title" tabindex="-1" class="text-title-2 text-fg outline-none">{{ SIGN_IN.title }}</h1>
-        <p class="mt-1 text-body text-fg-2">{{ SIGN_IN.lead }}</p>
+        <p class="mt-1 text-body text-fg-2">{{ SIGN_IN.lead(organisation) }}</p>
       </div>
       <p v-if="failed" role="alert" class="flex gap-2 text-small text-danger"><AppIcon name="error" /> {{ SIGN_IN.failed }}</p>
       <p v-else-if="refused" role="alert" class="flex gap-2 text-small text-danger"><AppIcon name="block" /> {{ refused }}</p>

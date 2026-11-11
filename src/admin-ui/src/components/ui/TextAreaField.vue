@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FormField from './FormField.vue'
+import { NO_PASSWORD_MANAGER } from './noAutofill'
 
 /** Multi-line text field; `mono` for code such as JSON. */
 defineProps<{ label: string; modelValue: string; id?: string; hint?: string; error?: string | null; placeholder?: string; rows?: number; mono?: boolean }>()
@@ -14,6 +15,8 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>()
       :value="modelValue"
       :rows="rows ?? 3"
       :placeholder="placeholder"
+      autocomplete="off"
+      v-bind="NO_PASSWORD_MANAGER"
       :spellcheck="mono ? 'false' : undefined"
       :aria-invalid="invalid ? 'true' : undefined"
       :aria-describedby="describedBy"
