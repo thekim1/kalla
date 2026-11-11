@@ -600,6 +600,13 @@ it. Small item for any later release: add `ModelDeployment.ContextWindow` (alrea
 `GatewayModels` sync sets `SupportsTools` for agent assistants without a manual flag (tools design §6.4). Additive
 fields, no migration.
 
+**`maxOutputTokens`** next to them (Decisions "Answer length from the model", 2026-11-11): the longest output the
+deployment's model produces. Unlike `ContextWindow` the gateway has no such field yet, so this one is a new nullable
+`ModelDeployment.MaxOutputTokens` (one migration), set in the gateway's model form or from its model list as
+`ContextWindow` is (`ModelList.cs:260`), and projected as `maxOutputTokens` (null when unset). Ume.Rag then fills
+`GatewayModels.ContextWindow` and `MaxOutputTokens` from the catalogue and the manual entries go (admin §4.10). Until
+then a platform admin enters both on the RAG mirror. Optional for the gateway, but it removes a manual step per model.
+
 Optional item next to these (admin design §4.10): `GET /v1/catalog/routes` (route alias name, kind, target model ids),
 so the RAG admin syncs route aliases and their targets' residencies instead of platform admins keeping manual
 `GatewayModels` rows for them. Additive route, `catalog.read` scope.
