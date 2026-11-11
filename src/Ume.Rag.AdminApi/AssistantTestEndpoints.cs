@@ -123,7 +123,8 @@ public sealed class AdminTestPanel(
                 new TestCondense(plan.Condense is CondenseOutcome.Rewritten, plan.Condense?.ToString()),
                 new TestAnswer(answer?.Text, delivered, filtered, [.. cited.Select(s => new TestCitation(s.Number, s.Citation.Id, s.Citation.Title))],
                     ChatOutcomes.Name(plan.Outcome), plan.Language),
-                new TestGateway(version.GatewayModel, ResidencyCeiling.ToHeader(plan.Ceiling), latencyMs, answer?.PromptTokens, answer?.CompletionTokens),
+                new TestGateway(version.GatewayModel, ResidencyCeiling.ToHeader(plan.Ceiling), latencyMs, answer?.PromptTokens, answer?.CompletionTokens,
+                    plan.Fixed is null ? plan.MaxTokens : null, plan.Fixed is null ? plan.MaxTokensSource : null, answer?.FinishReason),
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (ChatException ex)
@@ -267,7 +268,13 @@ public sealed record TestCitation(int Number, Guid DocumentId, string Title);
 public sealed record TestAnswer(string? Raw, string Delivered, IReadOnlyDictionary<string, int> Filtered, IReadOnlyList<TestCitation> Citations, string Outcome,
     string Language);
 
-public sealed record TestGateway(string Model, string Residency, double? LatencyMs, int? InputTokens, int? OutputTokens);
+/// <summary>
+/// The answer call (admin design §4.9): <see cref="MaxTokens"/> the <c>max_tokens</c> sent (null when left out),
+/// <see cref="MaxTokensSource"/> <c>override</c>/<c>model</c>/<c>provider</c>, <see cref="FinishReason"/> the gateway's
+/// (<c>length</c>: the answer stopped at the limit). Decisions "Answer length from the model".
+/// </summary>
+public sealed record TestGateway(string Model, string Residency, double? LatencyMs, int? InputTokens, int? OutputTokens, int? MaxTokens = null,
+    string? MaxTokensSource = null, string? FinishReason = null);
 
 public sealed record AssistantTestResult(
     AssistantTestTarget Target, int VersionNumber, TestRetrieval Retrieval, TestCondense Condense, TestAnswer Answer, TestGateway Gateway, double DurationMs);

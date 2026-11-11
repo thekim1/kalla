@@ -93,10 +93,20 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     var answer = scripts.Answer(ctx.Request.Headers[FakeChatScripts.StepHeader].ToString(), question)
                  ?? latency.Pad(FakeContent.Answer(question, FakeContent.AllText(body["messages"])));
     var promptTokens = FakeContent.Tokens(FakeContent.AllText(body["messages"]));
+    var finishReason = model.Name == "fake-stream-length" ? "length" : "stop";
+    // B-31 (chat design §6.3, §8.1): the max_tokens it got is echoed (`none` when left out), and an answer longer than it is
+    // cut there with finish_reason length, as a provider does.
+    var maxTokens = body["max_tokens"] is JsonValue m && m.TryGetValue<int>(out var limit) ? limit : (int?)null;
+    ctx.Response.Headers[FakeContent.MaxTokensHeader] = maxTokens?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
+    if (maxTokens is { } cap && FakeContent.Tokens(answer) > cap)
+    {
+        answer = FakeContent.Truncate(answer, cap);
+        finishReason = "length";
+    }
+
     var completionTokens = FakeContent.Tokens(answer);
     var id = "chatcmpl-" + Guid.NewGuid().ToString("N")[..12];
     var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-    var finishReason = model.Name == "fake-stream-length" ? "length" : "stop";
 
     if (body["stream"]?.GetValue<bool>() == true)
     {

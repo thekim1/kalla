@@ -169,6 +169,12 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
         await ReadAsync(connection, transaction, """SELECT "Id", "Name" FROM config."Departments" """,
             r => departments[r.GetGuid(0)] = r.GetString(1), cancellationToken);
 
+        // The answer models' limits (chat design §6.3); a GatewayModels edit bumps the config version like any config row.
+        var limits = new Dictionary<string, ModelLimitsEntry>(StringComparer.Ordinal);
+        await ReadAsync(connection, transaction, """
+            SELECT "Name", "ContextWindow", "MaxOutputTokens" FROM config."GatewayModels" WHERE "ContextWindow" IS NOT NULL OR "MaxOutputTokens" IS NOT NULL
+            """, r => limits[r.GetString(0)] = new ModelLimitsEntry(r.IsDBNull(1) ? null : r.GetInt32(1), r.IsDBNull(2) ? null : r.GetInt32(2)), cancellationToken);
+
         string? retrieval = null;
         string? chat = null;
         string[] trustedProxies = [];
@@ -181,6 +187,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
         {
             DemoteRules = demote,
             TrustedProxies = [.. NetworkRanges.ParseValid(trustedProxies)],
+            ModelLimits = limits,
         };
     }
 

@@ -64,17 +64,29 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
         var messageId = Guid.CreateVersion7();
-        var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
+        // §6.3 (Decisions "Answer length from the model"): the overrides, else the model's limits from the mirror.
+        var limits = AnswerLimits.Resolve(settings, snapshot.ModelLimits.GetValueOrDefault(assistant.Published.GatewayModel));
         var platform = resolved.Platform;
         // §7.1: the answer model reads the question's prompt form, line breaks kept; everything before it reads the query form.
-        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings);
+        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings, limits);
         CondenseOutcome? condense = null;
         string? query = null;
-        ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
-            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense)
+        ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded)
+        {
+            // §3.2: the client's max_tokens lowers the turn's limit, never raises it; with no known limit it is the limit.
+            var (maxTokens, source) = limits.MaxTokens(prompt?.EstimatedTokens ?? 0);
+            if (chat.MaxTokens is { } asked)
+            {
+                maxTokens = maxTokens is { } limit ? Math.Min(asked, limit) : asked;
+            }
+
+            return new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform,
+                condense)
             {
                 Query = query,
+                MaxTokensSource = source,
             };
+        }
 
         RetrievalResult? retrieval = null;
         var conversational = MessageKind.IsConversational(chat.Question);

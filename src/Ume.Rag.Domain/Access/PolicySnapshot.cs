@@ -44,6 +44,12 @@ public sealed record EmbeddingProfileEntry(
     public int? DimensionsParameter => RequestDimensions ? Dimensions : null;
 }
 
+/// <summary>
+/// A gateway model's limits from the <c>GatewayModels</c> mirror (Decisions "Answer length from the model"; chat design §6.3):
+/// null when unknown.
+/// </summary>
+public sealed record ModelLimitsEntry(int? ContextWindow, int? MaxOutputTokens);
+
 /// <summary>A level's data-protection policy fields the policy needs (identity §4.3 step 9).</summary>
 public sealed record LevelPolicyEntry(string Classification, IReadOnlyList<string> AllowedHistoryModes, bool ClientsWithoutHistoryOnly);
 
@@ -84,6 +90,9 @@ public sealed record PolicySnapshot(
     /// api believes (identity §1.2, as the admin's and the gateway's). Empty = the connection address is the client.
     /// </summary>
     public ImmutableArray<IPNetwork> TrustedProxies { get; init; } = [];
+
+    /// <summary>The known limits of the mirror's models by name; a model without any is absent (chat design §6.3).</summary>
+    public IReadOnlyDictionary<string, ModelLimitsEntry> ModelLimits { get; init; } = new Dictionary<string, ModelLimitsEntry>(StringComparer.Ordinal);
 
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),

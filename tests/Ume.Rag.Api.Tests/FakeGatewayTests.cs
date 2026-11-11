@@ -260,6 +260,30 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     }
 
     [Fact]
+    public async Task Max_tokens_is_echoed_and_a_longer_answer_stops_at_it_with_finish_reason_length()
+    {
+        // B-31: tests see whether max_tokens was sent (x-fake-max-tokens, "none" when left out), and an answer over it is cut.
+        var question = string.Join(' ', Enumerable.Repeat("Hur lång får en altan vara utan bygglov i Umeå?", 20));
+        string Body(int? maxTokens) => JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["model"] = "ume/chat-onprem", ["messages"] = new[] { new { role = "user", content = question } }, ["max_tokens"] = maxTokens,
+        }.Where(p => p.Value is not null).ToDictionary());
+
+        using var open = await SendAsync("/v1/chat/completions", Body(null), FakeGatewayFactory.OnPremKey, "OnPrem");
+        open.Headers.GetValues("x-fake-max-tokens").ShouldBe(["none"]);
+        var whole = await open.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        whole.GetProperty("choices")[0].GetProperty("finish_reason").GetString().ShouldBe("stop");
+        var full = whole.GetProperty("usage").GetProperty("completion_tokens").GetInt32();
+        full.ShouldBeGreaterThan(5);
+
+        using var capped = await SendAsync("/v1/chat/completions", Body(5), FakeGatewayFactory.OnPremKey, "OnPrem");
+        capped.Headers.GetValues("x-fake-max-tokens").ShouldBe(["5"]);
+        var cut = await capped.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        cut.GetProperty("choices")[0].GetProperty("finish_reason").GetString().ShouldBe("length");
+        cut.GetProperty("usage").GetProperty("completion_tokens").GetInt32().ShouldBeLessThanOrEqualTo(5);
+    }
+
+    [Fact]
     public async Task Embeddings_are_normalised_1024_dimensions_and_similar_texts_are_closer()
     {
         var vectors = await EmbedAsync("""{"model":"bge-m3","input":["Ansök om bygglov","Ansökan om bygglov för garage","Matsedel för skolan"]}""");
