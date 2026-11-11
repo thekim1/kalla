@@ -245,7 +245,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-26, B-27.
 - **Read:** #503, #504.
 
-### [ ] A-22 Postgres settings for SSD and short queries (#500)
+### [x] A-22 Postgres settings for SSD and short queries (#500)
 - **Do:** `jit = off`, `random_page_cost = 1.1`, `effective_io_concurrency = 200` in `deploy/postgres/postgresql.conf`,
   with `EXPLAIN (ANALYZE, BUFFERS)` of statements K, V-exact, V-approximate and H on the scale data before and after.
 - **Paths:** `deploy/postgres/**`.

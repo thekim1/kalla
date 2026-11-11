@@ -595,7 +595,8 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 **Postgres settings** (`deploy/postgres/postgresql.conf`, mounted and passed with `-c config_file=`; 16 GB / 24 GB):
 `max_connections=100` (data-model §1.1), `shared_buffers=768MB / 1536MB`, `effective_cache_size=2GB / 3500MB`,
 `work_mem=8MB`, `maintenance_work_mem=512MB / 1GB` (HNSW builds), `max_parallel_maintenance_workers=2`,
-`max_worker_processes=8`, `wal_level=replica`, `archive_mode=on`,
+`max_worker_processes=8`, `jit=off`, `random_page_cost=1.1`, `effective_io_concurrency=200` (SSD storage and
+short queries, #500; measured in results-a A-22), `wal_level=replica`, `archive_mode=on`,
 `archive_command = 'pgbackrest --stanza=ragdb archive-push %p'` (synchronous, inside the container, §7.4), `archive_timeout=60`, `wal_compression=lz4` (the stock image
 is built `--with-lz4`, checked by `deploy/postgres/test.sh`), `ssl=on` with the internal CA, `log_statement=none` (gateway),
 (autovacuum stays at the server defaults; `autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` are
