@@ -21,6 +21,7 @@ public static class AuditEntityTypes
     public const string Key = "key";
     public const string Pipeline = "pipeline";
     public const string Feedback = "feedback";
+    public const string EmbeddingProfile = "embedding-profile";
 }
 
 /// <summary>The <c>Details</c> of an audit entry. Copied.</summary>

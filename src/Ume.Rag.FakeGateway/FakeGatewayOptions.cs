@@ -69,6 +69,12 @@ public sealed class FakeModel
     /// <summary><c>chat</c>, <c>embedding</c> or <c>rerank</c>.</summary>
     public string Kind { get; set; } = "chat";
 
+    /// <summary>
+    /// The levels whose key may use the model, as the gateway's per-key model allowlist; empty: every key. Another key gets
+    /// 403 <c>model_not_allowed</c> (gateway <c>RouteResolver.ResolveModel</c>).
+    /// </summary>
+    public List<Residency> KeyLevels { get; set; } = [];
+
     public List<FakeTarget> Targets { get; set; } = [];
 }
 

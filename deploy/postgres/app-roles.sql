@@ -118,6 +118,8 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA config, content, chat, audit FROM ume_rag_
 GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or_agg(tsquery)
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
+-- The admin rebuilds an unused embedding profile's index after a dimension change (admin design 4.5).
+GRANT EXECUTE ON FUNCTION content.rag_reset_profile_index(uuid) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION chat.rag_retention_chat_step(integer) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])

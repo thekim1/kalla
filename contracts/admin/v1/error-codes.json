@@ -385,6 +385,16 @@
       "code": "file_not_restorable",
       "status": 409,
       "message": "The file {name} cannot be restored: it is not deleted, or its 14 days have passed."
+    },
+    {
+      "code": "profile_in_use",
+      "status": 409,
+      "message": "The embedding profile {profile} is in use: only its residency ceiling can change."
+    },
+    {
+      "code": "profile_test_failed",
+      "status": 422,
+      "message": "The profile was not saved: the test embedding failed ({error})."
     }
   ]
 }

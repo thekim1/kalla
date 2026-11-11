@@ -20,9 +20,14 @@ public sealed class EmbeddingProfileSeedOptions
 
     public int Dimensions { get; set; } = 1024;
 
-    /// <summary>Send <c>dimensions</c> on every embedding call (text-embedding-3-large at 1024 for the pilot, #142); never for BGE-M3.</summary>
-    public bool RequestDimensions { get; set; }
-    public int MaxInputTokens { get; set; } = 8192;
+    /// <summary>
+    /// Send <c>dimensions</c> on every embedding call: on by default for the pilot's text-embedding-3-large at 1024 (Decisions
+    /// "Pilot embedding model, U-b", #142); a BGE-M3 profile sets it false.
+    /// </summary>
+    public bool RequestDimensions { get; set; } = true;
+
+    /// <summary>text-embedding-3-large's input limit (Decisions "Pilot embedding model, U-b").</summary>
+    public int MaxInputTokens { get; set; } = 8191;
 
     /// <summary>The ceiling of embed and query-embed calls (P1 README §8 O1): <c>Eu</c> for the pilot.</summary>
     public Residency MaxResidency { get; set; } = Residency.Eu;
@@ -30,8 +35,9 @@ public sealed class EmbeddingProfileSeedOptions
 
 /// <summary>
 /// Seeds the platform profile from <see cref="EmbeddingProfileSeedOptions"/> (P1a item 13), insert-if-absent by name, as the
-/// default when there is none, with the canary text and its partial HNSW index. An existing profile is never changed:
-/// a different model or dimension count is a profile migration (P3), logged and left alone. The canary embedding itself
+/// default when there is none, with the canary text and its partial HNSW index. An existing profile is never changed here:
+/// a platform admin edits it in the admin UI (Platform, Gateway models) while no chunk set uses it, and a difference from the
+/// knobs is logged (Decisions "Editable embedding profiles before use"). The canary embedding itself
 /// is recorded from the gateway by the admin API, which holds the gateway keys.
 /// </summary>
 public static partial class EmbeddingProfileSeeder
@@ -74,7 +80,7 @@ public static partial class EmbeddingProfileSeeder
             await db.SaveChangesAsync(cancellationToken);
         }
         else if (profile.GatewayModel != options.GatewayModel || profile.Dimensions != options.Dimensions || profile.MaxResidency != options.MaxResidency ||
-            profile.RequestDimensions != options.RequestDimensions)
+            profile.RequestDimensions != options.RequestDimensions || profile.MaxInputTokens != options.MaxInputTokens)
         {
             LogProfileDiffers(logger, profile.Name);
         }
@@ -97,6 +103,6 @@ public static partial class EmbeddingProfileSeeder
     }
 
     [LoggerMessage(LogLevel.Warning,
-        "Embedding profile {Name} exists with another model, dimension count or ceiling than EmbeddingProfile:*; it is left as it is (a profile change is a migration, P3)")]
+        "Embedding profile {Name} exists with other values than EmbeddingProfile:*; it is left as it is. Change it in the admin UI under Platform, Gateway models (editable while no content uses it)")]
     private static partial void LogProfileDiffers(ILogger logger, string name);
 }

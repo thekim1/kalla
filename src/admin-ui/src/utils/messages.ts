@@ -72,6 +72,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   settings_model_residency: 'The model {model} cannot be used for {setting}: it is not a {kind} model the AI gateway offers at {ceiling}.',
   crawl_politeness_invalid: 'The politeness setting {field} for {host} is not valid: {problem}',
   file_not_restorable: 'The file {name} cannot be brought back: it is not deleted, or its 14 days have passed.',
+  profile_in_use: 'The embedding profile {profile} is already used by indexed content, so only its residency ceiling can change. A new model or size needs a profile migration.',
+  profile_test_failed: 'The profile was not saved because the test embedding failed ({error}). Run Test to see what to fix.',
   evaluation_model_unset: 'No model is chosen for creating test questions. A platform administrator chooses it under Settings.',
   version_not_restorable: 'Version {number} is the draft or the published version and cannot be restored.',
   retention_outside_policy: 'The information class {level} allows history {modes} and at most {maxDays} days.',
@@ -313,6 +315,39 @@ export function jobMessage(code: string): string {
   return prefix
     ? `${JOB_MESSAGE_PREFIXES[prefix]} (${code})`
     : `Something went wrong in the processing (${code}). Contact the platform team if it happens again.`
+}
+
+/**
+ * The outcome of an embedding profile test (admin design §4.5, `POST /api/embedding-profiles/{id}/test`) in plain words,
+ * with the fix on the AI gateway side. `{model}`, `{residency}`, `{dimensions}` and `{expected}` are filled by
+ * `embeddingTestMessage`.
+ */
+export const EMBEDDING_TEST_MESSAGES: Record<string, string> = {
+  ok: 'The test worked: {model} answered with {dimensions} dimensions at the residency {residency}.',
+  model_not_allowed: 'The AI gateway key of this residency may not use {model}. In the gateway, add the model to the key\'s allowed models, or choose a model the key may use.',
+  model_not_found: 'The AI gateway has no model called {model}. Check the name against the gateway\'s model list.',
+  max_residency_not_met: 'The AI gateway has no provider for {model} at or below the residency {residency}. In the gateway, add a deployment at that residency, or raise the profile\'s ceiling.',
+  bad_vector: 'The AI gateway returned {dimensions} dimensions, but the profile has {expected}. Turn on Send dimensions if the model can shorten its vectors, or set the profile\'s size to {dimensions}.',
+  residency_refused: 'The AI gateway answered from a residency ({residency}) above the profile\'s ceiling. Check the routes of {model} in the gateway.',
+  canary_mismatch: 'The model now gives different embeddings than the ones already indexed, so the change is refused. Check which model the gateway serves under {model}.',
+  gateway_not_configured: 'No AI gateway is configured for the admin service, so the profile cannot be tested.',
+  gateway_key_missing: 'The admin service has no AI gateway key for the residency {residency}. Add it to the deployment (Gateway:Keys).',
+  gateway_unavailable: 'The AI gateway could not be reached or failed. Try again in a moment.',
+}
+
+/** A test outcome as plain words for the values tested (`profile`); an unknown gateway code is named so support can find it. */
+export function embeddingTestMessage(
+  result: { ok: boolean; dimensions?: number | null; residency?: string | null; error?: string | null },
+  profile: { gatewayModel: string; dimensions: number; maxResidency: string },
+): string {
+  const key = result.ok ? 'ok' : (result.error ?? 'error')
+  const template = EMBEDDING_TEST_MESSAGES[key] ?? `The test embedding failed (${key}). Contact the platform team if it happens again.`
+  return formatMessage(template, {
+    model: profile.gatewayModel,
+    residency: result.residency ?? profile.maxResidency,
+    dimensions: result.dimensions ?? undefined,
+    expected: profile.dimensions,
+  })
 }
 
 /** When the problem has no code we know: by status. */

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../../../../contracts/admin/v1/error-codes.json?raw'
 import { SOURCE } from './labels'
-import { ERROR_MESSAGES, JOB_MESSAGES, JOB_MESSAGE_PREFIXES, formatMessage, jobMessage } from './messages'
+import {
+  EMBEDDING_TEST_MESSAGES,
+  ERROR_MESSAGES,
+  JOB_MESSAGES,
+  JOB_MESSAGE_PREFIXES,
+  embeddingTestMessage,
+  formatMessage,
+  jobMessage,
+} from './messages'
 
 // The exported list of the admin API's error codes (admin design §4.1); CI fails when the UI misses one.
 const contract = JSON.parse(raw) as { codes: { code: string; message: string }[] }
@@ -101,5 +109,38 @@ describe('worker messages', () => {
   it('names the ready-selector field by its label where the setting is the cause', () => {
     for (const code of ['render.bad_selector', 'render.selector_not_found', 'render.mostly_empty', 'render.empty'])
       expect(jobMessage(code), code).toContain(`“${SOURCE.readySelector}”`)
+  })
+})
+
+describe('embedding profile test messages', () => {
+  const profile = { gatewayModel: 'text-embedding-3-large', dimensions: 1024, maxResidency: 'Eu' }
+
+  it('says each refusal in plain words with the fix on the gateway side', () => {
+    expect(embeddingTestMessage({ ok: false, error: 'model_not_allowed' }, profile)).toBe(
+      "The AI gateway key of this residency may not use text-embedding-3-large. In the gateway, add the model to the key's allowed models, or choose a model the key may use.",
+    )
+    expect(embeddingTestMessage({ ok: false, error: 'max_residency_not_met' }, profile)).toContain(
+      'no provider for text-embedding-3-large at or below the residency Eu',
+    )
+    expect(embeddingTestMessage({ ok: false, error: 'bad_vector', dimensions: 3072, residency: 'Eu' }, profile)).toBe(
+      "The AI gateway returned 3072 dimensions, but the profile has 1024. Turn on Send dimensions if the model can shorten its vectors, or set the profile's size to 3072.",
+    )
+  })
+
+  it('reports a working test with the residency that answered', () => {
+    expect(embeddingTestMessage({ ok: true, dimensions: 1024, residency: 'Eu' }, profile)).toBe(
+      'The test worked: text-embedding-3-large answered with 1024 dimensions at the residency Eu.',
+    )
+  })
+
+  it('names an unknown gateway code', () => {
+    expect(embeddingTestMessage({ ok: false, error: 'quota_exceeded' }, profile)).toContain('(quota_exceeded)')
+  })
+
+  it('leaves no placeholder unfilled', () => {
+    for (const error of Object.keys(EMBEDDING_TEST_MESSAGES)) {
+      const text = embeddingTestMessage({ ok: error === 'ok', error, dimensions: 768, residency: 'Eu' }, profile)
+      expect(text).not.toMatch(/\{\w+\}/)
+    }
   })
 })
