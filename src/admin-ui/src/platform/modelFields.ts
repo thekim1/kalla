@@ -9,7 +9,10 @@ import { fieldLabel, type FieldSpec } from './schema'
  */
 export interface ModelField {
   name: string
-  modelKind: 'chat' | 'rerank' | 'embedding'
+  /** The models the picker offers; absent for a plain `number` member (`kind`). */
+  modelKind?: 'chat' | 'rerank' | 'embedding'
+  /** `number`: a whole-number member edited as its own field (the chat section's answer ceiling, B-31); default a model picker. */
+  kind?: 'number'
   /** The JSON property the member lives in; absent for a property of its own. */
   in?: string
 }
@@ -18,7 +21,7 @@ export interface ModelField {
 export function withModelFields(fields: FieldSpec[], models: readonly ModelField[]): FieldSpec[] {
   const result = fields.map((f) => {
     const own = models.find((m) => !m.in && m.name === f.name)
-    return own ? { ...f, kind: 'model' as const, modelKind: own.modelKind } : f
+    return own ? { ...f, kind: own.kind ?? ('model' as const), modelKind: own.kind ? undefined : own.modelKind } : f
   })
   for (const m of models.filter((x) => x.in)) {
     const at = result.findIndex((f) => f.name === m.in && f.kind === 'json')
@@ -27,8 +30,8 @@ export function withModelFields(fields: FieldSpec[], models: readonly ModelField
       name: m.name,
       label: PLATFORM.fields[m.name] ?? fieldLabel(m.name),
       help: PLATFORM.fieldHints[m.name],
-      kind: 'model',
-      modelKind: m.modelKind,
+      kind: m.kind ?? 'model',
+      modelKind: m.kind ? undefined : m.modelKind,
       required: false,
       nullable: true,
       parent: m.in,
