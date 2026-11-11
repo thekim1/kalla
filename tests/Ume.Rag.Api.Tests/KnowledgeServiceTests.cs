@@ -280,7 +280,10 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var dataSource = host.Services.GetRequiredService<NpgsqlDataSource>();
         var index = new PostgresSearchIndex(dataSource);
         var counter = new RetrievalCounter(dataSource, TimeProvider.System, NullLogger<RetrievalCounter>.Instance);
-        var embedder = new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), new QueryEmbeddingOptions(), new byte[32],
+        // Generous limits (#584): the first call through a fresh host on a busy runner can pass the 2 s default and turn an
+        // expected gateway answer into embedding_unavailable. The timeout tests use the embedder-only Build below.
+        var embedding = new QueryEmbeddingOptions { AttemptTimeout = TimeSpan.FromSeconds(30), TotalTimeout = TimeSpan.FromSeconds(30) };
+        var embedder = new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), embedding, new byte[32],
             TimeProvider.System, NullLogger<GatewayQueryEmbedder>.Instance);
         var service = new KnowledgeService(new KnowledgeFixture.FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
             new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System), options, reranker, new PostgresHydrator(dataSource)), new PostgresHydrator(dataSource),
