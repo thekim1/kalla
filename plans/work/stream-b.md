@@ -326,6 +326,43 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Editable embedding profiles before use"; admin §4.5, §5.8; data-model §2.1; processing §11.
 
+### [ ] B-31 Answer length from the model
+- **Do:** add `GatewayModels.MaxOutputTokens` (migration, check constraint) and let `PUT /api/gateway/models/{name}`
+  set `contextWindow` and `maxOutputTokens` on any row, kept by the sync; make `answer.maxOutputTokens` and
+  `answer.contextTokens` optional (`AssistantChatSettings` with nullable values; new drafts write neither), resolve
+  them against the version's model row as chat §6.3 (`C`, `R`, `F` = 1,024, `max_tokens` = override, else
+  `min(O, C − P)`, else left out in `GatewayChatClient`); V17's new bounds and the run-time lowering of an override
+  above a lowered model limit; the Utkast tab's *Use the model's limit* checkboxes with the model's limit shown; the
+  Gateway models page edits both limits; the test panel returns and shows `maxTokens`, `maxTokensSource` and
+  `finishReason` ("The answer stopped at the length limit"). No compatibility step: the migration removes
+  `answer.maxOutputTokens` and `answer.contextTokens` from every development `QuerySteps`.
+- **Paths:** `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/**` (migration), `src/Ume.Rag.Answering/**`,
+  `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Api/**` if the client's `max_tokens` cap moves, `src/Ume.Rag.FakeGateway/**`
+  (echo the `max_tokens` it got, `finish_reason: length` on request), `src/admin-ui/**`, their tests.
+- **Done when:** unit tests for the §6.3 table (override; model limit known; unknown → no `max_tokens`; override above
+  the model limit lowered; `C − P` below `O`); a FakeGateway test sees no `max_tokens` for a model without limits;
+  rules tests for V17's bounds; vitest for the checkboxes and the test panel's length notice.
+- **Waits on:** –
+- **Read:** Decisions "Answer length from the model"; chat §6.3, §8.1; admin §4.9, §4.10, V17, §5.5.4 (Utkast tab);
+  data-model `GatewayModels`, `AssistantVersions`.
+
+### [ ] B-32 Chat prompt texts in settings
+- **Do:** `Settings.Chat.Prompts` (chat §7.3 table) read through the config snapshot; `PromptBuilder`, `Condenser`
+  (both prompts), the follow-up prompt and the two caveats take each text from it with today's text as the built-in
+  default, the locked lines staying in code (the follow-up prompt's locked lines after its editable block, chat §9.8);
+  `{assistant}` and `{N}` filled; V38 on `PUT /api/settings/chat`; the Settings page's **Prompt texts** panel (the
+  whole frame in order, editable fields with **Reset to default**, locked lines read-only, the "changes every
+  assistant at once" note). Labels and messages in `labels.ts` and `messages.ts`.
+- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Domain/**`,
+  `src/admin-ui/**`, their tests.
+- **Done when:** a golden test shows the default frame, condense prompts, follow-up prompt and caveats unchanged in
+  wording (the follow-up lines in their new order); a test with every member set shows the locked lines still
+  present; V38 refuses a `<sources>` tag, an unknown placeholder and an unknown member; the test panel answers with an
+  edited identity line; vitest for the panel and its reset.
+- **Waits on:** – (independent of B-31; touches `PromptBuilder` too, so merge one, rebase the other)
+- **Read:** Decisions "Chat prompt texts configurable"; chat §5, §5.1, §7.2–§7.4, §9.8, §10.2, §10.4; admin §4.5
+  (`chat` section), V38; data-model `Settings`.
+
 ## Live (the live block, see the roadmap)
 
 ### [x] B-L1 Status green against the real gateway

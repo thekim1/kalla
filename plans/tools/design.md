@@ -828,8 +828,9 @@ annotations as chat §9.3; `MessageSources` rows for every document seen (`Used`
 
 ### 6.9 Token budget
 
-`C` = the assistant's `contextTokens` (agent default **32,768**), `R` = `maxOutputTokens` per step (default 1,024; the final
-step may use the assistant's full value). Mandatory: frame, prompt, static skills or catalogue, question, prefetched
+`C` = the assistant's `contextTokens` (absent: the model's `ContextWindow`, else the agent default **32,768**), `R` =
+`maxOutputTokens` per step (1,024 for intermediate steps; the final step takes chat §6.3's output limit: the assistant's
+override, else the model's `MaxOutputTokens` minus the estimated prompt; Decisions "Answer length from the model"). Mandatory: frame, prompt, static skills or catalogue, question, prefetched
 sources, `R`. History: chat §6.3, at most 4,000 tokens. Tool results: each ≤ 16,000 characters (§4.8),
 `search_knowledge` ≤ 4,000 tokens, all of the run ≤ 48,000 characters; when the next step would exceed `C − R`, the
 **oldest** tool results are replaced by `[tidigare resultat utelämnat för att spara plats]`, then history is trimmed,
