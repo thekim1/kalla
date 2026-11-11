@@ -122,6 +122,39 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task The_chat_section_takes_an_answer_ceiling_from_256_to_1000000_tokens()
+    {
+        // Decisions "Answer length from the model" (chat §6.3, admin §4.5): Settings.Chat.MaxAnswerTokens, unset by default.
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var before = await Json(await admin.GetAsync("/api/settings/chat", Ct));
+        var original = System.Text.Json.Nodes.JsonNode.Parse(before.GetProperty("value").GetRawText())!.AsObject();
+        var version = before.GetProperty("version").GetString();
+        System.Text.Json.Nodes.JsonObject With(System.Text.Json.Nodes.JsonNode? ceiling)
+        {
+            var value = original.DeepClone().AsObject();
+            value["maxAnswerTokens"] = ceiling;
+            return value;
+        }
+
+        foreach (var ceiling in new System.Text.Json.Nodes.JsonNode?[] { 255, 1_000_001, "8000", 8000.5 })
+        {
+            using var refused = await admin.PutAsJsonAsync("/api/settings/chat", new { value = With(ceiling), version }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, ceiling?.ToJsonString());
+        }
+
+        using (var saved = await admin.PutAsJsonAsync("/api/settings/chat", new { value = With(8000), version }, Ct))
+        {
+            saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
+            version = (await Json(saved)).GetProperty("version").GetString();
+        }
+
+        (await Json(await admin.GetAsync("/api/settings/chat", Ct))).GetProperty("value").GetProperty("maxAnswerTokens").GetInt32().ShouldBe(8000);
+        using var restored = await admin.PutAsJsonAsync("/api/settings/chat", new { value = original, version }, Ct);
+        restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
     public async Task V37_refuses_a_host_politeness_profile_outside_its_ranges_or_ceilings_and_saves_a_valid_one_audited()
     {
         await using var factory = database.HeaderFactory();

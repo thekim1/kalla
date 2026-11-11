@@ -13,6 +13,9 @@ public static class MaxTokensSources
 
     /// <summary>Left out: the limit is unknown, so the gateway's or the provider's default applies.</summary>
     public const string Provider = "provider";
+
+    /// <summary>The platform ceiling <c>Settings.Chat.MaxAnswerTokens</c> decided it: it lowered the limit or filled an unknown one.</summary>
+    public const string Ceiling = "ceiling";
 }
 
 /// <summary>
@@ -21,7 +24,7 @@ public static class MaxTokensSources
 /// (<c>F</c>) the answer's reserve in the budget, and <see cref="MaxTokens"/> the <c>max_tokens</c> to send for an
 /// estimated prompt.
 /// </summary>
-public sealed record AnswerLimits(int Context, int? Output, int Reserve, bool OutputOverridden, int? ModelOutput)
+public sealed record AnswerLimits(int Context, int? Output, int Reserve, bool OutputOverridden, int? ModelOutput, bool CeilingDecides = false)
 {
     /// <summary><c>C</c> when neither the assistant nor the model sets it.</summary>
     public const int DefaultContext = 16_384;
@@ -32,9 +35,10 @@ public sealed record AnswerLimits(int Context, int? Output, int Reserve, bool Ou
     /// <summary>
     /// <c>C</c> = the override, else the model's window <c>W</c>, else 16,384, and at most <c>W</c> when known (an override above
     /// a lowered window is lowered, never a failed chat); <c>R</c> = the override at most the model's <c>O</c>, else <c>O</c>,
-    /// else unknown; <c>F</c> = <c>R</c> when the assistant set it, else 1,024.
+    /// else unknown, and at most the platform ceiling <c>X</c> when set, which also fills an unknown <c>R</c>; <c>F</c> =
+    /// <c>R</c> when the assistant set it, else 1,024.
     /// </summary>
-    public static AnswerLimits Resolve(AssistantChatSettings settings, ModelLimitsEntry? model)
+    public static AnswerLimits Resolve(AssistantChatSettings settings, ModelLimitsEntry? model, int? ceiling = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var window = model?.ContextWindow;
@@ -46,16 +50,24 @@ public sealed record AnswerLimits(int Context, int? Output, int Reserve, bool Ou
         }
 
         int? output = settings.MaxOutputTokens is { } over ? (modelOutput is { } o ? Math.Min(over, o) : over) : modelOutput;
+        var decides = false;
+        if (ceiling is { } x && (output is null || x < output))
+        {
+            output = x;
+            decides = true;
+        }
+
         var overridden = settings.MaxOutputTokens is not null;
-        return new AnswerLimits(context, output, overridden ? output!.Value : DefaultReserve, overridden, modelOutput);
+        return new AnswerLimits(context, output, overridden ? output!.Value : DefaultReserve, overridden, modelOutput, decides);
     }
 
     /// <summary>
-    /// <c>max_tokens</c> for a prompt of <paramref name="estimatedPrompt"/> tokens (<c>P</c>): the override <c>R</c>; else the
-    /// model's <c>min(O, C − P)</c>; else null, left out of the request.
+    /// <c>max_tokens</c> for a prompt of <paramref name="estimatedPrompt"/> tokens (<c>P</c>): the override <c>R</c>; else, when
+    /// <c>R</c> is known, <c>min(R, C − P)</c>; else null, left out of the request. The source is <c>ceiling</c> when the
+    /// platform ceiling lowered or filled <c>R</c>.
     /// </summary>
     public (int? MaxTokens, string Source) MaxTokens(int estimatedPrompt) =>
-        OutputOverridden ? (Output, MaxTokensSources.Override)
-        : ModelOutput is { } o ? (Math.Max(1, Math.Min(o, Context - estimatedPrompt)), MaxTokensSources.Model)
+        OutputOverridden ? (Output, CeilingDecides ? MaxTokensSources.Ceiling : MaxTokensSources.Override)
+        : Output is { } r ? (Math.Max(1, Math.Min(r, Context - estimatedPrompt)), CeilingDecides ? MaxTokensSources.Ceiling : MaxTokensSources.Model)
         : (null, MaxTokensSources.Provider);
 }

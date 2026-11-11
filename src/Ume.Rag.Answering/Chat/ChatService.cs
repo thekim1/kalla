@@ -65,8 +65,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
         var messageId = Guid.CreateVersion7();
         // §6.3 (Decisions "Answer length from the model"): the overrides, else the model's limits from the mirror.
-        var limits = AnswerLimits.Resolve(settings, snapshot.ModelLimits.GetValueOrDefault(assistant.Published.GatewayModel));
         var platform = resolved.Platform;
+        var limits = AnswerLimits.Resolve(settings, snapshot.ModelLimits.GetValueOrDefault(assistant.Published.GatewayModel), platform.MaxAnswerTokens);
         // §7.1: the answer model reads the question's prompt form, line breaks kept; everything before it reads the query form.
         var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings, limits);
         CondenseOutcome? condense = null;

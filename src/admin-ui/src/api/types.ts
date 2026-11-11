@@ -808,6 +808,8 @@ export interface Assistant {
   generalKnowledge: GeneralKnowledge | null
   /** The rerankers the platform has a model for (`chat`, `gateway`); empty when it has none, which is the usual setup. */
   rerankers: Reranker[]
+  /** The platform answer ceiling `Settings.Chat.maxAnswerTokens` (chat §6.3), null when unset; shown on the Draft tab when lower. */
+  maxAnswerTokens?: number | null
   draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
   audienceClientIds: string[]
   updatedAt: IsoDateTime
@@ -931,7 +933,7 @@ export interface AssistantTestResult {
     outputTokens: number | null
     /** The `max_tokens` sent, null when left out (admin design §4.9). */
     maxTokens?: number | null
-    maxTokensSource?: 'override' | 'model' | 'provider' | null
+    maxTokensSource?: 'override' | 'model' | 'provider' | 'ceiling' | null
     /** `length`: the answer stopped at the limit. */
     finishReason?: string | null
   }

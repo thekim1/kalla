@@ -62,6 +62,35 @@ public sealed class AnswerLimitsTests
     }
 
     [Fact]
+    public void The_platform_ceiling_lowers_an_override_caps_the_model_limit_and_fills_an_unknown_one()
+    {
+        // X = Settings.Chat.MaxAnswerTokens (chat §6.3).
+        var lowered = AnswerLimits.Resolve(Steps("""{"answer":{"maxOutputTokens":8000}}"""), new ModelLimitsEntry(128_000, 16_384), 2_000);
+        (lowered.Output, lowered.Reserve).ShouldBe(((int?)2_000, 2_000)); // the override is capped, and so is its reserve
+        lowered.MaxTokens(3_000).ShouldBe(((int?)2_000, MaxTokensSources.Ceiling));
+
+        var capped = AnswerLimits.Resolve(AssistantChatSettings.Default, new ModelLimitsEntry(128_000, 16_384), 4_000);
+        capped.Reserve.ShouldBe(1_024); // F stays 1,024 without an override
+        capped.MaxTokens(3_000).ShouldBe(((int?)4_000, MaxTokensSources.Ceiling));
+
+        var filled = AnswerLimits.Resolve(AssistantChatSettings.Default, null, 4_000);
+        filled.MaxTokens(3_000).ShouldBe(((int?)4_000, MaxTokensSources.Ceiling)); // max_tokens is always sent with a ceiling
+
+        // A ceiling above the limits changes nothing.
+        AnswerLimits.Resolve(AssistantChatSettings.Default, new ModelLimitsEntry(128_000, 16_384), 100_000).MaxTokens(3_000)
+            .ShouldBe(((int?)16_384, MaxTokensSources.Model));
+        AnswerLimits.Resolve(Steps("""{"answer":{"maxOutputTokens":700}}"""), null, 100_000).MaxTokens(100).ShouldBe(((int?)700, MaxTokensSources.Override));
+    }
+
+    [Fact]
+    public void The_platform_ceiling_is_read_from_settings_chat()
+    {
+        PlatformChatSettings.Parse("""{"maxAnswerTokens":4000}""", new ChatOptions()).MaxAnswerTokens.ShouldBe(4_000);
+        PlatformChatSettings.Parse("{}", new ChatOptions()).MaxAnswerTokens.ShouldBeNull();
+        PlatformChatSettings.Parse("""{"maxAnswerTokens":"4000"}""", new ChatOptions()).MaxAnswerTokens.ShouldBeNull();
+    }
+
+    [Fact]
     public void The_prompt_estimate_is_the_mandatory_part_the_sources_and_the_history()
     {
         var context = new PromptContext("Bygg", "Var kortfattad.", "sv", "Vad kostar bygglov?", [new ChatMessageIn("user", "Hej"), new ChatMessageIn("assistant", "Hej!")],

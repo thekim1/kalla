@@ -310,6 +310,18 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public void V17_bounds_the_output_override_by_the_platform_ceiling_too()
+    {
+        // chat §6.3: lowering Settings.Chat.MaxAnswerTokens below an override is a warning on the draft (refused at publish).
+        var model = new GatewayModel { Name = "m", Residencies = ["Eu"], MaxOutputTokens = 16_384 };
+        static string[] Fields(IEnumerable<RuleProblem> problems) => [.. problems.Select(p => p.Params!["field"])];
+        Fields(AssistantRules.QuerySteps("""{"answer":{"maxOutputTokens":9000}}""", model, 8000)).ShouldBe(["answer.maxOutputTokens"]);
+        Fields(AssistantRules.QuerySteps("""{"answer":{"maxOutputTokens":8000}}""", model, 8000)).ShouldBeEmpty();
+        Fields(AssistantRules.QuerySteps("""{"answer":{"maxOutputTokens":9000}}""", model, null)).ShouldBeEmpty();
+        Fields(AssistantRules.QuerySteps("""{"answer":{"maxOutputTokens":20000}}""", null, 30000)).ShouldBeEmpty(); // model unknown
+    }
+
+    [Fact]
     public async Task A_new_assistants_first_draft_starts_from_the_default_instructions()
     {
         var seed = await SeedAsync();

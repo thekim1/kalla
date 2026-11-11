@@ -497,7 +497,14 @@ public static class AssistantEndpoints
             a.RetentionDays, a.State, published?.Number,
             draft is null ? null : new DraftInfo(draft.Number, draft.UpdatedAt, published is not null && draft.Number < published.Number, draft.Version.ToString(CultureInfo.InvariantCulture)),
             audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps),
-            await RerankersAsync(admin, ct));
+            await RerankersAsync(admin, ct), await AnswerCeilingAsync(admin, ct));
+    }
+
+    /// <summary>The platform answer ceiling <c>Settings.Chat.MaxAnswerTokens</c> (chat §6.3), null when unset: the Draft tab shows it when lower.</summary>
+    public static async Task<int?> AnswerCeilingAsync(AdminContext admin, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        return Ume.Rag.Answering.Chat.PlatformChatSettings.AnswerCeilingOf(await admin.Db.Settings.AsNoTracking().Select(s => s.Chat).SingleOrDefaultAsync(ct));
     }
 
     /// <summary>
@@ -631,7 +638,7 @@ public static class AssistantRules
 
         problems.AddRange(await AudienceRulesAsync(admin, assistant, audience, ct));
         var model = await admin.Db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == version.GatewayModel, ct);
-        problems.AddRange(QuerySteps(version.QuerySteps, model));
+        problems.AddRange(QuerySteps(version.QuerySteps, model, await AssistantEndpoints.AnswerCeilingAsync(admin, ct)));
         if (!confirmGeneralKnowledge && NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps))
         {
             problems.Add(new RuleProblem(AdminErrorCodes.GeneralKnowledgePublicUnconfirmed,
@@ -682,14 +689,15 @@ public static class AssistantRules
     /// limit; set, at most the model's limit, or a wide bound when the mirror does not know it. A draft whose override is
     /// above a limit lowered later gets the warning; the runtime lowers it to the limit.
     /// </summary>
-    internal static IEnumerable<RuleProblem> QuerySteps(string json, GatewayModel? model)
+    public static IEnumerable<RuleProblem> QuerySteps(string json, GatewayModel? model, int? answerCeiling = null)
     {
         var steps = JsonNode.Parse(json) as JsonObject ?? [];
         var problems = new List<string>();
         CheckInt(steps["retrieval"]?["topK"], 1, 50, "retrieval.topK");
         CheckInt(steps["history"]?["maxMessages"], 0, 20, "history.maxMessages");
         CheckInt(steps["history"]?["maxTokens"], 0, 8000, "history.maxTokens");
-        CheckInt(steps["answer"]?["maxOutputTokens"], 64, model?.MaxOutputTokens ?? UnknownOutputLimit, "answer.maxOutputTokens");
+        // The platform ceiling bounds it too: lowering the ceiling below an override is a warning on the draft (§6.3).
+        CheckInt(steps["answer"]?["maxOutputTokens"], 64, Math.Min(model?.MaxOutputTokens ?? UnknownOutputLimit, answerCeiling ?? int.MaxValue), "answer.maxOutputTokens");
         CheckInt(steps["answer"]?["contextTokens"], 4096, model?.ContextWindow ?? UnknownContextWindow, "answer.contextTokens");
         Check(steps["answer"]?["temperature"], 0, 1, "answer.temperature");
         if (steps["condense"]?["enabled"] is { } condense && !(condense is JsonValue c && c.GetValueKind() is JsonValueKind.True or JsonValueKind.False))
@@ -807,7 +815,7 @@ public sealed record DraftInfo(int Number, DateTimeOffset UpdatedAt, bool BaseCh
 public sealed record AssistantDto(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
     string HistoryMode, int RetentionDays, string State, int? PublishedVersion, DraftInfo? Draft, IReadOnlyList<Guid> AudienceClientIds, DateTimeOffset UpdatedAt,
-    string? UpdatedBy, string Version, string? GeneralKnowledge, IReadOnlyList<string> Rerankers);
+    string? UpdatedBy, string Version, string? GeneralKnowledge, IReadOnlyList<string> Rerankers, int? MaxAnswerTokens = null);
 
 public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<CollectionLink> CollectionLinks,
     IReadOnlyList<object> Warnings, DateTimeOffset UpdatedAt, string Version)
