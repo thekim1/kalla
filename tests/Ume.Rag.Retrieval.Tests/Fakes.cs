@@ -57,7 +57,7 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
     /// <summary>The stop list each keyword call was given (<see cref="SearchScope.KeywordStopLexemes"/>).</summary>
     public List<IReadOnlyList<string>> KeywordStopLists { get; } = [];
 
-    /// <summary>The frequent-lexeme rows; a thrown exception when <see cref="LexemeFailure"/> is set.</summary>
+    /// <summary>The keyword statistics rows; a thrown exception when <see cref="LexemeFailure"/> is set.</summary>
     public IReadOnlyList<FrequentLexeme> Lexemes { get; set; } = [];
 
     public Exception? LexemeFailure { get; set; }
@@ -95,7 +95,7 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
     public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) =>
         CountsFailure is null ? Task.FromResult(Counts) : Task.FromException<IReadOnlyList<CollectionChunkCount>>(CountsFailure);
 
-    public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken)
     {
         LexemeReads++;
         if (HoldLexemes is not null)

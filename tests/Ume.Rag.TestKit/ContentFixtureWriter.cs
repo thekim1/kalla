@@ -131,6 +131,45 @@ public sealed class ContentFixtureWriter(string workerConnectionString, string a
         return chunkIds;
     }
 
+    /// <summary>
+    /// Writes <paramref name="collectionId"/>'s <c>content."KeywordStatistics"</c> rows as the worker does (A-29,
+    /// <c>Ume.Rag.Worker.Engine.KeywordStatistics</c>): per profile with at least 100 live child chunks, the lexemes of
+    /// <c>ts_stat</c> in at least 10 % of them, with that count; the collection's other rows go. As the worker role, in one
+    /// transaction. Tests of rag-api's stop list call it where the worker would have run.
+    /// </summary>
+    public async Task RefreshKeywordStatisticsAsync(Guid collectionId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _worker.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var delete = new NpgsqlCommand("""DELETE FROM content."KeywordStatistics" WHERE "CollectionId" = $1""", connection, transaction))
+        {
+            delete.Parameters.Add(new NpgsqlParameter { Value = collectionId });
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var insert = new NpgsqlCommand("""
+            WITH counts AS (
+                SELECT "EmbeddingProfileId" AS profile, count(*) AS chunks
+                FROM content."Chunks"
+                WHERE "CollectionId" = $1 AND "DeletedAt" IS NULL AND "Kind" = 'child' AND "EmbeddingProfileId" IS NOT NULL
+                GROUP BY 1
+                HAVING count(*) >= 100
+            )
+            INSERT INTO content."KeywordStatistics" ("EmbeddingProfileId", "CollectionId", "Lexeme", "Ndoc", "ChunkCount", "ComputedAt")
+            SELECT counts.profile, $1, s.word, s.ndoc, counts.chunks, now()
+            FROM counts, LATERAL ts_stat(format(
+                'SELECT "SearchVector" FROM content."Chunks" WHERE "Kind" = ''child'' AND "DeletedAt" IS NULL AND "EmbeddingProfileId" = %L AND "CollectionId" = %L',
+                counts.profile, $1::uuid)) s
+            WHERE s.ndoc >= counts.chunks * 0.10
+            """, connection, transaction))
+        {
+            insert.Parameters.Add(new NpgsqlParameter { Value = collectionId });
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     /// <summary>Runs SQL as the worker (soft deletes and other edits a test needs).</summary>
     public async Task ExecuteAsync(string sql, CancellationToken cancellationToken = default)
     {

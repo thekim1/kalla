@@ -21,8 +21,8 @@ public sealed class KeywordStopListTests
         var index = new FakeIndex
         {
             Counts = [new(Profile, CollectionA, 10_000)],
-            Lexemes = [new(Profile, CollectionA, "umeå", 9_000), new(Profile, CollectionA, "kommun", 3_001),
-                new(Profile, CollectionA, "kontakt", 3_000), new(Profile, CollectionA, "bygglov", 1_250)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000), new(Profile, CollectionA, "kommun", 3_001, 10_000),
+                new(Profile, CollectionA, "kontakt", 3_000, 10_000), new(Profile, CollectionA, "bygglov", 1_250, 10_000)],
         };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
 
@@ -32,7 +32,7 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task A_scope_under_a_thousand_chunks_has_no_stop_list()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 999)], Lexemes = [new(Profile, CollectionA, "bygglov", 900)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 999)], Lexemes = [new(Profile, CollectionA, "bygglov", 900, 999)] };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
 
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
@@ -47,8 +47,8 @@ public sealed class KeywordStopListTests
             Counts = [new(Profile, CollectionA, 3_000), new(Profile, CollectionB, 7_000)],
             // "umeå": 2,900 + 700 = 3,600 of 10,000 → stopped, although under 30 % in B; "simhall" 2,000 → kept, although
             // 67 % of A; "kommun" only counted in A (absent from B's statistics) 2,500 → kept.
-            Lexemes = [new(Profile, CollectionA, "umeå", 2_900), new(Profile, CollectionB, "umeå", 700),
-                new(Profile, CollectionA, "simhall", 2_000), new(Profile, CollectionA, "kommun", 2_500)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 2_900, 3_000), new(Profile, CollectionB, "umeå", 700, 7_000),
+                new(Profile, CollectionA, "simhall", 2_000, 3_000), new(Profile, CollectionA, "kommun", 2_500, 3_000)],
         };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
 
@@ -58,13 +58,40 @@ public sealed class KeywordStopListTests
     }
 
     [Fact]
+    public async Task A_share_is_taken_of_the_stored_chunk_count()
+    {
+        // The worker counted 8,000 chunks; 10,000 are live now (within the 10 % the worker allows before it recomputes):
+        // "umeå" in 2,600 of the stored 8,000 is 32.5 % → stopped, though 26 % of the live count.
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 2_600, 8_000)] };
+        using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
+
+        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
+    }
+
+    [Fact]
+    public async Task A_collection_without_rows_adds_its_live_chunks_and_no_lexemes()
+    {
+        // B has no rows (not checked yet, or no lexeme at 10 %): its 7,000 live chunks count, its lexemes do not.
+        // "umeå" 2,900 of 3,000 + 7,000 = 29 % → kept; "kommun" 3,000 of 10,000 = 30 % → kept (30 % exactly stays).
+        var index = new FakeIndex
+        {
+            Counts = [new(Profile, CollectionA, 3_000), new(Profile, CollectionB, 7_000)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 2_900, 3_000), new(Profile, CollectionA, "kommun", 3_000, 3_000)],
+        };
+        using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
+
+        (await cache.StopLexemesAsync(Scope((CollectionA, RetrievalSettings.Default), (CollectionB, RetrievalSettings.Default)), Ct))
+            .ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_link_with_topics_takes_its_shares_of_the_whole_collection()
     {
         // The statistics are per collection: "umeå" in 2,000 of 10,000 chunks is 20 %, not 2,000 of the topic's 1,500.
         var index = new FakeIndex
         {
             Counts = [new(Profile, CollectionA, 1_500) { Tags = ["avfall"] }, new(Profile, CollectionA, 8_500)],
-            Lexemes = [new(Profile, CollectionA, "umeå", 2_000), new(Profile, CollectionA, "kommun", 4_000)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 2_000, 10_000), new(Profile, CollectionA, "kommun", 4_000, 10_000)],
         };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
         var topical = new SearchScope(Profile, 3, [new CollectionInScope(CollectionA, RetrievalSettings.Default) { Topics = ["avfall"] }], ["public"],
@@ -78,7 +105,7 @@ public sealed class KeywordStopListTests
     public async Task Another_profile_s_statistics_do_not_count()
     {
         var other = Guid.Parse("01929b6e-0000-7000-8000-0000000000ff");
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 5_000)], Lexemes = [new(other, CollectionA, "umeå", 5_000)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 5_000)], Lexemes = [new(other, CollectionA, "umeå", 5_000, 5_000)] };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
 
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
@@ -87,12 +114,12 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task Stale_statistics_serve_while_the_refresh_runs_in_the_background()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000)] };
         var time = new FakeTimeProvider();
         using var cache = new ScopeSizeCache(index, time);
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
 
-        index.Lexemes = [new(Profile, CollectionA, "kommun", 9_000)];
+        index.Lexemes = [new(Profile, CollectionA, "kommun", 9_000, 10_000)];
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]); // fresh: no read
         index.LexemeReads.ShouldBe(1);
 
@@ -108,20 +135,20 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task A_failed_read_gives_no_stop_list_or_keeps_the_previous_one()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("ts_stat") };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("KeywordStatistics") };
         var time = new FakeTimeProvider();
         using var cache = new ScopeSizeCache(index, time);
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
 
         index.LexemeFailure = null;
-        index.Lexemes = [new(Profile, CollectionA, "umeå", 9_000)];
+        index.Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000)];
         // #333: none yet, but the failed read is not repeated by every search: only after FailedReadRetry.
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
         index.LexemeReads.ShouldBe(1);
         time.Advance(ScopeSizeCache.FailedReadRetry);
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
 
-        index.LexemeFailure = new TimeoutException("ts_stat");
+        index.LexemeFailure = new TimeoutException("KeywordStatistics");
         time.Advance(TimeSpan.FromMinutes(10));
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
         await WaitForAsync(() => Task.FromResult(index.LexemeReads == 3));
@@ -133,12 +160,12 @@ public sealed class KeywordStopListTests
     public async Task A_failed_read_is_logged_at_warning_with_the_statement_name()
     {
         // #499, B-25: a refresh that fails (for example on the role's statement timeout) is visible, not silent.
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("ts_stat") };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("KeywordStatistics") };
         var logger = new GatewayRerankerTests.ListLogger();
         var time = new FakeTimeProvider();
         using var cache = new ScopeSizeCache(index, time, logger: logger);
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
-        logger.Messages.ShouldHaveSingleItem().ShouldBe("The search statistics statement FrequentLexemes failed; searches keep none yet");
+        logger.Messages.ShouldHaveSingleItem().ShouldBe("The search statistics statement KeywordStatistics failed; searches keep none yet");
 
         index.CountsFailure = new TimeoutException("count");
         time.Advance(TimeSpan.FromMinutes(10));
@@ -149,7 +176,7 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task Warming_reads_counts_and_statistics_so_the_first_search_does_not()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000)] };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
 
         cache.HasKeywordStatistics.ShouldBeFalse();
@@ -159,7 +186,7 @@ public sealed class KeywordStopListTests
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
         index.LexemeReads.ShouldBe(1);
 
-        var failing = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("ts_stat") };
+        var failing = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("KeywordStatistics") };
         using var cold = new ScopeSizeCache(failing, new FakeTimeProvider());
         (await cold.WarmAsync(Ct)).ShouldBeFalse(); // reported, not thrown
         (await cold.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
@@ -169,7 +196,7 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task Invalidate_drops_the_statistics()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000)] };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
 
@@ -184,7 +211,7 @@ public sealed class KeywordStopListTests
         var index = new FakeIndex
         {
             Counts = [new(Profile, CollectionA, 10_000)],
-            Lexemes = [new(Profile, CollectionA, "umeå", 9_000), new(Profile, CollectionA, "kommun", 8_000)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 9_000, 10_000), new(Profile, CollectionA, "kommun", 8_000, 10_000)],
             Keyword = [Chunk(1, keyword: 0.5)],
             Vector = [Chunk(1, distance: 0.2)],
         };
@@ -201,7 +228,7 @@ public sealed class KeywordStopListTests
     [Fact]
     public async Task A_small_scope_s_K_gets_an_empty_stop_list()
     {
-        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 20)], Lexemes = [new(Profile, CollectionA, "umeå", 20)] };
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 20)], Lexemes = [new(Profile, CollectionA, "umeå", 20, 20)] };
         using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
         using var engine = new RetrievalEngine(index, cache);
 

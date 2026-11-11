@@ -26,9 +26,10 @@ public sealed class PostgresSearchOptions
 /// <summary>
 /// Statements K and V on Postgres (knowledge design §6.2, §6.4) and the chunk counts for the exact/HNSW rule. Each call
 /// takes its own pooled connection, so K and V of one search overlap; no transaction (autocommit), no <c>SET</c> (the
-/// <c>hnsw.*</c> settings are role defaults, data-model §1.1). The exception are the two background statistics, which
-/// read the whole index and can outlast the api role's 5 s <c>statement_timeout</c> on a large corpus (#499, B-25): they
-/// run in a read-only transaction with <c>SET LOCAL statement_timeout</c> equal to their client limits. The data source
+/// <c>hnsw.*</c> settings are role defaults, data-model §1.1). The exception is the background chunk count, which reads the
+/// whole index and can outlast the api role's 5 s <c>statement_timeout</c> on a large corpus (#499, B-25): it runs in a
+/// read-only transaction with <c>SET LOCAL statement_timeout</c> equal to its client limit. The keyword statistics are a
+/// read of the worker's small table under the role's limit (#499 step 2, B-33). The data source
 /// must map pgvector types (<see cref="RetrievalDataSource.Configure"/>).
 /// </summary>
 public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSearchOptions? options = null) : ISearchIndex, IScopeSizeSource
@@ -36,8 +37,8 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
     /// <summary>Limit of <see cref="RetrievalStatements.CountChunks"/>, client and server side.</summary>
     public static readonly TimeSpan CountChunksTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>Limit of <see cref="RetrievalStatements.FrequentLexemes"/>, client and server side.</summary>
-    public static readonly TimeSpan FrequentLexemesTimeout = TimeSpan.FromSeconds(60);
+    /// <summary>Client-side limit of <see cref="RetrievalStatements.KeywordStatistics"/> (the role's 5 s is the server's).</summary>
+    public static readonly TimeSpan KeywordStatisticsTimeout = TimeSpan.FromSeconds(10);
 
     private readonly PostgresSearchOptions _options = options ?? new PostgresSearchOptions();
 
@@ -87,21 +88,16 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         return counts;
     }
 
-    public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken)
     {
         var lexemes = new List<FrequentLexeme>();
-        await RunAsync(RetrievalStatements.FrequentLexemes,
-            [
-                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Bigint, Value = minChunks },
-                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Double, Value = minShare },
-            ],
-            async (reader, ct) =>
+        await RunAsync(RetrievalStatements.KeywordStatistics, [], async (reader, ct) =>
+        {
+            while (await reader.ReadAsync(ct))
             {
-                while (await reader.ReadAsync(ct))
-                {
-                    lexemes.Add(new FrequentLexeme(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt64(3)));
-                }
-            }, FrequentLexemesTimeout, cancellationToken, serverLimit: true);
+                lexemes.Add(new FrequentLexeme(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4)));
+            }
+        }, KeywordStatisticsTimeout, cancellationToken);
         return lexemes;
     }
 

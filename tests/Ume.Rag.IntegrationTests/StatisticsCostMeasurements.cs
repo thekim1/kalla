@@ -10,7 +10,8 @@ namespace Ume.Rag.IntegrationTests;
 
 /// <summary>
 /// B-25 (#499): how long the search statistics take as <c>ume_rag_api</c> as the corpus grows, against the role's 5 s
-/// <c>statement_timeout</c>. Explicit: it loads up to <c>UME_RAG_MEASURE_CHUNKS</c> chunks (default 1,000,000, in
+/// <c>statement_timeout</c>. Since B-33 the keyword statistics are a read of the worker's rows (written here per full
+/// collection, as the worker would). Explicit: it loads up to <c>UME_RAG_MEASURE_CHUNKS</c> chunks (default 1,000,000, in
 /// collections of 50,000; about 10 minutes and 3–4 GB in the container), so it runs only on request:
 /// <c>UME_RAG_TEST_POSTGRES_TMPFS=1 dotnet test --project tests/Ume.Rag.IntegrationTests -c Release -- --filter-class
 /// "*StatisticsCostMeasurements" --explicit only --output Detailed</c> (the variable keeps the database in RAM, so the
@@ -48,6 +49,11 @@ public sealed class StatisticsCostMeasurements(RagDatabaseFixture database)
             {
                 if (loaded % CollectionChunks == 0)
                 {
+                    if (collection != Guid.Empty)
+                    {
+                        await writer.RefreshKeywordStatisticsAsync(collection, Ct); // the worker's rows (A-29) for the full one
+                    }
+
                     collection = Guid.NewGuid();
                 }
 
@@ -78,13 +84,13 @@ public sealed class StatisticsCostMeasurements(RagDatabaseFixture database)
                 """SELECT pg_size_pretty(pg_total_relation_size('content."Chunks"'))""");
             output.WriteLine($"{loaded:N0} chunks in {loaded / CollectionChunks} collections (loaded in {started.Elapsed.TotalSeconds:F0} s; Chunks {size}):");
 
+            await writer.RefreshKeywordStatisticsAsync(collection, Ct);
             var counts = await TimeUnlimitedAsync(RetrievalStatements.CountChunks, []);
-            var lexemes = await TimeUnlimitedAsync(RetrievalStatements.FrequentLexemes,
-                [ScopeSizeCache.KeywordStatisticsMinChunks, ScopeSizeCache.KeywordStatisticsShare]);
+            var lexemes = await TimeUnlimitedAsync(RetrievalStatements.KeywordStatistics, []);
             output.WriteLine($"  CountChunks {counts}");
-            output.WriteLine($"  FrequentLexemes {lexemes}");
+            output.WriteLine($"  KeywordStatistics {lexemes}");
             output.WriteLine($"  through PostgresSearchIndex (role timeout 5 s): CountChunks {await OutcomeAsync(() => index.CountChunksAsync(Ct))}, " +
-                $"FrequentLexemes {await OutcomeAsync(() => index.FrequentLexemesAsync(ScopeSizeCache.KeywordStatisticsMinChunks, ScopeSizeCache.KeywordStatisticsShare, Ct))}");
+                $"KeywordStatistics {await OutcomeAsync(() => index.KeywordStatisticsAsync(Ct))}");
         }
     }
 

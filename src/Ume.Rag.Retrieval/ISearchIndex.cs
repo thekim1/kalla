@@ -91,7 +91,7 @@ public readonly struct HashBytes(byte[] bytes) : IEquatable<HashBytes>
 }
 
 /// <summary>
-/// Chunk counts per collection of a profile (for the exact/HNSW rule, knowledge design §6.4) and the frequent lexemes
+/// Chunk counts per collection of a profile (for the exact/HNSW rule, knowledge design §6.4) and the keyword statistics
 /// behind the keyword stop list (§6.2, §20).
 /// </summary>
 public interface IScopeSizeSource
@@ -103,10 +103,11 @@ public interface IScopeSizeSource
     Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// The lexemes of the searchable child chunks' <c>SearchVector</c> that occur in at least <paramref name="minShare"/>
-    /// of their (profile, collection), for each (profile, collection) of at least <paramref name="minChunks"/> chunks.
+    /// The rows of <c>content."KeywordStatistics"</c>, which the worker keeps (A-29): per (profile, collection) of at least
+    /// <see cref="ScopeSizeCache.KeywordStatisticsMinChunks"/> live child chunks, the lexemes in at least
+    /// <see cref="ScopeSizeCache.KeywordStatisticsShare"/> of them. rag-api runs no <c>ts_stat</c> (#499 step 2, B-33).
     /// </summary>
-    Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>The searchable child chunks of one (profile, collection) that carry exactly <see cref="Tags"/> (empty = untagged).</summary>
@@ -115,5 +116,8 @@ public sealed record CollectionChunkCount(Guid EmbeddingProfileId, Guid Collecti
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
-/// <summary>A lexeme and the number of chunks of one (profile, collection) it occurs in.</summary>
-public sealed record FrequentLexeme(Guid EmbeddingProfileId, Guid CollectionId, string Lexeme, long Chunks);
+/// <summary>
+/// A lexeme of one (profile, collection): <see cref="Ndoc"/> of its <see cref="ChunkCount"/> live child chunks contain it,
+/// as the worker counted them (both from one <c>KeywordStatistics</c> row).
+/// </summary>
+public sealed record FrequentLexeme(Guid EmbeddingProfileId, Guid CollectionId, string Lexeme, long Ndoc, long ChunkCount);
