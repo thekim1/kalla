@@ -194,7 +194,11 @@ export const platformResources: PlatformResource[] = [
       { key: 'kind', label: PLATFORM.columns.kind },
       { key: 'residencies', label: PLATFORM.columns.residencies },
       { key: 'source', label: PLATFORM.columns.source },
+      { key: 'contextWindow', label: PLATFORM.fields.contextWindow! },
+      { key: 'maxOutputTokens', label: PLATFORM.fields.maxOutputTokens! },
     ],
+    // The limits of any row (Decisions "Answer length from the model"): manual until the gateway's catalogue carries them.
+    update: { method: 'put', path: '/api/gateway/models/{name}' },
     panels: ['embedding-profiles', 'embedding-canary'],
   },
   {
