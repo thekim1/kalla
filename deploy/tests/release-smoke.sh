@@ -12,7 +12,9 @@
 #   - pgbackrest stanza-create and check in the postgres container
 #   - parser /v1/info from the worker container (the worker image's own probe pointed at the parser: HTTPS through the
 #     internal CA, 2xx; the image has no shell or curl)
-#   - the renderer: with --render, rag-renderer runs healthy (COMPOSE_PROFILES=render); without, it doesn't run (#505)
+#   - the renderer: with --render, rag-renderer runs healthy (COMPOSE_PROFILES=render), and then switching it off as
+#     the upgrade guide says (no profile, no endpoint, rm rag-renderer, restart rag-worker) leaves a healthy stack
+#     without it; without --render it never runs (#505)
 #
 #   deploy/tests/release-smoke.sh BUNDLE.tar.gz [options]
 #
@@ -24,7 +26,7 @@
 #   --wait-timeout SECONDS  for `up --wait` [900]: the parser warms up and freshclam downloads the signatures first
 #   --chown-with-docker     without root or passwordless sudo (a developer machine): init-deployment.sh's chown runs
 #                           as root in a throwaway container of the bundle's postgres image, and so does the clean-up
-#   --render                init-deployment.sh --render: the Compose profile `render` with rag-renderer (#505)
+#   --render                init-deployment.sh --render (the Compose profile `render`), then switched off again (#505)
 #   --keep                  leave the stack running and the files in place
 #
 # Needs Docker with Compose v2, curl, jq and openssl; the containers read their secrets as their own users, so
@@ -112,21 +114,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# init-deployment.sh with the test host's options plus "$@", then this test's own .env lines, which a re-run (it rewrites
+# .env) needs again.
+init_deployment() {
+  PATH="$init_path" "$deploy/init-deployment.sh" \
+    --oidc-authority https://keycloak.smoke.test/realms/ume \
+    --gateway-url https://llm.smoke.test \
+    --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
+    --api-port "$api_port" --admin-port "$admin_port" \
+    --backup-target local --allow-file-keys "$@" --yes > "$work/init.log" \
+    || { cat "$work/init.log" >&2; fail "init-deployment.sh failed"; }
+  grep -q 'Run as root first' "$work/init.log" && { cat "$work/init.log" >&2; fail "init-deployment.sh could not chown"; }
+  {
+    # No rag-ingestion.slice on a test runner (deploy/host/install.sh is not run here).
+    echo "UME_RAG_INGESTION_SLICE="
+  } >> "$deploy/.env"
+  for f in ${extra_files[@]+"${extra_files[@]}"}; do sed -i "s#^COMPOSE_FILE=.*#&:$f#" "$deploy/.env"; done
+}
+
 echo "== init-deployment.sh ($name)"
-PATH="$init_path" "$deploy/init-deployment.sh" \
-  --oidc-authority https://keycloak.smoke.test/realms/ume \
-  --gateway-url https://llm.smoke.test \
-  --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
-  --api-port "$api_port" --admin-port "$admin_port" \
-  --backup-target local --allow-file-keys ${render:+--render} --yes > "$work/init.log" \
-  || { cat "$work/init.log" >&2; fail "init-deployment.sh failed"; }
-grep -q 'Run as root first' "$work/init.log" && { cat "$work/init.log" >&2; fail "init-deployment.sh could not chown"; }
+init_deployment ${render:+--render}
 ok "init-deployment.sh wrote $(basename "$deploy")/.env, certs and secrets"
-{
-  # No rag-ingestion.slice on a test runner (deploy/host/install.sh is not run here).
-  echo "UME_RAG_INGESTION_SLICE="
-} >> "$deploy/.env"
-for f in ${extra_files[@]+"${extra_files[@]}"}; do sed -i "s#^COMPOSE_FILE=.*#&:$f#" "$deploy/.env"; done
 
 echo "== images"
 unpinned="$(dc config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"
@@ -189,6 +197,19 @@ if [ -n "$render" ]; then
   [ "$renderer" = healthy ] || fail "rag-renderer is '${renderer:-not running}' with --render, expected healthy"
   grep -qx 'COMPOSE_PROFILES=render' "$deploy/.env" || fail "--render did not set COMPOSE_PROFILES=render in .env"
   ok "rag-renderer healthy with COMPOSE_PROFILES=render"
+
+  # The other half without a second boot: switch the renderer off as docs/upgrade-guide.md tells operators to. Its
+  # first step, init-deployment.sh again without --render, needs root here (the files now belong to the containers'
+  # users) and is checked on its own in verify.yml's deploy-checks; this applies its result (no profile, no endpoint)
+  # and checks that the stack runs without the renderer.
+  echo "== renderer off (no profile, no endpoint, rm rag-renderer, restart rag-worker)"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$deploy/.env"
+  "${as_root[@]}" rm -f "$deploy/secrets/worker/Render__Endpoint"
+  dc rm -sf rag-renderer >/dev/null
+  dc restart rag-worker >/dev/null
+  dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy again without the renderer"
+  [ -z "$(dc ps --format '{{.Service}}' | grep -x rag-renderer || true)" ] || fail "rag-renderer still runs after switching it off"
+  ok "renderer switched off: no rag-renderer, every service healthy again (browser sources: render.not_configured)"
 else
   [ -z "$renderer" ] || fail "rag-renderer runs without --render"
   grep -qx 'COMPOSE_PROFILES=' "$deploy/.env" || fail "COMPOSE_PROFILES is not empty in .env without --render"
