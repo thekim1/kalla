@@ -19,6 +19,7 @@ import { problemMessage } from '@/utils/problem'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
+import PromptTextsPanel from './PromptTextsPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
 import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
@@ -160,6 +161,7 @@ watch(() => props.resource, () => {
     <template v-for="panel in resource.panels ?? []" :key="panel">
       <EmbeddingProfilesPanel v-if="panel === 'embedding-profiles'" class="mb-6" />
       <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
+      <PromptTextsPanel v-else-if="panel === 'prompt-texts'" class="mb-6" />
     </template>
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
