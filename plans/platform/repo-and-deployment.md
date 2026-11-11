@@ -133,23 +133,23 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Packages | `ManagePackageVersionsCentrally`, `CentralPackageTransitivePinningEnabled=false` | `Directory.Packages.props` |
 | Version | `0.0.0-local`; release overrides `-p:Version` from the tag | `Directory.Build.props`, `release.yml` |
 | Containers | SDK container publish (`-t:PublishContainer`), **no Dockerfiles for .NET**; base `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6…4374`, user 1654 | `Directory.Build.targets` |
-| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.4` (ahead of the gateway's 13.6.1 at the user's request, #339), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
+| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.5` (ahead of the gateway's 13.6.1 at the user's request, #339), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
 
 ### 2.2 Initial `Directory.Packages.props`
 
 | Group | Package | Version | Status |
 |---|---|---|---|
-| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.4 | gateway's family (13.6.1 there; user, #339) |
-| | `Aspire.Hosting.Keycloak` | 13.6.4-preview.1.26523.11 | gateway's family (#339) |
+| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.5 | gateway's family (13.6.1 there; user, #339) |
+| | `Aspire.Hosting.Keycloak` | 13.6.5-preview.1.26559.7 | gateway's family (#339) |
 | | `CommunityToolkit.Aspire.Hosting.Ollama` | 13.6.0 | gateway (optional local BGE-M3, §4.4) |
 | | `MessagePack` | 2.5.307 | gateway (GHSA pin) |
-| | `Aspire.Hosting.Python` | 13.6.4 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
+| | `Aspire.Hosting.Python` | 13.6.5 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
 | Runtime (gateway) | `Microsoft.Extensions.Http.Resilience`, `Microsoft.Extensions.ServiceDiscovery` | 10.11.0 | gateway |
 | | `OpenTelemetry.Exporter.OpenTelemetryProtocol`, `OpenTelemetry.Extensions.Hosting` | 1.19.1 | gateway |
 | | `OpenTelemetry.Instrumentation.AspNetCore`, `.Http`, `.Runtime` | 1.19.0 | gateway |
-| | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.13 | gateway |
+| | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.14 | gateway |
 | | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | gateway |
-| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.4 | gateway's family (#339) |
+| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.5 | gateway's family (#339) |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
 | Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; dependency ranges admit Npgsql EF 10.0.3 (Stage 0); EF 10 compatibility test in P0 #6 |
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
@@ -164,7 +164,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
 | Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
-| Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.13, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
+| Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.14, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
 
 ### 2.3 Frontend (`src/admin-ui`)
@@ -228,7 +228,7 @@ src/parser/
 | `Ume.Rag.AdminApi` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering, Pipelines, `Ume.Rag.Tools` (P2); OIDC, OpenApi, Scalar (the P2 Graph member-group lookup uses a plain `HttpClient`, §2.2) | `ume-rag/admin` (`PublishAdminUi=true`) | `rag-admin` (+ `rag-admin-b` from P2) |
 | `Ume.Rag.MigrationService` | `Microsoft.NET.Sdk.Worker` | Infrastructure, ServiceDefaults | `ume-rag/migrations` | `rag-migrate` |
 | `Ume.Rag.FakeGateway` | `Microsoft.NET.Sdk.Web`, `ContainerFamily noble-chiseled` (as FakeLlm) | ServiceDefaults | `ume-rag/fake-gateway` (tests, R1 test) | dev/CI only |
-| `Ume.Rag.AppHost` | `Aspire.AppHost.Sdk/13.6.4` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
+| `Ume.Rag.AppHost` | `Aspire.AppHost.Sdk/13.6.5` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
 | `Ume.Rag.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `ume-rag/api`; its own host `rag-tools` only with the first external, OBO or write tool, P3) | chat role of `rag-api`; `rag-admin` |
 
 Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(args)) return;`, then
