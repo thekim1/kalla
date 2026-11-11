@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -63,8 +64,18 @@ public static class SettingsEndpoints
                     GatewayModelModelKinds.Rerank);
             });
         Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString(),
-            (r, db, models, ct) => PlatformModelRules.EnsureAsync(db, models,
-                [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
+            (r, db, models, ct) =>
+            {
+                // The platform answer ceiling (chat §6.3, Decisions "Answer length from the model"): absent or null, or an integer 256–1,000,000.
+                if (r.Value[PlatformChatSettings.MaxAnswerTokensKey] is { } ceiling &&
+                    Ume.Rag.Answering.Chat.AssistantChatSettings.TryInt(ceiling) is not (>= PlatformChatSettings.MinAnswerCeiling and <= PlatformChatSettings.MaxAnswerCeiling))
+                {
+                    throw AdminFaults.Field(PlatformChatSettings.MaxAnswerTokensKey, AdminErrorCodes.InvalidValue);
+                }
+
+                return PlatformModelRules.EnsureAsync(db, models,
+                    [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct);
+            });
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
             s.PiiFlagRules = r.FlagRules.ToJsonString();

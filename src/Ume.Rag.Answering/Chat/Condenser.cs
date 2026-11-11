@@ -13,9 +13,10 @@ namespace Ume.Rag.Answering.Chat;
 /// <c>allowedLinkHosts</c>, <c>messagesPerMinutePerUser</c> and the default <c>notFound</c> texts.
 /// </summary>
 /// <remarks><c>condenseReasoningEffort</c> is sent as <c>reasoning_effort</c> on the condense call when set (#287: a reasoning
-/// model otherwise spends its 96 tokens on hidden reasoning); null sends nothing.</remarks>
+/// model otherwise spends its 96 tokens on hidden reasoning); null sends nothing. <c>maxAnswerTokens</c> is the platform
+/// ceiling <c>X</c> of every answer (chat design §6.3, Decisions "Answer length from the model"); null (the default) sets none.</remarks>
 public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<string> AllowedLinkHosts, int MessagesPerMinutePerUser, string? NotFound,
-    string? CondenseReasoningEffort = null)
+    string? CondenseReasoningEffort = null, int? MaxAnswerTokens = null)
 {
     public static PlatformChatSettings Parse(string? settingsChat, ChatOptions fallback)
     {
@@ -37,7 +38,30 @@ public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<s
             hosts is { Count: > 0 } ? hosts : fallback.AllowedLinkHosts,
             json?["messagesPerMinutePerUser"] is JsonValue r && r.GetValueKind() == JsonValueKind.Number && r.TryGetValue<int>(out var rate) ? rate : fallback.MessagesPerMinutePerUser,
             json?["notFound"] is JsonObject notFound ? notFound.ToJsonString() : null,
-            json?["condenseReasoningEffort"] is JsonValue e && e.GetValueKind() == JsonValueKind.String && e.GetValue<string>() is { Length: > 0 and <= 20 } effort ? effort : null);
+            json?["condenseReasoningEffort"] is JsonValue e && e.GetValueKind() == JsonValueKind.String && e.GetValue<string>() is { Length: > 0 and <= 20 } effort ? effort : null,
+            AssistantChatSettings.TryInt(json?[MaxAnswerTokensKey]) is { } ceiling and > 0 ? ceiling : null);
+    }
+
+    /// <summary>The <c>Settings.Chat</c> member of the platform ceiling (admin design §4.5, <c>PUT /api/settings/chat</c>).</summary>
+    public const string MaxAnswerTokensKey = "maxAnswerTokens";
+
+    /// <summary>The ceiling's bounds on save (admin design §4.5): 256 to 1,000,000 tokens.</summary>
+    public const int MinAnswerCeiling = 256;
+
+    public const int MaxAnswerCeiling = 1_000_000;
+
+    /// <summary>The ceiling as stored in a <c>Settings.Chat</c> JSON text, for the admin's checks; null when unset or unreadable.</summary>
+    public static int? AnswerCeilingOf(string? settingsChat)
+    {
+        try
+        {
+            var json = string.IsNullOrWhiteSpace(settingsChat) ? null : JsonNode.Parse(settingsChat) as JsonObject;
+            return AssistantChatSettings.TryInt(json?[MaxAnswerTokensKey]) is { } ceiling and > 0 ? ceiling : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
 

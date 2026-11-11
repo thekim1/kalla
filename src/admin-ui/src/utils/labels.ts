@@ -688,6 +688,7 @@ export const PLATFORM = {
     maxResidency: 'Residency ceiling',
     contextWindow: 'Context window, in tokens',
     maxOutputTokens: 'Longest output, in tokens',
+    maxAnswerTokens: 'Longest answer, all assistants',
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
@@ -703,6 +704,7 @@ export const PLATFORM = {
       'The most tokens the model reads in one call, from the model’s documentation. Empty: unknown, so assistants budget 16,384. The AI gateway’s catalogue does not carry it yet.',
     maxOutputTokens:
       'The longest answer the model can write, from its documentation. Assistants that use the model’s limit ask for this much (less the prompt). Empty: unknown, so the provider’s default applies.',
+    maxAnswerTokens: 'Caps every assistant’s answer length, overrides included; leave empty to use each model’s limit.',
   } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
@@ -1029,7 +1031,10 @@ export const ASSISTANT = {
   lengthStopped: 'The answer stopped at the length limit.',
   maxTokensSent: (tokens: string | null, source: string) =>
     tokens === null ? 'Answer length: the provider’s default (no limit sent)' : `Answer length: at most ${tokens} tokens (${source})`,
-  maxTokensSources: { override: 'the assistant’s setting', model: 'the model’s limit', provider: 'the provider’s default' } as Record<string, string>,
+  maxTokensSources: {
+    override: 'the assistant’s setting', model: 'the model’s limit', provider: 'the provider’s default', ceiling: 'the platform’s ceiling',
+  } as Record<string, string>,
+  answerCeiling: (tokens: string) => `Platform ceiling: ${tokens} tokens. Every assistant’s answers stop there, this one’s included.`,
   temperature: 'Temperature (0 to 1; lower gives more predictable answers)',
   language: 'Answer language',
   languages: { '': 'Platform default', auto: 'The language of the question', sv: 'Always Swedish' } as Record<string, string>,

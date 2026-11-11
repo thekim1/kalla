@@ -63,10 +63,16 @@ const advancedErrors = ref<Record<string, string | undefined>>({})
 const UNKNOWN_OUTPUT_LIMIT = 1_000_000
 const UNKNOWN_CONTEXT_WINDOW = 1_048_576
 const chosenModel = computed(() => models.value.find((m) => m.name === model.value))
+// The platform ceiling (Settings.Chat.maxAnswerTokens, chat §6.3): shown when it is lower than the model's limit or that is unknown.
+const answerCeiling = computed(() => {
+  const ceiling = assistant.data.value?.maxAnswerTokens ?? null
+  const own = chosenModel.value?.maxOutputTokens ?? null
+  return ceiling !== null && (own === null || ceiling < own) ? ceiling : null
+})
 const limits = computed(() => ({
   topK: [1, 50],
   maxMessages: [0, 20],
-  maxOutputTokens: [64, chosenModel.value?.maxOutputTokens ?? UNKNOWN_OUTPUT_LIMIT],
+  maxOutputTokens: [64, Math.min(chosenModel.value?.maxOutputTokens ?? UNKNOWN_OUTPUT_LIMIT, assistant.data.value?.maxAnswerTokens ?? UNKNOWN_OUTPUT_LIMIT)],
   contextTokens: [4096, chosenModel.value?.contextWindow ?? UNKNOWN_CONTEXT_WINDOW],
   temperature: [0, 1],
 }) as const)
@@ -435,6 +441,7 @@ onMounted(load)
               <legend class="font-medium">{{ ASSISTANT.maxOutputTokens }}</legend>
               <CheckField v-model="advanced.useModelOutput" :label="ASSISTANT.useModelLimit" data-test="use-model-output" />
               <p class="text-small text-fg-3" data-test="model-output-limit">{{ limitHint(chosenModel?.maxOutputTokens) }}</p>
+              <p v-if="answerCeiling !== null" class="text-small text-fg-3" data-test="answer-ceiling">{{ ASSISTANT.answerCeiling(formatNumber(answerCeiling)) }}</p>
               <TextField
                 v-if="!advanced.useModelOutput" id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens"
                 inputmode="numeric" :error="advancedErrors.maxOutputTokens"

@@ -586,6 +586,36 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect((save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }).answer).toMatchObject({ maxOutputTokens: 8000, contextTokens: 32768 })
     })
 
+    it('shows the platform ceiling when it is lower than the model\'s limit, and bounds the override by it', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      withLimits()
+      vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, maxAnswerTokens: 4000 })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+
+      expect(wrapper.get('[data-test=answer-ceiling]').text()).toBe(ASSISTANT.answerCeiling(formatNumber(4000)))
+      await wrapper.get('[data-test=use-model-output] input').setValue(false)
+      await wrapper.get('#assistant-max-tokens').setValue('5000')
+      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await flushPromises()
+      expect(save).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain(ASSISTANT.rangeInvalid(64, 4000))
+    })
+
+    it('does not show a platform ceiling above the model\'s limit', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      withLimits()
+      vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, maxAnswerTokens: 100_000 })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+      expect(wrapper.find('[data-test=answer-ceiling]').exists()).toBe(false)
+    })
+
     it('opens a stored override unchecked, drops it when checked again, and says when the model\'s limit is unknown', async () => {
       signIn(['rag-editor'])
       mocks()
