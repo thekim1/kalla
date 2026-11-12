@@ -190,7 +190,8 @@ Seven long-running containers (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser
 `postgres`) and the one-shots `rag-migrate` and `rag-blobs-init`; no Redis until the first multi-host deployment, and then
 Ume.Rag's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
 process behind `IRateLimitStore`/`ISharedCache`; pgBackRest runs inside the Postgres image, not as a sidecar. Merging
-containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. Detail:
+containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. `rag-clamav`
+runs only where the malware scan is on (Decisions "Malware scan optional"). Detail:
 `docs/production-setup.md`; `platform/repo-and-deployment.md` §6.2.
 
 *From:* log rows 13, 58, 115; decided by user, 2026-11-07.
@@ -468,9 +469,23 @@ Scheduled crawls are full traversals with conditional GETs. A traversal is compl
 
 ### Egress guard and ClamAV
 
-Fetches go through a DNS-pinned egress guard, with the host firewall and a startup canary behind it. ClamAV scans every upload and every fetched file other than HTML, text and CSV, fail-closed; the UI shows malware metadata only. SharePoint ACLs are not mirrored (P2). Detail: `ingestion-worker/design-connectors.md` §7, §11.
+Fetches go through a DNS-pinned egress guard, with the host firewall and a startup canary behind it. ClamAV scans every upload and every fetched file other than HTML, text and CSV, fail-closed, unless the deployment turns the scan off (Decisions "Malware scan optional"); the UI shows malware metadata only. SharePoint ACLs are not mirrored (P2). Detail: `ingestion-worker/design-connectors.md` §7, §11.
 
 *From:* log row 41; decided by main session, 2026-10-29.
+
+### Malware scan optional
+
+The malware scan is a deployment's choice: `ClamAv:Mode` is `on` (default) or `off`, a deployment knob like
+`Parser:Mode`. With `on` the scan is as before, fail-closed, and outside Development a worker without `ClamAv:Host`
+refuses to start. With `off` no `rag-clamav` container runs, and the worker stores files without a scan and says so:
+a warning and security event 5106 `rag.malware.scan_off` at every start; the health check stays Healthy with the text
+"malware scan off"; an upload slot is `unscanned`, never `clean`, and has no `ScannedAt`; the run's report carries
+`malwareScan: "off"`; and the admin UI shows *Not scanned for malware* on those files and runs. Files stored while the
+scan was off are not scanned when it is turned on; an automatic re-scan may come later. Detail:
+`ingestion-worker/design-connectors.md` §9.1, §11; `platform/repo-and-deployment.md` §5.5, §7.1; `admin/design.md`
+§5.5.7.
+
+*From:* decided by user, 2026-11-09 (#535); the `unscanned` state, the health text and no re-scan by user, 2026-11-12.
 
 ### JavaScript rendering
 

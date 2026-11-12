@@ -52,7 +52,7 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 | Stage | Does | Writes | Reused across sources by |
 |---|---|---|---|
 | `fetch` | fetch or upload (6b); raw blob by content hash | `Documents` facts, raw blob | crawl frontier (P1 per source; from P2 shared, one request per URL per freshness window) and raw blob key |
-| `scan` | ClamAV for files (6b §11) | quarantine on a finding | – |
+| `scan` | ClamAV for files (6b §11; skipped with `ClamAv:Mode = off`) | quarantine on a finding | – |
 | `detect` | sniff media type and language; `/v1/inspect` for parser-bound types (6c §2) | facts | cache (intermediate) |
 | `parse` | routes per document: HTML extraction with the host's site profile, text/Markdown, CSV in the worker; PDF, Office, ODF, images to the parser (6c §3) | `NodeOutputs` (+ blobs) | parse cache: (content hash, parser settings hash, parser build), or the worker stage key |
 | `clean` | normalisation and furniture (6c §4) | `NodeOutputs` | cache (intermediate) |
@@ -284,7 +284,7 @@ All version 1. Class: job class (§7.4); cache: §8. Details column: which docum
 | Stage | Class | Cache | Template parameters | Details |
 |---|---|---|---|---|
 | `fetch` (URL list, crawl, upload) | fetch | none (raw blob is the document) | – (source settings, 6b) | 6b |
-| `scan` | fetch | none | – (uploads and fetched files; ClamAV, fail-closed) | 6b §11 |
+| `scan` | fetch | none | – (uploads and fetched files; ClamAV, fail-closed; skipped with `ClamAv:Mode = off`) | 6b §11 |
 | `detect` | inline | intermediate | – (`/v1/inspect` for PDF, TIFF, Office, ODF) | 6c §2 |
 | `parse` | inline for HTML, text, Markdown, CSV; **parse** for parser-bound types | **durable** | `ocr`, `tables` (parser route); parse rules and the site profile are inputs, not parameters | 6c §3 |
 | `clean` | inline | intermediate | – | 6c §4 |

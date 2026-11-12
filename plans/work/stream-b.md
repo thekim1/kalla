@@ -697,3 +697,27 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   #135).
 - **Waits on:** the shared Keycloak with the feedback service account.
 - **Read:** chat §13.3, §14.2.
+
+### [ ] B-47 Malware scan optional: the `unscanned` state, `ScannedAt`, event 5106, the AppHost's `ClamAv:Mode`, the admin's note (#535)
+- **Do:**
+  - **State and column:** `UploadStates.Unscanned` (`unscanned`) in the `State` check and `Uploads.ScannedAt
+    timestamptz NULL`, in one migration (connectors §9.1). No data step: the PR gives the SQL that sets `ScannedAt` on
+    development rows that were scanned.
+  - **Event:** 5106 `rag.malware.scan_off` (Warning) in `SecurityEvents`, with its row in `docs/security-events.md`.
+  - **AppHost:** `ClamAv:Mode` = `on` (default) | `off` replaces `ClamAv:Enabled`. `off` starts no `clamav` resource
+    and passes `ClamAv__Mode=off` to the worker.
+  - **Admin API:** `unscanned` counts as *processing*; each file carries `scannedAt` (admin §4.5); the contract follows.
+  - **Admin UI:** *Not scanned for malware* on a file's row and details when it is `unscanned`, or `indexed` with no
+    `scannedAt`; *Files in this run were not scanned for malware* in a run's summary when its report says
+    `malwareScan: "off"` (admin §5.5.7). Texts in `labels.ts` and `messages.ts` only.
+- **Paths:** `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`,
+  `src/Ume.Rag.Infrastructure/Security/**`, `src/Ume.Rag.AppHost/**`, `src/Ume.Rag.AdminApi/**`,
+  `src/admin-ui/src/views/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `contracts/admin/**`,
+  `docs/security-events.md`, `tests/**`.
+- **Done when:** the migration applies and the schema contract shapes are regenerated; admin API tests: an `unscanned`
+  slot is among *processing*, and an `indexed` slot without `ScannedAt` answers `scannedAt: null`; Vitest: the note
+  shows on those files and not on a scanned one, and the run line shows for `malwareScan: "off"`; the AppHost with
+  `ClamAv:Mode=off` has no `clamav` resource and the worker's environment has `ClamAv__Mode=off`.
+- **Waits on:** –. Land the state, the column, the event and the AppHost first (a part of its own): A-36 waits on them.
+- **Read:** Decisions "Malware scan optional"; connectors §9.1, §11; admin §4.5, §5.5.7; identity §10;
+  repo-and-deployment §4.1.

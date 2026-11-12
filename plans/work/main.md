@@ -206,3 +206,11 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
   cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
   repo-and-deployment §4.3.
+
+### [x] M-13 Malware scan optional (#535): the decision, the designs and the queue
+- **Done (2026-11-12):** Decisions "Malware scan optional" (the user's knob of 2026-11-09; the `unscanned` state, the
+  health text and no re-scan by the user, 2026-11-12); connectors §5.5, §9.1, §11, §16, §18; engine §2, §6; identity §10
+  (5106); admin §4.5, §5.5.7; repo-and-deployment §3, §4.1, §5.5, §6.2, §7.1. Queued as B-47 (state, column, event,
+  AppHost, admin) and A-36 (worker), A-37 (deployment and docs).
+- **Left open on purpose:** an automatic re-scan of files stored while the scan was off. `Uploads.ScannedAt` null
+  finds them when it is wanted.

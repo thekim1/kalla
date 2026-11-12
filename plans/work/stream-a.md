@@ -479,3 +479,44 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Live check:** on the test host with the gateway on v0.10.0: the admin's budget read-back answers for a real key.
 - **Waits on:** B-45 (the setting in code), A-30 (one credential key per service in the deployment).
 - **Read:** gateway-changes §5.6, §5.7; admin §8.6; identity §4.7, §10; engine §7.3; repo-and-deployment §6.3, §7.1.
+
+### [ ] A-36 Malware scan optional in the worker: `ClamAv:Mode`, the scanner that doesn't scan, `unscanned` slots (#535)
+- **Do:** `ClamAv:Mode` (`on` default | `off`) beside `ClamAv:Host` and `ClamAv:Port` (connectors §11).
+  - **`on`:** as today. Outside Development the worker refuses to start without `ClamAv:Host`, with a message that
+    names both settings; Development without a host keeps the `EicarOnlyScanner`.
+  - **`off`:** a scanner that contacts no clamd and answers "not scanned", a result of its own and never clean; no
+    `rag.clamav.*` metric; a Warning and event 5106 at start; the `clamav` health check Healthy with "Malware scan is
+    off (ClamAv:Mode = off)". The stage preview uses the same scanner.
+  - **Upload slots (§9.1):** a passed scan sets `clean` and `ScannedAt`; "not scanned" sets `unscanned` and leaves
+    `ScannedAt` null; an add or a replace clears `ScannedAt`; `indexed` keeps it.
+  - **Run report (§5.5):** the finalizer writes `malwareScan: "off"` into `Runs.Report` while the scan is off.
+- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Done when:** worker tests with `ClamAv:Mode=off` and no clamd: an uploaded file goes `unscanned` and then
+  `indexed` with `ScannedAt` null; a crawled PDF is stored; the run's report has `malwareScan: "off"`; 5106 is logged
+  once at start; the health check is Healthy with the text. With `on`: a scanned upload has `ScannedAt`, a replace
+  clears it until the new bytes pass, and a host outside Development without `ClamAv:Host` fails at start. The
+  worker's `sql-shapes.json` is regenerated.
+- **Waits on:** B-47's first part (the state, the column, the event).
+- **Read:** Decisions "Malware scan optional"; connectors §5.5, §9.1, §11, §16, §18.
+
+### [ ] A-37 Malware scan optional in the deployment and the docs (#535)
+- **Do:**
+  - **Compose:** `rag-clamav` under the profile `clamav`; the worker's `depends_on` on it not required;
+    `ClamAv__Mode: ${UME_RAG_CLAMAV_MODE:-on}` on the worker (repo-and-deployment §5.5).
+  - **`init-deployment.sh --clamav on|off`** (§7.1): default `on`, a re-run without the option keeps the value in
+    `deploy/.env`. It writes `UME_RAG_CLAMAV_MODE` and the profile; `off` skips the ClamAV confs and says so in the
+    closing notes.
+  - **Kubernetes:** `components/clamav` split from `components/ingestion`, in the example by default.
+  - **Portainer:** `UME_RAG_CLAMAV_MODE` and the profile in the template; regenerate the stack.
+  - **Docs:** `production-setup.md` (the choice, what `off` means, sizing without ClamAV, files stored while it was
+    off are not scanned later), `runbook.md`, `kubernetes.md`, `network-and-ports.md`, `local-development.md`
+    (`ClamAv:Mode` in place of `ClamAv:Enabled`) and `upgrade-guide.md`: an existing deployment re-runs
+    `init-deployment.sh`, or `rag-clamav` doesn't start and files wait with `clamav.unavailable`.
+- **Paths:** `deploy/**` (not `deploy/postgres/**`, `deploy/keycloak/**`, `deploy/kubernetes/base/app-roles.sql`),
+  `docs/**` (not `docs/security-events.md`, `docs/accessibility-statement.md`), `.github/workflows/verify.yml`.
+- **Done when:** `deploy-checks` pass and cover: `docker compose config` with and without the profile; a default
+  `init-deployment.sh` run writes the profile and `on`; `--clamav off` writes `off`, no profile and no ClamAV confs,
+  and a re-run without the option keeps it; `kubectl kustomize` of the example with and without `components/clamav`.
+  The release smoke test also boots with `--clamav off`: the worker is healthy and no `rag-clamav` container runs.
+- **Waits on:** A-36 (the worker reads `ClamAv:Mode`).
+- **Read:** Decisions "Malware scan optional"; repo-and-deployment §5.5, §6.2, §7.1; connectors §11.

@@ -295,7 +295,7 @@ credential key with `organisation.read`, admin design §4.10); `Gateway:Integrat
 cost or budget read-back).
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
-`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:MaxHostRate` (50 req/s) and `Crawl:MaxHostConnections` (16), the ceilings of a host's politeness profile (connectors design §6.6); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL with its secret path, a secret; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (4; also the most a host's `renderPerHost` may be), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (500 ms), `Render:AssetCacheMb` (128), `Render:Viewport` (1280×2000), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
+`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:MaxHostRate` (50 req/s) and `Crawl:MaxHostConnections` (16), the ceilings of a host's politeness profile (connectors design §6.6); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); `ClamAv:Mode` (`on` default, `off`: no malware scan, §5.5) with `ClamAv:Host` and `ClamAv:Port`; the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL with its secret path, a secret; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (4; also the most a host's `renderPerHost` may be), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (500 ms), `Render:AssetCacheMb` (128), `Render:Viewport` (1280×2000), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
 
 Platform settings (data-model §5): `Config:MaxUnconfirmedSeconds` (90 s grace window for security-relevant decisions
 on every service).
@@ -327,7 +327,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `fake-gateway` | `AddProject<Projects.Ume_Rag_FakeGateway>` | `FakeGateway:Enabled` (default true) | §4.3; `FakeGateway:Latency:*` passed through as in the gateway |
 | `ollama` | `AddOllama("ollama").AddModel("bge-m3")` | `Ollama:Enabled` (default false, dev only, throws in publish mode as the gateway does) | real BGE-M3 embeddings behind the fake gateway |
 | `parser` | `AddDockerfile("parser", "../parser")` | `Parser:Mode` = `container` (default) / `local` (`AddUvicornApp` from `Aspire.Hosting.Python`, hot reload) / `off` | internal endpoint only |
-| `clamav` | `AddDockerfile("clamav", "../../images/clamav").WithVolume("ume-rag-clamav-db")` | `ClamAv:Enabled` (default true; `false` = worker uses an EICAR-only fake scanner) | dev freshclam uses the public mirror |
+| `clamav` | `AddDockerfile("clamav", "../../images/clamav").WithVolume("ume-rag-clamav-db")` | `ClamAv:Mode` = `on` (default) / `off` (no container; the worker gets `ClamAv__Mode=off` and stores files unscanned, connectors design §11) | dev freshclam uses the public mirror |
 | `migrations` | `AddProject<…MigrationService>` | `Seed:Enabled` | `WaitFor(database)`; seeds dev key, the development embedding profile (§4.4), demo data |
 | `api` | `AddProject<…Api>("api", "https")` | – | `Rag__Roles=knowledge,chat,mcp`; `Gateway__BaseUrl` = fake or real gateway |
 | `worker` | `AddProject<…Worker>("worker", "https")` | – | references parser, clamav |
@@ -526,6 +526,22 @@ answering PONG with no engine. An unhealthy container keeps running (the entrypo
 `ume-rag.restart-unhealthy=true`; no autoheal container and no Docker socket in a container. `images/clamav/test.sh`
 re-runs these checks and runs in the `images` CI job (§8.2).
 
+**The scan is optional** (Decisions "Malware scan optional"; connectors design §11): the worker's `ClamAv:Mode` is
+`on` (default) or `off`.
+
+- **Compose:** `rag-clamav` runs only with the profile `clamav`, and the worker's dependency on it is not required.
+  The worker gets `ClamAv__Mode` from `UME_RAG_CLAMAV_MODE` in `deploy/.env` (`on` when the line is missing).
+- **`init-deployment.sh --clamav on|off`** (§7.1; default `on`, and a re-run without the option keeps the `.env`
+  value): `on` writes the profile into `COMPOSE_PROFILES`; `off` leaves it out, writes `UME_RAG_CLAMAV_MODE=off`,
+  skips the ClamAV confs and names the choice in its closing notes.
+- **Kubernetes:** `rag-clamav` is its own component, `components/clamav`, in the example by default. Leaving it out
+  goes together with `ClamAv__Mode=off` in the worker's configuration.
+- **Portainer:** `UME_RAG_CLAMAV_MODE` and the same profile.
+
+A worker asked for `on` with no clamd running fails closed as before: files wait with `clamav.unavailable`. That is
+also what an existing deployment gets if it updates without re-running `init-deployment.sh`, since its `.env` has
+no `clamav` profile yet (upgrade guide).
+
 ## 6. Production Compose
 
 ### 6.1 Networks
@@ -584,7 +600,7 @@ verify* on the host image).
 | rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-parser | ingestion | **4.0** (half the host; development: 2.0, 1 worker × 2 threads) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_*`; the NER process (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
-| rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
+| rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | only with the Compose profile `clamav` (the default; `init-deployment.sh --clamav off` leaves it out, §5.5); `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
 | rag-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | only with the Compose profile `render` (`init-deployment.sh --render`, #505; without it `browser` sources fail with `render.not_configured`); one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
 | open-webui (optional) | edge | 1.0 | 512 | 512m | not co-hosted | 1.5g | 256 | §12.8 |
@@ -731,6 +747,7 @@ Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. 
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
 | `--host-memory 16\|24` | `16` | the §6.2 profile: 24 adds `compose.host-24g.yaml` and the 24 GB ClamAV confs (§5.5) to `COMPOSE_FILE` |
 | `--freshclam-proxy HOST:PORT` | none | `UME_RAG_FRESHCLAM_PROXY` and the mounted `freshclam.conf` (§5.5); the `mirror` network then reaches only the proxy (§6.1) |
+| `--clamav on\|off` | `on`; a re-run keeps the value in `deploy/.env` | `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and the profile `clamav` in `COMPOSE_PROFILES`; `off` starts no `rag-clamav`, writes no ClamAV confs and says so in the closing notes (§5.5) |
 | `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-provider-url`, `--openwebui-data-dir`, `--openwebui-oidc-client-secret-file`, `--openwebui-api-key-file`, `--openwebui-rag-client-id` | none; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8). `openwebui.env` is written once; a re-run sets only `OAUTH_CLIENT_SECRET` and `OPENAI_API_KEYS` in place when their files are given, never the JWT secret |
 | `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets); P0 builds `all` only |
 | `--proxy`, `--upstream-host`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway; in P0 `--proxy` prints the proxy routes instead of writing the nginx file, and `--rolling` is not built (P2) |
@@ -975,7 +992,7 @@ p50/p95/p99).
 
 **Later (P3, only when its trigger fires):** same shape as the gateway's `deploy/kubernetes`: `base/` (api ×2, admin ×2, worker ×1, migrations Job, probes on
 `/health/*`, PodDisruptionBudgets, restricted Pod Security Standard), `components/datastores` (`ume-rag/postgres` as a
-StatefulSet, pgBackRest inside; Redis), `components/ingestion` (worker, parser, clamav), `example/`, `create-secrets.sh`,
+StatefulSet, pgBackRest inside; Redis), `components/ingestion` (worker, parser), `components/clamav` (optional, §5.5), `example/`, `create-secrets.sh`,
 `deploy.sh`. Compose roles map to Deployments per class group, and `rag.jobs.age` drives the autoscaler. **PgBouncer is
 required** there (transaction mode for `ume_rag_api` and `ume_rag_worker`, §6.2), because replica counts vary and the
 connection budget can no longer be fixed per host. What changes against Compose:

@@ -44,6 +44,10 @@ cost of every model call per assistant, knowledge base, step and client and show
 ([`platform/cost-attribution.md`](platform/cost-attribution.md) §5, steps C1–C6). It needs no gateway change; stage 2, the
 gateway's delegated attribution, follows in P2 before a second department.
 
+**Malware scan optional** (Decisions "Malware scan optional", user 2026-11-09, #535; not a go-live gate): a
+deployment may run without ClamAV (`ClamAv:Mode = off`), and its files are then marked as not scanned. Queued as
+B-47, then A-36 and A-37.
+
 ## Waiting on people
 
 | What | Who | Blocks |
