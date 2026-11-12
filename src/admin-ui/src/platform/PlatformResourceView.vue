@@ -22,7 +22,7 @@ import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
 import PromptTextsPanel from './PromptTextsPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
-import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
+import { gatewayAdminUrl, gatewayLink, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
 // A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions.
@@ -31,6 +31,7 @@ const ui = useUiStore()
 const { copy } = useCopy()
 const resource = computed(() => resourceById(props.resource))
 const rows = useLoadable<Row[]>([])
+const adminUrl = ref<string | null>(null)
 
 interface OpenForm {
   title: string
@@ -53,11 +54,22 @@ const secret = ref<string | null>(null)
 const confirming = ref<RowAction | null>(null)
 
 const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
-const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : null))
+const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : []))
+// A row without an edit opens its details alone; with one, they stand above its form.
+const showDetails = computed(() => details.value.length > 0 && (!resource.value?.update || openForm.value?.operation === resource.value.update))
+const drawerTitle = computed(() => openForm.value?.title ?? (selected.value && resource.value ? rowTitle(selected.value) : resource.value?.label ?? ''))
+const gatewayHref = computed(() => (adminUrl.value && resource.value?.gatewayPage ? gatewayLink(adminUrl.value, resource.value.gatewayPage) : null))
 const ownForm = computed(() => (selected.value && openForm.value?.operation === resource.value?.update ? resource.value?.form?.(selected.value) : undefined))
 
 async function load(): Promise<void> {
-  if (resource.value) await rows.run(() => rowsOf(resource.value!))
+  if (!resource.value) return
+  if (resource.value.gatewayPage) void gatewayAdminUrl().then((url) => (adminUrl.value = url))
+  await rows.run(() => rowsOf(resource.value!))
+}
+
+function rowTitle(row: Row): string {
+  const r = resource.value!
+  return String(row[r.columns[0]!.key] ?? row[r.key])
 }
 
 function cell(value: unknown): string {
@@ -113,10 +125,13 @@ function edit(row: Row): void {
   const r = resource.value!
   selected.value = row
   if (!r.update) {
-    drawerOpen.value = false
+    openForm.value = null
+    openError.value = null
+    secret.value = null
+    drawerOpen.value = !!r.details
     return
   }
-  void show(String(row[r.columns[0]!.key] ?? row[r.key]), PLATFORM.form.save, r.update, row, () => (r.load ? r.load(row) : row))
+  void show(rowTitle(row), PLATFORM.form.save, r.update, row, () => (r.load ? r.load(row) : row))
 }
 
 async function runAction(action: RowAction): Promise<void> {
@@ -149,6 +164,7 @@ function saved(response: unknown): void {
 
 watch(() => props.resource, () => {
   drawerOpen.value = false
+  adminUrl.value = null
   void load()
 }, { immediate: true })
 </script>
@@ -156,6 +172,11 @@ watch(() => props.resource, () => {
 <template>
   <template v-if="resource">
     <PageHeader :title="resource.label" :description="resource.description">
+      <UiButton
+        v-if="gatewayHref && resource.gatewayPage" :href="gatewayHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page"
+      >
+        {{ resource.gatewayPage.label }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
+      </UiButton>
       <UiButton v-if="resource.create" variant="primary" icon="add" data-test="create" @click="create">{{ PLATFORM.form.create }}</UiButton>
     </PageHeader>
     <template v-for="panel in resource.panels ?? []" :key="panel">
@@ -166,13 +187,13 @@ watch(() => props.resource, () => {
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
         :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
-        :clickable="!!resource.update" @row-click="edit"
+        :clickable="!!resource.update || !!resource.details" @row-click="edit"
       >
         <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">{{ cell(c.value ? c.value(row) : row[c.key]) }}</template>
       </DataTable>
     </AsyncState>
 
-    <UiDrawer v-model:open="drawerOpen" :title="openForm?.title ?? resource.label" wide>
+    <UiDrawer v-model:open="drawerOpen" :title="drawerTitle" wide>
       <div v-if="secret" class="grid gap-3" data-test="secret">
         <p class="font-medium">{{ PLATFORM.form.secretOnce }}</p>
         <code class="break-all rounded-card bg-sunken p-3 font-mono">{{ secret }}</code>
@@ -184,15 +205,20 @@ watch(() => props.resource, () => {
       <template v-else>
         <p v-if="opening">{{ COMMON.loading }}</p>
         <InlineError v-if="openError" :message="problemMessage(openError)" class="mb-4" />
-        <section v-if="details && openForm?.operation === resource.update" class="mb-6" data-test="details">
-          <h3 class="mb-2 font-medium">{{ details.title }}</h3>
-          <dl class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1">
-            <template v-for="item in details.items" :key="item.label">
-              <dt class="text-fg-2">{{ item.label }}</dt>
-              <dd class="tabular">{{ item.value }}</dd>
-            </template>
-          </dl>
-        </section>
+        <template v-if="showDetails">
+          <section v-for="section in details" :key="section.title" class="mb-6" data-test="details">
+            <h3 class="mb-2 font-medium">{{ section.title }}</h3>
+            <ul v-if="section.lines" class="grid gap-1">
+              <li v-for="line in section.lines" :key="line">{{ line }}</li>
+            </ul>
+            <dl v-if="section.items" class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1">
+              <template v-for="item in section.items" :key="item.label">
+                <dt class="text-fg-2">{{ item.label }}</dt>
+                <dd class="tabular">{{ item.value }}</dd>
+              </template>
+            </dl>
+          </section>
+        </template>
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">
           <UiButton v-for="action in resource.actions" :key="action.id" :data-test="`action-${action.id}`" @click="runAction(action)">{{ action.label }}</UiButton>
         </div>

@@ -64,6 +64,26 @@ public static class FakeCatalog
         _ => new FakePrice(0.15m, 0.075m, 0.60m),
     };
 
+    /// <summary>
+    /// The chat model that answers without a cost: no <c>x-ume-cost-usd</c> and no stream comment, as a gateway without
+    /// the feature (chat design §18.2); it is priced like every chat model, so a caller's estimate has prices to use.
+    /// </summary>
+    public const string NoCostModel = "fake-no-cost";
+
+    /// <summary>
+    /// A call's cost in USD at <paramref name="model"/>'s price, as the gateway's <c>CostCalculator.Calculate</c>: cached input
+    /// at the cached price (the input price when there is none), the rest of the input at the input price, output at the
+    /// output price, per million tokens, rounded to eight decimals.
+    /// </summary>
+    public static decimal Cost(FakeModel model, long inputTokens, long cachedInputTokens, long outputTokens)
+    {
+        var price = PriceOf(model);
+        var cached = Math.Clamp(cachedInputTokens, 0, Math.Max(inputTokens, 0));
+        var usd = (Math.Max(inputTokens - cached, 0) * price.InputPerMillionUsd + cached * (price.CachedInputPerMillionUsd ?? price.InputPerMillionUsd)
+                   + Math.Max(outputTokens, 0) * price.OutputPerMillionUsd) / 1_000_000m;
+        return Math.Round(usd, 8, MidpointRounding.AwayFromZero);
+    }
+
     /// <summary>The gateway's <c>ModelKind</c> name of a fake model kind (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>).</summary>
     public static string KindName(string kind) => kind switch
     {

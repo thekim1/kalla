@@ -80,6 +80,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<EvaluationRun> EvaluationRuns => Set<EvaluationRun>();
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
     public DbSet<RetrievalStat> RetrievalStats => Set<RetrievalStat>();
+    public DbSet<CollectionDailyUsage> CollectionDailyUsage => Set<CollectionDailyUsage>();
 
     /// <summary>The assistant versions whose <c>CollectionLinks</c> name any of <paramref name="collectionIds"/>; composable.</summary>
     public IQueryable<AssistantVersion> AssistantVersionsLinking(Guid[] collectionIds) => AssistantVersions.FromSql($"""
@@ -95,6 +96,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<Feedback> Feedback => Set<Feedback>();
     public DbSet<ToolCall> ToolCalls => Set<ToolCall>();
     public DbSet<AssistantDailyTotal> AssistantDailyTotals => Set<AssistantDailyTotal>();
+    public DbSet<AssistantDailyUsage> AssistantDailyUsage => Set<AssistantDailyUsage>();
     public DbSet<FeedbackImportState> FeedbackImportState => Set<FeedbackImportState>();
 
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>
@@ -332,6 +334,48 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     /// <summary><c>CK_&lt;table&gt;_&lt;column&gt;</c>: the column holds one of <paramref name="values"/>.</summary>
     internal static void ValuesCheck<T>(TableBuilder<T> table, string tableName, string column, IEnumerable<string> values) where T : class =>
         table.HasCheckConstraint($"CK_{tableName}_{column}", $"\"{column}\" IN ({SqlList(values)})");
+
+    /// <summary>
+    /// A daily usage table's checks (<c>AssistantDailyUsage</c>, <c>CollectionDailyUsage</c>; data-model §2.2, §2.3): the
+    /// level, a step that is not empty (any step name, so a new step needs no migration), and <c>CK_&lt;table&gt;_Counts</c>:
+    /// nothing negative, the estimated calls among the calls, the cached input within the input.
+    /// </summary>
+    internal static void UsageChecks<T>(TableBuilder<T> table, string tableName) where T : class
+    {
+        ClassificationCheck(table, tableName);
+        table.HasCheckConstraint($"CK_{tableName}_Step", "\"Step\" <> ''");
+        table.HasCheckConstraint($"CK_{tableName}_Counts",
+            "\"Calls\" >= 0 AND \"EstimatedCalls\" >= 0 AND \"EstimatedCalls\" <= \"Calls\" AND \"InputTokens\" >= 0 AND " +
+            "\"CachedInputTokens\" >= 0 AND \"CachedInputTokens\" <= \"InputTokens\" AND \"OutputTokens\" >= 0 AND " +
+            "\"CostUsd\" >= 0 AND \"EstimatedCostUsd\" >= 0");
+    }
+
+    /// <summary>
+    /// A daily usage table's columns: <c>Step</c> up to 100 characters (the gateway keeps 100 of <c>x-ume-step</c>,
+    /// gateway-changes §7.1), every counter <c>NOT NULL DEFAULT 0</c>, the costs <c>numeric(18,8)</c>, IX (<c>DepartmentId</c>,
+    /// <c>Day</c>) for the cost report by department.
+    /// </summary>
+    internal static void UsageColumns<T>(EntityTypeBuilder<T> entity) where T : class
+    {
+        entity.Property<string>("Classification").HasMaxLength(20);
+        entity.Property<string>("Step").HasMaxLength(100);
+        foreach (var counter in new[] { "Calls", "EstimatedCalls" })
+        {
+            entity.Property<int>(counter).HasDefaultValue(0);
+        }
+
+        foreach (var tokens in new[] { "InputTokens", "CachedInputTokens", "OutputTokens" })
+        {
+            entity.Property<long>(tokens).HasDefaultValue(0L);
+        }
+
+        foreach (var cost in new[] { "CostUsd", "EstimatedCostUsd" })
+        {
+            entity.Property<decimal>(cost).HasPrecision(18, 8).HasDefaultValue(0m);
+        }
+
+        entity.HasIndex("DepartmentId", "Day");
+    }
 
     private static readonly JsonSerializerOptions ScopesJson = new(JsonSerializerDefaults.Web);
 

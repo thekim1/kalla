@@ -118,7 +118,7 @@ public sealed partial class KnowledgeService(
         try
         {
             search = await engine.SearchAsync(new SearchRequest(request.Query, scope, request.TopK, request.Mode, request.Filters,
-                request.Mode == RetrievalMode.Keyword ? null : (query, token) => embedder.EmbedAsync(profile, query, request.RunId, token),
+                request.Mode == RetrievalMode.Keyword ? null : async (query, token) => (await embedder.EmbedAsync(profile, query, request.RunId, token)).Vector,
                 request.AllowDegraded, Rerank: rerank), ct);
         }
         catch (SearchUnavailableException)

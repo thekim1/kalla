@@ -750,7 +750,8 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
   misconfigured worker cannot starve chat (processing design §11).
 - Every call carries `x-ume-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
   from the integration phase 2 on; older gateways ignore them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
-- `OrgSync` with a `catalog.read` Data API key reads departments and teams (until B-35 moves it to the context).
+- The admin's sync reads departments, teams and member groups from `GET /v1/ume/context` with its credential key and
+  the scope `organisation.read` (§5.1; B-35). No Data API key is used.
 - Saving an assistant calls `GET /v1/models` with the level's key and `x-ume-max-residency` = the level's ceiling,
   and refuses a model that is not listed (§3.4, admin design §4.6 V8).
 

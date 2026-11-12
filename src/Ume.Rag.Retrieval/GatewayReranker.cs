@@ -16,7 +16,8 @@ namespace Ume.Rag.Retrieval;
 /// <see cref="ResidencyCeilingHandler"/> adds the level's key and checks <c>x-ume-residency</c>), the query and the passages as
 /// strings. The answer's <c>results[]</c> (<c>index</c>, <c>relevance_score</c>) are the scores; a passage without a result
 /// stays unscored. Usage is billed per input token (<c>usage.prompt_tokens</c>, <c>usage.total_tokens</c> or Cohere's
-/// <c>meta.billed_units.input_tokens</c>).
+/// <c>meta.billed_units.input_tokens</c>) and the cost is the gateway's <c>x-ume-cost-usd</c>
+/// (<see cref="GatewayUsageReader"/>).
 /// <para>
 /// Rerank is optional: the engine calls this only when <c>gatewayRerankModel</c> is set. A gateway without that model
 /// answers 404 (unknown model) or 400 (a model of another kind); that, any other refusal and a timeout throw, so the engine
@@ -107,7 +108,7 @@ public sealed partial class GatewayReranker(IHttpClientFactory clients, string h
                 _logged.Clear();
             }
 
-            return new RerankScores(scores, new RerankUsage(model, InputTokens(json.RootElement), 0));
+            return new RerankScores(scores, GatewayUsageReader.Read(response, json.RootElement, Step, model));
         }
     }
 
@@ -143,29 +144,6 @@ public sealed partial class GatewayReranker(IHttpClientFactory clients, string h
 
         return scores;
     }
-
-    /// <summary>Input tokens as the gateway bills them: <c>usage.prompt_tokens</c>, else <c>usage.total_tokens</c>, else <c>meta.billed_units.input_tokens</c>, else 0.</summary>
-    public static int InputTokens(JsonElement answer)
-    {
-        if (answer.ValueKind != JsonValueKind.Object)
-        {
-            return 0;
-        }
-
-        if (answer.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object &&
-            (Int(usage, "prompt_tokens") ?? Int(usage, "total_tokens")) is { } tokens)
-        {
-            return tokens;
-        }
-
-        return answer.TryGetProperty("meta", out var meta) && meta.ValueKind == JsonValueKind.Object &&
-               meta.TryGetProperty("billed_units", out var billed) && billed.ValueKind == JsonValueKind.Object && Int(billed, "input_tokens") is { } input
-            ? input
-            : 0;
-    }
-
-    private static int? Int(JsonElement o, string name) =>
-        o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : null;
 
     private bool First(string model, string reason) => _logged.TryAdd((model, reason), 0);
 

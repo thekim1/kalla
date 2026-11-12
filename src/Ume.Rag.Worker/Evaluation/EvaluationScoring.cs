@@ -1,5 +1,6 @@
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Retrieval;
 
@@ -225,9 +226,9 @@ public static class EvaluationScoring
     {
         ArgumentNullException.ThrowIfNull(outcomes);
         var timings = outcomes.Select(o => o.Result.Timings).ToList();
-        var usages = outcomes.Select(o => o.Result.RerankUsage).OfType<RerankUsage>().ToList();
-        var prompt = usages.Sum(u => (long)u.PromptTokens);
-        var completion = usages.Sum(u => (long)u.CompletionTokens);
+        var usages = outcomes.Select(o => o.Result.RerankUsage).OfType<GatewayCallUsage>().ToList();
+        var prompt = usages.Sum(u => u.InputTokens);
+        var completion = usages.Sum(u => u.OutputTokens);
         double? cost = reranked && outcomes.Count > 0 && price is { InputPerMillionUsd: { } input } && (completion == 0 || price.OutputPerMillionUsd is not null)
             ? (double)Math.Round((prompt * input + completion * (price.OutputPerMillionUsd ?? 0m)) / 1_000_000m / outcomes.Count, 6)
             : null;

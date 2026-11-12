@@ -1,4 +1,5 @@
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Worker.Evaluation;
@@ -76,8 +77,8 @@ public sealed class EvaluationScoringTests
     {
         QuestionOutcome[] outcomes =
         [
-            Outcome(total: 900, rerank: 800, new RerankUsage("ume/chat-eu", 1_000, 50)),
-            Outcome(total: 1_100, rerank: 1_000, new RerankUsage("ume/chat-eu", 3_000, 150)),
+            Outcome(total: 900, rerank: 800, new GatewayCallUsage("rerank", "ume/chat-eu", 1_000, 0, 50, null)),
+            Outcome(total: 1_100, rerank: 1_000, new GatewayCallUsage("rerank", "ume/chat-eu", 3_000, 0, 150, null)),
             Outcome(total: 30_100, rerank: 30_000, null, RetrievalDegradation.RerankUnavailable),
         ];
 
@@ -111,16 +112,16 @@ public sealed class EvaluationScoringTests
 
         var unpriced = EvaluationScoring.Search(outcomes, reranked: true, "ume/chat-eu", new ModelPrice(2m, null));
         unpriced.RerankCostPerQueryUsd.ShouldBe(0, "no tokens at all: the input price suffices");
-        QuestionOutcome[] completions = [Outcome(total: 40, rerank: 30, new RerankUsage("ume/chat-eu", 1_000, 50))];
+        QuestionOutcome[] completions = [Outcome(total: 40, rerank: 30, new GatewayCallUsage("rerank", "ume/chat-eu", 1_000, 0, 50, null))];
         EvaluationScoring.Search(completions, reranked: true, "ume/chat-eu", new ModelPrice(2m, null)).RerankCostPerQueryUsd
             .ShouldBeNull("completion tokens need the output price");
-        QuestionOutcome[] gateway = [Outcome(total: 40, rerank: 30, new RerankUsage("bge-reranker-v2-m3", 2_000, 0))];
+        QuestionOutcome[] gateway = [Outcome(total: 40, rerank: 30, new GatewayCallUsage("rerank", "bge-reranker-v2-m3", 2_000, 0, 0, null))];
         EvaluationScoring.Search(gateway, reranked: true, "bge-reranker-v2-m3", new ModelPrice(0.1m, null)).RerankCostPerQueryUsd
             .ShouldBe(0.0002, "a gateway rerank model bills input tokens only (#414)");
         EvaluationScoring.RerankModel(outcomes, reranked: true, "ume/chat-eu").ShouldBe("ume/chat-eu", "none answered: the platform's model");
     }
 
-    private static QuestionOutcome Outcome(double total, double rerank, RerankUsage? usage, string? degraded = null) => new(
+    private static QuestionOutcome Outcome(double total, double rerank, GatewayCallUsage? usage, string? degraded = null) => new(
         new EvaluationQuestionRow(Guid.NewGuid(), EvaluationLayer.Generated, "q", [Guid.NewGuid()]),
         new SearchResult("q", [], new Coverage(CoverageStatus.Low, null, null, null, null), degraded, null, new SearchTimings(0, 0, 0, rerank, total), usage),
         null);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Retrieval.Text;
 
 namespace Ume.Rag.Retrieval;
@@ -50,7 +51,10 @@ public sealed record SearchRequest(
 /// <param name="Degraded">Null, or one of <see cref="RetrievalDegradation"/>.</param>
 /// <param name="VectorSearch">How statement V ran; null when it did not run.</param>
 /// <param name="Timings">Stage milliseconds.</param>
-/// <param name="RerankUsage">The rerank call's token usage when one answered (cost per query in the evaluation); else null.</param>
+/// <param name="RerankUsage">
+/// The rerank call's usage (tokens and the gateway's cost) when one answered: cost per query in the evaluation, the turn's
+/// <c>rerank</c> usage record in chat (chat design §8.3); else null.
+/// </param>
 public sealed record SearchResult(
     string NormalizedQuery,
     IReadOnlyList<SearchHit> Hits,
@@ -58,7 +62,7 @@ public sealed record SearchResult(
     string? Degraded,
     VectorSearch? VectorSearch,
     SearchTimings Timings,
-    RerankUsage? RerankUsage = null);
+    GatewayCallUsage? RerankUsage = null);
 
 /// <summary>One result: 1-based rank, the candidate's ids, the final score and the per-list scores.</summary>
 public sealed record SearchHit(int Rank, Candidate Candidate, double Score, ChunkScores Scores);
@@ -264,7 +268,7 @@ public sealed class RetrievalEngine : IDisposable
 
             var rerankTime = 0.0;
             IReadOnlyDictionary<Guid, double>? rerankScores = null;
-            RerankUsage? rerankUsage = null;
+            GatewayCallUsage? rerankUsage = null;
             if (request.Rerank is { } rerank && deduped.Count > 0)
             {
                 var started = Stopwatch.StartNew();
@@ -311,7 +315,7 @@ public sealed class RetrievalEngine : IDisposable
         }
     }
 
-    private async Task<(IReadOnlyList<FusedCandidate> Ordered, IReadOnlyDictionary<Guid, double>? Scores, RerankUsage? Usage, string? Degraded)> RerankAsync(
+    private async Task<(IReadOnlyList<FusedCandidate> Ordered, IReadOnlyDictionary<Guid, double>? Scores, GatewayCallUsage? Usage, string? Degraded)> RerankAsync(
         string query, SearchScope scope, RerankCall call, IReadOnlyList<FusedCandidate> deduped, CancellationToken cancellationToken)
     {
         // The callers that serve answers ask only when the platform has a model for the reranker (KnowledgeService, B-16); an

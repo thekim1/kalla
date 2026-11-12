@@ -189,3 +189,34 @@ public sealed class RetrievalStat
     public int Retrieved { get; set; }
     public int Cited { get; set; }
 }
+
+/// <summary>
+/// Tokens and cost of the model calls the worker makes for a knowledge base, per Europe/Stockholm day, level and step
+/// (<c>content."CollectionDailyUsage"</c>, data-model §2.2; cost-attribution §5 C3; engine design §10.6): the counterpart
+/// of <see cref="AssistantDailyUsage"/>, written only by the worker.
+/// </summary>
+public sealed class CollectionDailyUsage
+{
+    public DateOnly Day { get; set; }
+    public Guid CollectionId { get; set; }
+    public required string Classification { get; set; }
+
+    /// <summary>The <c>x-ume-step</c> the calls sent: <c>embed</c>, <c>query-embed</c>, <c>rerank</c>, <c>eval-generate</c>, <c>eval-judge</c>, <c>eval-dedup</c>.</summary>
+    public required string Step { get; set; }
+
+    /// <summary>The collection's department at the time of the calls.</summary>
+    public Guid DepartmentId { get; set; }
+
+    public int Calls { get; set; }
+    public long InputTokens { get; set; }
+    public long CachedInputTokens { get; set; }
+    public long OutputTokens { get; set; }
+
+    /// <summary>The gateway's cost (<c>x-ume-cost-usd</c>).</summary>
+    public decimal CostUsd { get; set; }
+
+    /// <summary>The calls without a gateway cost, priced from <c>GatewayModels</c> into <see cref="EstimatedCostUsd"/>.</summary>
+    public int EstimatedCalls { get; set; }
+
+    public decimal EstimatedCostUsd { get; set; }
+}

@@ -365,6 +365,79 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantDailyUsage", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Step")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("CachedInputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<int>("Calls")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("CostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EstimatedCalls")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("EstimatedCostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<long>("InputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<long>("OutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.HasKey("Day", "AssistantId", "ClientId", "Classification", "Step");
+
+                    b.HasIndex("DepartmentId", "Day");
+
+                    b.ToTable("AssistantDailyUsage", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantDailyUsage_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_AssistantDailyUsage_Counts", "\"Calls\" >= 0 AND \"EstimatedCalls\" >= 0 AND \"EstimatedCalls\" <= \"Calls\" AND \"InputTokens\" >= 0 AND \"CachedInputTokens\" >= 0 AND \"CachedInputTokens\" <= \"InputTokens\" AND \"OutputTokens\" >= 0 AND \"CostUsd\" >= 0 AND \"EstimatedCostUsd\" >= 0");
+
+                            t.HasCheckConstraint("CK_AssistantDailyUsage_Step", "\"Step\" <> ''");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantVersion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -945,6 +1018,76 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Collections_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
 
                             t.HasCheckConstraint("CK_Collections_SharedWith", "\"SharedWith\" IN ('department', 'selected', 'municipality')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CollectionDailyUsage", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Step")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("CachedInputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<int>("Calls")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("CostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EstimatedCalls")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("EstimatedCostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<long>("InputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<long>("OutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.HasKey("Day", "CollectionId", "Classification", "Step");
+
+                    b.HasIndex("DepartmentId", "Day");
+
+                    b.ToTable("CollectionDailyUsage", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_CollectionDailyUsage_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_CollectionDailyUsage_Counts", "\"Calls\" >= 0 AND \"EstimatedCalls\" >= 0 AND \"EstimatedCalls\" <= \"Calls\" AND \"InputTokens\" >= 0 AND \"CachedInputTokens\" >= 0 AND \"CachedInputTokens\" <= \"InputTokens\" AND \"OutputTokens\" >= 0 AND \"CostUsd\" >= 0 AND \"EstimatedCostUsd\" >= 0");
+
+                            t.HasCheckConstraint("CK_CollectionDailyUsage_Step", "\"Step\" <> ''");
                         });
                 });
 

@@ -808,9 +808,39 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         var again = await embedder.EmbedAsync(Profile, "bygglov altan", null, Ct);
 
         counting.Calls.ShouldBe(1);
-        vectors.ShouldAllBe(v => v.Length == 1024);
-        again.ToArray().ShouldBe(vectors[0].ToArray());
+        vectors.ShouldAllBe(v => v.Vector.Length == 1024);
+        again.Vector.ToArray().ShouldBe(vectors[0].Vector.ToArray());
         embedder.QueryMac("bygglov altan").ShouldNotContain("bygglov");
+        // Chat design §8.3: the one call's usage goes to one request only; the joined and cached ones record nothing.
+        vectors.Count(v => v.Usage is not null).ShouldBe(1);
+        again.Usage.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task The_call_reports_the_fake_gateways_tokens_and_cost()
+    {
+        // The FakeGateway bills an embedding's input at its catalogue price, 0.02 USD per million tokens (x-ume-cost-usd).
+        var costs = new List<string>();
+        var (embedder, host) = Build(new CostRecording(fake.Server.CreateHandler(), costs));
+        using var _ = host;
+        using var __ = embedder;
+
+        var embedding = await embedder.EmbedAsync(Profile, "hur ansöker jag om bygglov för en altan", null, Ct);
+
+        var tokens = FakeContent.Tokens("hur ansöker jag om bygglov för en altan");
+        embedding.Usage.ShouldBe(new GatewayCallUsage(GatewayQueryEmbedder.Step, "bge-m3", tokens, 0, 0, Math.Round(tokens * 0.02m / 1_000_000m, 8)));
+        costs.ShouldHaveSingleItem().ShouldBe(embedding.Usage!.CostUsd!.Value.ToString("0.00000000", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>Keeps the <c>x-ume-cost-usd</c> of every answer, as the FakeGateway sent it.</summary>
+    private sealed class CostRecording(HttpMessageHandler inner, List<string> costs) : DelegatingHandler(inner)
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            costs.AddRange(response.Headers.TryGetValues("x-ume-cost-usd", out var values) ? values : []);
+            return response;
+        }
     }
 
     [Fact]
@@ -835,7 +865,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         using var _ = host2;
         using var __ = restarted;
         restarted.CachedCount.ShouldBe(0);
-        (await restarted.EmbedAsync(Profile, "bygglov altan", null, Ct)).Length.ShouldBe(1024);
+        (await restarted.EmbedAsync(Profile, "bygglov altan", null, Ct)).Vector.Length.ShouldBe(1024);
         counting.Calls.ShouldBe(callsBefore + 1); // a gateway call after the restart, then cached
         await restarted.EmbedAsync(Profile, "bygglov altan", null, Ct);
         counting.Calls.ShouldBe(callsBefore + 1);
@@ -851,10 +881,10 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         using var __ = embedder;
         var requesting = Profile with { Id = Guid.NewGuid(), Dimensions = 256, RequestDimensions = true };
 
-        (await embedder.EmbedAsync(requesting, "bygglov altan", null, Ct)).Length.ShouldBe(256);
+        (await embedder.EmbedAsync(requesting, "bygglov altan", null, Ct)).Vector.Length.ShouldBe(256);
         await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() =>
             embedder.EmbedAsync(requesting with { Id = Guid.NewGuid(), RequestDimensions = false }, "bygglov plank", null, Ct));
-        (await embedder.EmbedAsync(Profile, "bygglov plank", null, Ct)).Length.ShouldBe(1024);
+        (await embedder.EmbedAsync(Profile, "bygglov plank", null, Ct)).Vector.Length.ShouldBe(1024);
     }
 
     [Theory]

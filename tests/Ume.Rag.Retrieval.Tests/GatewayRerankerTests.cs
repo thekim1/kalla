@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using static Ume.Rag.Retrieval.Tests.Make;
 
 namespace Ume.Rag.Retrieval.Tests;
@@ -57,7 +58,7 @@ public sealed class GatewayRerankerTests : IDisposable
         result.Hits[0].Scores.RerankScore.ShouldBe(0.98);
         result.Hits[2].Scores.RerankScore.ShouldBe(0.01);
         result.Degraded.ShouldBeNull();
-        result.RerankUsage.ShouldBe(new RerankUsage(Model, 321, 0));
+        result.RerankUsage.ShouldBe(new GatewayCallUsage(GatewayReranker.Step, Model, 321, 0, 0, null));
 
         var call = gateway.Calls.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/rerank");
@@ -155,7 +156,7 @@ public sealed class GatewayRerankerTests : IDisposable
     public void Input_tokens_are_read_as_the_gateway_bills_them(string json, int tokens)
     {
         using var doc = JsonDocument.Parse(json);
-        GatewayReranker.InputTokens(doc.RootElement).ShouldBe(tokens);
+        (GatewayUsageReader.Tokens(doc.RootElement)?.InputTokens ?? 0).ShouldBe((long)tokens);
     }
 
     /// <summary>Cohere-style results, sorted by score: the given score per chunk id, 0.01 for the others.</summary>

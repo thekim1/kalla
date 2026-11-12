@@ -102,7 +102,7 @@ gateway counterpart.
   (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
   (simplification pass §14).
 - Networks: `edge` (proxy, inbound only), `data` (Postgres), `llm` (the default route, so also the OIDC authority and,
-  from P2, Graph for feature C; repo-and-deployment §6.1; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
+  from P2, Graph for feature C; repo-and-deployment §6.1; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, the organisation and model syncs), P2 `mcp` (hosted MCP servers:
   discovery, connection test, drift polling, test-panel and skill-gate tool calls; the worker is not on it).
 - Background services:
 

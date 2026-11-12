@@ -89,6 +89,12 @@ public static partial class FakeContent
     /// <summary>The response header that echoes the request's <c>max_tokens</c>, <c>none</c> when it was left out (B-31).</summary>
     public const string MaxTokensHeader = "x-fake-max-tokens";
 
+    /// <summary>The gateway's cost header on a complete JSON answer (gateway <c>GatewayHeaders.CostUsd</c>).</summary>
+    public const string CostHeader = "x-ume-cost-usd";
+
+    /// <summary>The request header <c>1</c> that asks for the stream cost comment (gateway <c>GatewayHeaders.StreamCost</c>).</summary>
+    public const string StreamCostHeader = "x-ume-stream-cost";
+
     /// <summary>The text cut to at most <paramref name="tokens"/> by <see cref="Tokens"/>, at a word boundary when there is one.</summary>
     public static string Truncate(string text, int tokens)
     {
