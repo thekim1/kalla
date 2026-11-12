@@ -21,8 +21,15 @@ namespace Ume.Rag.Worker.Engine;
 /// <param name="Live">The document's current set, or null.</param>
 /// <param name="SwappedBack">The set is a kept <c>superseded</c> one (rollback within 14 days), not a new write.</param>
 /// <param name="Job">The leased job completed in the commit; null inside a <c>reprocess</c> iteration (nothing completes).</param>
+/// <param name="Write">
+/// A new set of at most <see cref="IndexWriter.BatchSize"/> chunks not written yet: the swap inserts it (engine design §14
+/// rule 2a, #501). Null for a set already in the table (written invisible, or a kept one).
+/// </param>
 public sealed record SwapRequest(SourceContext Source, DocumentRow Document, Guid ExecutionId, byte[] ContentHash, Guid PipelineVersionId, Guid RunId,
-    ChunkSetRecord Set, ChunkSetRow? Live, bool SwappedBack, LeasedJob? Job);
+    ChunkSetRecord Set, ChunkSetRow? Live, bool SwappedBack, LeasedJob? Job, SetWrite? Write = null);
+
+/// <summary>The chunks of a set the swap inserts (rule 2a) and the profile they were embedded with (the profile guard).</summary>
+public sealed record SetWrite(IReadOnlyList<ChunkRecord> Chunks, EmbeddingProfileRecord EmbeddedWith);
 
 /// <summary>What <see cref="ChunkSetSwap.SwapAsync"/> did.</summary>
 public enum SwapResult
@@ -43,7 +50,8 @@ public enum SwapResult
 /// <summary>
 /// The per-document swap of engine design §14 rule 3, shared by the <c>embed</c> job (a new set, or a kept one) and a
 /// <c>reprocess</c> run's iteration (a kept <c>superseded</c> set swapped back without a <c>parse</c> or <c>embed</c> job,
-/// §2.3, §12.3). One short fenced transaction: the published-version check, the swap (the set <c>live</c>, or <c>held</c>
+/// §2.3, §12.3). One short fenced transaction: the published-version check, for a set of at most 1,000 chunks its insert
+/// (rule 2a: the profile guard, the set row and its chunks, written once), the swap (the set <c>live</c>, or <c>held</c>
 /// when personal data blocks it in a <c>public</c> collection under the source's <c>piiMode</c>; a flagged set's first
 /// <c>PiiFlaggedAt</c> at the swap time, #175), the document's site-profile version set to the set's,
 /// the run item and the job's completion. Live answers see the old set until this commit and the new one after it.
@@ -51,6 +59,7 @@ public enum SwapResult
 public sealed partial class ChunkSetSwap(
     EngineSettings settings,
     IChunkSetStore chunkSets,
+    IndexWriter index,
     PiiLifecycle pii,
     IJobQueue queue,
     JobDatabase database,
@@ -84,13 +93,26 @@ public sealed partial class ChunkSetSwap(
 
         if (!await IsPublishedAsync(commit, source.PipelineId, swap.PipelineVersionId, cancellationToken))
         {
-            // A new set stays writing for the orphan sweep; the publish's reprocess brings the document up to date.
+            // A set written invisible stays writing for the orphan sweep (a rule 2a set was never written); the publish's
+            // reprocess brings the document up to date.
             LogRepublished(logger, document.Id, swap.PipelineVersionId);
             return SwapResult.Republished;
         }
 
         var now = time.GetUtcNow();
-        await IndexWriter.SwapInAsync(commit.Connection, commit.Transaction, document.Id, set.Id, state, swap.PipelineVersionId, now, cancellationToken);
+        if (swap.Write is { } write)
+        {
+            // Rule 2a: nothing is written before this transaction, so a refusal leaves nothing behind.
+            if (!await index.WriteAndSwapInAsync(commit.Connection, commit.Transaction, set, state, write.Chunks, write.EmbeddedWith, now, cancellationToken))
+            {
+                throw IndexWriter.ProfileChanged(); // disposing the commit rolls it back
+            }
+        }
+        else
+        {
+            await IndexWriter.SwapInAsync(commit.Connection, commit.Transaction, document.Id, set.Id, state, swap.PipelineVersionId, now, cancellationToken);
+        }
+
         if (PiiLifecycle.Flags(set, clearance, values.PiiFlagRules))
         {
             await IndexWriter.MarkPiiFlaggedAsync(commit.Connection, commit.Transaction, set.Id, now, cancellationToken);
@@ -120,6 +142,11 @@ public sealed partial class ChunkSetSwap(
         }
 
         await commit.CommitAsync(cancellationToken);
+        if (swap.Write is not null)
+        {
+            index.Committed(swap.Write.EmbeddedWith.Id);
+        }
+
         LogSwapped(logger, document.Id, set.Id, swap.SwappedBack ? "swapped-back" : "new", state);
         pii.RaiseIfFlagged(set, new PiiSwapContext(source.CollectionClassification, source.SourceId, swap.RunId, values.PiiFlagRules, mode), clearance);
         return SwapResult.Swapped;
