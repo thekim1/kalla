@@ -523,7 +523,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   runs with the next release dry run.
 - **Read:** Decisions "Malware scan optional"; repo-and-deployment §5.5, §6.2, §7.1; connectors §11.
 
-### [ ] A-38 The gateway's limits and version in the platform UI (#606, gateway v0.10.0)
+### [x] A-38 (#623) The gateway's limits and version in the platform UI (#606, gateway v0.10.0)
 - **Do:** on the platform resource *Gateway models* (`resources.ts`, id `gateway-models`) a row with `limitsSource`
   `catalog` shows `contextWindow` and `maxOutputTokens` read-only, with a note that the gateway sends them; only a
   `manual` row keeps the edit action (`PUT /api/gateway/models/{name}` answers `400 platform_rule` with `constraint:
