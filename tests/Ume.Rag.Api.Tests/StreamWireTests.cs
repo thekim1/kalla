@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Ume.Rag.Answering.Chat;
+using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Api.Tests;
 
@@ -35,7 +36,7 @@ public sealed class StreamWireTests
     }
 
     [Fact]
-    public void Gateway_lines_give_delta_finish_and_usage_in_order_and_stop_at_done()
+    public void Gateway_lines_give_delta_finish_and_usage_with_cached_input_in_order_and_stop_at_done()
     {
         var events = new List<GatewayStreamEvent>();
 
@@ -43,13 +44,13 @@ public sealed class StreamWireTests
         events.ShouldBeEmpty(); // an empty content is no delta
         GatewayStreamLine.Read("""data: {"choices":[{"index":0,"delta":{"content":"Hej"},"finish_reason":null}]}""", events).ShouldBeTrue();
         GatewayStreamLine.Read("""data:{"choices":[{"index":0,"delta":{"content":" då"},"finish_reason":"stop"}]}""", events).ShouldBeTrue();
-        GatewayStreamLine.Read("""data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}""", events).ShouldBeTrue();
+        GatewayStreamLine.Read("""data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":8}}}""", events).ShouldBeTrue();
         GatewayStreamLine.Read(": keep-alive comment", events).ShouldBeTrue();
         GatewayStreamLine.Read("", events).ShouldBeTrue();
 
         events.ShouldBe([
             new GatewayStreamEvent.Delta("Hej"), new GatewayStreamEvent.Delta(" då"), new GatewayStreamEvent.Finish("stop"),
-            new GatewayStreamEvent.Usage(12, 3)]);
+            new GatewayStreamEvent.Usage(new GatewayTokens(12, 8, 3))]);
         GatewayStreamLine.Read("data: [DONE]", events).ShouldBeFalse();
     }
 
@@ -70,6 +71,6 @@ public sealed class StreamWireTests
         GatewayStreamLine.Read("""data: {"choices":[1]}""", events).ShouldBeTrue();
         GatewayStreamLine.Read("""data: [1, 2]""", events).ShouldBeTrue();
         GatewayStreamLine.Read("""data: {"choices":[{"delta":{"content":5}}],"usage":{"prompt_tokens":"x"}}""", events).ShouldBeTrue();
-        events.ShouldBe([new GatewayStreamEvent.Delta("x"), new GatewayStreamEvent.Usage(0, 0)]);
+        events.ShouldBe([new GatewayStreamEvent.Delta("x"), new GatewayStreamEvent.Usage(default)]);
     }
 }

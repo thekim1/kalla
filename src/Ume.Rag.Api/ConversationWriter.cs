@@ -4,6 +4,7 @@ using Npgsql;
 using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Api;
 
@@ -13,6 +14,8 @@ public sealed record TurnSource(int Rank, Guid DocumentId, Guid ChunkId, Guid Co
 /// <summary>
 /// A finished turn (chat design §12.1) in history mode <c>none</c> (all of P1, weakness review §4): metadata only, no text.
 /// <see cref="MessageId"/> is the answer's <c>chatcmpl-</c> id. The conversation is the issued id (<see cref="IssuedId"/>) or Open WebUI's chat (<see cref="ExternalChatId"/>).
+/// <see cref="Usage"/> holds the usage records of the turn's model calls (§8.3); a turn that ended without an answer after a
+/// model call is <see cref="UsageOnly"/> (<see cref="UsageOnlyOf"/>): no conversation or message rows, only its usage.
 /// </summary>
 public sealed record ChatTurn(
     Guid MessageId, Guid? IssuedId, string? ExternalChatId, Guid AssistantId, Guid? AssistantVersionId, Guid DepartmentId, Guid ClientId, string SubjectKind, string SubjectId,
@@ -25,6 +28,29 @@ public sealed record ChatTurn(
 
     /// <summary>Open WebUI's id of the answer (<c>X-Rag-Owui-Message-Id</c>): what its feedback names (§14.2).</summary>
     public string? AnswerExternalId { get; init; }
+
+    /// <summary>The usage records of the turn's model calls, upserted into <c>AssistantDailyUsage</c> per step (§12.2).</summary>
+    public IReadOnlyList<UsageRecord> Usage { get; init; } = [];
+
+    /// <summary>Only <see cref="Usage"/> is written: the turn failed or broke off after a model call (§12.1).</summary>
+    public bool UsageOnly { get; init; }
+
+    /// <summary><c>Messages.CostUsd</c>: the answer call's cost, the gateway's or the estimate (§12.2); null without an answer call.</summary>
+    public decimal? AnswerCostUsd => Usage.FirstOrDefault(r => r.Step == GatewayChatClient.AnswerStep) is { } answer
+        ? answer.Estimated ? answer.EstimatedCostUsd : answer.CostUsd
+        : null;
+
+    /// <summary>
+    /// A usage-only turn (§12.1): the usage of a turn that ended without an answer after a model call (e.g. the answer call
+    /// failing after condense and the query embedding were paid), under its assistant, client and level on <paramref name="at"/>'s day.
+    /// </summary>
+    public static ChatTurn UsageOnlyOf(Guid assistantId, Guid departmentId, Guid clientId, string classification, DateTimeOffset at, IReadOnlyList<UsageRecord> usage) =>
+        new(Guid.Empty, null, null, assistantId, null, departmentId, clientId, "", "", classification, "", 0, "", null, null, null, false, null, null, null, null, null,
+            null, [], at)
+        {
+            Usage = usage,
+            UsageOnly = true,
+        };
 
     /// <summary>The sort key of a batch (chat design §12.2: sorted keys, so overlapping batches cannot deadlock).</summary>
     public string Key => IssuedId is { } id ? "i:" + id.ToString("N") : $"o:{ClientId:N}:{SubjectId}:{ExternalChatId}:{AssistantId:N}";
@@ -54,8 +80,9 @@ public sealed record ChatTurn(
 /// <summary>
 /// The background writer (chat design §12; adapted from the gateway's <c>UsageWriter</c>): a bounded channel the request
 /// path enqueues into after the answer, drained in batches of ≤ 200 turns or 250 ms, one transaction per batch: the
-/// conversation upsert, the messages with <c>Seq</c> under a row lock, their sources, and the
-/// <c>AssistantDailyTotals</c> deltas as the last statement. A failed batch is retried after 2 s; after three failures it
+/// conversation upsert, the messages with <c>Seq</c> under a row lock, their sources, then the <c>AssistantDailyTotals</c>
+/// deltas and the <c>AssistantDailyUsage</c> deltas per step (usage-only turns included) as the last statements, each in
+/// sorted key order. A failed batch is retried after 2 s; after three failures it
 /// is split and each turn tried alone three times, then dropped (<c>rag.chat.writer.dropped{reason}</c>). No journal.
 /// </summary>
 public sealed partial class ConversationWriter : BackgroundService
@@ -234,8 +261,32 @@ public sealed partial class ConversationWriter : BackgroundService
         public int Unavailable { get; set; }
         public int Degraded { get; set; }
         public int UncitedAnswers { get; set; }
+    }
+
+    private sealed record UsageKey(DateOnly Day, Guid AssistantId, Guid ClientId, string Classification, string Step);
+
+    /// <summary>The sort order of the usage upserts (§12.2): every key part, strings ordinal, so overlapping batches lock in one order.</summary>
+    private static readonly Comparer<UsageKey> UsageOrder = Comparer<UsageKey>.Create((a, b) =>
+    {
+        var order = (a.Day, a.AssistantId, a.ClientId).CompareTo((b.Day, b.AssistantId, b.ClientId));
+        if (order == 0)
+        {
+            order = string.CompareOrdinal(a.Classification, b.Classification);
+        }
+
+        return order != 0 ? order : string.CompareOrdinal(a.Step, b.Step);
+    });
+
+    private sealed class UsageSums
+    {
+        public Guid DepartmentId { get; init; }
+        public int Calls { get; set; }
         public long InputTokens { get; set; }
+        public long CachedInputTokens { get; set; }
         public long OutputTokens { get; set; }
+        public decimal CostUsd { get; set; }
+        public int EstimatedCalls { get; set; }
+        public decimal EstimatedCostUsd { get; set; }
     }
 
     private const string InsertConversationSql = """
@@ -271,8 +322,16 @@ public sealed partial class ConversationWriter : BackgroundService
         await using var transaction = await connection.BeginTransactionAsync(ct);
         var totals = new SortedDictionary<TotalsKey, Totals>(Comparer<TotalsKey>.Create((a, b) =>
             (a.Day, a.AssistantId, a.ClientId, a.Classification).CompareTo((b.Day, b.AssistantId, b.ClientId, b.Classification))));
+        var usage = new SortedDictionary<UsageKey, UsageSums>(UsageOrder);
         foreach (var turn in turns.OrderBy(t => t.Key, StringComparer.Ordinal).ThenBy(t => t.At))
         {
+            // The calls were made and charged, whatever happens to the turn's rows below.
+            AddUsage(usage, turn);
+            if (turn.UsageOnly)
+            {
+                continue;
+            }
+
             var expires = turn.At.AddDays(turn.RetentionDays);
             var owned = await ScalarPairAsync(connection, transaction, turn.IssuedId is null ? UpsertOpenWebUiConversationSql : UpsertIssuedConversationSql,
                 ct, turn.IssuedId ?? Guid.CreateVersion7(), turn.Classification, turn.AssistantId, turn.ClientId, turn.SubjectKind, turn.SubjectId,
@@ -293,19 +352,19 @@ public sealed partial class ConversationWriter : BackgroundService
             const string message = """
                 INSERT INTO chat."Messages" ("Id", "ConversationId", "Classification", "Seq", "Role", "ExpiresAt", "AssistantVersionId", "GatewayModel",
                     "ObservedResidency", "InputTokens", "OutputTokens", "LatencyMs", "TimeToFirstTokenMs", "Coverage", "Degraded", "Language", "CondenseUsed",
-                    "Outcome", "CreatedAt", "ExternalMessageId")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                    "Outcome", "CreatedAt", "ExternalMessageId", "CostUsd")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
                 ON CONFLICT ("ConversationId", "ExternalMessageId") WHERE "ExternalMessageId" IS NOT NULL DO NOTHING
                 """;
             await ExecuteAsync(connection, transaction, message, ct, Guid.CreateVersion7(), conversationId, turn.Classification, seq + 1, "user", expires,
                 DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false,
-                turn.Outcome, turn.At, Db(turn.UserExternalId));
-            // The assistant message keeps the turn's id (chatcmpl-<N>), so /v1/feedback finds it (§3.5).
+                turn.Outcome, turn.At, Db(turn.UserExternalId), DBNull.Value);
+            // The assistant message keeps the turn's id (chatcmpl-<N>), so /v1/feedback finds it (§3.5); its cost is the answer call's.
             var answerId = turn.MessageId;
             await ExecuteAsync(connection, transaction, message, ct, answerId, conversationId, turn.Classification, seq + 2, "assistant", expires,
                 Db(turn.AssistantVersionId), Db(turn.GatewayModel), Db(turn.Residency), Db(turn.InputTokens), Db(turn.OutputTokens), Db(turn.LatencyMs),
                 Db(turn.TimeToFirstTokenMs), Db(turn.Coverage), Db(turn.Degraded), Db(turn.Language), turn.CondenseUsed, turn.Outcome, turn.At,
-                Db(turn.AnswerExternalId));
+                Db(turn.AnswerExternalId), Db(turn.AnswerCostUsd));
             foreach (var source in turn.Sources)
             {
                 await ExecuteAsync(connection, transaction, """
@@ -315,7 +374,7 @@ public sealed partial class ConversationWriter : BackgroundService
                     Db(source.PageEnd), source.Used);
             }
 
-            var key = new TotalsKey(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(turn.At, Stockholm).DateTime), turn.AssistantId, turn.ClientId, turn.Classification);
+            var key = new TotalsKey(Day(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
             if (!totals.TryGetValue(key, out var day))
             {
                 totals[key] = day = new Totals { DepartmentId = turn.DepartmentId };
@@ -328,8 +387,6 @@ public sealed partial class ConversationWriter : BackgroundService
             day.Unavailable += turn.Outcome == "unavailable" ? 1 : 0;
             day.Degraded += turn.Degraded is not null ? 1 : 0;
             day.UncitedAnswers += turn.Outcome == "answered" && turn.Sources.Count > 0 && !turn.Sources.Any(s => s.Used) ? 1 : 0;
-            day.InputTokens += turn.InputTokens ?? 0;
-            day.OutputTokens += turn.OutputTokens ?? 0;
         }
 
         // Last, in key order: the hot totals rows are locked for this statement only (performance pass §3.2).
@@ -338,20 +395,60 @@ public sealed partial class ConversationWriter : BackgroundService
             await ExecuteAsync(connection, transaction, """
                 INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
                     "NotFound", "GeneralAnswers", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
-                    "AgentLimitHits", "InputTokens", "OutputTokens", "CostUsd")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $14, $9, $10, 0, 0, $11, 0, 0, 0, 0, 0, $12, $13, 0)
+                    "AgentLimitHits")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $12, $9, $10, 0, 0, $11, 0, 0, 0, 0, 0)
                 ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
                     "Conversations" = t."Conversations" + excluded."Conversations", "Messages" = t."Messages" + excluded."Messages",
                     "NotFound" = t."NotFound" + excluded."NotFound", "GeneralAnswers" = t."GeneralAnswers" + excluded."GeneralAnswers",
                     "Unavailable" = t."Unavailable" + excluded."Unavailable",
-                    "Degraded" = t."Degraded" + excluded."Degraded", "UncitedAnswers" = t."UncitedAnswers" + excluded."UncitedAnswers",
-                    "InputTokens" = t."InputTokens" + excluded."InputTokens", "OutputTokens" = t."OutputTokens" + excluded."OutputTokens"
+                    "Degraded" = t."Degraded" + excluded."Degraded", "UncitedAnswers" = t."UncitedAnswers" + excluded."UncitedAnswers"
                 """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, day.DepartmentId, day.Conversations, day.Messages, day.NotFound, day.Unavailable,
-                day.Degraded, day.UncitedAnswers, day.InputTokens, day.OutputTokens, day.GeneralAnswers);
+                day.Degraded, day.UncitedAnswers, day.GeneralAnswers);
+        }
+
+        // Then the usage per step (§12.2, data-model §2.3), also in key order; the department is the one of the row's first call.
+        foreach (var (key, sums) in usage)
+        {
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO chat."AssistantDailyUsage" AS u ("Day", "AssistantId", "ClientId", "Classification", "Step", "DepartmentId", "Calls", "InputTokens",
+                    "CachedInputTokens", "OutputTokens", "CostUsd", "EstimatedCalls", "EstimatedCostUsd")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Step") DO UPDATE SET
+                    "Calls" = u."Calls" + excluded."Calls", "InputTokens" = u."InputTokens" + excluded."InputTokens",
+                    "CachedInputTokens" = u."CachedInputTokens" + excluded."CachedInputTokens", "OutputTokens" = u."OutputTokens" + excluded."OutputTokens",
+                    "CostUsd" = u."CostUsd" + excluded."CostUsd", "EstimatedCalls" = u."EstimatedCalls" + excluded."EstimatedCalls",
+                    "EstimatedCostUsd" = u."EstimatedCostUsd" + excluded."EstimatedCostUsd"
+                """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, key.Step, sums.DepartmentId, sums.Calls, sums.InputTokens,
+                sums.CachedInputTokens, sums.OutputTokens, sums.CostUsd, sums.EstimatedCalls, sums.EstimatedCostUsd);
         }
 
         await transaction.CommitAsync(ct);
     }
+
+    /// <summary>Adds the usage records of <paramref name="turn"/> to the batch's sums per (day, assistant, client, level, step).</summary>
+    private static void AddUsage(SortedDictionary<UsageKey, UsageSums> usage, ChatTurn turn)
+    {
+        var day = Day(turn.At);
+        foreach (var record in turn.Usage)
+        {
+            var key = new UsageKey(day, turn.AssistantId, turn.ClientId, turn.Classification, record.Step);
+            if (!usage.TryGetValue(key, out var sums))
+            {
+                usage[key] = sums = new UsageSums { DepartmentId = turn.DepartmentId };
+            }
+
+            sums.Calls++;
+            sums.InputTokens += record.InputTokens;
+            sums.CachedInputTokens += record.CachedInputTokens;
+            sums.OutputTokens += record.OutputTokens;
+            sums.CostUsd += record.CostUsd;
+            sums.EstimatedCalls += record.Estimated ? 1 : 0;
+            sums.EstimatedCostUsd += record.EstimatedCostUsd;
+        }
+    }
+
+    /// <summary>The Europe/Stockholm day of <paramref name="at"/> (data-model §2.3).</summary>
+    private static DateOnly Day(DateTimeOffset at) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime);
 
     private static object Db(object? value) => value ?? DBNull.Value;
 

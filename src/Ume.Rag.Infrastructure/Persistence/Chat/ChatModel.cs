@@ -141,7 +141,6 @@ internal static class ChatModel
             e.ToTable("AssistantDailyTotals", ChatSchema, t => ClassificationCheck(t, "AssistantDailyTotals"));
             e.HasKey(x => new { x.Day, x.AssistantId, x.ClientId, x.Classification });
             e.Property(x => x.Classification).HasMaxLength(20);
-            e.Property(x => x.CostUsd).HasPrecision(18, 8);
         });
 
         modelBuilder.Entity<AssistantDailyUsage>(e =>

@@ -9,14 +9,21 @@ using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Answering.Chat;
 
-/// <summary>What the gateway's stream carries: text, the usage, the finish reason.</summary>
+/// <summary>What the gateway's stream carries: text, the usage, the finish reason, and its end with the stream's cost.</summary>
 public abstract record GatewayStreamEvent
 {
     public sealed record Delta(string Text) : GatewayStreamEvent;
 
-    public sealed record Usage(int PromptTokens, int CompletionTokens) : GatewayStreamEvent;
+    /// <summary>The usage chunk's tokens (input, cached input, output; chat design §8.3).</summary>
+    public sealed record Usage(GatewayTokens Tokens) : GatewayStreamEvent;
 
     public sealed record Finish(string Reason) : GatewayStreamEvent;
+
+    /// <summary>
+    /// The stream ended (<c>data: [DONE]</c> or its last line): the cost from the comment <c>: ume-cost-usd=</c>, null when the
+    /// gateway wrote none. A stream that breaks off has no end event.
+    /// </summary>
+    public sealed record End(decimal? CostUsd) : GatewayStreamEvent;
 }
 
 /// <summary>The gateway's answer: the model text, token usage and finish reason.</summary>
@@ -26,11 +33,16 @@ public sealed record GatewayAnswer(string Text, int PromptTokens, int Completion
 /// Chat calls to the gateway (chat design §8): <c>POST /v1/chat/completions</c> with the assistant's gateway model, an explicit
 /// <c>x-ume-max-residency</c> (the <see cref="ResidencyCeilingHandler"/> adds that level's key and checks <c>x-ume-residency</c>
 /// before a byte is read), <c>x-ume-step: chat-answer</c> and <c>x-ume-run-id</c> = the message id. Streams are opened with
-/// <see cref="HttpCompletionOption.ResponseHeadersRead"/>, so every check runs before our first byte. Errors map to §3.6.
+/// <see cref="HttpCompletionOption.ResponseHeadersRead"/>, so every check runs before our first byte, and with
+/// <c>x-ume-stream-cost: 1</c>; they are read through <see cref="SseReader"/>, so the cost comment never reaches a client of
+/// ours. Errors map to §3.6. Each call's usage is read once (<see cref="GatewayUsageReader"/>, §8.3).
 /// </summary>
 public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatOptions> options, ILogger<GatewayChatClient> logger)
 {
     public const string HttpClientName = "gateway-chat";
+
+    /// <summary>The <c>x-ume-step</c> of the answer call.</summary>
+    public const string AnswerStep = "chat-answer";
 
     /// <summary>
     /// <c>temperature</c> only when the assistant sets one (#275: the gateway refuses it for models that deprecate it, Claude
@@ -42,31 +54,58 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>
+    /// One JSON answer. Once the gateway has answered <c>2xx</c> the call's usage goes to <paramref name="usage"/> (its tokens and
+    /// <c>x-ume-cost-usd</c>; a body that is not JSON gives no tokens), before the body is read for the text: the call was
+    /// charged even when the body then fails.
+    /// </summary>
     public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
-        Guid runId, string step, CancellationToken ct, string? reasoningEffort = null)
+        Guid runId, string step, CancellationToken ct, string? reasoningEffort = null, Action<GatewayCallUsage>? usage = null)
     {
         using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, reasoningEffort, ct);
-        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-        var choice = json.RootElement.GetProperty("choices")[0];
-        var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
-        var finish = choice.TryGetProperty("finish_reason", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString()! : "stop";
-        var usage = json.RootElement.TryGetProperty("usage", out var u) ? u : default;
-        return new GatewayAnswer(text, Int(usage, "prompt_tokens"), Int(usage, "completion_tokens"), finish);
+        JsonDocument json;
+        try
+        {
+            json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            usage?.Invoke(GatewayUsageReader.Read(response, default, step, model));
+            throw;
+        }
+
+        using (json)
+        {
+            var call = GatewayUsageReader.Read(response, json.RootElement, step, model);
+            usage?.Invoke(call);
+            var choice = json.RootElement.GetProperty("choices")[0];
+            var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
+            var finish = choice.TryGetProperty("finish_reason", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString()! : "stop";
+            return new GatewayAnswer(text, (int)call.InputTokens, (int)call.OutputTokens, finish);
+        }
     }
 
-    /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
+    /// <summary>
+    /// Opens the stream with <c>x-ume-stream-cost: 1</c> (§8.1): status and residency are checked when this returns; the caller
+    /// then writes its first byte.
+    /// </summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, CancellationToken ct) =>
-        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", null, ct);
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, AnswerStep, null, ct);
 
-    /// <summary>The stream's events; an idle gap over <c>Chat:StreamIdleTimeoutSeconds</c> or the total limit ends it with <c>stream_interrupted</c>.</summary>
+    /// <summary>
+    /// The stream's events, read through <see cref="SseReader"/> (the cost comment is taken, never passed on), ending with
+    /// <see cref="GatewayStreamEvent.End"/> and its cost; an idle gap over <c>Chat:StreamIdleTimeoutSeconds</c> or the total limit
+    /// ends it with <c>stream_interrupted</c> instead.
+    /// </summary>
     public async IAsyncEnumerable<GatewayStreamEvent> ReadAsync(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(response);
         using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
         total.CancelAfter(TimeSpan.FromSeconds(options.Value.MaxAnswerDurationSeconds));
         await using var body = await response.Content.ReadAsStreamAsync(total.Token);
-        using var reader = new StreamReader(body);
+        using var lines = new StreamReader(body);
+        var reader = new SseReader(lines);
         // One idle timer for the stream, re-armed before each line (#333: a linked source and timer per line cost ≈ 1 KB each).
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
         var idleTimeout = TimeSpan.FromSeconds(options.Value.StreamIdleTimeoutSeconds);
@@ -86,6 +125,8 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
 
             if (line is null || !GatewayStreamLine.Read(line, events))
             {
+                // The comment comes just before [DONE] (gateway-changes §5.4), so the cost is known here.
+                yield return new GatewayStreamEvent.End(reader.CostUsd);
                 yield break;
             }
 
@@ -115,6 +156,11 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
                 stream_options = stream ? new { include_usage = true } : null,
             }, options: RequestJson),
         }.WithMaxResidency(ceiling);
+        if (stream)
+        {
+            request.WithStreamCost();
+        }
+
         request.Headers.Add("x-ume-step", step);
         request.Headers.Add("x-ume-run-id", runId.ToString());
         using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -143,9 +189,6 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
 
         return response;
     }
-
-    private static int Int(JsonElement usage, string name) =>
-        usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var i) ? i : 0;
 
     /// <summary>
     /// §3.6: the gateway's status and code to ours; its <c>Retry-After</c> passed on for 429 and 503. One Warning names the

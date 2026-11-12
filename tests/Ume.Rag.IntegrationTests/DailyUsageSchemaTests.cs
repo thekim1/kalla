@@ -7,7 +7,8 @@ namespace Ume.Rag.IntegrationTests;
 /// The per-step usage tables (data-model §2.2, §2.3, §8; cost-attribution §5): <c>chat."AssistantDailyUsage"</c> written by
 /// the api (and the admin's test panel), <c>content."CollectionDailyUsage"</c> by the worker; every column takes a value,
 /// the checks refuse a negative counter, more estimated calls than calls, more cached than input tokens, an empty step and
-/// an unknown level, and the nightly chat step removes assistant usage older than 3 years.
+/// an unknown level, the nightly chat step removes assistant usage older than 3 years, and the daily totals keep no token
+/// or cost column (B-38).
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
@@ -111,6 +112,17 @@ public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
 
         (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyUsage" WHERE "AssistantId" = '{assistant}'"""))
             .ShouldBe(["true"]);
+    }
+
+    [Fact]
+    public async Task The_daily_totals_keep_no_token_or_cost_column()
+    {
+        // Data-model §2.3 (B-38): tokens and cost have one home, AssistantDailyUsage; the totals row keeps the turn counters.
+        var columns = await Sql.ListAsync(database.Connection(Api), """
+            SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'chat' AND table_name = 'AssistantDailyTotals'
+            """);
+        columns.ShouldContain("Messages");
+        columns.ShouldNotContain(c => c.Contains("Tokens", StringComparison.Ordinal) || c.Contains("Cost", StringComparison.Ordinal));
     }
 
     /// <summary>The values after the key's ids that the checks refuse (level, step, department, the counters, the costs).</summary>

@@ -169,11 +169,25 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
         await ReadAsync(connection, transaction, """SELECT "Id", "Name" FROM config."Departments" """,
             r => departments[r.GetGuid(0)] = r.GetString(1), cancellationToken);
 
-        // The answer models' limits (chat design §6.3); a GatewayModels edit bumps the config version like any config row.
+        // The answer models' limits (chat design §6.3) and every model's prices for the cost estimate (§8.3); a GatewayModels edit
+        // or sync bumps the config version like any config row.
         var limits = new Dictionary<string, ModelLimitsEntry>(StringComparer.Ordinal);
+        var prices = new Dictionary<string, ModelPricesEntry>(StringComparer.Ordinal);
         await ReadAsync(connection, transaction, """
-            SELECT "Name", "ContextWindow", "MaxOutputTokens" FROM config."GatewayModels" WHERE "ContextWindow" IS NOT NULL OR "MaxOutputTokens" IS NOT NULL
-            """, r => limits[r.GetString(0)] = new ModelLimitsEntry(r.IsDBNull(1) ? null : r.GetInt32(1), r.IsDBNull(2) ? null : r.GetInt32(2)), cancellationToken);
+            SELECT "Name", "ContextWindow", "MaxOutputTokens", "InputPerMillionUsd", "CachedInputPerMillionUsd", "OutputPerMillionUsd" FROM config."GatewayModels"
+            """, r =>
+        {
+            if (!r.IsDBNull(1) || !r.IsDBNull(2))
+            {
+                limits[r.GetString(0)] = new ModelLimitsEntry(r.IsDBNull(1) ? null : r.GetInt32(1), r.IsDBNull(2) ? null : r.GetInt32(2));
+            }
+
+            if (!r.IsDBNull(3) || !r.IsDBNull(4) || !r.IsDBNull(5))
+            {
+                prices[r.GetString(0)] = new ModelPricesEntry(r.IsDBNull(3) ? null : r.GetDecimal(3), r.IsDBNull(4) ? null : r.GetDecimal(4),
+                    r.IsDBNull(5) ? null : r.GetDecimal(5));
+            }
+        }, cancellationToken);
 
         string? retrieval = null;
         string? chat = null;
@@ -188,6 +202,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             DemoteRules = demote,
             TrustedProxies = [.. NetworkRanges.ParseValid(trustedProxies)],
             ModelLimits = limits,
+            ModelPrices = prices,
         };
     }
 

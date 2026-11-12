@@ -19,7 +19,7 @@
   "Api.FeedbackImporter.ImportOneAsync#2": ["Rating smallint"],
   "Api.FeedbackImporter.PruneAsync#1": ["ClientRetentionDays integer"],
   "Infrastructure.Access.PolicySnapshotStore.LoadAsync#1": ["Id uuid", "Name character varying", "Kind character varying", "ClassificationCeiling character varying", "StoresHistory boolean", "IsEnabled boolean"],
-  "Infrastructure.Access.PolicySnapshotStore.LoadAsync#10": ["Name character varying", "ContextWindow integer", "MaxOutputTokens integer"],
+  "Infrastructure.Access.PolicySnapshotStore.LoadAsync#10": ["Name character varying", "ContextWindow integer", "MaxOutputTokens integer", "InputPerMillionUsd numeric", "CachedInputPerMillionUsd numeric", "OutputPerMillionUsd numeric"],
   "Infrastructure.Access.PolicySnapshotStore.LoadAsync#11": ["Retrieval text", "Chat text", "TrustedProxies text[]"],
   "Infrastructure.Access.PolicySnapshotStore.LoadAsync#2": ["AssistantId uuid", "Kind character varying", "SubjectId uuid", "GroupValue character varying"],
   "Infrastructure.Access.PolicySnapshotStore.LoadAsync#3": ["AssistantId uuid", "Id uuid", "Number integer", "GatewayModel character varying", "CollectionLinks text", "SystemPrompt text", "QuerySteps text", "NotFound text", "PublishedAt timestamp with time zone"],

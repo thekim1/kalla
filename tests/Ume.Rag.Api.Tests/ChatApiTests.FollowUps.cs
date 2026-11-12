@@ -221,7 +221,7 @@ public sealed partial class ChatApiTests
         body.GetProperty("usage").GetRawText().ShouldBe(plainUsage); // the answer call's only
         outcomes.ShouldBe([FollowUps.Used]);
         tokens.Where(t => t.Contains("/follow-ups/", StringComparison.Ordinal)).Select(t => t[..t.LastIndexOf('/')]).ShouldBe(
-            ["input/follow-ups", "output/follow-ups"], ignoreOrder: true);
+            ["input/follow-ups", "cached-input/follow-ups", "output/follow-ups"], ignoreOrder: true);
     }
 
     [Fact]

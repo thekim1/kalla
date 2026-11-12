@@ -7,6 +7,7 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure.Access;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
 
@@ -57,7 +58,15 @@ public sealed partial class KnowledgeService(
     private (long Version, RetrievalPlatformSettings Platform, Dictionary<Guid, RetrievalSettings> Collections)? _settings;
     private (long Version, Dictionary<Guid, IReadOnlyList<DemotePattern>> BySource)? _demote;
 
-    public async Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct)
+    /// <summary>A retrieval whose model calls' usage nobody records (the Knowledge API, the test panel: counted in the gateway only).</summary>
+    public Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct) => RetrieveAsync(who, request, null, ct);
+
+    /// <summary>
+    /// A retrieval (§2.2); the usage of its model calls goes to <paramref name="usage"/> as each answers (chat design §8.3): the
+    /// query embedding on a cache miss (a cached or joined embedding made no call and gives none) and the rerank call when one
+    /// answered, its output readable or not. A search that fails after the embedding has still reported it.
+    /// </summary>
+    public async Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, Action<GatewayCallUsage>? usage, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(who);
         ArgumentNullException.ThrowIfNull(request);
@@ -118,7 +127,16 @@ public sealed partial class KnowledgeService(
         try
         {
             search = await engine.SearchAsync(new SearchRequest(request.Query, scope, request.TopK, request.Mode, request.Filters,
-                request.Mode == RetrievalMode.Keyword ? null : async (query, token) => (await embedder.EmbedAsync(profile, query, request.RunId, token)).Vector,
+                request.Mode == RetrievalMode.Keyword ? null : async (query, token) =>
+                {
+                    var embedding = await embedder.EmbedAsync(profile, query, request.RunId, token);
+                    if (embedding.Usage is { } call)
+                    {
+                        usage?.Invoke(call);
+                    }
+
+                    return embedding.Vector;
+                },
                 request.AllowDegraded, Rerank: rerank), ct);
         }
         catch (SearchUnavailableException)
@@ -132,6 +150,11 @@ public sealed partial class KnowledgeService(
         catch (ArgumentException)
         {
             throw new RetrievalDeniedException(400, KnowledgeCodes.InvalidRequest); // an empty or over-long query (§3.1)
+        }
+
+        if (search.RerankUsage is { } rerankCall)
+        {
+            usage?.Invoke(rerankCall);
         }
 
         var hydrateStarted = Stopwatch.GetTimestamp();
