@@ -537,7 +537,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** nothing (B-35 part 3, #607, added `limitsSource` and the status's `gateway`).
 - **Read:** admin §4.10; Decisions "Answer length from the model".
 
-### [ ] A-39 The worker's content retention step: the age rules of data-model §8 for rows without blobs
+### [x] A-39 (#626) The worker's content retention step: the age rules of data-model §8 for rows without blobs
 - **Do:** a nightly step function `content.rag_retention_content_step(batch_size)` in the style of
   `chat.rag_retention_chat_step` (data-model §8: `SECURITY DEFINER`, owner migrator, `SET search_path = pg_catalog,
   pg_temp`, batched, the minimums inside the function, returns the rows deleted), granted to the worker role and called
