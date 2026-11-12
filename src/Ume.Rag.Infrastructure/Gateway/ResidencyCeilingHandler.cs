@@ -15,8 +15,11 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// ceiling disposes the response (which cancels a stream at the gateway), raises event 5003 and throws. <c>GET /v1/models</c>
 /// is the exception: no model answers it, so it carries no residency (the gateway's <c>GatewayRequestHandler</c>).
 /// <c>GET /v1/ume/context</c> needs no ceiling either: it gets the service's credential key and nothing else is checked.
+/// From gateway phase 2 it also sends <c>x-ume-on-behalf-of</c> for a call made for an object's key (<see cref="GatewayCall"/>,
+/// <see cref="GatewayFeatures.ActAsKey"/>), checks the echo (event 5011) and turns a refusal of the key into
+/// <see cref="GatewayKeyRefusedException"/> (identity §4.7, gateway-changes §5.2, §5.7).
 /// </summary>
-public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> options, ILoggerFactory loggers) : DelegatingHandler
+public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> options, ILoggerFactory loggers, GatewayFeatures features) : DelegatingHandler
 {
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
     private readonly ILogger _log = loggers.CreateLogger<ResidencyCeilingHandler>();
@@ -29,6 +32,7 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
         {
             // The context (gateway-changes §5.5) is about the key, not a model: authenticated, no ceiling, no residency.
             AddCredentialKey(request, gateway.Key ?? throw new GatewayKeyMissingException(gateway.Maximum));
+            request.Headers.Remove(GatewayHeaders.OnBehalfOf); // never acted: the context is the credential key's own (§5.2)
             return await base.SendAsync(request, cancellationToken);
         }
 
@@ -45,7 +49,22 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
         }
 
         AddCredentialKey(request, key);
+        // Phase 2 (identity §4.7, gateway-changes §5.2): a call for an object with a gateway key runs as that key once the
+        // gateway acts as keys; the id goes in the D form, the gateway's own.
+        request.Headers.Remove(GatewayHeaders.OnBehalfOf);
+        var call = request.Options.TryGetValue(GatewayCall.OptionsKey, out var c) ? c : null;
+        var acting = call?.GatewayKeyId is { } keyId && features.ActAsKey ? keyId : (Guid?)null;
+        if (acting is { } id)
+        {
+            request.Headers.Add(GatewayHeaders.OnBehalfOf, id.ToString("D"));
+        }
+
         var response = await base.SendAsync(request, cancellationToken);
+        if (acting is { } sent)
+        {
+            await CheckActingAsync(request, response, call!, sent, gateway, cancellationToken);
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             return response; // 403 max_residency_not_met, 503 + Retry-After …: the caller maps them (identity design §4.7)
@@ -68,6 +87,70 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
             request.RequestUri?.AbsolutePath ?? "", requestId is null ? null : SecurityEvents.Printable(requestId));
         throw new GatewayResidencyException(ceiling, observed);
     }
+
+    /// <summary>
+    /// The answer to a call made as <paramref name="keyId"/> (gateway-changes §5.2, §5.7): a <c>2xx</c> or <c>304</c> must echo
+    /// the id (compared as a GUID), else it is discarded with event 5011 while <see cref="GatewayOptions.RequireDelegationEcho"/>
+    /// is on; a refusal of the key is thrown as <see cref="GatewayKeyRefusedException"/>; a <c>400 invalid_request</c> is a
+    /// bug here and logged at Error. Other answers go back to the caller as they are.
+    /// </summary>
+    private async Task CheckActingAsync(HttpRequestMessage request, HttpResponseMessage response, GatewayCall call, Guid keyId, GatewayOptions gateway,
+        CancellationToken cancellationToken)
+    {
+        var status = (int)response.StatusCode;
+        if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotModified)
+        {
+            var echo = response.Headers.TryGetValues(GatewayHeaders.OnBehalfOf, out var values) ? string.Join(",", values) : null;
+            if ((echo is not null && Guid.TryParse(echo, out var echoed) && echoed == keyId) || !gateway.RequireDelegationEcho)
+            {
+                return;
+            }
+
+            var requestId = response.Headers.TryGetValues(GatewayHeaders.RequestId, out var ids) ? ids.FirstOrDefault() : null;
+            response.Dispose();
+            SecurityEvents.DelegationMissing(_security, call.Step is null ? null : SecurityEvents.Printable(call.Step), call.AssistantId, call.CollectionId, keyId,
+                requestId is null ? null : SecurityEvents.Printable(requestId));
+            throw new GatewayDelegationEchoException(keyId, echo is null ? null : SecurityEvents.Printable(echo));
+        }
+
+        if (status is not (400 or 401 or 402 or 403))
+        {
+            return; // 429, 5xx …: as any call (gateway-changes §5.7)
+        }
+
+        await response.Content.LoadIntoBufferAsync(cancellationToken);
+        var (code, message) = await ErrorAsync(response, cancellationToken);
+        if (GatewayKeyRefusedException.IsKeyRefusal(status, code))
+        {
+            response.Dispose();
+            throw new GatewayKeyRefusedException(status, code ?? "budget_exceeded", message, keyId);
+        }
+
+        if (status == 400 && code == "invalid_request")
+        {
+            LogActingInvalid(_log, request.RequestUri?.AbsolutePath ?? "", keyId);
+        }
+    }
+
+    /// <summary>The OpenAI error shape's <c>error.code</c> and <c>error.message</c>; nulls when the body is not one.</summary>
+    private static async Task<(string? Code, string? Message)> ErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var json = await System.Text.Json.JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            var error = json.RootElement.TryGetProperty("error", out var e) ? e : default;
+            string? Text(string name) => error.ValueKind == System.Text.Json.JsonValueKind.Object && error.TryGetProperty(name, out var v) &&
+                                         v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            return (Text("code"), Text("message"));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    [LoggerMessage(LogLevel.Error, "Gateway call to {Path} as the key {GatewayKeyId} answered 400 invalid_request: a bug in Ume.Rag's x-ume-on-behalf-of (gateway-changes §5.7)")]
+    private static partial void LogActingInvalid(ILogger logger, string path, Guid gatewayKeyId);
 
     [LoggerMessage(LogLevel.Warning,
         "Gateway call at {Ceiling} to {Path} refused before sending: above this service's maximum {Maximum} (Gateway:MaxResidency, identity design §4.7)")]
@@ -145,6 +228,18 @@ public static class GatewayRequestExtensions
         ArgumentNullException.ThrowIfNull(request);
         request.Headers.Remove(GatewayHeaders.MaxResidency);
         request.Headers.Add(GatewayHeaders.MaxResidency, ResidencyCeiling.ToHeader(ceiling));
+        return request;
+    }
+
+    /// <summary>
+    /// What the call is made for (cost-attribution §4.1): <see cref="GatewayCall.GatewayKeyId"/> is the object's assigned key,
+    /// which <see cref="ResidencyCeilingHandler"/> sends as <c>x-ume-on-behalf-of</c> while the gateway acts as keys.
+    /// </summary>
+    public static HttpRequestMessage For(this HttpRequestMessage request, GatewayCall call)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(call);
+        request.Options.Set(GatewayCall.OptionsKey, call);
         return request;
     }
 

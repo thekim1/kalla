@@ -12,6 +12,19 @@ namespace Ume.Rag.FakeGateway;
 public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling, bool Credential = false)
 {
     public Residency Max => Ceiling is { } ceiling && ceiling < KeyLevel ? ceiling : KeyLevel;
+
+    /// <summary>The assigned key the request runs as (<c>x-ume-on-behalf-of</c>, gateway phase 2), or null.</summary>
+    public FakeAssignedKey? Acting { get; init; }
+
+    /// <summary>The presenting credential key's id (the "via" key of the usage record), or null for a per-level key.</summary>
+    public Guid? CredentialId { get; init; }
+
+    /// <summary>
+    /// A residency the request may be served at: within <see cref="Max"/> and, when acting, within the assigned key's own
+    /// residencies (the credential key's bound is <see cref="KeyLevel"/>; gateway-changes §5.3, feature credential-residencies).
+    /// </summary>
+    public bool Allows(Residency residency) =>
+        residency <= Max && (Acting is null || Acting.AllowedResidencies.Count == 0 || Acting.AllowedResidencies.Contains(residency));
 }
 
 /// <summary>An authenticated key: a per-level dev key (its level) or a credential key (its highest residency).</summary>
@@ -70,6 +83,10 @@ public static class FakeAccess
         }
 
         var (level, credential) = (authenticated.Level, authenticated.Credential is not null);
+        if (!TryResolveActing(context, options, authenticated, out var acting, out error))
+        {
+            return null;
+        }
 
         // As RequestStages.ReadMaxResidency: absent is "no ceiling" unless the key requires one; present, it must be exactly
         // one of the three names (an empty value, a list or a repeated header is refused, never ignored).
@@ -101,18 +118,91 @@ public static class FakeAccess
             return null;
         }
 
-        // Echoed as the gateway does from release 2 (gateway design §5.2); a session id is echoed for streaming tests.
-        foreach (var echo in (string[])[OnBehalfOfHeader, SessionHeader])
+        // A session id is echoed for streaming tests.
+        if (context.Request.Headers.TryGetValue(SessionHeader, out var session) && !StringValues.IsNullOrEmpty(session))
         {
-            if (context.Request.Headers.TryGetValue(echo, out var value) && !StringValues.IsNullOrEmpty(value))
+            context.Response.Headers[SessionHeader] = session;
+        }
+
+        if (acting?.BudgetExceeded is { Length: > 0 } scope)
+        {
+            // The gateway's 402 (gateway-changes §5.4): the scope only in the message, after the echo is set.
+            error = Error(context, StatusCodes.Status402PaymentRequired, "budget_exceeded", scope switch
             {
-                context.Response.Headers[echo] = value;
-            }
+                "Team" => "The team's budget (USD 100 per month) is used up. Ask the team's administrator to raise it.",
+                "Department" => "The department's budget (USD 1000 per month) is used up. Ask the department's administrator to raise it.",
+                _ => "The key's budget (USD 50 per month) is used up. Ask the key's administrator to raise it.",
+            });
+            return null;
         }
 
         error = null;
-        return new FakeCall(level, ceiling, credential);
+        return new FakeCall(level, ceiling, credential) { Acting = acting, CredentialId = authenticated.Credential is { } c ? CredentialId(c) : null };
     }
+
+    /// <summary>
+    /// <c>x-ume-on-behalf-of</c> as the gateway resolves it right after authentication (gateway v0.10.0
+    /// <c>RequestStages.cs:118-180</c>; gateway-changes §5.2): none = the presented key; not one GUID or repeated = 400; a
+    /// caller that is no credential key, an id not assigned to the integration, or no residency in common = 403
+    /// <c>delegation_not_allowed</c>; a disabled key or an inactive owner = 403 <c>key_disabled</c>; revoked or expired = 401.
+    /// A usable key is echoed in the D form on every later answer, unless <see cref="FakeGatewayOptions.DropOnBehalfOfEcho"/>.
+    /// </summary>
+    private static bool TryResolveActing(HttpContext context, FakeGatewayOptions options, FakeKey key, out FakeAssignedKey? acting, out IResult? error)
+    {
+        acting = null;
+        error = null;
+        var header = context.Request.Headers[OnBehalfOfHeader];
+        if (header.Count == 0)
+        {
+            return true;
+        }
+
+        if (header.Count > 1 || !Guid.TryParse(header[0], out var id))
+        {
+            error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", "x-ume-on-behalf-of must be one key id (a GUID).");
+            return false;
+        }
+
+        var assigned = key.Credential is null ? null : options.AssignedKeys.FirstOrDefault(k => k.Id == id);
+        var credentialResidencies = Enum.GetValues<Residency>().Where(r => r <= key.Level).ToList();
+        if (assigned is null || (assigned.AllowedResidencies.Count > 0 && !assigned.AllowedResidencies.Any(credentialResidencies.Contains)))
+        {
+            error = Error(context, StatusCodes.Status403Forbidden, "delegation_not_allowed", "This key may not make requests on behalf of that key.");
+            return false;
+        }
+
+        if (assigned.Status == "Revoked")
+        {
+            error = Error(context, StatusCodes.Status401Unauthorized, "key_revoked", "The API key has been revoked.");
+            return false;
+        }
+
+        if (assigned.Status == "Expired" || assigned.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow)
+        {
+            error = Error(context, StatusCodes.Status401Unauthorized, "key_expired", "The API key has expired.");
+            return false;
+        }
+
+        var team = FakeCatalog.OrganisationTeams.FirstOrDefault(t => t.Id == assigned.TeamId);
+        var department = team is null ? null : FakeCatalog.OrganisationDepartments.FirstOrDefault(d => d.Id == team.DepartmentId);
+        if (assigned.Status == "Disabled" || team is not { IsActive: true } || department is not { IsActive: true })
+        {
+            error = Error(context, StatusCodes.Status403Forbidden, "key_disabled", "The API key is disabled.");
+            return false;
+        }
+
+        if (!options.DropOnBehalfOfEcho)
+        {
+            context.Response.Headers[OnBehalfOfHeader] = assigned.Id.ToString("D");
+        }
+
+        acting = assigned;
+        return true;
+    }
+
+    /// <summary>A credential key's id as the context shows it (a stable one per secret when none is set).</summary>
+    public static Guid CredentialId(FakeCredentialKey key) =>
+        key.Id ?? new Guid(SHA256.HashData(Encoding.UTF8.GetBytes("fake-key:" + key.Key)).AsSpan(0, 16));
 
     /// <summary>
     /// Resolves <paramref name="modelName"/> for an endpoint serving <paramref name="kind"/>, selects its target within the
@@ -141,13 +231,19 @@ public static class FakeAccess
             return null;
         }
 
+        if (call.Acting is { AllowedModels.Count: > 0 } acting && !acting.AllowedModels.Contains(model.Name))
+        {
+            error = Error(context, StatusCodes.Status403Forbidden, "model_not_allowed", $"The API key may not use the model '{model.Name}'.");
+            return null;
+        }
+
         if (model.Kind != kind)
         {
             error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", $"The model '{model.Name}' cannot be used with this endpoint.");
             return null;
         }
 
-        var candidates = model.Targets.Where(t => t.Residency <= call.Max && !t.Drained).ToList();
+        var candidates = model.Targets.Where(t => call.Allows(t.Residency) && !t.Drained).ToList();
         if (candidates.Count == 0)
         {
             error = NoCandidate(context, options, call, model);
@@ -183,7 +279,7 @@ public static class FakeAccess
                 "No available provider can handle the request for this alias within the key's restrictions.");
         }
 
-        if (!model.Targets.Any(t => t.Residency <= call.Max))
+        if (!model.Targets.Any(t => call.Allows(t.Residency)))
         {
             return Error(context, StatusCodes.Status403Forbidden, "max_residency_not_met",
                 $"No provider for '{model.Name}' is configured at or below the residency '{ResidencyCeiling.ToHeader(ceiling)}' that the request allows.");
@@ -194,9 +290,14 @@ public static class FakeAccess
             $"No provider for '{model.Name}' within the residency '{ResidencyCeiling.ToHeader(ceiling)}' is available right now. Try again later.");
     }
 
-    /// <summary>The residencies a model is servable at within the call (for <c>/v1/models</c>).</summary>
+    /// <summary>
+    /// The residencies a model is servable at within the call (for <c>/v1/models</c>); none for a model the acting key may
+    /// not use (gateway-changes §5.5: the assigned key's models within both keys' residencies).
+    /// </summary>
     public static Residency[] ServableResidencies(FakeModel model, FakeCall call) =>
-        [.. model.Targets.Where(t => !t.Drained && t.Residency <= call.Max).Select(t => t.Residency).Distinct().Order()];
+        call.Acting is { AllowedModels.Count: > 0 } acting && !acting.AllowedModels.Contains(model.Name)
+            ? []
+            : [.. model.Targets.Where(t => !t.Drained && call.Allows(t.Residency)).Select(t => t.Residency).Distinct().Order()];
 
     /// <summary>The gateway's OpenAI error body (<c>GatewayErrors.Create</c>): <c>type</c> from the status, the request id.</summary>
     public static IResult Error(HttpContext context, int status, string code, string message) =>
