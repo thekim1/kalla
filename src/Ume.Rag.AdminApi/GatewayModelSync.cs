@@ -1,10 +1,8 @@
 using System.Data.Common;
 using System.Diagnostics.Metrics;
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
@@ -17,18 +15,6 @@ using Ume.Rag.Infrastructure.Security;
 
 namespace Ume.Rag.AdminApi;
 
-/// <summary>A provider account of the gateway catalogue (<c>/v1/catalog/providers</c>).</summary>
-public sealed record CatalogProviderItem(Guid Id, string Name, Residency Residency, bool IsEnabled);
-
-/// <summary>
-/// A model deployment of the gateway catalogue (<c>/v1/catalog/models</c>); <see cref="Kind"/> is the gateway's <c>ModelKind</c>.
-/// <see cref="Residency"/> is the deployment's own residency (gateway v0.9.1, ADR 019), <c>null</c> for its provider's.
-/// </summary>
-public sealed record CatalogModelItem(Guid Id, string Name, string Kind, Guid ProviderId, bool IsEnabled, Residency? Residency = null);
-
-/// <summary>A price row of the gateway catalogue (<c>/v1/catalog/prices</c>), per million tokens in USD.</summary>
-public sealed record CatalogPriceItem(Guid ModelId, DateTimeOffset EffectiveFrom, decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd);
-
 /// <summary>What one run changed: mirror rows added or changed, removed, and canaries recorded.</summary>
 public sealed record GatewayModelSyncResult(int Written, int Removed, int CanariesRecorded)
 {
@@ -40,16 +26,19 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
     string? LastError, GatewayModelSyncResult? LastResult, string? LastCanaryError);
 
 /// <summary>
-/// Mirrors the gateway's model catalogue into <c>config."GatewayModels"</c> (admin design §4.10; P1a item 13) every
-/// <c>OrgSync:IntervalMinutes</c> and on demand, with the same Data API key and the same pattern as
-/// <see cref="OrganisationSync"/>: one config write under the version lock and an advisory lock, only changed rows written
-/// (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row per enabled chat or embedding
-/// deployment of an enabled provider: <c>Kind = model</c>, <c>ModelKind</c> from the catalogue's <c>Kind</c>, <c>Residencies = [deployment residency, else provider residency]</c>, the latest price in
-/// effect. A catalogue row whose deployment is gone or disabled is removed; manual rows (route aliases) are never touched.
-/// After each run the canary embedding of every active profile that has none is recorded (<see cref="RecordCanariesAsync"/>).
+/// Mirrors the gateway's models into <c>config."GatewayModels"</c> (admin design §4.10) every <c>OrgSync:IntervalMinutes</c>
+/// and on demand, from <c>GET /v1/models</c> at the service's maximum ceiling with the admin's credential key and the
+/// gateway's facts (<c>ume</c>, gateway-changes §5.5); <c>If-None-Match</c> with the last <c>ETag</c>, and a <c>304</c> writes
+/// nothing. The same pattern as <see cref="OrganisationSync"/>: one config write under the version lock and an advisory
+/// lock, only changed rows written (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row
+/// per chat, embedding or rerank model or alias: a model is <c>Kind = model</c> with its residency, an alias
+/// <c>Kind = route</c> with its targets' residencies; <c>ModelKind</c>, prices and <c>SupportsTools</c> from the facts; the
+/// limits from <c>context_window</c> and <c>max_output_tokens</c> once the gateway sends one (<c>LimitsSource = catalog</c>),
+/// else the manual ones are kept. A catalogue row no longer listed is removed; manual rows are never touched. After each
+/// run the canary embedding of every active profile that has none is recorded (<see cref="RecordCanariesAsync"/>).
 /// </summary>
 public sealed partial class GatewayModelSync(
-    IServiceScopeFactory scopes, IHttpClientFactory httpClients, GatewayApi gateway, IOptions<OrgSyncOptions> options,
+    IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options,
     IOptions<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
 {
     /// <summary>The audit actor of a run and of a recorded canary.</summary>
@@ -57,8 +46,6 @@ public sealed partial class GatewayModelSync(
 
     /// <summary>Advisory lock key of the sync ("RAG0" + 0x11), one writer across instances.</summary>
     public const long LockKey = 0x5241_4730_0011;
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     private readonly Counter<long> _runs = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.admin.sync", description: "Organisation and model catalogue sync runs by kind and outcome");
@@ -70,8 +57,10 @@ public sealed partial class GatewayModelSync(
     private string? _lastError;
     private string? _lastCanaryError;
     private GatewayModelSyncResult? _lastResult;
+    private string? _etag;
 
-    public bool Enabled => options.Value.BaseUrl is not null;
+    /// <summary>On when the gateway and this service's credential key are configured.</summary>
+    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.Value.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.Value.Key);
 
     public GatewayModelSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _lastCanaryError);
 
@@ -85,7 +74,7 @@ public sealed partial class GatewayModelSync(
     }
 
     /// <summary>
-    /// One run, by <paramref name="actor"/> or the schedule (null): the mirror when the Data API is configured, then the
+    /// One run, by <paramref name="actor"/> or the schedule (null): the mirror when the gateway is configured, then the
     /// canaries. Never throws except on shutdown; returns null when the mirror could not be synced.
     /// </summary>
     public async Task<GatewayModelSyncResult?> RunAsync(AdminActor? actor, CancellationToken cancellationToken)
@@ -115,9 +104,17 @@ public sealed partial class GatewayModelSync(
     {
         try
         {
-            var providers = await FetchAsync<CatalogProviderItem>("v1/catalog/providers", cancellationToken);
-            var models = await FetchAsync<CatalogModelItem>("v1/catalog/models", cancellationToken);
-            var prices = await FetchAsync<CatalogPriceItem>("v1/catalog/prices", cancellationToken);
+            var answer = await gateway.GetModelListAsync(gatewayOptions.Value.Maximum, _etag, cancellationToken);
+            if (answer.Models is not { } models)
+            {
+                // 304: the list is as at the last run, which was written.
+                _lastSuccessAt = time.GetUtcNow();
+                _lastError = null;
+                Volatile.Write(ref _failures, 0);
+                _runs.Add(1, new("kind", "models"), new("outcome", "unchanged"));
+                return new GatewayModelSyncResult(0, 0, 0);
+            }
+
             await using var scope = scopes.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
             var outcome = await db.ExecuteConfigWriteAsync(async (_, ct) =>
@@ -127,7 +124,7 @@ public sealed partial class GatewayModelSync(
                     return new RunOutcome(null, null); // another instance is syncing
                 }
 
-                var changed = await ApplyAsync(db, providers, models, prices, time.GetUtcNow(), ct);
+                var changed = await ApplyAsync(db, models, time.GetUtcNow(), ct);
                 if (!changed.Changed)
                 {
                     return new RunOutcome(changed, null);
@@ -152,6 +149,7 @@ public sealed partial class GatewayModelSync(
                     entry.Action, entry.EntityType, entry.EntityId);
             }
 
+            _etag = outcome.Result is null ? null : answer.ETag; // another instance's run: ask again in full next time
             _lastSuccessAt = time.GetUtcNow();
             _lastError = null;
             Volatile.Write(ref _failures, 0);
@@ -170,62 +168,81 @@ public sealed partial class GatewayModelSync(
     }
 
     /// <summary>
-    /// Brings the tracked mirror in line with the catalogue without saving: adds and updates catalogue rows (with
-    /// <c>SyncedAt</c>) and removes catalogue rows no longer served. Manual rows, and the manual <c>SupportsTools</c> and
-    /// <c>ContextWindow</c> of catalogue rows, are left as they are.
+    /// Brings the tracked mirror in line with <paramref name="models"/> without saving: adds and updates catalogue rows (with
+    /// <c>SyncedAt</c>) and removes catalogue rows no longer listed. Models of another kind than chat, embedding or rerank
+    /// are not mirrored. Manual rows are left as they are, and so are a row's manual limits while the gateway sends none.
     /// </summary>
-    public static async Task<GatewayModelSyncResult> ApplyAsync(RagDbContext db, IReadOnlyList<CatalogProviderItem> providers,
-        IReadOnlyList<CatalogModelItem> models, IReadOnlyList<CatalogPriceItem> prices, DateTimeOffset now, CancellationToken ct)
+    public static async Task<GatewayModelSyncResult> ApplyAsync(RagDbContext db, IReadOnlyList<GatewayListedModel> models, DateTimeOffset now, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(models);
-        ArgumentNullException.ThrowIfNull(prices);
-        var enabledProviders = providers.Where(p => p.IsEnabled).ToDictionary(p => p.Id);
-        var latestPrice = prices.Where(p => p.EffectiveFrom <= now).GroupBy(p => p.ModelId)
-            .ToDictionary(g => g.Key, g => g.MaxBy(p => p.EffectiveFrom)!);
-        var served = models
-            .Where(m => m.IsEnabled && m.Kind is "Chat" or "Embedding" or "Rerank" && enabledProviders.ContainsKey(m.ProviderId))
-            .GroupBy(m => m.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var listed = models.Where(m => ModelKindOf(m.Ume.Kind) is not null).GroupBy(m => m.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var stored = await db.GatewayModels.ToDictionaryAsync(m => m.Name, StringComparer.Ordinal, ct);
         int written = 0, removed = 0;
 
-        foreach (var (name, deployments) in served)
+        foreach (var (name, model) in listed)
         {
             if (stored.TryGetValue(name, out var row) && row.Source == GatewayModelSources.Manual)
             {
                 continue; // a manual row (route alias) with the same name wins
             }
 
-            // The residency in effect, as the gateway routes and reports it: the deployment's own, else its provider's (v0.9.1).
-            var residencies = deployments.Select(d => d.Residency ?? enabledProviders[d.ProviderId].Residency).Distinct().Order()
-                .Select(ResidencyCeiling.ToHeader).ToArray();
-            var price = deployments.Select(d => latestPrice.GetValueOrDefault(d.Id)).OfType<CatalogPriceItem>().MaxBy(p => p.EffectiveFrom);
-            var modelKind = ModelKindOf(deployments[0].Kind);
+            var facts = model.Ume;
+            var alias = facts.Type == GatewayModelFacts.Alias;
+            var residencies = (alias ? facts.Residencies ?? [] : facts.Residency is { } r ? [r] : [])
+                .Where(x => ResidencyCeiling.TryParse(x, out _)).Distinct(StringComparer.Ordinal)
+                .OrderBy(x => ResidencyCeiling.TryParse(x, out var residency) ? residency : default).ToArray();
+            if (residencies.Length == 0)
+            {
+                continue; // nothing servable to record (the mirror's CHECK needs one residency)
+            }
+
+            var kind = alias ? GatewayModelKinds.Route : GatewayModelKinds.Model;
+            var modelKind = ModelKindOf(facts.Kind)!;
+            var tools = facts.Features.Contains("tools", StringComparer.Ordinal);
+            // The gateway's limits once it sends one, both together so they stay consistent; else the manual ones stay.
+            var fromGateway = facts.ContextWindow is not null || facts.MaxOutputTokens is not null;
             if (row is null)
             {
                 row = new GatewayModel { Name = name, Source = GatewayModelSources.Catalog };
                 db.GatewayModels.Add(row);
             }
-            else if (row.Kind == GatewayModelKinds.Model && row.ModelKind == modelKind && row.Residencies.SequenceEqual(residencies, StringComparer.Ordinal) &&
-                     row.InputPerMillionUsd == price?.InputPerMillionUsd && row.CachedInputPerMillionUsd == price?.CachedInputPerMillionUsd &&
-                     row.OutputPerMillionUsd == price?.OutputPerMillionUsd)
+            else if (row.Kind == kind && row.ModelKind == modelKind && row.Residencies.SequenceEqual(residencies, StringComparer.Ordinal) &&
+                     row.InputPerMillionUsd == facts.Pricing?.InputPerMillionUsd && row.CachedInputPerMillionUsd == facts.Pricing?.CachedInputPerMillionUsd &&
+                     row.OutputPerMillionUsd == facts.Pricing?.OutputPerMillionUsd && row.SupportsTools == tools &&
+                     row.SupportsToolsSource == GatewayModelSources.Catalog &&
+                     (fromGateway
+                         ? row.LimitsSource == GatewayModelSources.Catalog && row.ContextWindow == facts.ContextWindow && row.MaxOutputTokens == facts.MaxOutputTokens
+                         : row.LimitsSource == GatewayModelSources.Manual))
             {
                 continue;
             }
 
-            row.Kind = GatewayModelKinds.Model;
+            row.Kind = kind;
             row.ModelKind = modelKind;
             row.Residencies = residencies;
-            row.InputPerMillionUsd = price?.InputPerMillionUsd;
-            row.CachedInputPerMillionUsd = price?.CachedInputPerMillionUsd;
-            row.OutputPerMillionUsd = price?.OutputPerMillionUsd;
+            row.InputPerMillionUsd = facts.Pricing?.InputPerMillionUsd;
+            row.CachedInputPerMillionUsd = facts.Pricing?.CachedInputPerMillionUsd;
+            row.OutputPerMillionUsd = facts.Pricing?.OutputPerMillionUsd;
+            row.SupportsTools = tools;
+            row.SupportsToolsSource = GatewayModelSources.Catalog;
+            if (fromGateway)
+            {
+                row.ContextWindow = facts.ContextWindow;
+                row.MaxOutputTokens = facts.MaxOutputTokens;
+                row.LimitsSource = GatewayModelSources.Catalog;
+            }
+            else
+            {
+                row.LimitsSource = GatewayModelSources.Manual;
+            }
+
             row.SyncedAt = now;
             written++;
         }
 
-        foreach (var row in stored.Values.Where(r => r.Source == GatewayModelSources.Catalog && !served.ContainsKey(r.Name)))
+        foreach (var row in stored.Values.Where(r => r.Source == GatewayModelSources.Catalog && !listed.ContainsKey(r.Name)))
         {
             db.GatewayModels.Remove(row);
             removed++;
@@ -234,12 +251,13 @@ public sealed partial class GatewayModelSync(
         return new GatewayModelSyncResult(written, removed, 0);
     }
 
-    /// <summary>The mirror's <c>ModelKind</c> of a catalogue <c>Kind</c> (gateway <c>ModelKind</c>: <c>Chat</c>, <c>Embedding</c> or <c>Rerank</c>; others are not mirrored).</summary>
-    internal static string ModelKindOf(string catalogKind) => catalogKind switch
+    /// <summary>The mirror's <c>ModelKind</c> of the gateway's <c>ume.kind</c> (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>); null for a kind not mirrored.</summary>
+    internal static string? ModelKindOf(string kind) => kind switch
     {
+        "Chat" => GatewayModelModelKinds.Chat,
         "Embedding" => GatewayModelModelKinds.Embedding,
         "Rerank" => GatewayModelModelKinds.Rerank,
-        _ => GatewayModelModelKinds.Chat,
+        _ => null,
     };
 
     /// <summary>
@@ -338,24 +356,11 @@ public sealed partial class GatewayModelSync(
         _ => ex.GetType().Name,
     };
 
-    private async Task<IReadOnlyList<T>> FetchAsync<T>(string path, CancellationToken ct)
-    {
-        using var client = httpClients.CreateClient(OrganisationSync.HttpClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(options.Value.BaseUrl!, path));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.DataApiKey);
-        using var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
-        var page = await response.Content.ReadFromJsonAsync<CatalogPage<T>>(Json, ct);
-        return page?.Items ?? throw new InvalidDataException($"{path} returned no items.");
-    }
-
     public override void Dispose()
     {
         _gate.Dispose();
         base.Dispose();
     }
-
-    private sealed record CatalogPage<T>(IReadOnlyList<T>? Items);
 
     /// <summary>A run's result (null: another instance held the lock) and its audit entry (null: nothing changed).</summary>
     private sealed record RunOutcome(GatewayModelSyncResult? Result, AuditLogEntry? Audit);

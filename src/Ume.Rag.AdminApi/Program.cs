@@ -63,10 +63,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ConfigLockMetrics>();
 builder.Services.AddScoped<AdminContext>();
 builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
-// The model sync calls the gateway's Data API (OrgSync:BaseUrl) on its own cadence: no standard resilience handler, whose
-// Polly telemetry would log the gateway's address at Warning and Error on every retry (#265).
-builder.Services.AddHttpClient(OrganisationSync.HttpClientName).RemoveStandardResilienceHandler();
-// The organisation and gateway keys from the gateway's context, on the gateway client below (admin design §4.10).
+// The organisation and gateway keys from the gateway's context, and the models from /v1/models, on the gateway client
+// below with the admin's credential key (admin design §4.10).
 builder.Services.AddSingleton<OrganisationSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OrganisationSync>());
 builder.Services.AddHealthChecks().AddCheck<OrganisationSync>("organisation-sync");

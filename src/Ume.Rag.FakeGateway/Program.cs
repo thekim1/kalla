@@ -8,7 +8,7 @@ using Ume.Rag.FakeGateway;
 // invalid_request when it is missing, empty, repeated or not one of the three names), x-ume-residency on every answer,
 // 403 max_residency_not_met vs 503 no_eligible_provider + Retry-After, no circuit-open 503 (failing in-ceiling targets end
 // in 502/504 all_providers_failed), /v1/models filtered by the ceiling, the optional Cohere-compatible /v1/rerank
-// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and the Data API catalogue. Behaviour by model name
+// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and /v1/ume/context. Behaviour by model name
 // (appsettings.json):
 //   fake-fail-500 → 502 all_providers_failed; fake-fail-timeout → 504; fake-fail-fallback → its OnPrem target fails, so
 //   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-ume-residency
@@ -332,25 +332,6 @@ app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOp
         usage = new { prompt_tokens = tokens, total_tokens = tokens },
     });
 });
-
-// Data API model catalogue (gateway docs/data-access.md, catalog.read), until the model sync reads /v1/models (B-35).
-// Departments and teams come from /v1/ume/context.
-var catalog = app.MapGroup("/v1/catalog");
-catalog.AddEndpointFilter(async (context, next) =>
-{
-    var key = context.HttpContext.RequestServices.GetRequiredService<IOptionsSnapshot<FakeGatewayOptions>>().Value.DataApiKey;
-    var presented = FakeAccess.BearerOrApiKey(context.HttpContext.Request);
-    return presented is null || (key is not null && !FakeAccess.FixedTimeEquals(key, presented))
-        ? Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized")
-        : await next(context);
-});
-// The model catalogue as the gateway's DataEndpoints.cs serves it: one provider per residency, one deployment per
-// single-target model (a multi-target name is a route alias, not in the catalogue), and its price.
-catalog.MapGet("/providers", () => Results.Json(new { items = FakeCatalog.Providers }, FakeCatalog.Json));
-catalog.MapGet("/models", (IOptionsSnapshot<FakeGatewayOptions> options) =>
-    Results.Json(new { items = FakeCatalog.Models(options.Value.Served) }, FakeCatalog.Json));
-catalog.MapGet("/prices", (IOptionsSnapshot<FakeGatewayOptions> options) =>
-    Results.Json(new { items = FakeCatalog.Prices(options.Value.Served) }, FakeCatalog.Json));
 
 app.Run();
 

@@ -27,8 +27,6 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
     /// <summary>rag-admin's credential key (identity design §4.7): one key at every ceiling up to its maximum.</summary>
     public const string AdminKey = "fake-admin-credential-key-gw-0123456789";
 
-    public string DataApiKey { get; } = TestSecrets.RandomHex();
-
     public Guid ProfileId { get; } = Guid.CreateVersion7();
 
     async ValueTask IAsyncLifetime.InitializeAsync()
@@ -43,11 +41,10 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    /// <summary>The FakeGateway with rag-admin's credential key and the Data API catalogue.</summary>
+    /// <summary>The FakeGateway with rag-admin's credential key.</summary>
     public WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
-        web.UseSetting("FakeGateway:DataApiKey", DataApiKey);
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
@@ -61,8 +58,6 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
             web.UseEnvironment("Development");
             web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
             web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
-            web.UseSetting("OrgSync:BaseUrl", "http://fake-gateway/");
-            web.UseSetting("OrgSync:DataApiKey", DataApiKey);
             web.UseSetting("OrgSync:IntervalMinutes", "1440");
             web.UseSetting("Admin:Retention", "false");
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
@@ -79,7 +74,6 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
             web.ConfigureTestServices(services =>
             {
                 services.AddHeaderAuthentication();
-                services.AddHttpClient(OrganisationSync.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
                 services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             });
         });
@@ -112,14 +106,24 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     [Fact]
     public async Task A_platform_admin_sets_a_models_limits_the_sync_keeps_them_and_a_bad_pair_is_refused()
     {
-        // Decisions "Answer length from the model" (admin design §4.5, §4.10): ContextWindow and MaxOutputTokens on any mirror row,
-        // manual until the catalogue carries them.
+        // Decisions "Answer length from the model" (admin design §4.5, §4.10): ContextWindow and MaxOutputTokens are manual
+        // while the gateway sends none for the model (ume/chat-onprem), and come from /v1/models once it does (ume/chat-eu).
         await using var gateway = database.Gateway();
         await using var admin = database.AdminApi(gateway, Residency.Eu);
         await SyncedAsync(admin);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
-        const string Name = "ume/chat-eu";
+        const string Name = "ume/chat-onprem";
         var url = $"/api/gateway/models/{Name}";
+
+        var fromGateway = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == "ume/chat-eu");
+        (fromGateway.ContextWindow, fromGateway.MaxOutputTokens, fromGateway.LimitsSource).ShouldBe((128_000, 16_384, GatewayModelSources.Catalog));
+        using (var refused = await platform.PutAsJsonAsync("/api/gateway/models/ume/chat-eu", new { contextWindow = 1000 }, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            problem.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.PlatformRule.Code);
+            problem.GetProperty("params").GetProperty("constraint").GetString().ShouldBe(GatewayEndpoints.LimitsFromGateway);
+        }
 
         using (var set = await platform.PutAsJsonAsync(url, new { contextWindow = 128_000, maxOutputTokens = 16_384 }, Ct))
         {
@@ -127,9 +131,15 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             var row = (await set.Content.ReadFromJsonAsync<GatewayModelDto>(Ct))!;
             row.ContextWindow.ShouldBe(128_000);
             row.MaxOutputTokens.ShouldBe(16_384);
+            row.LimitsSource.ShouldBe(GatewayModelSources.Manual);
         }
 
-        await SyncedAsync(admin);
+        // A new instance reads the whole list (no ETag) and keeps the manual limits the gateway does not send.
+        await using (var other = database.AdminApi(gateway, Residency.Eu))
+        {
+            await SyncedAsync(other);
+        }
+
         var listed = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == Name);
         (listed.ContextWindow, listed.MaxOutputTokens).ShouldBe((128_000, 16_384)); // kept by the sync
 
@@ -193,7 +203,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
-    public async Task The_mirror_holds_each_chat_and_embedding_deployment_with_its_residency_and_price_and_a_second_run_writes_nothing()
+    public async Task The_mirror_holds_each_model_and_alias_within_the_ceiling_with_its_facts_and_an_unchanged_etag_writes_nothing()
     {
         await using var gateway = database.Gateway();
         await using var admin = database.AdminApi(gateway, Residency.Eu);
@@ -203,16 +213,21 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         var models = (await reader.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.ToDictionary(m => m.Name);
         models["ume/chat-eu"].Residencies.ShouldBe(["Eu"]);
         models["ume/chat-eu"].Kind.ShouldBe(GatewayModelKinds.Model);
-        models["ume/chat-eu"].ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // the catalogue's Kind "Chat" (#363 point 1)
+        models["ume/chat-eu"].ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // ume.kind "Chat" (#363 point 1)
         models["ume/chat-eu"].Source.ShouldBe(GatewayModelSources.Catalog);
         models["ume/chat-eu"].OutputPerMillionUsd.ShouldBe(0.60m);
-        models["ume/chat-advanced"].Residencies.ShouldBe(["External"]);
+        models["ume/chat-eu"].SupportsTools.ShouldBeTrue(); // ume.features "tools"
         models["bge-m3"].Residencies.ShouldBe(["OnPrem"]);
         models["bge-m3"].InputPerMillionUsd.ShouldBe(0.02m);
         models["bge-m3"].Kind.ShouldBe(GatewayModelKinds.Model);
-        models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // the catalogue's Kind "Embedding"
-        // A multi-target name is a route alias (a manual row), and this gateway has no rerank model (the default, B-16).
-        models.ShouldNotContainKey("ume/chat-standard");
+        models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // ume.kind "Embedding"
+        models["bge-m3"].SupportsTools.ShouldBeFalse();
+        // An alias is a route with its targets' residencies, from the catalogue.
+        models["ume/chat-standard"].Kind.ShouldBe(GatewayModelKinds.Route);
+        models["ume/chat-standard"].Source.ShouldBe(GatewayModelSources.Catalog);
+        models["ume/chat-standard"].Residencies.ShouldBe(["OnPrem", "Eu"]);
+        // The list is the gateway's within the admin's ceiling (Eu here), and this gateway has no rerank model (B-16).
+        models.ShouldNotContainKey("ume/chat-advanced");
         models.ShouldNotContainKey("bge-reranker-v2-m3");
 
         var version = await ConfigVersionAsync();
@@ -221,30 +236,38 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
-    public async Task A_deployments_own_residency_wins_over_its_providers()
+    public async Task The_facts_set_kind_residencies_tools_and_limits_and_an_unknown_kind_is_not_mirrored()
     {
-        // Gateway v0.9.1 (ADR 019): one Foundry provider (Eu) can hold a global deployment (External); the catalogue's
-        // model Residency is the deployment's own, null for the provider's.
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
-        var eu = new CatalogProviderItem(Guid.CreateVersion7(), "foundry", Residency.Eu, true);
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        string global = $"cohere-global-{suffix}", own = $"chat-provider-{suffix}", mixed = $"chat-mixed-{suffix}";
-        CatalogModelItem[] models =
+        string alias = $"route-{suffix}", limited = $"limited-{suffix}", unknown = $"unknown-{suffix}", moderation = $"moderation-{suffix}";
+        db.GatewayModels.Add(new GatewayModel { Name = unknown, Residencies = ["Eu"], Source = GatewayModelSources.Catalog, ContextWindow = 4096, MaxOutputTokens = 1024 });
+        await db.SaveChangesAsync(Ct);
+        static GatewayListedModel Model(string id, string type, string kind, string? residency, string[]? residencies, int? window, int? output, string[] features) =>
+            new(id, new GatewayModelFacts(type, kind, residency, residencies, window, output, features, new GatewayModelPricing(1m, 0.5m, 2m)));
+        GatewayListedModel[] models =
         [
-            new(Guid.CreateVersion7(), global, "Rerank", eu.Id, true, Residency.External),
-            new(Guid.CreateVersion7(), own, "Chat", eu.Id, true),
-            new(Guid.CreateVersion7(), mixed, "Chat", eu.Id, true),
-            new(Guid.CreateVersion7(), mixed, "Chat", eu.Id, true, Residency.OnPrem),
+            Model(alias, "alias", "Chat", null, ["Eu", "OnPrem"], 32_000, null, ["tools"]),
+            Model(limited, "model", "Chat", "External", null, 200_000, 32_000, []),
+            Model(unknown, "model", "Chat", "Eu", null, null, null, []),
+            Model(moderation, "model", "Moderation", "Eu", null, null, null, []),
         ];
 
         // Applied but not saved: every other catalogue row would be removed.
-        await GatewayModelSync.ApplyAsync(db, [eu], models, [], DateTimeOffset.UtcNow, Ct);
+        await GatewayModelSync.ApplyAsync(db, models, DateTimeOffset.UtcNow, Ct);
 
-        var added = db.ChangeTracker.Entries<GatewayModel>().Select(e => e.Entity).ToDictionary(m => m.Name);
-        added[global].Residencies.ShouldBe(["External"]);
-        added[own].Residencies.ShouldBe(["Eu"]);
-        added[mixed].Residencies.ShouldBe(["OnPrem", "Eu"]); // both in effect, in residency order
+        var rows = db.ChangeTracker.Entries<GatewayModel>().Select(e => e.Entity).ToDictionary(m => m.Name);
+        (rows[alias].Kind, rows[alias].SupportsTools).ShouldBe((GatewayModelKinds.Route, true));
+        rows[alias].Residencies.ShouldBe(["OnPrem", "Eu"]);
+        // One limit sent: both come from the gateway, the missing one null.
+        (rows[alias].ContextWindow, rows[alias].MaxOutputTokens, rows[alias].LimitsSource).ShouldBe((32_000, (int?)null, GatewayModelSources.Catalog));
+        (rows[limited].ContextWindow, rows[limited].MaxOutputTokens, rows[limited].LimitsSource).ShouldBe((200_000, 32_000, GatewayModelSources.Catalog));
+        (rows[limited].InputPerMillionUsd, rows[limited].CachedInputPerMillionUsd, rows[limited].OutputPerMillionUsd).ShouldBe((1m, 0.5m, 2m));
+        // No limit sent: the manual ones stay.
+        (rows[unknown].ContextWindow, rows[unknown].MaxOutputTokens, rows[unknown].LimitsSource).ShouldBe((4096, 1024, GatewayModelSources.Manual));
+        rows.ShouldNotContainKey(moderation);
         db.ChangeTracker.Clear();
+        await db.GatewayModels.Where(m => m.Name == unknown).ExecuteDeleteAsync(Ct);
     }
 
     [Fact]
@@ -267,11 +290,21 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             await db.SaveChangesAsync(Ct);
         }
 
-        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
-        using var response = await platform.PostAsync("/api/gateway/sync", null, Ct);
+        // An unchanged list (the ETag) writes nothing, even over a hand edit; a new instance reads it in full.
+        using (var same = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin))
+        using (var unchanged = await same.PostAsync("/api/gateway/sync", null, Ct))
+        {
+            (await unchanged.Content.ReadFromJsonAsync<GatewayModelSyncResult>(Ct)).ShouldBe(new GatewayModelSyncResult(0, 0, 0));
+        }
 
-        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-        (await response.Content.ReadFromJsonAsync<GatewayModelSyncResult>(Ct)).ShouldBe(new GatewayModelSyncResult(2, 1, 0));
+        await using var fresh = database.AdminApi(gateway, Residency.Eu);
+        var sync = fresh.Services.GetRequiredService<GatewayModelSync>();
+        for (var i = 0; i < 100 && sync.Status.LastResult is null; i++)
+        {
+            await Task.Delay(100, Ct); // the host's first run
+        }
+
+        (sync.Status.LastResult! with { CanariesRecorded = 0 }).ShouldBe(new GatewayModelSyncResult(2, 1, 0));
         var version = await ConfigVersionAsync();
         await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
         {
@@ -282,7 +315,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             (await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct)).OutputPerMillionUsd.ShouldBe(0.60m);
             (await db.GatewayModels.SingleAsync(m => m.Name == "bge-m3", Ct)).ModelKind.ShouldBe(GatewayModelModelKinds.Embedding);
             var audit = await db.AuditLog.Where(a => a.EntityType == "gateway-models" && a.ConfigVersion == version).ToListAsync(Ct);
-            audit.ShouldHaveSingleItem().Actor.ShouldBe("test-user");
+            audit.ShouldHaveSingleItem().Actor.ShouldBe(GatewayModelSync.SystemActor);
             db.GatewayModels.Remove(await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct));
             await db.SaveChangesAsync(Ct);
         }

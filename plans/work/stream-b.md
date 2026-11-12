@@ -391,7 +391,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** a renamed column in a retrieval or admin statement fails the test.
 - **Waits on:** –
 - **Read:** #510, #588.
-### [ ] B-35 Gateway phase 1: context and model sync with the organisation, the keys mirror, the FakeGateway contract (#580, cost-attribution B3)
+### [x] B-35 Gateway phase 1: context and model sync with the organisation, the keys mirror, the FakeGateway contract (#580, cost-attribution B3)
 - **Do:** the admin's sync of admin §4.10 from the gateway's discovery with the admin's key, `If-None-Match`/`ETag`
   and nothing written on `304`: `GET /v1/ume/context` → `gateway.features`, `version`, `admin_url` in memory and on the
   Gateway page; `departments` and `teams` → `Departments`/`Teams`, taken only when `features` contains `organisation`

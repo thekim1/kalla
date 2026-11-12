@@ -49,13 +49,10 @@ public sealed class FakeGatewayOptions
     /// <summary>
     /// Serve the models of kind <c>rerank</c> (<c>FakeGateway:RerankEnabled</c>). Off by default: the gateway as most
     /// organisations run it, with no rerank model configured, so <c>/v1/rerank</c> answers 404 <c>model_not_found</c> for
-    /// any rerank model name (and 400 for a model of another kind), and neither <c>/v1/models</c> nor the catalogue lists
+    /// any rerank model name (and 400 for a model of another kind), and neither <c>/v1/models</c> nor the context lists
     /// one (rerank is optional, Decisions "Gateway release 1 and shared Keycloak as built").
     /// </summary>
     public bool RerankEnabled { get; set; }
-
-    /// <summary>The catalogue's Data API key (<c>ume-dk-…</c>); null accepts any bearer.</summary>
-    public string? DataApiKey { get; set; }
 
     /// <summary>Length of the <c>fake-stream-stall</c> pause (above the chat idle timeout of 60 s by default).</summary>
     public int StallSeconds { get; set; } = 65;

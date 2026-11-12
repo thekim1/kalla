@@ -36,7 +36,6 @@ var oidcSecret = Secret("oidc-client-secret", 48);
 var devUserPassword = Secret("dev-user-password", 32);
 var apiClientSecret = Secret("api-client-secret", 48);
 var openWebUiClientSecret = Secret("openwebui-client-secret", 48);
-var dataApiKey = Secret("data-api-key", 43);
 // The knowledge role's query-embedding cache key and the download-grant signing key (knowledge design §4.6, §5.4).
 var cacheKeyPepper = Secret("cache-key-pepper", 48);
 var downloadGrantKey = Secret("download-grant-key", 48);
@@ -345,10 +344,7 @@ if (redis is not null)
 // Every model call goes through the gateway: locally the fake one (AGENTS.md).
 if (fakeGateway is not null)
 {
-    // The admin's model sync reads the fake's Data API catalogue until it reads /v1/models (B-35); the organisation sync
-    // reads the context with the admin's credential key (admin design §4.10).
-    fakeGateway.WithEnvironment("FakeGateway__DataApiKey", dataApiKey);
-    adminApi.WithEnvironment("OrgSync__BaseUrl", fakeGateway.GetEndpoint("https")).WithEnvironment("OrgSync__DataApiKey", dataApiKey);
+    // The admin's organisation and model syncs read /v1/ume/context and /v1/models with its credential key (admin §4.10).
     foreach (var (name, service) in new[] { ("api", api), ("worker", worker), ("admin", adminApi) })
     {
         service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway)
@@ -394,8 +390,14 @@ else
         }
     }
 
-    // The admin's model sync against the gateway's Data API (admin design §4.10): OrgSync:BaseUrl, OrgSync:DataApiKey. The
-    // organisation sync reads the context with Gateway:Services:admin:Key, which needs the scope organisation.read.
+    // The admin's organisation and model syncs (admin design §4.10) call the gateway with Gateway:Services:admin:Key, which
+    // needs the scope organisation.read; OrgSync:IntervalMinutes is passed on. There is no Data API key any more.
+    if (builder.Configuration["OrgSync:BaseUrl"] is not null || builder.Configuration["OrgSync:DataApiKey"] is not null)
+    {
+        throw new InvalidOperationException(
+            "OrgSync:BaseUrl and OrgSync:DataApiKey are gone: the admin syncs from the gateway with Gateway:Services:admin:Key (scope organisation.read).");
+    }
+
     foreach (var (key, value) in builder.Configuration.GetSection("OrgSync").AsEnumerable(makePathsRelative: true))
     {
         if (value is not null)

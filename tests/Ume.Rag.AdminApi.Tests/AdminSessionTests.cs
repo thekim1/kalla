@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Ume.Rag.Infrastructure.Persistence;
@@ -29,6 +30,9 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
         web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
         web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
         web.UseSetting("Oidc:ClientSecret", "test-secret");
+        // The shared database's mirror is seeded by the tests: the gateway syncs, which start with any host that has a
+        // gateway key, stay off here (OrganisationSyncTests and GatewayClientTests run them on databases of their own).
+        web.ConfigureTestServices(services => services.RemoveGatewaySyncs());
         // As the gateway's AdminFixture: a static OIDC configuration, so nothing is fetched from the placeholder authority.
         web.ConfigureTestServices(services => services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
             o.Configuration = new OpenIdConnectConfiguration
@@ -57,6 +61,25 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
         client.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.RoleHeader, roles.Length == 0 ? "none" : roles);
         client.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.DepartmentHeader, departments);
         return await client.WithXsrfTokenAsync();
+    }
+}
+
+/// <summary>Test host helpers.</summary>
+public static class GatewaySyncTestExtensions
+{
+    /// <summary>
+    /// Removes the hosted runs of <see cref="OrganisationSync"/> and <see cref="GatewayModelSync"/> (registered as
+    /// <c>AddHostedService(sp => sp.GetRequiredService&lt;T&gt;())</c>); the services themselves stay for the endpoints.
+    /// </summary>
+    public static IServiceCollection RemoveGatewaySyncs(this IServiceCollection services)
+    {
+        foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) &&
+                     d.ImplementationFactory?.Method.ReturnType is { } type && (type == typeof(OrganisationSync) || type == typeof(GatewayModelSync))).ToList())
+        {
+            services.Remove(descriptor);
+        }
+
+        return services;
     }
 }
 
