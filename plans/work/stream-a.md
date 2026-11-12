@@ -384,7 +384,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –. B-33 reads the table.
 - **Read:** #499; knowledge §6.2, §6.4; data-model §2.2; results-b B-25.
 
-### [ ] A-30 Gateway phase 1: one credential key per service in the deployment (#580, cost-attribution B2, deploy part)
+### [x] A-30 (#597, #611) Gateway phase 1: one credential key per service in the deployment (#580, cost-attribution B2, deploy part)
 - **Do:** `init-deployment.sh --gateway-credential-key-file SERVICE=FILE` (for `api`, `admin`, `worker`) writes
   `secrets/{api,admin,worker}/Gateway__Key` and drops the per-level key files and `--org-sync-key-file`
   (`OrgSync__DataApiKey`: the organisation now comes from the context, B-35); the Compose, Kubernetes
