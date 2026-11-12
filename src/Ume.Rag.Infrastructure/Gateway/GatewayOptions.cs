@@ -38,6 +38,16 @@ public sealed class GatewayOptions
     /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// A <c>2xx</c> or <c>304</c> answer to a call made as an assigned key must echo the key id in <c>x-ume-on-behalf-of</c>,
+    /// or the call is aborted with event 5011 (<c>Gateway:RequireDelegationEcho</c>, default on; identity design §4.7): an
+    /// older gateway instance during a rolling update ignores the header and would charge the credential key.
+    /// </summary>
+    public bool RequireDelegationEcho { get; set; } = true;
+
+    /// <summary>How often each service reads its own <c>GET /v1/ume/context</c> for the gateway's features (identity §4.7).</summary>
+    public TimeSpan ContextInterval { get; set; } = TimeSpan.FromMinutes(5);
+
     /// <summary><paramref name="ceiling"/>, lowered to <see cref="MaxResidency"/> when that is set and lower.</summary>
     public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
 

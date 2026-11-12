@@ -61,6 +61,12 @@ public sealed class FakeGatewayOptions
     /// </summary>
     public int CachedInputTokens { get; set; }
 
+    /// <summary>
+    /// Answers a request made as an assigned key without the <c>x-ume-on-behalf-of</c> echo (<c>FakeGateway:DropOnBehalfOfEcho</c>),
+    /// as an older gateway instance during a rolling update would: Ume.Rag must abort the call (event 5011, identity §4.7).
+    /// </summary>
+    public bool DropOnBehalfOfEcho { get; set; }
+
     /// <summary>Length of the <c>fake-stream-stall</c> pause (above the chat idle timeout of 60 s by default).</summary>
     public int StallSeconds { get; set; } = 65;
 
@@ -170,10 +176,10 @@ public sealed class FakeGatewayInfo
 
     /// <summary>
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
-    /// thekim1/llmgateway <c>v0.10.0</c>): <c>stream-cost</c> of phase 2 is here (the cost comment, B-38); <c>act-as-key</c>
-    /// and <c>run-metadata</c> come with the rest of phase 2.
+    /// thekim1/llmgateway <c>v0.10.0</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42) and
+    /// <c>stream-cost</c> (B-38).
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation", "member-groups", "stream-cost"];
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups"];
 }
 
 /// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>
@@ -228,4 +234,10 @@ public sealed class FakeAssignedKey
     public int? MaxOutputTokens { get; set; }
 
     public bool HasSystemPrompt { get; set; }
+
+    /// <summary>
+    /// A spent budget (<c>Key</c>, <c>Team</c> or <c>Department</c>; <c>FakeGateway:AssignedKeys:&lt;n&gt;:BudgetExceeded</c>): a
+    /// request made as the key answers <c>402 budget_exceeded</c> with the gateway's message for that scope (gateway-changes §5.4).
+    /// </summary>
+    public string? BudgetExceeded { get; set; }
 }

@@ -28,6 +28,7 @@ if (await WebDefaults.ExitIfHealthProbeAsync(args))
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddOptions<FakeGatewayOptions>().BindConfiguration(FakeGatewayOptions.SectionName);
+builder.Services.AddSingleton<FakeUsage>(); // the served requests by the key they ran as (B-42)
 var latency = builder.Configuration.GetSection(FakeLatency.SectionName).Get<FakeLatency>() ?? new FakeLatency();
 builder.Services.AddHttpClient("upstream").RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<FakeChatScripts>();
@@ -151,6 +152,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     var completionTokens = FakeContent.Tokens(answer);
     var cachedTokens = Math.Clamp(o.CachedInputTokens, 0, promptTokens);
     var cost = FakeCatalog.Cost(model, promptTokens, cachedTokens, completionTokens);
+    ctx.RequestServices.GetRequiredService<FakeUsage>().Record(ctx, call, model, promptTokens, completionTokens, cost);
     var id = "chatcmpl-" + Guid.NewGuid().ToString("N")[..12];
     var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -289,6 +291,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
         : [.. inputs.Select(text => FakeContent.Vector(text, dimensions))];
     var base64 = body["encoding_format"]?.GetValue<string>() == "base64";
     var inputTokens = inputs.Sum(FakeContent.Tokens);
+    ctx.RequestServices.GetRequiredService<FakeUsage>().Record(ctx, call, model, inputTokens, 0, FakeCatalog.Cost(model, inputTokens, 0, 0));
     SetCost(ctx, model, FakeCatalog.Cost(model, inputTokens, 0, 0));
     return Results.Json(new
     {
@@ -338,6 +341,7 @@ app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOp
     var topN = body["top_n"] is JsonValue n && n.TryGetValue<int>(out var top) && top > 0 ? top : documents.Count;
     var returnDocuments = body["return_documents"] is JsonValue r && r.TryGetValue<bool>(out var rd) && rd;
     var tokens = documents.Sum(d => FakeContent.Tokens(query) + FakeContent.Tokens(d));
+    ctx.RequestServices.GetRequiredService<FakeUsage>().Record(ctx, call, model, tokens, 0, FakeCatalog.Cost(model, tokens, 0, 0));
     SetCost(ctx, model, FakeCatalog.Cost(model, tokens, 0, 0));
     return Results.Json(new
     {

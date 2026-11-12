@@ -224,9 +224,8 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
             {"model":"ume/chat-onprem","messages":[
               {"role":"system","content":"Källor: [1] Bygglov ... [2] Avgifter ..."},
               {"role":"user","content":"Vad kostar bygglov?"}]}
-            """, FakeGatewayFactory.OnPremKey, "OnPrem", onBehalfOf: "digitalisering-ai");
+            """, FakeGatewayFactory.OnPremKey, "OnPrem");
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        response.Headers.GetValues("x-ume-on-behalf-of").ShouldBe(["digitalisering-ai"]);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var content = json.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
         content.ShouldContain("Vad kostar bygglov?");

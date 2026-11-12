@@ -123,7 +123,22 @@ public static class InfrastructureExtensions
         builder.Services.AddOptions<GatewayOptions>().BindConfiguration(GatewayOptions.SectionName);
         builder.Services.TryAddTransient<ResidencyCeilingHandler>();
         builder.Services.TryAddTransient<GatewayRetryHandler>();
-        var client = builder.Services.AddHttpClient(name, (sp, client) =>
+        // Phase 2 (identity §4.7): the service's own context read for the gateway's features, once per service.
+        if (!builder.Services.Any(d => d.ServiceType == typeof(GatewayFeatures)))
+        {
+            builder.Services.AddSingleton<GatewayFeatures>();
+            builder.Services.TryAddSingleton(TimeProvider.System);
+            Client(builder, GatewayContextReader.HttpClientName);
+            builder.Services.AddSingleton<GatewayContextReader>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayContextReader>());
+        }
+
+        var client = Client(builder, name);
+        return retryFailed ? client.AddHttpMessageHandler<GatewayRetryHandler>() : client;
+    }
+
+    private static IHttpClientBuilder Client(IHostApplicationBuilder builder, string name) =>
+        builder.Services.AddHttpClient(name, (sp, client) =>
             {
                 if (sp.GetRequiredService<IOptions<GatewayOptions>>().Value.BaseUrl is { Length: > 0 } baseUrl)
                 {
@@ -132,8 +147,6 @@ public static class InfrastructureExtensions
             })
             .RemoveStandardResilienceHandler()
             .AddHttpMessageHandler<ResidencyCeilingHandler>();
-        return retryFailed ? client.AddHttpMessageHandler<GatewayRetryHandler>() : client;
-    }
 
     /// <summary>
     /// Caps every gateway call of this service at <paramref name="maximum"/> (<see cref="GatewayOptions.ServiceMaximum"/>):
