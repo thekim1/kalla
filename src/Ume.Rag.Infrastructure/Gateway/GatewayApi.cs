@@ -52,9 +52,19 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     /// release 1 lists only models with an available target within the ceiling, gateway-changes §3.4; before release 1 the
     /// key's <c>AllowedResidencies</c> narrows it).
     /// </summary>
-    public async Task<IReadOnlySet<string>> ListModelsAsync(Residency ceiling, CancellationToken cancellationToken)
+    /// <remarks>
+    /// With <paramref name="asKey"/> (gateway phase 2) the list is the assigned key's, within both keys' residencies and the
+    /// ceiling (gateway-changes §5.5), while the gateway acts as keys; a refusal of the key throws <see cref="GatewayKeyRefusedException"/>
+    /// and a missing echo <see cref="GatewayDelegationEchoException"/>.
+    /// </remarks>
+    public async Task<IReadOnlySet<string>> ListModelsAsync(Residency ceiling, CancellationToken cancellationToken, Guid? asKey = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/models", UriKind.Relative)).WithMaxResidency(ceiling);
+        if (asKey is { } key)
+        {
+            request.For(new GatewayCall(key, "models"));
+        }
+
         using var response = await SendAsync(request, cancellationToken);
         var list = await response.Content.ReadFromJsonAsync<ModelList>(Json, cancellationToken)
             ?? throw new GatewayUnavailableException("The gateway's model list was empty.", null);
@@ -119,9 +129,9 @@ public sealed class GatewayApi(IHttpClientFactory clients)
         {
             response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
         }
-        catch (GatewayResidencyException)
+        catch (Exception ex) when (ex is GatewayResidencyException or GatewayKeyRefusedException or GatewayDelegationEchoException)
         {
-            throw;
+            throw; // the caller maps them (identity §4.7, gateway-changes §5.7)
         }
         catch (HttpRequestException ex)
         {

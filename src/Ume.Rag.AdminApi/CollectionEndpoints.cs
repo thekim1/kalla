@@ -65,7 +65,7 @@ public static class CollectionEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithName("GetCollection")
             .WithSummary("One collection with the assistants that link it; for a department it is shared with, the shared summary");
 
-        collections.MapPost("", async (CollectionCreateRequest request, AdminContext admin, CancellationToken ct) =>
+        collections.MapPost("", async (CollectionCreateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
                 var created = await admin.WriteAsync(async attempt =>
                 {
@@ -98,7 +98,7 @@ public static class CollectionEndpoints
                         UpdatedAt = admin.Now,
                         UpdatedBy = admin.Actor,
                     };
-                    await CheckGatewayKeyAsync(admin, collection, attempt);
+                    await CheckGatewayKeyAsync(admin, collection, models, attempt);
                     admin.Db.Collections.Add(collection);
                     return new AdminChange<Collection>(collection, "create", AuditEntityTypes.Collection, collection.Id, null, CollectionAudit.Of(collection))
                     {
@@ -109,7 +109,7 @@ public static class CollectionEndpoints
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("CreateCollection").WithSummary("Create a collection on the default embedding profile");
 
-        collections.MapPut("/{id:guid}", async (Guid id, CollectionUpdateRequest request, AdminContext admin, CancellationToken ct) =>
+        collections.MapPut("/{id:guid}", async (Guid id, CollectionUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
                 var saved = await admin.WriteAsync(async attempt =>
                 {
@@ -131,7 +131,7 @@ public static class CollectionEndpoints
                     collection.GatewayKeyId = request.GatewayKeyId;
                     if (recheckKey)
                     {
-                        await CheckGatewayKeyAsync(admin, collection, attempt);
+                        await CheckGatewayKeyAsync(admin, collection, models, attempt);
                     }
 
                     collection.UpdatedAt = admin.Now;
@@ -301,9 +301,9 @@ public static class CollectionEndpoints
 
     /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
     /// <summary>V39 (admin design §4.6): the collection's gateway key against its models at its level's ceiling.</summary>
-    private static async Task CheckGatewayKeyAsync(AdminContext admin, Collection collection, CancellationToken ct) =>
+    private static async Task CheckGatewayKeyAsync(AdminContext admin, Collection collection, GatewayModelCheck models, CancellationToken ct) =>
         AssistantEndpoints.Refuse(await GatewayKeyRules.CheckAsync(admin, collection.GatewayKeyId, collection.DepartmentId,
-            ResidencyCeiling.ForLevel(collection.Classification), await GatewayKeyRules.CollectionModelsAsync(admin, collection, ct), ct));
+            ResidencyCeiling.ForLevel(collection.Classification), await GatewayKeyRules.CollectionModelsAsync(admin, collection, ct), ct, models));
 
     private static async Task CheckDepartmentAsync(AdminContext admin, Guid departmentId, Guid? ownerTeamId, CancellationToken ct)
     {

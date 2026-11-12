@@ -185,7 +185,9 @@ export const api = {
   },
   gateway: {
     /** `level`: an assistant's level, so `available` is at its ceiling; absent: the platform ceiling (Settings, V32). */
-    models: (level?: string) => http.get<GatewayModel[]>(level ? `/api/gateway/models?level=${encodeURIComponent(level)}` : '/api/gateway/models'),
+    /** `gatewayKeyId` (B-43): once the gateway acts as keys, `available` is what that key may use. */
+    models: (level?: string, gatewayKeyId?: string | null) =>
+      http.get<GatewayModel[]>('/api/gateway/models', { ...(level ? { level } : {}), ...(gatewayKeyId ? { gatewayKeyId } : {}) }),
     /** The department's assigned gateway keys for the key picker (B-36). */
     keys: (departmentId: string) => http.get<GatewayKeyList>('/api/gateway/keys', { departmentId }),
   },

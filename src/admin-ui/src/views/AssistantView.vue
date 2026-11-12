@@ -247,7 +247,7 @@ async function load(): Promise<void> {
   retentionDays.value = String(a.retentionDays)
   await fillFrom(a)
   ;[models.value, collections.value, clients.value] = await Promise.all([
-    api.gateway.models(a.classification).catch(() => []),
+    api.gateway.models(a.classification, a.gatewayKeyId).catch(() => []),
     api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
     api.clients.list().catch(() => []),
   ])
@@ -324,9 +324,10 @@ async function loadPolicy(): Promise<void> {
 }
 
 // Availability is per ceiling (#447): ask again when the assistant's level changes.
-watch(() => assistant.data.value?.classification, async (level, before) => {
-  if (!level || !before || level === before) return
-  models.value = await api.gateway.models(level).catch(() => models.value)
+// B-43: and when its gateway key changes, since the list is then the key's.
+watch(() => [assistant.data.value?.classification, assistant.data.value?.gatewayKeyId] as const, async ([level, key], before) => {
+  if (!level || !before?.[0] || (level === before[0] && key === before[1])) return
+  models.value = await api.gateway.models(level, key).catch(() => models.value)
 })
 
 watch(tab, (t) => {

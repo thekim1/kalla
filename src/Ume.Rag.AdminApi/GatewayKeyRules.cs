@@ -42,8 +42,13 @@ public static class GatewayKeyRules
     /// that uses <paramref name="models"/> (empty names are ignored). Empty when no key is set: that is
     /// <see cref="WarningsAsync"/>' part.
     /// </summary>
+    /// <remarks>
+    /// With <paramref name="asKey"/> and while the gateway acts as keys (B-43), the models are checked authoritatively with
+    /// <c>GET /v1/models</c> as the key at the ceiling (<see cref="GatewayModelCheck.KeyModelsAsync"/>) instead of the mirror's
+    /// model list.
+    /// </remarks>
     public static async Task<IReadOnlyList<RuleProblem>> CheckAsync(
-        AdminContext admin, Guid? keyId, Guid departmentId, Residency ceiling, IEnumerable<string?> models, CancellationToken ct)
+        AdminContext admin, Guid? keyId, Guid departmentId, Residency ceiling, IEnumerable<string?> models, CancellationToken ct, GatewayModelCheck? asKey = null)
     {
         ArgumentNullException.ThrowIfNull(admin);
         if (keyId is not { } id)
@@ -67,7 +72,11 @@ public static class GatewayKeyRules
                 new Dictionary<string, string> { ["key"] = name, ["ceiling"] = ResidencyCeiling.ToHeader(ceiling) }, [.. key.AllowedResidencies]));
         }
 
-        if (key.AllowedModels.Length > 0)
+        if (asKey is { ActsAsKeys: true })
+        {
+            problems.AddRange(await asKey.KeyModelsAsync(key, ceiling, models, ct));
+        }
+        else if (key.AllowedModels.Length > 0)
         {
             var missing = models.OfType<string>().Where(m => m.Length > 0).Distinct(StringComparer.Ordinal)
                 .Where(m => !key.AllowedModels.Contains(m, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToList();
