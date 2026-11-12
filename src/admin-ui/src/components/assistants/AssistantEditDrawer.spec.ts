@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
@@ -31,10 +31,14 @@ function submit() {
 
 const body = (level: string, confirmGeneralKnowledge: boolean) => ({
   name: 'Bygglovsassistenten', ownerTeamId: 't1', classification: level, description: 'Svarar om bygglov.', contactName: 'Anna', contactEmail: 'anna@umea.se',
-  version: 'a3', confirmGeneralKnowledge,
+  gatewayKeyId: null, version: 'a3', confirmGeneralKnowledge,
 })
 
 describe('Edit assistant (admin design §5.5.4, #446)', () => {
+  beforeEach(() => {
+    vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: null, keys: [] })
+  })
+
   it('saves the level with the other own fields', async () => {
     const update = vi.spyOn(api.assistants, 'update').mockResolvedValue({ ...assistant, classification: 'sensitive', version: 'a4' })
     const wrapper = await open()

@@ -3,12 +3,13 @@ import { nextTick, ref, watch } from 'vue'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { Assistant, Level } from '@/api/types'
+import GatewayKeyPicker from '@/components/gateway/GatewayKeyPicker.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
-import { ASSISTANT, ASSISTANTS, COMMON, EDIT_DRAWER, LEVEL_HELP, LEVEL_LABEL } from '@/utils/labels'
+import { ASSISTANT, ASSISTANTS, COMMON, EDIT_DRAWER, GATEWAY_KEY, LEVEL_HELP, LEVEL_LABEL } from '@/utils/labels'
 import { problemLines } from '@/utils/problem'
 
 // Edit (admin design §5.5.4, #446): the assistant's own fields, the level included, saved through PUT /api/assistants/{id}.
@@ -23,6 +24,8 @@ const level = ref<Level>('internal')
 const description = ref('')
 const contactName = ref('')
 const contactEmail = ref('')
+// The gateway key (B-36, V39): refusals (another department, not usable, residency, models) come back after Save.
+const gatewayKeyId = ref<string | null>(null)
 const saving = ref(false)
 const refusals = ref<string[]>([])
 const refusalBox = ref<HTMLElement | null>(null)
@@ -37,6 +40,7 @@ watch(
     description.value = props.assistant.description ?? ''
     contactName.value = props.assistant.contactName ?? ''
     contactEmail.value = props.assistant.contactEmail ?? ''
+    gatewayKeyId.value = props.assistant.gatewayKeyId ?? null
     refusals.value = []
     form.clear()
   },
@@ -46,7 +50,8 @@ watch(
 function update(confirmGeneralKnowledge: boolean): Promise<Assistant> {
   return api.assistants.update(props.assistant.id, {
     name: name.value.trim(), ownerTeamId: props.assistant.ownerTeamId, classification: level.value, description: description.value.trim() || null,
-    contactName: contactName.value.trim() || null, contactEmail: contactEmail.value.trim() || null, version: props.assistant.version, confirmGeneralKnowledge,
+    contactName: contactName.value.trim() || null, contactEmail: contactEmail.value.trim() || null, gatewayKeyId: gatewayKeyId.value,
+    version: props.assistant.version, confirmGeneralKnowledge,
   })
 }
 
@@ -94,6 +99,7 @@ async function save(): Promise<void> {
       <TextAreaField id="assistant-edit-description" v-model="description" :label="ASSISTANTS.description" :hint="ASSISTANTS.descriptionHint" :error="form.errors.description" />
       <TextField id="assistant-edit-contact" v-model="contactName" :label="ASSISTANTS.contactName" :error="form.errors.contactName" />
       <TextField id="assistant-edit-email" v-model="contactEmail" :label="ASSISTANTS.contactEmail" type="email" inputmode="email" :error="form.errors.contactEmail" />
+      <GatewayKeyPicker id="assistant-edit-key" v-model="gatewayKeyId" :department-id="assistant.departmentId" :hint="GATEWAY_KEY.assistantHint" />
       <div v-if="refusals.length" ref="refusalBox" role="alert" class="rounded-card border border-danger p-3 text-small text-danger" data-test="refusals">
         <p class="font-medium">{{ EDIT_DRAWER.refused }}</p>
         <ul class="ml-5 list-disc"><li v-for="r in refusals" :key="r">{{ r }}</li></ul>

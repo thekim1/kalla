@@ -141,6 +141,8 @@ export interface CollectionUser {
 export interface Collection extends CollectionBase {
   shared: false
   ownerTeamId: string | null
+  /** The assigned gateway key its indexing and evaluation run as (V39); null = the worker's credential key. */
+  gatewayKeyId?: string | null
   embeddingProfileId: string
   retrievalSettings: Record<string, unknown>
   /** Only with `selected`. */
@@ -163,6 +165,8 @@ export interface CollectionUpdate {
   classification: Level
   contactName: string | null
   contactEmail: string | null
+  /** V39 (B-36); null = the worker's credential key. */
+  gatewayKeyId?: string | null
   version: string
 }
 
@@ -174,6 +178,8 @@ export interface AssistantUpdate {
   description: string | null
   contactName: string | null
   contactEmail: string | null
+  /** V39 (B-36); null = the platform's credential key. */
+  gatewayKeyId?: string | null
   version: string
   confirmGeneralKnowledge?: boolean
 }
@@ -811,6 +817,8 @@ export interface Assistant {
   /** The platform answer ceiling `Settings.Chat.maxAnswerTokens` (chat §6.3), null when unset; shown on the Draft tab when lower. */
   maxAnswerTokens?: number | null
   draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
+  /** The assigned gateway key its calls run as (V39); null = the platform's credential key. */
+  gatewayKeyId?: string | null
   audienceClientIds: string[]
   updatedAt: IsoDateTime
   updatedBy: string | null
@@ -895,6 +903,41 @@ export interface ClientSummary {
   isEnabled: boolean
   /** The client's own UI (admin design §5.4 step 13). */
   portalUrl?: string | null
+}
+
+/** An assigned gateway key of the mirror (`GET /api/gateway/keys`, admin design §4.5): read-only settings, never a secret. */
+export interface GatewayKey {
+  id: string
+  name: string
+  teamId: string
+  teamName: string | null
+  departmentId: string | null
+  status: string
+  ownerActive: boolean
+  expiresAt: IsoDateTime | null
+  /** Empty = every model. */
+  allowedModels: string[]
+  /** Empty = every residency. */
+  allowedResidencies: string[]
+  piiPolicy: string
+  contentGuardPolicy: string
+  requestsPerMinute: number | null
+  tokensPerMinute: number | null
+  maxConcurrentRequests: number | null
+  maxOutputTokens: number | null
+  hasSystemPrompt: boolean
+  usable: boolean
+  /** V39's status part: active, owner active and usable. */
+  selectable: boolean
+  /** Why it cannot be chosen, when `selectable` is false. */
+  reason: string | null
+  syncedAt: IsoDateTime
+}
+
+/** The key picker's list and the gateway admin UI address for links (null when unknown). */
+export interface GatewayKeyList {
+  adminUrl: string | null
+  keys: GatewayKey[]
 }
 
 export interface GatewayModel {

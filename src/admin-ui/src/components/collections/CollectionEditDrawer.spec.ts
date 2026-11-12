@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
@@ -23,6 +23,10 @@ function submit() {
 }
 
 describe('Edit knowledge base (admin design §5.5.2, #446)', () => {
+  beforeEach(() => {
+    vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: null, keys: [] })
+  })
+
   it('saves the level with the other own fields', async () => {
     const saved = collection({ classification: 'public', version: 'v4' })
     const update = vi.spyOn(api.collections, 'update').mockResolvedValue(saved)
@@ -35,7 +39,7 @@ describe('Edit knowledge base (admin design §5.5.2, #446)', () => {
     await flushPromises()
 
     expect(update).toHaveBeenCalledWith(c.id, {
-      name: c.name, ownerTeamId: c.ownerTeamId, classification: 'public', contactName: c.contactName, contactEmail: c.contactEmail, version: 'v3',
+      name: c.name, ownerTeamId: c.ownerTeamId, classification: 'public', contactName: c.contactName, contactEmail: c.contactEmail, gatewayKeyId: null, version: 'v3',
     })
     expect(wrapper.emitted('saved')?.[0]?.[0]).toEqual(saved)
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
