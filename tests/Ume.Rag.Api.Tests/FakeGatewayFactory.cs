@@ -6,13 +6,18 @@ using Microsoft.Extensions.Configuration;
 
 namespace Ume.Rag.Api.Tests;
 
-/// <summary>The FakeGateway in process, with the three per-level dev keys and a Data API key (repo-and-deployment §4.3).</summary>
+/// <summary>
+/// The FakeGateway in process, with the three per-level dev keys, the api's and the worker's credential keys (the worker's
+/// up to <c>Eu</c>) and a Data API key (repo-and-deployment §4.3).
+/// </summary>
 public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Program>
 {
     public const string OnPremKey = "fake-onprem-key-0123456789";
     public const string EuKey = "fake-eu-key-0123456789";
     public const string ExternalKey = "fake-external-key-0123456789";
     public const string DataApiKey = "ume-dk-fake-0123456789";
+    public const string ApiCredentialKey = "fake-api-credential-key-0123456789";
+    public const string WorkerCredentialKey = "fake-worker-credential-key-0123456789";
 
     public static IReadOnlyDictionary<string, string?> Keys { get; } = new Dictionary<string, string?>
     {
@@ -29,6 +34,9 @@ public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Prog
             ["FakeGateway:Keys:OnPrem"] = OnPremKey,
             ["FakeGateway:Keys:Eu"] = EuKey,
             ["FakeGateway:Keys:External"] = ExternalKey,
+            ["FakeGateway:CredentialKeys:api:Key"] = ApiCredentialKey,
+            ["FakeGateway:CredentialKeys:worker:Key"] = WorkerCredentialKey,
+            ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
             ["FakeGateway:DataApiKey"] = DataApiKey,
             ["FakeGateway:StallSeconds"] = "1",
         }));

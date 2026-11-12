@@ -14,6 +14,14 @@ public sealed class FakeGatewayOptions
     public Dictionary<Residency, string> Keys { get; set; } = [];
 
     /// <summary>
+    /// The services' credential keys of the integration <c>Ume.Rag</c> (<c>FakeGateway:CredentialKeys:&lt;service&gt;:Key</c>
+    /// and <c>:MaxResidency</c>; gateway-changes §5.1, the gateway's <c>docs/integrations.md</c> at <c>6a8f0a5</c>): one key
+    /// for every ceiling up to its highest residency (the worker's <c>Eu</c>), with <c>RequireMaxResidency</c>. A higher
+    /// ceiling is narrowed to the key's residencies, as the gateway does; <see cref="StrictKeyLevel"/> does not apply.
+    /// </summary>
+    public Dictionary<string, FakeCredentialKey> CredentialKeys { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Fake-only strictness: refuse with 403 <c>key_level_mismatch</c> when the ceiling is not the key's level. The real
     /// gateway would narrow silently; the fake makes a client that sends the wrong key for a level fail loudly.
     /// </summary>
@@ -107,4 +115,12 @@ public enum FakeFailure
 
     /// <summary>The provider does not answer in time (the gateway's last error <c>timeout</c>, 504).</summary>
     Timeout,
+}
+
+/// <summary>A credential key of the fake: its secret and the highest residency it allows.</summary>
+public sealed class FakeCredentialKey
+{
+    public string Key { get; set; } = "";
+
+    public Residency MaxResidency { get; set; } = Residency.External;
 }

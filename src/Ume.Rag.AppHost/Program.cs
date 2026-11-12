@@ -80,17 +80,18 @@ var fakeGateway = builder.ExecutionContext.IsRunMode && builder.Configuration.Ge
         .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https")
     : null;
 
-// Per-level dev keys (OnPrem, Eu, External), like the pilot team's gateway keys: the fake accepts them, the services
-// hold them as Gateway:Keys:<level> (the worker never the External one, simplification pass §6).
-string[] residencyLevels = ["OnPrem", "Eu", "External"];
-var gatewayKeys = residencyLevels.ToDictionary(level => level, level => Secret($"gateway-key-{level.ToLowerInvariant()}", 43));
+// One dev credential key per service, like the gateway integration Ume.Rag's (identity design §4.7): the fake accepts
+// each up to its highest residency (the worker's Eu), the service holds it as Gateway:Key.
+string[] gatewayServices = ["api", "admin", "worker"];
+var gatewayKeys = gatewayServices.ToDictionary(service => service, service => Secret($"gateway-key-{service}", 43), StringComparer.Ordinal);
 
 // FakeGateway:Latency:* (AppHost user secrets) gives the fake a real gateway's timing, as the gateway's FakeLlm.
 if (fakeGateway is not null)
 {
-    foreach (var (level, key) in gatewayKeys)
+    foreach (var (service, key) in gatewayKeys)
     {
-        fakeGateway.WithEnvironment($"FakeGateway__Keys__{level}", key);
+        fakeGateway.WithEnvironment($"FakeGateway__CredentialKeys__{service}__Key", key)
+            .WithEnvironment($"FakeGateway__CredentialKeys__{service}__MaxResidency", service == "worker" ? "Eu" : "External");
     }
 
     foreach (var setting in builder.Configuration.GetSection("FakeGateway:Latency").GetChildren())
@@ -329,66 +330,45 @@ if (fakeGateway is not null)
     // The admin's organisation sync reads the fake's Data API catalogue (admin design §4.10).
     fakeGateway.WithEnvironment("FakeGateway__DataApiKey", dataApiKey);
     adminApi.WithEnvironment("OrgSync__BaseUrl", fakeGateway.GetEndpoint("https")).WithEnvironment("OrgSync__DataApiKey", dataApiKey);
-    foreach (var service in new[] { api, worker, adminApi })
+    foreach (var (name, service) in new[] { ("api", api), ("worker", worker), ("admin", adminApi) })
     {
-        service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway);
-        foreach (var (level, key) in gatewayKeys)
-        {
-            if (service != worker || level != "External")
-            {
-                service.WithEnvironment($"Gateway__Keys__{level}", key);
-            }
-        }
+        service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway)
+            .WithEnvironment("Gateway__Key", gatewayKeys[name]);
     }
 }
 else
 {
-    // A real gateway, keys as init-deployment.sh --gateway-key-file [SERVICE:]LEVEL=FILE (#95):
-    //   Gateway:Keys:<level>                     shared: api and admin, the worker too unless it is External;
-    //   Gateway:Services:<service>:Keys:<level>  one deployable's own key (api, admin, worker), wins over the shared one;
-    //   every other Gateway:* value (BaseUrl, ...) goes to all three. The worker never holds External.
+    // A real gateway: each service's credential key of the integration Ume.Rag (identity design §4.7) as
+    //   Gateway:Services:<service>:Key   (service api, admin or worker);
+    //   every other Gateway:* value (BaseUrl, MaxResidency, ...) goes to all three.
     var services = new Dictionary<string, IResourceBuilder<ProjectResource>>(StringComparer.Ordinal)
     {
         ["api"] = api, ["admin"] = adminApi, ["worker"] = worker,
     };
     var gateway = builder.Configuration.GetSection("Gateway");
-    var keys = services.Keys.ToDictionary(s => s, _ => new Dictionary<string, string>(StringComparer.Ordinal), StringComparer.Ordinal);
-    foreach (var shared in gateway.GetSection("Keys").GetChildren())
+    if (gateway.GetSection("Keys").Exists())
     {
-        foreach (var service in services.Keys.Where(s => s != "worker" || shared.Key != "External"))
-        {
-            keys[service][GatewayLevel(shared.Key)] = shared.Value ?? "";
-        }
+        throw new InvalidOperationException("Gateway:Keys:<level> is gone: give each service its credential key as Gateway:Services:<service>:Key.");
     }
 
     foreach (var own in gateway.GetSection("Services").GetChildren())
     {
-        if (!services.ContainsKey(own.Key))
+        if (!services.TryGetValue(own.Key, out var service))
         {
             throw new InvalidOperationException($"Gateway:Services:{own.Key}: the service is api, admin or worker.");
         }
 
-        foreach (var key in own.GetSection("Keys").GetChildren())
+        if (own["Key"] is { Length: > 0 } key)
         {
-            if (own.Key == "worker" && key.Key == "External")
-            {
-                throw new InvalidOperationException("Gateway:Services:worker:Keys:External: the worker never holds the External key.");
-            }
-
-            keys[own.Key][GatewayLevel(key.Key)] = key.Value ?? "";
+            service.WithEnvironment("Gateway__Key", key);
         }
     }
 
-    foreach (var (name, service) in services)
+    foreach (var service in services.Values)
     {
-        foreach (var (level, key) in keys[name].Where(k => k.Value.Length > 0))
-        {
-            service.WithEnvironment($"Gateway__Keys__{level}", key);
-        }
-
         foreach (var (key, value) in gateway.AsEnumerable(makePathsRelative: true))
         {
-            if (value is not null && !key.StartsWith("Keys:", StringComparison.Ordinal) && !key.StartsWith("Services:", StringComparison.Ordinal))
+            if (value is not null && !key.StartsWith("Services:", StringComparison.Ordinal))
             {
                 service.WithEnvironment("Gateway__" + key.Replace(":", "__", StringComparison.Ordinal), value);
             }
@@ -541,8 +521,3 @@ IResourceBuilder<ParameterResource> Secret(string name, int length) =>
     {
         MinLength = length, Lower = true, Upper = true, Numeric = true, Special = false,
     }, secret: true, persist: true);
-
-// A gateway key's level as the services bind it (Gateway:Keys:<level>); anything else is a typo that would be ignored.
-string GatewayLevel(string level) => residencyLevels.Contains(level, StringComparer.Ordinal)
-    ? level
-    : throw new InvalidOperationException($"Gateway key level {level}: the level is OnPrem, Eu or External.");
