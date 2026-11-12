@@ -12,6 +12,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   holds the fake to it (#595, #580).
 - Schema contract tests for the services' raw SQL: every statement must prepare against the migrated database, and
   each result's columns must match a checked-in `sql-shapes.json` (#588, #592, #510).
+- The malware scan is optional per deployment: `ClamAv:Mode` = `on` (default) | `off`, set with
+  `init-deployment.sh --clamav on|off` (`UME_RAG_CLAMAV_MODE`; Kubernetes: the component `components/clamav`). With
+  `off` no `rag-clamav` runs and files are stored without a scan and marked so: upload state `unscanned`, no
+  `Uploads.ScannedAt`, `malwareScan: "off"` in the run's report, security event 5106 `rag.malware.scan_off` at every
+  worker start. Migration `UploadScannedAt`. The admin UI's *Not scanned for malware* note is still to come (#599,
+  #602, #601, #535).
 
 ### Changed
 
@@ -29,6 +35,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   says how a gateway admin issues the three keys (#597).
 - Local stack: against a real gateway the AppHost reads `Gateway:Services:<service>:Key` from its user secrets, and it
   refuses to start with a leftover `Gateway:Keys` section (#593, #596).
+- `rag-clamav` runs only with the Compose profile `clamav`, which `init-deployment.sh` writes by default: an existing
+  deployment re-runs `init-deployment.sh`, or files wait with `clamav.unavailable`; on Kubernetes `rag-clamav` moved
+  from `components/ingestion` to `components/clamav`. See `docs/upgrade-guide.md` (#601).
+- Outside Development a worker with the scan on and no `ClamAv:Host` refuses to start (#602). The AppHost's switch is
+  `ClamAv:Mode` in place of `ClamAv:Enabled` (#599).
+- The Portainer stack is regenerated from the gateway's v0.10.0 stack file, which adds `UME_ADMIN_PUBLIC_URL` and
+  `UME_INTEGRATION_REQUESTS_PER_MINUTE` to the gateway's services (#601).
 
 ## 0.4.0 (2026-11-11)
 
