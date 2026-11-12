@@ -237,6 +237,7 @@ schema-driven form (§5.8).
 | Settings, Data protection, Clients, Templates, Assistant templates (P2, weakness review §1), Site profiles, Embedding profiles, Gateway models, Organisation (generic) | P1 | W | R (data-protection matrix, models, clients) | – | – | – | R (models) | – |
 | Department settings (owner-team scoping, generic) | P2 | W | W (own departments) | – | – | – | R | R |
 | Audit log (list) | P1 | R (all) | R (own departments' entries) | – | – | – | – | – |
+| Costs (per department, §8.6; the cost cards on the assistant and knowledge base pages follow those pages' rows) | P1 (cost attribution stage 1) | R (all) | R (own departments) | – | – | – | – | – |
 | Parse-profile proposals | P2 | W (approve, reject) | R | R | – | – | R | R |
 | Skills | P2 | W (platform skills) | W | – | R | W | R (link only) | R |
 | Tool servers | P2 | W (register, approve, grant) | R | – | – | R | – | – |
@@ -251,11 +252,11 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 
 | Policy | Actions (department-scoped unless noted) |
 |---|---|
-| `Read` | list/detail of everything in scope; runs, reports, documents (metadata), evaluation reports, feedback metadata |
+| `Read` | list/detail of everything in scope; runs, reports, documents (metadata), evaluation reports, feedback metadata, the cost of an assistant or own knowledge base (§8.6) |
 | `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit the draft, publish, restore a version, archive/unarchive, test panel; P2: create from a template, copy, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
-| `Manage` | collection publish, collection sharing level and departments, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), P2 department settings (owner-team scoping) and owner-team changes while it is on |
+| `Manage` | collection publish, collection sharing level and departments, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), the cost report per department with its CSV (§8.6), P2 department settings (owner-team scoping) and owner-team changes while it is on |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
 | `Admin` (platform) | templates, assistant templates (P2), site profiles (edit, roll back; approve P2), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
@@ -491,6 +492,9 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope (P2; user 2026-11-07).
 
+**Cost** — §8.6: `GET /api/assistants/{id}/costs`, `GET /api/collections/{id}/costs` (Read) and `GET /api/costs`
+with its CSV (Manage).
+
 ### 4.6 Cross-rules (V1–V38; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
@@ -622,13 +626,19 @@ not yet published included**, every call as the assistant's gateway key (`Gatewa
 cost-attribution §4.1; knowledge §4.2, §4.5), residency ceiling at the assistant's level (with test history: chat §8.2's rule if the assistant has a history-resending client in its
 audience). It runs the assistant's **draft** by default (the published version when there is no draft, or on request
 with `target = published`), so a change is tried before **Publish**; the draft's V-rule warnings are shown above the
-answer. Nothing is stored. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
+answer. Nothing is stored but the **usage**: every model call of a test turn (condense, long-question condense, query
+embedding, rerank, answer, follow-ups) is counted as chat counts it (chat §8.3: tokens, cached input, the gateway's cost
+or an estimate from the mirror's prices, kept apart), in `chat."AssistantDailyUsage"` under the assistant and the
+**`admin-console` client row** (identity §4.1's pilot row, so test traffic stays apart from real users' clients;
+data-model §2.3), upserted by `rag-admin` after the answer with the same per-step deltas and key order as the chat
+writer (chat §12.2), never in `AssistantDailyTotals` (test turns are not chat statistics; cost-attribution §5 C2). A
+failed write is logged and dropped; the test answer is unaffected. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
 key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
 panel ships in the same P1 release as the chat role, so it never runs a different `Ume.Rag.Answering` than chat does.
 
 | Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
 |---|---|
-| `question` (≤ 2,000 characters); optional `history[]` (≤ 10 messages of ≤ 4,000 characters, to test condense); assistant id and `target` (`draft` default, `published`) | `target` and `versionNumber`; `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, `degraded`, candidates `{rank, documentId, title, url or file name, headingPath, text (600 characters, expandable), truncated, distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, outcome}`; `answer` `{raw, delivered, filtered (counts per kind), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, inputTokens, outputTokens, maxTokens, maxTokensSource, finishReason}` (`maxTokens` = the `max_tokens` sent, null when left out; `maxTokensSource` `override`/`model`/`ceiling`/`key`/`provider`; `finishReason` from the gateway, the panel saying "The answer stopped at the length limit" for `length`; Decisions "Answer length from the model"); `durationMs` (`AssistantTestEndpoints.cs`). **P2** (user, 2026-11-07, M-3): a `collectionIds` subset, the condense step's rewritten question and why it was skipped, the prompt token budget per part, `filtered[]` as (kind, text), `ttftMs` and `costUsd`; `usesTools`, `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}` and skill inclusion with tools |
+| `question` (≤ 2,000 characters); optional `history[]` (≤ 10 messages of ≤ 4,000 characters, to test condense); assistant id and `target` (`draft` default, `published`) | `target` and `versionNumber`; `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, `degraded`, candidates `{rank, documentId, title, url or file name, headingPath, text (600 characters, expandable), truncated, distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, outcome}`; `answer` `{raw, delivered, filtered (counts per kind), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, inputTokens, outputTokens, maxTokens, maxTokensSource, finishReason, costUsd, costEstimated}` (`costUsd` the sum over the turn's calls, `costEstimated` true when any part of it is an estimate; shown as "0,0012 USD", with "estimated" when so) (`maxTokens` = the `max_tokens` sent, null when left out; `maxTokensSource` `override`/`model`/`ceiling`/`key`/`provider`; `finishReason` from the gateway, the panel saying "The answer stopped at the length limit" for `length`; Decisions "Answer length from the model"); `durationMs` (`AssistantTestEndpoints.cs`). **P2** (user, 2026-11-07, M-3): a `collectionIds` subset, the condense step's rewritten question and why it was skipped, the prompt token budget per part, `filtered[]` as (kind, text) and `ttftMs`; `usesTools`, `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}` and skill inclusion with tools |
 
 - Rate: 20 test questions per minute per user on the full panel (the retrieval-only variant has no limit), metric
   `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the content is the caller's own department's).
@@ -708,6 +718,7 @@ Assistants, Feedback, Menu.
 │   Tool servers       P2  │                                                                                      │
 │ FOLLOW-UP                │                                                                                      │
 │   Feedback               │                                                                                      │
+│   Costs                  │                                                                                      │
 │   Conversation review    │                                                                                      │
 │ PLATFORM                 │                                                                                      │
 │   Organisation           │                                                                                      │
@@ -738,6 +749,7 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 | Assistants | create, draft form with description and contact, test panel on the draft, Publish, Versions (restore), audiences (clients), retention, stats, archive | create from a template, copy, version diff, Test questions with the test report, latest answer evaluation (weakness review §1); skills (with **Uses tools** when one carries tools), limits, widget audiences | risk acceptance |
 | Skills, Tool servers | – | tools §3, §4 pages | import/export |
 | Feedback | ratings, import health; comment reveal when A1 allows stored content (weakness review §4) | rewrite into test question | trends |
+| Costs | per department, assistant, knowledge base and step, by day or month, CSV; cost cards on the assistant and knowledge base pages (§8.6) | the gateway's figures and budget status beside them (cost-attribution §6 B7) | – |
 | Conversation review | – (when A1 allows stored content, weakness review §4: conversation behind a feedback item, access log) | search by assistant and period, `sensitive` two-person flow | user notification |
 | Platform objects | generic forms (§5.8) | dedicated pages where generic forms prove too thin; parse-profile proposals | OBO configuration, profile changes |
 | Audit log | list with filters | field-level diff viewer | – |
@@ -852,7 +864,8 @@ collection; Decisions "Level change in the edit drawer", #446) and the **gateway
 assigned keys of the knowledge base's department; indexing, re-embedding and evaluation run as it). The Overview's
 *State* card shows the key's name, its read-only settings, its status (an unusable key: "Fetching is paused: the
 gateway key is disabled", with the reason) and from gateway phase 3 its budget status, with a link to the key in the
-gateway; without a key it says "Charged to the platform: choose a gateway key". A level change is saved with the rest; a refusal
+gateway; without a key it says "Charged to the platform: choose a gateway key". Below it the Overview has the *Cost*
+card of §8.6 (indexing and evaluation, last 30 days), for the owning department only. A level change is saved with the rest; a refusal
 (`collection_level_conflict`: sources above the new level; `assistant_below_collection`: published assistants below
 it) is shown in the drawer after **Save** with the affected objects by name.
 
@@ -967,7 +980,8 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
   questions** (on the draft or the published version), and the latest report as the §7.2 card (§7.4).
 - **Copy** (in ⋯, P2) asks for name, slug, department and owner team and opens the copy's draft.
 
-The *Statistics* tab shows the date of last use and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
+The *Statistics* tab shows the date of last use, the *Cost* card of §8.6 (by step and client, gateway and estimated
+cost apart) and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
 `answers` run with question counts, compared with the previous run, next to the live `uncited_answer` rate
 (processing §14.8, `AnswerEvaluationService` §2.2).
 
@@ -1317,7 +1331,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
   questions (V33), metric `rag.admin.assistant_tests{outcome}`. Old runs: the last 20 per assistant are kept (data-model
   §8).
 
-## 8. Feedback, conversation review and access audit
+## 8. Feedback, conversation review, access audit and cost
 
 **P1: ratings only** ([weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
 answered, so our store holds no comment and no conversation content: §8.1 shows ratings, reason categories and import
@@ -1369,6 +1383,54 @@ within 24 h → the requester decrypts within 30 minutes. Comments of `sensitive
 `audit."ConversationAccess"` as a list: time, reviewer, scope (comment/conversation), assistant, level, reason, events
 (requested → approved → decrypted). Visible to platform admins (all), department admins (their departments) and
 reviewers (their own). Reading the list emits 6007. Export CSV (`;`, as `ReportEndpoints.cs:152-158`).
+
+### 8.6 Cost (cost attribution stage 1)
+
+What assistants and knowledge bases cost, finer than the gateway shows (cost-attribution §5 C4, C5): read from
+`chat."AssistantDailyUsage"` (every model call of chat, chat §8.3, and of the test panel, §4.9) and
+`content."CollectionDailyUsage"` (the worker's indexing and evaluation calls, engine §10.6), data-model §2.2, §2.3.
+**Reporting only**: no budget, limit or stop is set here; a per-assistant budget is its gateway key's (cost-attribution
+§4.2), and the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see). The
+gateway's cost and the estimated cost (calls without a gateway cost, priced from the model mirror) are always shown apart.
+
+| Method and path | Policy | Returns |
+|---|---|---|
+| `GET /api/assistants/{id}/costs` `?from=&to=&granularity=day\|month` | Read | per period, step and client: `calls`, `inputTokens`, `cachedInputTokens`, `outputTokens`, `costUsd`, `estimatedCostUsd`, `estimatedCalls`, and the totals |
+| `GET /api/collections/{id}/costs` (same query) | Read, own department only (a department the knowledge base is shared with sees no cost, §3.2) | per period and step, the same fields |
+| `GET /api/costs` `?from=&to=&granularity=&departmentId=&kind=assistant\|collection` (+ `&format=csv`) | Manage: department admins their departments, platform admins all | per period, department, object (assistant or knowledge base) and step, the same fields; the CSV has one row each |
+
+- **Periods**: Europe/Stockholm days (the tables' `Day`); `month` is the calendar month (`date_trunc` in SQL);
+  `from` and `to` are inclusive dates, default the last 30 days by day; at most 400 days by day and 36 months by month
+  (the tables keep 3 years, data-model §8), else 400 `period_too_long` (a `messages.ts` text, §4.2).
+- **Department of a row** is the row's `DepartmentId` (the object's department when the call was made), so a moved
+  object's earlier cost stays with the department that had it; the scope filter is `DepartmentId` ∈ the caller's
+  departments, as the feedback totals (§8.1). Names come from the admin's snapshot (§4.8); a deleted object shows its id
+  and "(deleted)".
+- **Who pays which call** follows cost-attribution §4.1: an assistant's query embeddings and rerank count under the
+  assistant, also on another department's shared knowledge base; a knowledge base's cost is its indexing, preview and
+  evaluation. Test-panel calls are the assistant's, under the client `admin-console` (§4.9), so they show apart from
+  real use.
+- **CSV**: `;` as `ReportEndpoints.cs:152-158`, English headers `period;department;kind;object;step;client;calls;`
+  `input_tokens;cached_input_tokens;output_tokens;cost_usd;estimated_cost_usd;estimated_calls` (client empty for
+  knowledge bases). Reads and exports are not audited: they hold no content.
+- **Beside the gateway**: from gateway phase 3 the gateway's own cost and budget status per key are shown next to these
+  figures (cost-attribution §6 B7; `GET /api/gateway/keys/{id}/budget`, §4.5); until then each view links to the
+  gateway's usage report (`admin_url`). How to read the two side by side is in `docs/runbook.md` (cost-attribution §5 C6).
+
+**UI** (C5; every label in `labels.ts`, every sentence in `messages.ts`, Decisions "Admin UI in English"):
+
+- **Assistant page, Statistics tab** (§5.5.4): a *Cost* card with a period picker (last 30 days, by day or month), the
+  total with its gateway and estimated parts, and a table by step (*Answer*, *Condense*, *Long-question condense*,
+  *Follow-up suggestions*, *Rerank*, *Query embedding*; P2 agent steps and test runs as their own rows) and by client
+  (*Test panel* for `admin-console`).
+- **Knowledge base Overview** (§5.5.2): a *Cost* card for the last 30 days, split into indexing (`embed`) and
+  evaluation (`eval-generate`, `eval-judge`, `eval-dedup`, `query-embed`, `rerank`), with a link to the Costs page
+  filtered to the knowledge base's department for those who see that page.
+- **Costs** (FOLLOW-UP in the navigation, §5.2; department and platform admins): department picker (the header's
+  department filter), period and granularity, one row per assistant and knowledge base with its cost, sorted by cost,
+  expandable by step, department totals, and **Download CSV**. A note under the table: "Estimated: {n} calls had no
+  cost from the gateway and are priced from the model list." and "The gateway's figures are the record for internal
+  charging; they also count retries and fallbacks."
 
 ## 9. Audit log and security-relevant views
 
@@ -1488,6 +1550,11 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
   insert → no plaintext returned, events present); department admin can reveal comments but gets 403 on conversations;
   platform admin without `rag-reviewer` gets 403 on both; `sensitive` → `review_flow_required`; access window expiry.
 - **Sync**: org and model sync write nothing when unchanged; alias residency rule; failure keeps the mirror.
+- **Cost** (§8.6, §4.9): a test-panel turn on the FakeGateway adds its steps to `AssistantDailyUsage` under
+  `admin-console` and nothing to `AssistantDailyTotals`; the cost routes sum seeded usage rows by day and by month,
+  gateway and estimated cost apart; a department admin sees only rows of their departments (another department's
+  assistant → 404, `GET /api/costs` without their rows), a platform admin all; the CSV has the documented headers;
+  a period over the limit → 400 `period_too_long`.
 - **Assistant versions**: a draft save with a broken rule is stored with `warnings[]` and bumps no config version;
   publish refuses it; publish moves `PublishedVersionId` and the api's view `PublishedAssistantVersions` shows only that
   version; restore creates a new version and keeps the draft; `draft_base_changed` after a restore; audiences, level

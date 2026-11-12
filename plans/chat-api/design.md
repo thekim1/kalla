@@ -675,7 +675,7 @@ x-ume-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2, 
 x-ume-stream-cost: 1                                     (streamed calls, from gateway phase 2, features stream-cost)
 x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
-x-ume-step: answer | condense | assistant-test   (assistant-test: test runs in rag-admin, admin design §7.4)
+x-ume-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in rag-admin, admin design §7.4; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
 x-ume-session: <conversation id>                         (session affinity for on-prem prefix caches)
 traceparent: …
 
@@ -751,7 +751,7 @@ WebUI use EU or on-prem models.
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | one 502/504 retry with the same ceiling and key after `Gateway:RetryDelay` (250 ms) (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
 | Client disconnect | `HttpContext.RequestAborted` cancels the gateway read and disposes the response; the gateway accounts it as `ClientCancelled` 499 (`GatewayRequestHandler.cs:418-422`); the partial answer is recorded with `Outcome = cancelled` (§12) |
-| Usage and cost | tokens from the final chunk's `usage` (stream) or the JSON body; cost from `x-ume-cost-usd` on complete JSON answers (`GatewayHeaders.cs:20-21`) and, on a stream sent with `x-ume-stream-cost: 1` (gateway phase 2), from the SSE comment `: ume-cost-usd=<usd>` the gateway writes after the provider's last event. `SseReader` reads the comment as the call's cost and **never forwards it** to rag-api's clients (§9.1); an aborted stream has none and its cost comes from the gateway's usage by run id (§12.4) |
+| Usage and cost | **Every model call of a turn** (condense, long-question condense, query embedding, rerank, answer, follow-ups; cost-attribution §5 C1) yields one usage record: its step (the `x-ume-step` it sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`), model, input, cached input (`usage.prompt_tokens_details.cached_tokens`, 0 when absent) and output tokens from the final chunk's `usage` (stream) or the JSON body (an embedding's `usage.prompt_tokens`, no output), and its cost, taken in this order: (1) `x-ume-cost-usd` on a complete JSON answer (`GatewayHeaders.cs:20-21`); (2) on a stream, which is always sent with `x-ume-stream-cost: 1` (gateway phase 2; an older gateway ignores it), the SSE comment `: ume-cost-usd=<usd>` the gateway writes after the provider's last event: `SseReader` reads it as the call's cost and **never forwards it** to rag-api's clients (§9.1); (3) otherwise an **estimate** from the model mirror's prices (`GatewayModels`, per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd` (the input price when that is null) + output × `OutputPerMillionUsd`; 0 for a model without prices), marked as estimated. Gateway and estimated cost are stored apart (data-model §2.3 `AssistantDailyUsage`), so a report always says how much of a figure is estimated. A query embedding served from the cache makes no call and records nothing; a call answered with an error status records nothing (the gateway charges no failed request); an aborted stream (client disconnect, idle or total timeout) has neither usage nor cost comment and is recorded with the prompt estimate of §6.3 as input, no output, at an estimated cost (gateway phase 3's read-back by run id, cost-attribution §6 B7, can replace such estimates; §12.4). **Reporting only**: no figure stops a turn; the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see), and the split per step joins its usage on `x-ume-run-id` (the message id) and `x-ume-step` (gateway-changes §7.1) |
 
 ## 9. Streaming and citations
 
@@ -1028,9 +1028,12 @@ bounded wait before dropping (`Pipeline/GatewayRequestHandler.Accounting.cs:118-
 
 `ChatTurn` holds: conversation key, assistant, client, subject, level, history mode, retention, user message
 (text, external id), assistant message (text, external id, outcome, coverage, degraded, language, condense used),
-cited and uncited source rows (ids, rank, number, page, snippet text), gateway facts (model, request id, observed
-residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory only until the batch is encrypted. In
-mode `none` (all of P1, §11.2) the turn carries no text at all.
+cited and uncited source rows (ids, rank, number, page, snippet text), gateway facts of the answer call (model,
+request id, observed residency, tokens, cost, latency, TTFT), the **usage record of every model call** of the turn
+(§8.3: step, input, cached input and output tokens, cost, estimated or not), timestamps. Plaintext lives in memory only
+until the batch is encrypted. In mode `none` (all of P1, §11.2) the turn carries no text at all. A turn that ends
+without an answer (an error or refusal after a model call, e.g. the answer call failing after condense and the query
+embedding were paid) is enqueued as a **usage-only** turn: no conversation or message rows, only its usage deltas.
 
 ### 12.2 Batch processing (one transaction)
 
@@ -1046,9 +1049,11 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
    the messages, snippets (skipped in mode `none`: all of P1).
 6. Messages (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING` for user messages), one `MessageSources`
    insert per source, then the **`AssistantDailyTotals`** upserts with the batch's aggregated deltas per
-   (Europe/Stockholm day, assistant, client, level) (data-model §2.3: statistics never depend on rows retention
-   removes), placed **last** in sorted key order, so the hot totals row locks are held only until the commit that
-   follows. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
+   (Europe/Stockholm day, assistant, client, level) and the **`AssistantDailyUsage`** upserts per (day, assistant,
+   client, level, step) with the summed calls, tokens, gateway cost and estimated cost of the batch's usage records
+   (data-model §2.3: statistics never depend on rows retention removes), placed **last** in sorted key order, so the
+   hot totals row locks are held only until the commit that follows. `Messages.CostUsd` is the answer call's cost
+   (gateway or estimated); the turn's full cost is the sum of its usage records. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
    folding the lock, `Seq` and the inserts into one `NpgsqlBatch` is built only if the R1 performance test shows the
    writer falling behind (#392, stream A A-L6; to-verify #20).
 7. Failure: the batch is retried after 2 s (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split
@@ -1070,11 +1075,12 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
 - Crash (no drain): turns queued or in the uncommitted batch are lost: normally ≤ 250 ms of traffic; during a database
   outage up to the capacity. The answer was delivered; what is lost is our record, its statistics and the possibility
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
-- `CostUsd`: from the answer itself (`x-ume-cost-usd`, or the stream cost comment from gateway phase 2, §8.3). For a
-  call that carries neither (an aborted stream), a job in `rag-admin` reads the gateway's Integration API usage by run
-  id (`GET /integration/v1/usage?runId=`, scope `usage.read`, gateway phase 3; gateway-changes §5.6) and fills
-  `Messages.CostUsd` and the daily totals. Until then the writer stores `CostUsd` 0 for such calls and TTFT null (the
-  chat path measures neither), and cost is visible in the gateway's own reports per key.
+- Cost: from the call itself (`x-ume-cost-usd`, or the stream cost comment, §8.3); a call that carries neither (an
+  aborted stream, a gateway without the feature) is estimated from the mirror's prices and counted as estimated, and
+  TTFT stays null when it was not measured. Reconciling estimates with the gateway's own figures through the
+  Integration API's usage by run id (`GET /integration/v1/usage?runId=`, scope `usage.read`, gateway phase 3;
+  gateway-changes §5.6) is stage 2's step B7 (cost-attribution §6), not designed here; until then the gateway's own
+  reports per key are the record.
 - **No sticky sessions**: the chat path keeps no per-instance state a request depends on. The history is the client's,
   the config snapshot is per instance (90 s grace, then 503), conversation ids are signed and verified without SQL,
   rate limits are per instance in P1 (Redis from P2), and `Seq` is assigned under the conversation row lock, correct
@@ -1261,7 +1267,8 @@ totals).
 | `rag.chat.ume` | counter | `members` (`outcome`, `related`, `follow_ups`, `both`), `client_kind`: requests using the extension (§3.8) |
 | `rag.chat.citations` | counter | `kind` (`valid`, `invalid`, `uncited_answer`) |
 | `rag.chat.filtered` | counter | `kind` (`image`, `html`, `link`, `bare_url`) |
-| `rag.chat.tokens` | counter | `direction` (`input`, `output`), `step` (`chat-answer`, `condense`, `condense-long`, `follow-ups`) |
+| `rag.chat.tokens` | counter | `direction` (`input`, `cached-input`, `output`), `step` (`chat-answer`, `condense`, `condense-long`, `follow-ups`, `rerank`, `query-embed`): every model call of §8.3 |
+| `rag.chat.cost` | counter, USD | `step` (as above), `source` (`gateway`: `x-ume-cost-usd` or the stream comment; `estimate`: the mirror's prices, §8.3); a rising `estimate` share means the gateway stopped sending cost |
 | `rag.chat.prompt.estimate_ratio` | histogram | – |
 | `rag.chat.stream.stalls` | counter | waits ≥ 1 s between gateway events (gateway `StreamGaps.StallThreshold`, `Pipeline/StreamGaps.cs:10-11`) |
 | `rag.chat.writer.queue`, `.queue_bytes` | observable gauge | – |
@@ -1287,8 +1294,11 @@ totals).
   answer or condense call), 5004, 5005, new **5011** `rag.gateway.delegation_missing` (Warning; `Step`,
   `AssistantId`, `GatewayKeyId`, `GatewayRequestId`); SIEM alerts on any 5003 or 5011 from the chat role.
 - **Dashboard** *Data plane*: TTFT and overhead p50/p95, outcome shares per level, condense outcomes, citation
-  validity, writer queue, feedback import health; per assistant (from the daily totals): not-found and
-  `uncited_answer` rates (§18.8).
+  validity, writer queue, feedback import health, cost per step and the estimated share (`rag.chat.cost`); per
+  assistant (from the daily totals): not-found and `uncited_answer` rates (§18.8).
+- **Cost per assistant** is not a metric dimension (assistant ids stay out of hot instruments): it is read from
+  `AssistantDailyUsage` (data-model §2.3) by the admin's cost report (admin §8.6), per day, assistant, client and step,
+  with gateway and estimated cost apart (cost-attribution §5 C1).
 - **P2 agent and tools**: `rag.agent.*`, `rag.tools.*`, `rag.mcp.requests`, `rag.skills.*`, the trace spans
   `rag.agent.step`/`rag.agent.tool` and the *Tools* dashboard are defined in tools design §10; events 5012–5015 in tools
   design §9.3.
@@ -1327,6 +1337,12 @@ totals).
 - Full turn persisted: conversation upsert, `Seq`, `MessageSources` numbers, daily totals; mode `none` writes no
   ciphertext and no `DataKeys` row (P1). When A1 allows stored content: ciphertext decrypts with
   the bucket key and fails with another conversation's AAD; `session` expiry.
+- Cost per step (§8.3, FakeGateway: `x-ume-cost-usd` on JSON answers, the `: ume-cost-usd=` comment on a stream asked
+  with `x-ume-stream-cost: 1`, neither for `fake-no-cost`): a turn with condense, query embedding, rerank, answer and
+  follow-ups writes one `AssistantDailyUsage` row per step with the FakeGateway's tokens and cost; the comment never
+  reaches the client's stream; `fake-no-cost` gives an estimate from the mirror's prices in `EstimatedCostUsd` (cached
+  input at its own price) and nothing in `CostUsd`; a failed answer call still writes condense's and the embedding's
+  usage.
 - User delete: conversation and all rows under it gone; retention step deletes expired messages, then empty expired
   conversations; no bucket key is destroyed while the A1 setting is off.
 - Feedback import against a recorded Open WebUI list response (WireMock): mapping, update, unmapped retry window,

@@ -397,3 +397,35 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   template or doc names `Gateway__Keys__*` or `OrgSync__DataApiKey`.
 - **Waits on:** B-37 (the key names in code), B-35 (the Data API key gone from code).
 - **Read:** repo-and-deployment §6.3, §7.1; identity §4.7; gateway-changes §5.1.
+
+### [ ] A-31 Cost per knowledge base: every worker model call's tokens and cost (cost-attribution C3)
+- **Do:** engine §10.6: every gateway call of the worker (`EmbeddingClient` for indexing, re-embedding and preview,
+  `EvalModelClient` for `eval-generate` and `eval-judge`, the dedup embeddings `eval-dedup`, the evaluation's query
+  embeddings and rerank) reads its usage (input, cached input, output tokens) and cost with B-38's shared reader:
+  `x-ume-cost-usd`, else an estimate from `GatewayModels`' prices, kept apart. A document's sum fills
+  `RunItems.CostUsd` (so `Runs.CostUsd` is no longer 0); each job attempt that made a call adds its deltas to
+  `content."CollectionDailyUsage"` per (day, collection, level, step) as the last statement of the transaction that
+  records its outcome, keys sorted. Every call carries `x-ume-run-id` (engine §7.7): the run's id, the evaluation run's
+  id, or the job's id for set generation and preview.
+- **Paths:** `src/Ume.Rag.Worker/**` (not `Processing/Pii/**`, `Engine/HnswIndexHealth.cs`), `tests/Ume.Rag.Worker.Tests/**`.
+- **Done when:** against the FakeGateway (B-38's cost headers): a sync of two documents gives each run item the sum of
+  its embedding calls' `x-ume-cost-usd` and the run that sum; `CollectionDailyUsage` holds the day's `embed` row with
+  the same tokens and cost; a set generation adds `eval-generate`, `eval-judge` and `eval-dedup` rows, a retrieval run
+  `query-embed` (cache misses only) and `rerank` rows; on `fake-no-cost` the cost lands in `EstimatedCostUsd`; a
+  retried attempt counts its calls once; every recorded call carried an `x-ume-run-id`.
+- **Waits on:** B-38 (the table, the shared reader and estimate, the FakeGateway's cost headers, the rerankers' usage).
+- **Read:** cost-attribution §5; engine §7.7, §10.2, §10.4, §10.6; processing §11, §13.1, §14.7; data-model §2.2.
+
+### [ ] A-32 Runbook: reading Ume.Rag's cost beside the gateway's (cost-attribution C6)
+- **Do:** a section in `docs/runbook.md`: where the figures come from (admin §8.6: `AssistantDailyUsage`,
+  `CollectionDailyUsage`, the gateway's cost or an estimate), why they differ from the gateway's usage report for the
+  same key and day (the gateway counts fallbacks and retries Ume.Rag doesn't see; estimated calls; aborted streams;
+  Knowledge API calls without an assistant and the admin's own checks are counted only in the gateway; days in
+  Europe/Stockholm against the gateway's time zone), how to match them per step (`x-ume-run-id`, `x-ume-step` in the
+  gateway's request list), what a rising estimated share means (`rag.chat.cost{source=estimate}`), and that the
+  gateway is the record for internal charging.
+- **Paths:** `docs/runbook.md`.
+- **Done when:** the section answers cost-attribution §5's done-when for an operator: a day of chat on two assistants
+  and one ingestion run read in the admin and the CSV and reconciled with the gateway's report, each difference named.
+- **Waits on:** B-40 (the report it describes), A-31.
+- **Read:** cost-attribution §5; admin §8.6; chat §8.3, §17; engine §10.6; gateway-changes §7.1.

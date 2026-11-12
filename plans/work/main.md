@@ -97,7 +97,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
   grading use `scripts/grading/` (README there).
 - **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
 
-### [ ] M-9 Cost attribution stage 1: settle the design and queue the streams
+### [x] M-9 Cost attribution stage 1: settle the design and queue the streams
 - **Do:** write stage 1 of [`../platform/cost-attribution.md`](../platform/cost-attribution.md) §5 into the designs it names
   (chat §8.3, §17 and the `AssistantDailyTotals` columns or a per-step table, admin §4.9 and a cost subsection under
   §8, processing §11/§14, engine §10): the cost of each call is the gateway's (`x-ume-cost-usd`, the stream comment
@@ -107,6 +107,11 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Done when:** the design sections state stage 1's rules, the queue items exist, and the user has answered Q3 (or
   confirmed the default).
 - **Waits on:** nothing for the `x-ume-cost-usd` part; the stream cost and the read-back follow M-12's phases.
+- **Written (2026-11-12):** stage 1 is in the designs (cost-attribution §5 lists the sections): a per-step table per
+  owner schema, `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"` (data-model §2.3 says why, not
+  columns on the totals row), gateway and estimated cost apart; the stream cost needs no wait (gateway phase 2 is
+  merged), and the Integration API read-back is stage 2's B7. Queued: B-38–B-41 (stream b), A-31, A-32 (stream a).
+  Q6 marked answered. Q3 answered by the user (2026-11-12): no hard budget in the pilot.
 
 ### [x] M-10 Settle #499 step 2 and #501 in the designs
 - **Do:** #499 step 2: who maintains scope sizes and the keyword stop list (the worker at the chunk-set swap, a

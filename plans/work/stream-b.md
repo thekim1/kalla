@@ -408,8 +408,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   merged, then the merge commit), and a contract test checks the FakeGateway's `/v1/ume/context` and `/v1/models`
   answers against its schemas: an undescribed field or a missing required one fails, as in the gateway's own tests.
 - **Paths:** `src/Ume.Rag.AdminApi/**` (`OrganisationSync.cs`, `GatewayModelSync.cs`, `GatewayEndpoints.cs`),
-  `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`, `deploy/postgres/app-roles.sql` (+ the
-  generated Kubernetes and Portainer copies), `src/Ume.Rag.FakeGateway/**`, `src/Ume.Rag.AppHost/**` (the Data API key
+  `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`, `deploy/postgres/app-roles.sql` (+ its
+  copy `deploy/kubernetes/base/app-roles.sql`; stream a regenerates the Portainer stack, issue labelled `stream-a`), `src/Ume.Rag.FakeGateway/**`, `src/Ume.Rag.AppHost/**` (the Data API key
   goes), `contracts/gateway/**`, `src/admin-ui/src/**` outside `platform/` (the Gateway page's features and version),
   `tests/**`.
 - **Done when:** against the FakeGateway: the sync fills `GatewayKeys` from `assigned_keys` (a revoked key's row goes,
@@ -454,6 +454,89 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   logged; the call-site tests pass with one key per service; the local stack answers a chat on the FakeGateway.
 - **Waits on:** –. A-30 (deploy) follows with the same key names.
 - **Read:** identity §4.7; repo-and-deployment §6.3, §7.1; gateway-changes §5.1.
+
+### [ ] B-38 Cost per step: every chat model call's tokens and cost, the usage tables, the FakeGateway's cost (cost-attribution C1)
+- **Do:** every model call of a chat turn (condense, long-question condense, query embedding, rerank, answer,
+  follow-ups) yields a usage record of chat §8.3: its `x-ume-step`, input, cached input
+  (`usage.prompt_tokens_details.cached_tokens`) and output tokens, and its cost from `x-ume-cost-usd`, else the stream
+  comment `: ume-cost-usd=<usd>` (every streamed answer sends `x-ume-stream-cost: 1`; the stream reader takes the
+  comment and never forwards it), else an estimate from `GatewayModels`' prices (cached input at its own price), kept
+  apart. The reading and the estimate live once in `src/Ume.Rag.Infrastructure/Gateway/` so the worker (A-31) uses the
+  same code; `IReranker` and the query embedder return their call's usage. `ChatTurn` carries the turn's usage records;
+  `ConversationWriter` upserts `chat."AssistantDailyUsage"` per (day, assistant, client, level, step) last in the
+  batch (chat §12.2), and a turn that fails after a model call is enqueued usage-only. Migration: the new
+  `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"` (data-model §2.2, §2.3; the worker's table here so
+  A-31 needs no stream-b path), `InputTokens`/`OutputTokens`/`CostUsd` dropped from `AssistantDailyTotals` (and from
+  the totals inserts of `FeedbackEndpoints` and `FeedbackImporter`), `rag-admin` `I U` on `AssistantDailyUsage`
+  (data-model §1.2), retention of both (data-model §8). Metrics `rag.chat.tokens` (`cached-input`, steps `rerank`,
+  `query-embed`) and `rag.chat.cost{step, source}` (chat §17). The FakeGateway sends `x-ume-cost-usd` on every JSON
+  answer (chat, embeddings, rerank) from its catalogue prices, writes the stream comment after its last event when the
+  request has `x-ume-stream-cost: 1`, reports `cached_tokens` when scripted, and a model `fake-no-cost` that sends
+  neither.
+- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Api/**`,
+  `src/Ume.Rag.AdminApi/FeedbackEndpoints.cs`, `src/Ume.Rag.Infrastructure/Gateway/**`,
+  `src/Ume.Rag.Infrastructure/Persistence/**`, `src/Ume.Rag.Domain/**`, `deploy/postgres/app-roles.sql` (+ its
+  copy `deploy/kubernetes/base/app-roles.sql`; stream a regenerates the Portainer stack, issue labelled `stream-a`), `src/Ume.Rag.FakeGateway/**`, `tests/**`.
+- **Done when:** against the FakeGateway (chat §18.2): a turn with condense, query embedding, rerank, answer and
+  follow-ups writes one `AssistantDailyUsage` row per step whose tokens and `CostUsd` equal the FakeGateway's; the
+  streamed answer's cost comes from the comment and the comment is absent from the client's stream; on `fake-no-cost`
+  the cost is in `EstimatedCostUsd` (cached input priced at `CachedInputPerMillionUsd`), `EstimatedCalls` counts it
+  and `CostUsd` stays 0; a failed answer call still writes condense's and the embedding's usage; a cached query
+  embedding writes nothing; `AssistantDailyTotals` has no token or cost column left.
+- **Waits on:** –. Gateway phase 2 (the stream comment) is merged.
+- **Read:** cost-attribution §5; chat §8.3, §12.1, §12.2, §12.4, §17, §18.2; data-model §1.2, §2.2, §2.3, §8;
+  gateway-changes §5.4, §7.1.
+
+### [ ] B-39 Cost per step: the test panel's calls under `admin-console` (cost-attribution C2)
+- **Do:** the test panel (admin §4.9) collects the usage records of its turn as chat does (B-38) and `rag-admin`
+  upserts them into `AssistantDailyUsage` under the assistant and the `admin-console` client row (its id from the
+  snapshot by name and kind `internal`; without the row the usage is not written and a warning is logged), never into
+  `AssistantDailyTotals`; `AssistantTestEndpoints` uses that row instead of a random client id. The panel's response
+  carries `gateway.costUsd` and `costEstimated`, shown on the panel ("0,0012 USD", "estimated"). The dev seed adds the
+  `admin-console` row (identity §4.1).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.MigrationService/DevSeeder.cs`, `src/admin-ui/src/views/**`,
+  `src/admin-ui/src/components/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `contracts/admin/**`,
+  `tests/**`.
+- **Done when:** a test-panel turn on the FakeGateway adds its steps to `AssistantDailyUsage` under `admin-console`
+  with the FakeGateway's costs and leaves `AssistantDailyTotals` unchanged; the response's `costUsd` is the sum of its
+  calls and `costEstimated` is true on `fake-no-cost`; a write failure leaves the answer intact.
+- **Waits on:** B-38.
+- **Read:** admin §4.9, §11.2; chat §8.3, §12.2; identity §4.1; data-model §1.2, §2.3.
+
+### [ ] B-40 Cost report API: per assistant, knowledge base and department, by day or month, CSV (cost-attribution C4)
+- **Do:** admin §8.6's routes `GET /api/assistants/{id}/costs`, `GET /api/collections/{id}/costs` (Read; the
+  collection's own department only) and `GET /api/costs` with `format=csv` (Manage: department admins their
+  departments, platform admins all) over `AssistantDailyUsage` and `CollectionDailyUsage`: per period (Europe/Stockholm
+  day or calendar month), step, client (assistants) and object, with calls, tokens, `costUsd`, `estimatedCostUsd`,
+  `estimatedCalls`; scope by the row's `DepartmentId`; names from the snapshot, deleted objects as id + "(deleted)";
+  limits 400 days by day and 36 months by month (400 `period_too_long`); the CSV with `;` and the headers of §8.6;
+  `PermissionMatrix` entries (§3.4).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Domain/**` (`PermissionMatrix`), `contracts/admin/**`,
+  `tests/**`.
+- **Done when:** on seeded usage rows the routes return the expected sums by day and by month with gateway and
+  estimated cost apart; the generated role matrix passes (a department admin gets 404 for another department's
+  assistant and no foreign rows from `/api/costs`; a platform admin sees all; another department gets no cost for a
+  shared knowledge base); the CSV has the documented headers; a too-long period gives `period_too_long`.
+- **Waits on:** B-38 (the tables). The knowledge-base figures are empty until A-31 fills them; the routes and their
+  tests don't wait on it.
+- **Read:** admin §3.3, §3.4, §4.8, §8.6, §11.2; data-model §2.2, §2.3; cost-attribution §4.1, §5.
+
+### [ ] B-41 Cost in the admin UI: assistant and knowledge base cards, the Costs page (cost-attribution C5)
+- **Do:** admin §8.6's UI: the *Cost* card on the assistant's Statistics tab (period picker, total with gateway and
+  estimated parts, by step and client), the *Cost* card on the knowledge base's Overview (indexing and evaluation, last
+  30 days, owning department only), and the *Costs* page under FOLLOW-UP for department and platform admins
+  (department filter, period, granularity, one row per assistant and knowledge base with its cost, expandable by step,
+  totals, **Download CSV**, the two notes on estimates and the gateway as the record). Route guard as admin §3.3. Every
+  label in `labels.ts` (the step names too), every sentence in `messages.ts`.
+- **Paths:** `src/admin-ui/src/views/**`, `src/admin-ui/src/components/**`, `src/admin-ui/src/router/**`,
+  `src/admin-ui/src/api/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/e2e/**` if a browser test is
+  added.
+- **Done when:** Vitest covers the cards and the page against the B-40 contract (sums, estimated parts, empty states);
+  a viewer has no Costs entry and the route sends them to `/forbidden`; the CSV link carries the filters; no UI string
+  outside `labels.ts`/`messages.ts`.
+- **Waits on:** B-40.
+- **Read:** admin §3.3, §5.2, §5.3, §5.5.2, §5.5.4, §5.7, §8.6; Decisions "Admin UI in English".
+
 ### [x] B-L1 Status green against the real gateway
 - **Done when:** `GET /api/gateway/status` green with the pilot keys; #95, #102, #162 rechecked.
 - **Waits on:** the gateway session (EU routes, pilot keys).

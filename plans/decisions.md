@@ -261,10 +261,14 @@ stream comment it asks for with `x-ume-stream-cost: 1`, and from the Integration
 finer split per step, joined on `x-ume-run-id` and `x-ume-step`. A per-assistant budget is the key's budget in the
 gateway, shown read-only in Ume.Rag; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
 the service's credential key and is charged to the integration's owner team; once the gateway's `features` contain
-`act-as-key`, publishing an assistant needs a key. Detail: `platform/cost-attribution.md` §4–§6;
-`gateway-changes/design.md` §5.
+`act-as-key`, publishing an assistant needs a key. Ume.Rag's own record (stage 1) is one row per day, object, step
+(and client, for an assistant) in `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"`; a call without a
+gateway cost is priced from the model mirror and kept apart as an estimate, never mixed into the gateway's figure; a
+row belongs to the object's department at the time of the call. Calls made for no assistant or knowledge base
+(Knowledge API callers without an assistant, the admin's checks and canary) are counted only in the gateway. The pilot
+needs no hard budget (Q3). Detail: `platform/cost-attribution.md` §4–§6; `gateway-changes/design.md` §5.
 
-*From:* log row 120; decided by user, 2026-11-11 (#580).
+*From:* log row 120; decided by user, 2026-11-11 (#580); stage 1's record and no pilot budget, 2026-11-12 (M-9).
 
 ## Sign-in and roles
 

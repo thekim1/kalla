@@ -435,13 +435,14 @@ keys, every call is charged to that team, and no `x-ume-on-behalf-of` is sent (s
 |---|---|
 | `x-ume-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
 | `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
-| `x-ume-run-id`, `x-ume-step` | `RunId` (GUID) and stage **type** (`embed`, `eval-judge`), never names (gateway design §7.1) |
+| `x-ume-run-id`, `x-ume-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 
 The response is checked before anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when
 `x-ume-on-behalf-of` was sent, its echo must match (`Gateway:RequireDelegationEcho`), else fatal
-`gateway.delegation_not_applied` (event 5011). `x-ume-cost-usd`, the gateway's cost of the call, is added to the
-stage's `NodeUsage`.
+`gateway.delegation_not_applied` (event 5011). The call's usage (input, cached input and output tokens) and its cost are
+added to the stage's `NodeUsage`: `x-ume-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
+an estimate from the model mirror's prices, kept apart as estimated (§10.6).
 
 HTTP clients come from `IHttpClientFactory`, one per downstream: the named gateway clients (`AddGatewayClient`) with
 the residency handler and no standard resilience handler, the typed `ParserClient` with the parser's timeout, and the
@@ -697,7 +698,8 @@ and stops at its owner's next heartbeat without committing), sets `Runs.State = 
 `Reason` is a code plus short fixed text, `<area>.<code>` (`parser.timeout`, `http.404`, `gateway.budget_exhausted`,
 `pii.flagged`), never library messages or document text (parser §7.5 rule). A document served by another source's
 frontier request gets its real outcome and the fact `fetch.shared` (6b §6.2). `Strategy` holds the route (§7.2);
-`CostUsd` the gateway cost of this document in this run; `DurationMs` wall time across its jobs; `ParserBuildHash` as
+`CostUsd` the cost of this document's model calls in this run (the gateway's `x-ume-cost-usd`, plus the estimates of
+§10.6 for calls without it); `DurationMs` wall time across its jobs; `ParserBuildHash` as
 parser §13.1.
 
 ### 10.3 Degraded threshold
@@ -728,6 +730,21 @@ jobs count as Failed; `degraded` counts as Updated.
 | Source → runs | state, trigger, pipeline version, site-profile version, counters by outcome, cost, duration, queue position of the next waiting job and age of the oldest (RAGFlow's "parsing stuck" is mostly invisible waiting, `../../platforms/ragflow.md:210-212`) |
 | Run detail | failures grouped by reason with counts; degraded items with their gaps; notes (short pages, incomplete traversal); per item: identity, outcome, strategy, duration, cost, parser build; links to the document |
 | Document / Overview | run items (90 days), live, held and superseded chunk sets with pipeline and site-profile version, cache entries, PII state of the live set / degraded or failed runs per department, dead jobs, scheduler lag |
+
+### 10.6 Cost per knowledge base (cost attribution stage 1)
+
+Every model call the worker makes for a knowledge base is recorded with its tokens and cost (cost-attribution §5 C3),
+reporting only; the gateway is the record for charging (it also counts fallbacks and retries the worker does not see).
+
+| Topic | Rule |
+|---|---|
+| Calls | every gateway call of §7.7: indexing, re-embedding and preview (`embed`), set generation (`eval-generate`, `eval-judge`, `eval-dedup`), retrieval evaluation's query embeddings (`query-embed`, only cache misses) and rerank (`rerank`); `GET /v1/models` costs nothing and is not recorded |
+| Usage | from the answer's `usage`: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (0 when absent), `completion_tokens` (none for embeddings); an answer without `usage` counts 0 tokens |
+| Cost | `x-ume-cost-usd` on the answer (every worker call is non-streamed, so the gateway sends it on every successful call); without it an **estimate** from `GatewayModels` (per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd`, the input price when that is null, + output × `OutputPerMillionUsd`; 0 for a model without prices), counted as estimated; the same rule as chat §8.3. A call answered with an error status records nothing |
+| Per document | the sum of a document's calls in a run is `RunItems.CostUsd` (gateway cost plus estimates, §10.2); the finalizer's `Runs.CostUsd` sums it (§10.4) |
+| Per day | `content."CollectionDailyUsage"` (data-model §2.2) per (Europe/Stockholm day, collection, level, step): calls, input, cached input and output tokens, `CostUsd` (the gateway's), `EstimatedCalls`, `EstimatedCostUsd`. Each job attempt that made a model call adds its deltas, keys sorted, as the **last statement of the transaction that records the attempt's outcome** (the run item's commit, the job's retry or completion; §14's swap transaction for a document that is indexed), so a retried or failed attempt's calls are counted once and the hot row's lock is held only until that commit (performance pass §3.2). Calls outside a run (preview, evaluation) are counted the same way under the source's or the evaluation set's collection |
+| Run ids | every call carries `x-ume-run-id` (§7.7), so the split per step joins the gateway's usage on `x-ume-run-id` and `x-ume-step` (gateway-changes §7.1) |
+| Why a daily table | `RunItems` are kept 90 days and `Runs` 13 months (data-model §8), set generation is no run, and the per-run figures do not keep gateway and estimated cost apart; the cost report (admin §8.6) reads the daily table, the run pages keep showing the per-run cost |
 
 ## 11. Preview
 

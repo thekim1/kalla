@@ -553,6 +553,7 @@ Swedish pitfalls (fixtures in §17):
 | Batching | ≤ 64 inputs per request, all misses of one document, with **no token cap per request**: from gateway v0.9.0 the gateway compares each input (the longest) with the model's `ContextWindow`, not the whole body (gateway #65; to-verify #43), so the embedding deployment may set its `ContextWindow`. Each input stays far below it because the chunker caps chunks (template `chunkTokens` ≤ 800 with the tail merge, §6.2); an input the gateway still refuses ends as fatal `embed.input_rejected`. Checked live 2026-11-06: 64 Swedish inputs, 59,584 tokens, one request (#429) |
 | Request | `POST /v1/embeddings` `{model: <profile's GatewayModel>, input: [...], encoding_format: "float"}`, plus `dimensions` when the profile asks for it; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = the collection's `GatewayKeyId` (from gateway phase 2; none without a key), `x-ume-max-residency` = the profile's `MaxResidency` (at most the platform ceiling; `Eu` until M2) with the worker's credential key (until the gateway's integration phase 1 its key of that level), `x-ume-run-id`, `x-ume-step: embed` |
 | Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
+| Usage and cost | every embedding call, preview's included, records `usage.prompt_tokens` and its cost: `x-ume-cost-usd`, or without it an estimate from the mirror's prices, marked as estimated (engine §10.6); the document's sum goes to `RunItems.CostUsd`, the day's to `CollectionDailyUsage` under step `embed` (cost-attribution §5 C3). Cache hits make no call and cost nothing |
 | Canary | on demand only: the worker makes no canary calls of its own. A platform admin runs the check from the admin UI (admin design §4.5 `POST /api/gateway/canary-check`): the admin API embeds each active profile's `CanaryText` at the profile's ceiling and compares it with `EmbeddingProfiles.CanaryEmbedding`, storing `CanaryCheckedAt` and `CanarySimilarity`. Cosine < 0.999 means the gateway alias now serves another model, which would silently mix vector spaces: until a later check passes, the worker refuses the profile for embedding, preview and evaluation (`embed.canary_mismatch`, transient) and the worker's health is `unhealthy`. A profile never checked, or without a recorded canary, is allowed. The admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced. Run the check after any change to the gateway's models (Decisions, "Embedding canary on demand") |
 | Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `ume-rag:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
 | Chat protection at the gateway | a knowledge base's calls run as its own gateway key, so its rate and concurrency limits (429 + `Retry-After`, honoured: requeued without an attempt) are separate from an assistant's; the credential key's limits do not apply to acted calls (gateway-changes §5.3), so the worker keeps its own embedding concurrency limit (`Worker:Concurrency:embed`, below) and the gateway is asked for no platform-wide cap (#580). Until the gateway's integration phase 1 the pilot team's key of the profile's level carries the gateway's `MaxConcurrentRequests` cap, so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-ume-step: query-embed`) only when the performance pass's §6 trigger fires ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9, §6) |
@@ -629,7 +630,9 @@ Expected documents: the source chunk's document plus every live document of the 
 (provenance only), `SourceContentHash`, `Origin` (model, prompt version, seed, judge scores), `Strata` (§19).
 
 **Cost** per kept question ≈ 2,000 on-prem tokens (generation 1.6 × ≈ 880, judge ≈ 620): a full set ≈ 200,000 tokens,
-charged to the collection's owner team; shown before generation.
+shown before generation as a forecast. The calls run as the knowledge base's gateway key (engine §7.7) and each is
+recorded under the collection by step (`eval-generate`, `eval-judge`, `eval-dedup`) in `CollectionDailyUsage` with the
+gateway's `x-ume-cost-usd` or an estimate (engine §10.6), so the real cost shows beside the forecast (admin §8.6).
 
 ### 13.2 Why documents, not chunks
 
@@ -790,7 +793,11 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Answer-level run (P2; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
 
 The re-processing itself is forecast by the publish flow (6a §12.2); the `eval` class (concurrency 1, on at most two
-worker instances) runs only generation and measuring. **Later (P2):** its reads go to the standby when read routing
+worker instances) runs only generation and measuring. **Recorded cost**: every model call of a retrieval run (query
+embeddings that miss the cache, `query-embed`; rerank variants, `rerank`) carries the evaluation run's id as
+`x-ume-run-id` and is counted under the collection in `CollectionDailyUsage` by step, with the gateway's cost or an
+estimate (engine §10.6; cost-attribution §5 C3). Answer-level runs (P2, `rag-admin`) are an assistant's calls and are
+counted in `chat."AssistantDailyUsage"` under the client `admin-console` (admin §4.9, §8.6). **Later (P2):** its reads go to the standby when read routing
 exists.
 
 ### 14.8 Nightly runs
