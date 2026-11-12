@@ -72,6 +72,10 @@ public static class AssistantEndpoints
                         UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     request.ApplyTo(assistant);
+                    // V39 (admin design §4.6): a key chosen at create is checked for status, department and residency; the
+                    // draft that follows has no models yet.
+                    Refuse(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId,
+                        ResidencyCeiling.ForLevel(assistant.Classification), [], attempt));
                     admin.Db.Assistants.Add(assistant);
                     await admin.Db.SaveChangesAsync(attempt);
                     // Created with only a draft: no published version, so no client lists it (admin design §4.5). The draft starts from
@@ -102,6 +106,7 @@ public static class AssistantEndpoints
                     await CheckTeamAsync(admin, assistant.DepartmentId, request.OwnerTeamId, attempt);
                     var before = AssistantAudit.Of(assistant);
                     var levelChanged = request.Classification != assistant.Classification;
+                    var keyChanged = request.GatewayKeyId != assistant.GatewayKeyId;
                     var confirmed = false;
                     assistant.Name = request.Name.Trim();
                     assistant.OwnerTeamId = request.OwnerTeamId;
@@ -118,6 +123,14 @@ public static class AssistantEndpoints
                         await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
                         confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps);
                     }
+                    else if (keyChanged && (assistant.PublishedVersionId ?? assistant.DraftVersionId) is { } current)
+                    {
+                        // V39 on a key save: the key against the models of the version that runs (else the draft) at its ceiling.
+                        var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == current, attempt);
+                        var audience = await AudienceClientsAsync(admin, assistant.Id, attempt);
+                        Refuse(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId, AssistantRules.Ceiling(assistant, audience),
+                            await GatewayKeyRules.AssistantModelsAsync(admin, version, attempt), attempt));
+                    }
 
                     object after = confirmed ? new { assistant = AssistantAudit.Of(assistant), generalKnowledgeConfirmed = true } : AssistantAudit.Of(assistant);
                     return new AdminChange<Assistant>(assistant, "update", AuditEntityTypes.Assistant, assistant.Id, before, after)
@@ -127,7 +140,7 @@ public static class AssistantEndpoints
                 }, ct);
                 return await DetailAsync(admin, saved, ct);
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateAssistant").WithSummary("Change the assistant's own fields (a level change re-checks V3, V7, V8, V9, V36)");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateAssistant").WithSummary("Change the assistant's own fields (a level change re-checks V3, V7, V8, V9, V36, V39; a key change V39)");
 
         assistants.MapGet("/{id:guid}/draft", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
@@ -471,10 +484,13 @@ public static class AssistantEndpoints
     }
 
     private static async Task<IReadOnlyList<RuleProblem>> WarningsAsync(AdminContext admin, Assistant assistant, AssistantVersion draft, CancellationToken ct) =>
-        await AssistantRules.CheckAsync(admin, assistant, draft, await AudienceClientsAsync(admin, assistant.Id, ct), ct, publishing: true);
+    [
+        .. await AssistantRules.CheckAsync(admin, assistant, draft, await AudienceClientsAsync(admin, assistant.Id, ct), ct, publishing: true),
+        .. await GatewayKeyRules.WarningsAsync(admin, assistant.GatewayKeyId, ct), // V39's warnings: no key, a key with a system prompt
+    ];
 
     /// <summary>The first problem as the refusal (its code and params), with every problem in <c>problems</c>.</summary>
-    private static void Refuse(IReadOnlyList<RuleProblem> problems)
+    internal static void Refuse(IReadOnlyList<RuleProblem> problems)
     {
         if (problems.Count == 0)
         {
@@ -497,7 +513,7 @@ public static class AssistantEndpoints
             a.RetentionDays, a.State, published?.Number,
             draft is null ? null : new DraftInfo(draft.Number, draft.UpdatedAt, published is not null && draft.Number < published.Number, draft.Version.ToString(CultureInfo.InvariantCulture)),
             audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps),
-            await RerankersAsync(admin, ct), await AnswerCeilingAsync(admin, ct));
+            await RerankersAsync(admin, ct), await AnswerCeilingAsync(admin, ct), a.GatewayKeyId);
     }
 
     /// <summary>The platform answer ceiling <c>Settings.Chat.MaxAnswerTokens</c> (chat §6.3), null when unset: the Draft tab shows it when lower.</summary>
@@ -557,7 +573,8 @@ public sealed record RuleProblem(AdminErrorCode Code, IReadOnlyDictionary<string
 /// ≥ the level), V8's ceiling (the ladder of max(level, ceilings of the audience clients that store history)), V9
 /// (<c>sensitive</c> only for clients without history when the policy says so), V11 (≤ 20 collections, each of the
 /// assistant's department or shared with it, ≤ 20 topics per link in the chunk tag format), V15 (not-found texts and links), V17 (query step ranges), V34 (the definition resolves;
-/// description and contact set) and V36 (a <c>public</c> assistant with general knowledge needs <c>confirmGeneralKnowledge</c>, #445). Returned as problems: refusals on publish, warnings on draft save.
+/// description and contact set), V36 (a <c>public</c> assistant with general knowledge needs <c>confirmGeneralKnowledge</c>, #445)
+/// and V39's refusals (the gateway key, <see cref="GatewayKeyRules"/>). Returned as problems: refusals on publish, warnings on draft save.
 /// </summary>
 public static class AssistantRules
 {
@@ -646,6 +663,9 @@ public static class AssistantRules
         }
 
         problems.AddRange(await NotFoundAsync(admin, version.NotFound, ct));
+        // V39: the assistant's gateway key against this version's models at the V8 ceiling.
+        problems.AddRange(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId, Ceiling(assistant, audience),
+            await GatewayKeyRules.AssistantModelsAsync(admin, version, ct), ct));
         return problems;
     }
 
@@ -815,7 +835,7 @@ public sealed record DraftInfo(int Number, DateTimeOffset UpdatedAt, bool BaseCh
 public sealed record AssistantDto(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
     string HistoryMode, int RetentionDays, string State, int? PublishedVersion, DraftInfo? Draft, IReadOnlyList<Guid> AudienceClientIds, DateTimeOffset UpdatedAt,
-    string? UpdatedBy, string Version, string? GeneralKnowledge, IReadOnlyList<string> Rerankers, int? MaxAnswerTokens = null);
+    string? UpdatedBy, string Version, string? GeneralKnowledge, IReadOnlyList<string> Rerankers, int? MaxAnswerTokens = null, Guid? GatewayKeyId = null);
 
 public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<CollectionLink> CollectionLinks,
     IReadOnlyList<object> Warnings, DateTimeOffset UpdatedAt, string Version)
@@ -832,10 +852,10 @@ public sealed record DraftDto(int Number, string? GatewayModel, string SystemPro
 
 public sealed record AssistantAudit(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
-    string State, Guid? PublishedVersionId, Guid? DraftVersionId)
+    string State, Guid? PublishedVersionId, Guid? DraftVersionId, Guid? GatewayKeyId)
 {
     public static AssistantAudit Of(Assistant a) => new(a.Id, a.Slug, a.Name, a.Description, a.ContactName, a.ContactEmail, a.DepartmentId, a.OwnerTeamId,
-        a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId);
+        a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId, a.GatewayKeyId);
 }
 
 public sealed record DraftAudit(
@@ -863,6 +883,9 @@ public record AssistantFields : AdminRequest, IValidatableObject
     [StringLength(254), EmailAddress]
     public string? ContactEmail { get; init; }
 
+    /// <summary>The assigned gateway key its calls run as (V39; null = the service's credential key).</summary>
+    public Guid? GatewayKeyId { get; init; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (!Domain.Classification.IsValid(Classification))
@@ -877,6 +900,7 @@ public record AssistantFields : AdminRequest, IValidatableObject
         assistant.Description = string.IsNullOrWhiteSpace(Description) ? null : Description.Trim();
         assistant.ContactName = string.IsNullOrWhiteSpace(ContactName) ? null : ContactName.Trim();
         assistant.ContactEmail = string.IsNullOrWhiteSpace(ContactEmail) ? null : ContactEmail.Trim();
+        assistant.GatewayKeyId = GatewayKeyId;
     }
 }
 

@@ -94,9 +94,11 @@ public static class CollectionEndpoints
                         EmbeddingProfileId = profile,
                         ContactName = Contact(request.ContactName),
                         ContactEmail = Contact(request.ContactEmail),
+                        GatewayKeyId = request.GatewayKeyId,
                         UpdatedAt = admin.Now,
                         UpdatedBy = admin.Actor,
                     };
+                    await CheckGatewayKeyAsync(admin, collection, attempt);
                     admin.Db.Collections.Add(collection);
                     return new AdminChange<Collection>(collection, "create", AuditEntityTypes.Collection, collection.Id, null, CollectionAudit.Of(collection))
                     {
@@ -125,6 +127,13 @@ public static class CollectionEndpoints
                     collection.Classification = request.Classification;
                     collection.ContactName = Contact(request.ContactName);
                     collection.ContactEmail = Contact(request.ContactEmail);
+                    var recheckKey = request.GatewayKeyId != collection.GatewayKeyId || before.Classification != collection.Classification;
+                    collection.GatewayKeyId = request.GatewayKeyId;
+                    if (recheckKey)
+                    {
+                        await CheckGatewayKeyAsync(admin, collection, attempt);
+                    }
+
                     collection.UpdatedAt = admin.Now;
                     collection.UpdatedBy = admin.Actor;
                     return new AdminChange<Collection>(collection, "update", AuditEntityTypes.Collection, collection.Id, before, CollectionAudit.Of(collection))
@@ -134,7 +143,7 @@ public static class CollectionEndpoints
                 }, ct);
                 return await DetailAsync(admin, saved, ct);
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateCollection").WithSummary("Change a collection's name, owner team, level (V2, V3) or contact");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateCollection").WithSummary("Change a collection's name, owner team, level (V2, V3), contact or gateway key (V39)");
 
         collections.MapDelete("/{id:guid}", async (Guid id, [Microsoft.AspNetCore.Mvc.FromQuery] string? version, AdminContext admin, CancellationToken ct) =>
             {
@@ -291,6 +300,11 @@ public static class CollectionEndpoints
     }
 
     /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
+    /// <summary>V39 (admin design §4.6): the collection's gateway key against its models at its level's ceiling.</summary>
+    private static async Task CheckGatewayKeyAsync(AdminContext admin, Collection collection, CancellationToken ct) =>
+        AssistantEndpoints.Refuse(await GatewayKeyRules.CheckAsync(admin, collection.GatewayKeyId, collection.DepartmentId,
+            ResidencyCeiling.ForLevel(collection.Classification), await GatewayKeyRules.CollectionModelsAsync(admin, collection, ct), ct));
+
     private static async Task CheckDepartmentAsync(AdminContext admin, Guid departmentId, Guid? ownerTeamId, CancellationToken ct)
     {
         if (!await admin.Departments().AnyAsync(d => d.Id == departmentId, ct))
@@ -559,7 +573,7 @@ public sealed record CollectionUser(
 public sealed record CollectionDto(
     Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, JsonElement RetrievalSettings,
     DateTimeOffset? PublishedAt, string SharedWith, IReadOnlyList<Guid> SharedWithDepartmentIds, string? ContactName, string? ContactEmail, int DocumentCount,
-    IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
+    IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version, Guid? GatewayKeyId)
 {
     /// <summary>Always false: the detail is the owner's; a department it is shared with gets the <see cref="CollectionSummary"/> (<c>shared: true</c>).</summary>
     public bool Shared => false;
@@ -569,16 +583,17 @@ public sealed record CollectionDto(
         ArgumentNullException.ThrowIfNull(c);
         using var settings = JsonDocument.Parse(c.RetrievalSettings);
         return new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId, settings.RootElement.Clone(), c.PublishedAt,
-            c.SharedWith, shares, c.ContactName, c.ContactEmail, documentCount, usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
+            c.SharedWith, shares, c.ContactName, c.ContactEmail, documentCount, usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture),
+            c.GatewayKeyId);
     }
 }
 
 public sealed record CollectionAudit(
     Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, string RetrievalSettings,
-    DateTimeOffset? PublishedAt, string SharedWith, string? ContactName, string? ContactEmail)
+    DateTimeOffset? PublishedAt, string SharedWith, string? ContactName, string? ContactEmail, Guid? GatewayKeyId)
 {
     public static CollectionAudit Of(Collection c) => new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId,
-        c.RetrievalSettings, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail);
+        c.RetrievalSettings, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail, c.GatewayKeyId);
 }
 
 public sealed record CollectionCreateRequest : AdminRequest, IValidatableObject
@@ -604,6 +619,9 @@ public sealed record CollectionCreateRequest : AdminRequest, IValidatableObject
 
     [StringLength(254), EmailAddress]
     public string? ContactEmail { get; init; }
+
+    /// <summary>The assigned gateway key its indexing, re-embedding and evaluation run as (V39; null = the worker's credential key).</summary>
+    public Guid? GatewayKeyId { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -637,6 +655,9 @@ public sealed record CollectionUpdateRequest : AdminRequest, IValidatableObject
 
     [Required]
     public string? Version { get; init; }
+
+    /// <summary>The assigned gateway key its indexing, re-embedding and evaluation run as (V39; null = the worker's credential key).</summary>
+    public Guid? GatewayKeyId { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

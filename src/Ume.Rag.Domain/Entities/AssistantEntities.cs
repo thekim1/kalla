@@ -37,6 +37,12 @@ public sealed class Assistant
     public string? ContactEmail { get; set; }
     public Guid DepartmentId { get; set; }
     public Guid? OwnerTeamId { get; set; }
+
+    /// <summary>
+    /// The gateway's id of the assigned key every call of its turns and its test panel run as (cost-attribution §4; data-model §2.1): a row of
+    /// <see cref="GatewayKey"/>, checked by V39; null = the service's credential key. No FK: a revoked key leaves the mirror.
+    /// </summary>
+    public Guid? GatewayKeyId { get; set; }
     public required string Classification { get; set; }
     public string HistoryMode { get; set; } = HistoryModes.None;
     public int RetentionDays { get; set; } = 90;

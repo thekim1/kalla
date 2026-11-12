@@ -172,7 +172,8 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
             gatewayModel = "ume/chat-eu", systemPrompt = "Svara kort och hänvisa till källorna.", collectionLinks = new[] { new { collectionId, tags = Array.Empty<string>() } },
             version = assistant.GetProperty("draft").GetProperty("version").GetString(),
         }, Ct));
-        draft.GetProperty("warnings").GetArrayLength().ShouldBe(0);
+        // The pilot runs on the platform's credential key until a gateway key is chosen (V39's warning, B-36).
+        draft.GetProperty("warnings").EnumerateArray().Select(w => w.GetProperty("code").GetString()).ShouldBe([AdminErrorCodes.GatewayKeyRequired.Code]);
         var published = await Ok(await admin.PostAsJsonAsync($"/api/assistants/{assistantId}/publish", new
         {
             version = assistant.GetProperty("version").GetString(), draftVersion = draft.GetProperty("version").GetString(),
