@@ -33,10 +33,10 @@ mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
 failures=0
 ok() { echo "ok: $*"; }
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
-render() { # render FILE... — the merged configuration as JSON, with the renderer's profile on so its caps are checked
+render() { # render FILE... — the merged configuration as JSON, with the clamav and render profiles on (their caps too)
   local args=() f
   for f in "$@"; do args+=(-f "$d/$f"); done
-  docker compose "${args[@]}" --profile render config --format json
+  docker compose "${args[@]}" --profile clamav --profile render config --format json
 }
 bytes() { # bytes SIZE — Compose's byte count for 1.5g, 384m, ...
   awk -v s="$1" 'BEGIN { n = s + 0; u = substr(s, length(s));

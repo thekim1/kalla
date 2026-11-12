@@ -265,8 +265,24 @@ jobs:
           if docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --services | grep -qx rag-renderer; then
             echo "rag-renderer runs without the render profile"; exit 1
           fi
-          # deploy/host/docker-user-firewall.sh targets each network by its subnet.
-          { docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json
+          # ClamAV only with its profile (#535; init-deployment.sh adds it unless --clamav off), alone, with the renderer
+          # and with the ClamAV overlays; the worker's dependency on it is optional and its mode follows UME_RAG_CLAMAV_MODE.
+          ingestion=(-f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml)
+          for profiles in "clamav" "clamav render"; do
+            args=(); for p in $profiles; do args+=(--profile "$p"); done
+            docker compose "${ingestion[@]}" "${args[@]}" config --services | grep -qx rag-clamav
+          done
+          docker compose "${ingestion[@]}" -f deploy/compose.host-24g.yaml -f deploy/compose.clamav-conf.yaml \
+            --profile clamav --profile render config --quiet
+          if docker compose "${ingestion[@]}" --profile render config --services | grep -qx rag-clamav; then
+            echo "rag-clamav runs without the clamav profile"; exit 1
+          fi
+          docker compose "${ingestion[@]}" config --format json | jq -e '.services["rag-worker"]
+            | .environment.ClamAv__Mode == "on" and .depends_on["rag-clamav"].required == false' >/dev/null
+          UME_RAG_CLAMAV_MODE=off docker compose "${ingestion[@]}" config --format json \
+            | jq -e '.services["rag-worker"].environment.ClamAv__Mode == "off"' >/dev/null
+          # deploy/host/docker-user-firewall.sh targets each network by its subnet (mirror is ClamAV's, so its profile on).
+          { docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile clamav config --format json
             docker compose -f deploy/compose.openwebui.yaml config --format json; } \
             | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
           bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
@@ -285,7 +301,20 @@ jobs:
           sh deploy/kubernetes/sync-config.sh
           git diff --exit-code -- deploy/kubernetes || { echo "Run deploy/kubernetes/sync-config.sh and commit the copies"; exit 1; }
           kustomize deploy/kubernetes/base > /dev/null
-          kustomize deploy/kubernetes/example > /dev/null
+          kustomize deploy/kubernetes/example > "$RUNNER_TEMP/k8s-example.yaml"
+          # ClamAV is its own component, in the example by default with the worker's ClamAv__Mode on (#535); without it
+          # the overlay sets off, and nothing of rag-clamav is left but the worker's unused ClamAv__Host.
+          awk '/^---/ { k = "" } /^kind: / { k = $2 } k == "Deployment" && /^  name: rag-clamav$/ { f = 1 } END { exit !f }' \
+            "$RUNNER_TEMP/k8s-example.yaml"
+          grep -qx '  ClamAv__Mode: "on"' "$RUNNER_TEMP/k8s-example.yaml"
+          cp -R deploy/kubernetes "$RUNNER_TEMP/k8s-noclamav"
+          sed -i -e 's|^  - \.\./components/clamav$|  # - ../components/clamav|' -e 's|# - ClamAv__Mode=off|- ClamAv__Mode=off|' \
+            "$RUNNER_TEMP/k8s-noclamav/example/kustomization.yaml"
+          kustomize "$RUNNER_TEMP/k8s-noclamav/example" > "$RUNNER_TEMP/k8s-noclamav.yaml"
+          grep -qx '  ClamAv__Mode: "off"' "$RUNNER_TEMP/k8s-noclamav.yaml"
+          if grep -v -x '  ClamAv__Host: rag-clamav' "$RUNNER_TEMP/k8s-noclamav.yaml" | grep -q rag-clamav; then
+            echo "rag-clamav is rendered without components/clamav"; exit 1
+          fi
           cp -R deploy/kubernetes "$RUNNER_TEMP/k8s"
           sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' \
             -e 's|# - \.\./components/networkpolicies|- ../components/networkpolicies|' "$RUNNER_TEMP/k8s/example/kustomization.yaml"
@@ -316,7 +345,7 @@ jobs:
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "${v}_IMAGE"; done
-          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup --profile render config --images)"
+          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup --profile clamav --profile render config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
           # Kubernetes: every image of the example overlay with every component is pinned by digest.
@@ -333,7 +362,7 @@ jobs:
         # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the
         # gateway credential keys land one per service (a per-level key file left from before is deleted); the Open
         # WebUI files render with the generated deploy/.env; --render turns the renderer's profile and the worker's
-        # endpoint on together.
+        # endpoint on together; --clamav on|off sets the malware scan's profile, mode and confs, and a re-run keeps it.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
           for k in api admin worker owui-key owui-secret data-api; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
@@ -393,15 +422,44 @@ jobs:
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
           # The renderer (#505): with --render its profile is in deploy/.env and the worker has the endpoint; without, neither.
-          grep -qx 'COMPOSE_PROFILES=render' "$d/deploy/.env"
+          # The malware scan's profile clamav is on by default (#535), next to render.
+          grep -qx 'COMPOSE_PROFILES=clamav,render' "$d/deploy/.env"
+          grep -qx 'UME_RAG_CLAMAV_MODE=on' "$d/deploy/.env"
           docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer
+          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-clamav
           init > "$d/init.log"
           [ ! -e "$s/worker/Render__Endpoint" ]
-          grep -qx 'COMPOSE_PROFILES=' "$d/deploy/.env"
+          grep -qx 'COMPOSE_PROFILES=clamav' "$d/deploy/.env"
           grep -q 'Renderer: off' "$d/init.log"
           if docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer; then
             echo "rag-renderer runs without --render"; exit 1
           fi
+          if grep -q 'Malware scan' "$d/init.log"; then echo "the malware scan is named off by default"; exit 1; fi
+          # --clamav off (#535): UME_RAG_CLAMAV_MODE=off, no clamav profile (render stays as asked), no ClamAV confs or
+          # their overlay even with --host-memory 24 and --freshclam-proxy, and a note; a re-run without the option keeps
+          # off; --clamav on turns it on again. The 24 GB confs come from ../images/clamav, as in the repository.
+          mkdir -p "$d/images" && cp -r images/clamav "$d/images/"
+          init --host-memory 24 > "$d/init.log"
+          [ -e "$s/clamav/clamd.conf" ]
+          grep -q 'compose.clamav-conf.yaml' "$d/deploy/.env"
+          init --clamav off --render --host-memory 24 --freshclam-proxy proxy.example.se:3128 > "$d/init.log"
+          grep -qx 'UME_RAG_CLAMAV_MODE=off' "$d/deploy/.env"
+          grep -qx 'COMPOSE_PROFILES=render' "$d/deploy/.env"
+          [ ! -e "$s/clamav" ]
+          if grep -q 'compose.clamav-conf.yaml' "$d/deploy/.env"; then echo "the ClamAV overlay is listed with --clamav off"; exit 1; fi
+          grep -q 'Malware scan: off' "$d/init.log"
+          docker compose --env-file "$d/deploy/.env" config --format json | jq -e '(.services | has("rag-clamav") | not)
+            and .services["rag-worker"].environment.ClamAv__Mode == "off" and (.services | has("rag-renderer"))' >/dev/null
+          init > "$d/init.log"
+          grep -qx 'UME_RAG_CLAMAV_MODE=off' "$d/deploy/.env"
+          grep -qx 'COMPOSE_PROFILES=' "$d/deploy/.env"
+          grep -q 'Malware scan: off' "$d/init.log"
+          init --clamav on > "$d/init.log"
+          grep -qx 'UME_RAG_CLAMAV_MODE=on' "$d/deploy/.env"
+          grep -qx 'COMPOSE_PROFILES=clamav' "$d/deploy/.env"
+          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-clamav
+          if out="$(init --clamav maybe 2>&1)"; then echo "--clamav maybe was accepted"; exit 1; fi
+          grep -q -- '--clamav must be on or off' <<< "$out"
       - name: init-deployment.sh --proxy writes an nginx config that nginx accepts
         # deploy/proxy/nginx.conf.example in the gateway's shape (#468): rendered for rag-api, rag-admin and Open WebUI,
         # then nginx -t with throwaway certificates (the pinned image of the AppHost's fixture site).

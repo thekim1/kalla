@@ -44,6 +44,9 @@
 #   --crawl-allow CIDR[,CIDR]  private ranges the crawler may fetch (municipal hosts)
 #   --host-memory 16|24 [16]  the host profile of §6.2 (24 adds compose.host-24g.yaml and the ClamAV 24 GB confs)
 #   --freshclam-proxy HOST:PORT  freshclam reaches database.clamav.net through this HTTP proxy
+#   --clamav on|off [on]    the malware scan (the worker's ClamAv:Mode, UME_RAG_CLAMAV_MODE): on runs rag-clamav (the
+#                           Compose profile clamav); off runs none, writes no ClamAV confs, and the worker stores files
+#                           without a malware scan. A re-run without it, and --renew-certs, keep what deploy/.env says
 #   --render                rag-renderer for sources with fetch mode browser (COMPOSE_PROFILES=render and the worker's
 #                           Render__Endpoint); without it those sources wait with render.not_configured. --renew-certs
 #                           keeps what deploy/.env says
@@ -81,7 +84,7 @@ certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
 oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; api_host=""; admin_host=""
 api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; org_sync_file=""; org_sync_url=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
-crawl_allow=""; host_memory=16; freshclam_proxy=""; role="all"; render=0
+crawl_allow=""; host_memory=16; freshclam_proxy=""; clamav=""; role="all"; render=0
 owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
 owui_key_file=""; owui_rag_client=""; owui_data=""
 proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
@@ -115,6 +118,7 @@ while [ $# -gt 0 ]; do
     --crawl-allow) crawl_allow="$2"; shift 2;;
     --host-memory) host_memory="$2"; shift 2;;
     --freshclam-proxy) freshclam_proxy="$2"; shift 2;;
+    --clamav) clamav="$2"; shift 2;;
     --render) render=1; shift;;
     --openwebui-host) owui_host="$2"; shift 2;;
     --openwebui-oidc-client-id) owui_client="$2"; shift 2;;
@@ -151,6 +155,14 @@ case "$key_provider" in
   *) die "--key-provider $key_provider: only the file key provider exists until postponed decision K1 is made";;
 esac
 case "$freshclam_proxy" in ""|*:[0-9]*) ;; *) die "--freshclam-proxy must be HOST:PORT";; esac
+case "$clamav" in ""|on|off) ;; *) die "--clamav must be on or off";; esac
+# Without --clamav a re-run keeps the malware scan's mode from deploy/.env; a first run, or a deploy/.env without the
+# line, gets the default, on.
+if [ -z "$clamav" ] && [ -f "$env_file" ]; then
+  clamav="$(sed -n 's/^UME_RAG_CLAMAV_MODE=//p' "$env_file" | tail -n 1)"
+  case "$clamav" in ""|on|off) ;; *) die "UME_RAG_CLAMAV_MODE in $env_file must be on or off: pass --clamav on|off";; esac
+fi
+clamav="${clamav:-on}"
 case "$org_sync_url" in ""|https://*) ;; *) die "--org-sync-url must be an https:// URL";; esac
 for a in ${proxy_sources//,/ }; do
   [[ "$a" =~ ^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$ ]] || die "--proxy-address takes IPv4 addresses or CIDRs, comma-separated: $a"
@@ -259,9 +271,11 @@ if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
   . "$env_file"
   api_host="${UME_RAG_API_PUBLIC_URL#https://}"; api_host="${api_host%%[:/]*}"
   admin_host="${UME_RAG_ADMIN_PUBLIC_HOST:-$api_host}"
-  # The kept deploy/.env decides whether the renderer runs, so its endpoint follows the profile.
+  # The kept deploy/.env decides whether the renderer runs, so its endpoint follows the profile; and the malware scan's
+  # mode, for the closing notes.
   render=0
   case ",${COMPOSE_PROFILES:-}," in *,render,*) render=1;; esac
+  clamav="${UME_RAG_CLAMAV_MODE:-on}"
 fi
 # Internal names only: rag-worker's listener serves its health probe, rag-parser's the worker, postgres every service.
 if [ "$renew" = 1 ] || new_file "$certs/postgres/postgres.crt"; then issue postgres postgres; fi
@@ -404,11 +418,11 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
 fi
 
 # --- ClamAV confs (compose.clamav-conf.yaml): copies of the image's, written only when a setting differs -------------
-# Left as they are by --renew-certs.
+# Left as they are by --renew-certs; none with --clamav off, which runs no rag-clamav.
 clamav_conf=0
 if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
   :
-elif [ "$host_memory" = 24 ] || [ -n "$freshclam_proxy" ]; then
+elif [ "$clamav" = on ] && { [ "$host_memory" = 24 ] || [ -n "$freshclam_proxy" ]; }; then
   clamav_conf=1
   src=""
   for d in "$here/clamav" "$here/../images/clamav"; do
@@ -505,7 +519,8 @@ compose_files="$here/compose.prod.yaml:$here/compose.ingestion.yaml"
 [ "$clamav_conf" = 1 ] && compose_files="$compose_files:$here/compose.clamav-conf.yaml"
 [ "$rolling" = 1 ] && compose_files="$compose_files:$here/compose.rolling.yaml"
 profiles=""
-[ "$render" = 1 ] && profiles="render"
+[ "$clamav" = on ] && profiles="clamav"
+[ "$render" = 1 ] && profiles="${profiles:+$profiles,}render"
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   if [ -e "$env_file" ]; then
     mv "$env_file" "$env_file.bak"; echo "Existing .env saved as $(basename "$env_file").bak"
@@ -514,9 +529,13 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
 # Non-secret settings for the production Compose files. Secrets live in UME_RAG_SECRETS_DIR.
 # The files of this deployment: \`docker compose --env-file deploy/.env ...\` uses them without -f.
 COMPOSE_FILE=$compose_files
-# Optional services: render starts rag-renderer for browser sources (init-deployment.sh --render, which also gives the
-# worker its endpoint; set both together).
+# Optional services: clamav starts rag-clamav, the malware scan (init-deployment.sh --clamav on, with
+# UME_RAG_CLAMAV_MODE=on below); render starts rag-renderer for browser sources (init-deployment.sh --render, which
+# also gives the worker its endpoint). Change each only together with its counterpart: re-run init-deployment.sh.
 COMPOSE_PROFILES=$profiles
+# The worker's ClamAv:Mode: on scans every upload and fetched file, fail-closed (needs the clamav profile); off stores
+# them without a malware scan (production-setup.md, Malware scan).
+UME_RAG_CLAMAV_MODE=$clamav
 UME_RAG_HOST_MEMORY=$host_memory
 UME_RAG_CERTS_DIR=$certs
 UME_RAG_SECRETS_DIR=$secrets
@@ -655,6 +674,11 @@ render_note=""
 [ "$render" = 1 ] || render_note="
 Renderer: off, so sources with fetch mode browser wait with render.not_configured. Re-run with --render to start
 rag-renderer (production-setup.md, Renderer)."
+clamav_note=""
+[ "$clamav" = on ] || clamav_note="
+Malware scan: off (--clamav off), so no rag-clamav runs and files are stored without a malware scan; the admin UI
+marks them Not scanned for malware. Turning the scan on later (--clamav on) does not scan the files stored meanwhile
+(production-setup.md, Malware scan)."
 owui_note=""
 if [ -n "$owui_host" ]; then
   owui_todo=""
@@ -703,5 +727,5 @@ $own_step
   6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
   7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
-$proxy_note$rolling_note$gateway_note$render_note$owui_note
+$proxy_note$rolling_note$gateway_note$clamav_note$render_note$owui_note
 EOF

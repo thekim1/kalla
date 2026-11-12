@@ -2,7 +2,8 @@
 # with two slots of two threads, and the 24 GB Postgres memory settings, given on the command line so they override
 # the 16 GB values in postgresql.conf. Use it with compose.prod.yaml and compose.ingestion.yaml, together with
 # compose.clamav-conf.yaml (ConcurrentDatabaseReload and TestDatabases yes, which need the 3g limit below);
-# `init-deployment.sh --host-memory 24` writes those confs and lists all four files in COMPOSE_FILE.
+# `init-deployment.sh --host-memory 24` writes those confs and lists all four files in COMPOSE_FILE (with --clamav off
+# no confs and no compose.clamav-conf.yaml: rag-clamav does not run).
 # The rag-ingestion.slice cap goes from MemoryMax=7G to 11G (deploy/host/). It also restores the pilot's CPU caps
 # (postgres 3, parser 4), which the base files keep at 2 during development (§6.2).
 

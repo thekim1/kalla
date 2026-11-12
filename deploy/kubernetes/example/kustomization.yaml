@@ -12,8 +12,11 @@ components:
   # In-cluster Postgres (pgvector, pgBackRest). Remove this line to use your own (then edit the connection strings before
   # running create-secrets.sh; see docs/kubernetes.md).
   - ../components/datastores
-  # Worker, parser and ClamAV: crawling, uploads and parsing.
+  # Worker and parser: crawling, uploads and parsing.
   - ../components/ingestion
+  # ClamAV, the malware scan. To run without it, remove this line and set ClamAv__Mode=off in ume-rag-worker-config
+  # below: files are then stored unscanned (docs/kubernetes.md, Malware scan).
+  - ../components/clamav
   # The renderer for JavaScript-rendered pages (copy its seccomp profile to the nodes first; docs/kubernetes.md).
   # - ../components/renderer
   # NetworkPolicies for the flows in docs/network-and-ports.md; check the lines marked "change" in it first.
@@ -60,6 +63,8 @@ configMapGenerator:
     literals:
       # Private ranges the crawler may fetch (municipal hosts), comma-separated.
       - Crawl__AllowedPrivateRanges=
+      # Only without ../components/clamav: no malware scan.
+      # - ClamAv__Mode=off
 patches:
   # change: a ReadWriteMany storage class for the blob volume (rag-api, rag-admin and rag-worker mount it).
   - target: {kind: PersistentVolumeClaim, name: rag-blobs}

@@ -16,6 +16,9 @@
 #   - the renderer: with --render, rag-renderer runs healthy (COMPOSE_PROFILES=render), and then switching it off as
 #     the upgrade guide says (no profile, no endpoint, rm rag-renderer, restart rag-worker) leaves a healthy stack
 #     without it; without --render it never runs (#505)
+#   - the malware scan: rag-clamav runs healthy by default (COMPOSE_PROFILES has clamav, UME_RAG_CLAMAV_MODE=on), and
+#     then switching it off as init-deployment.sh --clamav off does (no clamav profile, UME_RAG_CLAMAV_MODE=off, rm
+#     rag-clamav) leaves the worker healthy with ClamAv__Mode=off and no rag-clamav container (#535)
 #
 #   deploy/tests/release-smoke.sh BUNDLE.tar.gz [options]
 #
@@ -36,7 +39,7 @@
 set -euo pipefail
 
 bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; docker_chown=0; keep=0; render=""
-usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --work-dir) work="$2"; shift 2;;
@@ -209,15 +212,15 @@ echo "== renderer"
 renderer="$(dc ps --format '{{.Service}} {{.Health}}' | awk '$1 == "rag-renderer" {print $2}')"
 if [ -n "$render" ]; then
   [ "$renderer" = healthy ] || fail "rag-renderer is '${renderer:-not running}' with --render, expected healthy"
-  grep -qx 'COMPOSE_PROFILES=render' "$deploy/.env" || fail "--render did not set COMPOSE_PROFILES=render in .env"
-  ok "rag-renderer healthy with COMPOSE_PROFILES=render"
+  grep -qx 'COMPOSE_PROFILES=clamav,render' "$deploy/.env" || fail "--render did not set COMPOSE_PROFILES=clamav,render in .env"
+  ok "rag-renderer healthy with COMPOSE_PROFILES=clamav,render"
 
   # The other half without a second boot: switch the renderer off as docs/upgrade-guide.md tells operators to. Its
   # first step, init-deployment.sh again without --render, needs root here (the files now belong to the containers'
   # users) and is checked on its own in verify.yml's deploy-checks; this applies its result (no profile, no endpoint)
   # and checks that the stack runs without the renderer.
   echo "== renderer off (no profile, no endpoint, rm rag-renderer, restart rag-worker)"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$deploy/.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=clamav/' "$deploy/.env"
   "${as_root[@]}" rm -f "$deploy/secrets/worker/Render__Endpoint"
   dc rm -sf rag-renderer >/dev/null
   dc restart rag-worker >/dev/null
@@ -226,9 +229,31 @@ if [ -n "$render" ]; then
   ok "renderer switched off: no rag-renderer, every service healthy again (browser sources: render.not_configured)"
 else
   [ -z "$renderer" ] || fail "rag-renderer runs without --render"
-  grep -qx 'COMPOSE_PROFILES=' "$deploy/.env" || fail "COMPOSE_PROFILES is not empty in .env without --render"
+  grep -qx 'COMPOSE_PROFILES=clamav' "$deploy/.env" || fail "COMPOSE_PROFILES is not just clamav in .env without --render"
   ok "no rag-renderer without --render (browser sources: render.not_configured)"
 fi
+
+echo "== malware scan"
+clamd="$(dc ps --format '{{.Service}} {{.Health}}' | awk '$1 == "rag-clamav" {print $2}')"
+[ "$clamd" = healthy ] || fail "rag-clamav is '${clamd:-not running}' by default, expected healthy"
+grep -qx 'UME_RAG_CLAMAV_MODE=on' "$deploy/.env" || fail "init-deployment.sh did not set UME_RAG_CLAMAV_MODE=on by default"
+ok "rag-clamav healthy by default (the clamav profile, UME_RAG_CLAMAV_MODE=on)"
+
+# The other mode without a second boot from scratch, as for the renderer: init-deployment.sh --clamav off needs root
+# here and is checked on its own in verify.yml's deploy-checks; this applies its result to deploy/.env (the clamav
+# profile out, UME_RAG_CLAMAV_MODE=off), removes rag-clamav and lets `up` recreate the worker with ClamAv__Mode=off.
+echo "== malware scan off (no clamav profile, UME_RAG_CLAMAV_MODE=off, rm rag-clamav)"
+sed -i -e '/^COMPOSE_PROFILES=/{s/=/=,/; s/,clamav\(,\|$\)/\1/; s/=,/=/}' \
+  -e 's/^UME_RAG_CLAMAV_MODE=.*/UME_RAG_CLAMAV_MODE=off/' "$deploy/.env"
+if grep -E '^COMPOSE_PROFILES=' "$deploy/.env" | grep -qw clamav; then fail "could not take clamav out of COMPOSE_PROFILES"; fi
+dc rm -sf rag-clamav >/dev/null
+dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy with the malware scan off"
+[ -z "$(dc ps -a --format '{{.Service}}' | grep -x rag-clamav || true)" ] || fail "a rag-clamav container exists with the scan off"
+worker="$(dc ps -q rag-worker)"
+[ "$(docker inspect -f '{{.State.Health.Status}}' "$worker")" = healthy ] || fail "rag-worker is not healthy with the scan off"
+docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$worker" | grep -qx 'ClamAv__Mode=off' \
+  || fail "rag-worker does not run with ClamAv__Mode=off"
+ok "malware scan off: no rag-clamav, rag-worker healthy with ClamAv__Mode=off (files stored unscanned)"
 
 echo
 echo "Smoke test passed for $name."

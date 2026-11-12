@@ -13,7 +13,8 @@ and connection strings `init-deployment.sh` generates work unchanged. Docker Com
 |---|---|
 | `base/` | rag-api and rag-admin (2 replicas each, rolling updates, PodDisruptionBudgets, probes on `/health/*`), their Services, the `rag-migrate` Job and the blob volume `rag-blobs` |
 | `components/datastores/` | Optional single-instance Postgres (StatefulSet with the `ume-rag/postgres` image: pgvector, pgBackRest and WAL archiving, as in Compose), TLS and separate database roles |
-| `components/ingestion/` | rag-worker (1 replica, stop-then-start), rag-parser and rag-clamav: crawling, uploads and parsing |
+| `components/ingestion/` | rag-worker (1 replica, stop-then-start) and rag-parser: crawling, uploads and parsing |
+| `components/clamav/` | rag-clamav, the malware scan, with its signature volume; in the example by default (below) |
 | `components/renderer/` | Optional rag-renderer for JavaScript-rendered pages (needs a seccomp profile on the nodes, below) |
 | `components/networkpolicies/` | Optional NetworkPolicies: default deny, then only the stack's own flows (below) |
 | `example/` | An overlay to copy: namespace, images, settings, Ingress, the blob volume's storage class |
@@ -78,7 +79,8 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
      annotations are for ingress-nginx; with Traefik use a ServersTransport, with the Gateway API an HTTPRoute and a
      BackendTLSPolicy. Pass the Host header through, turn off response buffering for rag-api (streamed answers) and
      request buffering for the admin host (uploads up to 60 MB).
-   - Optionally `../components/renderer`, `../components/networkpolicies`, more replicas, resources, node placement.
+   - Optionally `../components/renderer`, `../components/networkpolicies`, more replicas, resources, node placement;
+     or no malware scan (*Malware scan*, below).
 
 4. **Deploy:**
 
@@ -144,6 +146,23 @@ production prefer your platform's database service (Postgres 17 with pgvector 0.
   `create-secrets.sh` without `--datastores`, and remove the component from the overlay.
 - Backups (and the point-in-time restore of the runbook) are then your platform's.
 
+## Malware scan
+
+`components/clamav` runs `rag-clamav`, which the worker uses to scan every upload and fetched file (fail-closed); the
+example overlay includes it. The worker's mode is the ConfigMap literal `ClamAv__Mode` in `ume-rag-worker-config`:
+the base sets `on`, so a worker without `rag-clamav` fails closed and its files wait with `clamav.unavailable`. To run
+**without a malware scan**, do both in your overlay: remove `- ../components/clamav`, and uncomment
+`- ClamAv__Mode=off` under `ume-rag-worker-config` (the overlay's value replaces the base's). The worker then stores
+files unscanned and says so: a warning and security event 5106 at every start, *Not scanned for malware* in the admin
+UI ([production setup](production-setup.md), *Malware scan*, which also says what turning it on later does not do).
+The mode is not derived from the component on purpose: forgetting one of the two steps stops ingestion instead of
+silently storing unscanned files.
+
+Removing the component from an overlay that ran with it does not delete what `kubectl apply` created before:
+`kubectl -n ume-rag delete deployment,service,pvc -l app.kubernetes.io/component=rag-clamav` removes `rag-clamav` and
+its signature volume. To turn the scan on again, add the component back, remove the `ClamAv__Mode=off` line, and run
+`deploy.sh`; freshclam downloads the signatures first (several minutes), and files stored meanwhile stay unscanned.
+
 ## Renderer
 
 Chromium's sandbox needs user namespaces, which the runtime's default seccomp profile blocks, so `rag-renderer` uses the
@@ -164,7 +183,7 @@ namespaces (Ubuntu 23.10 and later), check that the pod becomes ready. The worke
 networks and host firewall allow: the Ingress controller to rag-api and rag-admin on 8443; the apps and `rag-migrate`
 to Postgres (5432); the worker to the parser (8000), clamd (3310) and the renderer (3000); DNS; outbound HTTPS from
 rag-api and rag-admin (gateway, IdP, Data API), HTTP and HTTPS from the worker (the crawl, the gateway) and from ClamAV
-(freshclam). The parser and the renderer get no egress at all. The flows are listed in
+(freshclam; its policy selects no pod without `components/clamav`). The parser and the renderer get no egress at all. The flows are listed in
 [Network and ports](network-and-ports.md).
 
 Before enabling it, adjust the lines marked `change` in `networkpolicies.yaml`:
@@ -194,5 +213,6 @@ in to the admin UI, ask a question, crawl a page).
 
 ## Tested
 
-The manifests render in CI (Kustomize 5.7.1, the example overlay with every component). No cluster run is
+The manifests render in CI (Kustomize 5.7.1, the example overlay with every component, and without
+`components/clamav`). No cluster run is
 recorded yet; record the first in `plans/work/results-a.md`.

@@ -259,6 +259,8 @@ Notes:
 - Add `--ca-file <file>` only if §4.4 showed a TLS error.
 - Add `--freshclam-proxy <host:port>` if the host reaches the Internet only through a proxy (ClamAV downloads its
   signatures from `database.clamav.net`).
+- The malware scan is on by default (`rag-clamav`); `--clamav off` runs without it and stores files unscanned
+  (production-setup.md, *Malware scan*). This guide assumes it is on.
 - `--host-memory 24` only on a host where RAG may use 24 GB next to the gateway.
 - The script prints the next steps and the Keycloak redirect URIs. Save its output (it contains no secrets) for the
   report.
