@@ -135,5 +135,5 @@ key budget stops its assistant with the planned message, and the per-level keys 
 | Q2 | Who keeps the delegating keys' team lists current? | **answered** (#580): there are no team lists; department admins make assigned keys themselves |
 | Q3 | Are hard budgets needed during the pilot? | open; default no: one department, stage 1 reports are enough. A key budget needs no Ume.Rag work once gateway phase 2 runs |
 | Q4 | Currency in Ume.Rag's reports | **answered** (#580): USD, the gateway's cost |
-| Q5 | Does the gateway bound acted requests by the credential key's `RequireMaxResidency` and `AllowedResidencies`? | open with the gateway owner (#580 review point 1); Ume.Rag does not rely on it (gateway-changes §5.3) |
+| Q5 | Does the gateway bound acted requests by the credential key's `RequireMaxResidency` and `AllowedResidencies`? | yes: decided by user, 2026-11-12 (#580); `RequireMaxResidency` when either key requires it, residencies intersected (gateway-changes §5.3) |
 | Q6 | Does `/v1/ume/context` list every active department with its member groups? | open with the gateway owner (to raise on #580); until then departments, teams and member groups come from the Data API (gateway-changes §5.5) |

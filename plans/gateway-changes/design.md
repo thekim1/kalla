@@ -389,17 +389,17 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 The assigned key's team's request policy applies, so a team system prompt would change Ume.Rag's prompts; the admin
 warns when the chosen key has one (`has_system_prompt`, admin §5.5.4).
 
-**Residency bound on acted requests: requested in #580, pending the gateway's answer.** As the gateway's design stands,
-the credential key's own model and residency lists do not apply to a request made as an assigned key. Ume.Rag asked
-(review point 1 on #580) that:
+**Residency bound on acted requests (decided by user, 2026-11-12, #580; gateway phase 2).** The credential key's own
+model list does not apply to a request made as an assigned key, but its residency settings do:
 
 1. the credential key's `RequireMaxResidency` keeps applying to acted requests (`400` without the header);
 2. the credential key's `AllowedResidencies` stays an **upper bound**: the effective residencies are the assigned
    key's intersected with the credential key's (the credential key's model list may stay out of it).
 
 With both, the worker's `Eu`-capped credential key keeps the worker below `External` at the gateway too, and a stolen
-credential reaches no more than its own residencies. Until the gateway answers, Ume.Rag does not count on either:
-its own ceiling header and `x-ume-residency` check carry the residency rule alone (identity §4.7).
+credential reaches no more than its own residencies. Ume.Rag's own ceiling header and `x-ume-residency` check stay
+(identity §4.7); this is the gateway-side guard beside them. Until the gateway release with it is deployed, Ume.Rag
+sends no `x-ume-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
 
 ### 5.4 Budgets, rate limits and cost
 

@@ -564,13 +564,14 @@ runs as the credential key. The answer must echo the id sent: a missing or diffe
 call before a byte is used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an
 older gateway instance during a rolling update ignores the header and would charge the credential key).
 
-**What Ume.Rag relies on, and what is pending.** The ceiling header and the `x-ume-residency` check are Ume.Rag's
-residency rule on every call, acted or not, and hold whatever a key's admins change. As the gateway's design stands,
-the credential key's own `RequireMaxResidency` and `AllowedResidencies` do not apply to a request made as an assigned
-key, which then gets the assigned key's residencies. Ume.Rag asked that both keep bounding acted requests (the
-effective residencies the assigned key's ∩ the credential key's): **requested in #580, pending the gateway's answer**
-(gateway design §5.3). Until it is granted, the handler below is the only guard that keeps an acted call within its
-level, so it is required on every gateway client and tested at every call site.
+**Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every
+call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
+assigned key needs `x-ume-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
+residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3, gateway
+phase 2). Each service's credential key is therefore capped at the highest level that service serves: the worker's at
+`Eu` (it never sends `External`), rag-api's and rag-admin's at the highest level their assistants may use (`Eu`
+while `Gateway:MaxResidency` is `Eu`). The
+handler below stays required on every gateway client and tested at every call site.
 
 A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
 ceiling, or with a ceiling above the service's maximum (the worker: `Eu`; until phase 1: the ceiling must match the

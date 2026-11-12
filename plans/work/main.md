@@ -176,8 +176,9 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     cost and budget status per assistant and knowledge base (`src/Ume.Rag.AdminApi/**`, the two views); the
     FakeGateway's `/integration/v1`.
 - **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
-- **Waits on:** the gateway's phase PRs (user). Open with the gateway owner on #580: the residency bound on acted
-  requests (review point 1) and every department with its member groups in the context (gateway-changes §5.5).
+- **Waits on:** the gateway's phase PRs (user); phase 2 also on the residency intersection being in it (decided
+  2026-11-12, #580). Open with the gateway owner on #580: every department with its member groups in the context
+  (gateway-changes §5.5).
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
   cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
   repo-and-deployment §4.3.

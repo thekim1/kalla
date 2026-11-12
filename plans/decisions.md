@@ -312,8 +312,10 @@ file, with `AllowedIpRanges` and `RequireMaxResidency`. A call for an assistant 
 `x-ume-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
 usage record); the answer's echo of the header is checked, and a missing or different echo fails closed
 (`Gateway:RequireDelegationEcho`). Every call still sends `x-ume-max-residency` from the data's level, and the worker
-never sends `External`. Ume.Rag relies on the gateway keeping `RequireMaxResidency` on acted requests and bounding them
-by the credential key's `AllowedResidencies`: requested in #580, pending the gateway's answer. An assigned key cannot
+never sends `External`. The gateway bounds an acted request by the credential key too: `RequireMaxResidency` applies
+when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
+user, 2026-11-12, #580; gateway phase 2). So each service's credential key is capped at the highest level it serves
+(the worker's at `Eu`). An assigned key cannot
 authenticate by itself, so nothing per assistant is copied, stored or rotated in Ume.Rag. Each setting has one owner:
 departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,
 rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
