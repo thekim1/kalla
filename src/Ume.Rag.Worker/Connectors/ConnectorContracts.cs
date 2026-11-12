@@ -185,6 +185,12 @@ public sealed record FetchFacts(Uri? FinalUrl, string CanonicalIdentity, IReadOn
 
     /// <summary><c>Documents.FetchMode</c>: <c>browser</c> when the content is the rendered DOM (connectors design §8.1).</summary>
     public string FetchMode { get; init; } = Domain.Entities.FetchModes.Http;
+
+    /// <summary>
+    /// An upload's: when its bytes passed the malware scan; null when they were not scanned (<c>ClamAv:Mode = off</c>), so
+    /// the slot goes <c>unscanned</c> instead of <c>clean</c> (connectors design §9.1).
+    /// </summary>
+    public DateTimeOffset? ScannedAt { get; init; }
 }
 
 /// <summary>What one fetch produced (§2.1, outcomes §15). Reasons are <c>&lt;area&gt;.&lt;code&gt;</c>, never library text.</summary>

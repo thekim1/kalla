@@ -7,6 +7,7 @@ public enum UploadState
 {
     Received,
     Clean,
+    Unscanned,
     Malware,
     Refused,
     Indexed,
@@ -41,6 +42,9 @@ public sealed record UploadSlot
     public UploadState State { get; init; } = UploadState.Received;
 
     public string? Reason { get; init; }
+
+    /// <summary>When the current bytes passed a malware scan; an add or a replace clears it, <c>indexed</c> keeps it (§9.1).</summary>
+    public DateTimeOffset? ScannedAt { get; init; }
 
     public Guid? DocumentId { get; init; }
 

@@ -13,8 +13,13 @@ public interface IUploadSlotWriter
     /// <summary>Upserts the slots by <c>Id</c>; a re-planned batch writes the same rows again.</summary>
     Task WriteAsync(IReadOnlyList<UploadSlot> slots, CancellationToken cancellationToken);
 
-    /// <summary>The fetch stage's verdict on a slot: <c>clean</c>/<c>malware</c>/<c>refused</c>/<c>indexed</c>, the sniffed type and reason.</summary>
-    Task SetStateAsync(Guid uploadId, UploadState state, string? sniffedMediaType, string? reason, Guid? documentId, CancellationToken cancellationToken);
+    /// <summary>
+    /// The fetch stage's verdict on a slot's bytes (<paramref name="sha256"/>, lower-case hex), written only while the slot
+    /// still holds them and is not deleted: <c>clean</c> with <paramref name="scannedAt"/>, <c>unscanned</c> (the scan is off)
+    /// or another state without it, the sniffed type and reason.
+    /// </summary>
+    Task SetStateAsync(Guid uploadId, string sha256, UploadState state, DateTimeOffset? scannedAt, string? sniffedMediaType, string? reason, Guid? documentId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary><c>content."Uploads"</c>, one row per slot (connectors design §9.1).</summary>
@@ -22,27 +27,27 @@ public sealed class PostgresUploadStore(JobDatabase database) : IUploadSlotReade
 {
     private const string ListSql = """
         SELECT "Id", "SourceId", "Classification", "BatchId", "FileName", "DeclaredMediaType", "SniffedMediaType", "Bytes", "Sha256",
-               "State", "Reason", "DocumentId", "UploadedBy", "UploadedAt", "ReplacedAt", "DeletedAt"
+               "State", "Reason", "DocumentId", "UploadedBy", "UploadedAt", "ReplacedAt", "DeletedAt", "ScannedAt"
         FROM content."Uploads" WHERE "SourceId" = $1
         """;
 
     private const string UpsertSql = """
         INSERT INTO content."Uploads" ("Id", "SourceId", "Classification", "BatchId", "FileName", "DeclaredMediaType", "SniffedMediaType",
-                                      "Bytes", "Sha256", "State", "Reason", "DocumentId", "UploadedBy", "UploadedAt", "ReplacedAt", "DeletedAt")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                                      "Bytes", "Sha256", "State", "Reason", "DocumentId", "UploadedBy", "UploadedAt", "ReplacedAt", "DeletedAt", "ScannedAt")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT ("Id") DO UPDATE
            SET "BatchId" = EXCLUDED."BatchId", "FileName" = EXCLUDED."FileName", "DeclaredMediaType" = EXCLUDED."DeclaredMediaType",
                "SniffedMediaType" = EXCLUDED."SniffedMediaType", "Bytes" = EXCLUDED."Bytes", "Sha256" = EXCLUDED."Sha256",
                "State" = EXCLUDED."State", "Reason" = EXCLUDED."Reason", "DocumentId" = coalesce(EXCLUDED."DocumentId", content."Uploads"."DocumentId"),
                "UploadedBy" = EXCLUDED."UploadedBy", "UploadedAt" = EXCLUDED."UploadedAt", "ReplacedAt" = EXCLUDED."ReplacedAt",
-               "DeletedAt" = EXCLUDED."DeletedAt"
+               "DeletedAt" = EXCLUDED."DeletedAt", "ScannedAt" = EXCLUDED."ScannedAt"
          WHERE content."Uploads"."SourceId" = EXCLUDED."SourceId"
         """;
 
     private const string StateSql = """
         UPDATE content."Uploads"
-           SET "State" = $2, "SniffedMediaType" = coalesce($3, "SniffedMediaType"), "Reason" = $4, "DocumentId" = coalesce($5, "DocumentId")
-         WHERE "Id" = $1
+           SET "State" = $3, "ScannedAt" = $4, "SniffedMediaType" = coalesce($5, "SniffedMediaType"), "Reason" = $6, "DocumentId" = coalesce($7, "DocumentId")
+         WHERE "Id" = $1 AND "Sha256" = $2 AND "DeletedAt" IS NULL
         """;
 
     public async Task<IReadOnlyList<UploadSlot>> ListAsync(Guid sourceId, CancellationToken cancellationToken)
@@ -71,6 +76,7 @@ public sealed class PostgresUploadStore(JobDatabase database) : IUploadSlotReade
                 UploadedAt = reader.GetFieldValue<DateTimeOffset>(13),
                 ReplacedAt = Db.Nullable<DateTimeOffset>(reader, 14),
                 DeletedAt = Db.Nullable<DateTimeOffset>(reader, 15),
+                ScannedAt = Db.Nullable<DateTimeOffset>(reader, 16),
             });
         }
 
@@ -96,7 +102,7 @@ public sealed class PostgresUploadStore(JobDatabase database) : IUploadSlotReade
                     Db.P(slot.Id), Db.P(slot.SourceId), Db.P(slot.Classification), Db.P(slot.BatchId), Db.P(slot.FileName),
                     Db.P(slot.DeclaredMediaType), Db.P(slot.SniffedMediaType), Db.P(slot.Bytes), Db.P(Db.Bytes(slot.Sha256)), Db.P(Db.Text(slot.State)),
                     Db.P(slot.Reason), Db.P(slot.DocumentId), Db.P(slot.UploadedBy), Db.P(slot.UploadedAt.ToUniversalTime()),
-                    Db.P(Db.Utc(slot.ReplacedAt)), Db.P(Db.Utc(slot.DeletedAt)),
+                    Db.P(Db.Utc(slot.ReplacedAt)), Db.P(Db.Utc(slot.DeletedAt)), Db.P(Db.Utc(slot.ScannedAt)),
                 },
             };
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -105,12 +111,16 @@ public sealed class PostgresUploadStore(JobDatabase database) : IUploadSlotReade
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task SetStateAsync(Guid uploadId, UploadState state, string? sniffedMediaType, string? reason, Guid? documentId, CancellationToken cancellationToken)
+    public async Task SetStateAsync(Guid uploadId, string sha256, UploadState state, DateTimeOffset? scannedAt, string? sniffedMediaType, string? reason,
+        Guid? documentId, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(StateSql, connection)
         {
-            Parameters = { Db.P(uploadId), Db.P(Db.Text(state)), Db.P(sniffedMediaType), Db.P(reason), Db.P(documentId) },
+            Parameters =
+            {
+                Db.P(uploadId), Db.P(Db.Bytes(sha256)), Db.P(Db.Text(state)), Db.P(Db.Utc(scannedAt)), Db.P(sniffedMediaType), Db.P(reason), Db.P(documentId),
+            },
         };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

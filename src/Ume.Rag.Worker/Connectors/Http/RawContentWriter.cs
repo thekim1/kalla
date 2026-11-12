@@ -14,7 +14,8 @@ public sealed record StoredContent(FetchOutcome Outcome, PageLinks? Links);
 
 /// <summary>
 /// The store step of <see cref="PageFetcher"/>, which every HTTP connector shares (connectors design §11, §12): files are
-/// malware-scanned before they are stored (fail closed; a finding goes to <c>quarantine/{sourceId}/{sha256}</c>), the
+/// malware-scanned before they are stored (fail closed; a finding goes to <c>quarantine/{sourceId}/{sha256}</c>; with
+/// <c>ClamAv:Mode = off</c> they are stored unscanned), the
 /// content hash is taken over noise-normalised HTML or the raw bytes, and the raw blob is written once under
 /// <c>raw/{level}/{contentHash}</c>. A crawl also gets the page's links, extracted before normalisation (with the links a
 /// rendered page discovered besides its <c>&lt;a href&gt;</c>, §8.3) and stored next to the raw blob (§5.4), and an HTML
