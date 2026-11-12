@@ -121,7 +121,7 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
   --gateway-url https://llm.intern.umea.se --ca-file municipal-ca.pem \
   --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
   --gateway-credential-key-file worker=rag-worker.key \
-  --org-sync-url https://llm-data.intern.umea.se --org-sync-key-file org-sync.key --crawl-allow 10.20.0.0/16 \
+  --crawl-allow 10.20.0.0/16 \
   --backup-target /mnt/backup/ume-rag --host-memory 24 --freshclam-proxy proxy.intern.umea.se:8080 \
   --allow-file-keys --yes
 ```
@@ -153,8 +153,6 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--gateway-url URL` | prompted | the LLM gateway (HTTPS): `UME_RAG_GATEWAY_URL` |
 | `--ca-file FILE` | – | appended to the trust store of api, admin and worker: the gateway's CA and your PKI chain |
 | `--gateway-credential-key-file SERVICE=FILE` | – | `SERVICE`'s credential key of the gateway integration *Ume.Rag* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service): `secrets/SERVICE/Gateway__Key`. A gateway admin issues the three keys (*Gateway credential keys*, below). A service without one has its model calls refused |
-| `--org-sync-url URL` | – | the gateway's Data API (HTTPS, without `/v1`; its own service, often its own host and port 10443): `UME_RAG_ORG_SYNC_URL` → `OrgSync__BaseUrl`, on the firewall's `llm` list. Without it the org sync and the model catalogue sync stay off |
-| `--org-sync-key-file FILE` | – | the gateway Data API key for the admin's organisation sync (`catalog.read` only) |
 | `--key-provider file` | `file` | the only key provider until postponed decision K1 |
 | `--allow-file-keys` | – | required: accepts that the blob master key lives in a file on this host (pilot and test hosts) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` and the upload copy (below) |

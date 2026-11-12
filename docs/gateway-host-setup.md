@@ -76,9 +76,7 @@ Collect these before you start. Files go in a directory outside the checkout tha
 | Input | Where it comes from | How it is used |
 |---|---|---|
 | `<gateway url>` | the gateway's public HTTPS address (its admin UI is a different host) | `--gateway-url` |
-| `<data api url>` | the gateway's Data API (`/v1/catalog/*`), a service of its own: its public HTTPS address, or `https://<gateway host>:10443` by default. Not the gateway URL | `--org-sync-url` |
-| Three credential keys of the gateway integration *Ume.Rag*, one each for `api`, `admin`, `worker` | a gateway admin, as [production-setup.md](production-setup.md), *Gateway credential keys*, says: `RequireMaxResidency` on, this host's address in the address list, **allowed residencies `OnPrem` and `Eu` only**, PII policy `Off` or `Allow`, and the scope `organisation.read` on the admin's key only | files `~/rag-inputs/rag-api.key`, `rag-admin.key`, `rag-worker.key` (the key alone, one line) |
-| A gateway Data API key with `catalog.read` | gateway admin UI (Data API keys) | `~/rag-inputs/org-sync.key`; the admin syncs departments and the model catalogue with it |
+| Three credential keys of the gateway integration *Ume.Rag*, one each for `api`, `admin`, `worker` | a gateway admin, as [production-setup.md](production-setup.md), *Gateway credential keys*, says: `RequireMaxResidency` on, this host's address in the address list, **allowed residencies `OnPrem` and `Eu` only**, PII policy `Off` or `Allow`, and the scope `organisation.read` on the admin's key only (its organisation and model syncs read the gateway with it) | files `~/rag-inputs/rag-api.key`, `rag-admin.key`, `rag-worker.key` (the key alone, one line) |
 | `<keycloak url>/realms/ume` | the Keycloak on this host (realm `ume`, shared with the gateway) | `--oidc-authority`. If realm `ume` doesn't exist yet, use `https://keycloak.invalid/realms/ume`: the stack runs, only admin sign-in fails |
 | `<rag host>` | the host's DNS name | `--api-host`, `--admin-host` |
 | Backup target | agreed with IT: a mounted share (`/mnt/backup/ume-rag`), an S3 bucket, or `local` (a Docker volume on the same disk: test hosts only) | `--backup-target` |
@@ -245,8 +243,6 @@ sudo ./deploy/init-deployment.sh \
   --gateway-credential-key-file api="$HOME/rag-inputs/rag-api.key" \
   --gateway-credential-key-file admin="$HOME/rag-inputs/rag-admin.key" \
   --gateway-credential-key-file worker="$HOME/rag-inputs/rag-worker.key" \
-  --org-sync-url '<data api url>' \
-  --org-sync-key-file "$HOME/rag-inputs/org-sync.key" \
   --backup-target '<backup target>' \
   --host-memory 16 --allow-file-keys --yes
 ```
@@ -412,7 +408,7 @@ docker compose --env-file deploy/.env logs --since 30m rag-worker | grep -v -i '
 | Stop RAG, keep all data | `docker compose --env-file deploy/.env down` |
 | Start again | `docker compose --env-file deploy/.env up -d --wait` |
 | Update to a newer commit | `git pull`, rebuild the images (§5), re-run `sudo ./deploy/init-deployment.sh … --yes` with the same options (keeps secrets), re-append §7's lines if they're gone, `sudo deploy/host/install.sh`, then `up -d --wait` |
-| Remove RAG completely (HUMAN: deletes its data) | `docker compose --env-file deploy/.env down -v`, `sudo deploy/host/docker-user-firewall.sh --remove`, `sudo systemctl disable --now rag-firewall.timer rag-firewall.service rag-backup.timer rag-backup-status.timer` (and the other `rag-*` units `systemctl list-units 'rag-*'` shows), then delete the checkout. Ask the gateway admin to revoke the three RAG keys and the Data API key |
+| Remove RAG completely (HUMAN: deletes its data) | `docker compose --env-file deploy/.env down -v`, `sudo deploy/host/docker-user-firewall.sh --remove`, `sudo systemctl disable --now rag-firewall.timer rag-firewall.service rag-backup.timer rag-backup-status.timer` (and the other `rag-*` units `systemctl list-units 'rag-*'` shows), then delete the checkout. Ask the gateway admin to revoke the three RAG keys |
 
 None of these touch the gateway's Compose project, volumes or networks.
 

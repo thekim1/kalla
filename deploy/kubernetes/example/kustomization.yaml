@@ -48,9 +48,8 @@ configMapGenerator:
   - name: ume-rag-admin-config
     behavior: merge
     literals:
-      # change: your identity provider (docs/production-setup.md, Sign-in) and the gateway's Data API.
+      # change: your identity provider (docs/production-setup.md, Sign-in).
       - Oidc__Authority=https://idp.example.se/realms/ume
-      - OrgSync__BaseUrl=https://llm-data.example.se
       # - Oidc__RoleGroups__rag-platform-admin=GG-Rag-Admins
       # - Oidc__TenantId=<Entra tenant id>
   - name: ume-rag-migrations-config

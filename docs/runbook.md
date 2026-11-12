@@ -339,24 +339,22 @@ that can read packages.
 |---|---|
 | `UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL` | required: rag-api's public host name and URL (`https://rag.example.se:8543`) |
 | `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says; without one that service's model calls are refused, so deploy once, issue the keys, add them and update the stack |
-| `COMPOSE_PROFILES` | `data,clamav`: the gateway's Data API, which RAG's admin reads for the model catalogue and org sync, and `rag-clamav`, the malware scan; `data,clamav,render` adds the renderer. Without `clamav` the worker's files wait with `clamav.unavailable`, unless `UME_RAG_CLAMAV_MODE` is `off` |
+| `COMPOSE_PROFILES` | `clamav`: `rag-clamav`, the malware scan; `clamav,render` adds the renderer. Without `clamav` the worker's files wait with `clamav.unavailable`, unless `UME_RAG_CLAMAV_MODE` is `off` |
 | `UME_RAG_CLAMAV_MODE` | `on` (default) or `off`: `off`, with `clamav` left out of `COMPOSE_PROFILES`, stores files without a malware scan ([production-setup.md](production-setup.md), *Malware scan*) |
-| `UME_RAG_ORG_SYNC_KEY` | a Data API key with `catalog.read`; without it model settings cannot be saved |
 | `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024; `UME_RAG_EMBEDDING_REQUEST_DIMENSIONS`, default `true`, sends `dimensions`: set `false` for a model without that parameter, such as `bge-m3`). Seeded once: changing these later does not change the profile (`docs/gateway-host-setup.md` §13). Every RAG credential key must allow this model, and its deployment must be marked `Eu` |
 | `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group that grants platform admin (the other roles: `_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER`, `_VIEWER`) |
 
 The optional ones (ports, a separate admin host, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image overrides
 `RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
-network and reach it at `https://gateway:8443`, trusting the gateway's internal CA. The gateway's Data API is not on
-`llm`, so the stack adds one network to the gateway's part: `dataapi` joins `rag-dataapi` (internal), which only
-rag-admin shares, and rag-admin reaches it at `https://dataapi:8443`. That join is the only change to the gateway's
-file; a standalone gateway keeps its own.
+network and reach it at `https://gateway:8443`, trusting the gateway's internal CA; rag-admin's organisation and model
+syncs call it there with `UME_RAG_ADMIN_GATEWAY_KEY` (scope `organisation.read`). The gateway's part of the file is
+the gateway's own, unchanged.
 
 **Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
 key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are never regenerated, service
 certificates are re-issued when they expire within 30 days or the host names change. The secrets that follow a
-variable (the gateway credential keys, the Data API key, the OIDC client secret) are written again on every deploy,
+variable (the gateway credential keys, the OIDC client secret) are written again on every deploy,
 and removed when the variable is emptied; they live in the stack's environment, so restrict who can view it. The
 services read them at start: after changing one, restart the service that uses it.
 

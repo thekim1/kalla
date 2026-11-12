@@ -23,6 +23,23 @@ exception, with its own steps.
   `UME_RAG_*GATEWAY_KEY_<level>` variables, update the stack with the new stack file (`rag-bootstrap` deletes the old
   files), then restart rag-api, rag-admin and rag-worker. **Check:** no service's log shows `gateway_key_missing` or a
   gateway `401`.
+- **The gateway's Data API is no longer used (#580, B-35, A-30).** rag-admin syncs the organisation, its gateway keys
+  and the models from the gateway's `GET /v1/ume/context` and `GET /v1/models` with its credential key, which needs the
+  scope `organisation.read` (production-setup.md, *Gateway credential keys*). The Data API key
+  (`secrets/admin/OrgSync__DataApiKey`), `UME_RAG_ORG_SYNC_URL` and rag-admin's `OrgSync__BaseUrl` are gone, and
+  `init-deployment.sh` refuses `--org-sync-url` and `--org-sync-key-file`. **Apply:** have the gateway admin give the
+  admin's credential key the scope `organisation.read` if it lacks it. Re-run `init-deployment.sh` with your options
+  minus those two: it deletes the Data API key file and names it; ask the gateway admin to revoke that Data API key.
+  Then `dc up -d --wait` (rag-admin is recreated without `OrgSync__BaseUrl`); the host firewall drops the Data API from
+  `llm` on its next run (`sudo systemctl start rag-firewall.service` for now). Kubernetes: remove `OrgSync__BaseUrl`
+  from your overlay's `ume-rag-admin-config`, re-run `init-deployment.sh` as above, then `create-secrets.sh` (the key
+  leaves `ume-rag-admin-secrets`) and `kubectl rollout restart deployment/rag-admin`; the Data API's port can leave
+  your egress rules. Portainer: remove `UME_RAG_ORG_SYNC_KEY` (and `UME_RAG_ORG_SYNC_URL` if set), drop `data` from
+  `COMPOSE_PROFILES` unless the gateway's Data API serves something else, and update the stack with the new stack file
+  (`rag-bootstrap` deletes the key file and logs it; the network `rag-dataapi` is no longer in the file); then restart
+  rag-admin and ask the gateway admin to revoke the Data API key. **Check:** `secrets/admin/OrgSync__DataApiKey` is
+  gone, and the admin UI's Gateway page (`GET /api/gateway/status`) shows a recent successful organisation sync with
+  no `degraded` reason.
 - **Migration `UploadScannedAt` (#535, B-47).** It adds `content."Uploads"."ScannedAt"` and lets the upload state
   be `unscanned`. Additive: the previous release runs against it. Files uploaded before the migration have no
   `ScannedAt`, although they were scanned; once the admin UI shows *Not scanned for malware* (later in this
@@ -38,7 +55,7 @@ exception, with its own steps.
   keep the mode in `deploy/.env`. Kubernetes: `rag-clamav` moved from `components/ingestion` to `components/clamav`;
   add `- ../components/clamav` to your overlay's components (as in `example/`), or, to run without the scan, set
   `ClamAv__Mode=off` in its `ume-rag-worker-config` and delete the old resources (kubernetes.md, *Malware scan*).
-  Portainer: add `clamav` to `COMPOSE_PROFILES` (for example `data,clamav`), or set `UME_RAG_CLAMAV_MODE=off`, and
+  Portainer: add `clamav` to `COMPOSE_PROFILES`, or set `UME_RAG_CLAMAV_MODE=off`, and
   update the stack with the new stack file. **Check:** `dc ps rag-clamav` is healthy (or absent with `--clamav off`,
   where the worker logs that the scan is off at its start).
 

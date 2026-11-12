@@ -6,11 +6,10 @@
 # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
 # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
 # re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
-# credential keys, the Data API key, the OIDC client secret) are written again on every start, and removed when the
-# variable is empty.
+# credential keys, the OIDC client secret) are written again on every start, and removed when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
-# volume, mounted at /gateway-certs), so https://gateway:8443 and https://dataapi:8443 verify.
+# volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
 set -eu
 umask 077
 C=/certs
@@ -109,7 +108,11 @@ for svc in api admin worker; do
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
-put admin OrgSync__DataApiKey "${UME_RAG_ORG_SYNC_KEY:-}"
+# The Data API key of the admin's former org sync: the admin syncs with its credential key now.
+if [ -e "$S/admin/OrgSync__DataApiKey" ]; then
+  rm -f "$S/admin/OrgSync__DataApiKey"
+  echo "rag-bootstrap: deleted admin/OrgSync__DataApiKey; ask the gateway admin to revoke that Data API key"
+fi
 
 # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
 mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations"
@@ -132,5 +135,4 @@ chmod 755 "$C" "$S"
 missing=""
 for svc in api admin worker; do [ -e "$S/$svc/Gateway__Key" ] || missing="$missing $svc"; done
 [ -z "$missing" ] || echo "rag-bootstrap: no gateway credential key for${missing}: set UME_RAG_<SERVICE>_GATEWAY_KEY"
-[ -e "$S/admin/OrgSync__DataApiKey" ] || echo "rag-bootstrap: no UME_RAG_ORG_SYNC_KEY: the model catalogue and org sync stay off"
 echo "rag-bootstrap: certificates and secrets ready"

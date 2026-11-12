@@ -38,7 +38,6 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
        --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
        --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
        --gateway-credential-key-file worker=rag-worker.key \
-       --org-sync-url https://llm-data.example.se --org-sync-key-file data-api.key \
        --oidc-client-secret-file ume-rag-admin.secret --backup-target s3://s3.example.se/ume-rag \
        --backup-s3-credentials-file s3.cred --allow-file-keys
    ```
@@ -70,9 +69,8 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    - `images`: the release's images (`ghcr.io/thekim1/ume-rag/<service>`), pinned by digest from the release notes.
      A release bundle already pins the base and components. The packages may be private: give the namespace an
      `imagePullSecret` for ghcr.io, or mirror them.
-   - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl`, `Oidc__Authority`, `OrgSync__BaseUrl`,
-     `EmbeddingProfile__GatewayModel` and the role groups (`Oidc__RoleGroups__rag-platform-admin`, ...), as in
-     [production setup](production-setup.md), *Sign-in*.
+   - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl`, `Oidc__Authority`, `EmbeddingProfile__GatewayModel` and the role
+     groups (`Oidc__RoleGroups__rag-platform-admin`, ...), as in [production setup](production-setup.md), *Sign-in*.
    - The blob volume's `storageClassName` (ReadWriteMany). With ReadWriteOnce, every pod that mounts it (rag-api,
      rag-admin, rag-worker) must run on one node.
    - The Ingress host names and TLS secrets. The pods speak HTTPS, so the controller must connect with TLS: the example
@@ -182,14 +180,14 @@ namespaces (Ubuntu 23.10 and later), check that the pod becomes ready. The worke
 `components/networkpolicies` denies all traffic to and from the stack's pods, then allows only what the Compose
 networks and host firewall allow: the Ingress controller to rag-api and rag-admin on 8443; the apps and `rag-migrate`
 to Postgres (5432); the worker to the parser (8000), clamd (3310) and the renderer (3000); DNS; outbound HTTPS from
-rag-api and rag-admin (gateway, IdP, Data API), HTTP and HTTPS from the worker (the crawl, the gateway) and from ClamAV
+rag-api and rag-admin (gateway, IdP), HTTP and HTTPS from the worker (the crawl, the gateway) and from ClamAV
 (freshclam; its policy selects no pod without `components/clamav`). The parser and the renderer get no egress at all. The flows are listed in
 [Network and ports](network-and-ports.md).
 
 Before enabling it, adjust the lines marked `change` in `networkpolicies.yaml`:
 
 - **Ingress controller.** The policies admit the namespace `ingress-nginx`; use the namespace (or pods) of yours.
-- **Ports other than 443:** the gateway (its Compose stack publishes 8443) and Data API (10443), an IdP not on 443,
+- **Ports other than 443:** the gateway (its Compose stack publishes 8443), an IdP not on 443,
   the OTLP collector (4317), pgBackRest's S3 store from Postgres.
 - **Your own Postgres:** replace the rules that name the `postgres` pods with an `ipBlock` for your database.
 - **The crawl:** NetworkPolicy cannot filter by host name. The crawler refuses private addresses outside
