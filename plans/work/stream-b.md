@@ -486,7 +486,11 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   the cost is in `EstimatedCostUsd` (cached input priced at `CachedInputPerMillionUsd`), `EstimatedCalls` counts it
   and `CostUsd` stays 0; a failed answer call still writes condense's and the embedding's usage; a cached query
   embedding writes nothing; `AssistantDailyTotals` has no token or cost column left.
-- **Waits on:** –. Gateway phase 2 (the stream comment) is merged.
+- **Waits on:** –. Gateway phase 2 (the stream comment) is merged. **Taken by the main session** (stream b released it
+  on #580, 2026-11-12). **Part 1 is done** (#608): the two usage tables with grants and the chat retention step, the
+  shared reader and estimate (`src/Ume.Rag.Infrastructure/Gateway/GatewayUsage.cs`), usage from the rerankers and the
+  query embedder, the FakeGateway's cost. Part 2 (the chat turn's wiring, the totals' columns dropped, the metrics, the
+  §18.2 tests) is in progress with the main session.
 - **Read:** cost-attribution §5; chat §8.3, §12.1, §12.2, §12.4, §17, §18.2; data-model §1.2, §2.2, §2.3, §8;
   gateway-changes §5.4, §7.1.
 

@@ -132,9 +132,10 @@ realm, and a database restore of the gateway brings Keycloak back.
 **Host (user, 2026-10-31):** the gateway's test/dev instance already runs on a fixed host with HTTPS (public
 certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `ume` for the RAG pilot
 (J11), and the instance is Ume.Rag's interim J10. Ume.Rag already runs against it with interim `Eu` keys and
-`text-embedding-3-large` at 1024 dimensions (Decisions "Pilot embedding model, U-b"). Still missing: a read-only
-`catalog.read` Data API key for Ume.Rag's organisation and model syncs (Ume.Rag admin design §4.10). Ask the user how
-to hand the key over; never write it into either repository.
+`text-embedding-3-large` at 1024 dimensions (Decisions "Pilot embedding model, U-b"). Still missing: the instance on
+gateway v0.10.0 with the integration *Ume.Rag* and its three credential keys, `rag-admin`'s with the scope
+`organisation.read` for the organisation and model syncs (Ume.Rag admin design §4.10; no Data API key is needed any
+more). Ask the user how to hand the keys over; never write them into either repository.
 
 ## 3. Gateway production (prepare now, deploy late)
 
