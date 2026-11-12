@@ -1,4 +1,5 @@
 import { http } from '@/api/client'
+import { formatNumber } from '@/utils/format'
 import { PLATFORM } from '@/utils/labels'
 import type { ModelField } from './modelFields'
 
@@ -34,6 +35,8 @@ export interface Details {
   title: string
   items?: { label: string; value: string }[]
   lines?: string[]
+  /** A sentence under the facts. */
+  note?: string
 }
 
 /** A page of the gateway's admin where the rows are edited (admin design §2.3). */
@@ -60,11 +63,13 @@ export interface PlatformResource {
   gatewayPage?: GatewayPage
   create?: Operation
   update?: Operation
+  /** Whether a row takes `update`; every row when absent. A row that does not opens its details alone. */
+  editable?: (row: Row) => boolean
   /** The values an edit starts from; the row itself when absent. */
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
   /** Panels shown above the list, in order. */
-  panels?: readonly ('embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
+  panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
   /** A row whose edit is a form of its own instead of the generic one. */
   form?: (row: Row) => 'crawl-settings' | undefined
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
@@ -75,19 +80,33 @@ export function urlOf(path: string, row: Row | null, key: string): string {
   return row ? path.replace(/\{[^}]+\}/, encodeURIComponent(String(row[key]))) : path
 }
 
+/** The gateway's last context as the organisation sync holds it (`GatewayContextInfo`, admin design §4.10). */
+export interface GatewayContext {
+  version: string | null
+  adminUrl: string | null
+  features: string[]
+}
+
 /**
- * The gateway's admin URL from its last context (`gateway.admin_url`, admin design §2.3, §4.10), as the organisation sync
- * reports it; null when the sync has not read a context, the context has none, the status cannot be read, or the
- * address is not an http(s) URL (it becomes a link's `href`).
+ * The gateway's last context from the organisation sync's status, which holds it in memory without a gateway call (the
+ * same value `GET /api/gateway/status` returns as `gateway`); null when the sync has not read a context or the status
+ * cannot be read.
  */
-export async function gatewayAdminUrl(): Promise<string | null> {
+export async function gatewayContext(): Promise<GatewayContext | null> {
   try {
-    const status = await http.get<{ gateway: { adminUrl: string | null } | null }>('/api/organisation/sync')
-    const url = status.gateway?.adminUrl
-    return url && /^https?:\/\//i.test(url) ? url : null
+    return (await http.get<{ gateway: GatewayContext | null }>('/api/organisation/sync')).gateway ?? null
   } catch {
     return null
   }
+}
+
+/**
+ * The gateway's admin URL from its last context (`gateway.admin_url`, admin design §2.3, §4.10); null when there is no
+ * context, the context has none, or the address is not an http(s) URL (it becomes a link's `href`).
+ */
+export async function gatewayAdminUrl(): Promise<string | null> {
+  const url = (await gatewayContext())?.adminUrl
+  return url && /^https?:\/\//i.test(url) ? url : null
 }
 
 export function gatewayLink(adminUrl: string, page: GatewayPage): string {
@@ -229,10 +248,26 @@ export const platformResources: PlatformResource[] = [
       { key: 'source', label: PLATFORM.columns.source },
       { key: 'contextWindow', label: PLATFORM.fields.contextWindow! },
       { key: 'maxOutputTokens', label: PLATFORM.fields.maxOutputTokens! },
+      { key: 'limitsSource', label: PLATFORM.gatewayModels.limitsSource, value: (row) => PLATFORM.gatewayModels.limitsSources[String(row.limitsSource)] },
     ],
-    // The limits of any row (Decisions "Answer length from the model"): manual until the gateway's catalogue carries them.
+    // A row's limits (Decisions "Answer length from the model", admin design §4.10): set here until the gateway's catalogue
+    // sends them; from then on they are read-only, and the API refuses a write (platform_rule limits_from_gateway).
     update: { method: 'put', path: '/api/gateway/models/{name}' },
-    panels: ['embedding-profiles', 'embedding-canary'],
+    editable: (row) => row.limitsSource !== 'catalog',
+    details: (row) =>
+      row.limitsSource === 'catalog'
+        ? [
+            {
+              title: PLATFORM.gatewayModels.limits,
+              items: [
+                { label: PLATFORM.fields.contextWindow!, value: formatNumber(row.contextWindow as number | null) },
+                { label: PLATFORM.fields.maxOutputTokens!, value: formatNumber(row.maxOutputTokens as number | null) },
+              ],
+              note: PLATFORM.gatewayModels.limitsFromGateway,
+            },
+          ]
+        : [],
+    panels: ['gateway-context', 'embedding-profiles', 'embedding-canary'],
   },
   {
     id: 'organisation',

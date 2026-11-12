@@ -374,3 +374,11 @@ export const STATUS_MESSAGES = {
 export function formatMessage(template: string, params?: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, name: string) => (params?.[name] === undefined ? '' : String(params[name])))
 }
+
+/**
+ * A `platform_rule` refusal's text by its `constraint`, where the generic one would name the constraint raw and point at
+ * fields the refusal does not mark.
+ */
+export const PLATFORM_RULE_MESSAGES: Record<string, string> = {
+  limits_from_gateway: 'The AI gateway now sends this model’s limits, so they can no longer be set here. Reload the page to see them.',
+}
