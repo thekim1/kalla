@@ -1489,6 +1489,36 @@ export const EDIT_DRAWER = {
   refused: 'Not saved:',
 } as const
 
+/** The gateway key picker on an assistant's and a knowledge base's edit drawer (admin design §5.5.2, §5.5.4; B-36, V39). */
+export const GATEWAY_KEY = {
+  label: 'AI gateway key',
+  assistantHint: 'The key in the AI gateway that this assistant’s calls run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
+  collectionHint: 'The key in the AI gateway that indexing and evaluation run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
+  none: 'No key (charged to the platform’s owner team)',
+  noneWarning: 'Without a key, the calls are charged to the platform’s owner team.',
+  noKeys: 'The department has no AI gateway keys for this platform yet. Ask a gateway administrator to assign one.',
+  loadFailed: 'The keys could not be loaded.',
+  notSelectable: (reason: string) => `cannot be chosen: ${reason}`,
+  gone: 'The saved key is no longer in the AI gateway. Choose another one.',
+  systemPrompt: 'This key adds its team’s system prompt to every call, which changes the assistant’s prompts.',
+  settings: 'Key settings (read-only)',
+  openInGateway: 'Open the keys in the AI gateway',
+  team: 'Team',
+  status: 'Status',
+  expires: 'Expires',
+  never: 'Never',
+  models: 'Models',
+  residencies: 'Residencies',
+  all: 'All',
+  pii: 'Personal data policy',
+  contentGuard: 'Content guard',
+  rateLimits: 'Rate limits',
+  rate: (rpm: string, tpm: string, concurrent: string) => `${rpm} requests/min · ${tpm} tokens/min · ${concurrent} at a time`,
+  unlimited: 'no limit',
+  outputCap: 'Longest answer',
+  tokens: (n: string) => `${n} tokens`,
+} as const
+
 /** The model pickers' availability flag (#447): models the platform's key may use at the ceiling. */
 export const MODEL_AVAILABILITY = {
   notAvailable: 'Not available to this platform’s key',

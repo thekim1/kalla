@@ -428,7 +428,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   §5.5; repo-and-deployment §4.3; the gateway's `docs/openapi/integrations.json` and `docs/integrations.md` at `7b678a1`;
   #580 (the gateway owner's comment of 2026-11-12).
 
-### [ ] B-36 Gateway phase 1: a gateway key per assistant and knowledge base, the key picker, V39 (#580, cost-attribution B4)
+### [x] B-36 Gateway phase 1: a gateway key per assistant and knowledge base, the key picker, V39 (#580, cost-attribution B4)
 - **Do:** `GatewayKeyId` on `Assistants` and `Collections` (data-model §2.1); `GET /api/gateway/keys?departmentId=`
   (admin §4.5); the key picker on the assistant's and knowledge base's pages with the key's settings read-only and a
   link to the gateway (`admin_url`), a warning when the key has a system prompt (admin §5.5.4); V39 on save (admin §4.6:

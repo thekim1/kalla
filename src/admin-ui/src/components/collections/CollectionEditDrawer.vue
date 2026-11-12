@@ -2,11 +2,12 @@
 import { nextTick, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, Level } from '@/api/types'
+import GatewayKeyPicker from '@/components/gateway/GatewayKeyPicker.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
-import { COLLECTIONS, COMMON, EDIT_DRAWER, LEVEL_HELP, LEVEL_LABEL } from '@/utils/labels'
+import { COLLECTIONS, COMMON, EDIT_DRAWER, GATEWAY_KEY, LEVEL_HELP, LEVEL_LABEL } from '@/utils/labels'
 import { problemLines } from '@/utils/problem'
 
 // Edit (admin design §5.5.2, #446): the knowledge base's own fields, the level included, saved through PUT /api/collections/{id}.
@@ -19,6 +20,8 @@ const name = ref('')
 const level = ref<Level>('internal')
 const contactName = ref('')
 const contactEmail = ref('')
+// The gateway key (B-36, V39): refusals (another department, not usable, residency, models) come back after Save.
+const gatewayKeyId = ref<string | null>(null)
 const saving = ref(false)
 const refusals = ref<string[]>([])
 const refusalBox = ref<HTMLElement | null>(null)
@@ -32,6 +35,7 @@ watch(
     level.value = props.collection.classification
     contactName.value = props.collection.contactName ?? ''
     contactEmail.value = props.collection.contactEmail ?? ''
+    gatewayKeyId.value = props.collection.gatewayKeyId ?? null
     refusals.value = []
     form.clear()
   },
@@ -45,7 +49,8 @@ async function save(): Promise<void> {
   try {
     const saved = await api.collections.update(props.collection.id, {
       name: name.value.trim(), ownerTeamId: props.collection.ownerTeamId, classification: level.value,
-      contactName: contactName.value.trim() || null, contactEmail: contactEmail.value.trim() || null, version: props.collection.version,
+      contactName: contactName.value.trim() || null, contactEmail: contactEmail.value.trim() || null, gatewayKeyId: gatewayKeyId.value,
+      version: props.collection.version,
     })
     emit('saved', saved)
     emit('update:open', false)
@@ -77,6 +82,7 @@ async function save(): Promise<void> {
           <span><span class="block font-medium">{{ LEVEL_LABEL[l] }}</span><span class="block text-small text-fg-2">{{ LEVEL_HELP[l] }}</span></span>
         </label>
       </fieldset>
+      <GatewayKeyPicker id="collection-edit-key" v-model="gatewayKeyId" :department-id="collection.departmentId" :hint="GATEWAY_KEY.collectionHint" />
       <div v-if="refusals.length" ref="refusalBox" role="alert" class="rounded-card border border-danger p-3 text-small text-danger" data-test="refusals">
         <p class="font-medium">{{ EDIT_DRAWER.refused }}</p>
         <ul class="ml-5 list-disc"><li v-for="r in refusals" :key="r">{{ r }}</li></ul>
