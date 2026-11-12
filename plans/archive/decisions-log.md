@@ -174,3 +174,4 @@ One line per decision recorded in [`../decisions.md`](../decisions.md) after 202
   and "Evaluation models at the collection's ceiling" now say the worker never sends `External`). Replaces team
   delegation, per-level keys and stage 1's estimate from mirrored prices.
 - 2026-11-12 (#580): a request made as an assigned gateway key is bounded by the credential key too: `RequireMaxResidency` when either key requires it, and the residencies are the assigned key's ∩ the credential key's (user; gateway phase 2). → Decisions "Gateway keys"
+- 2026-11-12, user (#580): departments and teams come from `GET /v1/ume/context` with the scope `organisation.read` on `rag-admin`'s credential key, and the Data API key goes; department member groups stay entered by hand until the gateway's context carries them (Ume.Rag waits for the gateway rather than build another source); the integration contract is the gateway's `docs/openapi/integrations.json`. → Decisions "Gateway keys"

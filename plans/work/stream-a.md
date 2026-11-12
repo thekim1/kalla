@@ -386,12 +386,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ### [ ] A-30 Gateway phase 1: one credential key per service in the deployment (#580, cost-attribution B2, deploy part)
 - **Do:** `init-deployment.sh --gateway-credential-key-file SERVICE=FILE` (for `api`, `admin`, `worker`) writes
-  `secrets/{api,admin,worker}/Gateway__Key` and drops the per-level key files; the Compose, Kubernetes
+  `secrets/{api,admin,worker}/Gateway__Key` and drops the per-level key files and `--org-sync-key-file`
+  (`OrgSync__DataApiKey`: the organisation now comes from the context, B-35); the Compose, Kubernetes
   (`create-secrets.sh`) and Portainer templates mount the one key per service; the runbook and `production-setup.md`
   say how a gateway admin issues the three credential keys (integration *Ume.Rag*, `RequireMaxResidency`, address list,
-  residencies capped per service: the worker's at `OnPrem`+`Eu`) and how to rotate one.
+  residencies capped per service, an upper bound on every key it acts as: the worker's at `OnPrem`+`Eu`; the scope
+  `organisation.read` on `rag-admin`'s only, later `usage.read` too) and how to rotate one; the Data API key goes.
 - **Paths:** `deploy/**` (not `deploy/postgres/**`), `docs/**`.
 - **Done when:** `deploy-checks` pass with the new flag; the release smoke test boots with one key per service; no
-  template or doc names `Gateway__Keys__*`.
-- **Waits on:** B-37 (the key names in code).
+  template or doc names `Gateway__Keys__*` or `OrgSync__DataApiKey`.
+- **Waits on:** B-37 (the key names in code), B-35 (the Data API key gone from code).
 - **Read:** repo-and-deployment §6.3, §7.1; identity §4.7; gateway-changes §5.1.

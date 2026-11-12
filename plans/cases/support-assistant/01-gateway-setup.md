@@ -65,7 +65,7 @@ shows a gain ([`04-assistant.md`](04-assistant.md) §5). The chat-model reranker
 | Key | Holder | Settings | Reference |
 |---|---|---|---|
 | One gateway key per RAG deployable: `api`, `admin`, `worker` | `init-deployment.sh --gateway-key-file api:Eu=…` etc. | allowed residency `Eu` only; the worker never gets an `External` key | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md) "3. Inputs you need"; [`../../../docs/production-setup.md`](../../../docs/production-setup.md) "2. `init-deployment.sh`" |
-| Gateway Data API key, `catalog.read` | the admin's organisation and model sync | – | same |
+| Gateway Data API key, `catalog.read` (until B-35/A-30; then `rag-admin`'s credential key with the scope `organisation.read`) | the admin's organisation and model sync | – | same |
 
 The support assistant's chat traffic runs on the **api** key, shared with every other assistant on the deployment.
 Gateway budgets and usage therefore show it under the RAG team's key, not under the support department (see
@@ -107,7 +107,8 @@ Trade-offs to bring to it:
 - [ ] Answer and condense models within `Eu` listed by the gateway (condense: `gpt-6-luna` with the case budgets, §1);
       prices set (the model mirror shows cost).
 - [ ] `text-embedding-3-large` within `Eu`; the platform embedding profile's canary passes.
-- [ ] `api`, `admin`, `worker` keys with residency `Eu` only; Data API key with `catalog.read`.
+- [ ] `api`, `admin`, `worker` keys with residency `Eu` only; Data API key with `catalog.read` (from B-35/A-30:
+      credential keys, `rag-admin`'s with `organisation.read`, no Data API key).
 - [ ] PII policy on the api key decided in the DPIA.
 - [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker under the Foundry provider (kind Rerank, residency `Eu`;
       gateway v0.9.1); `Settings.Retrieval.gatewayRerankModel` set to its alias.

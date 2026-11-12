@@ -154,8 +154,10 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
   pin its OpenAPI document in `contracts/gateway/`, check the designs against what was built (gateway-changes §5 is
   Ume.Rag's view, the gateway's `docs/integrations.md` wins), and queue that phase's items in `stream-a.md` (worker)
   and `stream-b.md` (api, admin, FakeGateway) with done-whens from cost-attribution §6:
-  - **Phase 1** (B2–B4), **queued 2026-11-12** as B-35, B-36, B-37 and A-30 (designs checked against `6a8f0a5`: they match;
-    no OpenAPI document yet, so B-35 pins examples): one credential key per service (`Gateway:Key`) in place of the per-level keys, and the
+  - **Phase 1** (B2–B4), **queued 2026-11-12** as B-35, B-36, B-37 and A-30 (designs checked against `6a8f0a5`: they match);
+    **amended 2026-11-12** after the gateway owner's decisions on #580 (#84): B-35 takes the organisation from the
+    context with `organisation.read` and drops the Data API key, and its contract test checks against the gateway's
+    `docs/openapi/integrations.json`; B-36 handles `usable: false`; A-30 removes the Data API key: one credential key per service (`Gateway:Key`) in place of the per-level keys, and the
     residency handler's service maximum (`src/Ume.Rag.Infrastructure/Gateway/GatewayOptions.cs`,
     `ResidencyCeilingHandler.cs`, `GatewayApi.cs`; `deploy/init-deployment.sh`; `docs/production-setup.md`); the
     context and model sync with `ETag` and the `GatewayKeys` mirror, the manual model limit fields replaced by the
@@ -177,9 +179,9 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     cost and budget status per assistant and knowledge base (`src/Ume.Rag.AdminApi/**`, the two views); the
     FakeGateway's `/integration/v1`.
 - **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
-- **Waits on:** the gateway's phase PRs (user); phase 2 also on the residency intersection being in it (decided
-  2026-11-12, #580). Open with the gateway owner on #580: every department with its member groups in the context
-  (gateway-changes §5.5).
+- **Waits on:** the gateway's phase PRs (user). Phase 2 waits on a gateway release with #84 (feature
+  `credential-residencies`); phase 3 on #83 merged. Department member groups wait for the gateway (feature C, not
+  scheduled; user, 2026-11-12: wait, no other source in Ume.Rag); until then they are entered by hand (identity §2).
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
   cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
   repo-and-deployment §4.3.

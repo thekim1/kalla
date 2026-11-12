@@ -224,29 +224,29 @@ may sign in to Open WebUI is open (§5.3, §16).
 from the gateway before release 2. So in P1 department scope comes from the `departmentCodes` claim **plus member
 groups entered by hand on our own department record** (`PUT /api/organisation/departments/{id}/member-groups`, admin
 design §4.5; reasoning: weakness review §5 "Pilot department scope"; plan §3), matched against the `groups` claim by
-the same resolver. On the shared Keycloak
+the same resolver. The gateway has not scheduled member groups (#580, 2026-11-12); Ume.Rag waits for them rather than
+build another source (decided by user, 2026-11-12), so the hand-entered values are the source until then. On the shared Keycloak
 both are set on the account: `departmentCodes` is a user attribute shared with the gateway (one value scopes the user
 in both systems), and a member group is a Keycloak group name (§2.2, §2.5). The org sync replaces member groups only
-when the catalogue carries them (P0, stream B; Decisions table "P0 integration, stream B"), so hand-entered values
-stay until release 2.
+when the gateway's context carries them (`member_groups` per department, by addition, when the gateway builds feature
+C), so hand-entered values stay until then.
 
 ### 2.1 Where member groups live
 
 - **Gateway (source of truth)**: `Department` (`Domain/Entities/Entities.cs:8-19`) gains `MemberGroups`
   (`varchar(256)[]`, default empty), edited by gateway admins on the *Organisation* page; every change is an audit
   entry (`admin.change`).
-- **Data API**: `GET /v1/catalog/departments` (`DataApi/DataEndpoints.cs:140`, permission `catalog.read`,
-  `docs/data-access.md:162`) gains `memberGroups: string[]`.
+- **Gateway context**: when the gateway builds feature C, each department in `GET /v1/ume/context` gains
+  `member_groups` under the scope `organisation.read`, by addition (gateway-changes §5.5; not scheduled, #580).
 - **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
-  The admin API's `OrgSync` job reads `/v1/catalog/departments` and `/teams` every **5 minutes** and on demand
-  (*Sync now* on our organisation page), with a gateway **Data API key** (`ume-dk-…`, permission `catalog.read` only;
-  secret file `secrets/admin/OrgSync__DataApiKey`), until the gateway's `GET /v1/ume/context` lists every active
-department with its member groups; then the sync reads them there with the admin's credential key and the Data API
-key goes (gateway design §5.5, admin design §4.10). A key needs no IdP registration, which keeps the "no registration
-  before the pilot" rule (plan §2). Only changed rows are written, so an unchanged sync does not bump the config version
-  (data-model §2.1). From release 2, member groups are never edited in our admin UI; it links to the gateway's page.
-  Before it (P1), a platform admin enters them on our department record through the admin API
-(`PUT /api/organisation/departments/{id}/member-groups`).
+  The admin API's `OrgSync` job reads departments and teams from `GET /v1/ume/context` every **5 minutes** and on
+  demand (*Sync now* on our organisation page), with `rag-admin`'s credential key, which holds the scope
+  `organisation.read` (gateway design §5.5, admin design §4.10); there is no Data API key. The credential key needs no
+  IdP registration, which keeps the "no registration before the pilot" rule (plan §2). Only changed rows are written,
+  so an unchanged sync does not bump the config version (data-model §2.1). Until the context carries member groups, a
+  platform admin enters them on our department record through the admin API
+  (`PUT /api/organisation/departments/{id}/member-groups`) and the sync leaves them alone; from then on they are never
+  edited in our admin UI, which links to the gateway's page.
 
 **Freshness**: a change in the gateway reaches our mirror within 5 minutes (or at once with *Sync now*), and a
 signed-in admin's scope at their next sign-in (scopes are fixed at sign-in, §1.1). If the sync fails, the last mirror
@@ -319,7 +319,8 @@ admins (who need no departments) are never locked out.
    `OnTokenValidated` after `ApplyClaimMapping` (`AdminAuthentication.cs:123-127`).
 4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
    (tenant/guest refusals).
-5. Data API: `memberGroups` on `/v1/catalog/departments`; `code` on `/v1/catalog/teams` (missing today).
+5. Integration context: `member_groups` on each department of `GET /v1/ume/context` under `organisation.read` (teams
+   already carry `code`). Not scheduled in the gateway (#580, 2026-11-12).
 6. `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
    provider*.
@@ -553,7 +554,8 @@ sending (admin `gateway_key_missing`, admin design §4.6 V8).
 **Keys.** From the gateway's integration phase 1 (gateway design §5.1, §13.4) each service holds **one credential key**
 of the integration *Ume.Rag* (`rag-api`, `rag-admin`, `rag-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
 and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow every
-residency the platform uses; the worker's `[OnPrem, Eu]`. **Until phase 1** (P1) they are the pilot department's
+residency the platform uses; the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
+whole organisation in the context, §2.1) and, from phase 3, `usage.read`. **Until phase 1** (P1) they are the pilot department's
 team's own keys per level (`Gateway:Keys:OnPrem`, `Eu`, `External`), with `AllowedIpRanges` and `RequireMaxResidency`;
 the worker never holds the open key (weakness review §5).
 
@@ -567,8 +569,9 @@ older gateway instance during a rolling update ignores the header and would char
 **Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every
 call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
 assigned key needs `x-ume-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
-residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3, gateway
-phase 2). Each service's credential key is therefore capped at the highest level that service serves: the worker's at
+residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3,
+built in thekim1/llmgateway#84, feature `credential-residencies`). An older gateway instance during a rolling update
+does not apply the bound, which is one more reason the ceiling header goes on every call. Each service's credential key is therefore capped at the highest level that service serves: the worker's at
 `Eu` (it never sends `External`), rag-api's and rag-admin's at the highest level their assistants may use (`Eu`
 while `Gateway:MaxResidency` is `Eu`). The
 handler below stays required on every gateway client and tested at every call site.

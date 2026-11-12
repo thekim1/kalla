@@ -288,7 +288,9 @@ affected.
 
 ### 4.7 Data API
 
-- `GET /v1/catalog/departments` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`.
+- `GET /v1/catalog/departments` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`, and each
+  department of `GET /v1/ume/context` adds `member_groups` under `organisation.read` (where Ume.Rag reads them, §5.5;
+  the gateway owner's plan on #580, feature C not scheduled).
 - `GET /v1/catalog/teams` (`:143-145`) adds `code`. **Gap found**: Ume.Rag's `Teams` mirror has a `Code` column
   (data-model §2.1) that the catalog does not deliver today. Not needed for acting as a key (§5.2), but cheap and useful
   for display; Ume.Rag's `OrgSync` reads it from release 2 on.
@@ -333,17 +335,21 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 ## 5. Feature A: acting as an assigned key (gateway integrations)
 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
-in `~/git/llmgateway` (main at `7579c20`; phase 1 built in draft PR thekim1/llmgateway#81, whose field names are
-snake_case as built), with its ADRs 020 and 021. This section states only what Ume.Rag relies on; where it and the
+in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1 and 2 merged (thekim1/llmgateway#81 `6a8f0a5`, #82
+`d90c590`), phase 3 in #83, and the credential bound, `organisation.read` and the contract document in #84 (draft,
+stacked on #83). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
+`/v1/ume/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
+by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
+does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Ume.Rag relies on; where it and the
 gateway's document differ, the gateway's document wins and this section is a bug to report. Which call runs as which
 key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`](../platform/cost-attribution.md) §4,
 §6. The gateway delivers it in phases, each additive within `v1` and safe for a rolling update:
 
 | Gateway phase | Content | Ume.Rag can then |
 |---|---|---|
-| 1 (built in #81, not merged) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
-| 2 | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
-| 3 | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
+| 1 (merged, #81) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
+| 2 (merged, #82; the credential bound in #84) | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
+| 3 (#83) | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
 
 ### 5.1 Model
 
@@ -397,7 +403,11 @@ model list does not apply to a request made as an assigned key, but its residenc
    key's intersected with the credential key's (the credential key's model list may stay out of it).
 
 With both, the worker's `Eu`-capped credential key keeps the worker below `External` at the gateway too, and a stolen
-credential reaches no more than its own residencies. Ume.Rag's own ceiling header and `x-ume-residency` check stay
+credential reaches no more than its own residencies. As built (#84, feature `credential-residencies`): an empty list
+means all, on either key; no residency in common answers `403 delegation_not_allowed` before the body is read (event
+1006, reason `no_common_residency`); a model outside the bound answers `503 no_eligible_provider`, or `403
+max_residency_not_met` when the ceiling header excludes it; `/v1/models` with `x-ume-on-behalf-of` lists only models
+within both keys' residencies, so V8 and V39 see the bound. Ume.Rag's own ceiling header and `x-ume-residency` check stay
 (identity §4.7); this is the gateway-side guard beside them. Until the gateway release with it is deployed, Ume.Rag
 sends no `x-ume-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
 
@@ -420,22 +430,25 @@ Both are answered from the gateway's memory with an `ETag`; Ume.Rag polls with `
 neither is accounted as a model request. The admin's sync is admin §4.10.
 
 - **`GET /v1/ume/context`** (phase 1, a credential key). What Ume.Rag reads: `gateway` (`version`, `admin_url`,
-  `features`), `integration`, `key`, `departments` (`id`, `name`, `cost_center_code`, `is_active`), `teams` (`id`,
+  `features`), `integration`, `key` (with `integration_scopes` and `allowed_residencies`, the credential key's own
+  list), `departments` (`id`, `name`, `cost_center_code`, `is_active`), `teams` (`id`,
   `department_id`, `name`, `code`, `is_active`) and `assigned_keys` (`id`, `name`, `team_id`, `department_id`,
   `status`, `owner_active`, `expires_at`, `allowed_models`, `allowed_residencies`, `pii_policy`,
   `content_guard_policy`, `requests_per_minute`, `tokens_per_minute`, `max_concurrent_requests`, `max_output_tokens`,
-  `has_system_prompt`). Revoked keys are not listed; disabled and expired ones are, with their `status`.
-  `departments` and `teams` are those of the assigned keys plus the owner team. Department member groups are not in it
-  yet (feature C, §4).
+  `has_system_prompt`, `usable`: false when the presenting credential key shares no residency with it). Revoked keys
+  are not listed; disabled and expired ones are, with their `status`. Without a scope, `departments` and `teams` are
+  those of the assigned keys plus the owner team; with **`organisation.read`** (feature `organisation`; gateway admins
+  set it on `rag-admin`'s credential key only) they are every department and team, inactive ones included with
+  `is_active: false`. The `ETag` changes when a department or team changes. Department member groups are not in it:
+  feature C is not scheduled in the gateway; if built, each department gains `member_groups` under the same scope.
 - **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
   `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
   `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
   With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models: the key's model picker and the save checks
   (admin §4.6 V8, V39).
-- **Open for Ume.Rag** (to raise on #580): the context lists only the departments and teams of assigned keys, while
-  Ume.Rag's sharing with the whole municipality (admin §3.2) and its sign-in scope need every active department. Until
-  the context lists every department with its member groups, the admin keeps reading departments, teams and member
-  groups from the Data API catalogue (admin §4.10).
+- **Settled (#580, 2026-11-12):** the admin reads departments and teams from the context with `organisation.read`
+  (admin §4.10), and Ume.Rag holds no Data API key. Member groups stay entered by hand on Ume.Rag's department record
+  until the context carries them (identity §2).
 
 ### 5.6 Integration API (phase 3)
 
@@ -444,7 +457,7 @@ only `rag-admin`'s credential key gets it, so the keys that serve chat can read 
 
 | Endpoint | Ume.Rag uses it for |
 |---|---|
-| `GET /integration/v1/usage?from=&to=&groupBy=day,key,model,step&keyId=&runId=` | the gateway's requests, tokens and cost per assistant's and knowledge base's key, by day, model and step (cost-attribution §5) |
+| `GET /integration/v1/usage?from=&to=&granularity=day\|month&groupBy=key,model,step&keyId=&runId=` (Stockholm days or months; 60 requests per minute per key) | the gateway's requests, tokens and cost per assistant's and knowledge base's key, by day, model and step (cost-attribution §5) |
 | `GET /integration/v1/budgets?keyId=` | limit, spent and period of the budgets that apply to a key (its own, its team's, its department's): the budget status on the assistant and knowledge base pages (admin §5.5.4) |
 
 Keys and budgets are never created through it; they are made in the gateway by the people responsible for the money.
@@ -709,7 +722,7 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
   misconfigured worker cannot starve chat (processing design §11).
 - Every call carries `x-ume-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
   from the integration phase 2 on; older gateways ignore them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
-- `OrgSync` with a `catalog.read` Data API key reads departments and teams (no `memberGroups` or team `code` yet).
+- `OrgSync` with a `catalog.read` Data API key reads departments and teams (until B-35 moves it to the context).
 - Saving an assistant calls `GET /v1/models` with the level's key and `x-ume-max-residency` = the level's ceiling,
   and refuses a model that is not listed (§3.4, admin design §4.6 V8).
 
@@ -717,19 +730,19 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
 
 - **Phase 1:** a gateway admin makes the integration *Ume.Rag* and one credential key per service (`rag-api`,
   `rag-admin`, `rag-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
-  worker's has `AllowedResidencies = [OnPrem, Eu]` (it is an upper bound only if the gateway grants #580's request,
-  §5.3). They replace the per-level keys, which are revoked. Every call still carries `x-ume-max-residency`; calls
+  worker's has `AllowedResidencies = [OnPrem, Eu]` (an upper bound on every key it acts as, #84, §5.3);
+  `rag-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-ume-max-residency`; calls
   run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned
-  keys and the models from `GET /v1/ume/context` and `GET /v1/models` (admin §4.10); departments, teams and member
-  groups still come from the Data API until the context lists every department with its member groups (§5.5).
+  keys, the models and (with `organisation.read`, #84) every department and team from `GET /v1/ume/context` and
+  `GET /v1/models` (admin §4.10); the Data API key is revoked. Member groups stay hand-entered (§5.5).
   Department admins make assigned keys, and editors choose them on assistants and knowledge bases.
 - **Phase 2** (`features` `act-as-key`): every call of an assistant or knowledge base with a key sends
   `x-ume-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
   check models with `GET /v1/models` as the object's key (admin §4.6 V8, V39); publishing an assistant needs a key.
 - **Phase 3:** `rag-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
   per assistant and knowledge base (§5.6).
-- With release 2 (feature C): `OrgSync` takes `memberGroups` from wherever the gateway publishes them for
-  integrations; the same `TenantId`/`RefuseGuests` as the gateway.
+- With release 2 (feature C, not scheduled): `OrgSync` takes `member_groups` from the context's departments; the same
+  `TenantId`/`RefuseGuests` as the gateway.
 
 ## 14. Changes to other documents in this repo
 
@@ -742,7 +755,7 @@ What this design needs from the other documents of this repo, and they state:
 3. **`../archive/area-plans/platform.md`** §6–§7: keys per level and deployable (the pilot team's until the gateway's
    integration phase 1, then one credential key per service); no linked keys; two gateway releases.
 4. **`../platform/data-model.md`** §2.1: no `GatewayKeyLinks`; no GIN index on `Departments.MemberGroups`;
-   `Teams.Code` from `/v1/catalog/teams` `code` (release 2).
+   `Teams.Code` from the context's `teams[].code`.
 5. **`../platform/repo-and-deployment.md`** §4.3 FakeGateway: `RequireMaxResidency` behaviour (400 without the
    header), the 403/503 rule with `Retry-After`; §4.4 FakeLlm `dimensions` with release 1.
 6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: acting as an assigned key from the

@@ -314,19 +314,23 @@ usage record); the answer's echo of the header is checked, and a missing or diff
 (`Gateway:RequireDelegationEcho`). Every call still sends `x-ume-max-residency` from the data's level, and the worker
 never sends `External`. The gateway bounds an acted request by the credential key too: `RequireMaxResidency` applies
 when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
-user, 2026-11-12, #580; gateway phase 2). So each service's credential key is capped at the highest level it serves
-(the worker's at `Eu`). An assigned key cannot
+user, 2026-11-12, #580; built in thekim1/llmgateway#84, feature `credential-residencies`). So each service's
+credential key is capped at the highest level it serves (the worker's at `Eu`). An assigned key cannot
 authenticate by itself, so nothing per assistant is copied, stored or rotated in Ume.Rag. Each setting has one owner:
 departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,
 rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
 retrieval and answer settings, who may call an assistant and the content's level are Ume.Rag's. Configuration comes
 from the gateway's data plane with the credential key, not the Data API: the gateway's features, the assigned keys and
 the models with their limits and prices from `GET /v1/ume/context` and `GET /v1/models`, polled with `If-None-Match`;
-departments, teams and member groups stay on the Data API (`OrgSync:DataApiKey`) until the context lists every active
-department with its member groups. Detail:
+departments and teams from the same context, where `rag-admin`'s credential key (and only it) holds the scope
+`organisation.read` (every department and team, inactive ones included; feature `organisation`), so the Data API key
+goes. Department member groups are not in the gateway: they stay entered by hand on Ume.Rag's department record until
+the context carries them, and Ume.Rag builds no other source for them (decided by user, 2026-11-12, #580). The contract
+is the gateway's OpenAPI document `docs/openapi/integrations.json`, which changes by addition only. Detail:
 `gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
-*From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580).
+*From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580); the organisation from the context and member
+groups by hand until the gateway has them, decided by user, 2026-11-12 (#580).
 
 ### Gateway releases
 
