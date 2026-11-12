@@ -492,16 +492,19 @@ traceparent: …
   max_residency_not_met` (no embedding target within the profile's ceiling) is a configuration fault: degrade, log at
   Error.
 - Circuit: after 5 consecutive failures within 30 s, `hybrid` requests skip the embedding for 15 s (keyword-only at
-  once instead of waiting for a timeout each); one probe request then decides. State per instance, in memory.
-- Single flight: concurrent identical misses (same cache key) share one gateway call, the gateway's own rule for cache
+  once instead of waiting for a timeout each); one probe request then decides. State per instance, in memory. A refusal
+  of the object's key (`402`, and the `403` codes of gateway-changes §5.7) and a missing or wrong echo say nothing about
+  the gateway's health: they degrade that request only, are never retried and don't count toward the circuit, so one
+  assistant's spent budget or revoked key can't switch off the embedding for the others.
+- Single flight: concurrent identical misses (same cache key, so the same acting key) share one gateway call, the gateway's own rule for cache
   misses (`docs/performance.md:29`).
 
 ### 5.4 Cache
 
 | Layer | Levels | Key | Value | TTL, size |
 |---|---|---|---|---|
-| L1 in process (`MemoryCache` with `SizeLimit`, as `KeyAuthenticator.cs:23`) | all | `(profileId, queryMac)` | `float[1024]` | 5 min; 2,000 entries (≈ 8 MB) |
-| L2 `ISharedCache` | `public`, `internal` effective level only (data-model §12.14) | `ume-rag:qemb:{profileId:N}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (Redis: `SET … EX 300`); P2 multi-host only |
+| L1 in process (`MemoryCache` with `SizeLimit`, as `KeyAuthenticator.cs:23`) | all | `(profileId, gatewayKeyId, queryMac)`: the key the call runs as (none: the credential key), so each assistant's key pays for, and is checked on, its own query embeddings | `float[1024]` | 5 min; 2,000 entries (≈ 8 MB) |
+| L2 `ISharedCache` | `public`, `internal` effective level only (data-model §12.14) | `ume-rag:qemb:{profileId:N}:{gatewayKeyId:N or -}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (Redis: `SET … EX 300`); P2 multi-host only |
 
 `queryMac` = hex of the first 16 bytes of `HMAC-SHA256(Security:CacheKeyPepper, normalised query)`: a plain SHA-256
 of a short question is reversible by dictionary, the HMAC is not without the pepper (a secret file like the key pepper,
@@ -1223,7 +1226,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/data-model.md` §1.2 grants | api: S on `content."Documents"` (incl. `SourceId`, `DisplayName`), `ChunkSets`, `Chunks`, S on `config."Sources"` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`) |
 | `platform/data-model.md` §2.2 `RetrievalStats` | key (`Day`, `DocumentId`, `TextHash`, `CollectionId`) + `Classification`, not `ChunkId`; `content.rag_count_retrievals` takes those arrays |
 | `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore` and `recency`); `Sources.DemoteRules` generated from `Settings -> 'demote'`, readable by the api role; `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
-| `platform/data-model.md` §11, §12.14, §12.15 | P2 Redis key `ume-rag:qemb:{profileId:N}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; in process for all levels (P1: the only cache); §12.15 resolved by §7 here |
+| `platform/data-model.md` §11, §12.14, §12.15 | P2 Redis key `ume-rag:qemb:{profileId:N}:{gatewayKeyId:N or -}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; in process for all levels (P1: the only cache); §12.15 resolved by §7 here |
 | `ingestion-worker/design-processing.md` §6.5 | the chunker writes `OverlapChars` (0 for the first chunk of a section, tables, code) |
 | `ingestion-worker/design-processing.md` §13.5 | the evaluator calls the library with a `Collections` scope over the full collection (no `ChunkSets` scope); same dedup, identity-group collapse and per-document cap (k = 10); P2: compares with and without `IReranker` |
 | `identity/design.md` §3 | `CredentialKind.DownloadGrant`; caller row "Browser following a citation link — grant — subject none — client from the grant — P1" |
