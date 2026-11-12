@@ -319,16 +319,18 @@ export interface UploadFile {
   id: string
   fileName: string
   bytes: number
-  state: 'received' | 'clean' | 'malware' | 'refused' | 'indexed' | 'deleted' | string
+  state: 'received' | 'clean' | 'unscanned' | 'malware' | 'refused' | 'indexed' | 'deleted' | string
   reason: string | null
   documentId: string | null
   uploadedBy: string | null
   uploadedAt: IsoDateTime
   replacedAt: IsoDateTime | null
   deletedAt: IsoDateTime | null
+  /** When its current bytes passed a malware scan; null when they were not scanned (the scan is off, #535). */
+  scannedAt?: IsoDateTime | null
 }
 
-/** The `state` filter of `GET /api/sources/{id}/files` (admin design §5.5.7): processing is received and clean, failed is refused and malware. */
+/** The `state` filter of `GET /api/sources/{id}/files` (admin design §5.5.7): processing is received, clean and unscanned, failed is refused and malware. */
 export type FileStateFilter = 'processing' | 'indexed' | 'failed'
 
 /** The `sort` of `GET /api/sources/{id}/files`: path order (a folder's files together) or newest first. */
@@ -734,6 +736,8 @@ export interface CrawlReport {
   verdict?: { runFailure: string | null; runDegradation: string | null }
   politeness?: PolitenessReportEntry[]
   render?: RenderReport
+  /** `off`: the deployment runs without the malware scan, so the run's files were not scanned (#535, connectors §11). */
+  malwareScan?: 'off' | string
   [section: string]: unknown
 }
 

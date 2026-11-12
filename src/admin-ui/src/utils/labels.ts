@@ -637,8 +637,10 @@ export const FILES = {
   state: 'State',
   uploaded: 'Uploaded',
   states: {
-    received: 'Received', clean: 'Checked', malware: 'Malware', refused: 'Refused', indexed: 'Searchable', deleted: 'Removed',
+    received: 'Received', clean: 'Checked', unscanned: 'Not scanned', malware: 'Malware', refused: 'Refused', indexed: 'Searchable', deleted: 'Removed',
   } as Record<string, string>,
+  /** A file the malware scan did not check (admin design §5.5.7; the deployment runs with the scan off, #535). */
+  notScanned: 'Not scanned for malware',
   replace: 'Replace',
   replaceLabel: (name: string) => `Replace ${name}`,
   select: (name: string) => `Select ${name}`,
@@ -936,6 +938,8 @@ export const RUN_STATE_LABEL: Record<string, string> = {
 
 export const RUN_PAGE = {
   title: 'Run',
+  /** A run whose report says `malwareScan: "off"` (admin design §5.5.7, #535). */
+  notScanned: 'Files in this run were not scanned for malware',
   added: 'New',
   updated: 'Changed',
   unchanged: 'Unchanged',

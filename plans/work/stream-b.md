@@ -702,7 +702,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the shared Keycloak with the feedback service account.
 - **Read:** chat §13.3, §14.2.
 
-### [ ] B-47 Malware scan optional: the `unscanned` state, `ScannedAt`, event 5106, the AppHost's `ClamAv:Mode`, the admin's note (#535)
+### [x] B-47 Malware scan optional: the `unscanned` state, `ScannedAt`, event 5106, the AppHost's `ClamAv:Mode`, the admin's note (#535)
 - **Do:**
   - **State and column:** `UploadStates.Unscanned` (`unscanned`) in the `State` check and `Uploads.ScannedAt
     timestamptz NULL`, in one migration (connectors §9.1). No data step: the PR gives the SQL that sets `ScannedAt` on

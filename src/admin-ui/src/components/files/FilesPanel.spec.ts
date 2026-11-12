@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client'
 import type { DocumentDetail, Source, UploadFile, UploadSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
+import { FILES } from '@/utils/labels'
 import FilesPanel from './FilesPanel.vue'
 
 const source = { id: 's1', type: 'upload', name: 'Blanketter', settings: { maxFileSizeMb: 20 } } as unknown as Source
@@ -231,6 +232,26 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     expect(wrapper.find('[data-test=retry-failed]').exists()).toBe(false)
     expect(wrapper.find('[data-test=replace-u1]').exists()).toBe(false)
     expect(wrapper.get('[data-test=file-list]').text()).toContain('taxa.pdf')
+  })
+
+  it('notes a file that was not scanned for malware, in its row and its details, and not a scanned one (#535)', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary({ total: 3, processing: 1, indexed: 2 }))
+    vi.spyOn(api.sources, 'files').mockResolvedValue(page([
+      slot('u1', 'pending.pdf', 'unscanned'),
+      { ...slot('u2', 'old.pdf', 'indexed'), scannedAt: null },
+      { ...slot('u3', 'scanned.pdf', 'indexed'), scannedAt: '2026-11-01T10:01:00Z' },
+    ]))
+    const wrapper = mount(FilesPanel, { props: { source, canEdit: false }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.get('[data-test=not-scanned-u1]').text()).toBe(FILES.notScanned)
+    expect(wrapper.get('[data-test=not-scanned-u2]').text()).toBe(FILES.notScanned)
+    expect(wrapper.find('[data-test=not-scanned-u3]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=file-list]').text()).toContain(FILES.states.unscanned)
+    await wrapper.get('[data-test=open-u2]').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=detail-not-scanned]')?.textContent).toBe(FILES.notScanned)
+    wrapper.unmount()
   })
 
   it('shows the summary bar and refreshes it and the rows every 3 s while files are processing', async () => {

@@ -8,7 +8,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import { formatDateTime } from '@/utils/format'
 import { FILES } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
-import { baseName, groupByFolder, restorable, sizeText, stateTone } from './files'
+import { baseName, groupByFolder, notScanned, restorable, sizeText, stateTone } from './files'
 
 // The rows of the Files list (admin design §5.5.7): grouped under folder headers when sorted by name (files without a
 // folder first, under no header), else one list with each file's whole path. A row's name opens its details.
@@ -58,6 +58,7 @@ function toggle(id: string, on: boolean): void {
               {{ sizeText(f.bytes) }} · {{ showDeleted ? FILES.deletedAt : FILES.uploaded }} {{ formatDateTime(f.deletedAt ?? f.uploadedAt) }}
             </span>
             <span v-if="f.reason" class="block text-small text-danger">{{ jobMessage(f.reason) }}</span>
+            <span v-if="notScanned(f)" class="block text-small text-warning" :data-test="`not-scanned-${f.id}`">{{ FILES.notScanned }}</span>
           </span>
           <UiBadge :tone="stateTone(f.state)" :label="FILES.states[f.state] ?? f.state" />
           <UiButton v-if="selectable" size="sm" :aria-label="FILES.replaceLabel(f.fileName)" :data-test="`replace-${f.id}`" @click="emit('replace', f)">
