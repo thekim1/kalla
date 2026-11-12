@@ -522,3 +522,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Open after the merge:** the release smoke test's scan-off phase has not run yet (it needs release images); it
   runs with the next release dry run.
 - **Read:** Decisions "Malware scan optional"; repo-and-deployment §5.5, §6.2, §7.1; connectors §11.
+
+### [ ] A-38 The gateway's limits and version in the platform UI (#606, gateway v0.10.0)
+- **Do:** on the platform resource *Gateway models* (`resources.ts`, id `gateway-models`) a row with `limitsSource`
+  `catalog` shows `contextWindow` and `maxOutputTokens` read-only, with a note that the gateway sends them; only a
+  `manual` row keeps the edit action (`PUT /api/gateway/models/{name}` answers `400 platform_rule` with `constraint:
+  limits_from_gateway` for a `catalog` row; show that message if it comes back anyway). The same view shows the
+  gateway's `version` and `features` from `GET /api/gateway/status` (`gateway`, admin §4.10), and nothing when
+  `gateway` is null. Labels in `labels.ts` only (stream b's path: the PR goes on a `main-session/` branch, as A-33).
+- **Paths:** `src/admin-ui/src/platform/**`, `src/admin-ui/src/utils/labels.ts` (additions only).
+- **Done when:** Vitest: a `catalog` row has no edit action and shows its limits; a `manual` row keeps it; the version
+  and features show from a mocked status and are absent when `gateway` is null. Looked at in the browser on the
+  FakeGateway stack.
+- **Waits on:** nothing (B-35 part 3, #607, added `limitsSource` and the status's `gateway`).
+- **Read:** admin §4.10; Decisions "Answer length from the model".
