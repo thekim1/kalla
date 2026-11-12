@@ -56,8 +56,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
             new("Gateway:BaseUrl", "http://fake-gateway"),
-            new("Gateway:Keys:OnPrem", FakeGatewayFactory.OnPremKey),
-            new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
+            new("Gateway:Key", FakeGatewayFactory.WorkerCredentialKey),
             new("Worker:Concurrency:embed", concurrency.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         ]);
         builder.Logging.ClearProviders();
@@ -89,7 +88,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         result.CacheHits.ShouldBe(0);
         var call = rig.Recorder.Requests[^1];
         call.Headers.GetValues(GatewayHeaders.MaxResidency).Single().ShouldBe("Eu");
-        call.Headers.Authorization!.Parameter.ShouldBe(FakeGatewayFactory.EuKey);
+        call.Headers.Authorization!.Parameter.ShouldBe(FakeGatewayFactory.WorkerCredentialKey);
         call.Headers.GetValues(EmbeddingClient.StepHeader).Single().ShouldBe("embed");
         call.Headers.Contains(EmbeddingClient.RunIdHeader).ShouldBeTrue();
         call.Body.ShouldContain("\"model\":\"bge-m3\"");

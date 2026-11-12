@@ -130,7 +130,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
             questions.Where(q => q.SourceChunkId != doc1.ChunkIds[0]).ShouldAllBe(q => q.ExpectedDocumentIds.Length == 1);
 
             var calls = _gateway.Calls.ToList();
-            calls.ShouldAllBe(c => c.Ceiling == "Eu" && c.Key == FakeGatewayFactory.EuKey && c.Model == Model && c.ResponseFormat == "json_object",
+            calls.ShouldAllBe(c => c.Ceiling == "Eu" && c.Key == FakeGatewayFactory.WorkerCredentialKey && c.Model == Model && c.ResponseFormat == "json_object",
                 "an internal collection runs at Eu with the Eu key");
             calls.ShouldAllBe(c => !c.HasTemperature, "no temperature is sent");
             calls.Count(c => c.Step == EvalModelClient.GenerateStep).ShouldBe(6);
@@ -442,7 +442,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
             var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
 
-            var key = ceiling == "OnPrem" ? FakeGatewayFactory.OnPremKey : FakeGatewayFactory.EuKey;
+            var key = FakeGatewayFactory.WorkerCredentialKey; // one key for every ceiling (identity design §4.7)
             var calls = _gateway.Calls.ToList();
             calls.Select(c => c.Step).Order(StringComparer.Ordinal).ShouldBe([EvalModelClient.GenerateStep, EvalModelClient.JudgeStep]);
             calls.ShouldAllBe(c => c.Ceiling == ceiling && c.Key == key && !c.HasTemperature);
@@ -454,12 +454,12 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
     }
 
     [Fact]
-    public async Task A_worker_without_the_key_of_the_ceiling_and_a_kind_that_is_not_a_set_kind_are_refused()
+    public async Task A_worker_without_a_gateway_key_and_a_kind_that_is_not_a_set_kind_are_refused()
     {
         var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Sensitive);
         try
         {
-            await using (var rig = EvalRig.Start(database, _gateway, onPremKey: false))
+            await using (var rig = EvalRig.Start(database, _gateway, gatewayKey: false))
             {
                 var job = await rig.LeaseAsync(database, new EvalTopUpSetPayload { CollectionId = seed.CollectionId }, seed);
                 (await rig.RunAsync(job)).ShouldBe(new JobResult.FatalError(EvalModelClient.NoKey));

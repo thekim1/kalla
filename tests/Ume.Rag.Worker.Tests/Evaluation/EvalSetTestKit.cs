@@ -69,6 +69,8 @@ public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Prog
                 ["FakeGateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
                 ["FakeGateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
                 ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
+                ["FakeGateway:CredentialKeys:worker:Key"] = FakeGatewayFactory.WorkerCredentialKey,
+                ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
             });
             config.Add(_scripts);
         });
@@ -142,18 +144,17 @@ internal sealed class EvalRig : IAsyncDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public static EvalRig Start(RagDatabaseFixture database, EvalGatewayFactory gateway, bool onPremKey = true, string? maxResidency = null)
+    public static EvalRig Start(RagDatabaseFixture database, EvalGatewayFactory gateway, bool gatewayKey = true, string? maxResidency = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         var settings = new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
             ["Logging:LogLevel:Default"] = "Debug",
-            ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
         };
-        if (onPremKey)
+        if (gatewayKey)
         {
-            settings["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey;
+            settings["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey;
         }
 
         if (maxResidency is not null)

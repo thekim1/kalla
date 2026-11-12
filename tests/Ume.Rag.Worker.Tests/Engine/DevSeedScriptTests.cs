@@ -403,7 +403,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         {
             ["ConnectionStrings:ragdb"] = database.Connection(RagDatabase.Api), ["Security:KeyPepper"] = KeyPepper,
             ["Security:CacheKeyPepper"] = new string('c', 32), ["Security:DownloadGrantKeys:k1"] = new string('g', 32),
-            ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey, ["BlobStore:Root"] = _blobs.FullName,
+            ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey, ["BlobStore:Root"] = _blobs.FullName,
             ["Rag:Roles"] = "knowledge",
         })
         {

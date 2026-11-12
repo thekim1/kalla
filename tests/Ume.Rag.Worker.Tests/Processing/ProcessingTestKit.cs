@@ -353,6 +353,9 @@ public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Prog
     public const string OnPremKey = "fake-onprem-key-0123456789";
     public const string EuKey = "fake-eu-key-0123456789";
 
+    /// <summary>The worker's credential key (identity design §4.7): every ceiling up to <c>Eu</c>.</summary>
+    public const string WorkerCredentialKey = "fake-worker-credential-key-0123456789";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -361,6 +364,8 @@ public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Prog
             ["FakeGateway:Keys:OnPrem"] = OnPremKey,
             ["FakeGateway:Keys:Eu"] = EuKey,
             ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
+            ["FakeGateway:CredentialKeys:worker:Key"] = WorkerCredentialKey,
+            ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
         }));
     }
 }
