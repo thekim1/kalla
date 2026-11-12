@@ -159,7 +159,7 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task A_run_needs_a_set_and_member_groups_are_set_by_platform_admins()
+    public async Task A_run_needs_a_set()
     {
         var seed = await SeedAsync(withSet: false);
         await using var factory = database.HeaderFactory();
@@ -169,18 +169,6 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
             run.StatusCode.ShouldBe(HttpStatusCode.Conflict);
             (await Json(run)).GetProperty("code").GetString().ShouldBe("no_evaluation_set");
         }
-
-        (await admin.PutAsJsonAsync($"/api/organisation/departments/{seed.Department}/member-groups", new { memberGroups = new[] { "g" } }, Ct))
-            .StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
-        using var set = await platform.PutAsJsonAsync($"/api/organisation/departments/{seed.Department}/member-groups",
-            new { memberGroups = new[] { " SG-Bygg ", "SG-Bygg", "SG-Admin" } }, Ct);
-        set.StatusCode.ShouldBe(HttpStatusCode.OK, await set.Content.ReadAsStringAsync(Ct));
-        (await Json(set)).GetProperty("memberGroups").EnumerateArray().Select(g => g.GetString()).ShouldBe(["SG-Admin", "SG-Bygg"]);
-
-        await using var db = TestPostgres.Context(database.Connection(null));
-        (await db.Departments.AsNoTracking().SingleAsync(d => d.Id == seed.Department, Ct)).MemberGroups.ShouldBe(["SG-Admin", "SG-Bygg"]);
-        (await db.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "department" && a.EntityId == seed.Department.ToString() && a.Action == "member-groups", Ct)).ShouldBe(1);
     }
 
     [Fact]

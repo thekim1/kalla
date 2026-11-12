@@ -24,6 +24,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         string[] configRead = ["config.ConfigVersion", "config.ConfigOutbox", "config.DataProtectionKeys", "config.Departments", "config.Teams"];
         string[] organisation = ["config.Departments", "config.Teams"];
+
+        // The assigned gateway keys' mirror (B-35, data-model §1.2): the admin's sync writes it, the api reads it, the worker never.
+        string[] gatewayKeys = ["config.GatewayKeys"];
         string[] workerTables = ["content.Jobs", "content.WorkerInstances", "content.RunItems"];
 
         string[] keys = ["config.Clients", "config.Keys"];
@@ -49,16 +52,16 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
             .Select(t => "chat." + t)];
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, "content.ChunkSets", "content.Chunks",
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, .. gatewayKeys, "content.ChunkSets", "content.Chunks",
             "content.KeywordStatistics", .. chat], ignoreOrder: true); // the keyword stop list's statistics (#499)
         (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe([.. all, "config.PublishedAssistantVersions"], ignoreOrder: true); // explain access (identity §4.9)
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
 
         // The worker also reads the model mirror (the evaluation's residency checks, #130).
         (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels"],

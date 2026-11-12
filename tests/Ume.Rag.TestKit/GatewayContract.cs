@@ -6,7 +6,7 @@ namespace Ume.Rag.TestKit;
 /// The gateway's published integration contract (<c>contracts/gateway/integrations.json</c>, copied from the gateway's
 /// <c>docs/openapi/integrations.json</c>), so tests can hold the FakeGateway's answers to it: a field the document does not
 /// describe, or a required one that is missing, is a difference. Adapted from the gateway's
-/// <c>tests/Ume.LlmGateway.TestKit/IntegrationContract.cs</c> (thekim1/llmgateway#84): only the document's location differs.
+/// <c>tests/Ume.LlmGateway.TestKit/IntegrationContract.cs</c> (thekim1/llmgateway <c>v0.10.0</c>): only the document's location differs.
 /// </summary>
 public static class GatewayContract
 {

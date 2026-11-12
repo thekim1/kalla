@@ -2167,6 +2167,79 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("FeedbackImportState", "chat");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.GatewayKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("AllowedModels")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)[]");
+
+                    b.PrimitiveCollection<string[]>("AllowedResidencies")
+                        .IsRequired()
+                        .HasColumnType("varchar(10)[]");
+
+                    b.Property<string>("ContentGuardPolicy")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HasSystemPrompt")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaxConcurrentRequests")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("OwnerActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PiiPolicy")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("RequestsPerMinute")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("TokensPerMinute")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Usable")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.ToTable("GatewayKeys", "config");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.GatewayModel", b =>
                 {
                     b.Property<string>("Name")

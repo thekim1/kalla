@@ -5,8 +5,8 @@ using Microsoft.Net.Http.Headers;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// Copied from the gateway (<c>src/Ume.LlmGateway.Gateway/Requests/CacheableJson.cs</c>, thekim1/llmgateway#84 at
-/// <c>7b5f4e3</c>); only the namespace differs.
+/// Copied from the gateway (<c>src/Ume.LlmGateway.Gateway/Requests/CacheableJson.cs</c>, thekim1/llmgateway <c>v0.10.0</c>,
+/// unchanged since #84 at <c>7b5f4e3</c>); only the namespace differs.
 /// Answers of the discovery endpoints (<c>/v1/models</c>, <c>/v1/ume/context</c>) with an <c>ETag</c> over the body, so a
 /// client that polls sends <c>If-None-Match</c> and usually gets an empty 304. The body is built from memory either way;
 /// the tag only saves the transfer and the client's parsing.

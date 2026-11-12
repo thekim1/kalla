@@ -166,9 +166,9 @@ public sealed class FakeGatewayInfo
 
     /// <summary>
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
-    /// thekim1/llmgateway#84): <c>act-as-key</c>, <c>run-metadata</c> and <c>stream-cost</c> come with phase 2.
+    /// thekim1/llmgateway <c>v0.10.0</c>): <c>act-as-key</c>, <c>run-metadata</c> and <c>stream-cost</c> come with phase 2.
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation"];
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation", "member-groups"];
 }
 
 /// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>

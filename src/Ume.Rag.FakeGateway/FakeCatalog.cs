@@ -5,9 +5,9 @@ using Ume.Rag.Domain;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// The fake organisation, in the Data API's catalogue shape (gateway <c>DataEndpoints.cs</c>: <c>{ items: [...] }</c>,
-/// camelCase) plus the release 2 fields <c>memberGroups</c> and <c>code</c>. Same departments and teams as the gateway's
-/// dev seed, with fixed ids so the admin's org sync (P0 #11) is repeatable.
+/// The fake organisation, listed by <c>/v1/ume/context</c> (<see cref="FakeContext"/>), and the model catalogue in the Data
+/// API's shape (gateway <c>DataEndpoints.cs</c>: <c>{ items: [...] }</c>, camelCase). Same departments and teams as the
+/// gateway's dev seed, with fixed ids so the admin's org sync is repeatable.
 /// </summary>
 public static class FakeCatalog
 {
@@ -23,7 +23,7 @@ public static class FakeCatalog
     /// <summary>The pilot team (Digitalisering &amp; AI): the integration's owner team and the per-level dev keys' team.</summary>
     public static readonly Guid DigitaliseringTeamId = new("019a0000-0000-7000-8000-000000001001");
 
-    /// <summary>A department wound up, with its team: listed inactive in the context (organisation.read), not in the catalogue.</summary>
+    /// <summary>A department wound up, with its team: listed inactive in the context under organisation.read.</summary>
     public static readonly Guid OverformyndarId = new("019a0000-0000-7000-8000-000000007000");
 
     public static IReadOnlyList<CatalogDepartment> Departments { get; } =
@@ -42,8 +42,8 @@ public static class FakeCatalog
     ];
 
     /// <summary>
-    /// The whole organisation as the gateway's context lists it under <c>organisation.read</c>: the catalogue's departments
-    /// and teams and one inactive department with its team.
+    /// The whole organisation as the gateway's context lists it under <c>organisation.read</c>: the active departments and
+    /// teams above and one inactive department with its team.
     /// </summary>
     public static IReadOnlyList<CatalogDepartment> OrganisationDepartments { get; } =
     [

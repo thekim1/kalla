@@ -383,18 +383,13 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     }
 
     [Fact]
-    public async Task The_catalogue_lists_departments_with_member_groups_and_teams_with_codes()
+    public async Task Departments_and_teams_come_from_the_context_not_the_catalogue()
     {
+        // B-35: the organisation, member groups included, is in /v1/ume/context (FakeGatewayContractTests).
         using var client = fake.CreateClient();
-        (await client.GetAsync("/v1/catalog/departments", Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
-
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
-        using var departments = JsonDocument.Parse(await client.GetStringAsync("/v1/catalog/departments", Ct));
-        var social = departments.RootElement.GetProperty("items").EnumerateArray().Single(d => d.GetProperty("costCenterCode").GetString() == "3000");
-        social.GetProperty("memberGroups").EnumerateArray().Select(g => g.GetString()).ShouldBe(["Byggnadsnämnden"]);
-
-        using var teams = JsonDocument.Parse(await client.GetStringAsync("/v1/catalog/teams", Ct));
-        teams.RootElement.GetProperty("items").EnumerateArray().Select(t => t.GetProperty("code").GetString()).ShouldContain("digitalisering-ai");
+        (await client.GetAsync("/v1/catalog/departments", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await client.GetAsync("/v1/catalog/teams", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     /// <summary>The fake with a rerank model (<c>FakeGateway:RerankEnabled</c>).</summary>

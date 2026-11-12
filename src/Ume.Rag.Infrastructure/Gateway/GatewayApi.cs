@@ -19,6 +19,34 @@ public sealed class GatewayApi(IHttpClientFactory clients)
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>The gateway's discovery answers are snake_case (<c>contracts/gateway/integrations.json</c>).</summary>
+    private static readonly JsonSerializerOptions SnakeCase = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+
+    /// <summary>
+    /// <c>GET /v1/ume/context</c> with this service's credential key (gateway-changes §5.5): no ceiling, since no model
+    /// answers it. With <paramref name="etag"/> it sends <c>If-None-Match</c>, and an unchanged context comes back as
+    /// <see cref="GatewayContextAnswer.Context"/> null (<c>304</c>).
+    /// </summary>
+    public async Task<GatewayContextAnswer> GetContextAsync(string? etag, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/ume/context", UriKind.Relative));
+        if (!string.IsNullOrEmpty(etag))
+        {
+            request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        }
+
+        using var response = await SendAsync(request, cancellationToken);
+        var tag = response.Headers.ETag?.ToString() ?? etag;
+        if (response.StatusCode == HttpStatusCode.NotModified)
+        {
+            return new GatewayContextAnswer(null, tag);
+        }
+
+        var context = await response.Content.ReadFromJsonAsync<GatewayContext>(SnakeCase, cancellationToken)
+            ?? throw new GatewayUnavailableException("The gateway's context was empty.", null);
+        return new GatewayContextAnswer(context, tag);
+    }
+
     /// <summary>
     /// <c>GET /v1/models</c> at <paramref name="ceiling"/>: the model ids the gateway will serve with this level's key (gateway
     /// release 1 lists only models with an available target within the ceiling, gateway-changes §3.4; before release 1 the
@@ -79,9 +107,9 @@ public sealed class GatewayApi(IHttpClientFactory clients)
             throw new GatewayUnavailableException("The gateway did not answer in time.", ex);
         }
 
-        if (response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotModified)
         {
-            return response;
+            return response; // 304 only answers a request with If-None-Match (the context)
         }
 
         using (response)

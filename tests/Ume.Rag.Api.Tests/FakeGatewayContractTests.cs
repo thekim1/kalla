@@ -10,7 +10,7 @@ namespace Ume.Rag.Api.Tests;
 /// B-35 (#580): the FakeGateway's discovery answers hold to the gateway's published integration contract
 /// (<c>contracts/gateway/integrations.json</c>, checked as the gateway's own tests do: an undescribed field or a missing
 /// required one is a difference), and behave as the gateway's (<c>ContextEndpoint</c>, <c>ModelListEndpoint</c>,
-/// <c>CacheableJson</c> at thekim1/llmgateway#84): the organisation under <c>organisation.read</c>, revoked keys left out,
+/// <c>CacheableJson</c> at thekim1/llmgateway <c>v0.10.0</c>): the organisation and member groups under <c>organisation.read</c>, revoked keys left out,
 /// <c>usable</c> against the presenting credential key, and an <c>ETag</c> with an empty <c>304</c>.
 /// </summary>
 public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>
@@ -38,10 +38,14 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
         context["key"]!["integration_scopes"]!.AsArray().Select(s => s!.GetValue<string>()).ShouldBe(["organisation.read"]);
         context["integration"]!["name"]!.GetValue<string>().ShouldBe("Ume.Rag");
         context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("organisation");
+        context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("member-groups");
 
         var departments = context["departments"]!.AsArray();
         departments.Count.ShouldBe(4);
         departments.ShouldContain(d => d!["name"]!.GetValue<string>() == "Överförmyndarförvaltningen" && !d["is_active"]!.GetValue<bool>());
+        departments.ShouldAllBe(d => d!["member_groups"] is JsonArray); // every department carries its member groups (v0.10.0)
+        departments.Single(d => d!["cost_center_code"]!.GetValue<string>() == "3000")!["member_groups"]!.AsArray().Select(g => g!.GetValue<string>())
+            .ShouldBe(["Byggnadsnämnden"]);
         context["teams"]!.AsArray().Count.ShouldBe(5);
 
         var keys = context["assigned_keys"]!.AsArray().ToDictionary(k => k!["name"]!.GetValue<string>());
@@ -59,6 +63,7 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
         context["key"]!["allowed_residencies"]!.AsArray().Select(r => r!.GetValue<string>()).ShouldBe(["OnPrem", "Eu"]);
         context["departments"]!.AsArray().Select(d => d!["name"]!.GetValue<string>())
             .ShouldBe(["Fritidsförvaltningen", "Individ- och familjeomsorgen", "Kommunledningskontoret"], ignoreOrder: true);
+        context["departments"]!.AsArray().ShouldAllBe(d => d!["member_groups"] == null); // member groups only under organisation.read
         var keys = context["assigned_keys"]!.AsArray().ToDictionary(k => k!["name"]!.GetValue<string>());
         keys["Webb – external only"]!["usable"]!.GetValue<bool>().ShouldBeFalse(); // no residency in common with OnPrem, Eu
         keys["Kontaktcenter – chatbot"]!["usable"]!.GetValue<bool>().ShouldBeTrue();
@@ -133,6 +138,11 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
 
         GatewayContract.Differences(renamed, "UmeContext").ShouldBe(["UmeContext.assignedKeys is not in the contract", "UmeContext.assigned_keys is missing"]);
         GatewayContract.Differences(dropped, "UmeContext").ShouldBe(["UmeContext.assigned_keys[0].usable is missing"]);
+        var groups = context.DeepClone().AsObject();
+        var department = groups["departments"]![0]!.AsObject();
+        department["memberGroups"] = department["member_groups"]!.DeepClone();
+        department.Remove("member_groups");
+        GatewayContract.Differences(groups, "UmeContext").ShouldBe(["UmeContext.departments[0].memberGroups is not in the contract"]);
     }
 
     [Fact]

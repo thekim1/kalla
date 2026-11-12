@@ -6,10 +6,11 @@ using Ume.Rag.Domain;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// <c>GET /v1/ume/context</c> as the gateway builds it (<c>ContextEndpoint.Build</c>, thekim1/llmgateway#84 at
-/// <c>7b5f4e3</c>; the contract's <c>UmeContext</c>, <c>contracts/gateway/integrations.json</c>): the presented key, and for
+/// <c>GET /v1/ume/context</c> as the gateway builds it (<c>ContextEndpoint.Build</c>, thekim1/llmgateway
+/// <c>v0.10.0</c>; the contract's <c>UmeContext</c>, <c>contracts/gateway/integrations.json</c>): the presented key, and for
 /// a credential key its integration, the assigned keys that are not revoked, and their teams and departments; with the
-/// scope <c>organisation.read</c> every department and team, an inactive one included. A per-level dev key is an ordinary
+/// scope <c>organisation.read</c> every department and team, an inactive one included, and the departments' member
+/// groups (feature <c>member-groups</c>). A per-level dev key is an ordinary
 /// key of the pilot team (role <c>None</c>, no integration).
 /// </summary>
 public static class FakeContext
@@ -30,11 +31,13 @@ public static class FakeContext
 
         IEnumerable<CatalogTeam> teams = FakeCatalog.OrganisationTeams.Where(t => teamIds.Contains(t.Id));
         IEnumerable<CatalogDepartment> departments = FakeCatalog.OrganisationDepartments.Where(d => teams.Any(t => t.DepartmentId == d.Id));
+        var wholeOrganisation = false;
         if (credential is not null && credential.Scopes.Contains(OrganisationRead))
         {
             // The scope organisation.read: the whole organisation, which includes the teams above.
             departments = FakeCatalog.OrganisationDepartments;
             teams = FakeCatalog.OrganisationTeams;
+            wholeOrganisation = true;
         }
 
         var ownResidencies = Ladder.Where(r => r <= key.Level).ToList();
@@ -61,13 +64,8 @@ public static class FakeContext
             ["integration"] = credential is null
                 ? null
                 : new JsonObject { ["id"] = options.Integration.Id, ["name"] = options.Integration.Name, ["owner_team_id"] = options.Integration.OwnerTeamId },
-            ["departments"] = new JsonArray([.. departments.OrderBy(d => d.Name, StringComparer.Ordinal).ThenBy(d => d.Id).Select(d => (JsonNode?)new JsonObject
-            {
-                ["id"] = d.Id,
-                ["name"] = d.Name,
-                ["cost_center_code"] = d.CostCenterCode,
-                ["is_active"] = d.IsActive,
-            })]),
+            ["departments"] = new JsonArray([.. departments.OrderBy(d => d.Name, StringComparer.Ordinal).ThenBy(d => d.Id)
+                .Select(d => (JsonNode?)Department(d, wholeOrganisation))]),
             ["teams"] = new JsonArray([.. teams.OrderBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Id).Select(t => (JsonNode?)new JsonObject
             {
                 ["id"] = t.Id,
@@ -78,6 +76,24 @@ public static class FakeContext
             })]),
             ["assigned_keys"] = new JsonArray([.. assigned.Select(k => (JsonNode?)AssignedKey(k, ownResidencies, now))]),
         };
+    }
+
+    /// <summary>Member groups (who belongs to the department at sign-in) only with the scope <c>organisation.read</c>.</summary>
+    private static JsonObject Department(CatalogDepartment d, bool withMemberGroups)
+    {
+        var department = new JsonObject
+        {
+            ["id"] = d.Id,
+            ["name"] = d.Name,
+            ["cost_center_code"] = d.CostCenterCode,
+            ["is_active"] = d.IsActive,
+        };
+        if (withMemberGroups)
+        {
+            department["member_groups"] = Strings(d.MemberGroups);
+        }
+
+        return department;
     }
 
     /// <summary>
