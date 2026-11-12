@@ -58,3 +58,30 @@ public sealed record GatewayAssignedKey(
 
 /// <summary>A context answer and its <c>ETag</c>; <see cref="Context"/> is null for <c>304 Not Modified</c>.</summary>
 public sealed record GatewayContextAnswer(GatewayContext? Context, string? ETag);
+
+/// <summary>
+/// A model of <c>GET /v1/models</c> with the gateway's facts (the contract's <c>Model</c> and <c>ModelFacts</c>; gateway-changes
+/// §5.5). <see cref="GatewayModelFacts.Type"/> is <c>model</c> (one deployment, <see cref="GatewayModelFacts.Residency"/>) or
+/// <c>alias</c> (a route, <see cref="GatewayModelFacts.Residencies"/> of the targets the key may use).
+/// </summary>
+public sealed record GatewayListedModel(string Id, GatewayModelFacts Ume);
+
+/// <summary>A listed model's facts; a limit is null when the gateway does not know it.</summary>
+public sealed record GatewayModelFacts(
+    string Type,
+    string Kind,
+    string? Residency,
+    IReadOnlyList<string>? Residencies,
+    int? ContextWindow,
+    int? MaxOutputTokens,
+    IReadOnlyList<string> Features,
+    GatewayModelPricing? Pricing)
+{
+    public const string Alias = "alias";
+}
+
+/// <summary>Prices per million tokens in USD.</summary>
+public sealed record GatewayModelPricing(decimal InputPerMillionUsd, decimal CachedInputPerMillionUsd, decimal OutputPerMillionUsd);
+
+/// <summary>A model list and its <c>ETag</c>; <see cref="Models"/> is null for <c>304 Not Modified</c>.</summary>
+public sealed record GatewayModelListAnswer(IReadOnlyList<GatewayListedModel>? Models, string? ETag);

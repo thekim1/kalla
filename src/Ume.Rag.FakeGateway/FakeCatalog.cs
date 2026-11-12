@@ -1,19 +1,14 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Ume.Rag.Domain;
 
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// The fake organisation, listed by <c>/v1/ume/context</c> (<see cref="FakeContext"/>), and the model catalogue in the Data
-/// API's shape (gateway <c>DataEndpoints.cs</c>: <c>{ items: [...] }</c>, camelCase). Same departments and teams as the
-/// gateway's dev seed, with fixed ids so the admin's org sync is repeatable.
+/// The fake organisation, listed by <c>/v1/ume/context</c> (<see cref="FakeContext"/>), and the models' prices on
+/// <c>/v1/models</c>. Same departments and teams as the gateway's dev seed, with fixed ids so the admin's org sync is
+/// repeatable.
 /// </summary>
 public static class FakeCatalog
 {
-    /// <summary>camelCase with enums as strings, as the gateway's <c>JsonStringEnumConverter</c>.</summary>
-    public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
-
     private static readonly DateTimeOffset Created = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
     public static readonly Guid KommunledningskontoretId = new("019a0000-0000-7000-8000-000000001000");
@@ -57,35 +52,16 @@ public static class FakeCatalog
         new(new Guid("019a0000-0000-7000-8000-000000007001"), OverformyndarId, "Handläggning", false, Created, null),
     ];
 
-    /// <summary>One provider account per residency (gateway <c>/v1/catalog/providers</c>).</summary>
-    public static IReadOnlyList<CatalogProvider> Providers { get; } =
-    [
-        new(ProviderId(Residency.OnPrem), "fake-onprem", "Fake on-prem", "OpenAICompatible", Residency.OnPrem, true),
-        new(ProviderId(Residency.Eu), "fake-eu", "Fake EU", "AzureOpenAI", Residency.Eu, true),
-        new(ProviderId(Residency.External), "fake-external", "Fake external", "OpenAI", Residency.External, true),
-    ];
-
-    /// <summary>
-    /// The deployments (gateway <c>/v1/catalog/models</c>): single-target models, with the gateway's <c>ModelKind</c> name
-    /// (a rerank model only while <see cref="FakeGatewayOptions.RerankEnabled"/> is on, as the caller passes the served models).
-    /// </summary>
-    public static IReadOnlyList<CatalogModel> Models(IEnumerable<FakeModel> models) =>
-    [
-        .. Deployable(models).Select(m => new CatalogModel(ModelId(m.Name), m.Name, m.Name, KindName(m.Kind), ProviderId(m.Targets[0].Residency), true)),
-    ];
-
-    /// <summary>
-    /// One price per deployment (gateway <c>/v1/catalog/prices</c>), per million tokens: embeddings 0.02, chat 0.15 in and
-    /// 0.60 out, rerank 0.10 in (billed per input token, gateway design §7.4).
-    /// </summary>
-    public static IReadOnlyList<CatalogPrice> Prices(IEnumerable<FakeModel> models) => [.. Deployable(models).Select(PriceOf)];
-
     /// <summary>A model's price by its kind (a route alias: its first target's, which has the alias's kind).</summary>
-    public static CatalogPrice PriceOf(FakeModel model) => model.Kind switch
+    /// <remarks>
+    /// Per million tokens: embeddings 0.02, chat 0.15 in and 0.60 out, rerank 0.10 in (billed per input token, gateway
+    /// design §7.4).
+    /// </remarks>
+    public static FakePrice PriceOf(FakeModel model) => model.Kind switch
     {
-        FakeModel.Embedding => new CatalogPrice(ModelId(model.Name), Created, 0.02m, null, 0m),
-        FakeModel.Rerank => new CatalogPrice(ModelId(model.Name), Created, 0.10m, null, 0m),
-        _ => new CatalogPrice(ModelId(model.Name), Created, 0.15m, 0.075m, 0.60m),
+        FakeModel.Embedding => new FakePrice(0.02m, null, 0m),
+        FakeModel.Rerank => new FakePrice(0.10m, null, 0m),
+        _ => new FakePrice(0.15m, 0.075m, 0.60m),
     };
 
     /// <summary>The gateway's <c>ModelKind</c> name of a fake model kind (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>).</summary>
@@ -96,27 +72,18 @@ public static class FakeCatalog
         _ => "Chat",
     };
 
-    /// <summary>The provider account of a residency (<see cref="Providers"/>), the <c>owned_by</c> of a deployment on <c>/v1/models</c>.</summary>
-    public static string ProviderName(Residency residency) => Providers.Single(p => p.Residency == residency).Name;
-
-    private static IEnumerable<FakeModel> Deployable(IEnumerable<FakeModel> models) =>
-        models.Where(m => m.Targets.Count == 1 && m.Kind is FakeModel.Chat or FakeModel.Embedding or FakeModel.Rerank).OrderBy(m => m.Name, StringComparer.Ordinal);
-
-    private static Guid ProviderId(Residency residency) => new($"019a0000-0000-7000-8000-0000000090{(int)residency:D2}");
-
-    /// <summary>A stable id per model name, so repeated syncs see the same deployment.</summary>
-    private static Guid ModelId(string name) =>
-        new(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(name)).AsSpan(0, 16));
+    /// <summary>The provider account a deployment at <paramref name="residency"/> runs on: the <c>owned_by</c> of <c>/v1/models</c>.</summary>
+    public static string ProviderName(Residency residency) => residency switch
+    {
+        Residency.OnPrem => "fake-onprem",
+        Residency.Eu => "fake-eu",
+        _ => "fake-external",
+    };
 }
 
 public sealed record CatalogDepartment(Guid Id, string Name, string CostCenterCode, bool IsActive, DateTimeOffset CreatedAt, string[] MemberGroups);
 
 public sealed record CatalogTeam(Guid Id, Guid DepartmentId, string Name, bool IsActive, DateTimeOffset CreatedAt, string? Code);
 
-public sealed record CatalogProvider(Guid Id, string Name, string DisplayName, string Type, Residency Residency, bool IsEnabled);
-
-/// <summary>A deployment as the gateway's Data API lists it; <see cref="Residency"/> is its own residency (v0.9.1), <c>null</c> for the provider's.</summary>
-public sealed record CatalogModel(Guid Id, string Name, string UpstreamModel, string Kind, Guid ProviderId, bool IsEnabled, Residency? Residency = null);
-
-public sealed record CatalogPrice(Guid ModelId, DateTimeOffset EffectiveFrom, decimal InputPerMillionUsd, decimal? CachedInputPerMillionUsd,
-    decimal OutputPerMillionUsd);
+/// <summary>A model's price per million tokens in USD; no cached-input price means the input price.</summary>
+public sealed record FakePrice(decimal InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal OutputPerMillionUsd);

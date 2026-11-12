@@ -61,6 +61,31 @@ public sealed class GatewayApi(IHttpClientFactory clients)
         return list.Data?.Select(m => m.Id).OfType<string>().ToHashSet(StringComparer.Ordinal) ?? [];
     }
 
+    /// <summary>
+    /// <c>GET /v1/models</c> at <paramref name="ceiling"/> with the gateway's facts (<c>ume</c>, gateway-changes §5.5), for the
+    /// model mirror. With <paramref name="etag"/> it sends <c>If-None-Match</c>, and an unchanged list comes back as
+    /// <see cref="GatewayModelListAnswer.Models"/> null (<c>304</c>).
+    /// </summary>
+    public async Task<GatewayModelListAnswer> GetModelListAsync(Residency ceiling, string? etag, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/models", UriKind.Relative)).WithMaxResidency(ceiling);
+        if (!string.IsNullOrEmpty(etag))
+        {
+            request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        }
+
+        using var response = await SendAsync(request, cancellationToken);
+        var tag = response.Headers.ETag?.ToString() ?? etag;
+        if (response.StatusCode == HttpStatusCode.NotModified)
+        {
+            return new GatewayModelListAnswer(null, tag);
+        }
+
+        var list = await response.Content.ReadFromJsonAsync<FactsList>(SnakeCase, cancellationToken)
+            ?? throw new GatewayUnavailableException("The gateway's model list was empty.", null);
+        return new GatewayModelListAnswer([.. (list.Data ?? []).Where(m => m.Ume is not null)], tag);
+    }
+
     /// <summary><c>POST /v1/embeddings</c> of <paramref name="inputs"/> with <paramref name="model"/> at <paramref name="ceiling"/>.</summary>
     public async Task<GatewayEmbedding> EmbedAsync(string model, IReadOnlyList<string> inputs, Residency ceiling, CancellationToken cancellationToken,
         int? dimensions = null)
@@ -137,6 +162,8 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     }
 
     private sealed record ModelList(IReadOnlyList<ModelItem>? Data);
+
+    private sealed record FactsList(IReadOnlyList<GatewayListedModel>? Data);
 
     private sealed record ModelItem(string? Id);
 

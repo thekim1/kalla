@@ -103,19 +103,23 @@ public sealed record GatewayLevelStatus(string Level, string Outcome, string? Re
 public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string GatewayModel, int Dimensions, string MaxResidency, bool CanaryRecorded,
     DateTimeOffset? CanaryCheckedAt, double? CanarySimilarity);
 
-/// <summary>The gateway as this admin instance sees it.</summary>
+/// <summary>
+/// The gateway as this admin instance sees it. <see cref="Gateway"/> is the last context's version, admin URL and features
+/// (admin design §4.10: the Gateway page shows them), <see cref="Organisation"/> the organisation sync with its <c>degraded</c> reason.
+/// </summary>
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
-    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles);
+    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation);
 
 /// <summary>
 /// A row of the model mirror. <see cref="Available"/>: listed by the gateway's <c>/v1/models</c> with the platform's key at
 /// the requested ceiling, null when the gateway could not be asked (#447).
 /// </summary>
 public sealed record GatewayModelDto(string Name, string Kind, string ModelKind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
-    int? MaxOutputTokens, decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt, bool? Available)
+    int? MaxOutputTokens, decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt, bool? Available,
+    string LimitsSource)
 {
     public static GatewayModelDto Of(GatewayModel m, bool? available) => new(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow,
-        m.MaxOutputTokens, m.InputPerMillionUsd, m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt, available);
+        m.MaxOutputTokens, m.InputPerMillionUsd, m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt, available, m.LimitsSource);
 }
 
 /// <summary>
@@ -142,6 +146,9 @@ public sealed record GatewayModelLimitsRequest : AdminRequest, IValidatableObjec
 /// <summary>The gateway area (admin design §4.5): the model mirror, its sync, the key status per level and the embedding canary check.</summary>
 public static class GatewayEndpoints
 {
+    /// <summary>The <c>platform_rule</c> constraint of a manual limit on a row whose limits come from the gateway.</summary>
+    public const string LimitsFromGateway = "limits_from_gateway";
+
     /// <summary>The input of a status call: fixed, carries no content.</summary>
     public const string StatusProbeText = "status";
 
@@ -166,20 +173,26 @@ public static class GatewayEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels")
             .WithSummary("The gateway model mirror with residencies, prices and whether the platform's key may use each model (?level=)");
 
-        // The limits of any row (Decisions "Answer length from the model"); manual rows and SupportsTools come later (§4.5).
+        // The limits of a row the gateway sends none for (Decisions "Answer length from the model", admin §4.10): once
+        // /v1/models carries them (LimitsSource catalog) the manual fields go, and a write is refused (platform_rule).
         // Model names hold slashes (ume/chat-eu): a catch-all segment, unescaped, so a client may send the slash or %2F.
         gateway.MapPut("/models/{**name}", async (string name, GatewayModelLimitsRequest request, AdminContext admin, CancellationToken ct) =>
                 GatewayModelDto.Of(await admin.WriteAsync(async attempt =>
                 {
                     name = Uri.UnescapeDataString(name);
                     var row = await admin.Db.GatewayModels.SingleOrDefaultAsync(m => m.Name == name, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    if (row.LimitsSource == GatewayModelSources.Catalog)
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.PlatformRule, new Dictionary<string, string> { ["constraint"] = LimitsFromGateway });
+                    }
+
                     var before = new { row.ContextWindow, row.MaxOutputTokens };
                     row.ContextWindow = request.ContextWindow;
                     row.MaxOutputTokens = request.MaxOutputTokens;
                     return new AdminChange<GatewayModel>(row, "update", "gateway-model", row.Name, before, new { row.ContextWindow, row.MaxOutputTokens, row.Name });
                 }, ct), null))
             .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateGatewayModel")
-            .WithSummary("Set a mirror row's context window and output limit (null clears); the sync keeps them");
+            .WithSummary("Set a mirror row's context window and output limit while the gateway sends none (null clears); the sync keeps them");
 
         gateway.MapPost("/sync", async (HttpContext http, GatewayModelSync sync, CancellationToken ct) =>
             !sync.Enabled
@@ -209,8 +222,8 @@ public static class GatewayEndpoints
     /// refused by the gateway (403 <c>max_residency_not_met</c>), which the result shows as such; any other failure of one
     /// level is reported as <c>error</c> with <see cref="GatewayModelSync.ErrorText"/>, so the page always answers.
     /// </summary>
-    private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, IOptions<GatewayOptions> options,
-        CancellationToken ct)
+    private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, OrganisationSync organisation,
+        IOptions<GatewayOptions> options, CancellationToken ct)
     {
         var profiles = await db.EmbeddingProfiles.AsNoTracking().Where(p => p.State == EmbeddingProfileStates.Active)
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.Name).ToListAsync(ct);
@@ -256,6 +269,7 @@ public static class GatewayEndpoints
             }
         }
 
-        return new GatewayStatus(configured, model, levels, sync.Status, canaries);
+        var context = organisation.Status;
+        return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context);
     }
 }

@@ -107,6 +107,7 @@ internal static class ServingConfigModel
                 ValuesCheck(t, "GatewayModels", "ModelKind", GatewayModelModelKinds.All);
                 ValuesCheck(t, "GatewayModels", "Source", GatewayModelSources.All);
                 ValuesCheck(t, "GatewayModels", "SupportsToolsSource", GatewayModelSources.All);
+                ValuesCheck(t, "GatewayModels", "LimitsSource", GatewayModelSources.All);
                 t.HasCheckConstraint("CK_GatewayModels_Residencies",
                     $"cardinality(\"Residencies\") >= 1 AND \"Residencies\" <@ ARRAY[{SqlList(Enum.GetValues<Residency>().Select(ResidencyCeiling.ToHeader))}]::varchar(10)[]");
                 // Decisions "Answer length from the model": both limits positive, the output within the window when both are known.
@@ -121,6 +122,7 @@ internal static class ServingConfigModel
             e.Property(x => x.Residencies).HasColumnType("varchar(10)[]");
             e.Property(x => x.Source).HasMaxLength(10);
             e.Property(x => x.SupportsToolsSource).HasMaxLength(10);
+            e.Property(x => x.LimitsSource).HasMaxLength(10).HasDefaultValue(GatewayModelSources.Manual);
             e.Property(x => x.InputPerMillionUsd).HasPrecision(18, 6);
             e.Property(x => x.CachedInputPerMillionUsd).HasPrecision(18, 6);
             e.Property(x => x.OutputPerMillionUsd).HasPrecision(18, 6);

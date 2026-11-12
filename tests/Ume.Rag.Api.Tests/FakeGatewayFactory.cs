@@ -8,14 +8,13 @@ namespace Ume.Rag.Api.Tests;
 
 /// <summary>
 /// The FakeGateway in process, with the three per-level dev keys, the api's, the worker's (up to <c>Eu</c>) and the admin's
-/// credential keys (the admin's with <c>organisation.read</c>) and a Data API key (repo-and-deployment §4.3).
+/// credential keys (the admin's with <c>organisation.read</c>) (repo-and-deployment §4.3).
 /// </summary>
 public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Program>
 {
     public const string OnPremKey = "fake-onprem-key-0123456789";
     public const string EuKey = "fake-eu-key-0123456789";
     public const string ExternalKey = "fake-external-key-0123456789";
-    public const string DataApiKey = "ume-dk-fake-0123456789";
     public const string ApiCredentialKey = "fake-api-credential-key-0123456789";
     public const string WorkerCredentialKey = "fake-worker-credential-key-0123456789";
     public const string AdminCredentialKey = "fake-admin-credential-key-0123456789";
@@ -40,7 +39,6 @@ public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Prog
             ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
             ["FakeGateway:CredentialKeys:admin:Key"] = AdminCredentialKey,
             ["FakeGateway:CredentialKeys:admin:Scopes:0"] = "organisation.read",
-            ["FakeGateway:DataApiKey"] = DataApiKey,
             ["FakeGateway:StallSeconds"] = "1",
         }));
     }

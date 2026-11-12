@@ -364,7 +364,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task By_default_no_rerank_model_is_configured_and_rerank_answers_404()
     {
         // Rerank is optional (user, 2026-11-06): the default fake is a gateway without a rerank provider, which answers
-        // 404 for the model (400 for a model of another kind), lists none and has none in its catalogue.
+        // 404 for the model (400 for a model of another kind) and lists none; with it on, /v1/models lists a Rerank model.
         using var unknown = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
         await AssertErrorAsync(unknown, HttpStatusCode.NotFound, "model_not_found");
 
@@ -373,23 +373,23 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
         (await ModelsAsync(FakeGatewayFactory.ExternalKey, "External")).Keys.ShouldNotContain("bge-reranker-v2-m3");
 
-        using var client = fake.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
-        (await client.GetStringAsync("/v1/catalog/models", Ct)).ShouldNotContain("Rerank");
         using var enabled = Rerank();
         using var enabledClient = enabled.CreateClient();
-        enabledClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
-        (await enabledClient.GetStringAsync("/v1/catalog/models", Ct)).ShouldContain("\"kind\":\"Rerank\"");
+        enabledClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.ApiCredentialKey);
+        enabledClient.DefaultRequestHeaders.Add("x-ume-max-residency", "External");
+        (await enabledClient.GetStringAsync("/v1/models", Ct)).ShouldContain("\"kind\":\"Rerank\"");
     }
 
     [Fact]
-    public async Task Departments_and_teams_come_from_the_context_not_the_catalogue()
+    public async Task The_data_api_catalogue_is_gone()
     {
-        // B-35: the organisation, member groups included, is in /v1/ume/context (FakeGatewayContractTests).
+        // B-35: the organisation is in /v1/ume/context and the models' facts on /v1/models (FakeGatewayContractTests).
         using var client = fake.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
-        (await client.GetAsync("/v1/catalog/departments", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await client.GetAsync("/v1/catalog/teams", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.AdminCredentialKey);
+        foreach (var path in new[] { "departments", "teams", "providers", "models", "prices" })
+        {
+            (await client.GetAsync($"/v1/catalog/{path}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
     }
 
     /// <summary>The fake with a rerank model (<c>FakeGateway:RerankEnabled</c>).</summary>

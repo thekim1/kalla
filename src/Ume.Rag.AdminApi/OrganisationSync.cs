@@ -15,18 +15,11 @@ namespace Ume.Rag.AdminApi;
 
 /// <summary>
 /// Bound from the <c>OrgSync</c> configuration section (repo-and-deployment §3): the interval of the organisation and model
-/// syncs. <see cref="BaseUrl"/> and <see cref="DataApiKey"/> are the Data API's, read only by the model sync until it reads
-/// <c>/v1/models</c> (B-35 part 3); the organisation comes from the gateway's context.
+/// syncs. Both call the gateway with the admin's credential key (<c>Gateway:Key</c>); there is no Data API key.
 /// </summary>
 public sealed class OrgSyncOptions
 {
     public const string SectionName = "OrgSync";
-
-    /// <summary>The gateway Data API (locally the FakeGateway) of the model catalogue (<c>/v1/catalog/*</c>).</summary>
-    public Uri? BaseUrl { get; set; }
-
-    /// <summary>A Data API key with <c>catalog.read</c> only (<c>OrgSync__DataApiKey</c>, a secret).</summary>
-    public string? DataApiKey { get; set; }
 
     [Range(1, 1440)]
     public int IntervalMinutes { get; set; } = 5;
@@ -64,8 +57,6 @@ public sealed partial class OrganisationSync(
 {
     /// <summary>Failed runs in a row after which health is <c>Degraded</c> (identity §2.1).</summary>
     public const int FailuresBeforeDegraded = 3;
-
-    public const string HttpClientName = "org-sync";
 
     /// <summary>The audit actor of a scheduled run.</summary>
     public const string SystemActor = "system:org-sync";

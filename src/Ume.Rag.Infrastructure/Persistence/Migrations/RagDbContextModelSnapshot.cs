@@ -2262,6 +2262,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<string>("LimitsSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("manual");
+
                     b.Property<int?>("MaxOutputTokens")
                         .HasColumnType("integer");
 
@@ -2303,6 +2310,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_GatewayModels_Kind", "\"Kind\" IN ('model', 'route')");
 
                             t.HasCheckConstraint("CK_GatewayModels_Limits", "(\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0) AND (\"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" > 0) AND (\"ContextWindow\" IS NULL OR \"MaxOutputTokens\" IS NULL OR \"MaxOutputTokens\" <= \"ContextWindow\")");
+
+                            t.HasCheckConstraint("CK_GatewayModels_LimitsSource", "\"LimitsSource\" IN ('catalog', 'manual')");
 
                             t.HasCheckConstraint("CK_GatewayModels_ModelKind", "\"ModelKind\" IN ('chat', 'embedding', 'rerank')");
 

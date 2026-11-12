@@ -230,14 +230,21 @@ public sealed class GatewayModel
     public string Source { get; set; } = GatewayModelSources.Catalog;
     public bool SupportsTools { get; set; }
     public string SupportsToolsSource { get; set; } = GatewayModelSources.Manual;
-    /// <summary>The model's context window in tokens; manual (the Gateway models page) until the catalogue carries it, kept by the sync.</summary>
+    /// <summary>The model's context window in tokens: from the gateway's <c>ume.context_window</c>, else manual (the Gateway models page).</summary>
     public int? ContextWindow { get; set; }
 
     /// <summary>
     /// The longest output the model produces, in tokens (Decisions "Answer length from the model"; chat design §6.3): the
-    /// answer's <c>max_tokens</c> unless the assistant overrides it. Manual until the catalogue carries it, kept by the sync.
+    /// answer's <c>max_tokens</c> unless the assistant overrides it. From <c>ume.max_output_tokens</c>, else manual.
     /// </summary>
     public int? MaxOutputTokens { get; set; }
+
+    /// <summary>
+    /// Where <see cref="ContextWindow"/> and <see cref="MaxOutputTokens"/> come from (<see cref="GatewayModelSources"/>):
+    /// <c>catalog</c> once <c>GET /v1/models</c> sends a limit for the model (then the sync sets both and the manual fields
+    /// go), <c>manual</c> while it sends none.
+    /// </summary>
+    public string LimitsSource { get; set; } = GatewayModelSources.Manual;
 
     public decimal? InputPerMillionUsd { get; set; }
     public decimal? CachedInputPerMillionUsd { get; set; }

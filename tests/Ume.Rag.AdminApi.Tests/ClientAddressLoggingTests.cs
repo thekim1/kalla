@@ -15,10 +15,10 @@ public sealed class ClientAddressLoggingTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>rag-admin's named clients that reach the gateway or its Data API.</summary>
+    /// <summary>rag-admin's named clients that reach the gateway.</summary>
     public static TheoryData<string> Clients => new()
     {
-        OrganisationSync.HttpClientName, Infrastructure.Gateway.GatewayApi.HttpClientName, Answering.GatewayQueryEmbedder.HttpClientName,
+        Infrastructure.Gateway.GatewayApi.HttpClientName, Answering.GatewayQueryEmbedder.HttpClientName,
         Answering.Chat.GatewayChatClient.HttpClientName,
     };
 
@@ -34,11 +34,7 @@ public sealed class ClientAddressLoggingTests(AdminDatabaseFixture database)
         });
         using var client = factory.Services.GetRequiredService<IHttpClientFactory>().CreateClient(name);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://gateway-secret.invalid:8443/v1/models");
-        if (name != OrganisationSync.HttpClientName)
-        {
-            // The gateway clients refuse a call without a ceiling; give them one, as their callers do.
-            request.Headers.Add("x-ume-max-residency", "Eu");
-        }
+        request.Headers.Add("x-ume-max-residency", "Eu"); // the gateway clients refuse a call without a ceiling; their callers give one
 
         await Should.ThrowAsync<Exception>(() => client.SendAsync(request, Ct));
         logs.Text.ShouldNotContain("gateway-secret", Case.Insensitive);
