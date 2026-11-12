@@ -226,7 +226,7 @@ public static class GatewayEndpoints
         foreach (var level in Enum.GetValues<Residency>())
         {
             var name = ResidencyCeiling.ToHeader(level);
-            if (!configured || model is null || string.IsNullOrEmpty(options.Value.Keys.GetValueOrDefault(level)))
+            if (!configured || model is null || options.Value.KeyFor(level) is null)
             {
                 levels.Add(new GatewayLevelStatus(name, "not_configured", null, null, null, null));
                 continue;

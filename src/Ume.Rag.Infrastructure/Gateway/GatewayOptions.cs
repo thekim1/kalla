@@ -11,9 +11,22 @@ public sealed class GatewayOptions
     public string? BaseUrl { get; set; }
 
     /// <summary>
-    /// The per-level gateway keys, secret files <c>Gateway__Keys__OnPrem</c>, <c>__Eu</c>, <c>__External</c>: delegating keys
-    /// from gateway release 2, the pilot team's own keys until then (weakness review §5). The worker never holds
-    /// <c>External</c>.
+    /// This service's credential key of the gateway integration <c>Ume.Rag</c> (<c>Gateway:Key</c>, secret file
+    /// <c>Gateway__Key</c>; identity design §4.7, gateway-changes §5.1): one key for every call, at any ceiling up to
+    /// <see cref="Maximum"/>.
+    /// </summary>
+    public string? Key { get; set; }
+
+    /// <summary>
+    /// The highest ceiling this service may call at whatever <see cref="MaxResidency"/> says: <c>External</c> for rag-api
+    /// and rag-admin; the worker sets <c>Eu</c> with <c>CapGatewayCalls</c> (its credential key is capped there, identity
+    /// §4.7). Set in code only: configuration does not bind it.
+    /// </summary>
+    public Residency ServiceMaximum { get; internal set; } = Residency.External;
+
+    /// <summary>
+    /// The per-level keys (<c>Gateway:Keys:&lt;level&gt;</c>), read only while <see cref="Key"/> is unset: the worker moves to
+    /// <see cref="Key"/> in its own PR (B-37 is split by stream ownership), then this goes.
     /// </summary>
     public Dictionary<Residency, string> Keys { get; set; } = [];
 
@@ -33,6 +46,21 @@ public sealed class GatewayOptions
 
     /// <summary><paramref name="ceiling"/>, lowered to <see cref="MaxResidency"/> when that is set and lower.</summary>
     public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
+
+    /// <summary>
+    /// The highest ceiling a call of this service may carry: <see cref="ServiceMaximum"/>, lowered by
+    /// <see cref="MaxResidency"/> (the top of the ladder the service calls at).
+    /// </summary>
+    public Residency Maximum => Cap(ServiceMaximum);
+
+    /// <summary>
+    /// The key a call at <paramref name="ceiling"/> is sent with, or null when this service may not call there: the
+    /// credential key up to <see cref="Maximum"/>; without one, the per-level key of the ceiling.
+    /// </summary>
+    public string? KeyFor(Residency ceiling) =>
+        !string.IsNullOrEmpty(Key)
+            ? ceiling <= Maximum ? Key : null
+            : Keys.GetValueOrDefault(ceiling) is { Length: > 0 } key ? key : null;
 }
 
 /// <summary>Header names shared with the gateway (<c>Pipeline/GatewayHeaders.cs</c>, gateway design §2.1).</summary>

@@ -6,10 +6,10 @@ using Ume.Rag.Domain;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// An authenticated call: the key's level and the request's ceiling, if it sent one (the narrower one applies; without
-/// a ceiling the key's level alone).
+/// An authenticated call: the key's level (a credential key's highest residency) and the request's ceiling, if it sent one
+/// (the narrower one applies; without a ceiling the key's level alone).
 /// </summary>
-public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling)
+public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling, bool Credential = false)
 {
     public Residency Max => Ceiling is { } ceiling && ceiling < KeyLevel ? ceiling : KeyLevel;
 }
@@ -36,6 +36,13 @@ public static class FakeAccess
         var level = presented is null ? (Residency?)null : options.Keys
             .Where(k => FixedTimeEquals(k.Value, presented))
             .Select(k => (Residency?)k.Key).FirstOrDefault();
+        var credential = false;
+        if (level is null && presented is not null &&
+            options.CredentialKeys.Values.FirstOrDefault(k => k.Key.Length > 0 && FixedTimeEquals(k.Key, presented)) is { } credentialKey)
+        {
+            (level, credential) = (credentialKey.MaxResidency, true);
+        }
+
         if (level is null)
         {
             error = Error(context, StatusCodes.Status401Unauthorized, "invalid_api_key",
@@ -66,7 +73,7 @@ public static class FakeAccess
             ceiling = parsed;
         }
 
-        if (options.StrictKeyLevel && ceiling is { } sent && sent != level)
+        if (options.StrictKeyLevel && !credential && ceiling is { } sent && sent != level)
         {
             error = Error(context, StatusCodes.Status403Forbidden, "key_level_mismatch",
                 $"FakeGateway: the {level} key was sent with the ceiling {ResidencyCeiling.ToHeader(sent)}.");
@@ -83,7 +90,7 @@ public static class FakeAccess
         }
 
         error = null;
-        return new FakeCall(level.Value, ceiling);
+        return new FakeCall(level.Value, ceiling, credential);
     }
 
     /// <summary>

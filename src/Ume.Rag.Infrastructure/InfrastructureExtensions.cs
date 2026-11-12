@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Keys;
@@ -132,6 +133,18 @@ public static class InfrastructureExtensions
             .RemoveStandardResilienceHandler()
             .AddHttpMessageHandler<ResidencyCeilingHandler>();
         return retryFailed ? client.AddHttpMessageHandler<GatewayRetryHandler>() : client;
+    }
+
+    /// <summary>
+    /// Caps every gateway call of this service at <paramref name="maximum"/> (<see cref="GatewayOptions.ServiceMaximum"/>):
+    /// a call above it is refused before sending, whatever <c>Gateway:MaxResidency</c> says. The worker calls it with
+    /// <c>Eu</c> (identity design §4.7).
+    /// </summary>
+    public static IHostApplicationBuilder CapGatewayCalls(this IHostApplicationBuilder builder, Residency maximum)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Services.PostConfigure<GatewayOptions>(o => o.ServiceMaximum = maximum);
+        return builder;
     }
 
     /// <summary>
