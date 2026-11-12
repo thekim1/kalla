@@ -376,7 +376,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 812.4, condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [{ rank: 1, documentId: 'x', title: 'Altan', urlOrFileName: null, headingPath: 'Bygglov › Altan', text: 'Du behöver bygglov…', cited: true }] },
       answer: { raw: 'Ja [1].', delivered: 'Ja [1].', outcome: 'answered', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5 },
+      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
     })
     const publish = vi.spyOn(api.assistants, 'publish').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, version: 'a4' })
     const audiences = vi.spyOn(api.assistants, 'audiences').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, audienceClientIds: ['k1'], version: 'a5' })
@@ -517,7 +517,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
       answer: { raw: 'Ungefär 384 400 km.', delivered: `${caveat}\n\nUngefär 384 400 km.`, outcome: 'answered-general', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8 },
+      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
     })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
@@ -641,7 +641,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Ett långt svar', delivered: 'Ett långt svar', outcome: 'answered', language: 'sv', citations: [] },
-        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length' },
+        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length', costUsd: 0.0012, costEstimated: true },
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -652,6 +652,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
       expect(wrapper.get('[data-test=length-stopped]').text()).toBe(ASSISTANT.lengthStopped)
       expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(formatNumber(2000), ASSISTANT.maxTokensSources.model!))
+      // B-39 (admin §4.9): the turn's cost over all its calls, "estimated" when any part is.
+      expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: 0,0012 USD (estimated)')
     })
 
     it('the test panel shows no length notice for a complete answer, and the provider\'s default when no limit was sent', async () => {
@@ -661,7 +663,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Kort.', delivered: 'Kort.', outcome: 'answered', language: 'sv', citations: [] },
-        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop' },
+        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00034, costEstimated: false },
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -672,6 +674,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
       expect(wrapper.find('[data-test=length-stopped]').exists()).toBe(false)
       expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(null, ASSISTANT.maxTokensSources.provider!))
+      expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: 0,0003 USD')
     })
   })
 })
