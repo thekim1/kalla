@@ -728,3 +728,18 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   The worker writes `unscanned`, `ScannedAt` and `Runs.Report.malwareScan` since A-36 (#602).
 - **Read:** Decisions "Malware scan optional"; connectors §9.1, §11; admin §4.5, §5.5.7; identity §10;
   repo-and-deployment §4.1.
+
+### [ ] B-48 A cancelled turn is recorded: the user's message, the partial answer, its usage, the `Cancelled` count (chat §8.3)
+- **Do:** when the client disconnects or the idle or total timeout ends a streamed answer (chat §8.3), the writer gets
+  the turn as any other (§12): the user's message, the partial answer as delivered so far with `Outcome = cancelled`,
+  the turn's usage records (the aborted answer at its prompt estimate, as B-38 records it now, plus the calls before
+  it), and `AssistantDailyTotals.Cancelled` counted in the same transaction. Today such a turn writes usage only:
+  no message row, and `ConversationWriter` inserts `Errors` and `Cancelled` as constant `0`. Count `Errors` the same
+  way for a turn that ends `error` after the user's message was accepted, if it doesn't already.
+- **Paths:** `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, their tests.
+- **Done when:** a test disconnects at the first byte and mid-stream (FakeGateway `fake-slow` or a stalled stream):
+  one user and one assistant message are stored, the second with `Outcome = cancelled` and the delivered text, the
+  `chat-answer` usage row is estimated, and the day's `Cancelled` is 1; an idle timeout does the same; chat §18.4's
+  "partial turn `cancelled`" case passes.
+- **Waits on:** nothing (B-38 part 2, #615, records the usage).
+- **Read:** chat §8.3 (client disconnect, usage and cost), §12, §18.4; data-model §2.3 `Messages`, `AssistantDailyTotals`.

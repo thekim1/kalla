@@ -536,3 +536,27 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   FakeGateway stack.
 - **Waits on:** nothing (B-35 part 3, #607, added `limitsSource` and the status's `gateway`).
 - **Read:** admin §4.10; Decisions "Answer length from the model".
+
+### [ ] A-39 The worker's content retention step: the age rules of data-model §8 for rows without blobs
+- **Do:** a nightly step function `content.rag_retention_content_step(batch_size)` in the style of
+  `chat.rag_retention_chat_step` (data-model §8: `SECURITY DEFINER`, owner migrator, `SET search_path = pg_catalog,
+  pg_temp`, batched, the minimums inside the function, returns the rows deleted), granted to the worker role and called
+  by `MaintenanceService` after the existing steps until a batch deletes nothing; each run logged and written to
+  `audit."AuditLog"` as `system:retention`. Its rules, all from data-model §8:
+  - `CollectionDailyUsage`: `Day` older than 3 years (Europe/Stockholm, as the chat step);
+  - `Runs`: finished more than 13 months ago (their `RunItems` partitions are long dropped);
+  - `ParseObservations`: older than 180 days; `RetrievalStats`: older than 13 months;
+  - `EmbeddingCache`: unused for 30 days;
+  - `EvaluationRuns` of kind `assistant-tests` (with their results): beyond the last 20 per assistant;
+  - `SiteProfileVersions`: `superseded`/`rejected` older than 1 year, keeping the last 10 per host.
+  Rows that carry blobs (`NodeOutputs`, `QuarantinedFiles`, `tmp/` and `previews/`) are not in this item: they need the
+  tombstone path of §9.
+- **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Infrastructure/Jobs/**`, `tests/Ume.Rag.Worker.Tests/**`, and
+  stream b's migration (`src/Ume.Rag.Infrastructure/Persistence/Migrations/`) and `deploy/postgres/app-roles.sql` (the
+  grant; regenerate the Portainer stack): the PR goes on a `main-session/` branch, announced on a stream-b issue.
+- **Done when:** a test seeds each table with a row just inside and just outside its rule and runs the step: only the
+  outside rows go, the batch size holds, an audit row is written; the maintenance run calls it; the connection budget
+  test still passes.
+- **Waits on:** nothing.
+- **Read:** data-model §8, §9, §4.4; the chat step in migrations `ChatRetentionStep` and `DailyUsage`; ADR 016 in the
+  gateway's `docs/adr.md`.
