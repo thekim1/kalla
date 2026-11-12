@@ -440,7 +440,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-35 part 2 (the route removed).
 - **Read:** identity §2.1; admin §4.5, §4.10.
 
-### [ ] A-34 Gateway phase 2 in the worker: every job's calls as the knowledge base's key, the echo, a spent budget or an unusable key waits (#580, cost-attribution B5, B6, worker part)
+### [ ] A-34 (#621, code merged; the live check is open) Gateway phase 2 in the worker: every job's calls as the knowledge base's key, the echo, a spent budget or an unusable key waits (#580, cost-attribution B5, B6, worker part)
 - **Do:** the worker registers B-42's context reader and handler with its own credential key (identity §4.7), so it
   acts only while its context shows `act-as-key`; every call of a job (`EmbeddingClient` for indexing, re-embedding and
   preview, `EvalModelClient` for `eval-generate` and `eval-judge`, the evaluation's dedup and query embeddings and its
