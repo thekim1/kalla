@@ -3,6 +3,7 @@
 # init-deployment.sh non-interactively with test-host options, starts the production Compose files with the images the
 # bundle pins (`up --wait`: every service with a health check healthy, rag-migrate completed), then checks:
 #
+#   - api, admin and worker each have their gateway credential key (placeholders, secrets/<service>/Gateway__Key)
 #   - every running container's image is pinned by digest (the bundle's defaults; *_IMAGE variables are unset first)
 #   - rag-api: /health/ready = 200, /version reports the bundle's version
 #   - rag-api: /v1/models = 401 without a key           (P1: rag-api has no /v1 routes yet; a 404 is reported as
@@ -35,7 +36,7 @@
 set -euo pipefail
 
 bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; docker_chown=0; keep=0; render=""
-usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --work-dir) work="$2"; shift 2;;
@@ -114,12 +115,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# One placeholder credential key per service, as a gateway admin issues them (production-setup.md, Gateway credential
+# keys): the stack boots as a real one does. No check needs the gateway, which llm.smoke.test does not reach.
+mkdir -p "$work/keys"
+for svc in api admin worker; do printf 'smoke-%s-key\n' "$svc" > "$work/keys/$svc"; done
+
 # init-deployment.sh with the test host's options plus "$@", then this test's own .env lines, which a re-run (it rewrites
 # .env) needs again.
 init_deployment() {
   PATH="$init_path" "$deploy/init-deployment.sh" \
     --oidc-authority https://keycloak.smoke.test/realms/ume \
     --gateway-url https://llm.smoke.test \
+    --gateway-credential-key-file api="$work/keys/api" --gateway-credential-key-file admin="$work/keys/admin" \
+    --gateway-credential-key-file worker="$work/keys/worker" \
     --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
     --api-port "$api_port" --admin-port "$admin_port" \
     --backup-target local --allow-file-keys "$@" --yes > "$work/init.log" \
@@ -135,6 +143,12 @@ init_deployment() {
 echo "== init-deployment.sh ($name)"
 init_deployment ${render:+--render}
 ok "init-deployment.sh wrote $(basename "$deploy")/.env, certs and secrets"
+# The files now belong to the containers' users, so read them as root.
+for svc in api admin worker; do
+  key="$("${as_root[@]}" cat "$deploy/secrets/$svc/Gateway__Key")" || fail "no secrets/$svc/Gateway__Key"
+  [ "$key" = "smoke-$svc-key" ] || fail "secrets/$svc/Gateway__Key is not $svc's credential key"
+done
+ok "one gateway credential key per service (secrets/{api,admin,worker}/Gateway__Key)"
 
 echo "== images"
 unpinned="$(dc config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"

@@ -338,14 +338,14 @@ that can read packages.
 | Variable | |
 |---|---|
 | `UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL` | required: rag-api's public host name and URL (`https://rag.example.se:8543`) |
-| `UME_RAG_GATEWAY_KEY_Eu` | a gateway API key for RAG (gateway admin UI, residency Eu); without it every model call fails, so deploy once, create the key, add it and update the stack |
+| `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says; without one that service's model calls are refused, so deploy once, issue the keys, add them and update the stack |
 | `COMPOSE_PROFILES` | include `data` (the gateway's Data API, which RAG's admin reads for the model catalogue and org sync); `data,render` adds the renderer |
 | `UME_RAG_ORG_SYNC_KEY` | a Data API key with `catalog.read`; without it model settings cannot be saved |
-| `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024; `UME_RAG_EMBEDDING_REQUEST_DIMENSIONS`, default `true`, sends `dimensions`: set `false` for a model without that parameter, such as `bge-m3`). Seeded once: changing these later does not change the profile (`docs/gateway-host-setup.md` §13). Every RAG gateway key must allow this model, and its deployment must be marked `Eu` |
+| `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024; `UME_RAG_EMBEDDING_REQUEST_DIMENSIONS`, default `true`, sends `dimensions`: set `false` for a model without that parameter, such as `bge-m3`). Seeded once: changing these later does not change the profile (`docs/gateway-host-setup.md` §13). Every RAG credential key must allow this model, and its deployment must be marked `Eu` |
 | `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group that grants platform admin (the other roles: `_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER`, `_VIEWER`) |
 
-The optional ones (ports, a separate admin host, per-service gateway keys, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image
-overrides `RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
+The optional ones (ports, a separate admin host, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image overrides
+`RAG_*_IMAGE`) are listed at the top of the file. rag-api, rag-admin and rag-worker join the gateway's `llm`
 network and reach it at `https://gateway:8443`, trusting the gateway's internal CA. The gateway's Data API is not on
 `llm`, so the stack adds one network to the gateway's part: `dataapi` joins `rag-dataapi` (internal), which only
 rag-admin shares, and rag-admin reaches it at `https://dataapi:8443`. That join is the only change to the gateway's
@@ -355,8 +355,9 @@ file; a standalone gateway keeps its own.
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
 key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are never regenerated, service
 certificates are re-issued when they expire within 30 days or the host names change. The secrets that follow a
-variable (gateway keys, the Data API key, the OIDC client secret) are written again on every deploy, and removed when
-the variable is emptied; they live in the stack's environment, so restrict who can view it.
+variable (the gateway credential keys, the Data API key, the OIDC client secret) are written again on every deploy,
+and removed when the variable is emptied; they live in the stack's environment, so restrict who can view it. The
+services read them at start: after changing one, restart the service that uses it.
 
 **Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
 firewall 8543 and 9543 to your proxy yourself), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
@@ -527,6 +528,7 @@ Also for G1 and W2:
 | Admin API answers 503 `config_busy` | Another config change held the config version lock for more than 5 s. Retry; if it persists, look for a long transaction holding the lock on `config."ConfigVersion"` in `pg_stat_activity` |
 | `rag-migrate` exited non-zero; api, admin and worker do not start | `dc logs rag-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
 | A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files belong to the wrong user: run the `chown` commands `init-deployment.sh` printed (or re-run it as root) |
+| One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `secrets/<service>/Gateway__Key` (`init-deployment.sh` lists the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE` and restart that service (production-setup.md, *Gateway credential keys*) |
 | `rag-firewall.service` failed: "cannot resolve HOST" | DNS for an allow-listed name failed; the previous rules stay in place. Check the name in `deploy/.env` |
 | `rag-firewall.service` failed: "no DOCKER-USER chain" | Docker is not running, or runs without its iptables integration |
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
@@ -549,6 +551,11 @@ Also for G1 and W2:
   procedure yet (key provider decision K1).
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
+- **The gateway credential keys** (`secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway integration
+  *Ume.Rag*): a gateway admin issues and rotates them; rotate one with the gateway's 24-hour grace period, re-run
+  `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, and restart that service
+  ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway
+  `401` answers in one service's log mean its key expired, was revoked or the rotation's grace period ended first.
 - **The feedback service account's Open WebUI key** (`secrets/api/OpenWebUi__AdminApiKey`): `sudo
   deploy/openwebui-feedback-key.sh` mints a new one (the old one stops working at once), then `dc restart rag-api`.
   Its password stays in `secrets/openwebui.env` and is usable only while the script runs.

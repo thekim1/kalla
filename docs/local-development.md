@@ -49,10 +49,11 @@ again.
 
 **Generated secrets.** The AppHost generates its passwords and keys on the first run and keeps them in its user
 secrets (`UserSecretsId` `ume-rag-apphost-dev`) as `Parameters:<name>`: `postgres-password`, `key-pepper`, `dev-key`,
-`oidc-client-secret`, `dev-user-password`, `api-client-secret` and the per-level gateway keys `gateway-key-onprem`,
-`gateway-key-eu` and `gateway-key-external`. Keep them stable. The Postgres volume stores the password it was created
-with, and the key pepper hashes every key in the database, so changing either breaks the existing data. Do not print
-them into logs, transcripts or screenshots; the dashboard shows a parameter's value when you need it.
+`oidc-client-secret`, `dev-user-password`, `api-client-secret` and the services' dev credential keys for the fake
+gateway, `gateway-key-api`, `gateway-key-admin` and `gateway-key-worker`. Keep them stable. The Postgres volume
+stores the password it was created with, and the key pepper hashes every key in the database, so changing either
+breaks the existing data. Do not print them into logs, transcripts or screenshots; the dashboard shows a parameter's
+value when you need it.
 
 ## AppHost switches
 
@@ -121,8 +122,10 @@ Every model call goes through the gateway; locally that is `Ume.Rag.FakeGateway`
 ([`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.3). It serves 1024-dimension embeddings,
 chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and the catalogue
 (`/v1/catalog/departments`, `/v1/catalog/teams`). Like the real gateway it requires `x-ume-max-residency` and answers
-with `x-ume-residency`. Its three dev keys have the ceilings `OnPrem`, `Eu` and `External`; the services get them as
-`Gateway__Keys__<level>`, and the worker never gets the `External` one.
+with `x-ume-residency`. Each service has its own dev credential key, as the gateway integration *Ume.Rag* gives
+(production-setup.md, *Gateway credential keys*): the service gets it as `Gateway__Key`, and the fake accepts api's and
+admin's at every ceiling and the worker's up to `Eu`, narrowing a higher ceiling to the key's residencies as the gateway
+does. Only the admin's holds the scope `organisation.read`.
 
 Its models are in [`src/Ume.Rag.FakeGateway/appsettings.json`](../src/Ume.Rag.FakeGateway/appsettings.json), including
 fault models for tests: `fake-fail-500` (502 `all_providers_failed`, as the gateway answers when every target within
@@ -138,8 +141,9 @@ Switches:
   Berget AI).
 - `FakeGateway:RequireMaxResidency` (default `true`): `false` lets a request without `x-ume-max-residency` run with
   no ceiling.
-- `FakeGateway:StrictKeyLevel` (default `true`): a ceiling other than the dev key's level answers 403
-  `key_level_mismatch` (fake-only), so a client sending the wrong level's key fails loudly.
+- `FakeGateway:StrictKeyLevel` (default `true`): with one of the fake's per-level keys (`FakeGateway:Keys:<level>`,
+  which the AppHost does not set), a ceiling other than the key's level answers 403 `key_level_mismatch` (fake-only).
+  It does not apply to the credential keys.
 
 Every gateway client registered with `AddGatewayClient` sends a 502 or 504 once more with the same request (same
 ceiling, key and body; `GatewayRetryHandler`, `Gateway:RetryDelay` 250 ms) before any job retry. 403, 503 and 404
@@ -150,14 +154,14 @@ By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secre
 `StallProbability`, `StallMs`.
 
 **Against a real local gateway** (its AppHost running): set `FakeGateway:Enabled=false`,
-`Gateway:BaseUrl=https://localhost:<gateway port>` and the gateway's dev keys in the AppHost user secrets.
-`Gateway:Keys:<level>` is shared: it goes to the api and the admin API, and to the worker unless the level is
-`External`. `Gateway:Services:<service>:Keys:<level>` (service `api`, `admin` or `worker`) gives one service its own key
-and wins over the shared one. The levels are `OnPrem`, `Eu` and `External`; the AppHost stops on any other level, an
-unknown service or `Gateway:Services:worker:Keys:External`. Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all
-three, and `OrgSync:BaseUrl` and `OrgSync:DataApiKey` (the organisation sync's Data API key) to the admin API. The gateway's FakeLlm needs gateway
-release 1 for 1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama provider with `bge-m3`.
-The `OnPrem` key used for embeddings must have PII policy `Off` or `Allow`, never `Redact` or `Block`.
+`Gateway:BaseUrl=https://localhost:<gateway port>` and each service's credential key of a local integration *Ume.Rag*
+in the AppHost user secrets, made as production-setup.md, *Gateway credential keys*, says:
+`Gateway:Services:<service>:Key` (service `api`, `admin` or `worker`), which the service gets as `Gateway:Key`. The
+AppHost stops on an unknown service, and on the per-level keys of before B-37 (`Gateway:Keys:<level>`): remove them.
+Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all three, and `OrgSync:BaseUrl` and `OrgSync:DataApiKey`
+(the organisation sync's Data API key) to the admin API. The gateway's FakeLlm needs gateway release 1 for
+1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama provider with `bge-m3`. Every
+credential key must have PII policy `Off` or `Allow` for embeddings, never `Redact` or `Block`.
 
 ## Build and test
 

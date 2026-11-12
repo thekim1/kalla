@@ -33,7 +33,8 @@ configMapGenerator:
   - name: ume-rag-config
     behavior: merge
     literals:
-      # change: the gateway (HTTPS). Its keys are secret files (init-deployment.sh --gateway-key-file).
+      # change: the gateway (HTTPS). Each service's credential key is its secret file Gateway__Key
+      # (init-deployment.sh --gateway-credential-key-file).
       - Gateway__BaseUrl=https://llm.example.se
       # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
   - name: ume-rag-api-config

@@ -20,8 +20,8 @@ There are two ways to run the stack locally:
 .\scripts\Start-Dev.ps1
 ```
 
-The AppHost starts Postgres, the dev Keycloak, FakeGateway (1024-dimension embeddings, `Eu` and the other dev keys),
-the parser, ClamAV, the api, the worker and the admin API. Sign in to the admin with a test user from
+The AppHost starts Postgres, the dev Keycloak, FakeGateway (1024-dimension embeddings, a dev credential key per
+service), the parser, ClamAV, the api, the worker and the admin API. Sign in to the admin with a test user from
 [local-development.md](local-development.md#keycloak-test-realm) (password: the `dev-user-password` parameter). Open
 WebUI joins once stream B adds it to the AppHost (`OpenWebUi:Enabled`, the dev realm's client `open-webui-dev`, the
 seeded dev key; repo-and-deployment §4.1).
@@ -71,7 +71,7 @@ Nothing in the repository changes. You set values in one of two places:
 | Value | AppHost (user secrets, `dotnet user-secrets --project src/Ume.Rag.AppHost set ...`) | Pilot stack (`init-deployment.sh` options: `deploy/.env` and secret files) |
 |---|---|---|
 | The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--ca-file`) |
-| Its `Eu` keys, one per deployable | `Gateway:Services:api:Keys:Eu=<key>`, `Gateway:Services:admin:Keys:Eu=<key>`, `Gateway:Services:worker:Keys:Eu=<key>`; a shared `Gateway:Keys:Eu=<key>` goes to all three, and a service's own key wins over it. The AppHost stops on `Gateway:Services:worker:Keys:External`, an unknown service or a level other than `OnPrem`, `Eu`, `External` | `--gateway-key-file api:Eu=api-eu.key --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key` |
+| Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
 | The org sync's Data API key (`catalog.read`) | `OrgSync:BaseUrl=https://<Data API host>` (no `/v1`; the address the gateway admin UI shows under *Access → Data API access*), `OrgSync:DataApiKey=<key>` (a Data API key with `catalog.read`; passed to the admin API only) | `--org-sync-key-file org-sync.key` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
 | The shared Keycloak for Open WebUI | stream B's `open-webui` resource (J9) | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
@@ -111,12 +111,12 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 | | Status |
 |---|---|
 | Stream B's gateway client, `EmbeddingProfile:*` seeder and canary recording (`GET /api/gateway/status`) | now (#123) |
-| The AppHost's real-gateway mode: `Gateway:Services:<service>:Keys:<level>` per service, `OrgSync:*` passed to the admin API | now (#119) |
+| The AppHost's real-gateway mode: `Gateway:Services:<service>:Key` per service, `OrgSync:*` passed to the admin API | now (#119, B-37) |
 | `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | now (#159: column, seeder, admin calls, query embedding; #162: the worker's embed, canary and evaluation calls) |
 | The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
 | `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
 | An API key for `/v1/retrieve`: `POST /api/keys` in the admin API (#185), or the dev seed's `--api-key` offline (§4.4) | now |
-| On the gateway: a key restricted to residency `Eu`; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
+| On the gateway: the integration *Ume.Rag* with one credential key per service, each allowing `OnPrem` and `Eu` only; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
 | `psql` on your machine, or the AppHost's Postgres container (`--docker` below); Python 3.12 | now |
 
 ### 4.2 User secrets
@@ -130,9 +130,9 @@ dotnet user-secrets --project $p set DevelopmentVolumes:Postgres ume-rag-m1-post
 dotnet user-secrets --project $p set FakeGateway:Enabled false                           # now
 dotnet user-secrets --project $p set Gateway:BaseUrl https://<gateway host>              # now
 dotnet user-secrets --project $p set Gateway:MaxResidency Eu                            # now
-dotnet user-secrets --project $p set Gateway:Services:api:Keys:Eu <the api's Eu key>      # now
-dotnet user-secrets --project $p set Gateway:Services:admin:Keys:Eu <the admin's Eu key>  # now
-dotnet user-secrets --project $p set Gateway:Services:worker:Keys:Eu <the worker's Eu key>  # now
+dotnet user-secrets --project $p set Gateway:Services:api:Key <rag-api's credential key>      # now
+dotnet user-secrets --project $p set Gateway:Services:admin:Key <rag-admin's credential key>  # now
+dotnet user-secrets --project $p set Gateway:Services:worker:Key <rag-worker's credential key>  # now
 dotnet user-secrets --project $p set OrgSync:BaseUrl https://<Data API host>             # now (not the gateway's host)
 dotnet user-secrets --project $p set OrgSync:DataApiKey <the catalog.read key>           # now
 dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # now
@@ -142,11 +142,10 @@ dotnet user-secrets --project $p set EmbeddingProfile:MaxInputTokens 8191       
 dotnet user-secrets --project $p set EmbeddingProfile:MaxResidency Eu                    # now
 ```
 
-Set no `External` and no `OnPrem` key: the worker never holds `External` (the AppHost refuses
-`Gateway:Services:worker:Keys:External` and keeps a shared `Gateway:Keys:External` from the worker), and the pilot runs
-at `Eu`. With one key for all three, `Gateway:Keys:Eu` alone works too. `Gateway:MaxResidency Eu` caps every model
-call's ceiling at `Eu` (register M2, identity design §4.7): without it a `public` assistant is checked and answered at
-`External`, for which no key exists (admin code `gateway_key_missing`). The AppHost forwards every `Gateway:*` value. The
+Each service holds its own key, never another's; the worker's never allows `External`, and the pilot runs at `Eu`.
+`Gateway:MaxResidency Eu` caps every model call's ceiling at `Eu` (register M2, identity design §4.7): without it a
+`public` assistant's calls carry the ceiling `External`, and only the credential key's residencies keep them at `Eu`.
+The AppHost forwards every `Gateway:*` value. The
 migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfile:Name`) and never changes it once it
 exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
 profile differs from `EmbeddingProfile:*`).
@@ -311,8 +310,9 @@ left it:
 
 ```bash
 p=src/Ume.Rag.AppHost
-for k in DevelopmentVolumes:Postgres FakeGateway:Enabled Gateway:BaseUrl Gateway:Keys:Eu \
-         Gateway:Services:api:Keys:Eu Gateway:Services:admin:Keys:Eu Gateway:Services:worker:Keys:Eu OrgSync:BaseUrl OrgSync:DataApiKey \
+for k in DevelopmentVolumes:Postgres FakeGateway:Enabled Gateway:BaseUrl \
+         Gateway:Services:api:Key Gateway:Services:admin:Key Gateway:Services:worker:Key \
+         OrgSync:BaseUrl OrgSync:DataApiKey \
          EmbeddingProfile:GatewayModel EmbeddingProfile:Dimensions EmbeddingProfile:RequestDimensions \
          EmbeddingProfile:MaxInputTokens EmbeddingProfile:MaxResidency; do
   dotnet user-secrets --project $p remove $k
