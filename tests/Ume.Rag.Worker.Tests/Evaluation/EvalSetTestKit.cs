@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure;
@@ -169,6 +170,7 @@ internal sealed class EvalRig : IAsyncDisposable
         builder.Services.AddSingleton<IJobQueue>(database.Queue(RagDatabase.Worker));
         builder.Services.AddSingleton<WorkerIdentity>();
         builder.Services.AddSingleton<IEmbeddingProfileStore, PostgresEmbeddingProfileStore>();
+        builder.CapGatewayCalls(Residency.Eu); // as AddRagWorker does: the worker's maximum (identity design §4.7)
         builder.AddGatewayClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
         builder.Services.AddSingleton<EmbeddingClient>();
         builder.AddRagEvalSets();
