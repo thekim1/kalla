@@ -81,7 +81,7 @@ embeddings included; the knowledge base's key pays for keeping it indexed.
 - **Every acted call** sends `x-ume-on-behalf-of: <key id>` and checks the echo on its `2xx` answer; a missing or
   different echo fails closed (`Gateway:RequireDelegationEcho`, identity §4.7; security event 5011).
 - **A spent budget or an unusable key** (gateway `402 budget_exceeded`, whose message names the scope; `403
-  delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `key_expired` on an acted call; or the mirror
+  delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `key_expired` on an acted call; or the mirror
   showing the key not active, not usable or gone; gateway-changes §5.7) is shown to the chat user as the
   assistant being unavailable for now (chat §3.6), counted in the daily totals, and raised as an attention item for the
   object's department admins with the reason (admin §5.5.1); a worker job waits and retries after an hour, it does

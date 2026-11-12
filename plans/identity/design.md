@@ -561,7 +561,7 @@ until the first answer it sends no header. A `2xx` or `304` answer must echo the
 GUID's `D` form; compared as a GUID): a missing or different `x-ume-on-behalf-of` aborts the call before a byte is
 used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an older gateway instance
 during a rolling update ignores the header and would charge the credential key). An error answer goes by its code:
-`403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `key_expired` and `402 budget_exceeded` mean
+`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `key_expired` and `402 budget_exceeded` mean
 the object's key cannot be used now (gateway-changes §5.7; chat §3.6, engine §7.3).
 
 **Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every

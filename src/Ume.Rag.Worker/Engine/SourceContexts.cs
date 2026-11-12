@@ -10,7 +10,10 @@ using Ume.Rag.Worker.Connectors.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
 
-/// <summary>A source as the engine runs it: its collection, department and level, and its pipeline.</summary>
+/// <summary>
+/// A source as the engine runs it: its collection, department and level, its pipeline, and the collection's assigned gateway
+/// key (<c>Collections.GatewayKeyId</c>, null without one), which every model call of its documents runs as (engine design §7.7).
+/// </summary>
 public sealed record SourceContext(
     Guid SourceId,
     string Type,
@@ -22,13 +25,17 @@ public sealed record SourceContext(
     Guid DepartmentId,
     Guid EmbeddingProfileId,
     Guid PipelineId,
-    Guid? PublishedVersionId)
+    Guid? PublishedVersionId,
+    Guid? GatewayKeyId)
 {
     /// <summary>The source's <c>piiMode</c>: what a personal-data flag does in a <c>public</c> collection (settings that do not bind hold).</summary>
     public PiiMode PiiMode => SourceSettings.PiiModeOf(Type, Settings);
 
-    /// <summary>The knowledge base the source's model calls are counted under (engine design §10.6): its collection, level and department.</summary>
-    public Jobs.UsageOwner UsageOwner => new(CollectionId, CollectionClassification, DepartmentId);
+    /// <summary>
+    /// The knowledge base the source's model calls are counted under and run as (engine design §7.7, §10.6): its collection,
+    /// level, department and gateway key.
+    /// </summary>
+    public Jobs.UsageOwner UsageOwner => new(CollectionId, CollectionClassification, DepartmentId, GatewayKeyId);
 }
 
 /// <summary>A published pipeline version, validated and resolved (engine design §4: the worker runs rules 1–3, fail closed).</summary>
@@ -75,7 +82,7 @@ public sealed class SourceContexts(JobDatabase database, ILoggerFactory loggers)
 {
     private const string SourceSql = """
         SELECT s."Id", s."Type", s."Classification", s."Settings"::text, s."State" = 'active' AND s."DeletedAt" IS NULL AND c."DeletedAt" IS NULL,
-               c."Id", c."Classification", c."DepartmentId", c."EmbeddingProfileId", p."Id", p."PublishedVersionId"
+               c."Id", c."Classification", c."DepartmentId", c."EmbeddingProfileId", p."Id", p."PublishedVersionId", c."GatewayKeyId"
         FROM config."Sources" s
         JOIN config."Collections" c ON c."Id" = s."CollectionId"
         JOIN config."Pipelines" p ON p."Id" = s."PipelineId"
@@ -102,7 +109,8 @@ public sealed class SourceContexts(JobDatabase database, ILoggerFactory loggers)
 
         using var settings = JsonDocument.Parse(reader.GetString(3));
         return new SourceContext(reader.GetGuid(0), reader.GetString(1), reader.GetString(2), settings.RootElement.Clone(), reader.GetBoolean(4),
-            reader.GetGuid(5), reader.GetString(6), reader.GetGuid(7), reader.GetGuid(8), reader.GetGuid(9), Db.Nullable<Guid>(reader, 10));
+            reader.GetGuid(5), reader.GetString(6), reader.GetGuid(7), reader.GetGuid(8), reader.GetGuid(9), Db.Nullable<Guid>(reader, 10),
+            Db.Nullable<Guid>(reader, 11));
     }
 
     /// <summary>The version by id, validated against the template catalogue; a refused version throws <see cref="PipelineRefusedException"/>.</summary>

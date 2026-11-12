@@ -1,9 +1,10 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 31 (`main` at `ea5a990` plus this
-file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`). Earlier sessions are in the git history (`git log
--- HANDOVER.md`). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch
-`main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
+State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `da27bcf` plus
+this file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`; a **dry run of 0.5.0 passed** from `be37df0`).
+Earlier sessions are in the git history (`git log -- HANDOVER.md`). Repo `~/research/rag` on this machine
+(`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
+https://github.com/thekim1/ume-rag-platform (push after every commit).
 
 ## What this is
 
@@ -25,47 +26,40 @@ sink" monolith. Design and code live in this repo.
 
 ## Start here
 
-**Nothing waits in the main session's own queue** (M-13 is ticked). Stream a's remaining code items all wait on
-stream b again, so the next session starts with housekeeping and reviews:
+**Nothing waits in the main session's own queue.** Stream a's open code items (A-32, A-35) wait on stream b, and A-34
+waits only on its live check. So the next session starts with GitHub:
 
-**1. Settle B-38 part 2's deviations in the chat design** (#615 lists them; chat §8.3 and §17):
-- A rerank, condense or follow-up call that answers 2xx with output that can't be read keeps its usage.
-- A stream that breaks off is recorded usage-only at the prompt estimate; no message row, no `Cancelled` count.
-- A condense or follow-up call that times out records nothing.
-- `rag.chat.tokens{direction=input}` counts all input tokens, cached ones included.
-- The usage reaches the chat path through a callback, not through `RetrievalResult`.
+**1. Stream b's answers on #580.** Session 32 asked for (all in stream b's paths):
+- **Gateway v0.10.1** (`5b0526f`): the contract pin to `v0.10.1`; `GatewayKeyRefusedException.IsKeyRefusal`
+  (`src/Ume.Rag.Infrastructure/Gateway/GatewayActing.cs`) must match `403 key_revoked`/`key_expired` (it matches
+  `401`, so a revoked or expired key isn't recognised on v0.10.1: the worker then fails the document fatal
+  `gateway.key_revoked` instead of waiting); the FakeGateway answers `403` for them. Design: a `401` is always the
+  credential key's own refusal.
+- **Review of #616/#617** (`4fba45d` settled the design): key refusals and echo failures must not count toward the
+  query-embedding circuit nor be retried (`GatewayQueryEmbedder`); the query-embedding cache and single flight keyed
+  by `(profileId, gatewayKeyId, queryMac)`.
+- **Review of #618 (B-43, open):** a save that clears a published assistant's key must be refused
+  (`gateway_key_required`, admin V39); `GET /api/gateway/models?gatewayKeyId=` must check the key's department.
+  **The V39 rule is a design call the user hasn't confirmed yet** (asked in session 32): an editor can no longer
+  remove the key of a live assistant once `act-as-key` is on. Ask again if they haven't answered.
+- **B-48** (a cancelled turn recorded: the user's message, the partial answer, `Cancelled` counted) is queued for
+  stream b; **#619** (`Admin:GatewayAdminUrl`, `OrgSyncStatus.gateway`) and **#624** (two admin advisory locks share
+  `0x5241_4730_0011`) are filed.
 
-**2. Queue what the session left open:**
-- **Retention of `content."CollectionDailyUsage"`** (3 years, data-model §8). The worker has no content-retention
-  step at all (A-31, #613), so it needs its own stream-a item.
-- **`Admin:GatewayAdminUrl`** (admin §2.3's fallback for the gateway link) is read nowhere, and the admin UI's
-  `OrgSyncStatus` type lacks `gateway` (#609's hand-offs): an issue labelled `stream-b`.
-- `docs/local-development.md` doesn't name `fake-no-cost` or `FakeGateway:CachedInputTokens`.
+**2. Review stream b's open PRs:** #618 (B-43) and #625 (B-39), security-relevant parts.
 
-**3. `CHANGELOG.md` under Unreleased** (a small PR; shared file). It is current through #603. Missing: the Data API
-gone from the deployment (A-30 part 2, #611), member groups read-only (A-33, #609), cost per step and per knowledge
-base (B-38 #608 and #615, A-31 #613), and stream b's B-35 (#605, #607) and B-36 (#610, #612) if stream b added no
-lines itself.
+**3. Take stream a's items as they unblock:** A-32 (cost runbook) after B-40; A-35 (`Gateway__IntegrationApiUrl` and
+the runbook) after B-45. A-34's live check and every live check of B-35–B-46 wait on the interim gateway.
 
-**4. Review stream b's merged PRs** (it merges its own; review the security-relevant parts). B-35 parts 2 and 3
-(#605, #607) are spot-checked: the contract is the gateway's file at `v0.10.0` byte for byte, no Data API call is
-left, the member-groups route is gone, the sync keeps the organisation when the key lacks `organisation.read`.
-**B-36 (#610, #612: `GatewayKeyId`, the keys list, V39, the key picker) is not reviewed yet.**
+**4. Taking a stream b item** is allowed (user, 2026-11-12): ask on #580 first and wait for the answer. B-48 is
+independent of the gateway work and a candidate.
 
-**5. Take stream a's items as they unblock** (implementor agent in a worktree, review the diff, PR):
-- **A-34** (the worker acts as the knowledge base's key) after B-42. B-36 and A-31 are done.
-- **A-32** (cost runbook) after B-40.
-- **A-35** (the deployment's `Gateway__IntegrationApiUrl` and runbook) after B-45.
-
-**6. Taking a stream b item** is allowed (user, 2026-11-12: "can we unblock something by taking on it as main?").
-Ask on #580 first and wait for the answer; stream b answers within the hour. It released B-38 that way. Its next
-independent items are B-39 (the test panel's usage, hand-off in #615), B-40 (cost report API) and B-42 (phase 2).
-
-**7. Before the next release:** the release dry run. The smoke test has not run since #597 (one credential key per
-service), #601 (its new scan-off phase) and #611.
+**5. Before the next release:** the dry run of 0.5.0 passed (session 32, smoke test with the scan-off phase). Run it
+again if much lands before the tag, and the full CI set. The upgrade guide says **rolling update: no**
+(`DailyTotalsWithoutCost`).
 
 **Waiting on the user:**
-- **The interim gateway (J10) on v0.10.0**, with the integration *Ume.Rag* and three credential keys (`rag-api`,
+- **The interim gateway (J10) on v0.10.1** (not v0.10.0: #86 makes a refusal of an assigned key always `403`), with the integration *Ume.Rag* and three credential keys (`rag-api`,
   `rag-admin` with `organisation.read`, `rag-worker` capped at `OnPrem`+`Eu`). **It is needed now:** B-35 is merged,
   so the organisation, keys and model syncs read only `/v1/ume/context` and `/v1/models`, which v0.9.x doesn't have.
   Every live check of B-35–B-46, A-31, A-34 and A-35 waits on it. Gateway setup: `docs/production-setup.md` *Gateway
@@ -90,8 +84,28 @@ service), #601 (its new scan-off phase) and #611.
 
 **Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches, decisions in
 `plans/decisions.md`). It works fast (B-35 parts 2–3 and B-36 in one evening), splits items into parts, and also takes
-stream-a paths on `a/` branches when the user asks. It announces its work on the issue (#580). Its next items: B-39,
-B-40, B-41, B-42–B-46, and B-47 part 2 (the admin API's `scannedAt` and the UI's *Not scanned for malware* notes).
+stream-a paths on `a/` branches when the user asks. It announces its work on the issue (#580). B-42 and B-47 are merged (B-42 unticked until
+its live check); open: B-43 (#618), B-39 (#625); next B-40, B-41, B-44–B-46, B-48.
+
+## Done in session 32 (2026-11-12 night)
+
+- **Gateway v0.10.1** checked in the gateway's code and put in the design (`5b0526f`): refusals of the assigned key are
+  `403`; a `401` is the credential key's. Nine documents and the queues' live checks updated; stream b asked on #580.
+- **Reviewed #616, #617, #618** (agent, findings verified in the code): no high; two medium (one key's refusal opens
+  the query-embedding circuit for all; clearing a published assistant's key bypasses publish-needs-a-key) and three
+  low. Design settled in `4fba45d`; code to stream b on #580 and #618.
+- **A-34 #621** (agent): every worker job's calls as the knowledge base's key; a refused key waits until the next full
+  hour, then `failed` with the reason; a missing echo is fatal with 5011. Unticked until the live check.
+- **A-38 #623** (agent, checked in the browser on a FakeGateway stack): the gateway's limits read-only and its version
+  and features on *Gateway models*.
+- **A-39 #626** (agent): `content.rag_retention_content_step`, the age rules of data-model §8 for rows without blobs,
+  run nightly by the worker's maintenance. CI caught a missing line in the API's `sql-shapes.json` (see *Lessons*).
+- **B-38 part 2's deviations** settled in chat §8.3 and §17 (`be37df0`); the cancelled turn kept and queued as B-48.
+- **Docs and changelog:** #620 (the five migrations since 0.4.0 in the upgrade guide, rolling update no;
+  `fake-no-cost`, `CachedInputTokens`), #622 (CHANGELOG through #621).
+- **Issues:** #535, #604, #606 closed (the last two with a correction: the upgrade guide hadn't named their
+  migrations); #619 and #624 filed for stream b.
+- **Release dry run `0.5.0-dryrun`** (run 43318830850): green, smoke test with every phase including scan off.
 
 ## Done in session 31 (2026-11-12, evening)
 
@@ -121,8 +135,6 @@ B-40, B-41, B-42–B-46, and B-47 part 2 (the admin API's `scannedAt` and the UI
 
 - **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 2–3 are
   built (phase 1 is done on both streams).
-- **#535** stays open until B-47 part 2 (stream b). Until then a file stored with the scan off is in no state filter
-  of the Files tab, and nothing shows *Not scanned for malware*.
 - **A flaky test to watch:** `RenderTests.The_real_renderer_waits_for_the_quiet_rule_after_the_ready_selector_holds_text`
   failed once in CI (#613's first backend run: `Transient` instead of `Content`), with another PR's job on the same
   runner; it passed on the re-run and locally. File it if it comes back.
@@ -294,6 +306,12 @@ main session needs:
   worktrees, and start each command with `cd /home/crotalus/research/rag`.
 - **`rm` with a shell variable in the path is stopped by a safety check.** Use literal paths, or `git rm` for tracked
   files.
+- **SQL in `src/Ume.Rag.Infrastructure/` is in the API's SQL contract** (`tests/Ume.Rag.Api.Tests/sql-shapes.json`),
+  not only the worker's: an agent that adds a statement there must also run `tests/Ume.Rag.Api.Tests` (regenerate with
+  `UME_RAG_UPDATE_CONTRACTS=1`). A-39's agent ran only the worker tests and CI failed.
+- **A browser check without the password in the transcript:** a Node script under the scratchpad that requires
+  `tests/e2e/node_modules/playwright`, reads `Parameters:dev-user-password` from the AppHost user secrets itself and
+  writes screenshots (session 32, A-38). Simpler than the Playwright MCP route.
 - The Edit tool fails on a file not Read in this session. A commit made in the same step then goes out without the
   change, so check `git show --stat` after a combined edit-and-commit.
 

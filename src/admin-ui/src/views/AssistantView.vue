@@ -25,7 +25,7 @@ import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
-import { formatDateTime, formatNumber } from '@/utils/format'
+import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -478,6 +478,9 @@ onMounted(load)
             <p v-if="result.gateway.maxTokensSource" class="text-small text-fg-3" data-test="max-tokens-sent">
               {{ ASSISTANT.maxTokensSent(result.gateway.maxTokens == null ? null : formatNumber(result.gateway.maxTokens),
                                          ASSISTANT.maxTokensSources[result.gateway.maxTokensSource] ?? result.gateway.maxTokensSource) }}
+            </p>
+            <p class="text-small text-fg-3" data-test="test-cost">
+              {{ ASSISTANT.testCost(formatDecimal(result.gateway.costUsd, 4, 4), result.gateway.costEstimated) }}
             </p>
             <p v-if="result.gateway.finishReason === 'length'" role="status" class="mt-2 font-medium text-warn" data-test="length-stopped">
               {{ ASSISTANT.lengthStopped }}

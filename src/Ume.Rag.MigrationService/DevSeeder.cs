@@ -48,7 +48,25 @@ public static class DevSeeder
 
         // A profile seeded before item 13 gets its canary text now; the admin API records the canary embedding.
         await EmbeddingProfileSeeder.EnsureCanaryTextAndIndexAsync(db, profile, clock, cancellationToken);
+
+        // Identity §4.1's pilot row: the admin test panel's usage is written under it (admin §4.9, B-39). Insert-if-absent by name and kind.
+        if (!await db.Clients.AnyAsync(c => c.Name == AdminConsoleClientName && c.Kind == ClientKinds.Internal, cancellationToken))
+        {
+            db.Clients.Add(new Client
+            {
+                Name = AdminConsoleClientName,
+                Kind = ClientKinds.Internal,
+                ClassificationCeiling = Classification.Sensitive,
+                UpdatedAt = clock.GetUtcNow(),
+                UpdatedBy = EmbeddingProfileSeeder.Actor,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
+
+    /// <summary>The admin test panel's client (identity §4.1: kind <c>internal</c>, ceiling <c>sensitive</c>, no history).</summary>
+    public const string AdminConsoleClientName = "admin-console";
+
     /// <summary>
     /// The client <see cref="DevClientName"/> (<c>open-webui</c>, ceiling <c>internal</c>, no history) with the key
     /// <c>ume-rag-sk-</c> + <paramref name="devKey"/> (the AppHost's <c>dev-key</c> parameter, 43 base62 characters), hashed

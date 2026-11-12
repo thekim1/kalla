@@ -24,12 +24,14 @@ public sealed record EvaluationQuestionRow(Guid Id, EvaluationLayer Layer, strin
 /// <summary>
 /// The collection under evaluation: its level, department, profile and resolved retrieval settings (knowledge design
 /// §12.1), its live sources' compiled <c>demote</c> patterns (§6.5), and its set's active questions, <c>human</c> first
-/// (processing design §13.4).
+/// (processing design §13.4), and its assigned gateway key, which the run's model calls run as (engine design §7.7; null: the
+/// worker's credential key).
 /// </summary>
 public sealed record EvaluationTarget(
     Guid CollectionId,
     string Classification,
     Guid DepartmentId,
+    Guid? GatewayKeyId,
     DateTimeOffset? PublishedAt,
     EmbeddingProfileRecord Profile,
     RetrievalPlatformSettings Platform,
@@ -63,7 +65,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
     private const string CollectionSql = """
         SELECT c."Classification", c."DepartmentId", c."PublishedAt", c."EmbeddingProfileId", c."RetrievalSettings"::text,
                (SELECT st."Retrieval"::text FROM config."Settings" st ORDER BY st."Id" LIMIT 1),
-               (SELECT s."Id" FROM content."EvaluationSets" s WHERE s."CollectionId" = c."Id")
+               (SELECT s."Id" FROM content."EvaluationSets" s WHERE s."CollectionId" = c."Id"), c."GatewayKeyId"
         FROM config."Collections" c
         WHERE c."Id" = $1 AND c."DeletedAt" IS NULL
         """;
@@ -129,7 +131,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         string classification, collectionSettings;
         string? platformSettings;
         Guid department, profileId;
-        Guid? setId;
+        Guid? setId, gatewayKeyId;
         DateTimeOffset? publishedAt;
         await using (var connection = await database.OpenAsync(cancellationToken))
         {
@@ -147,6 +149,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
             collectionSettings = reader.GetString(4);
             platformSettings = Db.String(reader, 5);
             setId = Db.Nullable<Guid>(reader, 6);
+            gatewayKeyId = Db.Nullable<Guid>(reader, 7);
         }
 
         var profile = await profiles.GetAsync(profileId, cancellationToken)
@@ -165,7 +168,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
 
         var demote = await DemoteAsync(collectionId, cancellationToken);
         var questions = setId is { } set ? await QuestionsAsync(set, cancellationToken) : [];
-        return new EvaluationTarget(collectionId, classification, department, publishedAt, profile, platform, settings, demote, setId, questions);
+        return new EvaluationTarget(collectionId, classification, department, gatewayKeyId, publishedAt, profile, platform, settings, demote, setId, questions);
     }
 
     /// <summary>The last publish report or nightly run of the set that started before <paramref name="before"/>, with its ranks.</summary>

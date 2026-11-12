@@ -218,9 +218,12 @@ public sealed partial class EvaluationRunner(
         return (new EvaluationRunRecord(run, [.. outcomes.Select(o => o.ToResult(run.Id, target.Classification))]), outcomes, search);
     }
 
-    /// <summary>The collection's knowledge base as the owner of the job's model calls, in the attempt's <paramref name="usage"/>.</summary>
+    /// <summary>
+    /// The collection's knowledge base as the owner of the job's model calls, in the attempt's <paramref name="usage"/>; the
+    /// calls run as its gateway key.
+    /// </summary>
     private static UsageSink Calls(EvaluationTarget target, JobUsage usage) =>
-        new(usage, new UsageOwner(target.CollectionId, target.Classification, target.DepartmentId));
+        new(usage, new UsageOwner(target.CollectionId, target.Classification, target.DepartmentId, target.GatewayKeyId));
 
     private static EvalRunResult RunResult(EvaluationRunRecord record, IReadOnlyList<QuestionOutcome> outcomes, EvaluationSearchStats search, bool recallAlert) => new()
     {

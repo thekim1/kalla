@@ -58,6 +58,20 @@ exception, with its own steps.
   Portainer: add `clamav` to `COMPOSE_PROFILES`, or set `UME_RAG_CLAMAV_MODE=off`, and
   update the stack with the new stack file. **Check:** `dc ps rag-clamav` is healthy (or absent with `--clamav off`,
   where the worker logs that the scan is off at its start).
+- **Rolling update: no**, because of `DailyTotalsWithoutCost` below. Five more migrations since 0.4.0, besides
+  `UploadScannedAt` above; `rag-migrate` applies them and the grants in `app-roles.sql`, with no superuser steps:
+  - `GatewayKeys` adds `config."GatewayKeys"`, the mirror of the integration's assigned keys that rag-admin syncs from
+    the gateway's context (#580, B-35, B-36). Additive.
+  - `GatewayModelLimitsSource` adds `config."GatewayModels"."LimitsSource"` (`catalog` | `manual`, default `manual`):
+    the limits of a `catalog` row come from the gateway and can't be edited (B-35). Additive.
+  - `DailyUsage` adds `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"`, the tokens and cost of every
+    model call per day and step (B-38, A-31), and adds the first table to the chat retention step (3 years). Additive.
+  - `ObjectGatewayKeys` adds `config."Assistants"."GatewayKeyId"` and `config."Collections"."GatewayKeyId"` (B-36), the
+    key each one is charged to. Additive; an existing assistant or knowledge base has none until someone picks one.
+  - `DailyTotalsWithoutCost` drops `CostUsd`, `InputTokens` and `OutputTokens` from `chat."AssistantDailyTotals"`
+    (B-38): tokens and cost are only in `AssistantDailyUsage` now, and the totals of days before the upgrade lose them.
+    The previous release's rag-api still writes those columns, so **stop rag-api and rag-admin before `rag-migrate`**
+    and start the new release after it.
 
 ## 0.4.0
 

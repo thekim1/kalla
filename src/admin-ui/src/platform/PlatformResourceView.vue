@@ -19,6 +19,7 @@ import { problemMessage } from '@/utils/problem'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
+import GatewayContextPanel from './GatewayContextPanel.vue'
 import PromptTextsPanel from './PromptTextsPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
@@ -56,7 +57,7 @@ const confirming = ref<RowAction | null>(null)
 const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
 const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : []))
 // A row without an edit opens its details alone; with one, they stand above its form.
-const showDetails = computed(() => details.value.length > 0 && (!resource.value?.update || openForm.value?.operation === resource.value.update))
+const showDetails = computed(() => details.value.length > 0 && (!editable(selected.value!) || openForm.value?.operation === resource.value!.update))
 const drawerTitle = computed(() => openForm.value?.title ?? (selected.value && resource.value ? rowTitle(selected.value) : resource.value?.label ?? ''))
 const gatewayHref = computed(() => (adminUrl.value && resource.value?.gatewayPage ? gatewayLink(adminUrl.value, resource.value.gatewayPage) : null))
 const ownForm = computed(() => (selected.value && openForm.value?.operation === resource.value?.update ? resource.value?.form?.(selected.value) : undefined))
@@ -65,6 +66,11 @@ async function load(): Promise<void> {
   if (!resource.value) return
   if (resource.value.gatewayPage) void gatewayAdminUrl().then((url) => (adminUrl.value = url))
   await rows.run(() => rowsOf(resource.value!))
+}
+
+function editable(row: Row): boolean {
+  const r = resource.value!
+  return !!r.update && r.editable?.(row) !== false
 }
 
 function rowTitle(row: Row): string {
@@ -124,14 +130,14 @@ function create(): void {
 function edit(row: Row): void {
   const r = resource.value!
   selected.value = row
-  if (!r.update) {
+  if (!editable(row)) {
     openForm.value = null
     openError.value = null
     secret.value = null
     drawerOpen.value = !!r.details
     return
   }
-  void show(rowTitle(row), PLATFORM.form.save, r.update, row, () => (r.load ? r.load(row) : row))
+  void show(rowTitle(row), PLATFORM.form.save, r.update!, row, () => (r.load ? r.load(row) : row))
 }
 
 async function runAction(action: RowAction): Promise<void> {
@@ -180,7 +186,8 @@ watch(() => props.resource, () => {
       <UiButton v-if="resource.create" variant="primary" icon="add" data-test="create" @click="create">{{ PLATFORM.form.create }}</UiButton>
     </PageHeader>
     <template v-for="panel in resource.panels ?? []" :key="panel">
-      <EmbeddingProfilesPanel v-if="panel === 'embedding-profiles'" class="mb-6" />
+      <GatewayContextPanel v-if="panel === 'gateway-context'" class="mb-6" />
+      <EmbeddingProfilesPanel v-else-if="panel === 'embedding-profiles'" class="mb-6" />
       <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
       <PromptTextsPanel v-else-if="panel === 'prompt-texts'" class="mb-6" />
     </template>
@@ -217,6 +224,7 @@ watch(() => props.resource, () => {
                 <dd class="tabular">{{ item.value }}</dd>
               </template>
             </dl>
+            <p v-if="section.note" class="mt-2 text-small text-fg-3">{{ section.note }}</p>
           </section>
         </template>
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">

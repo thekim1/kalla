@@ -200,9 +200,10 @@ public sealed partial class ParseJobHandler(
 /// chunks are embedded (cache first), written invisible, and swapped in one fenced transaction with the run item and the
 /// job's completion. The swap re-checks that the source's published version is still the one written, so a slow write of
 /// an old version never overtakes a newer one; a set of a <c>public</c> collection that personal data flagged goes in
-/// <c>held</c>. The attempt's embedding calls (<see cref="JobContext.Usage"/>, counted under the source's collection and
-/// carrying the run's id) give the run item its <c>CostUsd</c> and go to <c>CollectionDailyUsage</c> in the transaction that
-/// writes the item (engine design §10.6).
+/// <c>held</c>. The attempt's embedding calls (<see cref="JobContext.Usage"/>, counted under the source's collection, run as
+/// its gateway key and carrying the run's id) give the run item its <c>CostUsd</c> and go to <c>CollectionDailyUsage</c> in the
+/// transaction that writes the item (engine design §7.7, §10.6). A spent budget or an unusable key waits until the next full
+/// hour; on the job's last attempt the document ends <c>failed</c> with that reason (§7.3).
 /// </summary>
 public sealed partial class EmbedJobHandler(
     SourceContexts sources,
@@ -257,6 +258,12 @@ public sealed partial class EmbedJobHandler(
         catch (PipelineRefusedException refused)
         {
             return new JobResult.FatalError(refused.Reason);
+        }
+        catch (StageTransientException transient) when (GatewayRefusals.Waits(transient.Code) && job.Attempts >= job.MaxAttempts)
+        {
+            // A spent budget or an unusable key on the last attempt (engine design §7.3): the document fails with the reason
+            // instead of the job dying without a run item.
+            return await Terminal(source, payload, job, document, Outcome.Failed, transient.Code, usage, cancellationToken);
         }
         catch (StageTransientException transient)
         {

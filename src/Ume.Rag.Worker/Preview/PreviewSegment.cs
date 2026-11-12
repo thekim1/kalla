@@ -28,8 +28,8 @@ namespace Ume.Rag.Worker.Preview;
 /// </summary>
 public sealed record PreviewRun(Guid JobId, PipelineRun Pipeline, PreviewCollectionRow Collection, IReadOnlyList<string> Stages, PreviewStore Store, JobUsage Usage)
 {
-    /// <summary>The knowledge base the preview's calls are counted under: the payload's collection.</summary>
-    public UsageOwner UsageOwner => new(Collection.Id, Collection.Classification, Collection.DepartmentId);
+    /// <summary>The knowledge base the preview's calls are counted under and run as: the payload's collection.</summary>
+    public UsageOwner UsageOwner => new(Collection.Id, Collection.Classification, Collection.DepartmentId, Collection.GatewayKeyId);
 
     public bool Embed { get; init; }
 

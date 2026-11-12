@@ -55,7 +55,7 @@ public sealed class NoDecompounderSearchIndexTests(RagDatabaseFixture database) 
     [Fact]
     public async Task The_evaluator_searches_whole_collections_and_a_scope_limited_to_topics_is_refused()
     {
-        var target = new EvaluationTarget(Guid.CreateVersion7(), Classification.Public, Guid.CreateVersion7(), null,
+        var target = new EvaluationTarget(Guid.CreateVersion7(), Classification.Public, Guid.CreateVersion7(), null, null,
             new EmbeddingProfileRecord(EngineKit.ProfileId, "fixture", "fixture-embed", EngineKit.Dimensions, 512, Residency.Eu),
             RetrievalPlatformSettings.Default, RetrievalSettings.Default, new Dictionary<Guid, IReadOnlyList<DemotePattern>>(), null, []);
         var evaluated = target.Scope(RetrievalSettings.Default);

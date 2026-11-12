@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Infrastructure.Gateway;
@@ -61,7 +62,7 @@ public sealed class FixedModelPrices(IReadOnlyDictionary<string, ModelPrices>? p
 public static class TestUsage
 {
     public static readonly UsageOwner Owner = new(Guid.Parse("01929b6e-0000-7000-8000-0000000c0001"), Ume.Rag.Domain.Classification.Internal,
-        Guid.Parse("01929b6e-0000-7000-8000-0000000d0001"));
+        Guid.Parse("01929b6e-0000-7000-8000-0000000d0001"), null);
 
     public static UsageSink Sink(IGatewayModelPrices? prices = null) => new(new JobUsage(prices ?? new FixedModelPrices(), TimeProvider.System), Owner);
 }
@@ -455,15 +456,74 @@ public sealed class FakeGatewayFactory : WebApplicationFactory<fakegateway::Prog
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration(config => config.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["FakeGateway:Keys:OnPrem"] = OnPremKey,
-            ["FakeGateway:Keys:Eu"] = EuKey,
-            ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
-            ["FakeGateway:CredentialKeys:worker:Key"] = WorkerCredentialKey,
-            ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
-        }));
+        builder.ConfigureAppConfiguration(config => config
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FakeGateway:Keys:OnPrem"] = OnPremKey,
+                ["FakeGateway:Keys:Eu"] = EuKey,
+                ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
+                ["FakeGateway:CredentialKeys:worker:Key"] = WorkerCredentialKey,
+                ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
+            })
+            .AddInMemoryCollection(TestGatewayKeys.Settings));
     }
+}
+
+/// <summary>
+/// Assigned keys of the integration in the worker tests' fakes (gateway phase 2, A-34; gateway-changes §5.2): a knowledge base's
+/// usable key, one whose own budget is spent and a disabled one, all of an active team and with every residency and model; and
+/// the helpers that let a worker act as them and read what the fake recorded.
+/// </summary>
+internal static class TestGatewayKeys
+{
+    public static readonly Guid KnowledgeBase = new("019a0000-0000-7000-8000-00000000c001");
+    public static readonly Guid BudgetSpent = new("019a0000-0000-7000-8000-00000000c002");
+    public static readonly Guid Disabled = new("019a0000-0000-7000-8000-00000000c003");
+
+    // Kontaktcenter, an active team of the fake's catalogue.
+    private const string Team = "019a0000-0000-7000-8000-000000001002";
+
+    /// <summary>The fake's <c>FakeGateway:AssignedKeys</c> entries, added after its own (a list binds its entries in order, whatever the index).</summary>
+    public static IEnumerable<KeyValuePair<string, string?>> Settings =>
+    [
+        new("FakeGateway:AssignedKeys:90:Id", KnowledgeBase.ToString()),
+        new("FakeGateway:AssignedKeys:90:Name", "Worker test – knowledge base"),
+        new("FakeGateway:AssignedKeys:90:TeamId", Team),
+        new("FakeGateway:AssignedKeys:91:Id", BudgetSpent.ToString()),
+        new("FakeGateway:AssignedKeys:91:Name", "Worker test – budget spent"),
+        new("FakeGateway:AssignedKeys:91:TeamId", Team),
+        new("FakeGateway:AssignedKeys:91:BudgetExceeded", "Key"),
+        new("FakeGateway:AssignedKeys:92:Id", Disabled.ToString()),
+        new("FakeGateway:AssignedKeys:92:Name", "Worker test – disabled"),
+        new("FakeGateway:AssignedKeys:92:TeamId", Team),
+        new("FakeGateway:AssignedKeys:92:Status", "Disabled"),
+    ];
+
+    /// <summary>The worker's credential key as the fake records it: the key of a call without a key, the "via" key of an acted one.</summary>
+    public static Guid WorkerCredentialId =>
+        fakegateway::Ume.Rag.FakeGateway.FakeAccess.CredentialId(new fakegateway::Ume.Rag.FakeGateway.FakeCredentialKey { Key = FakeGatewayFactory.WorkerCredentialKey });
+
+    /// <summary>Points the worker's own context read (identity §4.7) at <paramref name="fake"/>.</summary>
+    public static void ReadContextFrom(IServiceCollection services, WebApplicationFactory<fakegateway::Program> fake) =>
+        services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => fake.Server.CreateHandler());
+
+    /// <summary>
+    /// Reads the worker's context once and checks that it acts as keys, so its first job already does (the read at start runs in
+    /// the background and may come later).
+    /// </summary>
+    public static async Task ActAsKeysAsync(IServiceProvider worker)
+    {
+        (await worker.GetRequiredService<GatewayContextReader>().ReadAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
+        worker.GetRequiredService<GatewayFeatures>().ActAsKey.ShouldBeTrue();
+    }
+
+    /// <summary>Assigns <paramref name="key"/> to the collection, as an admin does in the knowledge base's settings (B-36).</summary>
+    public static Task AssignAsync(RagDatabaseFixture database, Guid collectionId, Guid key) =>
+        Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "GatewayKeyId" = $2 WHERE "Id" = $1""", collectionId, key);
+
+    /// <summary>The requests <paramref name="fake"/> served with <c>x-ume-run-id</c> <paramref name="runId"/>, under the key each ran as.</summary>
+    public static IReadOnlyList<fakegateway::Ume.Rag.FakeGateway.FakeUsageRecord> Served(WebApplicationFactory<fakegateway::Program> fake, Guid runId) =>
+        [.. fake.Services.GetRequiredService<fakegateway::Ume.Rag.FakeGateway.FakeUsage>().Records.Where(r => r.RunId == runId.ToString())];
 }
 
 /// <summary>Golden files (processing design §17): an output compared with its stored form; rewritten with <see cref="Fixtures.Update"/>.</summary>

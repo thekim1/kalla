@@ -440,14 +440,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-35 part 2 (the route removed).
 - **Read:** identity §2.1; admin §4.5, §4.10.
 
-### [ ] A-34 Gateway phase 2 in the worker: every job's calls as the knowledge base's key, the echo, a spent budget or an unusable key waits (#580, cost-attribution B5, B6, worker part)
+### [ ] A-34 (#621, code merged; the live check is open) Gateway phase 2 in the worker: every job's calls as the knowledge base's key, the echo, a spent budget or an unusable key waits (#580, cost-attribution B5, B6, worker part)
 - **Do:** the worker registers B-42's context reader and handler with its own credential key (identity §4.7), so it
   acts only while its context shows `act-as-key`; every call of a job (`EmbeddingClient` for indexing, re-embedding and
   preview, `EvalModelClient` for `eval-generate` and `eval-judge`, the evaluation's dedup and query embeddings and its
   rerank) carries the document's or evaluation's collection's `GatewayKeyId` (engine §7.7); a collection without a key
   runs as the credential key. Engine §7.3 on B-42's typed refusal: `402 budget_exceeded` → attempt counted,
   `AvailableAt` the next full hour, after `MaxAttempts` `failed` with `gateway.budget_exhausted`; `403
-  delegation_not_allowed`, `403 key_disabled`, `401 key_revoked`/`key_expired` the same with `gateway.key_unavailable`;
+  delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired` the same with `gateway.key_unavailable`;
   a missing or different echo fatal `gateway.delegation_not_applied` with 5011 and nothing stored; the key's `429` as
   any `429`.
 - **Paths:** `src/Ume.Rag.Worker/**` (not `Processing/Pii/**`, `Engine/HnswIndexHealth.cs`),
@@ -457,7 +457,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   next full hour and the run item ends `failed` `gateway.budget_exhausted` after `MaxAttempts`; a disabled key gives
   `gateway.key_unavailable`; with `DropOnBehalfOfEcho` the job fails `gateway.delegation_not_applied`, 5011 is logged
   and no vector is stored; a set generation's calls carry the collection's key.
-- **Live check:** on the interim gateway on v0.10.0 (not deployed yet): an ingestion run of a knowledge base with an
+- **Live check:** on the interim gateway on v0.10.1 (not deployed yet): an ingestion run of a knowledge base with an
   assigned key shows under that key in the gateway's usage report, with the worker's credential key as the via key.
 - **Waits on:** B-42 (the shared reader and handler, the typed refusal, the FakeGateway's modes), B-36
   (`Collections.GatewayKeyId`), A-31 (the same clients: its cost reading goes first).
@@ -476,7 +476,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `docs/**` (not `docs/security-events.md`, `docs/accessibility-statement.md`).
 - **Done when:** `deploy-checks` pass; with the variable set the admin container gets `Gateway__IntegrationApiUrl`,
   unset it gets none; the runbook names each refusal reason and its fix.
-- **Live check:** on the test host with the gateway on v0.10.0: the admin's budget read-back answers for a real key.
+- **Live check:** on the test host with the gateway on v0.10.1: the admin's budget read-back answers for a real key.
 - **Waits on:** B-45 (the setting in code), A-30 (one credential key per service in the deployment).
 - **Read:** gateway-changes §5.6, §5.7; admin §8.6; identity §4.7, §10; engine §7.3; repo-and-deployment §6.3, §7.1.
 
@@ -522,3 +522,41 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Open after the merge:** the release smoke test's scan-off phase has not run yet (it needs release images); it
   runs with the next release dry run.
 - **Read:** Decisions "Malware scan optional"; repo-and-deployment §5.5, §6.2, §7.1; connectors §11.
+
+### [x] A-38 (#623) The gateway's limits and version in the platform UI (#606, gateway v0.10.0)
+- **Do:** on the platform resource *Gateway models* (`resources.ts`, id `gateway-models`) a row with `limitsSource`
+  `catalog` shows `contextWindow` and `maxOutputTokens` read-only, with a note that the gateway sends them; only a
+  `manual` row keeps the edit action (`PUT /api/gateway/models/{name}` answers `400 platform_rule` with `constraint:
+  limits_from_gateway` for a `catalog` row; show that message if it comes back anyway). The same view shows the
+  gateway's `version` and `features` from `GET /api/gateway/status` (`gateway`, admin §4.10), and nothing when
+  `gateway` is null. Labels in `labels.ts` only (stream b's path: the PR goes on a `main-session/` branch, as A-33).
+- **Paths:** `src/admin-ui/src/platform/**`, `src/admin-ui/src/utils/labels.ts` (additions only).
+- **Done when:** Vitest: a `catalog` row has no edit action and shows its limits; a `manual` row keeps it; the version
+  and features show from a mocked status and are absent when `gateway` is null. Looked at in the browser on the
+  FakeGateway stack.
+- **Waits on:** nothing (B-35 part 3, #607, added `limitsSource` and the status's `gateway`).
+- **Read:** admin §4.10; Decisions "Answer length from the model".
+
+### [x] A-39 (#626) The worker's content retention step: the age rules of data-model §8 for rows without blobs
+- **Do:** a nightly step function `content.rag_retention_content_step(batch_size)` in the style of
+  `chat.rag_retention_chat_step` (data-model §8: `SECURITY DEFINER`, owner migrator, `SET search_path = pg_catalog,
+  pg_temp`, batched, the minimums inside the function, returns the rows deleted), granted to the worker role and called
+  by `MaintenanceService` after the existing steps until a batch deletes nothing; each run logged and written to
+  `audit."AuditLog"` as `system:retention`. Its rules, all from data-model §8:
+  - `CollectionDailyUsage`: `Day` older than 3 years (Europe/Stockholm, as the chat step);
+  - `Runs`: finished more than 13 months ago (their `RunItems` partitions are long dropped);
+  - `ParseObservations`: older than 180 days; `RetrievalStats`: older than 13 months;
+  - `EmbeddingCache`: unused for 30 days;
+  - `EvaluationRuns` of kind `assistant-tests` (with their results): beyond the last 20 per assistant;
+  - `SiteProfileVersions`: `superseded`/`rejected` older than 1 year, keeping the last 10 per host.
+  Rows that carry blobs (`NodeOutputs`, `QuarantinedFiles`, `tmp/` and `previews/`) are not in this item: they need the
+  tombstone path of §9.
+- **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Infrastructure/Jobs/**`, `tests/Ume.Rag.Worker.Tests/**`, and
+  stream b's migration (`src/Ume.Rag.Infrastructure/Persistence/Migrations/`) and `deploy/postgres/app-roles.sql` (the
+  grant; regenerate the Portainer stack): the PR goes on a `main-session/` branch, announced on a stream-b issue.
+- **Done when:** a test seeds each table with a row just inside and just outside its rule and runs the step: only the
+  outside rows go, the batch size holds, an audit row is written; the maintenance run calls it; the connection budget
+  test still passes.
+- **Waits on:** nothing.
+- **Read:** data-model §8, §9, §4.4; the chat step in migrations `ChatRetentionStep` and `DailyUsage`; ADR 016 in the
+  gateway's `docs/adr.md`.

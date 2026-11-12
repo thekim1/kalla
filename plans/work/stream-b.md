@@ -422,7 +422,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   nothing; a model's limits come from `ume.context_window`/`max_output_tokens` and the manual fields don't show for
   it; no `OrgSync:DataApiKey` or `/v1/catalog/` call is left; the contract test fails when the FakeGateway renames a
   field or drops a required one.
-- **Waits on:** –. The live run needs the gateway on v0.10.0 (released 2026-11-12).
+- **Waits on:** –. The live run needs the gateway on v0.10.1 (released 2026-11-12).
   A-30 removes the Data API key from the deployment.
 - **Read:** Decisions "Gateway keys"; admin §4.10; identity §2, §2.1; data-model `GatewayKeys`; gateway-changes §5,
   §5.5; repo-and-deployment §4.3; the gateway's `docs/openapi/integrations.json` and `docs/integrations.md` at `7b678a1`;
@@ -494,7 +494,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** cost-attribution §5; chat §8.3, §12.1, §12.2, §12.4, §17, §18.2; data-model §1.2, §2.2, §2.3, §8;
   gateway-changes §5.4, §7.1.
 
-### [ ] B-39 Cost per step: the test panel's calls under `admin-console` (cost-attribution C2)
+### [x] B-39 Cost per step: the test panel's calls under `admin-console` (cost-attribution C2) (#625)
 - **Do:** the test panel (admin §4.9) collects the usage records of its turn as chat does (B-38) and `rag-admin`
   upserts them into `AssistantDailyUsage` under the assistant and the `admin-console` client row (its id from the
   snapshot by name and kind `internal`; without the row the usage is not written and a warning is logged), never into
@@ -552,7 +552,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   parsed and compared as a GUID, and a missing or different one throws before use with event 5011 (`Step`,
   `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId`) while `Gateway:RequireDelegationEcho` (default
   `true`) is on; the refusals of gateway-changes §5.7 on an acted call (`403 delegation_not_allowed`, `403
-  key_disabled`, `401 key_revoked`/`key_expired`, `402 budget_exceeded` with the gateway's message) surface as one typed
+  key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded` with the gateway's message) surface as one typed
   refusal the callers map (B-44, A-34), and `400 invalid_request` is logged at Error and never retried. rag-api: every
   call of a turn as the assistant's `GatewayKeyId` (answer, condense, long-question condense and follow-ups in
   `GatewayChatClient`, the query embedding in `GatewayQueryEmbedder`, rerank in `GatewayReranker`, `ChatStreaming`),
@@ -560,7 +560,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   test panel as the assistant's key, the retrieval test as the collection's (cost-attribution §4.1). The FakeGateway's
   phase 2 of repo-and-deployment §4.3: features `act-as-key` and `run-metadata`; the header resolved as the gateway does
   (`400` malformed or repeated, `403 delegation_not_allowed` for an id not assigned to the integration or sharing no
-  residency with the credential key, `403 key_disabled`, `401 key_expired`), the request served under the assigned
+  residency with the credential key, `403 key_disabled`, `403 key_expired`), the request served under the assigned
   key's models and bounded residencies, the id echoed in the `D` form on every later answer; `/v1/models` with the
   header lists the key's models; `FakeGateway:DropOnBehalfOfEcho`; `FakeGateway:AssignedKeys:<n>:BudgetExceeded`
   (`Key`, `Team`, `Department`: `402 budget_exceeded` with the gateway's message); each served request recorded with
@@ -575,9 +575,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   under that key; an assistant without a key, or a FakeGateway without `act-as-key`, sends no header; with
   `DropOnBehalfOfEcho` the turn is aborted before a byte reaches the client and 5011 is logged, and passes with
   `Gateway:RequireDelegationEcho=false`; an upper-case echo passes; an unknown id (`403 delegation_not_allowed`), a
-  disabled key (`403 key_disabled`), an expired one (`401 key_expired`) and a spent budget (`402`) each surface as the
+  disabled key (`403 key_disabled`), an expired one (`403 key_expired`) and a spent budget (`402`) each surface as the
   typed refusal, not retried; the handler's call-site tests cover the header at every call site.
-- **Live check:** on the interim gateway on v0.10.0 (not deployed yet): one chat turn of an assistant with an assigned
+- **Live check:** on the interim gateway on v0.10.1 (not deployed yet): one chat turn of an assistant with an assigned
   key shows under that key in the gateway's usage report, with rag-api's credential key as the via key and the turn's
   run id and steps.
 - **Waits on:** B-35 (the contract pinned at v0.10.0, the FakeGateway's assigned keys), B-36 (`GatewayKeyId` on
@@ -602,7 +602,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `DropOnBehalfOfEcho` the save gives `gateway_unavailable` and 5011; publishing an assistant without a key gives
   `gateway_key_required` (without `act-as-key`: the warning only); a knowledge base without a key saves; the status
   answer reports the echo; Vitest shows each refusal's text.
-- **Live check:** on the interim gateway on v0.10.0: the key picker's model availability and V39 follow a real
+- **Live check:** on the interim gateway on v0.10.1: the key picker's model availability and V39 follow a real
   assigned key's models; the status page's echo is ok.
 - **Waits on:** B-42 (the handler and the FakeGateway's acting), B-36 (V39 and the picker).
 - **Read:** admin §4.5, §4.6 V8, V39, §5.5.2, §5.5.4; gateway-changes §5.5; cost-attribution §4.2.
@@ -625,7 +625,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   gives 503 `assistant_unavailable` and the FakeGateway saw no call; a key the FakeGateway refuses (`403
   delegation_not_allowed`) while the mirror still shows it active gives 503 `assistant_unavailable`; the test panel
   shows both reasons; the assistant page shows `[Unavailable]` with "The gateway key is disabled".
-- **Live check:** on the interim gateway on v0.10.0: a small key budget set in the gateway stops the assistant with the
+- **Live check:** on the interim gateway on v0.10.1: a small key budget set in the gateway stops the assistant with the
   planned message (cost-attribution §6's done-when).
 - **Waits on:** B-42 (the typed refusal, the FakeGateway's modes), B-36 (the key on the assistant and its page).
 - **Read:** chat §3.6, §4.1, §8.2, §9.6; knowledge §5.2, §5.5; admin §5.5.1, §5.5.2, §5.5.4; gateway-changes §5.4,
@@ -649,7 +649,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `exhausted: true`; rag-api's credential key gets `403` from the FakeGateway's `/integration/v1`; with
   `Gateway:IntegrationApiUrl` unset both routes answer `null` without a call; a second read within 5 minutes makes no
   call; the contract test fails on a renamed or missing field.
-- **Live check:** on the interim gateway on v0.10.0 with `usage.read` on rag-admin's key: an assistant key's cost for
+- **Live check:** on the interim gateway on v0.10.1 with `usage.read` on rag-admin's key: an assistant key's cost for
   a day equals the gateway's usage report for that key.
 - **Waits on:** B-42 (the FakeGateway's record per request under the acting key), B-36 (keys on objects), B-35 (the
   pin at v0.10.0).
@@ -666,7 +666,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** Vitest against B-45's contract: the budget status with an exhausted budget, the gateway's figures
   beside the stored ones by step, the shared-key note, `null` showing the link; no UI string outside
   `labels.ts`/`messages.ts`.
-- **Live check:** on the interim gateway on v0.10.0: a real assistant's card shows its key's gateway cost and budget.
+- **Live check:** on the interim gateway on v0.10.1: a real assistant's card shows its key's gateway cost and budget.
 - **Waits on:** B-45, B-41 (the cards).
 - **Read:** admin §5.5.4, §8.6; Decisions "Admin UI in English".
 
@@ -728,3 +728,18 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   The worker writes `unscanned`, `ScannedAt` and `Runs.Report.malwareScan` since A-36 (#602).
 - **Read:** Decisions "Malware scan optional"; connectors §9.1, §11; admin §4.5, §5.5.7; identity §10;
   repo-and-deployment §4.1.
+
+### [ ] B-48 A cancelled turn is recorded: the user's message, the partial answer, its usage, the `Cancelled` count (chat §8.3)
+- **Do:** when the client disconnects or the idle or total timeout ends a streamed answer (chat §8.3), the writer gets
+  the turn as any other (§12): the user's message, the partial answer as delivered so far with `Outcome = cancelled`,
+  the turn's usage records (the aborted answer at its prompt estimate, as B-38 records it now, plus the calls before
+  it), and `AssistantDailyTotals.Cancelled` counted in the same transaction. Today such a turn writes usage only:
+  no message row, and `ConversationWriter` inserts `Errors` and `Cancelled` as constant `0`. Count `Errors` the same
+  way for a turn that ends `error` after the user's message was accepted, if it doesn't already.
+- **Paths:** `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, their tests.
+- **Done when:** a test disconnects at the first byte and mid-stream (FakeGateway `fake-slow` or a stalled stream):
+  one user and one assistant message are stored, the second with `Outcome = cancelled` and the delivered text, the
+  `chat-answer` usage row is estimated, and the day's `Cancelled` is 1; an idle timeout does the same; chat §18.4's
+  "partial turn `cancelled`" case passes.
+- **Waits on:** nothing (B-38 part 2, #615, records the usage).
+- **Read:** chat §8.3 (client disconnect, usage and cost), §12, §18.4; data-model §2.3 `Messages`, `AssistantDailyTotals`.
