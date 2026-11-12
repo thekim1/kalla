@@ -288,7 +288,7 @@ public sealed partial class DocumentIngest(
         };
         if (reason is not null)
         {
-            await TerminalAsync(source, runId, null, document, document.CanonicalIdentity, Outcome.Superseded, reason, pipelineVersionId, null, cancellationToken);
+            await TerminalAsync(source, runId, null, document, document.CanonicalIdentity, Outcome.Superseded, reason, pipelineVersionId, null, null, cancellationToken);
         }
 
         return result;
@@ -345,7 +345,7 @@ public sealed partial class DocumentIngest(
 
         LogSuperseded(logger, document.Id, executionId);
         return await TerminalAsync(source, runId, job, document, document.CanonicalIdentity, Outcome.Superseded, "execution.superseded", pipelineVersionId,
-            frontier, cancellationToken);
+            frontier, null, cancellationToken);
     }
 
     /// <summary>A terminal outcome without a segment: the run item, the frontier row and the job's completion (when given) in one transaction.</summary>
@@ -354,14 +354,18 @@ public sealed partial class DocumentIngest(
     {
         ArgumentNullException.ThrowIfNull(fetch);
         var item = TerminalItem(fetch.Source, fetch.Run.Id, document, document?.CanonicalIdentity ?? fetch.Identity, outcome, reason, fetch.Pipeline.VersionId);
-        return CommitTerminalAsync(fetch.Job, fetch.ContentHash is null ? item : item with { ContentHash = fetch.ContentHash }, frontier, cancellationToken);
+        return CommitTerminalAsync(fetch.Job, fetch.ContentHash is null ? item : item with { ContentHash = fetch.ContentHash }, frontier, null, cancellationToken);
     }
 
+    /// <summary>
+    /// A terminal outcome of a document outside a segment; with <paramref name="usage"/> (an <c>embed</c> job's calls) the item's
+    /// <c>CostUsd</c> is their cost and they are added to <c>CollectionDailyUsage</c> in the same transaction (engine design §10.6).
+    /// </summary>
     public Task<JobResult> TerminalAsync(SourceContext source, Guid runId, LeasedJob? job, DocumentRow? document, string identityText, Outcome outcome,
-        string? reason, Guid? pipelineVersionId, FrontierCompletion? frontier, CancellationToken cancellationToken)
+        string? reason, Guid? pipelineVersionId, FrontierCompletion? frontier, JobUsage? usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return CommitTerminalAsync(job, TerminalItem(source, runId, document, identityText, outcome, reason, pipelineVersionId), frontier, cancellationToken);
+        return CommitTerminalAsync(job, TerminalItem(source, runId, document, identityText, outcome, reason, pipelineVersionId), frontier, usage, cancellationToken);
     }
 
     private static RunItemRow TerminalItem(SourceContext source, Guid runId, DocumentRow? document, string identityText, Outcome outcome, string? reason,
@@ -375,10 +379,11 @@ public sealed partial class DocumentIngest(
             ContentHash = document?.ContentHash,
         };
 
-    private async Task<JobResult> CommitTerminalAsync(LeasedJob? job, RunItemRow item, FrontierCompletion? frontier, CancellationToken cancellationToken)
+    private async Task<JobResult> CommitTerminalAsync(LeasedJob? job, RunItemRow item, FrontierCompletion? frontier, JobUsage? usage,
+        CancellationToken cancellationToken)
     {
         await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
-        await commit.AddRunItemAsync(item, cancellationToken);
+        await commit.AddRunItemAsync(item with { CostUsd = usage?.PendingCostUsd }, cancellationToken);
         if (frontier is not null)
         {
             await commit.CompleteFrontierAsync(frontier, cancellationToken);
@@ -388,6 +393,11 @@ public sealed partial class DocumentIngest(
         {
             // The lease is gone: nothing is written; the dispatcher records the loss.
             return new JobResult.Success();
+        }
+
+        if (usage is not null)
+        {
+            await commit.AddUsageAsync(usage, cancellationToken);
         }
 
         await commit.CommitAsync(cancellationToken);

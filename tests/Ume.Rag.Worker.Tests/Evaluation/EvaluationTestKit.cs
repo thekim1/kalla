@@ -30,6 +30,14 @@ internal sealed record EvalFixture(SourceSeed Seed, Guid SetId, Guid Permit, Gui
 /// <param name="Generated">An answerable question of the generated layer.</param>
 internal sealed record EvalQuestions(Guid CompoundOnly, Guid Keyword, Guid Unreachable, IReadOnlyList<Guid> Unanswerable, Guid Generated);
 
+/// <summary>A search outside a job (contract and reproducibility tests): a run id of its own, the calls counted in an attempt nobody writes.</summary>
+internal static class EvaluationSessionTestExtensions
+{
+    public static Task<Ume.Rag.Retrieval.SearchResult> SearchAsync(this Worker.Evaluation.EvaluationSession session, Worker.Evaluation.EvaluationQuestionRow question,
+        Ume.Rag.Pipelines.Jobs.EvaluationVariant variant, Ume.Rag.Retrieval.RetrievalSettings settings, CancellationToken cancellationToken) =>
+        session.SearchAsync(question, variant, settings, Guid.CreateVersion7(), TestUsage.Sink(), cancellationToken);
+}
+
 internal static class EvalKit
 {
     public const string CompoundOnlyQuestion = "Hur får man tillstånd?";

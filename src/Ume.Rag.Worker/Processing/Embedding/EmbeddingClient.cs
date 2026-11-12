@@ -4,12 +4,16 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Persistence;
 
 namespace Ume.Rag.Worker.Processing.Embedding;
 
-/// <summary>Who an embedding call is for (engine design §7.7 headers): the run and the step type.</summary>
-public sealed record EmbeddingCall(Guid? RunId, string Step = "embed");
+/// <summary>
+/// Who an embedding call is for (engine design §7.7 headers, §10.6): the run id it carries as <c>x-ume-run-id</c> (the run's,
+/// the evaluation run's, or the job's id for set generation and preview), where its usage is counted, and the step type.
+/// </summary>
+public sealed record EmbeddingCall(Guid RunId, UsageSink Usage, string Step = EmbeddingClient.EmbedStep);
 
 /// <summary>
 /// <c>POST /v1/embeddings</c> through the worker's gateway client <see cref="HttpClientName"/> (<c>AddGatewayClient</c> with its
@@ -17,13 +21,16 @@ public sealed record EmbeddingCall(Guid? RunId, string Step = "embed");
 /// worker's key of that level, <c>Eu</c> for the P1a pilot), <c>dimensions</c> when the profile requests it,
 /// <c>x-ume-run-id</c> and <c>x-ume-step</c>. The answer is checked before anything is stored: one vector per input in input
 /// order, each of the profile's dimensions and finite (else fatal <c>embed.bad_vector</c>); the residency is checked by the
-/// handler (above the ceiling: fatal, event 5003). Status codes map per engine design §7.3.
+/// handler (above the ceiling: fatal, event 5003). Status codes map per engine design §7.3. Every answered call's usage
+/// (<c>usage.prompt_tokens</c> and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the call's
+/// <see cref="EmbeddingCall.Usage"/> before the vectors are checked, since the gateway charged it; an error answer records nothing.
 /// </summary>
 public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clock)
 {
     public const string HttpClientName = "gateway-embed";
     public const string RunIdHeader = "x-ume-run-id";
     public const string StepHeader = "x-ume-step";
+    public const string EmbedStep = "embed";
 
     private static readonly Uri EmbeddingsPath = new("v1/embeddings", UriKind.Relative);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -38,11 +45,7 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
             Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, inputs, "float", profile.DimensionsParameter), options: Json),
         };
         request.WithMaxResidency(profile.MaxResidency);
-        if (call.RunId is { } runId)
-        {
-            request.Headers.Add(RunIdHeader, runId.ToString());
-        }
-
+        request.Headers.Add(RunIdHeader, call.RunId.ToString());
         request.Headers.Add(StepHeader, call.Step);
         HttpResponseMessage response;
         try
@@ -69,17 +72,33 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
                 throw await MapAsync(response, cancellationToken);
             }
 
-            EmbeddingResponse? body;
+            JsonDocument document;
             try
             {
-                body = await response.Content.ReadFromJsonAsync<EmbeddingResponse>(Json, cancellationToken);
+                document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             }
             catch (JsonException)
             {
+                await call.Usage.RecordAsync(new GatewayCallUsage(call.Step, profile.GatewayModel, default(GatewayTokens), GatewayUsageReader.CostHeader(response)),
+                    cancellationToken);
                 throw new StageFatalException(RunItemOutcome.Failed, "embed.bad_vector");
             }
 
-            return Check(body, inputs.Count, profile.Dimensions);
+            using (document)
+            {
+                await call.Usage.RecordAsync(GatewayUsageReader.Read(response, document.RootElement, call.Step, profile.GatewayModel), cancellationToken);
+                EmbeddingResponse? body;
+                try
+                {
+                    body = document.RootElement.Deserialize<EmbeddingResponse>(Json);
+                }
+                catch (JsonException)
+                {
+                    throw new StageFatalException(RunItemOutcome.Failed, "embed.bad_vector");
+                }
+
+                return Check(body, inputs.Count, profile.Dimensions);
+            }
         }
     }
 

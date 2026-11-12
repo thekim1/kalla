@@ -284,12 +284,12 @@ public sealed class CrawlSourceRunner(
             case CrawlFetchResult.Requeue requeue when (requeue.CountsAttempt && job.Attempts >= job.MaxAttempts) || scanWait.Expired(requeue.Reason, job):
                 await traversal.AbandonAsync(context, urlHash, cancellationToken);
                 return await ingest.TerminalAsync(source, run.Id, job, await KnownAsync(source, row!.Url, cancellationToken), row.Url, Outcome.Failed,
-                    requeue.Reason, run.PipelineVersionId, null, cancellationToken);
+                    requeue.Reason, run.PipelineVersionId, null, null, cancellationToken);
             case CrawlFetchResult.Requeue requeue:
                 return new JobResult.TransientError(requeue.Reason, requeue.Delay, requeue.CountsAttempt);
             case CrawlFetchResult.NotReached notReached:
                 return await ingest.TerminalAsync(source, run.Id, job, await KnownAsync(source, row!.Url, cancellationToken), row.Url, Outcome.Skipped,
-                    notReached.Reason, run.PipelineVersionId, null, cancellationToken);
+                    notReached.Reason, run.PipelineVersionId, null, null, cancellationToken);
             case CrawlFetchResult.Done done:
                 var outcome = done.Fold.Kind == CanonicalFoldKind.Folded ? new FetchOutcome.Skipped(CrawlTraversal.Folded) : done.Outcome;
                 var fetched = done.Frontier.Row;

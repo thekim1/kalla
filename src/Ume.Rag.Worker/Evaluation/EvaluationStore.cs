@@ -242,11 +242,12 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
     }
 
     /// <summary>
-    /// Writes the runs and their results and completes the job with <paramref name="result"/> in one transaction; the
-    /// completion is the fence (a job that lost its lease writes nothing).
+    /// Writes the runs and their results and completes the job with <paramref name="result"/> in one transaction, with the
+    /// job's model calls (<paramref name="usage"/>) added to <c>CollectionDailyUsage</c> last; the completion is the fence (a
+    /// job that lost its lease writes nothing).
     /// </summary>
     public async Task<JobResult> CompleteAsync<TResult>(LeasedJob job, IJobQueue queue, WorkerIdentity identity, IReadOnlyList<EvaluationRunRecord> runs,
-        TResult result, CancellationToken cancellationToken)
+        TResult result, JobUsage usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(runs);
@@ -266,7 +267,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
             }
         }
 
-        return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, cancellationToken);
+        return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, usage, cancellationToken);
     }
 
     /// <summary>The collection's sources with at least one demote pattern that compiles (<see cref="DemoteAdjuster.Compile"/>).</summary>

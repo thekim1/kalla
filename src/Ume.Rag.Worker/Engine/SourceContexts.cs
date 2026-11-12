@@ -26,6 +26,9 @@ public sealed record SourceContext(
 {
     /// <summary>The source's <c>piiMode</c>: what a personal-data flag does in a <c>public</c> collection (settings that do not bind hold).</summary>
     public PiiMode PiiMode => SourceSettings.PiiModeOf(Type, Settings);
+
+    /// <summary>The knowledge base the source's model calls are counted under (engine design §10.6): its collection, level and department.</summary>
+    public Jobs.UsageOwner UsageOwner => new(CollectionId, CollectionClassification, DepartmentId);
 }
 
 /// <summary>A published pipeline version, validated and resolved (engine design §4: the worker runs rules 1–3, fail closed).</summary>

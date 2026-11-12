@@ -57,15 +57,15 @@ public sealed partial class EvalJobHandler(EvaluationRunner runner, ConfigVersio
                     return new JobResult.FatalError(InvalidPayload);
                 case EvalKinds.OnDemand:
                     return CommandPayload.Read<EvalOnDemandPayload>(payload) is { } onDemand
-                        ? await runner.OnDemandAsync(job, onDemand, cancellationToken)
+                        ? await runner.OnDemandAsync(job, onDemand, context.Usage, cancellationToken)
                         : new JobResult.FatalError(InvalidPayload);
                 case EvalKinds.PublishReport:
                     return CommandPayload.Read<EvalPublishReportPayload>(payload) is { } report
-                        ? await runner.PublishReportAsync(job, report, cancellationToken)
+                        ? await runner.PublishReportAsync(job, report, context.Usage, cancellationToken)
                         : new JobResult.FatalError(InvalidPayload);
                 case EvalKinds.Nightly:
                     return CommandPayload.Read<EvalNightlyPayload>(payload) is { } nightly
-                        ? await runner.NightlyAsync(job, nightly, cancellationToken)
+                        ? await runner.NightlyAsync(job, nightly, context.Usage, cancellationToken)
                         : new JobResult.FatalError(InvalidPayload);
                 default:
                     if (context.Services.GetService<IEvalSetHandler>() is { } sets)

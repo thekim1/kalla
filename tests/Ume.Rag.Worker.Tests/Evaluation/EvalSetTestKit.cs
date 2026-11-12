@@ -170,6 +170,7 @@ internal sealed class EvalRig : IAsyncDisposable
         builder.Services.AddSingleton<IJobQueue>(database.Queue(RagDatabase.Worker));
         builder.Services.AddSingleton<WorkerIdentity>();
         builder.Services.AddSingleton<IEmbeddingProfileStore, PostgresEmbeddingProfileStore>();
+        builder.Services.AddSingleton<IGatewayModelPrices, PostgresGatewayModelPrices>();
         builder.CapGatewayCalls(Residency.Eu); // as AddRagWorker does: the worker's maximum (identity design §4.7)
         builder.AddGatewayClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
         builder.Services.AddSingleton<EmbeddingClient>();
@@ -200,7 +201,8 @@ internal sealed class EvalRig : IAsyncDisposable
         await using var scope = _host.Services.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetService<IEvalSetHandler>();
         handler.ShouldNotBeNull();
-        return await handler.ExecuteAsync(new JobContext(job, scope.ServiceProvider), kind, Ct);
+        var usage = new JobUsage(scope.ServiceProvider.GetRequiredService<IGatewayModelPrices>(), TimeProvider.System);
+        return await handler.ExecuteAsync(new JobContext(job, scope.ServiceProvider, usage), kind, Ct);
     }
 
     public async ValueTask DisposeAsync()
