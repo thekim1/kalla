@@ -480,7 +480,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-45 (the setting in code), A-30 (one credential key per service in the deployment).
 - **Read:** gateway-changes §5.6, §5.7; admin §8.6; identity §4.7, §10; engine §7.3; repo-and-deployment §6.3, §7.1.
 
-### [ ] A-36 Malware scan optional in the worker: `ClamAv:Mode`, the scanner that doesn't scan, `unscanned` slots (#535)
+### [x] A-36 (#602) Malware scan optional in the worker: `ClamAv:Mode`, the scanner that doesn't scan, `unscanned` slots (#535)
 - **Do:** `ClamAv:Mode` (`on` default | `off`) beside `ClamAv:Host` and `ClamAv:Port` (connectors §11).
   - **`on`:** as today. Outside Development the worker refuses to start without `ClamAv:Host`, with a message that
     names both settings; Development without a host keeps the `EicarOnlyScanner`.
@@ -499,7 +499,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-47's first part (the state, the column, the event).
 - **Read:** Decisions "Malware scan optional"; connectors §5.5, §9.1, §11, §16, §18.
 
-### [ ] A-37 Malware scan optional in the deployment and the docs (#535)
+### [x] A-37 (#601) Malware scan optional in the deployment and the docs (#535)
 - **Do:**
   - **Compose:** `rag-clamav` under the profile `clamav`; the worker's `depends_on` on it not required;
     `ClamAv__Mode: ${UME_RAG_CLAMAV_MODE:-on}` on the worker (repo-and-deployment §5.5).
@@ -519,4 +519,6 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   and a re-run without the option keeps it; `kubectl kustomize` of the example with and without `components/clamav`.
   The release smoke test also boots with `--clamav off`: the worker is healthy and no `rag-clamav` container runs.
 - **Waits on:** A-36 (the worker reads `ClamAv:Mode`).
+- **Open after the merge:** the release smoke test's scan-off phase has not run yet (it needs release images); it
+  runs with the next release dry run.
 - **Read:** Decisions "Malware scan optional"; repo-and-deployment §5.5, §6.2, §7.1; connectors §11.

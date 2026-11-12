@@ -45,8 +45,8 @@ cost of every model call per assistant, knowledge base, step and client and show
 gateway's delegated attribution, follows in P2 before a second department.
 
 **Malware scan optional** (Decisions "Malware scan optional", user 2026-11-09, #535; not a go-live gate): a
-deployment may run without ClamAV (`ClamAv:Mode = off`), and its files are then marked as not scanned. Queued as
-B-47, then A-36 and A-37.
+deployment may run without ClamAV (`ClamAv:Mode = off`), and its files are then marked as not scanned. Built
+2026-11-12 (#599, #602, #601) except the admin API's `scannedAt` and the admin UI's notes, which are the rest of B-47.
 
 ## Waiting on people
 

@@ -718,6 +718,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   slot is among *processing*, and an `indexed` slot without `ScannedAt` answers `scannedAt: null`; Vitest: the note
   shows on those files and not on a scanned one, and the run line shows for `malwareScan: "off"`; the AppHost with
   `ClamAv:Mode=off` has no `clamav` resource and the worker's environment has `ClamAv__Mode=off`.
-- **Waits on:** –. Land the state, the column, the event and the AppHost first (a part of its own): A-36 waits on them.
+- **Waits on:** –. **Part 1 is done** (#599, by the main session with the user's go-ahead, 2026-11-12): the state,
+  the column and its migration `UploadScannedAt`, event 5106 and the AppHost's `ClamAv:Mode`. **Left for stream b:**
+  the admin API (`unscanned` among *processing*, `scannedAt` on each file, the contract) and the admin UI's two notes.
+  The worker writes `unscanned`, `ScannedAt` and `Runs.Report.malwareScan` since A-36 (#602).
 - **Read:** Decisions "Malware scan optional"; connectors §9.1, §11; admin §4.5, §5.5.7; identity §10;
   repo-and-deployment §4.1.

@@ -104,8 +104,11 @@ user asks (B-37 part 2, #594). It announces its work on the issue (#580).
 
 - **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 1–3 are
   built.
-- **#535** (malware scan optional, Decisions "Malware scan optional") is settled and queued (M-13, `fe64205`):
-  B-47 for stream b, then A-36 (worker) once B-47's first part is merged, then A-37 (deployment and docs).
+- **#535** (malware scan optional, Decisions "Malware scan optional", M-13) is built except B-47 part 2: B-47 part 1
+  (#599, by the main session), A-36 (#602, worker) and A-37 (#601, deployment and docs) are merged. Stream b has the
+  admin API's `scannedAt` and the admin UI's notes left. The release smoke test's scan-off phase has not run yet.
+  The main session asked stream b on #580 whether B-35 part 2 is started and whether B-38 is free (the user allows
+  the main session to take a stream b item to unblock stream a); don't start either before it answers.
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
