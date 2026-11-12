@@ -133,7 +133,8 @@ the ceiling fails; there is no circuit-open 503), `fake-fail-timeout` (504 `all_
 `fake-fail-fallback` (its `OnPrem` target fails: 502 at `OnPrem`, an answer from `Eu` at `Eu`), `fake-slow`,
 `fake-wrong-residency`, `fake-wrong-residency-embed`, `fake-drained` (503 `no_eligible_provider` + `Retry-After`) and
 the stream faults `fake-stream-broken`, `fake-stream-stall`, `fake-stream-no-done`, `fake-stream-empty-deltas` and
-`fake-stream-length`.
+`fake-stream-length`. `fake-no-cost` answers without `x-ume-cost-usd` and without the stream cost comment, as a
+gateway that can't price the call (the usage is then recorded at Ume.Rag's estimate).
 
 Switches:
 - `FakeGateway:RerankEnabled` (default `false`): rerank is optional, so by default `/v1/rerank` answers 404
@@ -144,6 +145,9 @@ Switches:
 - `FakeGateway:StrictKeyLevel` (default `true`): with one of the fake's per-level keys (`FakeGateway:Keys:<level>`,
   which the AppHost does not set), a ceiling other than the key's level answers 403 `key_level_mismatch` (fake-only).
   It does not apply to the credential keys.
+- `FakeGateway:CachedInputTokens` (default `0`): the prompt tokens every chat answer reports as cached
+  (`usage.prompt_tokens_details.cached_tokens`, at most the prompt), priced at the cached rate. Tests set it to check the
+  cached-input price (chat design §8.3).
 
 Every gateway client registered with `AddGatewayClient` sends a 502 or 504 once more with the same request (same
 ceiling, key and body; `GatewayRetryHandler`, `Gateway:RetryDelay` 250 ms) before any job retry. 403, 503 and 404
