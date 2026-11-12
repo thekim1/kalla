@@ -675,7 +675,6 @@ export const PLATFORM = {
     toolPolicy: 'Tool policy',
     portalUrl: 'Portal URL',
     isEnabled: 'Enabled',
-    memberGroups: 'Member groups',
     evaluationModel: 'Model for test questions',
     evaluationJudgeModel: 'Judge model',
     condenseModel: 'Condense model',
@@ -692,8 +691,6 @@ export const PLATFORM = {
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
-    memberGroups:
-      'Group names from the sign-in (or Entra object ids). The sign-in shares its groups with the AI gateway: a gateway group with the same name counts too. A member group gives department scope, never a role.',
     requestsPerMinute:
       'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. Open WebUI users always get the per-user limit.',
     dimensions: 'The size of each vector. It must match what the model returns.',
@@ -715,7 +712,7 @@ export const PLATFORM = {
     gatewayModels: { label: 'Gateway models', description: 'The models from the AI gateway’s catalogue' },
     organisation: {
       label: 'Organisation',
-      description: 'Departments: their member groups and how their knowledge bases are shared',
+      description: 'Departments from the AI gateway: their member groups and how their knowledge bases are shared',
       keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'organisation', 'municipality'],
     },
   },
@@ -871,6 +868,9 @@ export const PLATFORM = {
     },
   },
   organisation: {
+    memberGroups: 'Member groups',
+    noMemberGroups: 'No member groups',
+    gatewayLink: 'Edit member groups in the AI gateway',
     sharing: 'How its knowledge bases are shared',
     department: 'Only our department',
     selected: 'Selected departments',

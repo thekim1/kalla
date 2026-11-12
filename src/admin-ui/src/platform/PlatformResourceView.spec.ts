@@ -14,15 +14,6 @@ const departments = [
   },
 ]
 
-const openApi = {
-  paths: {
-    '/api/organisation/departments/{id}/member-groups': {
-      put: { requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/MemberGroupsRequest' } } } } },
-    },
-  },
-  components: { schemas: { MemberGroupsRequest: { properties: { memberGroups: { type: 'array', items: { type: 'string' } } } } } },
-}
-
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
@@ -33,10 +24,15 @@ afterEach(() => {
 })
 
 describe('Platform objects: organisation (admin design §5.8)', () => {
-  it('lists each department with its member groups and sharing summary, and opens its member groups with the sharing per level', async () => {
+  function mountOrganisation(syncStatus: unknown) {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? openApi : departments))))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'organisation' }, attachTo: document.body })
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>((url) => Promise.resolve(json(url === '/api/organisation/sync' ? syncStatus : departments)))
+    vi.stubGlobal('fetch', fetch)
+    return { fetch, wrapper: mount(PlatformResourceView, { props: { resource: 'organisation' }, attachTo: document.body }) }
+  }
+
+  it('lists each department with its member groups and sharing summary, and opens them read-only with the sharing per level', async () => {
+    const { fetch, wrapper } = mountOrganisation({ gateway: null })
     await flushPromises()
 
     const row = wrapper.get('tbody tr')
@@ -46,17 +42,56 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
 
     await row.trigger('click')
     await flushPromises()
-    const details = wrapper.get('[data-test="details"]')
-    expect(details.text()).toContain(PLATFORM.organisation.sharing)
-    const facts = details.findAll('dt').map((dt, i) => [dt.text(), details.findAll('dd')[i]!.text()])
+    const [groups, sharing] = wrapper.findAll('[data-test="details"]')
+    expect(groups!.get('h3').text()).toBe(PLATFORM.organisation.memberGroups)
+    expect(groups!.findAll('li').map((li) => li.text())).toEqual(['Kommunstyrelsen', 'KLK-alla'])
+    expect(sharing!.text()).toContain(PLATFORM.organisation.sharing)
+    const facts = sharing!.findAll('dt').map((dt, i) => [dt.text(), sharing!.findAll('dd')[i]!.text()])
     expect(facts).toEqual([
       [PLATFORM.organisation.department, '2'],
       [PLATFORM.organisation.selected, '1'],
       [PLATFORM.organisation.sharedWith, '4'],
       [PLATFORM.organisation.municipality, '3'],
     ])
-    expect((wrapper.get('#platform-organisation-memberGroups').element as HTMLTextAreaElement).value).toBe('Kommunstyrelsen\nKLK-alla')
-    expect(wrapper.text()).toContain(PLATFORM.fieldHints.memberGroups)
+
+    // No edit: no form, no save, and nothing but GETs (the member-groups PUT is gone, B-35 part 2).
+    expect(document.body.querySelector('form')).toBeNull()
+    expect(document.body.textContent).not.toContain(PLATFORM.form.save)
+    expect(fetch.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true)
+    expect(fetch.mock.calls.map(([url]) => String(url)).some((url) => url.includes('member-groups'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('links the gateway\'s Organisation page in a new tab when the sync knows the gateway\'s admin URL (admin design §2.3)', async () => {
+    const { wrapper } = mountOrganisation({ gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] } })
+    await flushPromises()
+
+    const link = wrapper.get('[data-test="gateway-page"]')
+    expect(link.element.tagName).toBe('A')
+    expect(link.attributes('href')).toBe('https://gateway-admin.example.invalid/organisation')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toContain('noopener')
+    expect(link.text()).toContain(PLATFORM.organisation.gatewayLink)
+    wrapper.unmount()
+  })
+
+  it('shows no gateway link when the admin URL is unknown or not an http(s) address, or the sync status cannot be read', async () => {
+    const notALink = { gateway: { version: '0.10.0', adminUrl: 'javascript:alert(1)', features: [] } }
+    for (const status of [{ gateway: { version: '0.10.0', adminUrl: null, features: [] } }, { gateway: null }, notALink]) {
+      const { wrapper } = mountOrganisation(status)
+      await flushPromises()
+      expect(wrapper.find('tbody tr').exists()).toBe(true)
+      expect(wrapper.find('[data-test="gateway-page"]').exists()).toBe(false)
+      wrapper.unmount()
+    }
+
+    setActivePinia(createPinia())
+    vi.stubGlobal('fetch', vi.fn((url: string) =>
+      Promise.resolve(url === '/api/organisation/sync' ? new Response(null, { status: 500 }) : json(departments))))
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'organisation' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('tbody tr').exists()).toBe(true)
+    expect(wrapper.find('[data-test="gateway-page"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
