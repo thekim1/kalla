@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Blobs;
@@ -66,6 +67,8 @@ public static class WorkerExtensions
                 host.ShutdownTimeout = needed;
             }
         });
+        // The worker's credential key allows OnPrem and Eu only: a call above Eu is refused before sending (identity design §4.7).
+        builder.CapGatewayCalls(Residency.Eu);
         builder.AddRagJobQueue();
         builder.AddRagBlobStore();
         builder.AddRagBlobEnvelope();

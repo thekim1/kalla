@@ -198,8 +198,7 @@ public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeG
             new Dictionary<string, string?>
             {
                 ["Gateway:BaseUrl"] = "http://fake-gateway",
-                ["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
-                ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+                ["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey,
                 ["BlobStore:Root"] = _blobs.FullName,
                 ["Worker:Classes"] = JobClasses.Eval,
                 ["Worker:SchedulerSeconds"] = "600",

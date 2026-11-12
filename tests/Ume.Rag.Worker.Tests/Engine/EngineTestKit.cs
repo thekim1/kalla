@@ -233,8 +233,7 @@ internal static class EngineKit
         }, Merge(new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
-            ["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
-            ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+            ["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey,
             ["BlobStore:Root"] = blobs.FullName,
             ["Crawl:AllowedPrivateRanges"] = "127.0.0.1/32",
             ["Worker:FinalizerSeconds"] = FinalizerSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),

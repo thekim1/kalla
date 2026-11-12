@@ -96,8 +96,7 @@ internal static class EvalKit
         }, new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
-            ["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
-            ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+            ["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey,
             ["BlobStore:Root"] = blobs.FullName,
             ["Worker:Classes"] = JobClasses.Eval,
         }, engine: true);

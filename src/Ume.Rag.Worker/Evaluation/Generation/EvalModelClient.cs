@@ -75,8 +75,8 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// The ceiling of a collection's level (<see cref="ResidencyCeiling.ForLevel"/>), at most <c>Eu</c> because the worker
-    /// holds no <c>External</c> key, then lowered by <c>Gateway:MaxResidency</c>.
+    /// The ceiling of a collection's level (<see cref="ResidencyCeiling.ForLevel"/>), at most <c>Eu</c> because the worker's
+    /// calls are capped there (<c>CapGatewayCalls</c>, identity design §4.7), then lowered by <c>Gateway:MaxResidency</c>.
     /// </summary>
     public Residency CeilingFor(string classification)
     {
@@ -88,7 +88,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     public async Task RequireAtCeilingAsync(IReadOnlyCollection<string> models, Residency ceiling, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(models);
-        if (gateway.CurrentValue.Keys.GetValueOrDefault(ceiling) is not { Length: > 0 } key)
+        if (gateway.CurrentValue.KeyFor(ceiling) is not { } key)
         {
             throw new EvalStopException(new JobResult.FatalError(NoKey));
         }
@@ -150,7 +150,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         }
         catch (GatewayCallRefusedException)
         {
-            // This worker holds no key of the ceiling: the evaluation models cannot be called there.
+            // This worker holds no gateway key, or the ceiling is above its maximum: the evaluation models cannot be called there.
             throw new EvalStopException(new JobResult.FatalError(NoKey));
         }
         catch (GatewayResidencyException)
