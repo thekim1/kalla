@@ -174,10 +174,12 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
             await db.SaveChangesAsync(Ct);
         }
 
-        // A new instance holds no ETag yet: it reads the whole context and writes what differs.
+        // A new instance holds no ETag yet: it reads the whole context and writes what differs. Its model sync may write
+        // after it (another config version), so the run's audit entry is found by time, not by the latest version.
+        var started = DateTimeOffset.UtcNow;
         await using var admin = database.AdminApi(gateway);
         var sync = admin.Services.GetRequiredService<OrganisationSync>();
-        for (var i = 0; i < 100 && sync.Status.LastRunAt is null; i++)
+        for (var i = 0; i < 100 && sync.Status.LastSuccessAt is null; i++)
         {
             await Task.Delay(100, Ct);
         }
@@ -191,8 +193,7 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
             (await db.Departments.SingleAsync(d => d.CostCenterCode == stray, Ct)).IsActive.ShouldBeFalse();
             (await db.GatewayKeys.SingleAsync(k => k.Id == ChatbotKey, Ct)).Usable.ShouldBeTrue();
             (await db.GatewayKeys.AnyAsync(k => k.Id == strayKey, Ct)).ShouldBeFalse();
-            var version = await db.ConfigVersion.Select(v => v.Version).SingleAsync(Ct);
-            (await db.AuditLog.Where(a => a.EntityType == "organisation" && a.ConfigVersion == version).ToListAsync(Ct))
+            (await db.AuditLog.Where(a => a.EntityType == "organisation" && a.Timestamp >= started).ToListAsync(Ct))
                 .ShouldHaveSingleItem().Actor.ShouldBe(OrganisationSync.SystemActor);
         }
 

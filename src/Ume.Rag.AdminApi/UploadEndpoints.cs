@@ -597,18 +597,22 @@ public sealed class FileRequestSizeLimit : IRequestSizeLimitMetadata
     public long? MaxRequestBodySize => UploadEndpoints.FileRequestLimit;
 }
 
-/// <summary>An upload slot as the Files list shows it: its path, size, state with its reason, the document, who and when.</summary>
+/// <summary>
+/// An upload slot as the Files list shows it: its path, size, state with its reason, the document, who and when.
+/// <see cref="ScannedAt"/> is when its current bytes passed a malware scan; null for a slot that was not scanned (#535).
+/// </summary>
 public sealed record UploadFileDto(Guid Id, string FileName, long Bytes, string State, string? Reason, Guid? DocumentId, string? UploadedBy, DateTimeOffset UploadedAt,
-    DateTimeOffset? ReplacedAt, DateTimeOffset? DeletedAt)
+    DateTimeOffset? ReplacedAt, DateTimeOffset? DeletedAt, DateTimeOffset? ScannedAt)
 {
     internal static UploadFileDto Of(Upload u) =>
-        new(u.Id, u.FileName, u.Bytes, u.State, u.Reason, u.DocumentId, u.UploadedBy, u.UploadedAt, u.ReplacedAt, u.DeletedAt);
+        new(u.Id, u.FileName, u.Bytes, u.State, u.Reason, u.DocumentId, u.UploadedBy, u.UploadedAt, u.ReplacedAt, u.DeletedAt, u.ScannedAt);
 }
 
 /// <summary>The list's <c>state</c> filter (admin design §5.5.7): each value and the <see cref="UploadStates"/> it covers.</summary>
 public static class FileStates
 {
-    public static IReadOnlyList<string> Processing { get; } = [UploadStates.Received, UploadStates.Clean];
+    /// <summary>On the way to <c>indexed</c>: received, scanned clean, or passed without a scan (<c>ClamAv:Mode = off</c>, #535).</summary>
+    public static IReadOnlyList<string> Processing { get; } = [UploadStates.Received, UploadStates.Clean, UploadStates.Unscanned];
     public static IReadOnlyList<string> Indexed { get; } = [UploadStates.Indexed];
     public static IReadOnlyList<string> Failed { get; } = [UploadStates.Refused, UploadStates.Malware];
 

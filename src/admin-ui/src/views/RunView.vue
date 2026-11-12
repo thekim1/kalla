@@ -100,6 +100,7 @@ onBeforeUnmount(() => {
         v-if="summary.state === 'awaiting-deletion-confirmation'" :run-id="summary.id" :proposed-count="summary.proposedDeletions" class="mb-6"
         @decided="load"
       />
+      <p v-if="run.data.value?.report?.malwareScan === 'off'" class="mb-6 text-warning" role="note" data-test="not-scanned">{{ RUN_PAGE.notScanned }}</p>
       <UiCard v-if="completeness || verdictReasons.length" class="mb-6" data-test="report">
         <p v-if="completeness?.complete">{{ RUN_PAGE.complete }}</p>
         <template v-else-if="completeness">

@@ -494,6 +494,38 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     }
 
     [Fact]
+    public async Task An_unscanned_slot_is_processing_and_each_file_says_when_it_was_scanned()
+    {
+        // B-47 (#535, admin design §4.5, §5.5.7): with the malware scan off a slot passes as unscanned and is indexed without ScannedAt.
+        var (sourceId, code) = await UploadSourceAsync();
+        var now = DateTimeOffset.UtcNow;
+        Upload Slot(string name, string state, DateTimeOffset? scanned) => new()
+        {
+            SourceId = sourceId, Classification = Classification.Internal, BatchId = Guid.CreateVersion7(), FileName = name, DeclaredMediaType = "application/pdf",
+            Bytes = 1000, Sha256 = RandomNumberGenerator.GetBytes(32), State = state, UploadedBy = "anna", UploadedAt = now, ScannedAt = scanned,
+        };
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            db.Uploads.AddRange(Slot("pending.pdf", UploadStates.Unscanned, null), Slot("unscanned.pdf", UploadStates.Indexed, null),
+                Slot("scanned.pdf", UploadStates.Indexed, now));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = Factory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
+        var summary = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files/summary", Ct));
+        (summary.GetProperty("total").GetInt32(), summary.GetProperty("processing").GetInt32(), summary.GetProperty("indexed").GetInt32()).ShouldBe((3, 1, 2));
+
+        var processing = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?state=processing", Ct));
+        processing.GetProperty("items").EnumerateArray().Select(f => f.GetProperty("fileName").GetString()).ShouldBe(["pending.pdf"]);
+        var files = (await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files", Ct))).GetProperty("items").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fileName").GetString()!, f => f.GetProperty("scannedAt"));
+        files["unscanned.pdf"].ValueKind.ShouldBe(JsonValueKind.Null);
+        files["pending.pdf"].ValueKind.ShouldBe(JsonValueKind.Null);
+        files["scanned.pdf"].GetDateTimeOffset().ShouldBe(now, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
     public async Task A_platform_admin_restores_a_deleted_file_within_the_grace_through_a_batch_that_re_adds_the_slot()
     {
         // B-24, connectors §9.3: "restore adds the entry back and the document is revived" (the worker's add on a deleted slot,

@@ -12,7 +12,7 @@ import { FILES } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 import { extensionOf } from '@/utils/uploads'
-import { baseName, folderOf, sizeText, stateTone } from './files'
+import { baseName, folderOf, notScanned, sizeText, stateTone } from './files'
 
 // A file's details (admin design §5.5.7): name and folder, size, type, uploaded by and when, replaced when, state and
 // reason; for an indexed file its document's passages (the count from `/api/documents/{id}`, the first few from
@@ -90,6 +90,7 @@ watch(
           <span class="grid gap-1">
             <UiBadge :tone="stateTone(file.state)" :label="FILES.states[file.state] ?? file.state" />
             <span v-if="file.reason" class="text-small text-danger" data-test="detail-reason">{{ jobMessage(file.reason) }}</span>
+            <span v-if="notScanned(file)" class="text-small text-warning" data-test="detail-not-scanned">{{ FILES.notScanned }}</span>
           </span>
         </DetailRow>
         <DetailRow v-if="usedBy !== undefined" :label="FILES.details.usedBy">
