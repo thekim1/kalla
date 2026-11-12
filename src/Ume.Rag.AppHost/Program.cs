@@ -144,8 +144,20 @@ switch (parserMode)
         throw new InvalidOperationException($"Parser:Mode must be container, local or off, not '{parserMode}'.");
 }
 
-// ClamAv:Enabled=false: the worker uses an EICAR-only fake scanner. Dev freshclam uses the public mirror (§5.5).
-var clamAv = builder.Configuration.GetValue("ClamAv:Enabled", true)
+// ClamAv:Mode = on (default) | off (Decisions "Malware scan optional"; connectors design §11). Off: no clamav resource,
+// and the worker gets ClamAv__Mode=off and stores files without a scan. Dev freshclam uses the public mirror (§5.5).
+if (builder.Configuration["ClamAv:Enabled"] is not null)
+{
+    throw new InvalidOperationException("ClamAv:Enabled is gone: set ClamAv:Mode to on or off.");
+}
+
+var clamAvMode = builder.Configuration["ClamAv:Mode"] ?? "on";
+if (clamAvMode is not ("on" or "off"))
+{
+    throw new InvalidOperationException($"ClamAv:Mode must be on or off, not '{clamAvMode}'.");
+}
+
+var clamAv = clamAvMode == "on"
     ? builder.AddDockerfile("clamav", Path.Combine("..", "..", "images", "clamav"))
         .WithVolume("ume-rag-clamav-db", "/var/lib/clamav")
         .WithEndpoint(port: 7414, targetPort: 3310, name: "clamd", scheme: "tcp")
@@ -239,6 +251,7 @@ if (parserEndpoint is not null)
     worker.WithEnvironment("Parser__BaseUrl", parserEndpoint);
 }
 
+worker.WithEnvironment("ClamAv__Mode", clamAvMode);
 if (clamAv is not null)
 {
     worker.WithEnvironment("ClamAv__Host", clamAv.GetEndpoint("clamd").Property(EndpointProperty.Host))

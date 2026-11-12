@@ -135,6 +135,15 @@ public static partial class SecurityEvents
         EventName = "rag.pipeline.refused")]
     public static partial void PipelineRefused(ILogger logger, Guid pipelineId, Guid pipelineVersionId, string reason);
 
+    /// <summary>
+    /// The worker started with <c>ClamAv:Mode = off</c>: files are stored without a malware scan (connectors design §11).
+    /// Once at every start.
+    /// </summary>
+    [LoggerMessage(5106, LogLevel.Warning,
+        "Malware scan is off (ClamAv:Mode = off): files are stored without a scan",
+        EventName = "rag.malware.scan_off")]
+    public static partial void MalwareScanOff(ILogger logger);
+
     /// <summary>Every audit entry the admin writes (identity design §10).</summary>
     [LoggerMessage(6001, LogLevel.Information,
         "Admin {Actor}: {Action} {EntityType} {EntityId}", EventName = "rag.admin.change")]

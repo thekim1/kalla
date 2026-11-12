@@ -56,6 +56,7 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
 | 5103 | `rag.pii.flagged` | Warning | worker | A document became flagged for personal data | `DocumentId`, `ChunkSetId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag` | P1 |
 | 5104 | `rag.parser.limit_exceeded` | Warning | worker | The parser refused a file for a size or bomb limit | `DocumentId`, `Limit` | P1 |
 | 5105 | `rag.pipeline.refused` | Warning | worker | A published pipeline version failed validation and was not run | `PipelineId`, `PipelineVersionId`, `Reason` | P1 |
+| 5106 | `rag.malware.scan_off` | Warning | worker | The worker started with `ClamAv:Mode = off`: files are stored without a malware scan. Once at every start | – | P1 |
 | 6001 | `rag.admin.change` | Information | admin | Every audit entry: a configuration change (`Action` `create`, `update`, `sync`, …), with the details in the audit log | `Actor`, `Action`, `EntityType`, `EntityId` | P0 |
 | 6002 | `rag.admin.signin` | Information | admin | A sign-in (not an extension) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId` | P0 |
 | 6003 | `rag.admin.signout` | Information | admin | A sign-out | `Actor`, `SourceAddress`, `SessionId` | P0 |
@@ -85,6 +86,7 @@ Gateway counterparts: our 5001 with `wrong_tenant`/`guest_refused` is the gatewa
 - any **5003** or **5011** from the chat role;
 - any **5004** (configuration unconfirmed beyond the grace window);
 - any **5102** (malware);
+- any **5106** on a deployment that is meant to scan (the malware scan was turned off);
 - **5103** on a `public` reference with a personnummer;
 - any **5001** `user_jwt_invalid` (Open WebUI secret mismatch or forgery);
 - **5001** `wrong_tenant` or `guest_refused` repeatedly;

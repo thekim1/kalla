@@ -23,6 +23,11 @@ exception, with its own steps.
   `UME_RAG_*GATEWAY_KEY_<level>` variables, update the stack with the new stack file (`rag-bootstrap` deletes the old
   files), then restart rag-api, rag-admin and rag-worker. **Check:** no service's log shows `gateway_key_missing` or a
   gateway `401`.
+- **Migration `UploadScannedAt` (#535, B-47).** It adds `content."Uploads"."ScannedAt"` and lets the upload state
+  be `unscanned`. Additive: the previous release runs against it. Files uploaded before the migration have no
+  `ScannedAt`, although they were scanned; once the admin UI shows *Not scanned for malware* (later in this
+  release), set it once after the migration: `UPDATE content."Uploads" SET "ScannedAt" = "UploadedAt" WHERE
+  "ScannedAt" IS NULL AND "State" IN ('clean', 'indexed');`
 
 ## 0.4.0
 
