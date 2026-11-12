@@ -29,9 +29,18 @@ export interface ResourceColumn {
   value?: (row: Row) => unknown
 }
 
+/** A read-only section of the row's drawer: facts as label and value, or a plain list. */
 export interface Details {
   title: string
-  items: { label: string; value: string }[]
+  items?: { label: string; value: string }[]
+  lines?: string[]
+}
+
+/** A page of the gateway's admin where the rows are edited (admin design §2.3). */
+export interface GatewayPage {
+  /** Appended to the gateway's `admin_url`. */
+  path: string
+  label: string
 }
 
 export interface PlatformResource {
@@ -45,8 +54,10 @@ export interface PlatformResource {
   list?: string
   key: string
   columns: ResourceColumn[]
-  /** Read-only facts about the row, shown above its form. */
-  details?: (row: Row) => Details
+  /** Read-only facts about the row, shown above its form (or alone, for a row without an edit). */
+  details?: (row: Row) => Details[]
+  /** Linked in the page header when the gateway's admin URL is known. */
+  gatewayPage?: GatewayPage
   create?: Operation
   update?: Operation
   /** The values an edit starts from; the row itself when absent. */
@@ -62,6 +73,25 @@ export interface PlatformResource {
 
 export function urlOf(path: string, row: Row | null, key: string): string {
   return row ? path.replace(/\{[^}]+\}/, encodeURIComponent(String(row[key]))) : path
+}
+
+/**
+ * The gateway's admin URL from its last context (`gateway.admin_url`, admin design §2.3, §4.10), as the organisation sync
+ * reports it; null when the sync has not read a context, the context has none, the status cannot be read, or the
+ * address is not an http(s) URL (it becomes a link's `href`).
+ */
+export async function gatewayAdminUrl(): Promise<string | null> {
+  try {
+    const status = await http.get<{ gateway: { adminUrl: string | null } | null }>('/api/organisation/sync')
+    const url = status.gateway?.adminUrl
+    return url && /^https?:\/\//i.test(url) ? url : null
+  } catch {
+    return null
+  }
+}
+
+export function gatewayLink(adminUrl: string, page: GatewayPage): string {
+  return `${adminUrl.replace(/\/+$/, '')}${page.path}`
 }
 
 export async function listRows(resource: PlatformResource): Promise<Row[]> {
@@ -223,20 +253,25 @@ export const platformResources: PlatformResource[] = [
         },
       },
     ],
+    // Member groups come from the gateway's context (identity §2.1) and are edited on its Organisation page.
     details: (row) => {
       const s = sharingOf(row)
       const O = PLATFORM.organisation
-      return {
-        title: O.sharing,
-        items: [
-          { label: O.department, value: String(s.department) },
-          { label: O.selected, value: String(s.selected) },
-          { label: O.sharedWith, value: String(s.sharedWithDepartments) },
-          { label: O.municipality, value: String(s.municipality) },
-        ],
-      }
+      const groups = (row.memberGroups as string[] | undefined) ?? []
+      return [
+        { title: O.memberGroups, lines: groups.length ? groups : [O.noMemberGroups] },
+        {
+          title: O.sharing,
+          items: [
+            { label: O.department, value: String(s.department) },
+            { label: O.selected, value: String(s.selected) },
+            { label: O.sharedWith, value: String(s.sharedWithDepartments) },
+            { label: O.municipality, value: String(s.municipality) },
+          ],
+        },
+      ]
     },
-    update: { method: 'put', path: '/api/organisation/departments/{id}/member-groups' },
+    gatewayPage: { path: '/organisation', label: PLATFORM.organisation.gatewayLink },
   },
 ]
 
