@@ -398,7 +398,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-37 (the key names in code), B-35 (the Data API key gone from code).
 - **Read:** repo-and-deployment §6.3, §7.1; identity §4.7; gateway-changes §5.1.
 
-### [ ] A-31 Cost per knowledge base: every worker model call's tokens and cost (cost-attribution C3)
+### [x] A-31 (#613) Cost per knowledge base: every worker model call's tokens and cost (cost-attribution C3)
 - **Do:** engine §10.6: every gateway call of the worker (`EmbeddingClient` for indexing, re-embedding and preview,
   `EvalModelClient` for `eval-generate` and `eval-judge`, the dedup embeddings `eval-dedup`, the evaluation's query
   embeddings and rerank) reads its usage (input, cached input, output tokens) and cost with B-38's shared reader:

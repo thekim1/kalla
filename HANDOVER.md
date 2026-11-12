@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 30 (`main` at `beeb86c` plus this
+State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 31 (`main` at `ea5a990` plus this
 file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`). Earlier sessions are in the git history (`git log
 -- HANDOVER.md`). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch
 `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
@@ -25,37 +25,53 @@ sink" monolith. Design and code live in this repo.
 
 ## Start here
 
-**Nothing is ready for the main session itself.** Both main items are ticked (M-9, M-12). M-4, the live block, waits
-on people, and stream a's items wait on stream b. The next session:
+**Nothing waits in the main session's own queue** (M-13 is ticked). Stream a's remaining code items all wait on
+stream b again, so the next session starts with housekeeping and reviews:
 
-**1. Review stream b's PRs as they come** (stream b merges its own; review the security-relevant parts). The gateway
-work runs B-35 → B-36 → B-42:
-- **B-35 parts 2–3:** the `GatewayKeys` mirror and the context sync, then the model sync.
-  - Part 2 must pin `contracts/gateway/integrations.json` at `v0.10.0`, not `7b678a1`.
-  - The sync takes departments, teams and **member groups** from `/v1/ume/context` with `organisation.read`.
-  - It removes `PUT /api/organisation/departments/{id}/member-groups` and every Data API call.
-- **B-36:** the key picker and V39.
-- **B-38:** cost per step, the usage tables, and the FakeGateway sending cost.
-- **Then B-39–B-46:** cost report and UI; gateway phases 2–3.
+**1. Settle B-38 part 2's deviations in the chat design** (#615 lists them; chat §8.3 and §17):
+- A rerank, condense or follow-up call that answers 2xx with output that can't be read keeps its usage.
+- A stream that breaks off is recorded usage-only at the prompt estimate; no message row, no `Cancelled` count.
+- A condense or follow-up call that times out records nothing.
+- `rag.chat.tokens{direction=input}` counts all input tokens, cached ones included.
+- The usage reaches the chat path through a callback, not through `RetrievalResult`.
 
-**2. Take stream a's items as they unblock** (implementor agent in a worktree, review the diff, `a/` branch, PR):
-- **A-30 part 2** and **A-33** once B-35 part 2 is merged:
-  - A-30 part 2 drops `--org-sync-key-file` / `OrgSync__DataApiKey` and the Data API notes.
-  - A-33 makes the member groups read-only in the platform UI.
-- **A-31** (the worker's cost per knowledge base) once B-38 is merged.
-- **A-34** (the worker acts as the knowledge base's key) after B-42, B-36 and A-31.
+**2. Queue what the session left open:**
+- **Retention of `content."CollectionDailyUsage"`** (3 years, data-model §8). The worker has no content-retention
+  step at all (A-31, #613), so it needs its own stream-a item.
+- **`Admin:GatewayAdminUrl`** (admin §2.3's fallback for the gateway link) is read nowhere, and the admin UI's
+  `OrgSyncStatus` type lacks `gateway` (#609's hand-offs): an issue labelled `stream-b`.
+- `docs/local-development.md` doesn't name `fake-no-cost` or `FakeGateway:CachedInputTokens`.
+
+**3. `CHANGELOG.md` under Unreleased** (a small PR; shared file). It is current through #603. Missing: the Data API
+gone from the deployment (A-30 part 2, #611), member groups read-only (A-33, #609), cost per step and per knowledge
+base (B-38 #608 and #615, A-31 #613), and stream b's B-35 (#605, #607) and B-36 (#610, #612) if stream b added no
+lines itself.
+
+**4. Review stream b's merged PRs** (it merges its own; review the security-relevant parts). B-35 parts 2 and 3
+(#605, #607) are spot-checked: the contract is the gateway's file at `v0.10.0` byte for byte, no Data API call is
+left, the member-groups route is gone, the sync keeps the organisation when the key lacks `organisation.read`.
+**B-36 (#610, #612: `GatewayKeyId`, the keys list, V39, the key picker) is not reviewed yet.**
+
+**5. Take stream a's items as they unblock** (implementor agent in a worktree, review the diff, PR):
+- **A-34** (the worker acts as the knowledge base's key) after B-42. B-36 and A-31 are done.
+- **A-32** (cost runbook) after B-40.
 - **A-35** (the deployment's `Gateway__IntegrationApiUrl` and runbook) after B-45.
-- A-32 (cost runbook) after B-40.
 
-**3. Before the next release:** run the release smoke test. A-30 part 1 (#597) changed it to boot with one credential
-key per service, and nobody has booted it since. `CHANGELOG.md` is up to date through #597 (#598).
+**6. Taking a stream b item** is allowed (user, 2026-11-12: "can we unblock something by taking on it as main?").
+Ask on #580 first and wait for the answer; stream b answers within the hour. It released B-38 that way. Its next
+independent items are B-39 (the test panel's usage, hand-off in #615), B-40 (cost report API) and B-42 (phase 2).
+
+**7. Before the next release:** the release dry run. The smoke test has not run since #597 (one credential key per
+service), #601 (its new scan-off phase) and #611.
 
 **Waiting on the user:**
 - **The interim gateway (J10) on v0.10.0**, with the integration *Ume.Rag* and three credential keys (`rag-api`,
-  `rag-admin` with `organisation.read`, `rag-worker` capped at `OnPrem`+`Eu`). Best done around when B-35 part 2
-  lands: from then on the organisation sync reads only `/v1/ume/context`, which v0.9.x doesn't have. Every live check
-  of B-35–B-46, A-34 and A-35 waits on it. Gateway setup: `docs/production-setup.md` *Gateway credential keys*.
-- **Local user secrets** (see *Environment notes*): the AppHost refuses `Gateway:Keys:Eu` since B-37.
+  `rag-admin` with `organisation.read`, `rag-worker` capped at `OnPrem`+`Eu`). **It is needed now:** B-35 is merged,
+  so the organisation, keys and model syncs read only `/v1/ume/context` and `/v1/models`, which v0.9.x doesn't have.
+  Every live check of B-35–B-46, A-31, A-34 and A-35 waits on it. Gateway setup: `docs/production-setup.md` *Gateway
+  credential keys*.
+- **Local user secrets** (see *Environment notes*): the AppHost refuses `Gateway:Keys:Eu`, and since #599 also
+  `ClamAv:Enabled` (use `ClamAv:Mode`).
 - **Upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, needs a decision entry) and
   rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a contextual-header trial (U5) and a
   near-duplicate warning (U6).
@@ -73,50 +89,59 @@ key per service, and nobody has booted it since. `CHANGELOG.md` is up to date th
   Graph group lookup, tenant and guest refusal.
 
 **Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches, decisions in
-`plans/decisions.md`). It works fast, splits items into parts, and also takes stream-a paths on `a/` branches when the
-user asks (B-37 part 2, #594). It announces its work on the issue (#580).
+`plans/decisions.md`). It works fast (B-35 parts 2–3 and B-36 in one evening), splits items into parts, and also takes
+stream-a paths on `a/` branches when the user asks. It announces its work on the issue (#580). Its next items: B-39,
+B-40, B-41, B-42–B-46, and B-47 part 2 (the admin API's `scannedAt` and the UI's *Not scanned for malware* notes).
 
-## Done in session 30 (2026-11-12)
+## Done in session 31 (2026-11-12, evening)
 
-- **#580, gateway integration:**
-  - **Gateway v0.10.0 released** (phases 1–3, the credential residency bound, `organisation.read`, member groups).
-  - **User decision:** member groups wait for the gateway rather than come from another source. The gateway built
-    them, so they now come from the context (`959c4ae`, `7a15ca3`).
-  - **M-12 done** (`beeb86c`): designs checked against the gateway's code at `v0.10.0` (401 for a revoked or expired
-    assigned key; echo as a GUID on 2xx/304; 402 scope only in the message; the stream cost comment before `[DONE]`;
-    the Integration API's real shape). Phases 2–3 queued as B-42–B-46, A-34, A-35.
-  - Decisions "Gateway keys": each service reads `features` from its own context.
-- **M-9 done** (`1699b51`): cost attribution stage 1 in the designs.
-  - Per-step tables `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"`, with gateway cost and
-    estimates apart; the cost report (admin §8.6).
-  - B-38–B-41, A-31, A-32 queued.
-  - **User: Q3, no hard budget in the pilot.**
-- **Merged:**
-  - B-34 #592 (schema contract for stream b's SQL; #510 closed);
-  - B-37 #593 (stream b), #594, #596 (one credential key per service; `Gateway:Keys` gone);
-  - B-35 part 1 #595 (FakeGateway context and model facts, contract pinned at #84's `7b678a1`);
-  - **A-30 part 1 #597** (mine, via an agent): `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`,
-    Portainer/Kubernetes/docs, deploy-checks. The Portainer stack was regenerated from the gateway's `main` compose
-    file, which credential keys need.
-- **Ownership:** `deploy/kubernetes/base/app-roles.sql` belongs to stream b with its source (`.github/stream-ownership.txt`).
+- **#535, the malware scan is optional** (user's three calls: a separate `unscanned` state, health Healthy with
+  "malware scan off", no re-scan when it is turned on):
+  - **M-13** (`fe64205`): Decisions "Malware scan optional", the designs, B-47, A-36 and A-37 queued.
+  - **B-47 part 1 #599** (main session, stream b's paths): `UploadStates.Unscanned`, `Uploads.ScannedAt` (migration
+    `UploadScannedAt`), event 5106, the AppHost's `ClamAv:Mode`. README #600.
+  - **A-36 #602:** the worker reads `ClamAv:Mode`; `unscanned` slots, `ScannedAt`, `malwareScan: "off"` in the run
+    report. Outside Development a worker with the scan on and no `ClamAv:Host` refuses to start.
+  - **A-37 #601:** the Compose profile `clamav`, `init-deployment.sh --clamav on|off`, `components/clamav`, Portainer,
+    docs. An existing deployment must re-run `init-deployment.sh` (upgrade guide).
+- **Cost attribution stage 1, code:**
+  - **B-38** (taken from stream b with its agreement on #580): part 1 #608 (the usage tables, the shared reader and
+    estimate in `src/Ume.Rag.Infrastructure/Gateway/GatewayUsage.cs`, usage from the rerankers and the query
+    embedder, the FakeGateway's cost), part 2 #615 (the chat turn's usage per step, `AssistantDailyUsage` written
+    with the turn, the totals without tokens and cost, the metrics).
+  - **A-31 #613:** every worker model call's tokens and cost per knowledge base, `RunItems.CostUsd`, `x-ume-run-id`.
+    Its deviations are in engine §10.6 and §11 (`6d326a8`).
+- **Gateway phase 1, stream a's side:** A-30 part 2 #611 (the Data API is gone from the deployment and docs; the
+  Portainer stack regenerated at gateway `v0.10.0` with the grants it lacked), A-33 #609 (member groups read-only in
+  the platform UI, with a link to the gateway).
+- **Stream b merged:** B-35 parts 2 and 3 (#605, #607), B-36 (#610, #612).
+- **CHANGELOG:** #598 (through #597), #603 (the malware scan).
 
 ## Open
 
-- **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 1–3 are
-  built.
-- **#535** (malware scan optional, Decisions "Malware scan optional", M-13) is built except B-47 part 2: B-47 part 1
-  (#599, by the main session), A-36 (#602, worker) and A-37 (#601, deployment and docs) are merged. Stream b has the
-  admin API's `scannedAt` and the admin UI's notes left. The release smoke test's scan-off phase has not run yet.
-  The main session asked stream b on #580 whether B-35 part 2 is started and whether B-38 is free (the user allows
-  the main session to take a stream b item to unblock stream a); don't start either before it answers.
+- **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 2–3 are
+  built (phase 1 is done on both streams).
+- **#535** stays open until B-47 part 2 (stream b). Until then a file stored with the scan off is in no state filter
+  of the Files tab, and nothing shows *Not scanned for malware*.
+- **A flaky test to watch:** `RenderTests.The_real_renderer_waits_for_the_quiet_rule_after_the_ready_selector_holds_text`
+  failed once in CI (#613's first backend run: `Transient` instead of `Content`), with another PR's job on the same
+  runner; it passed on the re-run and locally. File it if it comes back.
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
 
-- **State at handover:** the dev AppHost is **stopped** and wasn't started in session 30 (only the persistent ClamAV
-  container runs). Migrations through `AnswerLengthFromModel` are applied locally; the next start applies the rest.
-  It won't start until the gateway user secrets change (*Environment notes*). `Settings.Chat` is `{}`. The local parser
-  image is older than #526 (no LibreOffice): **rebuild it before demoing `.doc`/`.xls`/`.ppt`/`.rtf`**.
+- **State at handover:** the dev AppHost is **stopped**. No ClamAV container exists any more (the "persistent" one
+  was gone before session 31 started; its signatures are still in the volume `ume-rag-clamav-db`). Migrations through
+  `AnswerLengthFromModel` are applied on the dev database; the next start applies the rest (`KeywordStatistics`,
+  `UploadScannedAt`, `GatewayKeys`, `GatewayModelLimitsSource`, `DailyUsage`, `ObjectGatewayKeys`,
+  `DailyTotalsWithoutCost`). After `UploadScannedAt` every existing upload row has `ScannedAt` null: run the
+  upgrade guide's one-line `UPDATE` so scanned files don't read as unscanned. It won't start until the user secrets
+  change (*Environment notes*). `Settings.Chat` is `{}`. The local parser image is older than #526 (no LibreOffice):
+  **rebuild it before demoing `.doc`/`.xls`/`.ppt`/`.rtf`**.
+- **A stack on the FakeGateway starts without touching the user secrets or the dev data** (done in session 31 to check
+  #599): `export FakeGateway__Enabled=true Seed__Enabled=false Parser__Mode=off Render__Mode=off
+  OpenWebUi__Enabled=false DevelopmentVolumes__Postgres=<a throwaway volume name>` (add `ClamAv__Mode=off` to skip
+  ClamAV), then `aspire start …`; afterwards `aspire stop --all` and `docker volume rm` the volume.
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
   --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
   `aspire resource worker restart --apphost … --non-interactive`.
@@ -157,7 +182,7 @@ user asks (B-37 part 2, #594). It announces its work on the issue (#580).
   (pre-#526), `ume-rag.local/postgres:ci`.
 - `~/git/llmgateway`'s working tree is still at v0.9.0; `origin` is fetched through **v0.10.0** (tag). Read the
   gateway with `git show v0.10.0:<path>`, or pull first. Where its docs and its code differ, follow the code.
-- Worktrees: none besides the main clone (agent worktrees under `.claude/worktrees/` were removed).
+- Worktrees: none besides the main clone (the agents' worktrees and the `../rag-*` ones were removed).
 - The 13.6.1 CLI above starts the 13.6.5 AppHost fine (checked this session).
 
 ## How we work (user preferences, binding)
@@ -245,6 +270,30 @@ main session needs:
   short CI job really ran its steps (a 25 s `deploy-checks` did).
 - **Gateway docs vs code:** the gateway's `docs/integrations.md` and OpenAPI said 403 where the code answers 401. Check
   behaviour Ume.Rag depends on in the code at the tag.
+- **Agent worktrees start from local `main`, not from the branch that is checked out.** An agent told "your branch
+  contains X" didn't have X (A-36 on B-47 part 1): merge the prerequisite first, or tell the agent to check
+  `git log -1` and name the commit it needs. Both agents coped (one applied the missing files unchanged).
+- **Bringing an agent's work to a PR:** commit it in the agent's worktree, `git worktree add ../rag-<id> -b <branch>
+  origin/main`, `git cherry-pick -n <agent branch>`, resolve, build, re-run the tests there, commit, push. Afterwards
+  `git worktree unlock` and `remove --force` the agent's worktree and delete its `worktree-agent-…` branch.
+- **Two open PRs with an EF migration each:** the second to merge regenerates its own. Keep a copy of the migration's
+  `.cs`, remove it and its designer, restore `RagDbContextModelSnapshot.cs` from `main`, `dotnet ef migrations add
+  <Name> --project src/Ume.Rag.Infrastructure --startup-project src/Ume.Rag.Infrastructure --output-dir
+  Persistence/Migrations`, compare the new `.cs` with the copy (it should differ only by the header and hand-written
+  SQL) and put the copy back under the new timestamp. The file needs `// <auto-generated />` as its first line or the
+  build fails on style rules. A new worktree needs `dotnet restore` first. Tell the other stream on its PR.
+- **`src/admin-ui/src/utils/labels.ts` and `messages.ts` are stream b's paths**, so a stream-a UI item that needs a
+  text goes on a `main-session/` branch (A-33, #609), or `ownership` fails.
+- **Regenerating the Portainer stack:** `git -C ~/git/llmgateway show v0.10.0:deploy/compose.portainer.yaml >
+  <scratch file>`, then `deploy/portainer/build-stack.sh <scratch file>`. Any PR that changes
+  `deploy/postgres/app-roles.sql` leaves the stack stale until someone does this (#605 and #608 both did; #611 fixed
+  it). An agent's sandbox may refuse `git -C` on the gateway clone; it then fetches the file with `gh api … ?ref=v0.10.0`.
+- **Waiting on a PR's checks in a loop:** test for an empty `conclusion`, not for `status != COMPLETED`; right after a
+  push the rollup lists checks whose status is already final-looking while the conclusion is still empty.
+- **A `cd` into an agent's worktree makes it the session's working directory.** Use `git -C <path>` for other
+  worktrees, and start each command with `cd /home/crotalus/research/rag`.
+- **`rm` with a shell variable in the path is stopped by a safety check.** Use literal paths, or `git rm` for tracked
+  files.
 - The Edit tool fails on a file not Read in this session. A commit made in the same step then goes out without the
   change, so check `git show --stat` after a combined edit-and-commit.
 
@@ -253,6 +302,7 @@ main session needs:
 - `rag_key.txt` in the repo root holds the interim-gateway key (mode 600, excluded in `.git/info/exclude`); the
   address and the same key are in the AppHost user secrets (`Gateway:BaseUrl`, `Gateway:Keys:Eu`). Never commit,
   print or move them.
+- **`ClamAv:Enabled` is gone** (#599): the AppHost stops on it. Use `ClamAv:Mode` = `on` | `off`.
 - **The AppHost won't start with these user secrets:** since B-37 it refuses a `Gateway:Keys` section ("give each
   service its credential key as `Gateway:Services:<service>:Key`"). The user moves the key, or gives the three
   credential keys once the interim gateway runs v0.10.0. `Parameters:gateway-key-{eu,onprem,external}` and

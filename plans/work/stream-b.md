@@ -458,7 +458,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –. A-30 (deploy) follows with the same key names.
 - **Read:** identity §4.7; repo-and-deployment §6.3, §7.1; gateway-changes §5.1.
 
-### [ ] B-38 Cost per step: every chat model call's tokens and cost, the usage tables, the FakeGateway's cost (cost-attribution C1)
+### [x] B-38 (#608, #615, by the main session) Cost per step: every chat model call's tokens and cost, the usage tables, the FakeGateway's cost (cost-attribution C1)
 - **Do:** every model call of a chat turn (condense, long-question condense, query embedding, rerank, answer,
   follow-ups) yields a usage record of chat §8.3: its `x-ume-step`, input, cached input
   (`usage.prompt_tokens_details.cached_tokens`) and output tokens, and its cost from `x-ume-cost-usd`, else the stream
@@ -489,8 +489,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –. Gateway phase 2 (the stream comment) is merged. **Taken by the main session** (stream b released it
   on #580, 2026-11-12). **Part 1 is done** (#608): the two usage tables with grants and the chat retention step, the
   shared reader and estimate (`src/Ume.Rag.Infrastructure/Gateway/GatewayUsage.cs`), usage from the rerankers and the
-  query embedder, the FakeGateway's cost. Part 2 (the chat turn's wiring, the totals' columns dropped, the metrics, the
-  §18.2 tests) is in progress with the main session.
+  query embedder, the FakeGateway's cost. **Part 2 is done** (#615): the chat turn's wiring, the totals' columns
+  dropped, the metrics, the §18.2 tests. B-39 can pass `chat.Usage()` from the test panel (hand-off in #615).
 - **Read:** cost-attribution §5; chat §8.3, §12.1, §12.2, §12.4, §17, §18.2; data-model §1.2, §2.2, §2.3, §8;
   gateway-changes §5.4, §7.1.
 
