@@ -9,6 +9,7 @@ using Ume.Rag.Pipelines.Processing;
 using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Engine;
+using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
 using Ume.Rag.Worker.Processing.Detect;
@@ -20,9 +21,16 @@ using Ume.Rag.Worker.Processing.Pii;
 
 namespace Ume.Rag.Worker.Preview;
 
-/// <summary>What one preview job runs with: its pipeline version, the collection, the stages up to <c>untilStage</c> and its store.</summary>
-public sealed record PreviewRun(Guid JobId, PipelineRun Pipeline, PreviewCollectionRow Collection, IReadOnlyList<string> Stages, PreviewStore Store)
+/// <summary>
+/// What one preview job runs with: its pipeline version, the collection, the stages up to <c>untilStage</c>, its store, and
+/// the attempt's model calls (an <c>embed: true</c> preview's embeddings, counted under the collection with the job's id as
+/// <c>x-ume-run-id</c>, engine design §10.6).
+/// </summary>
+public sealed record PreviewRun(Guid JobId, PipelineRun Pipeline, PreviewCollectionRow Collection, IReadOnlyList<string> Stages, PreviewStore Store, JobUsage Usage)
 {
+    /// <summary>The knowledge base the preview's calls are counted under: the payload's collection.</summary>
+    public UsageOwner UsageOwner => new(Collection.Id, Collection.Classification, Collection.DepartmentId);
+
     public bool Embed { get; init; }
 
     public bool PiiSpans { get; init; }
@@ -235,7 +243,8 @@ public sealed class PreviewSegment(
         {
             var embeddingProfile = await profiles.GetAsync(run.Collection.EmbeddingProfileId, cancellationToken)
                 ?? throw new StageFatalException(RunItemOutcome.Failed, "embed.profile_unknown");
-            var embedded = await _embed.RunAsync(withPii, level, embeddingProfile.Id, new EmbeddingCall(null), cancellationToken);
+            var embedded = await _embed.RunAsync(withPii, level, embeddingProfile.Id, new EmbeddingCall(run.JobId, new UsageSink(run.Usage, run.UsageOwner)),
+                cancellationToken);
             log.Done(embedded.CacheHits == withPii.Chunks.Count, new
             {
                 chunks = withPii.Chunks.Count,

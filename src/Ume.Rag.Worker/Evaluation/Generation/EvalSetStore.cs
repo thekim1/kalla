@@ -10,8 +10,8 @@ using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Evaluation.Generation;
 
-/// <summary>The collection a round is for: its level and embedding profile.</summary>
-public sealed record EvalTarget(Guid Id, string Classification, Guid EmbeddingProfileId);
+/// <summary>The collection a round is for: its level, embedding profile and department (the owner of the round's model calls).</summary>
+public sealed record EvalTarget(Guid Id, string Classification, Guid EmbeddingProfileId, Guid DepartmentId);
 
 /// <summary><c>Settings.EvaluationModel</c>, <c>Settings.EvaluationJudgeModel</c> and <c>Settings.EvaluationMaxQuestions</c>.</summary>
 public sealed record EvalSettings(string? Model, string? JudgeModel, int MaxQuestions)
@@ -50,7 +50,7 @@ public sealed record EvalSetWrite(IReadOnlyList<Guid> Stale, IReadOnlyList<(Guid
 public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerIdentity identity, TimeProvider time)
 {
     private const string CollectionSql = """
-        SELECT "Classification", "EmbeddingProfileId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
+        SELECT "Classification", "EmbeddingProfileId", "DepartmentId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
         """;
 
     private const string SettingsSql = """
@@ -140,7 +140,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(CollectionSql, connection) { Parameters = { Db.P(collectionId) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new EvalTarget(collectionId, reader.GetString(0), reader.GetGuid(1)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new EvalTarget(collectionId, reader.GetString(0), reader.GetGuid(1), reader.GetGuid(2)) : null;
     }
 
     /// <summary>The settings row's values; without a row the defaults (no model).</summary>
@@ -270,9 +270,12 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         return documents;
     }
 
-    /// <summary>The round's writes and the job's completion with <paramref name="result"/>, in one transaction fenced by the lease.</summary>
+    /// <summary>
+    /// The round's writes and the job's completion with <paramref name="result"/>, in one transaction fenced by the lease, with
+    /// the round's model calls (<paramref name="usage"/>) added to <c>CollectionDailyUsage</c> last (engine design §10.6).
+    /// </summary>
     public async Task<JobResult> CommitAsync(LeasedJob job, Guid setId, string classification, string createdBy, EvalSetWrite write, EvalSetResult result,
-        CancellationToken cancellationToken)
+        JobUsage usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(write);
@@ -299,7 +302,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
             await CommandCommit.ExecuteAsync(commit, NextRoundSql, cancellationToken, Db.P(setId), Db.P(next));
         }
 
-        return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, cancellationToken);
+        return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, usage, cancellationToken);
     }
 
     private async Task<IReadOnlyList<EvalChunk>> ReadChunksAsync(string sql, NpgsqlParameter parameter, CancellationToken cancellationToken)

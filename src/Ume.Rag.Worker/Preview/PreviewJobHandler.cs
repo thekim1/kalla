@@ -46,7 +46,7 @@ public sealed class PreviewJobHandler(StagePreview stagePreview, Preflight prefl
             case PreviewKinds.StagePreview when SyncJobs.Read<StagePreviewPayload>(job) is { } stage:
                 try
                 {
-                    return await stagePreview.RunAsync(job, stage, cancellationToken);
+                    return await stagePreview.RunAsync(job, stage, context.Usage, cancellationToken);
                 }
                 catch (StageTransientException transient)
                 {

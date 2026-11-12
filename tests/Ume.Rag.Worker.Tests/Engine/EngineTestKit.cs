@@ -330,6 +330,35 @@ internal static class EngineKit
             live ? """SELECT count(*) FROM content."Documents" WHERE "SourceId" = $1 AND "DeletedAt" IS NULL AND "LiveChunkSetId" IS NOT NULL"""
                  : """SELECT count(*) FROM content."Documents" WHERE "SourceId" = $1""", seed.SourceId);
 
+    /// <summary>
+    /// The collection's <c>CollectionDailyUsage</c> rows summed per step (a test that runs over midnight has two days), with
+    /// the days and departments they were written under.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, DailyUsage>> DailyUsageAsync(RagDatabaseFixture database, Guid collectionId)
+    {
+        await using var connection = new NpgsqlConnection(database.Connection(null));
+        await connection.OpenAsync(Ct);
+        await using var command = new NpgsqlCommand("""
+            SELECT "Step", array_agg(DISTINCT "Day"), array_agg(DISTINCT "Classification"), array_agg(DISTINCT "DepartmentId"), sum("Calls")::int,
+                   sum("InputTokens")::bigint, sum("CachedInputTokens")::bigint, sum("OutputTokens")::bigint, sum("CostUsd"), sum("EstimatedCalls")::int,
+                   sum("EstimatedCostUsd")
+            FROM content."CollectionDailyUsage" WHERE "CollectionId" = $1 GROUP BY "Step"
+            """, connection) { Parameters = { new NpgsqlParameter { Value = collectionId } } };
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var rows = new Dictionary<string, DailyUsage>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(Ct))
+        {
+            rows[reader.GetString(0)] = new DailyUsage(reader.GetFieldValue<DateOnly[]>(1), reader.GetFieldValue<string[]>(2), reader.GetFieldValue<Guid[]>(3),
+                reader.GetInt32(4), reader.GetInt64(5), reader.GetInt64(6), reader.GetInt64(7), reader.GetDecimal(8), reader.GetInt32(9), reader.GetDecimal(10));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Today in Europe/Stockholm, the day a usage row is written under.</summary>
+    public static DateOnly StockholmToday() =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Worker.Jobs.MaintenanceService.Stockholm).DateTime);
+
     private static async Task<string> JobsTextAsync(RagDatabaseFixture database, Guid runId)
     {
         await using var connection = new NpgsqlConnection(database.Connection(null));
@@ -342,3 +371,7 @@ internal static class EngineKit
 }
 
 internal sealed record RunCounters(string State, int Added, int Updated, int Unchanged, int Deleted, int Failed, int ProposedDeletions);
+
+/// <summary>A collection's <c>CollectionDailyUsage</c> for one step, summed over its days.</summary>
+internal sealed record DailyUsage(DateOnly[] Days, string[] Classifications, Guid[] Departments, int Calls, long InputTokens, long CachedInputTokens,
+    long OutputTokens, decimal CostUsd, int EstimatedCalls, decimal EstimatedCostUsd);

@@ -242,12 +242,19 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
         }
     }
 
+    /// <summary>
+    /// The preview's embedding calls carry the job's id as <c>x-ume-run-id</c> and are counted under the payload's collection
+    /// with the job's completion (engine design §10.6), the one usage write a preview makes.
+    /// </summary>
     [Fact]
     public async Task Embed_true_embeds_through_the_gateway_and_writes_no_embedding_cache_row()
     {
-        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("parkering " + name))));
+        var marker = Guid.NewGuid().ToString("N");
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"parkering {name} {marker}"))));
         var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
-        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        var recorder = new GatewayCallRecorder();
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs,
+            services: s => s.AddHttpClient(Worker.Processing.Embedding.EmbeddingClient.HttpClientName).AddHttpMessageHandler(recorder.Handler));
         try
         {
             var cached = await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."EmbeddingCache" """);
@@ -266,6 +273,13 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             embed.Facts.Value.GetProperty("dimensions").GetInt32().ShouldBe(EngineKit.Dimensions);
             embed.Facts.Value.GetProperty("embeddingTokens").GetInt64().ShouldBeGreaterThan(0);
             (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."EmbeddingCache" """)).ShouldBe(cached);
+
+            var calls = recorder.Answered;
+            calls.ShouldNotBeEmpty();
+            calls.ShouldAllBe(c => c.RunId == job.ToString() && c.Step == "embed");
+            var usage = (await EngineKit.DailyUsageAsync(database, seed.CollectionId)).ShouldHaveSingleItem();
+            usage.Key.ShouldBe("embed");
+            (usage.Value.Calls, usage.Value.InputTokens, usage.Value.CostUsd).ShouldBe((calls.Count, calls.Sum(c => c.InputTokens), calls.Sum(c => c.CostUsd!.Value)));
         }
         finally
         {

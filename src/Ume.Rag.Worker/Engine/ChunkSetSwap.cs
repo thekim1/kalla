@@ -26,7 +26,14 @@ namespace Ume.Rag.Worker.Engine;
 /// rule 2a, #501). Null for a set already in the table (written invisible, or a kept one).
 /// </param>
 public sealed record SwapRequest(SourceContext Source, DocumentRow Document, Guid ExecutionId, byte[] ContentHash, Guid PipelineVersionId, Guid RunId,
-    ChunkSetRecord Set, ChunkSetRow? Live, bool SwappedBack, LeasedJob? Job, SetWrite? Write = null);
+    ChunkSetRecord Set, ChunkSetRow? Live, bool SwappedBack, LeasedJob? Job, SetWrite? Write = null)
+{
+    /// <summary>
+    /// The <c>embed</c> job's model calls: their cost is the run item's <c>CostUsd</c>, and they go to <c>CollectionDailyUsage</c> as
+    /// the swap's last statement (engine design §10.6); null for a swap without calls (a <c>reprocess</c> iteration).
+    /// </summary>
+    public JobUsage? Usage { get; init; }
+}
 
 /// <summary>The chunks of a set the swap inserts (rule 2a) and the profile they were embedded with (the profile guard).</summary>
 public sealed record SetWrite(IReadOnlyList<ChunkRecord> Chunks, EmbeddingProfileRecord EmbeddedWith);
@@ -54,7 +61,8 @@ public enum SwapResult
 /// (rule 2a: the profile guard, the set row and its chunks, written once), the swap (the set <c>live</c>, or <c>held</c>
 /// when personal data blocks it in a <c>public</c> collection under the source's <c>piiMode</c>; a flagged set's first
 /// <c>PiiFlaggedAt</c> at the swap time, #175), the document's site-profile version set to the set's,
-/// the run item and the job's completion. Live answers see the old set until this commit and the new one after it.
+/// the run item and the job's completion, then the job's model calls (<see cref="SwapRequest.Usage"/>). Live answers see the old
+/// set until this commit and the new one after it.
 /// </summary>
 public sealed partial class ChunkSetSwap(
     EngineSettings settings,
@@ -134,11 +142,17 @@ public sealed partial class ChunkSetSwap(
             Strategy = document.ParseStrategy,
             PipelineVersionId = swap.PipelineVersionId,
             ExecutionId = swap.ExecutionId,
+            CostUsd = swap.Usage?.PendingCostUsd,
             ContentHash = swap.ContentHash,
         }, cancellationToken);
         if (swap.Job is not null && !await commit.CompleteJobAsync(queue, swap.Job.Id, identity.InstanceId, null, cancellationToken))
         {
             return SwapResult.LeaseLost;
+        }
+
+        if (swap.Usage is { } usage)
+        {
+            await commit.AddUsageAsync(usage, cancellationToken);
         }
 
         await commit.CommitAsync(cancellationToken);
