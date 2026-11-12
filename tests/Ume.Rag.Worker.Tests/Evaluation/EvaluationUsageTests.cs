@@ -89,6 +89,29 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
 
         usage[EvalModelClient.GenerateStep].Calls.ShouldBe(result.Generated);
         usage[EvalModelClient.GenerateStep].OutputTokens.ShouldBeGreaterThan(0, "a chat answer has output tokens");
+        TestGatewayKeys.Served(_gateway, Guid.Parse(calls[0].RunId!)).Select(r => (r.KeyId, r.ViaKeyId)).Distinct()
+            .ShouldBe([(TestGatewayKeys.WorkerCredentialId, (Guid?)null)], "a collection without a key runs as the credential key itself");
+    }
+
+    /// <summary>A-34 (#580; engine design §7.7): every model call of a set generation runs as the collection's gateway key.</summary>
+    [Fact]
+    public async Task A_set_generations_generate_judge_and_dedup_calls_carry_the_collections_key()
+    {
+        var seed = await SeedAsync();
+        await TestGatewayKeys.AssignAsync(database, seed.CollectionId, TestGatewayKeys.KnowledgeBase);
+        var recorder = new GatewayCallRecorder();
+        await using var worker = await StartWorkerAsync(recorder);
+
+        var result = await GenerateAsync(seed);
+
+        result.Kept.ShouldBeGreaterThan(0);
+        var calls = recorder.Answered;
+        await ShouldCarryTheJobsIdAsync(calls);
+        var served = TestGatewayKeys.Served(_gateway, Guid.Parse(calls[0].RunId!));
+        served.Count.ShouldBe(calls.Count, "the fake served every answered call of the job");
+        served.Select(r => r.Step).Distinct().Order().ShouldBe(SetSteps.Order());
+        served.Select(r => (r.KeyId, r.ViaKeyId)).Distinct().ShouldBe([(TestGatewayKeys.KnowledgeBase, TestGatewayKeys.WorkerCredentialId)],
+            "every call runs as the collection's key, through the worker's credential key");
     }
 
     [Fact]
@@ -247,14 +270,20 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
         return seed;
     }
 
-    /// <summary>A worker running the <c>eval</c> class on the scripted gateway, with every gateway call recorded.</summary>
-    private Task<WorkerHost> StartWorkerAsync(GatewayCallRecorder recorder) =>
-        WorkerHost.StartAsync(database, s =>
+    /// <summary>
+    /// A worker running the <c>eval</c> class on the scripted gateway, with every gateway call recorded; it reads its context from
+    /// the fake, which acts as keys, before the first job.
+    /// </summary>
+    private async Task<WorkerHost> StartWorkerAsync(GatewayCallRecorder recorder)
+    {
+        var worker = await WorkerHost.StartAsync(database, s =>
         {
             foreach (var client in new[] { EmbeddingClient.HttpClientName, EvalModelClient.HttpClientName, EvalModelClient.CatalogueClientName })
             {
                 s.AddHttpClient(client).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler()).AddHttpMessageHandler(recorder.Handler);
             }
+
+            TestGatewayKeys.ReadContextFrom(s, _gateway);
         }, new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
@@ -263,6 +292,9 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
             ["Worker:Classes"] = JobClasses.Eval,
             ["Worker:SchedulerSeconds"] = "600",
         }, engine: true);
+        await TestGatewayKeys.ActAsKeysAsync(worker.Services);
+        return worker;
+    }
 
     private async Task<EvalSetResult> GenerateAsync(SourceSeed seed) =>
         EvalKit.Result<EvalSetResult>(await EvalKit.RunJobAsync(database, seed, new EvalGenerateSetPayload { CollectionId = seed.CollectionId },

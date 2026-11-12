@@ -1,6 +1,7 @@
 using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
@@ -139,12 +140,14 @@ public sealed class EvaluationSession : IDisposable
     /// <summary>
     /// Searches one question for the evaluation run <paramref name="runId"/>; <c>hybrid-no-decompounder</c> goes to the scratch
     /// keyword copy, a reranked variant to the engine with the reranker. The rerank call's usage, when one answered, goes to
-    /// <paramref name="usage"/> with the embedding's.
+    /// <paramref name="usage"/> with the embedding's. Both calls run as the owner's gateway key (engine design §7.7): the
+    /// embedding names it itself, the shared reranker takes it from <see cref="GatewayCallScope"/>.
     /// </summary>
     public async Task<SearchResult> SearchAsync(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid runId,
         UsageSink usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(usage);
+        using var acting = GatewayCallScope.Begin(usage.Owner.Acting(null));
         var engine = variant switch
         {
             EvaluationVariant.HybridNoDecompounder => _withoutDecompounder,
