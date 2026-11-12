@@ -1,5 +1,7 @@
 {
   "AdminApi.CollectionSharing.TopicCountsAsync#1": ["CollectionId uuid", "Tag text", "Documents integer"],
+  "AdminApi.CostEndpoints.AssistantUsageAsync#1": ["Period date", "ObjectId uuid", "DepartmentId uuid", "Step character varying", "ClientId uuid", "Calls bigint", "InputTokens bigint", "CachedInputTokens bigint", "OutputTokens bigint", "CostUsd numeric", "EstimatedCostUsd numeric", "EstimatedCalls bigint"],
+  "AdminApi.CostEndpoints.CollectionUsageAsync#1": ["Period date", "ObjectId uuid", "DepartmentId uuid", "Step character varying", "ClientId uuid", "Calls bigint", "InputTokens bigint", "CachedInputTokens bigint", "OutputTokens bigint", "CostUsd numeric", "EstimatedCostUsd numeric", "EstimatedCalls bigint"],
   "AdminApi.EmbeddingCanaryCheck.LastAsync#1": ["Value uuid"],
   "AdminApi.EmbeddingCanaryCheck.RunAsync#1": ["Id uuid", "Embedding real[]"],
   "AdminApi.EmbeddingProfileEndpoints.RecordedAsync#1": ["Value uuid"],
