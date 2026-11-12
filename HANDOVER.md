@@ -48,8 +48,7 @@ work runs B-35 → B-36 → B-42:
 - A-32 (cost runbook) after B-40.
 
 **3. Before the next release:** run the release smoke test. A-30 part 1 (#597) changed it to boot with one credential
-key per service, and nobody has booted it since. Add the session's changes to `CHANGELOG.md` under Unreleased (a small
-PR; it's a shared file): credential keys B-37/A-30, the FakeGateway context B-35 part 1, B-34's SQL contract.
+key per service, and nobody has booted it since. `CHANGELOG.md` is up to date through #597 (#598).
 
 **Waiting on the user:**
 - **The interim gateway (J10) on v0.10.0**, with the integration *Ume.Rag* and three credential keys (`rag-api`,
@@ -103,8 +102,10 @@ user asks (B-37 part 2, #594). It announces its work on the issue (#580).
 
 ## Open
 
-- **#513** stays open until its items close; **#535** (ClamAV `ClamAv:Mode = on | off`, user decision) has no PR yet;
-  **#550** until stream b acknowledges; **#580** until phases 1–3 are built.
+- **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 1–3 are
+  built.
+- **#535** (malware scan optional, Decisions "Malware scan optional") is settled and queued (M-13, `fe64205`):
+  B-47 for stream b, then A-36 (worker) once B-47's first part is merged, then A-37 (deployment and docs).
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
