@@ -333,7 +333,8 @@ app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOp
     });
 });
 
-// Data API catalogue (gateway docs/data-access.md, catalog.read); memberGroups and code come with gateway release 2.
+// Data API model catalogue (gateway docs/data-access.md, catalog.read), until the model sync reads /v1/models (B-35).
+// Departments and teams come from /v1/ume/context.
 var catalog = app.MapGroup("/v1/catalog");
 catalog.AddEndpointFilter(async (context, next) =>
 {
@@ -343,8 +344,6 @@ catalog.AddEndpointFilter(async (context, next) =>
         ? Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized")
         : await next(context);
 });
-catalog.MapGet("/departments", () => Results.Json(new { items = FakeCatalog.Departments }, FakeCatalog.Json));
-catalog.MapGet("/teams", () => Results.Json(new { items = FakeCatalog.Teams }, FakeCatalog.Json));
 // The model catalogue as the gateway's DataEndpoints.cs serves it: one provider per residency, one deployment per
 // single-target model (a multi-target name is a route alias, not in the catalogue), and its price.
 catalog.MapGet("/providers", () => Results.Json(new { items = FakeCatalog.Providers }, FakeCatalog.Json));

@@ -345,7 +345,8 @@ if (redis is not null)
 // Every model call goes through the gateway: locally the fake one (AGENTS.md).
 if (fakeGateway is not null)
 {
-    // The admin's organisation sync reads the fake's Data API catalogue (admin design §4.10).
+    // The admin's model sync reads the fake's Data API catalogue until it reads /v1/models (B-35); the organisation sync
+    // reads the context with the admin's credential key (admin design §4.10).
     fakeGateway.WithEnvironment("FakeGateway__DataApiKey", dataApiKey);
     adminApi.WithEnvironment("OrgSync__BaseUrl", fakeGateway.GetEndpoint("https")).WithEnvironment("OrgSync__DataApiKey", dataApiKey);
     foreach (var (name, service) in new[] { ("api", api), ("worker", worker), ("admin", adminApi) })
@@ -393,7 +394,8 @@ else
         }
     }
 
-    // The admin's organisation sync against the gateway's Data API (admin design §4.10): OrgSync:BaseUrl, OrgSync:DataApiKey.
+    // The admin's model sync against the gateway's Data API (admin design §4.10): OrgSync:BaseUrl, OrgSync:DataApiKey. The
+    // organisation sync reads the context with Gateway:Services:admin:Key, which needs the scope organisation.read.
     foreach (var (key, value) in builder.Configuration.GetSection("OrgSync").AsEnumerable(makePathsRelative: true))
     {
         if (value is not null)

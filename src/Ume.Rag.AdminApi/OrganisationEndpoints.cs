@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -13,8 +12,8 @@ public static class OrganisationEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var organisation = api.MapGroup("/organisation").WithTags("Organisation");
 
-        // Departments in the user's scope (every one for a platform admin), active first, each with its member groups and how
-        // its knowledge bases are shared (admin design §3.2).
+        // Departments in the user's scope (every one for a platform admin), active first, each with its member groups (from the
+        // gateway, read-only) and how its knowledge bases are shared (admin design §3.2).
         organisation.MapGet("/departments", async (AdminContext admin, CancellationToken ct) =>
         {
             var collections = admin.Db.Collections.Where(c => c.DeletedAt == null);
@@ -48,19 +47,6 @@ public static class OrganisationEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithName("GetDepartmentMap")
             .WithSummary("The department's knowledge bases (own and shared in), the assistants that link them and their audiences, as table rows");
 
-        // Member groups by hand (admin design §4.10, P1a item 14): the group-claim values that place a signed-in admin in the
-        // department (identity §2), entered until the gateway catalogue carries them (release 2); the sync leaves them alone.
-        organisation.MapPut("/departments/{id:guid}/member-groups", async (Guid id, MemberGroupsRequest request, AdminContext admin, CancellationToken ct) =>
-                await admin.WriteAsync(async attempt =>
-                {
-                    var department = await admin.Db.Departments.SingleOrDefaultAsync(d => d.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                    var before = department.MemberGroups;
-                    department.MemberGroups = [.. request.MemberGroups.Select(g => g.Trim()).Where(g => g.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-                    return new AdminChange<MemberGroupsDto>(new MemberGroupsDto(department.Id, department.MemberGroups), "member-groups", AuditEntityTypes.Department,
-                        department.Id, new { memberGroups = before }, new { memberGroups = department.MemberGroups }) { DepartmentId = department.Id };
-                }, ct))
-            .RequireAuthorization(AdminPolicies.Admin).WithName("SetMemberGroups").WithSummary("A department's member groups (by hand until gateway release 2)");
-
         // Sync now, and the last runs for the overview (admin design §3.4: platform admins).
         organisation.MapPost("/sync", async (HttpContext http, OrganisationSync sync, CancellationToken ct) =>
             !sync.Enabled
@@ -68,7 +54,7 @@ public static class OrganisationEndpoints
                 : await sync.RunAsync(AdminActor.Of(http), ct) is { } result
                     ? Results.Ok(result)
                     : throw AdminFaults.Of(AdminErrorCodes.SyncFailed, new Dictionary<string, string> { ["error"] = sync.Status.LastError ?? "" }))
-            .RequireAuthorization(AdminPolicies.Admin).WithName("SyncOrganisation").WithSummary("Sync departments and teams from the gateway now");
+            .RequireAuthorization(AdminPolicies.Admin).WithName("SyncOrganisation").WithSummary("Sync departments, teams and gateway keys from the gateway's context now");
         organisation.MapGet("/sync", (OrganisationSync sync) => sync.Status)
             .RequireAuthorization(AdminPolicies.Admin).WithName("OrganisationSyncStatus").WithSummary("The organisation sync's last runs");
 
@@ -175,19 +161,3 @@ public sealed record DepartmentDto(Guid Id, string Name, string CostCenterCode, 
 public sealed record SharingSummaryDto(int Department, int Selected, int Municipality, int SharedWithDepartments);
 
 public sealed record TeamDto(Guid Id, string Name, string? Code, bool IsActive);
-
-public sealed record MemberGroupsDto(Guid DepartmentId, IReadOnlyList<string> MemberGroups);
-
-public sealed record MemberGroupsRequest : AdminRequest, IValidatableObject
-{
-    [MaxLength(50)]
-    public IReadOnlyList<string> MemberGroups { get; init; } = [];
-
-    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-    {
-        if (MemberGroups.Any(g => g is null || g.Length > 256 || g.Any(char.IsControl)))
-        {
-            yield return new ValidationResult("Each member group is a group-claim value of at most 256 characters.", [nameof(MemberGroups)]);
-        }
-    }
-}

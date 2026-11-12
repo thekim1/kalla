@@ -28,6 +28,10 @@ GRANT SELECT ON config."__EFMigrationsHistory" TO ume_rag_admin;
 -- The gateway mirror (departments, teams): written by the admin's org sync, read by every service (scopes, audiences).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Departments", config."Teams" TO ume_rag_admin;
 GRANT SELECT ON config."Departments", config."Teams" TO ume_rag_api, ume_rag_worker;
+-- The assigned gateway keys' mirror (data-model §1.2, §2.1): the admin's sync writes it; the api reads an assistant's key
+-- status and output cap before a call (chat §4.1, §6.3); the worker never needs it.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."GatewayKeys" TO ume_rag_admin;
+GRANT SELECT ON config."GatewayKeys" TO ume_rag_api;
 -- Clients and keys: the admin manages them, the api authenticates with them; key use goes to KeyLastUse (api), so it
 -- never bumps the config version. The worker holds no keys.
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Clients", config."Keys" TO ume_rag_admin;

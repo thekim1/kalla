@@ -33,6 +33,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Team> Teams => Set<Team>();
+    public DbSet<GatewayKey> GatewayKeys => Set<GatewayKey>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<WorkerInstance> WorkerInstances => Set<WorkerInstance>();
     public DbSet<RunItem> RunItems => Set<RunItem>();
@@ -199,6 +200,22 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Code).HasMaxLength(100);
             e.HasIndex(x => x.Code).IsUnique();
+        });
+
+        // The assigned keys' mirror (data-model §2.1, admin design §4.10). No FK to Teams or Departments: the gateway's key
+        // list and organisation are read together, but a key's row must not block anything the org sync does. The status
+        // and policy values are the gateway's and can grow, so they have no CHECK.
+        modelBuilder.Entity<GatewayKey>(e =>
+        {
+            e.ToTable("GatewayKeys", ConfigSchema);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Status).HasMaxLength(20);
+            e.Property(x => x.AllowedModels).HasColumnType("varchar(200)[]");
+            e.Property(x => x.AllowedResidencies).HasColumnType("varchar(10)[]");
+            e.Property(x => x.PiiPolicy).HasMaxLength(20);
+            e.Property(x => x.ContentGuardPolicy).HasMaxLength(20);
+            e.HasIndex(x => x.DepartmentId);
         });
 
         modelBuilder.Entity<AdminSession>(e =>
