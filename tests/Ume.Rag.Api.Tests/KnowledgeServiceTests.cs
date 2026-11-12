@@ -189,7 +189,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         foreach (var (key, value) in new Dictionary<string, string?>
         {
             ["ConnectionStrings:ragdb"] = Connection(Api), ["Security:KeyPepper"] = KeyPepper, ["Security:CacheKeyPepper"] = new string('c', 32),
-            ["Security:DownloadGrantKeys:k1"] = GrantKey, ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+            ["Security:DownloadGrantKeys:k1"] = GrantKey, ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Key"] = FakeGatewayFactory.ApiCredentialKey,
             ["BlobStore:Root"] = BlobRoot, ["Rag:Roles"] = "knowledge",
         })
         {
@@ -271,7 +271,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
-            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
         ]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway ?? db.Gateway.Server.CreateHandler());
         // Made by the container, so disposing the host closes its connections (the api role has a connection limit).
@@ -410,7 +410,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
-            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
         ]);
         builder.AddGatewayClient(ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
         var host = builder.Build();
@@ -789,7 +789,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler, QueryEmbeddingOptions? options = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
-        builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey)]);
+        builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey)]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName, retryFailed: false).ConfigurePrimaryHttpMessageHandler(() => handler);
         var host = builder.Build();
         return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,

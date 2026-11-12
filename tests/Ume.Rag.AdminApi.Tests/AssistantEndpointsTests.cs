@@ -26,8 +26,7 @@ namespace Ume.Rag.AdminApi.Tests;
 [Collection(AdminDatabaseGroup.Name)]
 public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
 {
-    private const string EuKey = "fake-eu-key-assistants-0123456789";
-    private const string ExternalKey = "fake-external-key-assistants-0123";
+    private const string AdminKey = "fake-eu-key-assistants-0123456789"; // rag-admin\'s credential key
     private const string Model = "ume/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -54,15 +53,13 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
-        web.UseSetting("FakeGateway:Keys:Eu", EuKey);
-        web.UseSetting("FakeGateway:Keys:External", ExternalKey);
+        web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
     private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway) => database.HeaderFactory().WithWebHostBuilder(web =>
     {
         web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-        web.UseSetting("Gateway:Keys:Eu", EuKey);
-        web.UseSetting("Gateway:Keys:External", ExternalKey);
+        web.UseSetting("Gateway:Key", AdminKey);
         web.ConfigureTestServices(services =>
             services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
     });

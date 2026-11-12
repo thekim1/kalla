@@ -32,8 +32,7 @@ namespace Ume.Rag.AdminApi.Tests;
 [Collection(AdminDatabaseGroup.Name)]
 public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
 {
-    private const string EuKey = "fake-eu-key-pilot-setup-0123456789";
-    private const string ExternalKey = "fake-external-key-pilot-setup-012";
+    private const string AdminKey = "fake-eu-key-pilot-setup-0123456789"; // rag-admin\'s credential key
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private readonly string _root = Directory.CreateTempSubdirectory("ume-rag-pilot-").FullName;
 
@@ -98,14 +97,12 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
         await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
         {
             web.UseEnvironment("Development");
-            web.UseSetting("FakeGateway:Keys:Eu", EuKey);
-            web.UseSetting("FakeGateway:Keys:External", ExternalKey);
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
         });
         await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
         {
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-            web.UseSetting("Gateway:Keys:Eu", EuKey);
-            web.UseSetting("Gateway:Keys:External", ExternalKey);
+            web.UseSetting("Gateway:Key", AdminKey);
             web.UseSetting("Security:KeyPepper", "pilot-setup-test-pepper-0123456789abcdef");
             web.UseSetting("BlobStore:Root", Path.Combine(_root, "blobs"));
             web.UseSetting("KeyProvider:Directory", keys);

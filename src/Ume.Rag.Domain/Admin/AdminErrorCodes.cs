@@ -52,7 +52,7 @@ public static class AdminErrorCodes
 
     /// <summary>
     /// V8: this service holds no gateway key for <c>{ceiling}</c>, so the model cannot be checked or called there (#237): a
-    /// deployment setting (<c>Gateway:Keys:{ceiling}</c>, or <c>Gateway:MaxResidency</c> under M2), not a retry.
+    /// deployment setting (the credential key <c>Gateway:Key</c>, or <c>Gateway:MaxResidency</c> under M2), not a retry.
     /// </summary>
     public static AdminErrorCode GatewayKeyMissing { get; } = new("gateway_key_missing", 503, "No AI gateway key is configured for {ceiling}, so {model} cannot be checked there.");
 

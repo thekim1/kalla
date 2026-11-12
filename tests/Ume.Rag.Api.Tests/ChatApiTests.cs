@@ -243,9 +243,10 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
     }
 
     [Fact]
-    public async Task Under_a_max_residency_a_public_assistant_answers_at_the_cap_with_the_eu_key()
+    public async Task Under_a_max_residency_a_public_assistant_answers_at_the_cap()
     {
-        // A public assistant's level asks for External; this host holds only the Eu key (M2, #237).
+        // A public assistant's level asks for External; Gateway:MaxResidency Eu caps it (M2, #237). Without the cap the one
+        // credential key calls at External, the top of the api's ladder (identity design §4.7).
         var snapshot = Snapshot();
         snapshot = snapshot with
         {
@@ -274,8 +275,8 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         }
 
         await using var uncapped = Public(null);
-        using var refused = await Ask(Client(uncapped, db.IntegrationKey), "Behöver jag bygglov för en altan högre än 1,2 meter?");
-        refused.IsSuccessStatusCode.ShouldBeFalse(); // External without an External key: never sent
+        using var external = await Ask(Client(uncapped, db.IntegrationKey), "Behöver jag bygglov för en altan högre än 1,2 meter?");
+        external.StatusCode.ShouldBe(HttpStatusCode.OK, await external.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]
@@ -576,12 +577,6 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
-            if (classification == Domain.Classification.Public)
-            {
-                // A public assistant's model call runs at its level's ceiling (External), so the api needs that key.
-                web.UseSetting("Gateway:Keys:External", FakeGatewayFactory.ExternalKey);
-            }
-
             web.ConfigureTestServices(services =>
                 services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });

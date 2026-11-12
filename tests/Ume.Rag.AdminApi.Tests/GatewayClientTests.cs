@@ -24,9 +24,8 @@ namespace Ume.Rag.AdminApi.Tests;
 /// </summary>
 public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
 {
-    public const string OnPremKey = "fake-onprem-key-gw-0123456789";
-    public const string EuKey = "fake-eu-key-gw-0123456789";
-    public const string ExternalKey = "fake-external-key-gw-0123456789";
+    /// <summary>rag-admin's credential key (identity design §4.7): one key at every ceiling up to its maximum.</summary>
+    public const string AdminKey = "fake-admin-credential-key-gw-0123456789";
 
     public string DataApiKey { get; } = TestSecrets.RandomHex();
 
@@ -44,18 +43,19 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    /// <summary>The FakeGateway with its per-level keys and the Data API catalogue.</summary>
+    /// <summary>The FakeGateway with rag-admin's credential key and the Data API catalogue.</summary>
     public WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
         web.UseSetting("FakeGateway:DataApiKey", DataApiKey);
-        web.UseSetting("FakeGateway:Keys:OnPrem", OnPremKey);
-        web.UseSetting("FakeGateway:Keys:Eu", EuKey);
-        web.UseSetting("FakeGateway:Keys:External", ExternalKey);
+        web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
-    /// <summary>The admin API holding the gateway keys of <paramref name="levels"/>, syncing from <paramref name="gateway"/>.</summary>
-    public WebApplicationFactory<Program> AdminApi(WebApplicationFactory<FakeGatewayProgram> gateway, params Residency[] levels) =>
+    /// <summary>
+    /// The admin API with its credential key (none when <paramref name="key"/> is false) and <c>Gateway:MaxResidency</c>
+    /// <paramref name="maxResidency"/>, syncing from <paramref name="gateway"/>.
+    /// </summary>
+    public WebApplicationFactory<Program> AdminApi(WebApplicationFactory<FakeGatewayProgram> gateway, Residency? maxResidency = null, bool key = true) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
         {
             web.UseEnvironment("Development");
@@ -66,9 +66,14 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
             web.UseSetting("OrgSync:IntervalMinutes", "1440");
             web.UseSetting("Admin:Retention", "false");
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-            foreach (var level in levels)
+            if (key)
             {
-                web.UseSetting($"Gateway:Keys:{level}", level switch { Residency.OnPrem => OnPremKey, Residency.Eu => EuKey, _ => ExternalKey });
+                web.UseSetting("Gateway:Key", AdminKey);
+            }
+
+            if (maxResidency is { } max)
+            {
+                web.UseSetting("Gateway:MaxResidency", ResidencyCeiling.ToHeader(max));
             }
 
             web.ConfigureTestServices(services =>
@@ -310,7 +315,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     public async Task V8_lists_the_model_at_the_ceiling_or_refuses_with_its_code()
     {
         await using var gateway = database.Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem);
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
         await SyncedAsync(admin);
         var drained = "fake-drained";
         await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
@@ -331,8 +336,11 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         (await Code(() => check.EnsureServableAsync("no-such-model", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
         // The mirror allows it at OnPrem, but its OnPrem target is drained: the gateway does not list it (gateway-changes §3.4).
         (await Code(() => check.EnsureServableAsync(drained, Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.ModelNotListed.Code);
-        // This instance holds no External key: the gateway cannot be asked, and the code says which key is missing (#237).
-        (await Code(() => check.EnsureServableAsync("ume/chat-eu", Residency.External, Ct))).ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
+        // An instance without a credential key cannot ask the gateway, and the code says the key is missing (#237).
+        await using var keyless = database.AdminApi(gateway, key: false);
+        await using var keylessScope = keyless.Services.CreateAsyncScope();
+        (await Code(() => keylessScope.ServiceProvider.GetRequiredService<GatewayModelCheck>().EnsureServableAsync("ume/chat-eu", Residency.Eu, Ct)))
+            .ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
     }
 
     [Fact]
@@ -350,15 +358,15 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         var refused = await Should.ThrowAsync<ApiFaultException>(() => check.EnsureServableAsync("ume/chat-advanced", Residency.External, Ct));
         refused.Extensions!["code"].ShouldBe(AdminErrorCodes.ModelResidency.Code);
         ((IReadOnlyDictionary<string, string>)refused.Extensions["params"]!)["ceiling"].ShouldBe("Eu"); // the capped ceiling
-        // The cap only lowers: an OnPrem ceiling stays OnPrem, and this instance has no OnPrem key.
-        (await Code(() => check.EnsureServableAsync("bge-m3", Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
+        // The cap only lowers: an OnPrem ceiling stays OnPrem, checked with the same credential key.
+        await check.EnsureServableAsync("bge-m3", Residency.OnPrem, Ct);
     }
 
     [Fact]
     public async Task The_status_embeds_once_per_held_key_at_its_ceiling_and_shows_the_canary()
     {
         await using var gateway = database.Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem);
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
         await SyncedAsync(admin);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
 
@@ -480,7 +488,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
         var before = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == database.ProfileId, Ct);
         var audits = await db.AuditLog.CountAsync(a => a.Action == "check-canary", Ct);
-        // This instance holds no Eu key, the profile's ceiling.
+        // This instance's maximum is OnPrem (Gateway:MaxResidency), below the profile's Eu ceiling.
         await using var admin = database.AdminApi(gateway, Residency.OnPrem);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
 
@@ -507,7 +515,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             await SyncedAsync(recording);
         }
 
-        await using var admin = database.AdminApi(gateway).WithWebHostBuilder(web => web.UseSetting("Gateway:BaseUrl", ""));
+        await using var admin = database.AdminApi(gateway, key: false).WithWebHostBuilder(web => web.UseSetting("Gateway:BaseUrl", ""));
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
 
         using var response = await platform.PostAsync("/api/gateway/canary-check", null, Ct);
@@ -532,7 +540,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     public async Task One_level_failing_oddly_is_that_levels_error_and_the_page_still_answers()
     {
         await using var gateway = database.Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+        await using var admin = database.AdminApi(gateway, Residency.Eu).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
             services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() =>
                 new MalformedAtOnPrem { InnerHandler = gateway.Server.CreateHandler() })));
         await SyncedAsync(admin);

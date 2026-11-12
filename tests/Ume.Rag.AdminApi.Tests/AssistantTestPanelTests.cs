@@ -26,7 +26,7 @@ namespace Ume.Rag.AdminApi.Tests;
 [Collection(AdminDatabaseGroup.Name)]
 public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
 {
-    private const string EuKey = "sk-ume-eu-panel-0000000000000000";
+    private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // rag-admin\'s credential key
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>The rerank calls the panel sent (B-16), on the rerankers' gateway client.</summary>
@@ -38,7 +38,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
     private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway) => database.HeaderFactory().WithWebHostBuilder(web =>
     {
         web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-        web.UseSetting("Gateway:Keys:Eu", EuKey);
+        web.UseSetting("Gateway:Key", AdminKey);
         web.ConfigureTestServices(services =>
         {
             services.AddHttpClient(GatewayChatClient.HttpClientName)
@@ -118,7 +118,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
         {
             web.UseEnvironment("Development");
-            web.UseSetting("FakeGateway:Keys:Eu", EuKey);
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
         });
         await using var factory = Admin(gateway);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
@@ -258,7 +258,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
         {
             web.UseEnvironment("Development");
-            web.UseSetting("FakeGateway:Keys:Eu", EuKey);
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
         });
         await using var factory = Admin(gateway);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
