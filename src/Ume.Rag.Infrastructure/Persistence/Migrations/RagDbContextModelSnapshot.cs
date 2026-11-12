@@ -187,6 +187,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DraftVersionId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("GatewayKeyId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("HistoryMode")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -956,6 +959,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("GatewayKeyId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Name")

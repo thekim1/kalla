@@ -266,6 +266,21 @@ public static class AdminErrorCodes
     /// <summary>V38: a member of <c>Settings.Chat.prompts</c> (<c>{field}</c>) breaks a rule (<c>{problem}</c>, chat design §7.3).</summary>
     public static AdminErrorCode PromptTextInvalid { get; } = new("prompt_text_invalid", 400, "The prompt text {field} is not valid: {problem}.");
 
+    /// <summary>V39: the key is unknown, not usable (not active, owner inactive, or no residency in common with Ume.Rag's key) or of another department; <c>{reason}</c> says which.</summary>
+    public static AdminErrorCode GatewayKeyInvalid { get; } = new("gateway_key_invalid", 409, "The AI gateway key {key} cannot be used: {reason}.");
+
+    /// <summary>V39: every residency the key allows is above the object's ceiling.</summary>
+    public static AdminErrorCode GatewayKeyResidency { get; } = new("gateway_key_residency", 409, "The AI gateway key {key} allows no residency within the ceiling {ceiling}.");
+
+    /// <summary>V39: the key's model list lacks models the object uses; <c>affected</c> lists them.</summary>
+    public static AdminErrorCode GatewayKeyModel { get; } = new("gateway_key_model", 409, "The AI gateway key {key} does not allow every model this uses.");
+
+    /// <summary>V39: the object has no key. A warning until the gateway acts as keys (feature <c>act-as-key</c>), then publish refuses it.</summary>
+    public static AdminErrorCode GatewayKeyRequired { get; } = new("gateway_key_required", 409, "No AI gateway key is chosen: the calls are charged to the platform's owner team.");
+
+    /// <summary>V39, a warning only: the key has a system prompt.</summary>
+    public static AdminErrorCode GatewayKeySystemPrompt { get; } = new("gateway_key_system_prompt", 409, "The AI gateway key {key} adds its team's system prompt to every call, which changes the assistant's prompts.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -274,5 +289,6 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
+            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt];
 }

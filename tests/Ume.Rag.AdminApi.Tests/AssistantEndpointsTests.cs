@@ -130,7 +130,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         {
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
             var body = await Json(draft);
-            Codes(body.GetProperty("warnings")).ShouldBe(["assistant_contact_missing", "query_steps_invalid"], ignoreOrder: true);
+            Codes(body.GetProperty("warnings")).ShouldBe(["assistant_contact_missing", "query_steps_invalid", "gateway_key_required"], ignoreOrder: true);
             draftVersion = body.GetProperty("version").GetString();
         }
 
@@ -158,7 +158,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
                }, Ct))
         {
             var body = await Json(fixedDraft);
-            body.GetProperty("warnings").GetArrayLength().ShouldBe(0);
+            Codes(body.GetProperty("warnings")).ShouldBe([AdminErrorCodes.GatewayKeyRequired.Code]); // keyless: V39 warns, publish goes ahead (no act-as-key)
             draftVersion = body.GetProperty("version").GetString();
         }
 
@@ -403,7 +403,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
             var body = await Json(draft);
             body.GetProperty("querySteps").GetProperty("answer").GetProperty("generalKnowledge").GetString().ShouldBe(generalKnowledge);
-            return ([.. Codes(body.GetProperty("warnings"))], body.GetProperty("version").GetString());
+            return ([.. Codes(body.GetProperty("warnings")).Where(c => c != AdminErrorCodes.GatewayKeyRequired.Code)], body.GetProperty("version").GetString()); // keyless: V39 warns
         }
 
         async Task<(IReadOnlyList<string> Warnings, string? DraftVersion)> StepsAsync(Guid id, object querySteps, string? draftVersion)
@@ -415,7 +415,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             }, Ct);
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
             var body = await Json(draft);
-            return ([.. Codes(body.GetProperty("warnings"))], body.GetProperty("version").GetString());
+            return ([.. Codes(body.GetProperty("warnings")).Where(c => c != AdminErrorCodes.GatewayKeyRequired.Code)], body.GetProperty("version").GetString()); // keyless: V39 warns
         }
 
         // An internal assistant: an unknown value is V17's warning; fallback is accepted and publishes.

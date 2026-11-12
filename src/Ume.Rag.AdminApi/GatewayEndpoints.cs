@@ -110,6 +110,28 @@ public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string G
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
     IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation);
 
+/// <summary>The key picker's list and the gateway's admin UI address for links to a key (null when unknown).</summary>
+public sealed record GatewayKeyListDto(string? AdminUrl, IReadOnlyList<GatewayKeyDto> Keys);
+
+/// <summary>
+/// An assigned gateway key of the mirror with its read-only settings (admin design §4.5). <see cref="Selectable"/> is V39's
+/// status part (<c>Active</c>, owner active, the gateway's <c>usable</c>), and <see cref="Reason"/> says why not.
+/// </summary>
+public sealed record GatewayKeyDto(
+    Guid Id, string Name, Guid TeamId, string? TeamName, Guid? DepartmentId, string Status, bool OwnerActive, DateTimeOffset? ExpiresAt,
+    IReadOnlyList<string> AllowedModels, IReadOnlyList<string> AllowedResidencies, string PiiPolicy, string ContentGuardPolicy, int? RequestsPerMinute,
+    int? TokensPerMinute, int? MaxConcurrentRequests, int? MaxOutputTokens, bool HasSystemPrompt, bool Usable, bool Selectable, string? Reason, DateTimeOffset SyncedAt)
+{
+    public static GatewayKeyDto Of(GatewayKey k, string? teamName)
+    {
+        ArgumentNullException.ThrowIfNull(k);
+        var reason = GatewayKeyRules.UnusableReason(k);
+        return new(k.Id, k.Name, k.TeamId, teamName, k.DepartmentId, k.Status, k.OwnerActive, k.ExpiresAt, k.AllowedModels, k.AllowedResidencies, k.PiiPolicy,
+            k.ContentGuardPolicy, k.RequestsPerMinute, k.TokensPerMinute, k.MaxConcurrentRequests, k.MaxOutputTokens, k.HasSystemPrompt, k.Usable, reason is null,
+            reason, k.SyncedAt);
+    }
+}
+
 /// <summary>
 /// A row of the model mirror. <see cref="Available"/>: listed by the gateway's <c>/v1/models</c> with the platform's key at
 /// the requested ceiling, null when the gateway could not be asked (#447).
@@ -201,6 +223,22 @@ public static class GatewayEndpoints
                     ? Results.Ok(result)
                     : throw AdminFaults.Of(AdminErrorCodes.SyncFailed, new Dictionary<string, string> { ["error"] = sync.Status.LastError ?? "" }))
             .RequireAuthorization(AdminPolicies.Admin).WithName("SyncGatewayModels").WithSummary("Sync the model catalogue from the gateway now");
+
+        // The key picker (admin design §4.5, §5.5.4; B-36): the department's assigned keys from the mirror with their read-only
+        // settings; an unusable one is listed with its reason and is not selectable. Never a secret.
+        gateway.MapGet("/keys", async (Guid departmentId, AdminContext admin, OrganisationSync organisation, CancellationToken ct) =>
+            {
+                if (!await admin.Departments().AnyAsync(d => d.Id == departmentId, ct))
+                {
+                    throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                }
+
+                var keys = await admin.Db.GatewayKeys.AsNoTracking().Where(k => k.DepartmentId == departmentId).OrderBy(k => k.Name).ToListAsync(ct);
+                var teams = await admin.Db.Teams.AsNoTracking().Where(t => t.DepartmentId == departmentId).ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+                return new GatewayKeyListDto(organisation.Status.Gateway?.AdminUrl, [.. keys.Select(k => GatewayKeyDto.Of(k, teams.GetValueOrDefault(k.TeamId)))]);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayKeys")
+            .WithSummary("The department's assigned gateway keys for the key picker, with their settings and whether each can be chosen");
 
         gateway.MapGet("/status", StatusAsync)
             .RequireAuthorization(AdminPolicies.Admin).WithName("GatewayStatus").WithSummary("Per level key: one embedding call at that ceiling; sync and canary state");

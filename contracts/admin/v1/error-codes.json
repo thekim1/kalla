@@ -400,6 +400,31 @@
       "code": "prompt_text_invalid",
       "status": 400,
       "message": "The prompt text {field} is not valid: {problem}."
+    },
+    {
+      "code": "gateway_key_invalid",
+      "status": 409,
+      "message": "The AI gateway key {key} cannot be used: {reason}."
+    },
+    {
+      "code": "gateway_key_residency",
+      "status": 409,
+      "message": "The AI gateway key {key} allows no residency within the ceiling {ceiling}."
+    },
+    {
+      "code": "gateway_key_model",
+      "status": 409,
+      "message": "The AI gateway key {key} does not allow every model this uses."
+    },
+    {
+      "code": "gateway_key_required",
+      "status": 409,
+      "message": "No AI gateway key is chosen: the calls are charged to the platform\u0027s owner team."
+    },
+    {
+      "code": "gateway_key_system_prompt",
+      "status": 409,
+      "message": "The AI gateway key {key} adds its team\u0027s system prompt to every call, which changes the assistant\u0027s prompts."
     }
   ]
 }
