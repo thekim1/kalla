@@ -18,6 +18,24 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   `Uploads.ScannedAt`, `malwareScan: "off"` in the run's report, security event 5106 `rag.malware.scan_off` at every
   worker start. Migration `UploadScannedAt`. The admin UI's *Not scanned for malware* note is still to come (#599,
   #602, #601, #535).
+- **A gateway key per assistant and knowledge base** (gateway integration phases 1–2). rag-admin mirrors the
+  integration's assigned keys from the gateway's context (`config."GatewayKeys"`, migration `GatewayKeys`); an
+  assistant or knowledge base names one (`GatewayKeyId`, migration `ObjectGatewayKeys`), picked on its edit drawer
+  from the keys of its department, and admin rule V39 checks it: active, of the object's department, reaching its
+  ceiling and allowing each of its models (#610, #612). Once the gateway's context shows `act-as-key`, every model
+  call runs as that key (`x-ume-on-behalf-of`): chat turns, Knowledge API searches, the test panel, the retrieval
+  test (#616, #617) and every worker job (#621). An answer without the key's echo is discarded before use (security
+  event 5011, `Gateway:RequireDelegationEcho`); a spent budget or an unusable key makes a worker job wait until the next
+  full hour and then fail the document with `gateway.budget_exhausted` or `gateway.key_unavailable`. The FakeGateway
+  acts as assigned keys, with `DropOnBehalfOfEcho` and a spent budget per key for tests (#616).
+- **Tokens and cost of every model call**, per day and step: `chat."AssistantDailyUsage"` for every chat model call
+  (condense, query embedding, rerank, answer, follow-ups), written with the turn, and `content."CollectionDailyUsage"`
+  for every worker model call (indexing, preview, evaluations), with `RunItems.CostUsd` and `x-ume-run-id`. The cost
+  is the gateway's (`x-ume-cost-usd`, or the stream's cost comment, never forwarded), else an estimate from the model
+  mirror's prices, stored apart. Migration `DailyUsage`; metrics `rag.chat.tokens` (with `cached-input`) and the cost
+  metrics. The FakeGateway sends a cost and has `fake-no-cost` and `FakeGateway:CachedInputTokens` (#608, #615, #613).
+- The Files tab counts an `unscanned` file as *processing*, each file has `scannedAt`, and the admin UI shows *Not
+  scanned for malware* on such a file and *Files in this run were not scanned for malware* on its run (#614, #535).
 
 ### Changed
 
@@ -42,6 +60,19 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   `ClamAv:Mode` in place of `ClamAv:Enabled` (#599).
 - The Portainer stack is regenerated from the gateway's v0.10.0 stack file, which adds `UME_ADMIN_PUBLIC_URL` and
   `UME_INTEGRATION_REQUESTS_PER_MINUTE` to the gateway's services (#601).
+- **The gateway's Data API is no longer used.** rag-admin syncs the organisation, member groups, its gateway keys and
+  the models from the gateway's `GET /v1/ume/context` and `GET /v1/models` with its credential key, which needs the
+  scope `organisation.read`; without it the departments and teams are left as they are and its health reports
+  `Degraded`. `OrgSync:BaseUrl`, `OrgSync:DataApiKey`, `--org-sync-url`, `--org-sync-key-file` and the Data API
+  firewall entry are gone, and the AppHost refuses the old keys. See `docs/upgrade-guide.md` (#605, #607, #611).
+- A model's context window and output limit come from the gateway when its catalogue carries them
+  (`GatewayModels.LimitsSource` `catalog`, migration `GatewayModelLimitsSource`); only a `manual` row can be edited
+  (#607). The gateway status shows the gateway's version, admin URL and features (#607).
+- Member groups are read-only on the platform's Organisation page, with a link to the gateway's page; the route
+  `PUT /api/organisation/departments/{id}/member-groups` is gone (#605, #609).
+- `chat."AssistantDailyTotals"` no longer holds tokens and cost (migration `DailyTotalsWithoutCost`): they are in
+  `AssistantDailyUsage`, and the totals of earlier days lose them. **Rolling update: no** for this release; see
+  `docs/upgrade-guide.md` (#615, #620).
 
 ## 0.4.0 (2026-11-11)
 
