@@ -238,6 +238,31 @@ public sealed partial class ConversationWriter : BackgroundService
         public long OutputTokens { get; set; }
     }
 
+    private const string InsertConversationSql = """
+        INSERT INTO chat."Conversations" AS c ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId",
+            "HistoryMode", "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
+        """;
+
+    private const string OwnedUpdateSql = """
+        DO UPDATE SET "LastMessageAt" = GREATEST(c."LastMessageAt", excluded."LastMessageAt"),
+            "ExpiresAt" = GREATEST(c."ExpiresAt", excluded."ExpiresAt")
+            WHERE c."ClientId" = excluded."ClientId" AND c."SubjectId" = excluded."SubjectId" AND c."AssistantId" = excluded."AssistantId"
+        RETURNING "Id", (xmax = 0)
+        """;
+
+    /// <summary>The conversation of an issued id: the row, or none when the id is another owner's (#266).</summary>
+    private const string UpsertIssuedConversationSql = $"""
+        {InsertConversationSql}
+        ON CONFLICT ("Id") {OwnedUpdateSql}
+        """;
+
+    /// <summary>The conversation of an Open WebUI chat, by its external chat id.</summary>
+    private const string UpsertOpenWebUiConversationSql = $"""
+        {InsertConversationSql}
+        ON CONFLICT ("ClientId", "SubjectId", "ExternalChatId", "AssistantId") {OwnedUpdateSql}
+        """;
+
     /// <summary>One batch in one transaction (chat design §12.2).</summary>
     public async Task WriteAsync(IReadOnlyList<ChatTurn> turns, CancellationToken ct)
     {
@@ -249,16 +274,8 @@ public sealed partial class ConversationWriter : BackgroundService
         foreach (var turn in turns.OrderBy(t => t.Key, StringComparer.Ordinal).ThenBy(t => t.At))
         {
             var expires = turn.At.AddDays(turn.RetentionDays);
-            var conflict = turn.IssuedId is null ? """("ClientId", "SubjectId", "ExternalChatId", "AssistantId")""" : """("Id")""";
-            var owned = await ScalarPairAsync(connection, transaction, $"""
-                INSERT INTO chat."Conversations" AS c ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId",
-                    "HistoryMode", "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
-                ON CONFLICT {conflict} DO UPDATE SET "LastMessageAt" = GREATEST(c."LastMessageAt", excluded."LastMessageAt"),
-                    "ExpiresAt" = GREATEST(c."ExpiresAt", excluded."ExpiresAt")
-                    WHERE c."ClientId" = excluded."ClientId" AND c."SubjectId" = excluded."SubjectId" AND c."AssistantId" = excluded."AssistantId"
-                RETURNING "Id", (xmax = 0)
-                """, ct, turn.IssuedId ?? Guid.CreateVersion7(), turn.Classification, turn.AssistantId, turn.ClientId, turn.SubjectKind, turn.SubjectId,
+            var owned = await ScalarPairAsync(connection, transaction, turn.IssuedId is null ? UpsertOpenWebUiConversationSql : UpsertIssuedConversationSql,
+                ct, turn.IssuedId ?? Guid.CreateVersion7(), turn.Classification, turn.AssistantId, turn.ClientId, turn.SubjectKind, turn.SubjectId,
                 (object?)turn.ExternalChatId ?? DBNull.Value, turn.HistoryMode, turn.RetentionDays, turn.At, expires);
             if (owned is not var (conversationId, inserted))
             {
