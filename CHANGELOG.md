@@ -5,11 +5,30 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+### Added
+
+- The FakeGateway answers `GET /v1/ume/context` and gives `/v1/models` the gateway's model facts, both with an `ETag`
+  and an empty `304`; the gateway's contract is pinned in `contracts/gateway/integrations.json`, and a contract test
+  holds the fake to it (#595, #580).
+- Schema contract tests for the services' raw SQL: every statement must prepare against the migrated database, and
+  each result's columns must match a checked-in `sql-shapes.json` (#588, #592, #510).
+
 ### Changed
 
 - A chunk set of at most 1,000 chunks is written once, inside the swap transaction: half the dead chunk rows of a
   re-crawl and 8–14 % less WAL (#589, #501).
 - Indexing and the stage preview run the same stage runner (#590, #508).
+- **One gateway credential key per service.** rag-api, rag-admin and rag-worker each call the gateway with one
+  credential key (`Gateway:Key`, secret file `Gateway__Key`) at every ceiling up to the service's maximum: `Eu` for
+  the worker, `Gateway:MaxResidency` or else `External` for rag-api and rag-admin. A call above the maximum is refused
+  before sending and logged. The per-level keys (`Gateway:Keys:<level>`) are gone; see `docs/upgrade-guide.md` (#593,
+  #594, #596, #580).
+- Deployment: `init-deployment.sh --gateway-credential-key-file SERVICE=FILE` replaces `--gateway-key-file`, and a
+  re-run deletes the per-level key files and names them. The Portainer stack takes `UME_RAG_API_GATEWAY_KEY`,
+  `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY`. `docs/production-setup.md`, *Gateway credential keys*,
+  says how a gateway admin issues the three keys (#597).
+- Local stack: against a real gateway the AppHost reads `Gateway:Services:<service>:Key` from its user secrets, and it
+  refuses to start with a leftover `Gateway:Keys` section (#593, #596).
 
 ## 0.4.0 (2026-11-11)
 
