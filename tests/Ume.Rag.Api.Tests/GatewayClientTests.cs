@@ -116,9 +116,11 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task The_workers_maximum_is_Eu_whatever_the_configuration_says()
     {
-        // CapGatewayCalls(Eu) is the worker's registration; Gateway:ServiceMaximum in configuration is not bound.
+        // CapGatewayCalls(Eu) is the worker's registration; Gateway:ServiceMaximum in configuration is not bound, and
+        // Gateway:MaxResidency, which lowers the worker's evaluation ceilings, does not lower its maximum: an embedding
+        // profile's Eu ceiling stays callable (B-37).
         var stub = new CountingHandler();
-        using var host = Build(stub, key: FakeGatewayFactory.WorkerCredentialKey, cap: Residency.Eu);
+        using var host = Build(stub, key: FakeGatewayFactory.WorkerCredentialKey, maxResidency: Residency.OnPrem, cap: Residency.Eu);
 
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
         using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));

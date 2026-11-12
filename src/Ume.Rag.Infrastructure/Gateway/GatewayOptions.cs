@@ -18,11 +18,11 @@ public sealed class GatewayOptions
     public string? Key { get; set; }
 
     /// <summary>
-    /// The highest ceiling this service may call at whatever <see cref="MaxResidency"/> says: <c>External</c> for rag-api
-    /// and rag-admin; the worker sets <c>Eu</c> with <c>CapGatewayCalls</c> (its credential key is capped there, identity
-    /// §4.7). Set in code only: configuration does not bind it.
+    /// The worker's fixed maximum (<c>Eu</c>, set with <c>CapGatewayCalls</c>; its credential key is capped there, identity
+    /// §4.7), or null for rag-api and rag-admin, whose maximum is the top of their <see cref="MaxResidency"/> ladder. Set in
+    /// code only: configuration does not bind it.
     /// </summary>
-    public Residency ServiceMaximum { get; internal set; } = Residency.External;
+    public Residency? ServiceMaximum { get; internal set; }
 
     /// <summary>
     /// The per-level keys (<c>Gateway:Keys:&lt;level&gt;</c>), read only while <see cref="Key"/> is unset: the worker moves to
@@ -48,10 +48,10 @@ public sealed class GatewayOptions
     public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
 
     /// <summary>
-    /// The highest ceiling a call of this service may carry: <see cref="ServiceMaximum"/>, lowered by
-    /// <see cref="MaxResidency"/> (the top of the ladder the service calls at).
+    /// The highest ceiling a call of this service may carry (B-37): the worker's <see cref="ServiceMaximum"/>; for rag-api
+    /// and rag-admin <see cref="MaxResidency"/>, else <c>External</c>.
     /// </summary>
-    public Residency Maximum => Cap(ServiceMaximum);
+    public Residency Maximum => ServiceMaximum ?? MaxResidency ?? Residency.External;
 
     /// <summary>
     /// The key a call at <paramref name="ceiling"/> is sent with, or null when this service may not call there: the
