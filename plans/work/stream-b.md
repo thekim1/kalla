@@ -381,7 +381,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 ## Live (the live block, see the roadmap)
 
 
-### [ ] B-34 Schema contract for stream b's positional SQL readers (#510, follow-up of A-28)
+### [x] B-34 Schema contract for stream b's positional SQL readers (#510, follow-up of A-28)
 - **Do:** add the raw-SQL statements of stream b's stores to A-28's schema contract (`SqlSchemaContractTests`,
   `sql-shapes.json`, #588): the retrieval statements and hydrator (`src/Ume.Rag.Retrieval/Postgres/**`), the admin
   API's and rag-api's raw readers, the column names and types each reader expects, with `CommandBehavior.SchemaOnly`.
