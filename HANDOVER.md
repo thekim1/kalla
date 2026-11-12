@@ -1,8 +1,8 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 29 (`main` at `714a58f` plus this
-file; last release `v0.3.0`, **v0.4.0 is ready to tag**). Earlier sessions are in the git history (`git log --
-HANDOVER.md`). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch
+State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 29 (`main` at `81bb827` plus this
+file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`). Earlier sessions are in the git history (`git log
+-- HANDOVER.md`). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch
 `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
 
 ## What this is
@@ -25,16 +25,21 @@ sink" monolith. Design and code live in this repo.
 
 ## Start here
 
-**1. Tag v0.4.0 once the user agrees.** Everything for it is on `main`: the CHANGELOG `## 0.4.0 (2026-11-11)` and
-`docs/upgrade-guide.md` 0.4.0 (#582, #586; **rolling update: yes**, three additive migrations, the chat model limits
-to enter on Gateway models, `dc restart postgres` for the A-22 settings). Release dry run 4 (#43111499721, the release
-branch) passed, and **dry run 5 on `main` at `714a58f` passed** (#43122068059, with A-29, B-33 and #586: verify,
-parser and build with the smoke test all green). Ask the user, then
-`git tag -a v0.4.0 -m "v0.4.0" 714a58f && git push origin v0.4.0` (it publishes images and the release). Fix the
-CHANGELOG date if the tag is on a later day. **After dry run 5** stream b merged A-25 (#589, write each chunk once),
-A-26 (#590, one stage runner) and A-28 (#588, worker SQL schema contract), unreviewed but green; main reviewed #589
-afterwards and ticked A-25 (`e3a1e67`). Tagging `714a58f` releases what dry run 5 tested and leaves them for 0.5.0
-(they need CHANGELOG lines); tagging `main` needs one more dry run first.
+**The next session starts the next queued work. In order:**
+
+**1. M-9, cost attribution stage 1** (`plans/work/main.md` M-9; the first unticked item that isn't waiting on people;
+stream a has nothing ready: A-20 is postponed to go-live, A-27 waits on it, A-30 waits on B-37, the A-L items wait on
+the live block). Write stage 1 of `plans/platform/cost-attribution.md` §5 into the designs it names (chat §8.3, §17
+and the `AssistantDailyTotals` columns or a per-step table, admin §4.9 and a cost subsection under §8, processing
+§11/§14, engine §10): each call's cost is the gateway's (`x-ume-cost-usd` now; the stream comment from gateway phase 2;
+`usage.read` from phase 3), estimated from the mirror's prices only where none is given, split per step on
+`x-ume-run-id`/`x-ume-step`. Then queue C1–C6 in `stream-a.md`/`stream-b.md` with paths and done-whens, and bring
+**Q3** (cost-attribution §7) to the user. A design pass of this size can go to an implementor agent in a worktree;
+review its diff, fix paths, commit on `main` (it owns `plans/**`).
+
+**Then, as they arrive:** review stream b's PRs for **B-34** (#510 SQL contract), **B-35**, **B-36**, **B-37** (gateway
+phase 1, below); take **A-30** once B-37 is
+merged.
 
 **2. #580, the gateway integration (user decision, 2026-11-11).** Every assistant and knowledge base runs on an
 *assigned* gateway key of its department chosen by id; each service has one credential key and sends
@@ -48,12 +53,10 @@ afterwards and ticked A-25 (`e3a1e67`). Tagging `714a58f` releases what dry run 
 - **Open:** point 8 (every active department and team in the context, member groups with feature C); until then the
   organisation sync stays on the Data API. No OpenAPI document from the gateway yet.
 
-**3. Then, if the user doesn't choose:** A-25 (write each chunk once, engine §14 rule 2a, #501; an implementor agent in
-a worktree; respect the profile guard of processing §11 inside the swap transaction), then M-9 (cost stage 1, now on
-the gateway's cost; Q3 to the user).
+**3. After M-9:** M-12 phase 2 once a gateway release has #82 with the residency intersection (queue its items from
+M-12's list); the upload gaps or the support-assistant proof of concept when the user picks them (below).
 
 **Waiting on the user:**
-- **Tag v0.4.0** (above).
 - **#580 point 8** (as gateway owner), the residency intersection in #82, and the gateway's phase PRs.
 - **Upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, needs a decision entry) and
   rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a contextual-header trial (U5) and a
@@ -75,6 +78,7 @@ the live items, and **#584** (a flaky Api test, its path) is filed for it.
 
 ## Done in session 29 (2026-11-11/12)
 
+- **v0.4.0 released** (tag on `714a58f`, release run #43167650776 all green, 11 assets, published 06:41 UTC).
 - **Release:** dry run 3 failed in `parser.yml` (`docker create ghcr.io/astral-sh/uv` → "denied": the expired ghcr
   login in the runners' shared Docker config); `82f027d` gives every job that pulls ghcr its own `DOCKER_CONFIG`.
   Dry run 4 passed (verify, parser, build; smoke 55 s, renderer on and off; build job 8 min). #572 merged. A-21, A-23
