@@ -20,6 +20,12 @@ public static class FakeCatalog
     public static readonly Guid IndividOchFamiljeomsorgenId = new("019a0000-0000-7000-8000-000000003000");
     public static readonly Guid FritidsforvaltningenId = new("019a0000-0000-7000-8000-000000005000");
 
+    /// <summary>The pilot team (Digitalisering &amp; AI): the integration's owner team and the per-level dev keys' team.</summary>
+    public static readonly Guid DigitaliseringTeamId = new("019a0000-0000-7000-8000-000000001001");
+
+    /// <summary>A department wound up, with its team: listed inactive in the context (organisation.read), not in the catalogue.</summary>
+    public static readonly Guid OverformyndarId = new("019a0000-0000-7000-8000-000000007000");
+
     public static IReadOnlyList<CatalogDepartment> Departments { get; } =
     [
         new(FritidsforvaltningenId, "Fritidsförvaltningen", "5000", true, Created, []),
@@ -30,9 +36,25 @@ public static class FakeCatalog
     public static IReadOnlyList<CatalogTeam> Teams { get; } =
     [
         new(new Guid("019a0000-0000-7000-8000-000000005001"), FritidsforvaltningenId, "Bokning & anläggningar", true, Created, null),
-        new(new Guid("019a0000-0000-7000-8000-000000001001"), KommunledningskontoretId, "Digitalisering & AI", true, Created, "digitalisering-ai"),
+        new(DigitaliseringTeamId, KommunledningskontoretId, "Digitalisering & AI", true, Created, "digitalisering-ai"),
         new(new Guid("019a0000-0000-7000-8000-000000001002"), KommunledningskontoretId, "Kontaktcenter", true, Created, null),
         new(new Guid("019a0000-0000-7000-8000-000000003001"), IndividOchFamiljeomsorgenId, "Verksamhetsutveckling", true, Created, null),
+    ];
+
+    /// <summary>
+    /// The whole organisation as the gateway's context lists it under <c>organisation.read</c>: the catalogue's departments
+    /// and teams and one inactive department with its team.
+    /// </summary>
+    public static IReadOnlyList<CatalogDepartment> OrganisationDepartments { get; } =
+    [
+        .. Departments,
+        new(OverformyndarId, "Överförmyndarförvaltningen", "7000", false, Created, []),
+    ];
+
+    public static IReadOnlyList<CatalogTeam> OrganisationTeams { get; } =
+    [
+        .. Teams,
+        new(new Guid("019a0000-0000-7000-8000-000000007001"), OverformyndarId, "Handläggning", false, Created, null),
     ];
 
     /// <summary>One provider account per residency (gateway <c>/v1/catalog/providers</c>).</summary>
@@ -56,15 +78,15 @@ public static class FakeCatalog
     /// One price per deployment (gateway <c>/v1/catalog/prices</c>), per million tokens: embeddings 0.02, chat 0.15 in and
     /// 0.60 out, rerank 0.10 in (billed per input token, gateway design §7.4).
     /// </summary>
-    public static IReadOnlyList<CatalogPrice> Prices(IEnumerable<FakeModel> models) =>
-    [
-        .. Deployable(models).Select(m => m.Kind switch
-        {
-            FakeModel.Embedding => new CatalogPrice(ModelId(m.Name), Created, 0.02m, null, 0m),
-            FakeModel.Rerank => new CatalogPrice(ModelId(m.Name), Created, 0.10m, null, 0m),
-            _ => new CatalogPrice(ModelId(m.Name), Created, 0.15m, 0.075m, 0.60m),
-        }),
-    ];
+    public static IReadOnlyList<CatalogPrice> Prices(IEnumerable<FakeModel> models) => [.. Deployable(models).Select(PriceOf)];
+
+    /// <summary>A model's price by its kind (a route alias: its first target's, which has the alias's kind).</summary>
+    public static CatalogPrice PriceOf(FakeModel model) => model.Kind switch
+    {
+        FakeModel.Embedding => new CatalogPrice(ModelId(model.Name), Created, 0.02m, null, 0m),
+        FakeModel.Rerank => new CatalogPrice(ModelId(model.Name), Created, 0.10m, null, 0m),
+        _ => new CatalogPrice(ModelId(model.Name), Created, 0.15m, 0.075m, 0.60m),
+    };
 
     /// <summary>The gateway's <c>ModelKind</c> name of a fake model kind (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>).</summary>
     public static string KindName(string kind) => kind switch
