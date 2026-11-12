@@ -344,8 +344,8 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Parser `timeout`, `worker_crashed`, `resource_limit` / `ocr_failed`, `conversion_failed` | half the range inside the job; a single page that still fails is a **missing page** (`degraded` while ≤ 10 % and ≤ 20 pages, else fatal; 6c §3.3) / transient once, then as before | – / yes | – / back-off |
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429, or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
-| Gateway 402 (budget used up: the knowledge base's key, its team or department) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
-| The knowledge base's gateway key unusable: gateway `403 delegation_not_allowed` or `403` with the key's code (`key_disabled`, …) | transient | yes | as 402, reason `gateway.key_unavailable` |
+| Gateway `402 budget_exceeded` (budget used up: the knowledge base's key, its team or department; the gateway's message names which) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
+| The knowledge base's gateway key unusable, on a call sent with `x-ume-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `401 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
 | Gateway 403 `max_residency_not_met`; 400 | fatal, reason `gateway.<code>` | – | – |
 | Gateway answer above the residency ceiling (`x-ume-residency`) | fatal, result discarded, event 5003 | – | – |
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |
@@ -438,10 +438,11 @@ keys, every call is charged to that team, and no `x-ume-on-behalf-of` is sent (s
 | `x-ume-run-id`, `x-ume-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 
-The response is checked before anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when
-`x-ume-on-behalf-of` was sent, its echo must match (`Gateway:RequireDelegationEcho`), else fatal
-`gateway.delegation_not_applied` (event 5011). The call's usage (input, cached input and output tokens) and its cost are
-added to the stage's `NodeUsage`: `x-ume-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
+The worker learns `act-as-key` from its own `GET /v1/ume/context` (identity §4.7). The response is checked before
+anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when `x-ume-on-behalf-of` was sent, a
+`2xx` answer's echo must be the GUID sent (`Gateway:RequireDelegationEcho`; gateway-changes §5.2), else fatal
+`gateway.delegation_not_applied` (event 5011); an error answer goes by §7.3. The call's usage (input, cached input
+and output tokens) and its cost are added to the stage's `NodeUsage`: `x-ume-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
 an estimate from the model mirror's prices, kept apart as estimated (§10.6).
 
 HTTP clients come from `IHttpClientFactory`, one per downstream: the named gateway clients (`AddGatewayClient`) with

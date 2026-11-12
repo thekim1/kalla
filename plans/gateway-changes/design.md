@@ -368,22 +368,33 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 
 ### 5.2 Header, resolution and echo
 
-`x-ume-on-behalf-of: <assigned key id>` (a GUID) on a request authenticated by a credential key:
+`x-ume-on-behalf-of: <assigned key id>` (a GUID) on a request authenticated by a credential key. The gateway
+resolves it right after authenticating the credential key, before the body is read (gateway v0.10.0,
+`src/Ume.LlmGateway.Gateway/Requests/RequestStages.cs:118-180`; the codes in `GatewayErrors.cs:61-79`):
 
 | Case | Gateway answer |
 |---|---|
 | No header | the credential key itself, as any key |
-| Header malformed or repeated | `400 invalid_request` |
-| Caller not a credential key, or the id not an assigned key of the same integration (unknown ids answer the same) | `403 delegation_not_allowed` |
-| Assigned key disabled, revoked or expired, or its team or department inactive | `403` with the key's ordinary code (`key_disabled`, …) |
-| Usable | the request runs as the assigned key; the answer echoes `x-ume-on-behalf-of` with the resolved id |
+| Header not one GUID, or repeated | `400 invalid_request` (nothing logged) |
+| Caller not a credential key, the id not an assigned key of the same integration (unknown ids answer the same), or the two keys sharing no residency (§5.3) | `403 delegation_not_allowed` |
+| Assigned key disabled, or its team or department inactive | `403 key_disabled` |
+| Assigned key revoked or expired | `401 key_revoked` / `401 key_expired`, the codes a presented key gets; the gateway's `docs/integrations.md` and `integrations.json` say `403` here, the code answers `401` |
+| Usable | the request runs as the assigned key; the answer carries `x-ume-on-behalf-of` with the applied id |
 
 - Ume.Rag sends the key's id, never a name, and only once the latest context's `gateway.features` contains
-  `act-as-key` (phase 2). From then on every answer must echo the id it sent; a missing or different echo fails closed
-  before anything is used (`Gateway:RequireDelegationEcho`, default `true`; identity §4.7, event 5011), because an older
-  gateway instance during a rolling update ignores the header and would charge the credential key.
-- Every endpoint that reaches a model honours the header, and `GET /v1/models` with the header lists the assigned
-  key's models (§5.5).
+  `act-as-key` (phase 2). Each service learns the features from its own `GET /v1/ume/context` with its credential key
+  (`If-None-Match`, at start and every 5 minutes; not accounted, no rate limit; identity §4.7), so no service depends
+  on the admin's sync for it.
+- **The echo** is the assigned key's id in the GUID's `D` form (lower case, `RequestStages.cs:132`); Ume.Rag parses it
+  and compares GUIDs. It is set once acting is resolved, so it is on every later answer of that request: `2xx`, a
+  `304` of `/v1/models`, and the errors after authentication (`402`, `429`, `400`, `5xx`); a refusal of the table
+  above carries none. Ume.Rag checks it on every `2xx` and `304` answer to a request that sent the header: a missing or
+  different echo fails closed before anything is used (`Gateway:RequireDelegationEcho`, default `true`; identity §4.7,
+  event 5011), because an older gateway instance during a rolling update ignores the header and would charge the
+  credential key. An error answer is handled by its code (§5.7), with or without an echo.
+- Every endpoint that reaches a model honours the header, and so do `GET /v1/models` (the assigned key's models,
+  §5.5) and `GET /v1/ume/context` (answered as if the assigned key had been presented; Ume.Rag never sends the header
+  there).
 
 ### 5.3 What applies to a request made as an assigned key
 
@@ -413,15 +424,22 @@ sends no `x-ume-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
 ### 5.4 Budgets, rate limits and cost
 
 - **Budgets** are the assigned key's, its team's and its department's; a spent one answers `402 budget_exceeded`
-  naming the scope. Ume.Rag shows the assistant as unavailable with the reason (chat §3.6, admin §5.5.4) and a worker
-  job waits (engine §7.3).
+  (`error.type` `insufficient_quota`). The scope is only in `error.message` ("The key's budget (USD 50 per month) is
+  used up. …", "The team's …", "The department's …", or "… token quota …"; `GatewayErrors.cs:168-186`): there is no
+  structured scope field, so Ume.Rag passes the message on (chat §8.2) and never parses it; which budget is spent comes
+  from `/integration/v1/budgets` (`exhausted`, §5.6). Ume.Rag shows the assistant as unavailable with the reason (chat
+  §3.6, admin §5.5.4) and a worker job waits (engine §7.3).
 - **Rate limits** are the assigned key's, so each assistant and each knowledge base has its own; indexing and chat
   already hit different limits. Ume.Rag asks for no platform-wide cap (review point 4 on #580); the worker keeps its
   own embedding concurrency limit (processing §11).
-- **Cost**: `x-ume-cost-usd` on complete answers. A streamed call sends `x-ume-stream-cost: 1` and the gateway writes
-  one Server-Sent Events comment after the provider's last event, `: ume-cost-usd=<usd>` (phase 2; `features`
-  `stream-cost`); an aborted stream has none, and the gateway's usage record stays the record. rag-api reads the
-  comment and never forwards it to its own clients (chat §8.3). Run metadata: §7.1. Read-back: §5.6.
+- **Cost**: `x-ume-cost-usd` on complete JSON answers (eight decimals). A streamed call sends `x-ume-stream-cost: 1`
+  (exactly `1`; any other value asks for nothing) and the gateway writes one Server-Sent Events comment
+  `: ume-cost-usd=<usd>` (six decimals, USD) **before the closing `data: [DONE]`** of an OpenAI-style stream such as
+  `/v1/chat/completions`, or after the last event of a stream without one (phase 2; `features` `stream-cost`;
+  `GatewayRequestHandler.cs:445-521`). The figure is the one the usage record gets, from the provider's token counts
+  when the stream reports them (Ume.Rag sends `stream_options.include_usage`), else from the gateway's estimate. An
+  aborted or broken stream has none, and the gateway's usage record stays the record. rag-api reads the comment and
+  never forwards it to its own clients (chat §8.3). Run metadata: §7.1. Read-back: §5.6.
 
 ### 5.5 Discovery: `GET /v1/ume/context` and `GET /v1/models`
 
@@ -443,34 +461,44 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
 - **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
   `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
   `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
-  With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models: the key's model picker and the save checks
-  (admin §4.6 V8, V39).
+  With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models within both keys' residencies (§5.3) and the
+  ceiling header, which the call still needs (the credential key's `RequireMaxResidency`): the key's model picker and
+  the save checks (admin §4.6 V8, V39). It answers the refusals and the echo of §5.2; the `ETag` is over the body, so
+  each key has its own.
 - **Settled (#580, 2026-11-12):** the admin reads departments and teams from the context with `organisation.read`
   (admin §4.10), and Ume.Rag holds no Data API key. Member groups come from the same context (v0.10.0; identity §2.1).
 
 ### 5.6 Integration API (phase 3)
 
-`/integration/v1` on the gateway's Admin API, authenticated with a credential key that carries the scope `usage.read`;
-only `rag-admin`'s credential key gets it, so the keys that serve chat can read nothing.
+`/integration/v1` on the gateway's **Admin API** (its own base URL, `Gateway:IntegrationApiUrl`), authenticated with
+`Authorization: Bearer` and a credential key of an active integration that carries the scope `usage.read`: `401` for
+any other key or none, `403` without the scope (gateway v0.10.0,
+`src/Ume.LlmGateway.AdminApi/Integrations/IntegrationApiEndpoints.cs`, `IntegrationApiService.cs`). Only
+`rag-admin`'s credential key gets the scope, so the keys that serve chat can read nothing. The key's status, expiry
+and address list apply as on the gateway; its own rate limit per key, `Admin:IntegrationRequestsPerMinute` (60,
+`429` beyond it); every read is the gateway's security event 2006 `admin.data.read`. Errors are problem details; names
+are camelCase. Read-only: keys and budgets are never created through it; they are made in the gateway by the people
+responsible for the money.
 
-| Endpoint | Ume.Rag uses it for |
-|---|---|
-| `GET /integration/v1/usage?from=&to=&granularity=day\|month&groupBy=key,model,step&keyId=&runId=` (Stockholm days or months; 60 requests per minute per key) | the gateway's requests, tokens and cost per assistant's and knowledge base's key, by day, model and step (cost-attribution §5) |
-| `GET /integration/v1/budgets?keyId=` | limit, spent and period of the budgets that apply to a key (its own, its team's, its department's): the budget status on the assistant and knowledge base pages (admin §5.5.4) |
-
-Keys and budgets are never created through it; they are made in the gateway by the people responsible for the money.
+| Endpoint | Answer | Ume.Rag uses it for |
+|---|---|---|
+| `GET /integration/v1/usage?from=&to=&granularity=&groupBy=&keyId=&runId=` | `from`, `to` required inclusive dates (Europe/Stockholm days), at most 366 days, else `400`; `granularity` `day` (default) or `month` (widens `from` and `to` to whole months); `groupBy` any of `key`, `model`, `step`, comma-separated, default `key`, empty for one row per period; `keyId` one of the integration's keys (another's is `404`); `runId` a filter on the kept records only. Answer `{ from, to, granularity, groupBy[], items[] }`, each item `{ period, keyId, keyName, model, step, requests, successfulRequests, inputTokens, cachedInputTokens, outputTokens, costUsd }` (a dimension not grouped by is `null`; `model` is the requested name, an alias as sent; `step` is `null` in the monthly totals before the gateway's retention boundary, which a month granularity adds) | the gateway's requests, tokens and cost per assistant's and knowledge base's key, by day or month and step (admin §8.6) |
+| `GET /integration/v1/budgets?keyId=` | `keyId` required (another integration's is `404`). Answer `{ keyId, items[] }`, the active budgets that apply as the gateway applies them (the key's own and its rotation predecessors', its team's, its department's), each `{ id, scope (VirtualKey, Team, Department), scopeId, unit (Usd, Tokens), limit, residency (or null), period, periodStart, periodEnd, spent (in the unit), percentUsed, exhausted }` | the budget status on the assistant and knowledge base pages and which budget a `402` hit (admin §4.5, §5.5.4) |
 
 ### 5.7 Errors and security events
 
-| Gateway answer | Ume.Rag |
+| Gateway answer to a request with `x-ume-on-behalf-of` | Ume.Rag |
 |---|---|
 | `400 invalid_request` on the header | a bug in Ume.Rag: logged at Error, never retried |
-| `403 delegation_not_allowed`, or `403` with the assigned key's code | final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1) |
-| `402 budget_exceeded` | as above, with the scope the gateway names |
-| a missing or different echo | 5011 `rag.gateway.delegation_missing`, the call aborted before use (identity §10) |
+| `403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked`, `401 key_expired` | the object's key is unusable; final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1). A `401` is also what a revoked or expired credential key gets; the next context call tells them apart (a revoked assigned key leaves `assigned_keys`, a bad credential key fails the context call itself, admin §4.10) |
+| `402 budget_exceeded` | as above, with the gateway's message (§5.4) |
+| `429 rate_limited` | the assigned key's own limit: as any `429` (chat §3.6 passes `Retry-After` on; the worker waits for it, engine §7.3) |
+| a `2xx` or `304` without the echo, or with another id | 5011 `rag.gateway.delegation_missing`, the call aborted before use (identity §10) |
 
-The gateway logs its refusals as security event 1006 `gateway.delegation.refused` (`Reason`, `OnBehalfOf`, `KeyId`,
-`KeyPrefix`, `TeamId`, `DepartmentId`).
+The gateway logs its refusals (not the malformed header) as security event 1006 `gateway.delegation.refused`
+(`Reason`: `not_credential`, `key_not_assigned`, `key_revoked`, `key_expired`, `key_disabled`, `owner_inactive`,
+`no_common_residency`; `RequestId`, `OnBehalfOf` as sent, `Endpoint`, and the credential key's `KeyId`,
+`KeyPrefix`, `TeamId`, `DepartmentId`; `SecurityEvents.cs:86-88`). They are not usage records.
 
 ## 6. FakeLlm: embedding dimensions (plan §3c)
 
@@ -501,16 +529,18 @@ The gateway logs its refusals as security event 1006 `gateway.delegation.refused
 Stored from gateway phase 2 on (`features` `run-metadata`); Ume.Rag already sends them and an older gateway ignores
 them.
 
-- `x-ume-run-id` and `x-ume-step`: any key may send them. Trimmed; at most 100 characters kept (longer values are
+- `x-ume-run-id` and `x-ume-step`: any key may send them, acting or not; request headers only, never echoed on the
+  answer (`RequestStages.cs:182-199`). Trimmed; at most 100 characters kept (longer values are
   truncated, never refused: metadata must not fail a model call); control characters replaced
   (`SecurityEvents.Printable`, `SecurityEvents.cs:30-49`, which allocates nothing when there is nothing to replace).
 - Stored on `UsageRecord` as `RunId varchar(100) NULL`, `Step varchar(100) NULL` (the gateway's migration
   `UsageRunMetadata`). Not in monthly totals (retention summarises without them). No index: the admin filter `runId=` on
   `/api/usage/requests` runs inside the time range like the other filters.
 - Exposed on `/v1/usage/records` (`runId`, `step`), in the admin request list (column hidden by default) and on the
-  Integration API's `usage` (`groupBy=step`, `runId=`, §5.6), where Ume.Rag joins its per-step split.
-- Documented as **opaque ids only**: no names, no content, no user ids (ADR 003). Ume.Rag sends GUIDs and step names
-  such as `condense`, `answer`, `judge`.
+  Integration API's `usage` (`groupBy=step` groups by it, `runId=` filters on it; there is no grouping by run, §5.6),
+  where Ume.Rag sets its per-step split beside the gateway's.
+- Documented as **opaque ids only**: no names, no content, no user ids (ADR 003). Ume.Rag sends GUIDs and its step names
+  (`condense`, `chat-answer`, `query-embed`, `rerank`, `embed`, `eval-judge`, …; chat §8.3, engine §7.7).
 
 ### 7.2 Tool passthrough guarantee (tests only)
 

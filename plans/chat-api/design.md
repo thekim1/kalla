@@ -226,14 +226,14 @@ Swedish user-facing variants only in the fixed texts of §10.
 | 400 | `invalid_request`, `unsupported_parameter`, `tools_not_supported`, `attachments_not_supported`, `continue_not_supported`, `question_too_long`, `comment_not_stored` | §3.2, §3.5; an invalid `ume` member (`param` `ume` or `ume.<member>`, §3.8) |
 | 400 | `context_length_exceeded` | the question plus the mandatory prompt parts do not fit the assistant's context (§6.3); also mapped from the gateway's code (`GatewayErrors.cs:27`) |
 | 401 | identity §5.2/§6.3 reasons (`invalid_key`, `user_jwt_missing`, …) | `WWW-Authenticate: Bearer` |
-| 402 | `budget_exceeded` | gateway 402 mapped (the budget of the assistant's gateway key, its team or department: the scope the gateway names, `GatewayErrors.cs:34`); the turn's outcome is `unavailable` |
+| 402 | `budget_exceeded` | gateway 402 mapped (the budget of the assistant's gateway key, its team or department; the gateway names the scope only in its message, which is passed on, gateway-changes §5.4); the turn's outcome is `unavailable` |
 | 403 | `client_disabled`, `credential_not_allowed`, `subject_not_allowed`, `permission_missing` | identity §4.3 steps 1–4 |
 | 404 | `model_not_found`, `conversation_not_found`, `message_not_found` | identity steps 5–10; foreign or forged conversation ids (§11.1) |
 | 413 | `request_too_large` | body > 2 MB |
 | 429 | `rate_limited` | per-user limit (§4.1 step 4) or the gateway's 429 (its `Retry-After` passed on) |
 | 502 | `upstream_error` | gateway 5xx other than 503, malformed answer, a failed residency or key-echo check (§8.2; the message never names the residency); gateway `403 max_residency_not_met` (no configured target within the ceiling: a configuration fault the save-time model validation should prevent; logged at Error) |
 | 503 | `config_unconfirmed`, `membership_unavailable`, `search_unavailable`, `upstream_unavailable` | identity steps 0/11, knowledge §3.6, gateway unreachable or `503 no_eligible_provider` (in-ceiling targets drained or circuit-open; its `Retry-After` passed on) |
-| 503 | `assistant_unavailable` | the assistant's gateway key is unusable: not `Active`, its owner inactive or missing from `GatewayKeys` (checked at step 7, before any model call), or the gateway refuses it (`403 delegation_not_allowed` or `403` with the key's code, gateway-changes §5.7); the message names the reason without the key's name; the turn's outcome is `unavailable` and the admin raises the attention item (admin §5.5.1) |
+| 503 | `assistant_unavailable` | the assistant's gateway key is unusable: not `Active`, its owner inactive or missing from `GatewayKeys` (checked at step 7, before any model call), or the gateway refuses it (`403 delegation_not_allowed`, `403 key_disabled`, or `401 key_revoked`/`key_expired` on a call sent with `x-ume-on-behalf-of`, gateway-changes §5.7); the message names the reason without the key's name; the turn's outcome is `unavailable` and the admin raises the attention item (admin §5.5.1) |
 
 After the first byte only an SSE error chunk is possible (§9.6).
 
@@ -672,7 +672,7 @@ it separately and the frame is prepended at run time). P2: each linked skill's b
 POST {Gateway:BaseUrl}/v1/chat/completions
 Authorization: Bearer <rag-api's credential key>
 x-ume-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2, features act-as-key; none without a key)
-x-ume-stream-cost: 1                                     (streamed calls, from gateway phase 2, features stream-cost)
+x-ume-stream-cost: 1                                     (every streamed call; exactly "1"; features stream-cost, gateway-changes §5.4)
 x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
 x-ume-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in rag-admin, admin design §7.4; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
@@ -706,8 +706,7 @@ rag-api holds the pilot department's team's own keys per level (`OnPrem`-only, `
 `RequireMaxResidency`), picks the one of the call's ceiling, and every call is charged to the pilot team.
 
 `ResidencyCeilingHandler`, a `DelegatingHandler` on every gateway `HttpClient`, refuses (throws before sending) any
-request without an explicit `x-ume-max-residency` or with a ceiling above the service's maximum (until phase 1: whose
-key does not belong to that ceiling), sets `x-ume-on-behalf-of` from the call's object key and checks its echo;
+request without an explicit `x-ume-max-residency` or with a ceiling above the service's maximum, sets `x-ume-on-behalf-of` from the call's object key and checks its echo;
 unit-tested for every call site (answer, condense, follow-ups, query embedding, rerank, judge, evaluation generation;
 the worker's NER/LLM stages use the same handler). Keys are secret files, never logged; the worker never sends
 `External`. The
@@ -719,13 +718,16 @@ when a deployment answers; the ceiling and key checks still apply.
 The call uses `HttpCompletionOption.ResponseHeadersRead`; nothing is written to our client until all of these pass:
 
 1. **Status**: 2xx, `Content-Type: text/event-stream` (stream) or JSON. Errors map per §3.6 (gateway body parsed for
-   `error.code`; its message is not passed through except `budget_exceeded`'s team wording).
+   `error.code`; its message is not passed through except `budget_exceeded`'s, which names the key's, team's or
+   department's budget, gateway-changes §5.4).
 2. **Residency**: `x-ume-residency` (`Pipeline/GatewayHeaders.cs:15`; written as `OnPrem`/`Eu`/`External`) parsed
    case-insensitively and compared by `OnPrem < Eu < External` with the call's ceiling. Missing or above → abort
    (dispose the response, which cancels the gateway stream), event **5003** `rag.residency.refused`, 502
    `upstream_error`. `public` calls carry `External`, so the check always applies.
-3. **Key echo** (when `x-ume-on-behalf-of` was sent and `Gateway:RequireDelegationEcho` is set): the answer's
-   `x-ume-on-behalf-of` equals the key id sent; else abort, event **5011** `rag.gateway.delegation_missing`, 502.
+3. **Key echo** (when `x-ume-on-behalf-of` was sent and `Gateway:RequireDelegationEcho` is set): the `2xx` answer's
+   `x-ume-on-behalf-of` parses as the GUID sent (the gateway writes the `D` form); else abort, event **5011**
+   `rag.gateway.delegation_missing`, 502. An error status was already mapped by step 1, echo or not
+   (gateway-changes §5.2).
 4. **PII header** (`GatewayHeaders.cs:36`): recorded and counted (`rag.chat.gateway.pii{action}`); `blocked` arrives as
    an error status. The PII policy is the assistant's key's, set by its department in the gateway and shown read-only
    on the assistant page (admin §5.5.4).
@@ -751,7 +753,7 @@ WebUI use EU or on-prem models.
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | one 502/504 retry with the same ceiling and key after `Gateway:RetryDelay` (250 ms) (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
 | Client disconnect | `HttpContext.RequestAborted` cancels the gateway read and disposes the response; the gateway accounts it as `ClientCancelled` 499 (`GatewayRequestHandler.cs:418-422`); the partial answer is recorded with `Outcome = cancelled` (§12) |
-| Usage and cost | **Every model call of a turn** (condense, long-question condense, query embedding, rerank, answer, follow-ups; cost-attribution §5 C1) yields one usage record: its step (the `x-ume-step` it sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`), model, input, cached input (`usage.prompt_tokens_details.cached_tokens`, 0 when absent) and output tokens from the final chunk's `usage` (stream) or the JSON body (an embedding's `usage.prompt_tokens`, no output), and its cost, taken in this order: (1) `x-ume-cost-usd` on a complete JSON answer (`GatewayHeaders.cs:20-21`); (2) on a stream, which is always sent with `x-ume-stream-cost: 1` (gateway phase 2; an older gateway ignores it), the SSE comment `: ume-cost-usd=<usd>` the gateway writes after the provider's last event: `SseReader` reads it as the call's cost and **never forwards it** to rag-api's clients (§9.1); (3) otherwise an **estimate** from the model mirror's prices (`GatewayModels`, per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd` (the input price when that is null) + output × `OutputPerMillionUsd`; 0 for a model without prices), marked as estimated. Gateway and estimated cost are stored apart (data-model §2.3 `AssistantDailyUsage`), so a report always says how much of a figure is estimated. A query embedding served from the cache makes no call and records nothing; a call answered with an error status records nothing (the gateway charges no failed request); an aborted stream (client disconnect, idle or total timeout) has neither usage nor cost comment and is recorded with the prompt estimate of §6.3 as input, no output, at an estimated cost (gateway phase 3's read-back by run id, cost-attribution §6 B7, can replace such estimates; §12.4). **Reporting only**: no figure stops a turn; the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see), and the split per step joins its usage on `x-ume-run-id` (the message id) and `x-ume-step` (gateway-changes §7.1) |
+| Usage and cost | **Every model call of a turn** (condense, long-question condense, query embedding, rerank, answer, follow-ups; cost-attribution §5 C1) yields one usage record: its step (the `x-ume-step` it sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`), model, input, cached input (`usage.prompt_tokens_details.cached_tokens`, 0 when absent) and output tokens from the final chunk's `usage` (stream) or the JSON body (an embedding's `usage.prompt_tokens`, no output), and its cost, taken in this order: (1) `x-ume-cost-usd` on a complete JSON answer (`GatewayHeaders.cs:20-21`); (2) on a stream, which is always sent with `x-ume-stream-cost: 1` (gateway phase 2; an older gateway ignores it), the SSE comment `: ume-cost-usd=<usd>` (six decimals) the gateway writes just before the closing `data: [DONE]`: `SseReader` reads it as the call's cost and **never forwards it** to rag-api's clients (§9.1); (3) otherwise an **estimate** from the model mirror's prices (`GatewayModels`, per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd` (the input price when that is null) + output × `OutputPerMillionUsd`; 0 for a model without prices), marked as estimated. Gateway and estimated cost are stored apart (data-model §2.3 `AssistantDailyUsage`), so a report always says how much of a figure is estimated. A query embedding served from the cache makes no call and records nothing; a call answered with an error status records nothing (the gateway charges no failed request); an aborted stream (client disconnect, idle or total timeout) has neither usage nor cost comment and is recorded with the prompt estimate of §6.3 as input, no output, at an estimated cost (gateway phase 3's read-back by run id, cost-attribution §6 B7, can replace such estimates; §12.4). **Reporting only**: no figure stops a turn; the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see), and the split per step joins its usage on `x-ume-run-id` (the message id) and `x-ume-step` (gateway-changes §7.1) |
 
 ## 9. Streaming and citations
 

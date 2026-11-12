@@ -473,8 +473,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   the totals inserts of `FeedbackEndpoints` and `FeedbackImporter`), `rag-admin` `I U` on `AssistantDailyUsage`
   (data-model §1.2), retention of both (data-model §8). Metrics `rag.chat.tokens` (`cached-input`, steps `rerank`,
   `query-embed`) and `rag.chat.cost{step, source}` (chat §17). The FakeGateway sends `x-ume-cost-usd` on every JSON
-  answer (chat, embeddings, rerank) from its catalogue prices, writes the stream comment after its last event when the
-  request has `x-ume-stream-cost: 1`, reports `cached_tokens` when scripted, and a model `fake-no-cost` that sends
+  answer (chat, embeddings, rerank) from its catalogue prices, writes the stream comment just before `data: [DONE]` when the
+  request has `x-ume-stream-cost: 1` (gateway-changes §5.4), reports `cached_tokens` when scripted, and a model `fake-no-cost` that sends
   neither.
 - **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Api/**`,
   `src/Ume.Rag.AdminApi/FeedbackEndpoints.cs`, `src/Ume.Rag.Infrastructure/Gateway/**`,
@@ -539,6 +539,132 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   outside `labels.ts`/`messages.ts`.
 - **Waits on:** B-40.
 - **Read:** admin §3.3, §5.2, §5.3, §5.5.2, §5.5.4, §5.7, §8.6; Decisions "Admin UI in English".
+
+### [ ] B-42 Gateway phase 2: every api and admin call as the object's key, the echo check, the FakeGateway acting (#580, cost-attribution B5)
+- **Do:** in the shared client (`src/Ume.Rag.Infrastructure/Gateway/`): each service reads `gateway.features` from its
+  own `GET /v1/ume/context` with its credential key, at start and every 5 minutes with `If-None-Match`, held in memory
+  (identity §4.7); the call's object key travels on the request and `ResidencyCeilingHandler` sets
+  `x-ume-on-behalf-of` from it only while the features contain `act-as-key`; on every `2xx`/`304` answer the echo is
+  parsed and compared as a GUID, and a missing or different one throws before use with event 5011 (`Step`,
+  `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId`) while `Gateway:RequireDelegationEcho` (default
+  `true`) is on; the refusals of gateway-changes §5.7 on an acted call (`403 delegation_not_allowed`, `403
+  key_disabled`, `401 key_revoked`/`key_expired`, `402 budget_exceeded` with the gateway's message) surface as one typed
+  refusal the callers map (B-44, A-34), and `400 invalid_request` is logged at Error and never retried. rag-api: every
+  call of a turn as the assistant's `GatewayKeyId` (answer, condense, long-question condense and follow-ups in
+  `GatewayChatClient`, the query embedding in `GatewayQueryEmbedder`, rerank in `GatewayReranker`, `ChatStreaming`),
+  a Knowledge API caller without an assistant as the first searched collection's key (knowledge §5.2); rag-admin: the
+  test panel as the assistant's key, the retrieval test as the collection's (cost-attribution §4.1). The FakeGateway's
+  phase 2 of repo-and-deployment §4.3: features `act-as-key` and `run-metadata`; the header resolved as the gateway does
+  (`400` malformed or repeated, `403 delegation_not_allowed` for an id not assigned to the integration or sharing no
+  residency with the credential key, `403 key_disabled`, `401 key_expired`), the request served under the assigned
+  key's models and bounded residencies, the id echoed in the `D` form on every later answer; `/v1/models` with the
+  header lists the key's models; `FakeGateway:DropOnBehalfOfEcho`; `FakeGateway:AssignedKeys:<n>:BudgetExceeded`
+  (`Key`, `Team`, `Department`: `402 budget_exceeded` with the gateway's message); each served request recorded with
+  the key it ran as, its `x-ume-run-id`, `x-ume-step`, tokens and cost (for B-45). `docs/security-events.md`'s 5011 row
+  to the key form (it still names a team).
+- **Paths:** `src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Retrieval/**`,
+  `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**` (`AssistantTestEndpoints.cs`, `TestRetrievalEndpoints.cs`, the
+  gateway registration), `src/Ume.Rag.FakeGateway/**`, `docs/security-events.md`, `tests/**` (not
+  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** against the FakeGateway with `act-as-key`: every call of a chat turn (condense, query embedding,
+  rerank, answer, follow-ups) and of a test-panel turn carries the assistant's key id and the FakeGateway records it
+  under that key; an assistant without a key, or a FakeGateway without `act-as-key`, sends no header; with
+  `DropOnBehalfOfEcho` the turn is aborted before a byte reaches the client and 5011 is logged, and passes with
+  `Gateway:RequireDelegationEcho=false`; an upper-case echo passes; an unknown id (`403 delegation_not_allowed`), a
+  disabled key (`403 key_disabled`), an expired one (`401 key_expired`) and a spent budget (`402`) each surface as the
+  typed refusal, not retried; the handler's call-site tests cover the header at every call site.
+- **Live check:** on the interim gateway on v0.10.0 (not deployed yet): one chat turn of an assistant with an assigned
+  key shows under that key in the gateway's usage report, with rag-api's credential key as the via key and the turn's
+  run id and steps.
+- **Waits on:** B-35 (the contract pinned at v0.10.0, the FakeGateway's assigned keys), B-36 (`GatewayKeyId` on
+  assistants and collections and in rag-api's snapshot). The stream cost (`x-ume-stream-cost`, the comment) and the
+  usage records are B-38's: not repeated here.
+- **Read:** gateway-changes §5.2, §5.3, §5.4, §5.7, §7.1; identity §4.7, §10; chat §8.1, §8.2; knowledge §5.2;
+  cost-attribution §4.1; repo-and-deployment §4.3.
+
+### [ ] B-43 Gateway phase 2: save checks as the key, publish needs a key, the acted status check (#580, cost-attribution B5, admin part)
+- **Do:** once the admin's context shows `act-as-key`: V8's and V39's `GET /v1/models` as the object's key
+  (`x-ume-on-behalf-of`) at the ceiling (admin §4.6): each missing model named (`gateway_key_model`), a refusal of the
+  key `gateway_key_invalid`, a missing echo `gateway_unavailable` with 5011; `GET /api/gateway/models?gatewayKeyId=`
+  computes `available` as that key (admin §4.5); publish and restore refuse an assistant without a key
+  (`gateway_key_required`, 409), and a knowledge base without one keeps saving and indexing on the credential key with
+  its page's note (cost-attribution §4.2); `GET /api/gateway/status` adds one acted `/v1/models` call's echo (the first
+  usable mirrored key). The publish dialog and the key picker show the new refusals (`messages.ts`).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `contracts/admin/**`, `src/admin-ui/src/views/**`,
+  `src/admin-ui/src/components/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/**` (not
+  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** against the FakeGateway with `act-as-key`: V39 refuses a key whose `/v1/models` lacks the condense
+  model, naming it, though the admin's own list has it; a disabled key gives `gateway_key_invalid`; with
+  `DropOnBehalfOfEcho` the save gives `gateway_unavailable` and 5011; publishing an assistant without a key gives
+  `gateway_key_required` (without `act-as-key`: the warning only); a knowledge base without a key saves; the status
+  answer reports the echo; Vitest shows each refusal's text.
+- **Live check:** on the interim gateway on v0.10.0: the key picker's model availability and V39 follow a real
+  assigned key's models; the status page's echo is ok.
+- **Waits on:** B-42 (the handler and the FakeGateway's acting), B-36 (V39 and the picker).
+- **Read:** admin §4.5, §4.6 V8, V39, §5.5.2, §5.5.4; gateway-changes §5.5; cost-attribution §4.2.
+
+### [ ] B-44 Gateway phase 2: a spent budget or an unusable key in chat and the admin (#580, cost-attribution B6, api and admin part)
+- **Do:** chat §3.6: at step 7 an assistant whose `GatewayKeys` row is missing, not `Active`, not `OwnerActive` or not
+  `Usable` answers 503 `assistant_unavailable` before any model call; B-42's typed refusal maps to 503
+  `assistant_unavailable` (the key) or 402 `budget_exceeded` with the gateway's message (a budget) before the first
+  byte; the turn's outcome is `unavailable`, counted in the daily totals; a refusal after the first byte is §9.6's
+  error chunk; Knowledge API callers get §5.5's embedding failure (knowledge §5.2); the test panel shows the same
+  reason. rag-admin: the `[Unavailable]` badge with its reason on the assistant's and knowledge base's pages, derived
+  from the mirror (admin §5.5.4, §5.5.2), and from B-45's budgets once there; the attention-list source of admin
+  §5.5.1 (the list itself comes with P2's `GET /api/overview`; until then the badge is the signal).
+- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.AdminApi/**`,
+  `contracts/admin/**`, `src/admin-ui/src/views/**`, `src/admin-ui/src/components/**`,
+  `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/**` (not `tests/Ume.Rag.ContractTests/**`,
+  `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** against the FakeGateway: a key with `BudgetExceeded: Department` gives 402 `budget_exceeded` with the
+  department's message before the first byte and an `unavailable` turn in the totals; a disabled key in the mirror
+  gives 503 `assistant_unavailable` and the FakeGateway saw no call; a key the FakeGateway refuses (`403
+  delegation_not_allowed`) while the mirror still shows it active gives 503 `assistant_unavailable`; the test panel
+  shows both reasons; the assistant page shows `[Unavailable]` with "The gateway key is disabled".
+- **Live check:** on the interim gateway on v0.10.0: a small key budget set in the gateway stops the assistant with the
+  planned message (cost-attribution §6's done-when).
+- **Waits on:** B-42 (the typed refusal, the FakeGateway's modes), B-36 (the key on the assistant and its page).
+- **Read:** chat §3.6, §4.1, §8.2, §9.6; knowledge §5.2, §5.5; admin §5.5.1, §5.5.2, §5.5.4; gateway-changes §5.4,
+  §5.7; cost-attribution §4.2.
+
+### [ ] B-45 Gateway phase 3: the Integration API read-back, cost and budget per key (#580, cost-attribution B7, API part)
+- **Do:** `Gateway:IntegrationApiUrl` in rag-admin (unset: no read-back, the routes answer `null` without a call); a
+  client for `/integration/v1/usage` and `/budgets` with rag-admin's credential key (`usage.read`), parameters and
+  fields as gateway-changes §5.6; `GET /api/gateway/keys/{id}/budget` (admin §4.5) and
+  `GET /api/gateway/keys/{id}/usage` (admin §8.6), cached 5 minutes per key and query; `401`, `403` (scope missing)
+  and `429` shown on the *Gateway* page as the reason; the budgets' `exhausted` feeds B-44's badge. The FakeGateway's
+  `/integration/v1` (repo-and-deployment §4.3): `usage` from the requests it served (B-42's record) with `from`, `to`,
+  `granularity`, `groupBy`, `keyId`, `runId`, `400` beyond 366 days or for an unknown `groupBy`, `404` for a key not
+  of the integration; `budgets` from `FakeGateway:AssignedKeys:<n>:Budgets`; `usage.read` on the admin's dev
+  credential key only (`401` for a key that is not a credential key, `403` without the scope); the AppHost passes the
+  dev `Gateway:IntegrationApiUrl`. The contract test checks both answers against the pinned `integrations.json`.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.FakeGateway/**`, `src/Ume.Rag.AppHost/**`, `contracts/admin/**`,
+  `tests/**` (not `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** against the FakeGateway, after chat turns on two keys: `GET /api/gateway/keys/{id}/usage` returns per
+  step that key's tokens and cost only, by day and by month; `/budget` returns an exhausted department budget with
+  `exhausted: true`; rag-api's credential key gets `403` from the FakeGateway's `/integration/v1`; with
+  `Gateway:IntegrationApiUrl` unset both routes answer `null` without a call; a second read within 5 minutes makes no
+  call; the contract test fails on a renamed or missing field.
+- **Live check:** on the interim gateway on v0.10.0 with `usage.read` on rag-admin's key: an assistant key's cost for
+  a day equals the gateway's usage report for that key.
+- **Waits on:** B-42 (the FakeGateway's record per request under the acting key), B-36 (keys on objects), B-35 (the
+  pin at v0.10.0).
+- **Read:** gateway-changes §5.6; admin §4.5, §8.6; repo-and-deployment §3 (`Gateway:IntegrationApiUrl`), §4.3;
+  cost-attribution §6.
+
+### [ ] B-46 Gateway phase 3 in the admin UI: budget status and the gateway's cost beside Ume.Rag's (#580, cost-attribution B7, UI part)
+- **Do:** the key header's budget status on the assistant's and knowledge base's pages (admin §5.5.4: per budget its
+  scope, spent of limit with the percentage, the period's end, *Used up*); the gateway's figures on B-41's *Cost* cards
+  beside Ume.Rag's (admin §8.6), with the note when several objects share the key and the gateway link when there is no
+  read-back. Every label in `labels.ts`, every sentence in `messages.ts`.
+- **Paths:** `src/admin-ui/src/views/**`, `src/admin-ui/src/components/**`, `src/admin-ui/src/api/**`,
+  `src/admin-ui/src/utils/labels.ts`, `messages.ts`.
+- **Done when:** Vitest against B-45's contract: the budget status with an exhausted budget, the gateway's figures
+  beside the stored ones by step, the shared-key note, `null` showing the link; no UI string outside
+  `labels.ts`/`messages.ts`.
+- **Live check:** on the interim gateway on v0.10.0: a real assistant's card shows its key's gateway cost and budget.
+- **Waits on:** B-45, B-41 (the cards).
+- **Read:** admin §5.5.4, §8.6; Decisions "Admin UI in English".
 
 ### [x] B-L1 Status green against the real gateway
 - **Done when:** `GET /api/gateway/status` green with the pilot keys; #95, #102, #162 rechecked.

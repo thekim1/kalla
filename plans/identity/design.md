@@ -550,16 +550,19 @@ sending (admin `gateway_key_missing`, admin design §4.6 V8).
 of the integration *Ume.Rag* (`rag-api`, `rag-admin`, `rag-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
 and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow every
 residency the platform uses; the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
-whole organisation in the context, §2.1) and, from phase 3, `usage.read`. **Until phase 1** (P1) they are the pilot department's
-team's own keys per level (`Gateway:Keys:OnPrem`, `Eu`, `External`), with `AllowedIpRanges` and `RequireMaxResidency`;
-the worker never holds the open key (weakness review §5).
+whole organisation in the context, §2.1) and, from phase 3, `usage.read`.
 
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
 assistant or a knowledge base that has a `GatewayKeyId` also sends `x-ume-on-behalf-of: <that key id>` (cost-attribution
 §4.1 says which object a call belongs to); a call without an object, or for an object without a key, sends none and
-runs as the credential key. The answer must echo the id sent: a missing or different `x-ume-on-behalf-of` aborts the
-call before a byte is used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an
-older gateway instance during a rolling update ignores the header and would charge the credential key).
+runs as the credential key. Each service (api, admin, worker) reads the features from its own `GET /v1/ume/context`
+with its credential key, at start and every 5 minutes with `If-None-Match` (gateway-changes §5.2), held in memory;
+until the first answer it sends no header. A `2xx` or `304` answer must echo the id sent (the gateway writes it in the
+GUID's `D` form; compared as a GUID): a missing or different `x-ume-on-behalf-of` aborts the call before a byte is
+used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an older gateway instance
+during a rolling update ignores the header and would charge the credential key). An error answer goes by its code:
+`403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `key_expired` and `402 budget_exceeded` mean
+the object's key cannot be used now (gateway-changes §5.7; chat §3.6, engine §7.3).
 
 **Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every
 call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
@@ -572,8 +575,7 @@ while `Gateway:MaxResidency` is `Eu`). The
 handler below stays required on every gateway client and tested at every call site.
 
 A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
-ceiling, or with a ceiling above the service's maximum (the worker: `Eu`; until phase 1: the ceiling must match the
-level of the key it uses), sets `x-ume-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
+ceiling, or with a ceiling above the service's maximum (the worker: `Eu`), sets `x-ume-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
 for every call site (chat, condense, follow-ups, query embedding, rerank, judge, evaluation generation, NER/LLM stages).
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
@@ -596,7 +598,7 @@ try again; `403 max_residency_not_met` (no target configured within the ceiling)
 admin calls the gateway's `GET /v1/models` with its credential key and the ceiling of the assistant's effective level
 (for an audience client that keeps history, max(level, client ceiling)), from phase 2 as the assistant's key
 (`x-ume-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
-admin design V8, V39). Until phase 1 the call goes with the pilot team's key of that level (weakness review §5).
+admin design V8, V39).
 
 ### 4.8 Internal callers
 
@@ -996,7 +998,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
-| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | the response lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
+| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | a `2xx` or `304` response lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another GUID, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2; error answers go by their code, gateway-changes §5.7) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
 | 5012 | `rag.tool.definition_changed` | api, admin (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
 | 5013 | `rag.tool.upstream_refused` | api, admin (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
 | 5014 | `rag.content.tag_neutralised` | api, admin (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |

@@ -331,7 +331,8 @@ departments and teams from the same context, where `rag-admin`'s credential key 
 goes. Department member groups come from the same context (`member_groups` per department, feature `member-groups`,
 gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
 source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
-release tag), which changes by addition only. Detail:
+release tag), which changes by addition only. Each service reads the gateway's `features` from its own
+`/v1/ume/context`, so it acts as a key only once its own gateway instance says `act-as-key`. Detail:
 `gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
 *From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580); the organisation from the context and member

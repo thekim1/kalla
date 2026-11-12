@@ -78,10 +78,11 @@ embeddings included; the knowledge base's key pays for keeping it indexed.
   without one keeps indexing on the credential key and its page says so.
 - **Per-assistant budgets** are the key's budget in the gateway, set by the people responsible for the money. No
   Ume.Rag setting holds a budget; the admin shows the status read-only with a link to the gateway (`admin_url`).
-- **Every acted call** sends `x-ume-on-behalf-of: <key id>` and checks the echo; a missing or different echo fails
-  closed (`Gateway:RequireDelegationEcho`, identity §4.7; security event 5011).
-- **A spent budget or an unusable key** (gateway `402 budget_exceeded` naming the scope, `403` with the key's code or
-  `delegation_not_allowed`, or the mirror showing the key not active or gone) is shown to the chat user as the
+- **Every acted call** sends `x-ume-on-behalf-of: <key id>` and checks the echo on its `2xx` answer; a missing or
+  different echo fails closed (`Gateway:RequireDelegationEcho`, identity §4.7; security event 5011).
+- **A spent budget or an unusable key** (gateway `402 budget_exceeded`, whose message names the scope; `403
+  delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `key_expired` on an acted call; or the mirror
+  showing the key not active, not usable or gone; gateway-changes §5.7) is shown to the chat user as the
   assistant being unavailable for now (chat §3.6), counted in the daily totals, and raised as an attention item for the
   object's department admins with the reason (admin §5.5.1); a worker job waits and retries after an hour, it does
   not fail the document until its attempts run out (engine §7.3).
@@ -124,15 +125,15 @@ estimated calls explained).
 
 Each step starts when the gateway phase it needs is merged (gateway-changes §5; `work/main.md` M-12).
 
-| # | Step | Gateway phase | Owner | Reference |
-|---|---|---|---|---|
-| B1 | The gateway's integration: credential and assigned keys, `GET /v1/ume/context`, the model facts on `GET /v1/models` (1); acting as an assigned key with the echo, run metadata, stream cost (2); the Integration API (3); the OpenAPI document of the contract | 1–3 | gateway (user) | gateway-changes §5, §7.1; gateway `docs/integrations.md` |
-| B2 | One credential key per service in place of the per-level keys: the secret files, the residency handler (a ceiling above the service's maximum refused), the runbook | 1 | operator + gateway admin; b (api, admin) + a (worker) | identity §4.7; repo-and-deployment §6.3, §7.1 |
-| B3 | The admin's sync from `/v1/ume/context` and `/v1/models` with `ETag`: the assigned keys mirror, the gateway's features, the models with their limits and route aliases (the manual model fields go); the FakeGateway's integration contract with a contract test | 1 | b (admin, FakeGateway) | admin §4.10; data-model §2.1; repo-and-deployment §4.3 |
-| B4 | `GatewayKeyId` on assistants and knowledge bases; the key picker with the key's settings read-only and the gateway link; V39 | 1 | b + main (V-rule) | admin §4.6, §5.5.2, §5.5.4; data-model §2.1 |
-| B5 | Every call of §4.1 sends `x-ume-on-behalf-of` and checks the echo; streamed calls ask for and read the stream cost; save checks ask `GET /v1/models` as the object's key; publishing an assistant needs a key | 2 | b (api, admin) + a (worker) | identity §4.7; chat §8; knowledge §5.2; engine §7.7 |
-| B6 | The handling of §4.2 for a spent budget or an unusable key in chat, the admin and the worker; the department attention item | 2 | b + a | chat §3.6; engine §7.3; admin §5.5.1 |
-| B7 | The gateway's cost and budget status per assistant and knowledge base from `/integration/v1` (`usage.read` on `rag-admin`'s credential key), beside stage 1's split | 3 | b | gateway-changes §5.6; admin §5.5.4 |
+| # | Step | Gateway phase | Owner | Reference | Queue |
+|---|---|---|---|---|---|
+| B1 | The gateway's integration: credential and assigned keys, `GET /v1/ume/context`, the model facts on `GET /v1/models` (1); acting as an assigned key with the echo, run metadata, stream cost (2); the Integration API (3); the OpenAPI document of the contract | 1–3 | gateway (user) | gateway-changes §5, §7.1; gateway `docs/integrations.md` | – (gateway v0.10.0) |
+| B2 | One credential key per service in place of the per-level keys: the secret files, the residency handler (a ceiling above the service's maximum refused), the runbook | 1 | operator + gateway admin; b (api, admin) + a (worker) | identity §4.7; repo-and-deployment §6.3, §7.1 | B-37, A-30 |
+| B3 | The admin's sync from `/v1/ume/context` and `/v1/models` with `ETag`: the assigned keys mirror, the gateway's features, the models with their limits and route aliases (the manual model fields go); the FakeGateway's integration contract with a contract test | 1 | b (admin, FakeGateway) | admin §4.10; data-model §2.1; repo-and-deployment §4.3 | B-35 |
+| B4 | `GatewayKeyId` on assistants and knowledge bases; the key picker with the key's settings read-only and the gateway link; V39 | 1 | b + main (V-rule) | admin §4.6, §5.5.2, §5.5.4; data-model §2.1 | B-36 |
+| B5 | Every call of §4.1 sends `x-ume-on-behalf-of` and checks the echo; streamed calls ask for and read the stream cost; save checks ask `GET /v1/models` as the object's key; publishing an assistant needs a key | 2 | b (api, admin) + a (worker) | identity §4.7; chat §8; knowledge §5.2; engine §7.7 | B-42, B-43, A-34; A-35 (deployment) |
+| B6 | The handling of §4.2 for a spent budget or an unusable key in chat, the admin and the worker; the department attention item | 2 | b + a | chat §3.6; engine §7.3; admin §5.5.1 | B-44, A-34 |
+| B7 | The gateway's cost and budget status per assistant and knowledge base from `/integration/v1` (`usage.read` on `rag-admin`'s credential key), beside stage 1's split | 3 | b | gateway-changes §5.6; admin §5.5.4 | B-45, B-46; A-35 (deployment) |
 
 **Done when:** two departments' assistants and knowledge bases show as their own keys in the gateway's usage report, a
 key budget stops its assistant with the planned message, and the per-level keys are revoked.

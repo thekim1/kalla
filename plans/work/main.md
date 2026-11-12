@@ -154,7 +154,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Left for the user:** who owns "Ask-a-file workspaces" (teams and individuals) against "Organisation" (departments
   only); answer before P2.
 
-### [ ] M-12 Gateway integration (#580): queue the stream items when the gateway's phase PRs exist
+### [x] M-12 Gateway integration (#580): queue the stream items when the gateway's phase PRs exist
 - **Do:** when a gateway integration phase is merged in `~/git/llmgateway` (phase 1 is draft PR thekim1/llmgateway#81),
   pin its OpenAPI document in `contracts/gateway/`, check the designs against what was built (gateway-changes §5 is
   Ume.Rag's view, the gateway's `docs/integrations.md` wins), and queue that phase's items in `stream-a.md` (worker)
@@ -172,7 +172,11 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     (`AssistantEndpoints.cs`, `CollectionEndpoints.cs`, `src/admin-ui/src/views/AssistantView.vue`,
     `CollectionView.vue`, `labels.ts`, `messages.ts`); the FakeGateway's `/v1/ume/context`, `ume` model fields and
     contract test (`src/Ume.Rag.FakeGateway/**`, `tests/Ume.Rag.ContractTests/**`).
-  - **Phase 2** (B5–B6): `x-ume-on-behalf-of` from the object's key with the echo check on every call
+  - **Phase 2** (B5–B6), **queued 2026-11-12** as B-42 (the shared client's acting and echo check on every api and
+    admin call, the FakeGateway's acting, drop-echo, refusal and budget modes), B-43 (save checks as the key, publish
+    needs a key), B-44 (a spent budget or an unusable key in chat and the admin), A-34 (the worker's calls as the
+    knowledge base's key and its waiting jobs) and A-35 (deployment and runbook, with phase 3); the stream cost stays
+    B-38's. Scope as listed: `x-ume-on-behalf-of` from the object's key with the echo check on every call
     (`src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.Answering/Chat/GatewayChatClient.cs`,
     `GatewayStreamLine.cs`, `src/Ume.Rag.Answering/GatewayQueryEmbedder.cs`, `src/Ume.Rag.Retrieval/GatewayReranker.cs`,
     `src/Ume.Rag.Api/ChatStreaming.cs`, `src/Ume.Rag.AdminApi/AssistantTestEndpoints.cs`,
@@ -182,11 +186,23 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     acting, echo, drop-echo and budget modes and the stream cost comment.
   - **Phase 3** (B7): the Integration API read-back (`usage.read` on `rag-admin`'s key, `Gateway:IntegrationApiUrl`):
     cost and budget status per assistant and knowledge base (`src/Ume.Rag.AdminApi/**`, the two views); the
-    FakeGateway's `/integration/v1`.
+    FakeGateway's `/integration/v1`. **Queued 2026-11-12** as B-45 (the read-back, `GET /api/gateway/keys/{id}/budget`
+    and `/usage`, the FakeGateway's `/integration/v1`) and B-46 (the admin UI); A-35 deploys `Gateway:IntegrationApiUrl`.
+  - **Designs checked against v0.10.0** (2026-11-12, from source at the tag): gateway-changes §5.2–§5.7, §7.1 (a revoked
+    or expired acted key answers `401 key_revoked`/`key_expired`, not `403`; the echo is the id's `D` form, on every
+    answer after acting, errors included, and is checked on `2xx`/`304`; the `402` names its scope only in the message;
+    the stream comment comes before `data: [DONE]`, six decimals, exactly `x-ume-stream-cost: 1`; `/v1/models` as a key
+    still needs the ceiling; the Integration API's parameters, defaults, fields, `401`/`403`/`404`/`429` and the budgets
+    answer; event 1006's fields); identity §4.7 (each service reads `act-as-key` from its own context), §10 (5011);
+    chat §3.6, §8.1–§8.3; knowledge §5.2; engine §7.3, §7.7; admin §4.5, §4.6 V39, §4.10, §5.5.1, §5.5.4, §8.6 (the
+    gateway's usage per key beside the cost report); cost-attribution §4.2, §6 (queue ids); repo-and-deployment §4.3
+    (the FakeGateway's modes).
 - **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
 - **Waits on:** nothing since **gateway v0.10.0** (released 2026-11-12: phases 1–3, the credential bound,
-  `organisation.read`, member groups). Phase 2 and 3 items are next to queue. Member groups now come from the
-  context (B-35, A-33).
+  `organisation.read`, member groups). Member groups now come from the context (B-35, A-33). The live checks of
+  B-42–B-46, A-34 and A-35 wait on the interim gateway on v0.10.0.
+- **Closed (2026-11-12):** the 401-vs-403 difference in the gateway's docs is reported on #580; "each service reads
+  the features from its own context" is in Decisions "Gateway keys".
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
   cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
   repo-and-deployment §4.3.
