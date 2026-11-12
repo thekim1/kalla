@@ -82,4 +82,5 @@ src/admin-ui/src/platform/**                  a
 src/**                                        b
 tests/**                                      b
 contracts/admin/**                            b
+contracts/gateway/**                          b
 dev/**                                        b

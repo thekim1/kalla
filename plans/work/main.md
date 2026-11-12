@@ -154,7 +154,8 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
   pin its OpenAPI document in `contracts/gateway/`, check the designs against what was built (gateway-changes §5 is
   Ume.Rag's view, the gateway's `docs/integrations.md` wins), and queue that phase's items in `stream-a.md` (worker)
   and `stream-b.md` (api, admin, FakeGateway) with done-whens from cost-attribution §6:
-  - **Phase 1** (B2–B4): one credential key per service (`Gateway:Key`) in place of the per-level keys, and the
+  - **Phase 1** (B2–B4), **queued 2026-11-12** as B-35, B-36, B-37 and A-30 (designs checked against `6a8f0a5`: they match;
+    no OpenAPI document yet, so B-35 pins examples): one credential key per service (`Gateway:Key`) in place of the per-level keys, and the
     residency handler's service maximum (`src/Ume.Rag.Infrastructure/Gateway/GatewayOptions.cs`,
     `ResidencyCeilingHandler.cs`, `GatewayApi.cs`; `deploy/init-deployment.sh`; `docs/production-setup.md`); the
     context and model sync with `ETag` and the `GatewayKeys` mirror, the manual model limit fields replaced by the

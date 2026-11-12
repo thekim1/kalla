@@ -391,6 +391,57 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** a renamed column in a retrieval or admin statement fails the test.
 - **Waits on:** –
 - **Read:** #510, #588.
+### [ ] B-35 Gateway phase 1: context and model sync, the keys mirror, the FakeGateway contract (#580, cost-attribution B3)
+- **Do:** the admin's sync of admin §4.10 from the gateway's discovery with the admin's key, `If-None-Match`/`ETag`
+  and nothing written on `304`: `GET /v1/ume/context` → `gateway.features`, `version`, `admin_url` in memory and on the
+  Gateway page, `assigned_keys` → the `GatewayKeys` mirror (data-model §2.1; migration and grants, rag-api `S`);
+  `GET /v1/models` → `GatewayModels` from the `ume` fields (`kind`, `residency`/`residencies`, `context_window`,
+  `max_output_tokens`, `features`, `pricing`), the manual limit fields kept only while the gateway sends `null`.
+  Departments and teams stay on the Data API (gateway-changes §5.5; #580 point 8). The FakeGateway answers both as the
+  gateway does at `thekim1/llmgateway@6a8f0a5` (`docs/integrations.md` *Discovery*, `ContextEndpoint.cs`), and a
+  pinned example of each answer in `contracts/gateway/` (with the gateway commit it was taken from) is checked against
+  the FakeGateway's output in a contract test. Replace the example with the gateway's OpenAPI document once it is
+  published (asked on #580).
+- **Paths:** `src/Ume.Rag.AdminApi/**` (`OrganisationSync.cs`, `GatewayModelSync.cs`, `GatewayEndpoints.cs`),
+  `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`, `deploy/postgres/app-roles.sql` (+ the
+  generated Kubernetes and Portainer copies), `src/Ume.Rag.FakeGateway/**`, `contracts/gateway/**`, `src/admin-ui/src/**`
+  outside `platform/` (the Gateway page's features and version), `tests/**`.
+- **Done when:** against the FakeGateway: the sync fills `GatewayKeys` from `assigned_keys` (a revoked key's row goes,
+  a disabled one keeps its `Status`); a second run with an unchanged `ETag` writes nothing; a model's limits come from
+  `ume.context_window`/`max_output_tokens` and the manual fields don't show for it; the contract test fails when the
+  FakeGateway renames a field of the pinned examples.
+- **Waits on:** – (gateway phase 1 merged, thekim1/llmgateway#81).
+- **Read:** Decisions "Gateway keys"; admin §4.10; data-model `GatewayKeys`; gateway-changes §5.5; repo-and-deployment
+  §4.3; the gateway's `docs/integrations.md` at `6a8f0a5`.
+
+### [ ] B-36 Gateway phase 1: a gateway key per assistant and knowledge base, the key picker, V39 (#580, cost-attribution B4)
+- **Do:** `GatewayKeyId` on `Assistants` and `Collections` (data-model §2.1); `GET /api/gateway/keys?departmentId=`
+  (admin §4.5); the key picker on the assistant's and knowledge base's pages with the key's settings read-only and a
+  link to the gateway (`admin_url`), a warning when the key has a system prompt (admin §5.5.4); V39 on save (admin §4.6:
+  an `Active` key of the object's department, owner active, a residency within the object's level, every model the
+  object uses allowed). No call is made as the key yet, and publishing doesn't need one until the gateway's `features`
+  contain `act-as-key` (phase 2).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`,
+  `src/admin-ui/src/views/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `contracts/admin/**`, `tests/**`.
+- **Done when:** the picker lists only the department's keys, unusable ones marked with their reason; V39 refuses
+  another department's key, a disabled key, a key whose residencies are all above the object's level and a key that
+  lacks one of the object's models (the embedding profile's and rerank models included), each with its code; a saved
+  key shows its settings read-only.
+- **Waits on:** B-35 (the mirror).
+- **Read:** admin §4.5, §4.6 V39, §5.5.2, §5.5.4; data-model §2.1; cost-attribution §4.
+
+### [ ] B-37 Gateway phase 1: one credential key per service (#580, cost-attribution B2, code part)
+- **Do:** `Gateway:Key` (secret file `Gateway__Key`) in place of `Gateway:Keys:OnPrem/Eu/External` in the gateway
+  client of api, admin and worker; `ResidencyCeilingHandler` refuses a call without a ceiling or with one above the
+  service's maximum (the worker `Eu`; api and admin the top of their `Gateway:MaxResidency` ladder), unit-tested at
+  every call site as before (identity §4.7); the FakeGateway accepts a credential key; the AppHost passes one dev key per
+  service. Don't send `x-ume-on-behalf-of` yet (phase 2).
+- **Paths:** `src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.AppHost/**`, `src/Ume.Rag.FakeGateway/**`, the
+  services' gateway registration, `tests/**`.
+- **Done when:** no `Gateway:Keys:*` is read anywhere; a call above the service's maximum is refused before sending and
+  logged; the call-site tests pass with one key per service; the local stack answers a chat on the FakeGateway.
+- **Waits on:** –. A-30 (deploy) follows with the same key names.
+- **Read:** identity §4.7; repo-and-deployment §6.3, §7.1; gateway-changes §5.1.
 ### [x] B-L1 Status green against the real gateway
 - **Done when:** `GET /api/gateway/status` green with the pilot keys; #95, #102, #162 rechecked.
 - **Waits on:** the gateway session (EU routes, pilot keys).
