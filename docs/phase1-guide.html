@@ -539,7 +539,11 @@ Privatpersoner: 328 kr/timme
         <pre class="cmd">dotnet user-secrets --project src/Ume.Rag.AppHost \
   set Gateway:BaseUrl https://&lt;gateway&gt;
 dotnet user-secrets --project src/Ume.Rag.AppHost \
-  set Gateway:Keys:Eu &lt;nyckel&gt;
+  set Gateway:Services:api:Key &lt;api-nyckel&gt;
+dotnet user-secrets --project src/Ume.Rag.AppHost \
+  set Gateway:Services:admin:Key &lt;admin-nyckel&gt;
+dotnet user-secrets --project src/Ume.Rag.AppHost \
+  set Gateway:Services:worker:Key &lt;worker-nyckel&gt;
 dotnet user-secrets --project src/Ume.Rag.AppHost \
   set FakeGateway:Enabled false</pre>
         <p class="note">Adresser och nycklar finns bara i användarhemligheter eller hemliga filer, aldrig i koden. Fullständiga

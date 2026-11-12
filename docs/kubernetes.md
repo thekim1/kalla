@@ -35,14 +35,19 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    ```bash
    ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
        --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
-       --gateway-key-file Eu=rag-eu.key --org-sync-url https://llm-data.example.se --org-sync-key-file data-api.key \
+       --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
+       --gateway-credential-key-file worker=rag-worker.key \
+       --org-sync-url https://llm-data.example.se --org-sync-key-file data-api.key \
        --oidc-client-secret-file ume-rag-admin.secret --backup-target s3://s3.example.se/ume-rag \
        --backup-s3-credentials-file s3.cred --allow-file-keys
    ```
 
    It creates an internal CA, a certificate per service, database passwords, the key pepper, the blob master key, the
    Data Protection certificate, the pgBackRest repository settings and connection strings to the host `postgres` (the
-   Service in `components/datastores`). It also writes `deploy/.env`, which Kubernetes does not use. **Back up
+   Service in `components/datastores`), and puts each service's gateway credential key (issued by a gateway admin:
+   [production-setup.md](production-setup.md), *Gateway credential keys*) in `deploy/secrets/<service>/Gateway__Key`.
+   The key's address list then holds the cluster's egress addresses. It also writes `deploy/.env`, which Kubernetes
+   does not use. **Back up
    `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal` and `deploy/certs/data-protection.pfx`** outside the
    cluster (runbook, *Key escrow*): without them a restored database is unusable.
 
@@ -54,8 +59,10 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
 
    Leave out `--datastores` if you bring your own Postgres (below), and `--renderer` without the renderer component.
    `--renderer` needs the worker's endpoint file, which `init-deployment.sh` writes only with `--render`.
-   The script can run again after `init-deployment.sh --renew-certs` or a new gateway key; restart the deployments
-   afterwards (`kubectl rollout restart`). Keep `deploy/certs/ca.key` offline between renewals.
+   Each service's `ume-rag-<service>-secrets` holds its `Gateway__Key`. The script can run again after
+   `init-deployment.sh --renew-certs` or a rotated credential key (`init-deployment.sh` with the new
+   `--gateway-credential-key-file SERVICE=FILE`); restart the deployments afterwards (`kubectl rollout restart`, for a
+   key only `deployment/rag-<service>`). Keep `deploy/certs/ca.key` offline between renewals.
 
 3. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
    repository with the `../base` paths adjusted) and change:

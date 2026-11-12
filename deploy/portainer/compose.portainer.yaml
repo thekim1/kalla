@@ -48,8 +48,11 @@
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
 #   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
 #                             citation links are absolute
-#   UME_RAG_GATEWAY_KEY_Eu    a gateway API key for RAG (created in the gateway's admin UI, residency Eu); without it
-#                             the stack starts but every model call fails. Change it and redeploy to rotate.
+#   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
+#                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
+#                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
+#                             one the stack starts but that service's model calls are refused. To rotate one, change
+#                             it, update the stack, then restart that service (it reads the key at start).
 # Recommended
 #   COMPOSE_PROFILES=data     the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
 #                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
@@ -63,7 +66,6 @@
 #                             groups that grant a RAG role (';'-separated); empty grants nothing
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
-#   UME_RAG_GATEWAY_KEY_OnPrem / _External, UME_RAG_{API,ADMIN,WORKER}_GATEWAY_KEY_Eu (a key per service wins)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
 #   COMPOSE_PROFILES=data,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
 #   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
@@ -325,12 +327,9 @@ services:
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
-      UME_RAG_GATEWAY_KEY_OnPrem: ${UME_RAG_GATEWAY_KEY_OnPrem:-}
-      UME_RAG_GATEWAY_KEY_Eu: ${UME_RAG_GATEWAY_KEY_Eu:-}
-      UME_RAG_GATEWAY_KEY_External: ${UME_RAG_GATEWAY_KEY_External:-}
-      UME_RAG_API_GATEWAY_KEY_Eu: ${UME_RAG_API_GATEWAY_KEY_Eu:-}
-      UME_RAG_ADMIN_GATEWAY_KEY_Eu: ${UME_RAG_ADMIN_GATEWAY_KEY_Eu:-}
-      UME_RAG_WORKER_GATEWAY_KEY_Eu: ${UME_RAG_WORKER_GATEWAY_KEY_Eu:-}
+      UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
+      UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
+      UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
       UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
     configs:
@@ -836,7 +835,7 @@ configs:
 
       -- Gateway (faces the clients): what it authenticates, routes and accounts with. Not the audit log or Data API keys. It reads
       -- the Data Protection key ring but does not add keys (it only decrypts; the admin API creates and rotates them).
-      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
+      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "ProviderAccounts", "ModelDeployments", "ModelPrices",
         "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
         "UsageRecords", "UsageMonthlyTotals", "AlertEvents", "AuthFailures", "DataProtectionKeys" TO ume_gateway;
       GRANT INSERT ON "UsageRecords", "AlertEvents", "AuthFailures" TO ume_gateway;
@@ -844,11 +843,11 @@ configs:
 
       -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
       -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.
-      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
+      GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
         "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
         "UsageRecords", "UsageMonthlyTotals", "AuditLog", "AlertEvents", "AuthFailures", "DataProtectionKeys",
         "Branding", "__EFMigrationsHistory" TO ume_admin;
-      GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "ProviderAccounts",
+      GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "Integrations", "ProviderAccounts",
         "ModelDeployments", "ModelPrices", "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets",
         "Budgets", "DataApiKeys" TO ume_admin;
       GRANT UPDATE ("TrustedProxies", "LogAllRequests", "LogAllRequestsUntil", "UpdatedAt", "UsageRetentionDays", "AuditRetentionDays",
@@ -873,7 +872,7 @@ configs:
           GRANT SELECT ("Id", "TeamId", "Name", "Description", "Prefix", "IsEnabled", "CreatedAt", "CreatedBy", "ExpiresAt",
             "RevokedAt", "GraceUntil", "RotatedToKeyId", "LastUsedAt", "AllowedModels", "AllowedResidencies", "AllowedProviders",
             "AllowedIpRanges", "PiiPolicy", "AttachmentPolicy", "RequestsPerMinute", "TokensPerMinute", "AllowProviderTools",
-            "AllowProviderStorage", "MaxConcurrentRequests") ON "VirtualKeys" TO ume_data;
+            "AllowProviderStorage", "MaxConcurrentRequests", "IntegrationId", "IntegrationRole") ON "VirtualKeys" TO ume_data;
           GRANT SELECT ("Id", "Name", "DisplayName", "Type", "Residency", "IsEnabled") ON "ProviderAccounts" TO ume_data;
           -- Its own credentials: the key hash (SHA-256 of a 256-bit random key) to authenticate Data API keys, and the
           -- only column it may write, the approximate last use.
@@ -891,8 +890,9 @@ configs:
       # the api's keys, the worker's crawl key pepper, the renderer's WebSocket path and the blob master key in the rag-certs
       # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
       # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
-      # re-issued when they expire within 30 days or their host names change. Files that follow a variable (gateway keys,
-      # the Data API key, the OIDC client secret) are written again on every start, and removed when the variable is empty.
+      # re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
+      # credential keys, the Data API key, the OIDC client secret) are written again on every start, and removed when the
+      # variable is empty.
       #
       # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
       # volume, mounted at /gateway-certs), so https://gateway:8443 and https://dataapi:8443 verify.
@@ -985,16 +985,13 @@ configs:
       put() {
         if [ -n "$$3" ]; then printf '%s' "$$3" > "$$S/$$1/$$2"; else rm -f "$$S/$$1/$$2"; fi
       }
-      # Gateway keys per level: the shared one for api, admin and worker, a service's own one wins. The worker never holds
-      # External (simplification pass §6).
-      for level in OnPrem Eu External; do
-        shared="$$(printenv "UME_RAG_GATEWAY_KEY_$$level" || true)"
-        for svc in api admin worker; do
-          [ "$$svc:$$level" = worker:External ] && continue
-          up="$$(echo "$$svc" | tr a-z A-Z)"
-          own="$$(printenv "UME_RAG_$${up}_GATEWAY_KEY_$$level" || true)"
-          put "$$svc" "Gateway__Keys__$$level" "$${own:-$$shared}"
-        done
+      # Each service's credential key of the gateway integration Ume.Rag (identity design §4.7):
+      # UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY. The per-level keys they
+      # replace are revoked at the gateway and read by no service, so none is left in the volume.
+      for svc in api admin worker; do
+        up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
+        put "$$svc" Gateway__Key "$$(printenv "UME_RAG_$${up}_GATEWAY_KEY" || true)"
+        rm -f "$$S/$$svc"/Gateway__Keys__*
       done
       put admin Oidc__ClientSecret "$${UME_RAG_OIDC_CLIENT_SECRET:-}"
       put admin OrgSync__DataApiKey "$${UME_RAG_ORG_SYNC_KEY:-}"
@@ -1018,8 +1015,8 @@ configs:
       chown -R 1654:1654 "$$C/api" "$$C/admin" "$$C/worker" "$$C/migrations" "$$S/api" "$$S/admin" "$$S/worker" "$$S/migrations" "$$S/keys"
       chmod 755 "$$C" "$$S"
       missing=""
-      for svc in api admin worker; do [ -e "$$S/$$svc/Gateway__Keys__Eu" ] || missing="$$missing $$svc"; done
-      [ -z "$$missing" ] || echo "rag-bootstrap: no Eu gateway key for$${missing}: set UME_RAG_GATEWAY_KEY_Eu (model calls fail until then)"
+      for svc in api admin worker; do [ -e "$$S/$$svc/Gateway__Key" ] || missing="$$missing $$svc"; done
+      [ -z "$$missing" ] || echo "rag-bootstrap: no gateway credential key for$${missing}: set UME_RAG_<SERVICE>_GATEWAY_KEY"
       [ -e "$$S/admin/OrgSync__DataApiKey" ] || echo "rag-bootstrap: no UME_RAG_ORG_SYNC_KEY: the model catalogue and org sync stay off"
       echo "rag-bootstrap: certificates and secrets ready"
   rag-postgres-init:
@@ -1225,6 +1222,9 @@ configs:
       -- "FetchedAt" for statement D and the citation fields (knowledge design §6.3, §10.1); "CanonicalIdentity" (the upload
       -- slot) and "ContentHash" for the blob key and ETag of the document content route (knowledge design §3.5).
       GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
+      -- The keyword stop list's statistics (knowledge design 6.2, #499): the worker keeps them, rag-api and the admin read them.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON content."KeywordStatistics" TO ume_rag_worker;
+      GRANT SELECT ON content."KeywordStatistics" TO ume_rag_api, ume_rag_admin;
       GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
         "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
         "CanonicalIdentity", "ContentHash")

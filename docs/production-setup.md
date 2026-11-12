@@ -117,7 +117,8 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
   --oidc-client-secret-file admin-client.secret \
   --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
   --gateway-url https://llm.intern.umea.se --ca-file municipal-ca.pem \
-  --gateway-key-file api:Eu=api-eu.key --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key \
+  --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
+  --gateway-credential-key-file worker=rag-worker.key \
   --org-sync-url https://llm-data.intern.umea.se --org-sync-key-file org-sync.key --crawl-allow 10.20.0.0/16 \
   --backup-target /mnt/backup/ume-rag --host-memory 24 --freshclam-proxy proxy.intern.umea.se:8080 \
   --allow-file-keys --yes
@@ -149,7 +150,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--bind ADDR` | `127.0.0.1` (`0.0.0.0` with `--proxy`) | address the listeners are published on |
 | `--gateway-url URL` | prompted | the LLM gateway (HTTPS): `UME_RAG_GATEWAY_URL` |
 | `--ca-file FILE` | – | appended to the trust store of api, admin and worker: the gateway's CA and your PKI chain |
-| `--gateway-key-file [SERVICE:]LEVEL=FILE` | – | a gateway key per level (`OnPrem`, `Eu`, `External`; repeat). Without `SERVICE` api and admin get it, and the worker unless it is `External`; `api:`, `admin:` or `worker:` gives that deployable its own key (the gateway team issues one per deployable), which wins over a shared one. `worker:External` is refused. P1a calls every model at `Eu` |
+| `--gateway-credential-key-file SERVICE=FILE` | – | `SERVICE`'s credential key of the gateway integration *Ume.Rag* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service): `secrets/SERVICE/Gateway__Key`. A gateway admin issues the three keys (*Gateway credential keys*, below). A service without one has its model calls refused |
 | `--org-sync-url URL` | – | the gateway's Data API (HTTPS, without `/v1`; its own service, often its own host and port 10443): `UME_RAG_ORG_SYNC_URL` → `OrgSync__BaseUrl`, on the firewall's `llm` list. Without it the org sync and the model catalogue sync stay off |
 | `--org-sync-key-file FILE` | – | the gateway Data API key for the admin's organisation sync (`catalog.read` only) |
 | `--key-provider file` | `file` | the only key provider until postponed decision K1 |
@@ -264,6 +265,59 @@ sudo curl --cacert deploy/certs/ca.pem https://localhost:9543/health/ready
 ```
 
 Every .NET service also answers `/health/live` and `/version`.
+
+## Gateway credential keys
+
+Each RAG service calls the LLM gateway with its own key: rag-api, rag-admin and rag-worker each hold one **credential
+key** of the gateway integration *Ume.Rag* (identity design §4.7, gateway-changes §5.1; the gateway's
+`docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-ume-max-residency`), and
+never holds another service's key. A gateway admin issues the three keys in the gateway's admin UI:
+
+1. **The integration.** Under *Access → Integrations*, create `Ume.Rag` with its owner team. Calls made as a credential
+   key are charged to that team: the organisation and model syncs, the embedding canary, model checks, and every call
+   of an assistant or knowledge base that has no key of its own.
+2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Ume.Rag`,
+   role *Credential*. Name them so the usage report tells them apart, for example `Ume.Rag api`, `Ume.Rag admin` and
+   `Ume.Rag worker`. Each key has:
+   - **`RequireMaxResidency` on**: the gateway refuses a request without the ceiling header (`400 invalid_request`).
+   - **An address list** (`AllowedIpRanges`): the addresses that service's requests reach the gateway from (this host's,
+     or the NAT or proxy address the gateway sees; on Kubernetes the cluster's egress addresses).
+   - **Allowed residencies capped per service**, at the highest level that service serves. The gateway takes the
+     credential key's residencies as an upper bound on every key the service acts as (gateway-changes §5.3), so the cap
+     also holds for the keys that assistants and knowledge bases run on. The worker's key: `OnPrem` and `Eu` (it never
+     sends `External`). rag-api's and rag-admin's: up to the highest level assistants may use, which is `OnPrem` and
+     `Eu` while `UME_RAG_GATEWAY_MAX_RESIDENCY` is `Eu` (register M2), and all three once External routes exist and
+     that setting is emptied.
+   - **PII policy `Off` or `Allow`**, never `Redact` or `Block`: every service embeds (the worker documents, rag-api
+     queries, rag-admin the canary check), and a redacting key would silently change text with personal identity
+     numbers in it.
+   - **Models**: none listed (all) or every model the platform calls, the embedding model among them.
+   - **Scopes** on rag-admin's key only: `organisation.read` (the whole organisation in `GET /v1/ume/context`, which the
+     admin's organisation sync reads) and, once the gateway's Integration API is used, `usage.read` (cost and budget
+     read-back). rag-api's and the worker's keys hold no scope, so a key that serves public chat reads nothing else.
+   - An expiry as your key policy sets it; rotate before it (below).
+3. **Hand them over** as one file per key, holding the key alone on one line, and pass them to `init-deployment.sh`:
+   `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key
+   --gateway-credential-key-file worker=rag-worker.key`. It writes `secrets/api/Gateway__Key`,
+   `secrets/admin/Gateway__Key` and `secrets/worker/Gateway__Key` (mode 0600, owned by the services' user like every
+   secret file). Delete the handed-over files afterwards. On Kubernetes, `create-secrets.sh` then puts each into its
+   service's secret ([Kubernetes](kubernetes.md)); on Portainer the keys are the variables `UME_RAG_API_GATEWAY_KEY`,
+   `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY` (runbook, *Portainer and other hosts without shell
+   access*).
+
+Settings, scopes included, are changed by gateway admins only; the key's managers may rotate and revoke it.
+
+**Rotate one key.** In the gateway's admin UI, rotate that service's key with the 24-hour grace period (the new key
+keeps the integration, role, scopes, residencies and address list; the old one works until the grace period ends). Put
+the new key in a file and re-run `sudo ./deploy/init-deployment.sh` with your options and
+`--gateway-credential-key-file SERVICE=FILE` for that service only: it rewrites that key file and keeps the others and
+every generated secret. Then restart the service, which reads its secret files at start:
+`docker compose --env-file deploy/.env restart rag-api` (or `rag-admin`, `rag-worker`). Check its log for gateway
+`401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again, then
+`kubectl rollout restart deployment/rag-<service>`. Portainer: change the variable, update the stack (`rag-bootstrap`
+rewrites the file), then restart that service's container. A key that
+leaked is rotated without the grace period (*revoke immediately*): the service fails its model calls until it is
+restarted with the new key.
 
 ## Backup target
 

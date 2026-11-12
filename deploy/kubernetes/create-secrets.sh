@@ -4,7 +4,9 @@
 #
 #   ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
 #       --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
-#       --gateway-key-file Eu=rag-eu.key --org-sync-url https://llm-data.example.se --org-sync-key-file data.key \
+#       --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
+#       --gateway-credential-key-file worker=rag-worker.key \
+#       --org-sync-url https://llm-data.example.se --org-sync-key-file data.key \
 #       --backup-target s3://... --allow-file-keys [--render]
 #   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag [--datastores] [--renderer]
 #
@@ -15,7 +17,8 @@
 #                      instead of waiting for a renderer
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
-# Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb) and
+# Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb and the gateway
+# credential key Gateway__Key of api, admin and worker) and
 # ume-rag-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for api, admin, worker and
 # migrations, ume-rag-parser-certs, and ume-rag-blob-key (the blob master key). The connection strings point at the
 # host "postgres"; with your own database, edit deploy/secrets/<service>/ConnectionStrings__ragdb first.
@@ -29,7 +32,7 @@ while [ $# -gt 0 ]; do
     --renderer) renderer=1; shift;;
     --certs-dir) certs="$2"; shift 2;;
     --secrets-dir) secrets="$2"; shift 2;;
-    -h|--help) sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done

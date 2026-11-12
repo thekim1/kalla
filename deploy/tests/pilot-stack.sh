@@ -123,11 +123,12 @@ env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" o
 # --- init-deployment.sh: the feedback service account ---------------------------------------------------------------
 # The 24 GB profile copies the ClamAV image's confs from ../images/clamav, as in the repository.
 i="$work/init"; mkdir -p "$i/keys" "$i/images"; cp -r "$d" "$i/deploy"; cp -r "$repo/images/clamav" "$i/images/"
-for k in eu owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$i/keys/$k"; done
+for k in api admin worker owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$i/keys/$k"; done
 init() {
   bash "$i/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
     --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
-    --gateway-key-file Eu="$i/keys/eu" --openwebui-host chat.example.se \
+    --gateway-credential-key-file api="$i/keys/api" --gateway-credential-key-file admin="$i/keys/admin" \
+    --gateway-credential-key-file worker="$i/keys/worker" --openwebui-host chat.example.se \
     --openwebui-api-key-file "$i/keys/owui-key" --openwebui-oidc-client-secret-file "$i/keys/owui-secret" \
     --backup-target local --host-memory 24 --allow-file-keys --no-chown --yes > "$i/init.log"
 }

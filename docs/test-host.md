@@ -31,8 +31,8 @@ the directory that holds `deploy/`.
   ```
 
 - Its own host names, for example `rag-api-test.intern.umea.se` and `rag-admin-test.intern.umea.se`, its own OIDC
-  redirect URIs, and its own gateway keys. Nothing is shared with a production deployment: not the secrets, not the
-  backup repository, not the escrow set.
+  redirect URIs, and its own gateway credential keys. Nothing is shared with a production deployment: not the secrets,
+  not the backup repository, not the escrow set.
 
 ## Install with the pilot caps
 
@@ -44,7 +44,8 @@ and `--proxy`:
   --oidc-client-secret-file admin-client.secret \
   --api-host rag-api-test.intern.umea.se --admin-host rag-admin-test.intern.umea.se --proxy \
   --gateway-url https://<gateway host> --ca-file municipal-ca.pem \
-  --gateway-key-file api:Eu=api-eu.key --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key \
+  --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
+  --gateway-credential-key-file worker=rag-worker.key \
   --crawl-allow <municipal ranges> --backup-target /mnt/backup/ume-rag-test \
   --host-memory 24 --freshclam-proxy <proxy host>:<port> --allow-file-keys --yes
 ```

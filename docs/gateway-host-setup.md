@@ -77,7 +77,7 @@ Collect these before you start. Files go in a directory outside the checkout tha
 |---|---|---|
 | `<gateway url>` | the gateway's public HTTPS address (its admin UI is a different host) | `--gateway-url` |
 | `<data api url>` | the gateway's Data API (`/v1/catalog/*`), a service of its own: its public HTTPS address, or `https://<gateway host>:10443` by default. Not the gateway URL | `--org-sync-url` |
-| Three gateway keys, one each for `api`, `admin`, `worker` | gateway admin UI: one key per RAG service, **allowed residency `Eu` only** | files `~/rag-inputs/api-eu.key`, `admin-eu.key`, `worker-eu.key` (the key alone, one line) |
+| Three credential keys of the gateway integration *Ume.Rag*, one each for `api`, `admin`, `worker` | a gateway admin, as [production-setup.md](production-setup.md), *Gateway credential keys*, says: `RequireMaxResidency` on, this host's address in the address list, **allowed residencies `OnPrem` and `Eu` only**, PII policy `Off` or `Allow`, and the scope `organisation.read` on the admin's key only | files `~/rag-inputs/rag-api.key`, `rag-admin.key`, `rag-worker.key` (the key alone, one line) |
 | A gateway Data API key with `catalog.read` | gateway admin UI (Data API keys) | `~/rag-inputs/org-sync.key`; the admin syncs departments and the model catalogue with it |
 | `<keycloak url>/realms/ume` | the Keycloak on this host (realm `ume`, shared with the gateway) | `--oidc-authority`. If realm `ume` doesn't exist yet, use `https://keycloak.invalid/realms/ume`: the stack runs, only admin sign-in fails |
 | `<rag host>` | the host's DNS name | `--api-host`, `--admin-host` |
@@ -89,8 +89,9 @@ Two settings on the gateway side (a person with gateway admin rights):
 
 - **The embedding deployment's `ContextWindow` may be set** (8191 for `text-embedding-3-large`). From v0.9.0 the
   gateway checks each embedding input against it, not the whole batch.
-- **Each RAG key allows residency `Eu` only.** The platform also sends a ceiling with every call, but the key is the
-  second guard.
+- **Each RAG credential key allows `OnPrem` and `Eu` only**: the worker's always, rag-api's and rag-admin's while the
+  pilot calls every model at `Eu` (register M2). The platform also sends a ceiling with every call, but the key is the
+  second guard, and the gateway applies it to every key a service acts as.
 
 ## 4. Preflight checks (read-only)
 
@@ -142,14 +143,14 @@ ss -ltnp | grep -E ':(8543|9543)\b' || echo "8543 and 9543 free"
 Expected: both free. The gateway uses 8443 (gateway), 9443 (admin) and 10443 (Data API) by default; RAG uses 8543 and
 9543. If either is taken, pick others with `--api-port` and `--admin-port` in §7.
 
-**4.4 The gateway answers with your worker key**
+**4.4 The gateway answers with the worker's key**
 
 This proves the key, the model and the residency before anything else is installed. The key goes to curl through a
 header file, never on its command line:
 
 ```bash
 umask 077; tmp=$(mktemp -d)
-printf 'Authorization: Bearer %s\n' "$(tr -d '\r\n' < ~/rag-inputs/worker-eu.key)" > "$tmp/h"
+printf 'Authorization: Bearer %s\n' "$(tr -d '\r\n' < ~/rag-inputs/rag-worker.key)" > "$tmp/h"
 curl -sS -D "$tmp/headers" -o "$tmp/body" -w 'HTTP %{http_code}\n' \
   -H @"$tmp/h" -H 'x-ume-max-residency: Eu' -H 'Content-Type: application/json' \
   -d '{"model":"text-embedding-3-large","input":["Hej från Umeå kommun"],"dimensions":1024,"encoding_format":"float"}' \
@@ -158,7 +159,7 @@ jq -r '"dims=\(.data[0].embedding|length)"' "$tmp/body"; grep -i '^x-ume-residen
 rm -rf "$tmp"
 ```
 
-Expected: `HTTP 200`, `dims=1024`, `x-ume-residency: Eu`. Repeat with `api-eu.key` and `admin-eu.key`.
+Expected: `HTTP 200`, `dims=1024`, `x-ume-residency: Eu`. Repeat with `rag-api.key` and `rag-admin.key`.
 
 | Result | Meaning | What to do |
 |---|---|---|
@@ -241,9 +242,9 @@ sudo ./deploy/init-deployment.sh \
   --oidc-authority '<keycloak url>/realms/ume' \
   --api-host '<rag host>' --admin-host '<rag host>' \
   --gateway-url '<gateway url>' \
-  --gateway-key-file api:Eu="$HOME/rag-inputs/api-eu.key" \
-  --gateway-key-file admin:Eu="$HOME/rag-inputs/admin-eu.key" \
-  --gateway-key-file worker:Eu="$HOME/rag-inputs/worker-eu.key" \
+  --gateway-credential-key-file api="$HOME/rag-inputs/rag-api.key" \
+  --gateway-credential-key-file admin="$HOME/rag-inputs/rag-admin.key" \
+  --gateway-credential-key-file worker="$HOME/rag-inputs/rag-worker.key" \
   --org-sync-url '<data api url>' \
   --org-sync-key-file "$HOME/rag-inputs/org-sync.key" \
   --backup-target '<backup target>' \

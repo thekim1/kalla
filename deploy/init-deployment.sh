@@ -10,8 +10,8 @@
 #   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
 #       --oidc-client-secret-file ume-rag-admin.secret \
 #       --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
-#       --gateway-url https://<gateway host> --gateway-key-file api:Eu=api-eu.key \
-#       --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key \
+#       --gateway-url https://<gateway host> --gateway-credential-key-file api=rag-api.key \
+#       --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key \
 #       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
 #       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
@@ -27,11 +27,10 @@
 #   --api-host HOST, --admin-host HOST, --api-port N [8543], --admin-port N [9543], --bind ADDR [127.0.0.1]
 #   --gateway-url URL       the LLM gateway (HTTPS); --ca-file FILE adds its CA (and your PKI chain) to the services'
 #                           trust store
-#   --gateway-key-file [SERVICE:]LEVEL=FILE
-#                           a gateway key per level (OnPrem, Eu, External; repeat the option): without SERVICE api and
-#                           admin get it, and the worker too unless it is External; SERVICE (api, admin, worker) gives
-#                           one deployable its own key and wins over the shared one. The worker never holds External.
-#                           P1a calls every model at Eu.
+#   --gateway-credential-key-file SERVICE=FILE
+#                           SERVICE's credential key of the gateway integration Ume.Rag (SERVICE api, admin or worker;
+#                           repeat the option, one key per service, issued by a gateway admin):
+#                           secrets/SERVICE/Gateway__Key
 #   --org-sync-url URL      the gateway's Data API (HTTPS; its own service and often its own host, without /v1): the admin's
 #                           org sync and model catalogue sync read /v1/catalog/* there; both stay off without it
 #   --org-sync-key-file FILE  the gateway Data API key for the admin's org sync (catalog.read only)
@@ -87,7 +86,7 @@ owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; o
 owui_key_file=""; owui_rag_client=""; owui_data=""
 proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
 yes=0; renew=0; renew_ca=0; chown=1; rolling=0
-gateway_keys=()
+credential_keys=()
 
 # The comment block at the top of this file.
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
@@ -105,7 +104,7 @@ while [ $# -gt 0 ]; do
     --bind) bind="$2"; shift 2;;
     --gateway-url) gateway_url="$2"; shift 2;;
     --ca-file) ca_file="$2"; shift 2;;
-    --gateway-key-file) gateway_keys+=("$2"); shift 2;;
+    --gateway-credential-key-file) credential_keys+=("$2"); shift 2;;
     --org-sync-url) org_sync_url="$2"; shift 2;;
     --org-sync-key-file) org_sync_file="$2"; shift 2;;
     --key-provider) key_provider="$2"; shift 2;;
@@ -193,12 +192,12 @@ fi
 for f in "$oidc_secret_file" "$org_sync_file" "$ca_file" "$s3_credentials" "$owui_secret_file" "$owui_key_file"; do
   [ -z "$f" ] || [ -r "$f" ] || die "cannot read $f"
 done
-for spec in ${gateway_keys[@]+"${gateway_keys[@]}"}; do
-  target="${spec%%=*}"; level="${target#*:}"; svc=""; [ "$target" = "$level" ] || svc="${target%%:*}"
-  case "$svc" in ""|api|admin|worker) ;; *) die "--gateway-key-file SERVICE:LEVEL=FILE: SERVICE is api, admin or worker";; esac
-  case "$level" in OnPrem|Eu|External) ;; *) die "--gateway-key-file [SERVICE:]LEVEL=FILE: LEVEL is OnPrem, Eu or External";; esac
-  [ "$svc:$level" != worker:External ] || die "the worker never holds the External key (simplification pass §6)"
-  [ "$spec" != "$target" ] || die "--gateway-key-file takes [SERVICE:]LEVEL=FILE, not $spec"
+for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do
+  [ "${spec#*=}" != "$spec" ] || die "--gateway-credential-key-file takes SERVICE=FILE, not $spec"
+  case "${spec%%=*}" in
+    api|admin|worker) ;;
+    *) die "--gateway-credential-key-file SERVICE=FILE: SERVICE is api, admin or worker, not ${spec%%=*}";;
+  esac
   [ -r "${spec#*=}" ] || die "cannot read ${spec#*=}"
 done
 if [ -n "$owui_host" ]; then
@@ -342,23 +341,16 @@ else
 fi
 printf 'UME_RAG_RENDER_WS_PATH=%s\n' "$render_path" > "$secrets/renderer.env"
 
-# Shared keys first, then each deployable's own (the gateway team issues one key per deployable), which win.
-for pass in shared own; do
-  for spec in ${gateway_keys[@]+"${gateway_keys[@]}"}; do
-    target="${spec%%=*}"; level="${target#*:}"
-    if [ "$target" = "$level" ]; then
-      [ "$pass" = shared ] || continue
-      services=(api admin worker)
-    else
-      [ "$pass" = own ] || continue
-      services=("${target%%:*}")
-    fi
-    for svc in "${services[@]}"; do
-      # The worker never holds the External key (simplification pass §6).
-      [ "$svc" = worker ] && [ "$level" = External ] && continue
-      tr -d '\r\n' < "${spec#*=}" > "$secrets/$svc/Gateway__Keys__$level"
-    done
-  done
+# Each service's credential key of the gateway integration Ume.Rag (identity design §4.7, gateway-changes §5.1): one
+# key for every call, capped at the gateway at the residencies that service serves (the worker's at OnPrem and Eu).
+for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do
+  tr -d '\r\n' < "${spec#*=}" > "$secrets/${spec%%=*}/Gateway__Key"
+done
+# The per-level keys the credential keys replace are revoked at the gateway, and no service reads them: delete them.
+removed_keys=""
+for f in "$secrets"/{api,admin,worker}/Gateway__Keys__*; do
+  [ -e "$f" ] || continue
+  rm -f "$f"; removed_keys="$removed_keys ${f#"$secrets"/}"
 done
 if [ -n "$oidc_secret_file" ]; then tr -d '\r\n' < "$oidc_secret_file" > "$secrets/admin/Oidc__ClientSecret"; fi
 if [ -n "$org_sync_file" ]; then tr -d '\r\n' < "$org_sync_file" > "$secrets/admin/OrgSync__DataApiKey"; fi
@@ -651,12 +643,14 @@ elif [ ! -e "$secrets/admin/OrgSync__DataApiKey" ]; then
   gateway_note="
 Data API: no key for $sync_url. Re-run with --org-sync-key-file FILE (a Data API key, catalog.read)."
 fi
-for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Keys__Eu" ] || missing="$missing $svc"; done
+for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Key" ] || missing="$missing $svc"; done
 if [ -n "$missing" ]; then
   gateway_note="$gateway_note
-Gateway: no Eu key for${missing}. P1a calls every model at ceiling Eu: re-run with --gateway-key-file Eu=FILE (or
-SERVICE:Eu=FILE, one per deployable)."
+Gateway: no credential key for${missing}; a service without one has its model calls refused. Re-run with
+--gateway-credential-key-file SERVICE=FILE, one per service (production-setup.md, Gateway credential keys)."
 fi
+[ -z "$removed_keys" ] || gateway_note="$gateway_note
+Gateway: deleted the per-level key files${removed_keys}; ask the gateway admin to revoke those keys."
 render_note=""
 [ "$render" = 1 ] || render_note="
 Renderer: off, so sources with fetch mode browser wait with render.not_configured. Re-run with --render to start

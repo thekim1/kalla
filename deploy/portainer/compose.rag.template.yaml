@@ -23,8 +23,11 @@
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
 #   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
 #                             citation links are absolute
-#   UME_RAG_GATEWAY_KEY_Eu    a gateway API key for RAG (created in the gateway's admin UI, residency Eu); without it
-#                             the stack starts but every model call fails. Change it and redeploy to rotate.
+#   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
+#                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
+#                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
+#                             one the stack starts but that service's model calls are refused. To rotate one, change
+#                             it, update the stack, then restart that service (it reads the key at start).
 # Recommended
 #   COMPOSE_PROFILES=data     the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
 #                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
@@ -38,7 +41,6 @@
 #                             groups that grant a RAG role (';'-separated); empty grants nothing
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
-#   UME_RAG_GATEWAY_KEY_OnPrem / _External, UME_RAG_{API,ADMIN,WORKER}_GATEWAY_KEY_Eu (a key per service wins)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
 #   COMPOSE_PROFILES=data,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
 #   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
@@ -75,12 +77,9 @@ x-rag-secrets: &rag-secrets-mount
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
-      UME_RAG_GATEWAY_KEY_OnPrem: ${UME_RAG_GATEWAY_KEY_OnPrem:-}
-      UME_RAG_GATEWAY_KEY_Eu: ${UME_RAG_GATEWAY_KEY_Eu:-}
-      UME_RAG_GATEWAY_KEY_External: ${UME_RAG_GATEWAY_KEY_External:-}
-      UME_RAG_API_GATEWAY_KEY_Eu: ${UME_RAG_API_GATEWAY_KEY_Eu:-}
-      UME_RAG_ADMIN_GATEWAY_KEY_Eu: ${UME_RAG_ADMIN_GATEWAY_KEY_Eu:-}
-      UME_RAG_WORKER_GATEWAY_KEY_Eu: ${UME_RAG_WORKER_GATEWAY_KEY_Eu:-}
+      UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
+      UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
+      UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
       UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
     configs:

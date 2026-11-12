@@ -12,6 +12,18 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **One gateway credential key per service (#580, B-37, A-30).** rag-api, rag-admin and rag-worker each read only
+  their credential key of the gateway integration *Ume.Rag*, the secret file `Gateway__Key`; the per-level keys
+  (`Gateway__Keys__<level>`) are no longer read. **Apply:** a gateway admin issues the three keys
+  (production-setup.md, *Gateway credential keys*); re-run `init-deployment.sh` with your options, replacing every
+  `--gateway-key-file` with `--gateway-credential-key-file api=FILE`, `admin=FILE` and `worker=FILE`. It writes the new
+  files, deletes the per-level ones and names them: ask the gateway admin to revoke those keys. Then restart api, admin
+  and worker. Kubernetes: `create-secrets.sh` again (the old keys leave the secrets), then `kubectl rollout restart`.
+  Portainer: set `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY`, remove the
+  `UME_RAG_*GATEWAY_KEY_<level>` variables, update the stack with the new stack file (`rag-bootstrap` deletes the old
+  files), then restart rag-api, rag-admin and rag-worker. **Check:** no service's log shows `gateway_key_missing` or a
+  gateway `401`.
+
 ## 0.4.0
 
 - **Rolling update: yes** from 0.3.0. Three migrations, all of which 0.3.0 runs against:
@@ -230,9 +242,10 @@ None of these has happened yet; the first release that brings one adds its comma
   host, then `dc up -d --force-recreate`, and move `ca.key` off again. `--renew-ca` replaces the CA as well.
 - **PKI certificates** of the public listeners: run `init-deployment.sh` again, with all your original options and the
   new `--api-cert`, `--api-key`, `--admin-cert` and `--admin-key`, then recreate api and admin.
-- **Gateway keys and the OIDC client secret:** run `init-deployment.sh` again, with all your original options and the
-  new `--gateway-key-file` or `--oidc-client-secret-file`; it rewrites those files. Recreate the services that read
-  them.
+- **Gateway credential keys and the OIDC client secret:** run `init-deployment.sh` again, with all your original options
+  and the new `--gateway-credential-key-file SERVICE=FILE` or `--oidc-client-secret-file`; it rewrites those files.
+  Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
+  (production-setup.md, *Gateway credential keys*).
 - **Never regenerate** the pepper, the Data Protection certificate, the blob master key or the pgBackRest passphrase:
   existing data or backups would become unreadable. There is no rotation procedure for them yet; after any future
   rotation, escrow again (runbook, *Key escrow*).

@@ -146,7 +146,7 @@ services:
       Rag__Roles: knowledge,chat,mcp
       # The rag-blobs volume's rag/ container (repo-and-deployment §6.3), as in rag-admin and rag-worker.
       BlobStore__Root: /data/blobs/rag
-      # Gateway keys per level are secret files (Gateway__Keys__<level>, init-deployment.sh --gateway-key-file).
+      # Its gateway credential key is the secret file Gateway__Key (init-deployment.sh --gateway-credential-key-file).
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       # Caps every model call's ceiling (identity design §4.7): Eu under register M2; empty once External routes exist.
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
