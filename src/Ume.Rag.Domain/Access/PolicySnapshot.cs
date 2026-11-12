@@ -20,17 +20,21 @@ public sealed record PublishedVersionEntry(Guid Id, int Number, string GatewayMo
 /// <summary>An audience row (<c>AssistantAudiences</c>): <c>client</c> (P1), <c>department</c>/<c>group</c> (P2).</summary>
 public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupValue);
 
-/// <summary>An assistant with its access fields, its published version (null: none yet) and its audiences.</summary>
+/// <summary>
+/// An assistant with its access fields, its published version (null: none yet) and its audiences. <see cref="GatewayKeyId"/>
+/// is the assigned gateway key its turns run as (B-36, B-42), null for the service's credential key.
+/// </summary>
 public sealed record AssistantEntry(
     Guid Id, string Slug, string Name, string Classification, string HistoryMode, string State, Guid DepartmentId, Guid? OwnerTeamId,
     PublishedVersionEntry? Published, IReadOnlyList<AudienceEntry> Audiences, string? Description = null, string? ContactName = null,
     string? ContactEmail = null,
-    int RetentionDays = 90);
+    int RetentionDays = 90,
+    Guid? GatewayKeyId = null);
 
-/// <summary>A collection: level, profile, settings, publication and deletion (data-model §2.1).</summary>
+/// <summary>A collection: level, profile, settings, publication, deletion and its gateway key (data-model §2.1).</summary>
 public sealed record CollectionEntry(
     Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, Guid EmbeddingProfileId, string RetrievalSettings,
-    DateTimeOffset? PublishedAt, bool Deleted)
+    DateTimeOffset? PublishedAt, bool Deleted, Guid? GatewayKeyId = null)
 {
     /// <summary>Live for the data plane: not deleted and published (knowledge design §4.5).</summary>
     public bool IsLive => !Deleted && PublishedAt is not null;

@@ -52,7 +52,12 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
         // Phase 2 (identity §4.7, gateway-changes §5.2): a call for an object with a gateway key runs as that key once the
         // gateway acts as keys; the id goes in the D form, the gateway's own.
         request.Headers.Remove(GatewayHeaders.OnBehalfOf);
-        var call = request.Options.TryGetValue(GatewayCall.OptionsKey, out var c) ? c : null;
+        var call = request.Options.TryGetValue(GatewayCall.OptionsKey, out var c) ? c : GatewayCallScope.Current;
+        if (call is { Step: null } && request.Headers.TryGetValues("x-ume-step", out var steps))
+        {
+            call = call with { Step = steps.FirstOrDefault() }; // event 5011 names the step the client sent
+        }
+
         var acting = call?.GatewayKeyId is { } keyId && features.ActAsKey ? keyId : (Guid?)null;
         if (acting is { } id)
         {

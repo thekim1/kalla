@@ -88,6 +88,8 @@ public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFacto
         };
 
         SearchResult search;
+        // B-42 (cost-attribution §4.1): the query embedding runs as the collection's gateway key.
+        using var acting = GatewayCallScope.Begin(new GatewayCall(collection.GatewayKeyId, CollectionId: collection.Id));
         try
         {
             search = await _engine.SearchAsync(new SearchRequest(request.Question, scope, request.TopK, request.Mode,

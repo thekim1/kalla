@@ -83,6 +83,8 @@ public sealed class AdminTestPanel(
         var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null);
 
         var started = Stopwatch.GetTimestamp();
+        // B-42 (cost-attribution §4.1): every call of the panel's turn, the answer included, runs as the assistant's gateway key.
+        using var acting = GatewayCallScope.Begin(new GatewayCall(assistant.GatewayKeyId, AssistantId: assistant.Id));
         try
         {
             var plan = await chat.PlanAsync(who, parsed, ct);
@@ -155,6 +157,7 @@ public sealed class AdminTestPanel(
         entry = entry with
         {
             State = Domain.Entities.AssistantStates.Active,
+            GatewayKeyId = assistant.GatewayKeyId, // the key as saved now, as the test runs (B-42)
             Published = new PublishedVersionEntry(version.Id, version.Number, version.GatewayModel!, version.CollectionLinks, version.SystemPrompt, version.QuerySteps,
                 version.NotFound, version.PublishedAt),
         };

@@ -18,6 +18,32 @@ public sealed record GatewayCall(Guid? GatewayKeyId, string? Step = null, Guid? 
 }
 
 /// <summary>
+/// The call of the work in progress (a chat turn, a Knowledge API search, a test-panel turn), for every gateway request made
+/// inside it that carries none of its own: set once where the object is known, so the clients below need no parameter.
+/// An async-local value: it flows into the requests awaited inside the scope and ends with it.
+/// </summary>
+public static class GatewayCallScope
+{
+    private static readonly AsyncLocal<GatewayCall?> Ambient = new();
+
+    public static GatewayCall? Current => Ambient.Value;
+
+    /// <summary>Makes <paramref name="call"/> current until the result is disposed (the previous one comes back then).</summary>
+    public static IDisposable Begin(GatewayCall call)
+    {
+        ArgumentNullException.ThrowIfNull(call);
+        var previous = Ambient.Value;
+        Ambient.Value = call;
+        return new Restore(previous);
+    }
+
+    private sealed class Restore(GatewayCall? previous) : IDisposable
+    {
+        public void Dispose() => Ambient.Value = previous;
+    }
+}
+
+/// <summary>
 /// The gateway's <c>features</c> as this service last read them from its own <c>GET /v1/ume/context</c> (identity §4.7,
 /// gateway-changes §5.2), held in memory. Empty until the first answer, so no call acts as a key before then.
 /// </summary>

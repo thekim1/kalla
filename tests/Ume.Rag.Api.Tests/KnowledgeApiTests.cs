@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ume.Rag.TestKit;
 
@@ -38,6 +40,47 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
 
     private Task<HttpResponseMessage> Retrieve(HttpClient client, object body) =>
         client.PostAsync(new Uri("/v1/retrieve", UriKind.Relative), JsonContent.Create(body), Ct);
+
+    [Fact]
+    public async Task A_search_without_an_assistant_runs_as_the_first_searched_collections_gateway_key()
+    {
+        // B-42 (knowledge §5.2, cost-attribution §4.1): the query embedding of a Knowledge API search runs as the key of the
+        // first searched collection; the FakeGateway's dev key "Kontaktcenter – chatbot".
+        var key = new Guid("019a0000-0000-7000-8000-00000000b001");
+        var snapshot = db.Snapshot();
+        snapshot = snapshot with
+        {
+            Collections = new Dictionary<Guid, Ume.Rag.Domain.Access.CollectionEntry>(snapshot.Collections)
+            {
+                [db.PublicCollection] = snapshot.Collections[db.PublicCollection] with { GatewayKeyId = key },
+            },
+        };
+        var sent = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+        await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+        {
+            services.AddHttpClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new OnBehalfOfRecorder(db.Gateway.Server.CreateHandler(), sent));
+            services.AddHttpClient(Ume.Rag.Infrastructure.Gateway.GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler());
+        }));
+        (await api.Services.GetRequiredService<Ume.Rag.Infrastructure.Gateway.GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
+        using var client = api.CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", db.InternalKey);
+
+        using var response = await Retrieve(client, new { query = "Behöver jag bygglov för altan?", collections = new[] { Slug(db.PublicCollection) }, top_k = 5 });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        sent.ShouldNotBeEmpty();
+        sent.ShouldAllBe(s => s == key.ToString("D"));
+    }
+
+    private sealed class OnBehalfOfRecorder(HttpMessageHandler inner, System.Collections.Concurrent.ConcurrentQueue<string?> sent) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            sent.Enqueue(request.Headers.TryGetValues(Ume.Rag.Infrastructure.Gateway.GatewayHeaders.OnBehalfOf, out var v) ? string.Join(",", v) : null);
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
 
     [Fact]
     public async Task Retrieve_answers_the_documented_snake_case_shape()
