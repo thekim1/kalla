@@ -5,6 +5,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+### Changed
+
+- A chunk set of at most 1,000 chunks is written once, inside the swap transaction: half the dead chunk rows of a
+  re-crawl and 8–14 % less WAL (#589, #501).
+- Indexing and the stage preview run the same stage runner (#590, #508).
+
 ## 0.4.0 (2026-11-11)
 
 Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics kept by the
