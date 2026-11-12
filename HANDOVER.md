@@ -1,9 +1,9 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-11, end of session 28 (`main` at `fc859ab` plus this
-file; last release `v0.3.0`, **v0.4.0 is next**). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
-Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
-`origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
+State of the Ume.Rag work for the next session. Rewritten 2026-11-12, end of session 29 (`main` at `714a58f` plus this
+file; last release `v0.3.0`, **v0.4.0 is ready to tag**). Earlier sessions are in the git history (`git log --
+HANDOVER.md`). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch
+`main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
 
 ## What this is
 
@@ -14,119 +14,88 @@ sink" monolith. Design and code live in this repo.
 
 ## Where to read
 
-1. [`plans/decisions.md`](plans/decisions.md): the decisions in force, one entry per topic, every entry binds (#521,
-   merged this session). The old `01-general-idea.md` §10 table is `plans/archive/decisions-log.md` (verbatim, doesn't
-   bind). Record a decision by changing or adding an entry, then a dated line under the log's *Later decisions*.
+1. [`plans/decisions.md`](plans/decisions.md): the decisions in force, one entry per topic, every entry binds. The old
+   `01-general-idea.md` §10 table is `plans/archive/decisions-log.md` (verbatim, doesn't bind). Record a decision by
+   changing or adding an entry, then a dated line under the log's *Later decisions*.
 2. **`plans/roadmap.md`**: done, what is left before go-live, the live block, waiting on people, P2/P3. One page.
 3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md`; results in `results-a.md`/`results-b.md`.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
-6. Not binding, for decisions still to take: `plans/platform/upload-quality-review.md` (upload gaps U1–U7) and
-   `plans/platform/assistant-keys-and-budgets-options.md` (keys and budgets per assistant).
+6. Not binding: `plans/platform/upload-quality-review.md` (upload gaps U1–U7, decisions still to take).
 
 ## Start here
 
-**1. Finish the v0.4.0 release.** `main`'s Unreleased section is large: B-30 (editable embedding profiles), B-31
-(answer length from the model, platform ceiling), B-32 part 1 (prompt texts as settings), A-21–A-24, SA-15, the
-organisation name, Aspire 13.6.5. Steps:
-- **#572 (mine, open, CI green)**: release build cache per image, one smoke boot covering the renderer on and off, a
-  per-job `DOCKER_CONFIG`, no build-record uploads. Held until a release dry run from its branch passes.
-  - Dry run 1 (`main`, #43083741760) failed: a stale ghcr login (fixed in #572).
-  - Dry run 2 (`a/release-faster`, #43091903032) built every image and **passed the smoke test** (1 min 56 s,
-    renderer on then off), then failed on GitHub's artifact outage (fixed: no build-record uploads; the final artifact
-    upload needs GitHub up).
-  - **Dry run 3**: a session watcher was to dispatch it from `a/release-faster` once GitHub was healthy and the
-    runners idle. Check `gh run list --workflow release.yml`; if none newer than #43091903032, run
-    `gh workflow run release.yml --ref a/release-faster -f version=0.4.0-dryrun -f e2e=false` (runners idle first).
-    In that run the parser and renderer steps should take seconds (cache hits, filled by dry run 2).
-- When it passes: merge #572; **tick A-21 and A-23** (their done-when is that smoke test) with a results row; close
-  #503, #504, #505 with evidence.
-- Then the release PR: `CHANGELOG.md` `## 0.4.0 (date)` from Unreleased; `docs/upgrade-guide.md` 0.4.0 section. That
-  section needs **rolling update: yes or no**, and the new migrations are `ProfileIndexReset` (B-30, new functions and
-  grants in `app-roles.sql`) and `AnswerLengthFromModel` (B-31: drops `answer.maxOutputTokens`/`contextTokens` from
-  every `QuerySteps`), plus A-29's once merged. The Unreleased notes already there (proxy 2 MB, renderer profile, idle
-  lanes, telemetry) move into it. **Ask the user before pushing the tag**: it publishes images and the release.
+**1. Tag v0.4.0 once the user agrees.** Everything for it is on `main`: the CHANGELOG `## 0.4.0 (2026-11-11)` and
+`docs/upgrade-guide.md` 0.4.0 (#582, #586; **rolling update: yes**, three additive migrations, the chat model limits
+to enter on Gateway models, `dc restart postgres` for the A-22 settings). Release dry run 4 (#43111499721, the release
+branch) passed, and **dry run 5 on `main` at `714a58f` passed** (#43122068059, with A-29, B-33 and #586: verify,
+parser and build with the smoke test all green). Ask the user, then
+`git tag -a v0.4.0 -m "v0.4.0" 714a58f && git push origin v0.4.0` (it publishes images and the release). Fix the
+CHANGELOG date if the tag is on a later day.
 
-**2. Review stream b's open PRs:**
-- **#578, #579** (A-29: `content.KeywordStatistics` and the worker's refresh, from M-10). Stream b took this stream-a
-  item. Review the migration, the grants (`ume_rag_api` S only), the `ts_stat` on the maintenance connection, and the
-  10 % / 7-day refresh rule (knowledge §6.2). B-33 (rag-api reads it) follows.
-- **#577**: the fix for #565 (a used profile's fixed fields read-only, a visible switch label). Check it in the browser.
-- **#576**: B-32 part 2, the Prompt texts panel. Check it in the browser.
+**2. #580, the gateway integration (user decision, 2026-11-11).** Every assistant and knowledge base runs on an
+*assigned* gateway key of its department chosen by id; each service has one credential key and sends
+`x-ume-on-behalf-of`; configuration from `/v1/ume/context` and `/v1/models`. The designs follow it (`a457474`:
+Decisions "Cost attribution", "Gateway keys"; gateway-changes §5; cost-attribution §4–§7; data-model `GatewayKeys`,
+V39; identity §4.7; admin §4.10, §5.5.4; chat §8). **M-12** in `plans/work/main.md` queues the code per gateway phase
+once that phase's gateway PR merges (phase 1 is thekim1/llmgateway#81, open). Open with the gateway owner on #580:
+point 1 (keep `RequireMaxResidency` and the credential key's residencies as an upper bound on acted requests) and
+point 8 (every active department and team in the context, member groups with feature C). Watch #580 and #81.
 
-**3. Then, if the user doesn't choose:** A-25 (write each chunk once, engine §14 rule 2a, #501; give it to an
-implementor agent in a worktree and respect the profile guard of processing §11 inside the swap transaction), then
-M-9 once the user picks a keys-and-budgets option.
+**3. Then, if the user doesn't choose:** A-25 (write each chunk once, engine §14 rule 2a, #501; an implementor agent in
+a worktree; respect the profile guard of processing §11 inside the swap transaction), then M-9 (cost stage 1, now on
+the gateway's cost; Q3 to the user).
 
 **Waiting on the user:**
-- **Tag v0.4.0** (after dry run 3 and the release PR).
+- **Tag v0.4.0** (above).
+- **#580's open points 1 and 8** (as gateway owner), and the gateway's phase PRs.
 - **Upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, needs a decision entry) and
   rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a contextual-header trial (U5) and a
   near-duplicate warning (U6).
-- **Keys and budgets per assistant**: options paper `af7e30f`, not chosen; M-9 depends on it.
 - **Ask-a-file workspaces** (P2): owned by teams and individuals, against "Organisation" (departments own all content).
   Answer before P2 (`plans/work/main.md` M-11).
 - **LibreOffice placement**, decided again before go-live with the parser sandbox question (Decisions "Parser").
 - **CI runners** (proposal only, user: "write it down, change nothing yet"): `ume-rag` and `ume-rag2` share one Docker
-  daemon and one user home. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners. More capacity is
-  the remaining lever for the ~8.5-minute verify gate of a release.
-- **The gateway** (`~/git/llmgateway` `origin/main`) still pins Aspire 13.6.4 (GHSA-f7vh-h5g3-7jrh; AppHost only, so
-  development tooling); nothing filed there.
+  daemon and one user home. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners.
+- **The gateway** (`~/git/llmgateway` `origin/main`) still pins Aspire 13.6.4 (GHSA-f7vh-h5g3-7jrh; AppHost only).
 - **Support-assistant proof of concept** (`plans/cases/support-assistant/07-rollout.md` §0b, P1–P8): needs the
-  documents (which intranet sections, Word/PDF/Markdown) and about twenty anonymised tickets. It goes ahead of
-  everything else once they exist, and is the first real measurement of upload quality. The local model mirror has no
-  `gpt-6-luna` row: add one or use `claude-haiku-5-5` as condense model.
+  documents and about twenty anonymised tickets. It goes ahead of everything else once they exist.
 - The live block's inputs: gold set with DoIT, G1/DPIA, test host, U1, pilot accounts on the gateway.
 - **#511** (split the worker into libraries): only if it keeps growing in P2.
 
-**Stream b** (remote, GitHub only) has its own main session that writes design PRs on `main-session/` branches
-(#547, #548, #568) and records decisions in `plans/decisions.md` (#550 told it how). It works fast: B-30, B-31 and
-B-32 part 1 all landed this session, and it now also takes stream-a items (A-29) on `a/` branches. Its queue: B-32
-part 2 (#576), B-33 (after A-29), the live items.
+**Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches, decisions in
+`plans/decisions.md`). It works fast and also takes stream-a items on `a/` branches. B-30–B-33 are done; its queue has
+the live items, and **#584** (a flaky Api test, its path) is filed for it.
 
-## Done in session 28 (2026-11-11)
+## Done in session 29 (2026-11-11/12)
 
-- **Security: Aspire 13.6.5 (#549)** for GHSA-f7vh-h5g3-7jrh (published 2026-11-10 23:24; it turned every backend job
-  red through the package audit). EF Core and the 10.0.x package family to 10.0.14 with it. CHANGELOG #551.
-- **Stream b reviewed and merged:** #542/#543 (Portainer Data API network), #544 (neutral wording,
-  `Admin:OrganisationName`), #545 (`Crawl:UserAgent`), #546 (deploy templates send `dimensions`).
-- **Decisions register #521 merged** (rebased twice; the five newer decisions written as entries); design PRs #547,
-  #548, #568 (platform answer ceiling, my suggestion) merged.
-- **B-30 (editable embedding profiles)**: reviewed #554/#559 twice. Found the in-use race (admin save vs a worker's
-  first chunk set) and then a cache hole (a worker caching old-model vectors after the admin's reset); both fixed by
-  stream b with a row lock and `content.rag_lock_profile_if_unchanged` on the set insert and on cache writes. Checked
-  #558 in the browser (list, edit drawer, **Test** against the real gateway, 409 on a used profile); filed #565.
-- **SA-15 (#552)**: 2 MB request bodies on the api host and Open WebUI.
-- **M-11 (`319aef7`)**: 21 design-vs-decision points fixed (an agent, reviewed; admin design now in English).
-- **M-10 (`0141a1a`)**: keyword statistics move to the worker (`KeywordStatistics`, knowledge §6.2), scope sizes stay
-  in rag-api; sets ≤ 1,000 chunks written in the swap transaction (engine §14 rule 2a). Queued A-29, B-33; A-25
-  unblocked. #560 told stream b.
-- **A-22 (#553)**: Postgres `jit = off`, `random_page_cost = 1.1`, `effective_io_concurrency = 200`; unchanged plans at
-  55,000 chunks (`results-a.md`). #500 closed.
-- **A-21 (#555)**: trace sampling knobs, 30 s .NET health probe with a 5 s start interval. Unticked until dry run 3.
-- **A-24 (#557)**: the no-decompounder variant runs statement K; identical on 494 rows. #509 closed.
-- **A-23 (#563)**: idle job lanes wait for `rag_jobs` or the next due job (`Worker:IdleWaitSeconds` 30; 16 probes a
-  minute instead of 240), requeues notify, `rag-renderer` behind the `render` profile (`init-deployment.sh --render`).
-  An implementor agent's work, reviewed and re-tested. Designs updated (`1b2f3f0`). Unticked until dry run 3.
-- **Designs** (`4e7f42c`): B-30 as built (admin §4.5, processing §11 *Profile guard*), `Admin:OrganisationName`.
-- **#566**: `UME_RAG_ORGANISATION_NAME` knob; found and fixed the Portainer stack missing B-30's grants.
-- **#567**: the release smoke test covers the renderer profile. **#572** (open, above) makes the release faster.
-- **#575** (B-32 part 1) reviewed: approved, with a non-blocking note that invisible Unicode format characters (Cf) pass
-  V38. CHANGELOG lines: #556, #570. #502 closed. The keys-and-budgets options paper committed.
+- **Release:** dry run 3 failed in `parser.yml` (`docker create ghcr.io/astral-sh/uv` → "denied": the expired ghcr
+  login in the runners' shared Docker config); `82f027d` gives every job that pulls ghcr its own `DOCKER_CONFIG`.
+  Dry run 4 passed (verify, parser, build; smoke 55 s, renderer on and off; build job 8 min). #572 merged. A-21, A-23
+  ticked with results rows (#581); #503, #504 (with a correction: B-27 adopted nothing), #505 closed. Release notes
+  #582, #586.
+- **Reviewed and merged:** A-29 #578/#579 (one note: a collection with no lexeme at 10 % stores no rows), B-33 #583
+  (stream b merged it), #577 and #576 after browser checks (notes: disabled inputs look editable; three fields named
+  *Instructions*), #585. #499, #560, #565 closed.
+- **#586 (mine):** the worker checks every collection's keyword statistics at start (an upgrade otherwise ran without
+  stop lists until the night), and `KeywordStatistics` moved from its own unpooled session onto the worker's pool: CI's
+  `DispatcherTests` saw 12 worker connections, over the role budget (data-model §1.1).
+- **#580:** reviewed the gateway contract (7 points + point 8 on the department list) and wrote the design pass
+  (`a457474`, an implementor agent's work, reviewed; one wrong path fixed).
+- **#584** filed: `KnowledgeServiceTests.A_failed_embedding_…` times out on a busy runner (embedding 2 s total limit).
 
 ## Open
 
-- **#572** (above). **#513** stays open until its items close; **#499** until A-29 and B-33; **#501** until A-25;
-  **#503**, **#504**, **#505** until dry run 3; **#535** (ClamAV `ClamAv:Mode = on | off`, user decision) has no PR
-  yet; **#550**, **#560** until stream b acknowledges; **#565** until #577.
+- **#513** stays open until its items close; **#501** until A-25; **#535** (ClamAV `ClamAv:Mode = on | off`, user
+  decision) has no PR yet; **#550** until stream b acknowledges; **#580** (above); **#584** (stream b).
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
 
-- **State at handover:** the dev AppHost is **stopped** (only the persistent ClamAV container runs; the next
-  `aspire start` starts the rest). It ran this session on `main` with B-30 for the browser check; the migrations through
-  `AnswerLengthFromModel` are applied locally. User secrets are at defaults. The local parser image is older than #526
-  (no LibreOffice): **rebuild it before demoing `.doc`/`.xls`/`.ppt`/`.rtf`**.
+- **State at handover:** the dev AppHost is **stopped** (only the persistent ClamAV container runs). It ran this session
+  on `main` plus #576/#577 for the browser checks; migrations through `AnswerLengthFromModel` are applied locally (not
+  yet `KeywordStatistics`; the next start applies it). `Settings.Chat` is back to `{}`. User secrets are at defaults.
+  The local parser image is older than #526 (no LibreOffice): **rebuild it before demoing `.doc`/`.xls`/`.ppt`/`.rtf`**.
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
   --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
   `aspire resource worker restart --apphost … --non-interactive`.
@@ -203,6 +172,17 @@ Development and CI gotchas are in [`docs/local-development.md`](docs/local-devel
 [`docs/ci-runner.md`](docs/ci-runner.md) (*Working with the workflows*), where stream agents read them too. What only the
 main session needs:
 
+- **Stacked PRs:** merging the base PR with `--delete-branch` *closed* the stacked PR (#579) instead of retargeting
+  it. Retarget first (`gh pr edit <n> --base main`), then merge the base. To recover, push the old base sha back to its
+  branch, reopen, retarget.
+- **After a GitHub outage** runs can sit `queued` with jobs that have a start time but no runner. Cancel and re-run
+  them (the user allows cancelling stuck CI).
+- **Check a watcher's exit code before merging:** `gh run watch … --exit-status; echo exit=$?` printed `exit=1` and
+  I merged anyway (#582 was docs only; the failure was the flaky test of #584). Read the result first.
+- An `a/` branch may not touch `plans/**` (`ownership`, main's path): put design lines in a direct `main` commit.
+- The auto-mode classifier blocks `commit --amend` + force-push even on your own branch: push a follow-up commit.
+- New worker background services open connections on the worker role: count them against data-model §1.1's budget
+  (pool 10 + LISTEN + 1); `DispatcherTests.Under_load_…_role_cap` catches an extra session.
 - **`scripts/check-doc-refs.py`** resolves a bare `name.md §N` by file name: a new file with a common name (`plan.md`)
   captures old references. Give plan files distinctive names.
 - The `implementor` agent refuses git writes (commit, rebase): review its diff, commit and rebase yourself.
