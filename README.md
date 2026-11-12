@@ -63,7 +63,7 @@ aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
 The Aspire dashboard opens at `https://localhost:17470`. The AppHost starts postgres (stock pgvector image), keycloak,
 the fake gateway, the parser and ClamAV (built from their Dockerfiles), the migration service, api, worker, adminapi
 and the admin UI (`https://localhost:5174`). The resource graph and its switches (`Parser:Mode`,
-`ClamAv:Enabled`, `FakeGateway:Enabled`, `Ollama:Enabled`, `Redis:Enabled`, `Oidc:Authority`) are in
+`ClamAv:Mode`, `FakeGateway:Enabled`, `Ollama:Enabled`, `Redis:Enabled`, `Oidc:Authority`) are in
 [`plans/platform/repo-and-deployment.md`](plans/platform/repo-and-deployment.md) §4.1. Set them as AppHost user secrets:
 
 ```bash
