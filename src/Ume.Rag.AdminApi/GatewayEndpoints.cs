@@ -244,8 +244,19 @@ public static class GatewayEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var gateway = api.MapGroup("/gateway").WithTags("Gateway");
 
-        gateway.MapGet("/models", async (string? level, Guid? gatewayKeyId, RagDbContext db, GatewayModelAvailability availability, CancellationToken ct) =>
+        gateway.MapGet("/models", async (string? level, Guid? gatewayKeyId, AdminContext admin, RagDbContext db, GatewayModelAvailability availability,
+                CancellationToken ct) =>
             {
+                // A key of a department outside the caller's scope is 404 before any gateway call, as /keys (admin §4.5; #618 review).
+                if (gatewayKeyId is { } keyId)
+                {
+                    var departments = admin.Departments().Select(d => d.Id);
+                    if (!await db.GatewayKeys.AsNoTracking().AnyAsync(k => k.Id == keyId && k.DepartmentId != null && departments.Contains(k.DepartmentId.Value), ct))
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    }
+                }
+
                 // level = an assistant's level (its ceiling); absent: the platform ceiling of the Settings pickers (V32).
                 if (level is not null && !Classification.IsValid(level))
                 {

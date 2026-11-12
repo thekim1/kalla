@@ -270,6 +270,50 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_published_assistants_key_cannot_be_cleared_once_the_gateway_acts_as_keys()
+    {
+        // #618 review: clearing the key would put the live assistant on rag-api's credential key, outside its department's budget.
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = await AdminAsync(database, gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        var (id, _) = await AssistantAsync(admin, seed, Full);
+        // Published as the draft (the fixture's 8-dimension profile model is not in the FakeGateway's catalogue, so V39 as the key
+        // would refuse a real publish for a reason that is not this rule's).
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Assistants.Where(a => a.Id == id).ExecuteUpdateAsync(u => u.SetProperty(a => a.PublishedVersionId, a => a.DraftVersionId), Ct);
+        }
+
+        var published = await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct);
+        using var cleared = await SetKeyAsync(admin, id, published, null);
+        cleared.StatusCode.ShouldBe(HttpStatusCode.Conflict, await cleared.Content.ReadAsStringAsync(Ct));
+        (await Json(cleared)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.GatewayKeyRequired.Code);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct)).GetProperty("gatewayKeyId").GetGuid().ShouldBe(Full);
+
+        // A draft-only assistant may still drop its key: publishing it is what needs one.
+        var (draftOnly, draftDetail) = await AssistantAsync(admin, seed, Full);
+        using var dropped = await SetKeyAsync(admin, draftOnly, draftDetail, null);
+        dropped.StatusCode.ShouldBe(HttpStatusCode.OK, await dropped.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task The_pickers_availability_refuses_a_key_outside_the_callers_departments_before_any_gateway_call()
+    {
+        // #618 review (admin §4.5): a gatewayKeyId that is not a key of a department in scope is 404, as /api/gateway/keys.
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = await AdminAsync(database, gateway);
+        using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "X" + seed.Code);
+        using var own = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+
+        (await stranger.GetAsync($"/api/gateway/models?level=internal&gatewayKeyId={Full}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await own.GetAsync($"/api/gateway/models?level=internal&gatewayKeyId={Guid.NewGuid()}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await own.GetAsync($"/api/gateway/models?level=internal&gatewayKeyId={Full}", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await stranger.GetAsync("/api/gateway/models?level=internal", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task A_knowledge_base_without_a_key_saves_and_the_status_reports_the_acted_echo()
     {
         var seed = await SeedAsync();

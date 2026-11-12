@@ -114,6 +114,13 @@ public static class AssistantEndpoints
                     request.ApplyTo(assistant);
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
+                    // V39: once the gateway acts as keys, a published assistant's key cannot be cleared: it would then run on
+                    // rag-api's credential key, outside its department's budget (#618 review).
+                    if (keyChanged && assistant.GatewayKeyId is null && assistant.PublishedVersionId is not null && models.ActsAsKeys)
+                    {
+                        Refuse([new(AdminErrorCodes.GatewayKeyRequired, null, [])]);
+                    }
+
                     if (levelChanged && assistant.PublishedVersionId is { } published)
                     {
                         // Dependants are re-checked against the published version (admin design §4.6): V3, V7, V9 and V8.
