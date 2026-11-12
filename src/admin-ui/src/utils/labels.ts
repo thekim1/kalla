@@ -700,7 +700,7 @@ export const PLATFORM = {
       'Sends the size on every call, for a model that can shorten its vectors (text-embedding-3-large at 1024). Leave it off for a model that cannot (BGE-M3).',
     maxResidency: 'The highest residency the profile’s embedding calls may reach, at most Eu.',
     contextWindow:
-      'The most tokens the model reads in one call, from the model’s documentation. Empty: unknown, so assistants budget 16,384. The AI gateway’s catalogue does not carry it yet.',
+      'The most tokens the model reads in one call, from the model’s documentation. Empty: unknown, so assistants budget 16,384. Set here only while the AI gateway’s catalogue does not send it.',
     maxOutputTokens:
       'The longest answer the model can write, from its documentation. Assistants that use the model’s limit ask for this much (less the prompt). Empty: unknown, so the provider’s default applies.',
     maxAnswerTokens: 'Caps every assistant’s answer length, overrides included; leave empty to use each model’s limit.',
@@ -880,6 +880,17 @@ export const PLATFORM = {
     sharedWith: 'Departments shared with',
     summary: (department: number, selected: number, municipality: number) =>
       `${department} own · ${selected} selected · ${municipality} whole organisation`,
+  },
+  gatewayModels: {
+    limitsSource: 'Limits from',
+    limitsSources: { catalog: 'AI gateway', manual: 'Set here' } as Record<string, string>,
+    limits: 'Limits',
+    limitsFromGateway: 'The AI gateway sends this model’s limits, so they cannot be changed here.',
+    gateway: 'AI gateway',
+    version: 'Version',
+    unknownVersion: 'Unknown',
+    features: 'Features',
+    noFeatures: 'None',
   },
   form: {
     create: 'Create',

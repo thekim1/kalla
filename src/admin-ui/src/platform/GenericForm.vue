@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { request } from '@/api/client'
+import { isApiError, request } from '@/api/client'
 import type { GatewayModel } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -10,6 +10,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiSwitch from '@/components/ui/UiSwitch.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { COMMON, PLATFORM } from '@/utils/labels'
+import { PLATFORM_RULE_MESSAGES } from '@/utils/messages'
 import { isObject, memberOf, modelHint, modelOptions } from './modelFields'
 import { fromInput, InputError, toInput, type FieldSpec } from './schema'
 
@@ -54,6 +55,13 @@ function hint(field: FieldSpec): string | undefined {
   return [field.help, extra, picked].filter(Boolean).join(' ') || undefined
 }
 
+/** A platform rule's own text when the refusal names a constraint that has one (`limits_from_gateway`, admin design §4.10). */
+function platformRuleMessage(error: unknown): string | undefined {
+  if (!isApiError(error) || error.problem?.code !== 'platform_rule') return undefined
+  const constraint = error.problem.params?.constraint
+  return constraint ? PLATFORM_RULE_MESSAGES[constraint] : undefined
+}
+
 /** The request body from the controls, or null after marking the fields that cannot be read. */
 function collect(): Record<string, unknown> | null {
   const body: Record<string, unknown> = {}
@@ -90,6 +98,8 @@ async function save(): Promise<void> {
     emit('saved', await request(props.method.toUpperCase() as 'POST' | 'PUT', props.url, { body }))
   } catch (e) {
     form.applyServerError(e)
+    const rule = platformRuleMessage(e)
+    if (rule) form.formError.value = rule
   } finally {
     saving.value = false
   }
