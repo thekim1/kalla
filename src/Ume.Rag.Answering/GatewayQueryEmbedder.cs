@@ -35,6 +35,12 @@ public sealed class QueryEmbeddingOptions
 }
 
 /// <summary>
+/// A query's vector and the usage of the gateway call that made it (step <c>query-embed</c>; chat design §8.3); null when
+/// no call was made for this request (the cache, or another request's call), which records nothing.
+/// </summary>
+public sealed record QueryEmbedding(ReadOnlyMemory<float> Vector, GatewayCallUsage? Usage);
+
+/// <summary>
 /// Embeds a normalised query with the profile's model at the profile's ceiling (knowledge design §5; P1 README §8 O1:
 /// the ceiling comes from the profile) on the gateway client <see cref="HttpClientName"/>, whose
 /// <see cref="ResidencyCeilingHandler"/> checks key, ceiling and <c>x-ume-residency</c>. L1 cache keyed by
@@ -42,7 +48,9 @@ public sealed class QueryEmbeddingOptions
 /// a connection failure, a 502/504 (<c>all_providers_failed</c>, with the same ceiling, #390) or a 503 without
 /// <c>Retry-After</c>; after 5 failures in 30 s the circuit skips the call for 15 s,
 /// then one call decides. Every failure is a <see cref="QueryEmbeddingUnavailableException"/> whose reason is the
-/// <c>degraded</c> value (§5.5). The query text is never logged.
+/// <c>degraded</c> value (§5.5). The query text is never logged. A call's usage (step <c>query-embed</c>, its input tokens
+/// and the gateway's <c>x-ume-cost-usd</c>; chat design §8.3) goes to the request whose miss made the call: a cache hit, or a
+/// request that joined another's call, gets none, so each call is recorded once.
 /// </summary>
 public sealed partial class GatewayQueryEmbedder : IDisposable
 {
@@ -50,6 +58,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     public const string RunIdHeader = "x-ume-run-id";
     public const string StepHeader = "x-ume-step";
     public const string PiiHeader = "x-ume-pii";
+
+    /// <summary>The <c>x-ume-step</c> of the call.</summary>
+    public const string Step = "query-embed";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -59,7 +70,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
     private readonly MemoryCache _cache;
-    private readonly ConcurrentDictionary<string, Lazy<Task<float[]>>> _inflight = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<Task<QueryEmbedding>>> _inflight = new(StringComparer.Ordinal);
     private readonly Lock _circuit = new();
     private readonly Queue<DateTimeOffset> _failures = new();
     private DateTimeOffset? _openUntil;
@@ -94,15 +105,18 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         }
     }
 
-    /// <summary>The query's vector in <paramref name="profile"/>'s space.</summary>
-    public async Task<ReadOnlyMemory<float>> EmbedAsync(EmbeddingProfileEntry profile, string normalizedQuery, Guid? runId, CancellationToken cancellationToken)
+    /// <summary>
+    /// The query's vector in <paramref name="profile"/>'s space, with the usage of the gateway call this request made (null
+    /// when the vector came from the cache or from another request's call).
+    /// </summary>
+    public async Task<QueryEmbedding> EmbedAsync(EmbeddingProfileEntry profile, string normalizedQuery, Guid? runId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentException.ThrowIfNullOrEmpty(normalizedQuery);
         var key = profile.Id.ToString("N") + ":" + QueryMac(normalizedQuery);
         if (_cache.TryGetValue(key, out float[]? cached) && cached is not null)
         {
-            return cached;
+            return new QueryEmbedding(cached, null);
         }
 
         if (!TryEnterCircuit())
@@ -110,23 +124,26 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             throw new QueryEmbeddingUnavailableException(RetrievalDegradation.EmbeddingUnavailable, "The query embedding circuit is open.");
         }
 
-        // The shared call runs on its own time limit, so one caller's cancellation does not fail the others.
-        var call = _inflight.GetOrAdd(key, _ => new Lazy<Task<float[]>>(() => CallAndRecordAsync(key, profile, normalizedQuery, runId)));
-        return await call.Value.WaitAsync(cancellationToken);
+        // The shared call runs on its own time limit, so one caller's cancellation does not fail the others. The request
+        // whose Lazy went in made the call and gets its usage; the others share the vector only.
+        var mine = new Lazy<Task<QueryEmbedding>>(() => CallAndRecordAsync(key, profile, normalizedQuery, runId));
+        var call = _inflight.GetOrAdd(key, mine);
+        var embedding = await call.Value.WaitAsync(cancellationToken);
+        return ReferenceEquals(call, mine) ? embedding : embedding with { Usage = null };
     }
 
     /// <summary>Hex of the first 16 bytes of HMAC-SHA256(cache key, query): not reversible by dictionary without the key.</summary>
     public string QueryMac(string normalizedQuery) =>
         Convert.ToHexStringLower(HMACSHA256.HashData(_cacheKey, Encoding.UTF8.GetBytes(normalizedQuery)).AsSpan(0, 16));
 
-    private async Task<float[]> CallAndRecordAsync(string key, EmbeddingProfileEntry profile, string query, Guid? runId)
+    private async Task<QueryEmbedding> CallAndRecordAsync(string key, EmbeddingProfileEntry profile, string query, Guid? runId)
     {
         try
         {
-            var vector = await CallAsync(profile, query, runId);
+            var (vector, usage) = await CallAsync(profile, query, runId);
             _cache.Set(key, vector, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = _options.CacheLifetime });
             RecordSuccess();
-            return vector;
+            return new QueryEmbedding(vector, usage);
         }
         catch (QueryEmbeddingUnavailableException)
         {
@@ -139,7 +156,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         }
     }
 
-    private async Task<float[]> CallAsync(EmbeddingProfileEntry profile, string query, Guid? runId)
+    private async Task<(float[] Vector, GatewayCallUsage Usage)> CallAsync(EmbeddingProfileEntry profile, string query, Guid? runId)
     {
         using var total = new CancellationTokenSource(_options.TotalTimeout, _time);
         for (var attempt = 1; ; attempt++)
@@ -150,7 +167,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             {
                 Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, query, "float", profile.DimensionsParameter), options: Json),
             }.WithMaxResidency(profile.MaxResidency);
-            request.Headers.Add(StepHeader, "query-embed");
+            request.Headers.Add(StepHeader, Step);
             if (runId is { } id)
             {
                 request.Headers.Add(RunIdHeader, id.ToString());
@@ -205,7 +222,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         }
     }
 
-    private static async Task<float[]> ReadAsync(HttpResponseMessage response, EmbeddingProfileEntry profile, CancellationToken cancellationToken)
+    private static async Task<(float[] Vector, GatewayCallUsage Usage)> ReadAsync(HttpResponseMessage response, EmbeddingProfileEntry profile, CancellationToken cancellationToken)
     {
         // A redacted or blocked query would embed other text than asked (§5.2).
         if (response.Headers.TryGetValues(PiiHeader, out var pii) && pii.Any(v => v is "redacted" or "blocked"))
@@ -224,7 +241,8 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             throw Unavailable("The query embedding has the wrong shape.");
         }
 
-        return vector;
+        var tokens = body.Usage is { } usage ? GatewayUsageReader.UsageTokens(usage) : null;
+        return (vector, new GatewayCallUsage(Step, profile.GatewayModel, tokens ?? default, GatewayUsageReader.CostHeader(response)));
     }
 
     private static QueryEmbeddingUnavailableException Unavailable(string message, Exception? inner = null) =>
@@ -296,7 +314,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         string Model, string Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
 
-    private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
+    private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data, JsonElement? Usage);
 
     private sealed record EmbeddingItem(float[]? Embedding);
 

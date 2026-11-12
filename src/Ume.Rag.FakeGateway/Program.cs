@@ -13,8 +13,13 @@ using Ume.Rag.FakeGateway;
 //   fake-fail-500 → 502 all_providers_failed; fake-fail-timeout → 504; fake-fail-fallback → its OnPrem target fails, so
 //   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-ume-residency
 //   External; fake-drained → 503 + Retry-After (its in-ceiling targets are drained);
-//   fake-stream-broken | -stall | -no-done | -empty-deltas | -length → streaming edge cases (chat design §18.4).
-// With stream_options.include_usage the last chunk carries usage only, as OpenAI's do. NOT for production.
+//   fake-stream-broken | -stall | -no-done | -empty-deltas | -length → streaming edge cases (chat design §18.4);
+//   fake-no-cost → answers without x-ume-cost-usd and without the stream cost comment.
+// With stream_options.include_usage the last chunk carries usage only, as OpenAI's do. The cost as gateway phase 2
+// (gateway-changes §5.4, GatewayRequestHandler at v0.10.0): x-ume-cost-usd (eight decimals) on every complete JSON answer,
+// and with x-ume-stream-cost: 1 (exactly "1") the comment ": ume-cost-usd=<usd>" (six decimals) just before data: [DONE]
+// (after the last event of a stream without one), both at the catalogue's prices (FakeCatalog.Cost).
+// FakeGateway:CachedInputTokens scripts the cached prompt tokens of chat answers. NOT for production.
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
 {
     return;
@@ -144,6 +149,8 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     }
 
     var completionTokens = FakeContent.Tokens(answer);
+    var cachedTokens = Math.Clamp(o.CachedInputTokens, 0, promptTokens);
+    var cost = FakeCatalog.Cost(model, promptTokens, cachedTokens, completionTokens);
     var id = "chatcmpl-" + Guid.NewGuid().ToString("N")[..12];
     var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -196,7 +203,18 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
         await Sse(ctx, Chunk(new { }, finishReason));
         if (includeUsage)
         {
-            await Sse(ctx, new { id, @object = "chat.completion.chunk", created, model = model.Name, choices = Array.Empty<object>(), usage = new { prompt_tokens = promptTokens, completion_tokens = completionTokens, total_tokens = promptTokens + completionTokens } });
+            await Sse(ctx, new
+            {
+                id, @object = "chat.completion.chunk", created, model = model.Name, choices = Array.Empty<object>(),
+                usage = new { prompt_tokens = promptTokens, completion_tokens = completionTokens, total_tokens = promptTokens + completionTokens, prompt_tokens_details = new { cached_tokens = cachedTokens } },
+            });
+        }
+
+        // The gateway's cost comment goes before the closing [DONE] (OpenAI-style clients stop reading there), or after the
+        // last event of a stream without one; only when asked with exactly "1".
+        if (ctx.Request.Headers[FakeContent.StreamCostHeader] == "1" && model.Name != FakeCatalog.NoCostModel)
+        {
+            await ctx.Response.WriteAsync(string.Create(System.Globalization.CultureInfo.InvariantCulture, $": ume-cost-usd={decimal.Round(cost, 6):0.000000}\n\n"));
         }
 
         if (model.Name != "fake-stream-no-done")
@@ -208,6 +226,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     }
 
     await latency.WholeAnswerAsync(FakeContent.StreamWords(answer).Count(), promptTokens, ctx.RequestAborted);
+    SetCost(ctx, model, cost);
     return Results.Json(new
     {
         id,
@@ -215,7 +234,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
         created,
         model = model.Name,
         choices = new[] { new { index = 0, message = new { role = "assistant", content = answer }, finish_reason = finishReason } },
-        usage = new { prompt_tokens = promptTokens, completion_tokens = completionTokens, total_tokens = promptTokens + completionTokens, prompt_tokens_details = new { cached_tokens = 0 } },
+        usage = new { prompt_tokens = promptTokens, completion_tokens = completionTokens, total_tokens = promptTokens + completionTokens, prompt_tokens_details = new { cached_tokens = cachedTokens } },
     });
 });
 
@@ -269,6 +288,8 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
         ? await UpstreamEmbeddingsAsync(clients.CreateClient("upstream"), upstream, inputs, ctx.RequestAborted)
         : [.. inputs.Select(text => FakeContent.Vector(text, dimensions))];
     var base64 = body["encoding_format"]?.GetValue<string>() == "base64";
+    var inputTokens = inputs.Sum(FakeContent.Tokens);
+    SetCost(ctx, model, FakeCatalog.Cost(model, inputTokens, 0, 0));
     return Results.Json(new
     {
         @object = "list",
@@ -279,7 +300,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
             index,
             embedding = base64 ? (object)Convert.ToBase64String(System.Runtime.InteropServices.MemoryMarshal.AsBytes(vector.AsSpan())) : vector,
         }),
-        usage = new { prompt_tokens = inputs.Sum(FakeContent.Tokens), total_tokens = inputs.Sum(FakeContent.Tokens) },
+        usage = new { prompt_tokens = inputTokens, total_tokens = inputTokens },
     });
 });
 
@@ -317,6 +338,7 @@ app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOp
     var topN = body["top_n"] is JsonValue n && n.TryGetValue<int>(out var top) && top > 0 ? top : documents.Count;
     var returnDocuments = body["return_documents"] is JsonValue r && r.TryGetValue<bool>(out var rd) && rd;
     var tokens = documents.Sum(d => FakeContent.Tokens(query) + FakeContent.Tokens(d));
+    SetCost(ctx, model, FakeCatalog.Cost(model, tokens, 0, 0));
     return Results.Json(new
     {
         id = "rerank-" + Guid.NewGuid().ToString("N"),
@@ -358,6 +380,15 @@ static async Task<List<float[]>> UpstreamEmbeddingsAsync(HttpClient client, stri
     return [.. json.RootElement.GetProperty("data").EnumerateArray()
         .OrderBy(e => e.GetProperty("index").GetInt32())
         .Select(e => e.GetProperty("embedding").EnumerateArray().Select(x => x.GetSingle()).ToArray())];
+}
+
+// x-ume-cost-usd on a complete JSON answer, as the gateway writes it (eight decimals); never for fake-no-cost.
+static void SetCost(HttpContext ctx, FakeModel model, decimal cost)
+{
+    if (model.Name != FakeCatalog.NoCostModel)
+    {
+        ctx.Response.Headers[FakeContent.CostHeader] = cost.ToString("0.00000000", System.Globalization.CultureInfo.InvariantCulture);
+    }
 }
 
 static async Task StartSse(HttpContext ctx)

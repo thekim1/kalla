@@ -91,7 +91,7 @@ public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFacto
         try
         {
             search = await _engine.SearchAsync(new SearchRequest(request.Question, scope, request.TopK, request.Mode,
-                Embed: request.Mode == RetrievalMode.Keyword ? null : (query, token) => _embedder.EmbedAsync(profile, query, null, token)), ct);
+                Embed: request.Mode == RetrievalMode.Keyword ? null : async (query, token) => (await _embedder.EmbedAsync(profile, query, null, token)).Vector), ct);
         }
         catch (GatewayKeyMissingException missing)
         {

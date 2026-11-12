@@ -54,6 +54,13 @@ public sealed class FakeGatewayOptions
     /// </summary>
     public bool RerankEnabled { get; set; }
 
+    /// <summary>
+    /// The prompt tokens every chat answer reports as cached (<c>FakeGateway:CachedInputTokens</c>, at most its prompt), in
+    /// <c>usage.prompt_tokens_details.cached_tokens</c> and priced at the cached rate; 0 by default, as a prompt cache miss.
+    /// Tests script it to check the cached-input price (chat design §8.3).
+    /// </summary>
+    public int CachedInputTokens { get; set; }
+
     /// <summary>Length of the <c>fake-stream-stall</c> pause (above the chat idle timeout of 60 s by default).</summary>
     public int StallSeconds { get; set; } = 65;
 
@@ -163,9 +170,10 @@ public sealed class FakeGatewayInfo
 
     /// <summary>
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
-    /// thekim1/llmgateway <c>v0.10.0</c>): <c>act-as-key</c>, <c>run-metadata</c> and <c>stream-cost</c> come with phase 2.
+    /// thekim1/llmgateway <c>v0.10.0</c>): <c>stream-cost</c> of phase 2 is here (the cost comment, B-38); <c>act-as-key</c>
+    /// and <c>run-metadata</c> come with the rest of phase 2.
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation", "member-groups"];
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation", "member-groups", "stream-cost"];
 }
 
 /// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>

@@ -6,7 +6,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Content;
 
 /// <summary>
 /// The serving <c>content</c> tables of P1 (data-model §2.2; processing design §13, §14; weakness review §2; knowledge
-/// design §4.7): evaluation sets, questions, runs and results, and the retrieval counters. Config rows are referenced by
+/// design §4.7): evaluation sets, questions, runs and results, the retrieval counters and the knowledge bases' daily usage
+/// (cost-attribution §5 C3). Config rows are referenced by
 /// id without a foreign key. Raw SQL in the migration adds <c>content.rag_count_retrievals</c>, the api's only way to
 /// the counters (data-model §12.3).
 /// </summary>
@@ -90,6 +91,13 @@ internal static class ServingContentModel
             });
             e.HasKey(x => new { x.Day, x.DocumentId, x.TextHash, x.CollectionId });
             e.Property(x => x.Classification).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<CollectionDailyUsage>(e =>
+        {
+            e.ToTable("CollectionDailyUsage", ContentSchema, t => UsageChecks(t, "CollectionDailyUsage"));
+            e.HasKey(x => new { x.Day, x.CollectionId, x.Classification, x.Step });
+            UsageColumns(e);
         });
     }
 }

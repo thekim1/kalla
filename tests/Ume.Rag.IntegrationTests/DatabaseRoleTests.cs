@@ -48,8 +48,13 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Chat (P1b item 1, data-model §2.3): the api owns it, the admin reads it (and marks feedback reviewed, a column
         // grant), the worker has no access.
-        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState" }
+        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState", "AssistantDailyUsage" }
             .Select(t => "chat." + t)];
+
+        // Cost per step (data-model §1.2, §2.2, §2.3; cost-attribution §5): the worker writes its knowledge bases' usage, the
+        // admin reads it; the admin also upserts the test panel's assistant usage (I U, no D), the api owns the assistant's.
+        string[] collectionUsage = ["content.CollectionDailyUsage"];
+        string[] assistantUsage = ["chat.AssistantDailyUsage"];
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
         (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, .. gatewayKeys, "content.ChunkSets", "content.Chunks",
@@ -59,16 +64,16 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe([.. all, "config.PublishedAssistantVersions"], ignoreOrder: true); // explain access (identity §4.9)
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog", .. assistantUsage], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites, .. assistantUsage], ignoreOrder: true);
         (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
 
         // The worker also reads the model mirror (the evaluation's residency checks, #130).
-        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels"],
+        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels", .. collectionUsage],
             ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, "audit.AuditLog", .. collectionUsage], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, .. collectionUsage], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, .. collectionUsage], ignoreOrder: true);
 
         // Column grants exist only where data-model §1.2 lists columns: the api's reads of Sources and Documents.
         (await ColumnPrivilegesAsync(Api)).ShouldBe([.. ApiSourceColumns.Select(c => "config.Sources." + c), .. ApiDocumentColumns.Select(c => "content.Documents." + c)], ignoreOrder: true);
