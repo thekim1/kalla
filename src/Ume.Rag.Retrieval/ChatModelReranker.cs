@@ -19,7 +19,8 @@ namespace Ume.Rag.Retrieval;
 /// <c>temperature</c> for Claude models (#275), 0 for every other model. An answer that scores at least half the
 /// passages is used and the rest stay unscored (<see cref="Parse"/>, #403); anything less throws
 /// <see cref="RerankOutputException"/>, a refused or failed call its own exception; the engine then keeps the fused order
-/// with <c>rerank_unavailable</c>. The question and the passages are never logged. Replaced by <c>GatewayReranker</c> when the
+/// with <c>rerank_unavailable</c>. The call's usage (tokens, <c>x-ume-cost-usd</c>) is read by <see cref="GatewayUsageReader"/>.
+/// The question and the passages are never logged. Replaced by <c>GatewayReranker</c> when the
 /// gateway's rerank endpoint exists (gateway-changes §7.4).
 /// </summary>
 public sealed partial class ChatModelReranker(IHttpClientFactory clients, string httpClientName = ChatModelReranker.HttpClientName, ILogger<ChatModelReranker>? logger = null)
@@ -111,10 +112,7 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
             LogPartial(_logger, request.Model, unscored, scores.Count);
         }
 
-        var usage = root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object
-            ? new RerankUsage(request.Model, Int(u, "prompt_tokens"), Int(u, "completion_tokens"))
-            : new RerankUsage(request.Model, 0, 0);
-        return new RerankScores(scores, usage);
+        return new RerankScores(scores, GatewayUsageReader.Read(response, root, Step, request.Model));
     }
 
     /// <summary>
@@ -202,8 +200,6 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
 
     private static double? Number(JsonNode? node) =>
         node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<double>(out var d) && double.IsFinite(d) ? d : null;
-
-    private static int Int(JsonElement usage, string name) => usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var i) ? i : 0;
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The gateway refused a rerank call with {Model}: HTTP {Status}")]
     private static partial void LogRefused(ILogger logger, string model, int status);

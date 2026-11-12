@@ -254,6 +254,41 @@ public sealed class AssistantDailyTotal
     public decimal CostUsd { get; set; }
 }
 
+/// <summary>
+/// Tokens and cost of the model calls made for an assistant, per Europe/Stockholm day, client, level and step
+/// (<c>chat."AssistantDailyUsage"</c>, data-model §2.3; chat design §8.3, §12.2): the gateway's cost apart from the
+/// estimate of calls without one. Written by the api's conversation writer and the admin's test panel.
+/// </summary>
+public sealed class AssistantDailyUsage
+{
+    public DateOnly Day { get; set; }
+    public Guid AssistantId { get; set; }
+
+    /// <summary>The client the calls were made for; the test panel's and P2 assistant tests' are the <c>admin-console</c> row.</summary>
+    public Guid ClientId { get; set; }
+
+    public required string Classification { get; set; }
+
+    /// <summary>The <c>x-ume-step</c> the calls sent: <c>condense</c>, <c>condense-long</c>, <c>query-embed</c>, <c>rerank</c>, <c>chat-answer</c>, <c>follow-ups</c>.</summary>
+    public required string Step { get; set; }
+
+    /// <summary>The assistant's department at the time of the calls.</summary>
+    public Guid DepartmentId { get; set; }
+
+    public int Calls { get; set; }
+    public long InputTokens { get; set; }
+    public long CachedInputTokens { get; set; }
+    public long OutputTokens { get; set; }
+
+    /// <summary>The gateway's cost (<c>x-ume-cost-usd</c> or the stream comment).</summary>
+    public decimal CostUsd { get; set; }
+
+    /// <summary>The calls without a gateway cost, priced from <c>GatewayModels</c> into <see cref="EstimatedCostUsd"/>.</summary>
+    public int EstimatedCalls { get; set; }
+
+    public decimal EstimatedCostUsd { get; set; }
+}
+
 /// <summary>The watermark of the Open WebUI feedback import per client (<c>chat."FeedbackImportState"</c>, chat design §14.2).</summary>
 public sealed class FeedbackImportState
 {

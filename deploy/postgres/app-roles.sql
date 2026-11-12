@@ -105,6 +105,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON content."EvaluationSets", content."Evalu
 GRANT SELECT ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns", content."EvaluationResults",
   content."RetrievalStats" TO ume_rag_admin;
 GRANT INSERT, UPDATE ON content."EvaluationRuns", content."EvaluationResults" TO ume_rag_admin;
+-- Tokens and cost of the worker's model calls per knowledge base and step (data-model §2.2; cost-attribution §5 C3): the
+-- worker writes them, the admin reads them for its cost report.
+GRANT SELECT, INSERT, UPDATE, DELETE ON content."CollectionDailyUsage" TO ume_rag_worker;
+GRANT SELECT ON content."CollectionDailyUsage" TO ume_rag_admin;
 
 -- chat (data-model §1.2, §2.3): the api owns it; the admin reads it and marks feedback reviewed (admin design §8.1); the
 -- worker has no access to the schema. P1 writes metadata and ratings only (weakness review §4).
@@ -113,6 +117,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON chat."Conversations", chat."DataKeys", c
 GRANT SELECT ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources", chat."Feedback",
   chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_admin;
 GRANT UPDATE ("ReviewState") ON chat."Feedback" TO ume_rag_admin;
+-- Tokens and cost of every model call per assistant, client and step (data-model §2.3; chat design §8.3, §12.2): the api's
+-- conversation writer upserts them; the admin upserts the test panel's calls too (admin design §4.9).
+GRANT SELECT, INSERT, UPDATE, DELETE ON chat."AssistantDailyUsage" TO ume_rag_api;
+GRANT SELECT, INSERT, UPDATE ON chat."AssistantDailyUsage" TO ume_rag_admin;
 
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;

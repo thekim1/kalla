@@ -144,6 +144,13 @@ internal static class ChatModel
             e.Property(x => x.CostUsd).HasPrecision(18, 8);
         });
 
+        modelBuilder.Entity<AssistantDailyUsage>(e =>
+        {
+            e.ToTable("AssistantDailyUsage", ChatSchema, t => UsageChecks(t, "AssistantDailyUsage"));
+            e.HasKey(x => new { x.Day, x.AssistantId, x.ClientId, x.Classification, x.Step });
+            UsageColumns(e);
+        });
+
         modelBuilder.Entity<FeedbackImportState>(e =>
         {
             e.ToTable("FeedbackImportState", ChatSchema);

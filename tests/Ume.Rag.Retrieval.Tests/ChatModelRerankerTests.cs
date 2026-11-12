@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Gateway;
 using static Ume.Rag.Retrieval.Tests.Make;
 
 namespace Ume.Rag.Retrieval.Tests;
@@ -60,7 +61,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         result.Hits[1].Scores.RerankScore.ShouldBe(0.9);
         result.Hits[2].Scores.RerankScore.ShouldBe(0.1);
         result.Degraded.ShouldBeNull();
-        result.RerankUsage.ShouldBe(new RerankUsage(Model, 1200, 80));
+        result.RerankUsage.ShouldBe(new GatewayCallUsage(ChatModelReranker.Step, Model, 1200, 0, 80, null));
 
         var call = gateway.Calls.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/chat/completions");

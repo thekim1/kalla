@@ -1,5 +1,6 @@
 extern alias fakegateway;
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -381,6 +382,105 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     }
 
     [Fact]
+    public async Task Json_answers_carry_x_ume_cost_usd_at_the_catalogue_prices()
+    {
+        // Gateway-changes §5.4: the cost of a complete JSON answer, eight decimals; the fake's prices per million tokens are
+        // chat 0.15 in and 0.60 out, embeddings 0.02, rerank 0.10 (FakeCatalog.PriceOf).
+        using var chat = await ChatAsync("ume/chat-onprem", "Hur söker jag bygglov för en altan?");
+        var chatUsage = (await chat.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage");
+        Cost(chat).ShouldBe(Usd((chatUsage.GetProperty("prompt_tokens").GetInt64() * 0.15m + chatUsage.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m));
+        chat.Headers.GetValues("x-ume-cost-usd").Single().ShouldMatch(@"^\d+\.\d{8}$");
+
+        using var embedding = await SendAsync("/v1/embeddings", """{"model":"bge-m3","input":["Ansök om bygglov","Matsedel"]}""", FakeGatewayFactory.OnPremKey, "OnPrem");
+        var embeddingTokens = (await embedding.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage").GetProperty("prompt_tokens").GetInt64();
+        Cost(embedding).ShouldBe(Usd(embeddingTokens * 0.02m / 1_000_000m));
+
+        using var enabled = Rerank();
+        using var rerank = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"bygglov","documents":["Bygglov för altan","Matsedel"]}""",
+            FakeGatewayFactory.EuKey, "Eu", enabled);
+        var rerankTokens = (await rerank.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage").GetProperty("prompt_tokens").GetInt64();
+        Cost(rerank).ShouldBe(Usd(rerankTokens * 0.10m / 1_000_000m));
+    }
+
+    [Fact]
+    public async Task A_stream_asked_for_its_cost_ends_with_the_comment_just_before_done_and_only_then()
+    {
+        // Gateway-changes §5.4: x-ume-stream-cost exactly "1" → ": ume-cost-usd=<usd>" (six decimals) before data: [DONE].
+        var events = await RawStreamAsync("ume/chat-onprem", streamCost: "1");
+        events[^1].ShouldBe("data: [DONE]");
+        events[^2].ShouldStartWith(": ume-cost-usd=");
+        using var usage = JsonDocument.Parse(events[^3]["data: ".Length..]);
+        var tokens = usage.RootElement.GetProperty("usage");
+        var cost = (tokens.GetProperty("prompt_tokens").GetInt64() * 0.15m + tokens.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m;
+        events[^2].ShouldBe(": ume-cost-usd=" + decimal.Round(cost, 6).ToString("0.000000", CultureInfo.InvariantCulture));
+        events.Count(e => e.StartsWith(':')).ShouldBe(1);
+
+        foreach (var other in new[] { null, "0", "true", "01" })
+        {
+            (await RawStreamAsync("ume/chat-onprem", streamCost: other)).ShouldNotContain(e => e.StartsWith(':'), $"x-ume-stream-cost: {other}");
+        }
+    }
+
+    [Fact]
+    public async Task Fake_no_cost_sends_neither_the_header_nor_the_comment()
+    {
+        using var json = await ChatAsync("fake-no-cost", "Hej");
+        json.StatusCode.ShouldBe(HttpStatusCode.OK);
+        json.Headers.Contains("x-ume-cost-usd").ShouldBeFalse();
+
+        var events = await RawStreamAsync("fake-no-cost", streamCost: "1");
+        events[^1].ShouldBe("data: [DONE]");
+        events.ShouldNotContain(e => e.StartsWith(':'));
+
+        // It is priced like every chat model, so a caller's estimate has prices.
+        var models = await ModelsAsync(FakeGatewayFactory.OnPremKey, "OnPrem");
+        models.Keys.ShouldContain("fake-no-cost");
+    }
+
+    [Fact]
+    public async Task Scripted_cached_tokens_are_reported_and_priced_at_the_cached_rate()
+    {
+        // FakeGateway:CachedInputTokens: usage.prompt_tokens_details.cached_tokens (at most the prompt), priced at 0.075.
+        using var cached = fake.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c => c.AddInMemoryCollection([new("FakeGateway:CachedInputTokens", "4")])));
+        using var response = await SendAsync("/v1/chat/completions", Chat("ume/chat-onprem"), FakeGatewayFactory.OnPremKey, "OnPrem", cached);
+        var usage = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage");
+        var prompt = usage.GetProperty("prompt_tokens").GetInt64();
+        var cachedTokens = usage.GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64();
+        cachedTokens.ShouldBe(Math.Min(4, prompt));
+        Cost(response).ShouldBe(Usd(((prompt - cachedTokens) * 0.15m + cachedTokens * 0.075m + usage.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m));
+
+        var events = await RawStreamAsync("ume/chat-onprem", streamCost: "1", cached);
+        using var chunk = JsonDocument.Parse(events[^3]["data: ".Length..]);
+        chunk.RootElement.GetProperty("usage").GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64()
+            .ShouldBe(Math.Min(4, chunk.RootElement.GetProperty("usage").GetProperty("prompt_tokens").GetInt64()));
+
+        // Unscripted, nothing is cached.
+        using var plain = await ChatAsync("ume/chat-onprem", "Hej");
+        (await plain.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage").GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64().ShouldBe(0);
+    }
+
+    private static decimal Cost(HttpResponseMessage response) =>
+        decimal.Parse(response.Headers.GetValues("x-ume-cost-usd").Single(), CultureInfo.InvariantCulture);
+
+    private static decimal Usd(decimal usd) => Math.Round(usd, 8, MidpointRounding.AwayFromZero);
+
+    /// <summary>The raw SSE events of a streamed answer with usage, data and comment lines as sent.</summary>
+    private async Task<List<string>> RawStreamAsync(string model, string? streamCost, WebApplicationFactory<fakegateway::Program>? factory = null)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model,
+            stream = true,
+            stream_options = new { include_usage = true },
+            messages = new[] { new { role = "user", content = "Hur söker jag bygglov?" } },
+        });
+        using var response = await SendAsync("/v1/chat/completions", body, FakeGatewayFactory.OnPremKey, "OnPrem", factory, streamCost: streamCost);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var text = await response.Content.ReadAsStringAsync(Ct);
+        return [.. text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)];
+    }
+
+    [Fact]
     public async Task The_data_api_catalogue_is_gone()
     {
         // B-35: the organisation is in /v1/ume/context and the models' facts on /v1/models (FakeGatewayContractTests).
@@ -399,7 +499,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     private static string Chat(string model) => JsonSerializer.Serialize(new { model, messages = new[] { new { role = "user", content = "Hej" } } });
 
     private async Task<HttpResponseMessage> SendAsync(string path, string? body, string? key, string? ceiling, WebApplicationFactory<fakegateway::Program>? factory = null,
-        string? onBehalfOf = null)
+        string? onBehalfOf = null, string? streamCost = null)
     {
         using var client = (factory ?? fake).CreateClient();
         using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post, path);
@@ -421,6 +521,11 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         if (onBehalfOf is not null)
         {
             request.Headers.Add("x-ume-on-behalf-of", onBehalfOf);
+        }
+
+        if (streamCost is not null)
+        {
+            request.Headers.Add("x-ume-stream-cost", streamCost);
         }
 
         return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Ct);

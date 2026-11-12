@@ -61,4 +61,13 @@ public static class GatewayHeaders
     public const string Residency = "x-ume-residency";
     public const string OnBehalfOf = "x-ume-on-behalf-of";
     public const string RequestId = "x-request-id";
+
+    /// <summary>The call's cost in USD on a complete JSON answer (eight decimals; gateway-changes §5.4).</summary>
+    public const string CostUsd = "x-ume-cost-usd";
+
+    /// <summary>
+    /// Request header: exactly <c>1</c> asks the gateway to end a streamed answer with the SSE comment
+    /// <c>: ume-cost-usd=&lt;usd&gt;</c> (gateway-changes §5.4); any other value asks for nothing.
+    /// </summary>
+    public const string StreamCost = "x-ume-stream-cost";
 }

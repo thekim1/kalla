@@ -137,7 +137,7 @@ public sealed class GatewayResidencyException(Residency ceiling, string? observe
     public string? Observed { get; } = observed;
 }
 
-/// <summary>Setting the ceiling of a gateway request.</summary>
+/// <summary>Setting the ceiling of a gateway request, and asking for a stream's cost.</summary>
 public static class GatewayRequestExtensions
 {
     public static HttpRequestMessage WithMaxResidency(this HttpRequestMessage request, Residency ceiling)
@@ -145,6 +145,18 @@ public static class GatewayRequestExtensions
         ArgumentNullException.ThrowIfNull(request);
         request.Headers.Remove(GatewayHeaders.MaxResidency);
         request.Headers.Add(GatewayHeaders.MaxResidency, ResidencyCeiling.ToHeader(ceiling));
+        return request;
+    }
+
+    /// <summary>
+    /// <c>x-ume-stream-cost: 1</c> (chat design §8.1, gateway-changes §5.4): the streamed answer ends with the cost comment,
+    /// which <see cref="SseReader"/> takes; a gateway without the feature ignores the header.
+    /// </summary>
+    public static HttpRequestMessage WithStreamCost(this HttpRequestMessage request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.Headers.Remove(GatewayHeaders.StreamCost);
+        request.Headers.Add(GatewayHeaders.StreamCost, "1");
         return request;
     }
 }
