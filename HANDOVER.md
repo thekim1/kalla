@@ -38,12 +38,15 @@ afterwards and ticked A-25 (`e3a1e67`). Tagging `714a58f` releases what dry run 
 
 **2. #580, the gateway integration (user decision, 2026-11-11).** Every assistant and knowledge base runs on an
 *assigned* gateway key of its department chosen by id; each service has one credential key and sends
-`x-ume-on-behalf-of`; configuration from `/v1/ume/context` and `/v1/models`. The designs follow it (`a457474`:
-Decisions "Cost attribution", "Gateway keys"; gateway-changes §5; cost-attribution §4–§7; data-model `GatewayKeys`,
-V39; identity §4.7; admin §4.10, §5.5.4; chat §8). **M-12** in `plans/work/main.md` queues the code per gateway phase
-once that phase's gateway PR merges (phase 1 is thekim1/llmgateway#81, open). Open with the gateway owner on #580:
-point 1 (keep `RequireMaxResidency` and the credential key's residencies as an upper bound on acted requests) and
-point 8 (every active department and team in the context, member groups with feature C). Watch #580 and #81.
+`x-ume-on-behalf-of`; configuration from `/v1/ume/context` and `/v1/models`. Designs: `a457474`, `b0740ab`.
+- **Gateway phase 1 merged** (thekim1/llmgateway#81, `6a8f0a5`); designs checked against it; **queued** as B-35 (sync,
+  `GatewayKeys`, FakeGateway contract with pinned examples in `contracts/gateway/`), B-36 (key picker, V39), B-37
+  (credential key per service) and A-30 (its deployment) (`abd452b`). Review them as they come.
+- **Point 1 decided by the user (2026-11-12):** acted requests are bounded by the credential key too
+  (`RequireMaxResidency` when either key requires it; residencies intersected). #82 (phase 2, open) has the first
+  half; the intersection is asked for on #82. Queue phase 2 (M-12) only once a release with it exists.
+- **Open:** point 8 (every active department and team in the context, member groups with feature C); until then the
+  organisation sync stays on the Data API. No OpenAPI document from the gateway yet.
 
 **3. Then, if the user doesn't choose:** A-25 (write each chunk once, engine §14 rule 2a, #501; an implementor agent in
 a worktree; respect the profile guard of processing §11 inside the swap transaction), then M-9 (cost stage 1, now on
@@ -51,7 +54,7 @@ the gateway's cost; Q3 to the user).
 
 **Waiting on the user:**
 - **Tag v0.4.0** (above).
-- **#580's open points 1 and 8** (as gateway owner), and the gateway's phase PRs.
+- **#580 point 8** (as gateway owner), the residency intersection in #82, and the gateway's phase PRs.
 - **Upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, needs a decision entry) and
   rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a contextual-header trial (U5) and a
   near-duplicate warning (U6).
