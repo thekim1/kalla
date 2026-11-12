@@ -73,6 +73,7 @@ public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Prog
                 ["FakeGateway:CredentialKeys:worker:Key"] = FakeGatewayFactory.WorkerCredentialKey,
                 ["FakeGateway:CredentialKeys:worker:MaxResidency"] = "Eu",
             });
+            config.AddInMemoryCollection(TestGatewayKeys.Settings);
             config.Add(_scripts);
         });
     }

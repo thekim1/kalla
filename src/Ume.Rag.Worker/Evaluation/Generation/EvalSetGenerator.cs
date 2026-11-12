@@ -25,8 +25,8 @@ namespace Ume.Rag.Worker.Evaluation.Generation;
 /// runs at the collection's ceiling (<see cref="EvalModelClient.CeilingFor"/>); a model the gateway does not serve there
 /// refuses the job with <see cref="EvalModelClient.ModelNotAtCeiling"/>. Result <see cref="EvalSetResult"/>. Every model call
 /// (<c>eval-generate</c>, <c>eval-judge</c>, the near-duplicate embeddings <c>eval-dedup</c>) carries the job's id as
-/// <c>x-ume-run-id</c> and is counted under the collection; the round's commit adds them to <c>CollectionDailyUsage</c>
-/// (engine design §7.7, §10.6).
+/// <c>x-ume-run-id</c>, runs as the collection's gateway key and is counted under the collection; the round's commit adds them
+/// to <c>CollectionDailyUsage</c> (engine design §7.7, §10.6).
 /// </summary>
 public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient models, EmbeddingClient embeddings, IEmbeddingProfileStore profiles,
     QuestionFilters filters, ITokenCounter tokens, ILogger<EvalSetGenerator> logger) : IEvalSetHandler
@@ -111,7 +111,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         var setId = await store.EnsureSetAsync(collection, cancellationToken);
         var round = await store.RoundAsync(setId, cancellationToken);
         var seed = ChunkSampler.Seed(setId, round);
-        var usage = new RoundCalls(job.Id, new UsageSink(jobUsage, new UsageOwner(collection.Id, collection.Classification, collection.DepartmentId)));
+        var usage = new RoundCalls(job.Id, new UsageSink(jobUsage, collection.UsageOwner));
         var active = await store.ActiveAsync(setId, cancellationToken);
         var (stale, rechecked) = kind == EvalKinds.TopUpSet
             ? await CheckStaleAsync(job, active, judgeModel, ceiling, usage, cancellationToken)

@@ -21,7 +21,10 @@ public sealed record EmbeddingCall(Guid RunId, UsageSink Usage, string Step = Em
 /// worker's key of that level, <c>Eu</c> for the P1a pilot), <c>dimensions</c> when the profile requests it,
 /// <c>x-ume-run-id</c> and <c>x-ume-step</c>. The answer is checked before anything is stored: one vector per input in input
 /// order, each of the profile's dimensions and finite (else fatal <c>embed.bad_vector</c>); the residency is checked by the
-/// handler (above the ceiling: fatal, event 5003). Status codes map per engine design §7.3. Every answered call's usage
+/// handler (above the ceiling: fatal, event 5003). The call runs as the knowledge base's gateway key
+/// (<see cref="UsageOwner.Acting"/>, engine design §7.7): a refusal of the key waits until the next full hour with an attempt
+/// counted (<see cref="GatewayRefusals"/>), and an answer without the key's echo is fatal <c>gateway.delegation_not_applied</c>
+/// before a vector is read (event 5011 by the handler). Status codes map per engine design §7.3. Every answered call's usage
 /// (<c>usage.prompt_tokens</c> and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the call's
 /// <see cref="EmbeddingCall.Usage"/> before the vectors are checked, since the gateway charged it; an error answer records nothing.
 /// </summary>
@@ -47,6 +50,7 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
         request.WithMaxResidency(profile.MaxResidency);
         request.Headers.Add(RunIdHeader, call.RunId.ToString());
         request.Headers.Add(StepHeader, call.Step);
+        request.For(call.Usage.Owner.Acting(call.Step));
         HttpResponseMessage response;
         try
         {
@@ -55,6 +59,14 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
         catch (GatewayResidencyException)
         {
             throw new StageFatalException(RunItemOutcome.Failed, "gateway.residency_above_ceiling");
+        }
+        catch (GatewayKeyRefusedException refused)
+        {
+            throw new StageTransientException(GatewayRefusals.Reason(refused), GatewayRefusals.UntilNextHour(clock), countsAttempt: true);
+        }
+        catch (GatewayDelegationEchoException)
+        {
+            throw new StageFatalException(RunItemOutcome.Failed, GatewayRefusals.DelegationNotApplied);
         }
         catch (HttpRequestException)
         {
@@ -134,19 +146,12 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
         {
             HttpStatusCode.TooManyRequests => new StageTransientException("gateway.rate_limited", retryAfter ?? TimeSpan.FromSeconds(5), countsAttempt: false),
             HttpStatusCode.ServiceUnavailable when retryAfter is not null => new StageTransientException("gateway.unavailable", retryAfter, countsAttempt: false),
-            HttpStatusCode.PaymentRequired => new StageTransientException("gateway.budget_exhausted", UntilNextHour(), countsAttempt: true),
+            HttpStatusCode.PaymentRequired => new StageTransientException(GatewayRefusals.BudgetExhausted, GatewayRefusals.UntilNextHour(clock), countsAttempt: true),
             HttpStatusCode.Forbidden => new StageFatalException(RunItemOutcome.Failed, "gateway." + (code ?? "forbidden")),
             HttpStatusCode.BadRequest => new StageFatalException(RunItemOutcome.Failed, "embed.input_rejected"),
             >= HttpStatusCode.InternalServerError => new StageTransientException("gateway.http_" + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture), retryAfter, countsAttempt: true),
             _ => new StageFatalException(RunItemOutcome.Failed, "gateway.http_" + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)),
         };
-    }
-
-    private TimeSpan UntilNextHour()
-    {
-        var now = clock.GetUtcNow();
-        var next = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, TimeSpan.Zero).AddHours(1);
-        return next - now;
     }
 
     private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)

@@ -6,10 +6,18 @@ using Ume.Rag.Worker.Connectors.Persistence;
 namespace Ume.Rag.Worker.Jobs;
 
 /// <summary>
-/// The knowledge base a worker call is counted under (engine design §10.6; data-model §2.2 <c>CollectionDailyUsage</c>): the
-/// collection, its level and its department at the time of the call.
+/// The knowledge base a worker call is counted under and runs as (engine design §7.7, §10.6; data-model §2.2
+/// <c>CollectionDailyUsage</c>; cost-attribution §4.1): the collection, its level, its department and its assigned gateway key
+/// (<c>Collections.GatewayKeyId</c>; null: the call runs as the worker's credential key) at the time of the call.
 /// </summary>
-public sealed record UsageOwner(Guid CollectionId, string Classification, Guid DepartmentId);
+public sealed record UsageOwner(Guid CollectionId, string Classification, Guid DepartmentId, Guid? GatewayKeyId)
+{
+    /// <summary>
+    /// What a call of <paramref name="step"/> for this knowledge base is made for: <see cref="ResidencyCeilingHandler"/> sends
+    /// <c>x-ume-on-behalf-of</c> with <see cref="GatewayKeyId"/> once the gateway acts as keys, and checks the echo (identity §4.7).
+    /// </summary>
+    public GatewayCall Acting(string? step) => new(GatewayKeyId, step, CollectionId: CollectionId);
+}
 
 /// <summary>Where a call's usage goes: the job attempt's <see cref="JobUsage"/> under the knowledge base <see cref="Owner"/>.</summary>
 public sealed record UsageSink(JobUsage Usage, UsageOwner Owner)

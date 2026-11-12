@@ -10,8 +10,15 @@ using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Evaluation.Generation;
 
-/// <summary>The collection a round is for: its level, embedding profile and department (the owner of the round's model calls).</summary>
-public sealed record EvalTarget(Guid Id, string Classification, Guid EmbeddingProfileId, Guid DepartmentId);
+/// <summary>
+/// The collection a round is for: its level, embedding profile, department and gateway key (the owner of the round's model
+/// calls, which run as the key; engine design §7.7).
+/// </summary>
+public sealed record EvalTarget(Guid Id, string Classification, Guid EmbeddingProfileId, Guid DepartmentId, Guid? GatewayKeyId)
+{
+    /// <summary>The knowledge base the round's model calls are counted under and run as.</summary>
+    public UsageOwner UsageOwner => new(Id, Classification, DepartmentId, GatewayKeyId);
+}
 
 /// <summary><c>Settings.EvaluationModel</c>, <c>Settings.EvaluationJudgeModel</c> and <c>Settings.EvaluationMaxQuestions</c>.</summary>
 public sealed record EvalSettings(string? Model, string? JudgeModel, int MaxQuestions)
@@ -50,7 +57,7 @@ public sealed record EvalSetWrite(IReadOnlyList<Guid> Stale, IReadOnlyList<(Guid
 public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerIdentity identity, TimeProvider time)
 {
     private const string CollectionSql = """
-        SELECT "Classification", "EmbeddingProfileId", "DepartmentId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
+        SELECT "Classification", "EmbeddingProfileId", "DepartmentId", "GatewayKeyId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
         """;
 
     private const string SettingsSql = """
@@ -140,7 +147,9 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(CollectionSql, connection) { Parameters = { Db.P(collectionId) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new EvalTarget(collectionId, reader.GetString(0), reader.GetGuid(1), reader.GetGuid(2)) : null;
+        return await reader.ReadAsync(cancellationToken)
+            ? new EvalTarget(collectionId, reader.GetString(0), reader.GetGuid(1), reader.GetGuid(2), Db.Nullable<Guid>(reader, 3))
+            : null;
     }
 
     /// <summary>The settings row's values; without a row the defaults (no model).</summary>

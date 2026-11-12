@@ -49,7 +49,10 @@ public sealed class EvalStopException : Exception
 /// <see cref="ModelNotAtCeiling"/> unless the gateway lists every model at that ceiling (<see cref="CatalogueClientName"/>);
 /// a gateway answer of 403 <c>max_residency_not_met</c> is refused the same way, and an answer from above the ceiling is
 /// discarded by the handler.
-/// Other status codes map as the embedding client's (engine design §7.3). Every completion carries <c>x-ume-run-id</c> and
+/// Other status codes map as the embedding client's (engine design §7.3). Every completion runs as the knowledge base's gateway
+/// key (<see cref="UsageOwner.Acting"/>, engine design §7.7): a refusal of the key waits until the next full hour
+/// (<see cref="GatewayRefusals"/>), an answer without the key's echo ends the job with <c>gateway.delegation_not_applied</c>.
+/// The catalogue read goes without the key (a plain client, no model call). Every completion carries <c>x-ume-run-id</c> and
 /// its answered call's usage (tokens and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the caller's
 /// <see cref="UsageSink"/> (engine design §7.7, §10.6); the catalogue read costs nothing and is not recorded.
 /// </summary>
@@ -132,6 +135,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         request.WithMaxResidency(ceiling);
         request.Headers.Add(Processing.Embedding.EmbeddingClient.RunIdHeader, runId.ToString());
         request.Headers.Add(Processing.Embedding.EmbeddingClient.StepHeader, step);
+        request.For(usage.Owner.Acting(step));
         using var response = await SendAsync(HttpClientName, request, cancellationToken);
         JsonDocument? document;
         try
@@ -180,6 +184,14 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         {
             throw new EvalStopException(new JobResult.FatalError(ResidencyAboveCeiling));
         }
+        catch (GatewayKeyRefusedException refused)
+        {
+            throw new EvalStopException(new JobResult.TransientError(GatewayRefusals.Reason(refused), GatewayRefusals.UntilNextHour(clock)));
+        }
+        catch (GatewayDelegationEchoException)
+        {
+            throw new EvalStopException(new JobResult.FatalError(GatewayRefusals.DelegationNotApplied));
+        }
         catch (HttpRequestException)
         {
             throw new EvalStopException(new JobResult.TransientError("gateway.unreachable"));
@@ -214,16 +226,10 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
             HttpStatusCode.BadRequest => new JobResult.FatalError(RequestRejected),
             HttpStatusCode.TooManyRequests => new JobResult.TransientError("gateway.rate_limited", retryAfter ?? TimeSpan.FromSeconds(5), CountsAttempt: false),
             HttpStatusCode.ServiceUnavailable when retryAfter is not null => new JobResult.TransientError("gateway.unavailable", retryAfter, CountsAttempt: false),
-            HttpStatusCode.PaymentRequired => new JobResult.TransientError("gateway.budget_exhausted", UntilNextHour()),
+            HttpStatusCode.PaymentRequired => new JobResult.TransientError(GatewayRefusals.BudgetExhausted, GatewayRefusals.UntilNextHour(clock)),
             >= HttpStatusCode.InternalServerError => new JobResult.TransientError(status, retryAfter),
             _ => new JobResult.FatalError(status),
         };
-    }
-
-    private TimeSpan UntilNextHour()
-    {
-        var now = clock.GetUtcNow();
-        return new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, TimeSpan.Zero).AddHours(1) - now;
     }
 
     private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
