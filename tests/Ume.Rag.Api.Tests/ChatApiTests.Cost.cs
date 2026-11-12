@@ -97,7 +97,7 @@ public sealed partial class ChatApiTests
     /// <see cref="CostGateway"/> for chat, rerank and the query embedding.
     /// </summary>
     private WebApplicationFactory<Program> CostHost(ConcurrentQueue<CostCall> calls, WebApplicationFactory<fakegateway::Program> gateway, string model = "ume/chat-eu",
-        bool rerank = true, string? failStep = null)
+        bool rerank = true, string? failStep = null, Guid? gatewayKeyId = null)
     {
         var snapshot = Snapshot();
         var bygg = snapshot.Assistants[db.AssistantId];
@@ -109,6 +109,7 @@ public sealed partial class ChatApiTests
             {
                 [db.AssistantId] = bygg with
                 {
+                    GatewayKeyId = gatewayKeyId, // B-42: the key the turn runs as
                     Published = bygg.Published! with { GatewayModel = model, QuerySteps = rerank ? """{"retrieval":{"rerank":"chat"}}""" : bygg.Published.QuerySteps },
                 },
             },

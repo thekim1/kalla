@@ -77,6 +77,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3).
         var settings = resolved.Settings(assistant);
+        // B-42 (identity §4.7, cost-attribution §4.1): every call of the turn runs as the assistant's gateway key.
+        using var acting = GatewayCallScope.Begin(Acting(assistant));
 
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
@@ -303,6 +305,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         ArgumentNullException.ThrowIfNull(cited);
         var messages = FollowUps.Messages(count, plan.Language, plan.Query!, FollowUps.Answer(plan, delivered), FollowUps.Titles(plan.Prompt?.Sources ?? [], cited),
             plan.Platform.Texts);
+        using var acting = GatewayCallScope.Begin(Acting(plan.Assistant));
         var (answer, failure) = await CallTaskModelAsync(messages, FollowUps.Step, FollowUps.TokensPerQuestion * count, options.Value.FollowUpTimeout,
             plan.Platform, plan.Ceiling, plan.MessageId, plan.Usage, ct);
         IReadOnlyList<string> suggestions = answer is null ? [] : FollowUps.Accept(answer.Text, count, question, plan.Query);
@@ -310,6 +313,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         _followUps?.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
         return suggestions;
     }
+
+    /// <summary>The turn's calls as the assistant's gateway key (null: the service's credential key; B-42).</summary>
+    private static GatewayCall Acting(AssistantEntry assistant) => new(assistant.GatewayKeyId, AssistantId: assistant.Id);
 
     /// <summary><c>rag.chat.condense{kind, outcome}</c> (§17); for <c>long</c> every outcome but <c>used</c> is the fallback.</summary>
     private void Count(string kind, CondenseOutcome outcome) =>
@@ -343,6 +349,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         var model = plan.Assistant.Published!.GatewayModel;
+        using var acting = GatewayCallScope.Begin(Acting(plan.Assistant));
         if (stream)
         {
             var response = await gateway.OpenStreamAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId, ct);

@@ -105,6 +105,11 @@ public sealed partial class KnowledgeService(
                 new RetrievalTimings(Ms(started), 0, 0, 0, 0, Ms(started)));
         }
 
+        // B-42 (knowledge §5.2, cost-attribution §4.1): the query embedding and rerank run as the assistant's gateway key, or for a
+        // caller without an assistant as the first searched collection's.
+        using var acting = GatewayCallScope.Begin(request.AssistantId is { } asking
+            ? new GatewayCall(snapshot.Assistants.GetValueOrDefault(asking)?.GatewayKeyId, AssistantId: asking)
+            : new GatewayCall(collections[0].GatewayKeyId, CollectionId: collections[0].Id));
         var (platform, settings) = Settings(snapshot);
         var demote = Demote(snapshot);
         var topics = Topics(request.AssistantId, snapshot);
