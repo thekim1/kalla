@@ -28,6 +28,19 @@ exception, with its own steps.
   `ScannedAt`, although they were scanned; once the admin UI shows *Not scanned for malware* (later in this
   release), set it once after the migration: `UPDATE content."Uploads" SET "ScannedAt" = "UploadedAt" WHERE
   "ScannedAt" IS NULL AND "State" IN ('clean', 'indexed');`
+- **Malware scan optional (#535, A-36, A-37).** The worker's `ClamAv:Mode` is `on` (default) or `off`, and
+  `rag-clamav` now runs only with the Compose profile `clamav`, which `init-deployment.sh` writes into
+  `COMPOSE_PROFILES` unless `--clamav off` (production-setup.md, *Malware scan*). An existing `deploy/.env` has no
+  `clamav` profile yet: **without a re-run, `rag-clamav` does not start after the update, and since the worker is still
+  `on` and fails closed, every upload and fetched file waits with `clamav.unavailable`.** **Apply (Compose):** re-run
+  `init-deployment.sh` with your usual options (it adds the profile and `UME_RAG_CLAMAV_MODE=on`; add `--clamav off`
+  only to store files without a malware scan, then also `dc rm -sf rag-clamav`), then `dc up -d --wait`. Later re-runs
+  keep the mode in `deploy/.env`. Kubernetes: `rag-clamav` moved from `components/ingestion` to `components/clamav`;
+  add `- ../components/clamav` to your overlay's components (as in `example/`), or, to run without the scan, set
+  `ClamAv__Mode=off` in its `ume-rag-worker-config` and delete the old resources (kubernetes.md, *Malware scan*).
+  Portainer: add `clamav` to `COMPOSE_PROFILES` (for example `data,clamav`), or set `UME_RAG_CLAMAV_MODE=off`, and
+  update the stack with the new stack file. **Check:** `dc ps rag-clamav` is healthy (or absent with `--clamav off`,
+  where the worker logs that the scan is off at its start).
 
 ## 0.4.0
 

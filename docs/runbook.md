@@ -299,8 +299,8 @@ dc stop rag-worker              # it gets its stop grace period (120 s) before i
 dc up -d --wait rag-worker
 ```
 
-`dc restart rag-worker` also stops it before it starts. The parser, ClamAV and the renderer (when its `render` profile
-is on) can be restarted on their own: the worker reports them in its own health and retries (a render that loses the renderer fails as
+`dc restart rag-worker` also stops it before it starts. The parser, ClamAV (when its `clamav` profile is on) and the
+renderer (when its `render` profile is on) can be restarted on their own: the worker reports them in its own health and retries (a render that loses the renderer fails as
 `render.unavailable` and keeps the page's last good content).
 
 **After any change to the gateway's models** (a new deployment behind an alias, a provider switch, a gateway upgrade),
@@ -313,7 +313,7 @@ first*).
 
 Docker restarts a container only when its main process exits. ClamAV's does not, so a hung clamd would stay
 unhealthy. `rag-restart-unhealthy.timer` runs `deploy/host/restart-unhealthy.sh` every minute: it restarts every
-container labelled `ume-rag.restart-unhealthy=true` (today `rag-clamav` and `rag-renderer`) that Docker reports
+container labelled `ume-rag.restart-unhealthy=true` (today `rag-clamav` and `rag-renderer`, where they run) that Docker reports
 unhealthy. A container
 in its start period counts as starting, not unhealthy, so a slow first download does not loop.
 
@@ -327,8 +327,8 @@ journalctl -u rag-restart-unhealthy.service --since today
 `deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
 through environment variables, for hosts where `init-deployment.sh` cannot run. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged, plus RAG's services (all named `rag-…`): rag-postgres, rag-migrate,
-rag-api (8543), rag-admin (9543), rag-worker, rag-parser, rag-clamav and, with the `render` profile, rag-renderer. Open
-WebUI is not part of it.
+rag-api (8543), rag-admin (9543), rag-worker, rag-parser and, with their profiles, rag-clamav (`clamav`) and
+rag-renderer (`render`). Open WebUI is not part of it.
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
 gateway's volumes `<stack>_ume-certs`, `<stack>_ume-secrets` and its database are found by it), add the variables
@@ -339,7 +339,8 @@ that can read packages.
 |---|---|
 | `UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL` | required: rag-api's public host name and URL (`https://rag.example.se:8543`) |
 | `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says; without one that service's model calls are refused, so deploy once, issue the keys, add them and update the stack |
-| `COMPOSE_PROFILES` | include `data` (the gateway's Data API, which RAG's admin reads for the model catalogue and org sync); `data,render` adds the renderer |
+| `COMPOSE_PROFILES` | `data,clamav`: the gateway's Data API, which RAG's admin reads for the model catalogue and org sync, and `rag-clamav`, the malware scan; `data,clamav,render` adds the renderer. Without `clamav` the worker's files wait with `clamav.unavailable`, unless `UME_RAG_CLAMAV_MODE` is `off` |
+| `UME_RAG_CLAMAV_MODE` | `on` (default) or `off`: `off`, with `clamav` left out of `COMPOSE_PROFILES`, stores files without a malware scan ([production-setup.md](production-setup.md), *Malware scan*) |
 | `UME_RAG_ORG_SYNC_KEY` | a Data API key with `catalog.read`; without it model settings cannot be saved |
 | `UME_RAG_EMBEDDING_MODEL` | the gateway's model id of the embedding model (`UME_RAG_EMBEDDING_DIMENSIONS`, default 1024; `UME_RAG_EMBEDDING_REQUEST_DIMENSIONS`, default `true`, sends `dimensions`: set `false` for a model without that parameter, such as `bge-m3`). Seeded once: changing these later does not change the profile (`docs/gateway-host-setup.md` §13). Every RAG credential key must allow this model, and its deployment must be marked `Eu` |
 | `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group that grants platform admin (the other roles: `_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER`, `_VIEWER`) |
@@ -387,7 +388,7 @@ the allow-lists are host names, resolved when it runs.
 | `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
 | `llm` (api, admin) | the gateway, the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
 | `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
-| `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy |
+| `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused with `--clamav off` |
 | `backup` (postgres) | the S3 endpoint, DNS; nothing with a mounted share |
 | `openwebui` | `rag-api`'s public URL and the OIDC provider, DNS (when `UME_RAG_OPENWEBUI_HOST` is set) |
 
@@ -535,6 +536,8 @@ Also for G1 and W2:
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
 | `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
 | `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `secrets/renderer.env` is missing: re-run `init-deployment.sh` (it keeps every other secret) |
+| Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `rag-clamav` | The worker's malware scan is `on` (`UME_RAG_CLAMAV_MODE` in `deploy/.env`, or no such line) but `COMPOSE_PROFILES` lacks `clamav`, as in a deployment updated without re-running `init-deployment.sh` (upgrade guide): re-run it with your options (it writes the profile; add `--clamav off` only to store files unscanned), then `dc up -d --wait` |
+| Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; files show *Not scanned for malware* | The deployment runs with `--clamav off` (`UME_RAG_CLAMAV_MODE=off`): intended there, or re-run `init-deployment.sh` with your options plus `--clamav on`, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
 | Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh` with your options plus `--render`, then `dc up -d --wait` and `dc restart rag-worker` |
 | Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `secrets/worker/Render__Endpoint` but `COMPOSE_PROFILES` in `deploy/.env` lacks `render`: re-run `init-deployment.sh` with or without `--render`, so the two match, then `dc up -d --wait` and `dc restart rag-worker` |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |

@@ -16,13 +16,13 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 
 | Component | Where | What it is to Ume.Rag |
 |---|---|---|
-| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav` and, with `init-deployment.sh --render` (profile `render`), `rag-renderer` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
+| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav` (profile `clamav`, unless `init-deployment.sh --clamav off`) and, with `init-deployment.sh --render` (profile `render`), `rag-renderer` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
 | **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call), its Data API (catalogue for the admin's sync), and in the pilot the **shared Keycloak** (realm `ume`). Ume.Rag reaches each by URL only |
 | **Municipal reverse proxy** | in front of the RAG host (and the gateway host) | terminates public TLS and re-encrypts to the RAG listeners (`init-deployment.sh --proxy`) |
 | **Identity provider** | the shared Keycloak (pilot), a standalone Keycloak, or Entra ID / AD FS directly | OIDC for the admin UI and Open WebUI |
 | **Crawled sites** | municipal hosts (private ranges) and public web sites | read by `rag-worker` over HTTP(S) |
 | **Backup target** | a share mounted on the RAG host, or an S3-compatible store | pgBackRest repository and the upload copy |
-| **ClamAV signatures** | `database.clamav.net` (no internal mirror, Decisions "ClamAV updates"), or through an egress proxy | `freshclam` inside `rag-clamav` |
+| **ClamAV signatures** | `database.clamav.net` (no internal mirror, Decisions "ClamAV updates"), or through an egress proxy | `freshclam` inside `rag-clamav`; not reached with `--clamav off` |
 | **OTLP collector** (optional) | municipal monitoring | logs, metrics and traces of the .NET services |
 
 The gateway repository publishes its own services on loopback by default and serves them through its proxy:
@@ -45,7 +45,7 @@ flowchart LR
     owui[open-webui :3000, optional]
     worker[rag-worker]
     parser[rag-parser :8000 internal]
-    clam[rag-clamav :3310 internal]
+    clam[rag-clamav :3310 internal, on by default]
     render[rag-renderer :3000 internal]
     pg[postgres :5432 internal]
   end
@@ -171,7 +171,7 @@ machine).
 | | | every other private, loopback, link-local, CGNAT, documentation, multicast or reserved range | – | rejected | – | list in `docker-user-firewall.sh` (`private=`) |
 | | | the rest of the Internet | any at the firewall; the worker itself fetches only `http`/`https` on 80 and 443 plus `Settings.Crawl.AllowedPorts` | public sites being crawled | with the ingestion overlay | `Settings.Crawl.AllowedPorts` (admin UI, run-time) |
 | | | DNS | 53, UDP and TCP | | always | |
-| `mirror` (172.30.7.0/24) | rag-clamav (freshclam) | `database.clamav.net` | 443, HTTPS | signature updates, four times a day | with the ingestion overlay, no proxy | `images/clamav/freshclam.conf` (`DatabaseMirror`) |
+| `mirror` (172.30.7.0/24) | rag-clamav (freshclam) | `database.clamav.net` | 443, HTTPS | signature updates, four times a day | with the ingestion overlay and the malware scan on (not `--clamav off`), no proxy | `images/clamav/freshclam.conf` (`DatabaseMirror`) |
 | | | **or only** freshclam's HTTP proxy, `UME_RAG_FRESHCLAM_PROXY` | the given `HOST:PORT` | the same through the proxy | with `--freshclam-proxy` | `--freshclam-proxy` |
 | | | DNS | 53, UDP and TCP | | always | |
 | `backup` (172.30.16.0/24) | postgres (pgBackRest) | the S3 endpoint, `UME_RAG_BACKUP_ENDPOINT` | 443 unless the endpoint names a port, HTTPS | WAL archive and backups | with an `s3://` target | `--backup-target s3://ENDPOINT/BUCKET[/PATH]` |
@@ -232,7 +232,7 @@ listeners of §2) and `ss -ltnp`.
 | `postgres` | 5432 (image default) | PostgreSQL over TLS only (`hostnossl ... reject`), database `ragdb`, the four service roles, `scram-sha-256`; the superuser only over the Unix socket | `data` (internal) | rag-migrate, rag-api, rag-admin, rag-worker (`Host=postgres`, `SSL Mode=VerifyFull`) | `deploy/postgres/pg_hba.conf`, `deploy/postgres/postgresql.conf`, `deploy/init-deployment.sh` |
 | `rag-parser` | 8000 | HTTPS (internal CA, name `rag-parser`) | `parser` (internal; its only network) | rag-worker (`Parser__BaseUrl: https://rag-parser:8000`) | `deploy/compose.ingestion.yaml`, `src/parser/Dockerfile` |
 | NER (`ner-0`) | – | runs inside the parser container (`/v1/ner` on port 8000), not a container of its own | – | rag-worker | `src/parser/ume_parser/api.py` |
-| `rag-clamav` (clamd) | 3310 | TCP, **no TLS and no authentication** | `ingestion` (internal) | rag-worker (`ClamAv__Host: rag-clamav`, `ClamAv__Port: 3310`, INSTREAM) | `images/clamav/clamd.conf` (`TCPSocket 3310`), `deploy/compose.ingestion.yaml` |
+| `rag-clamav` (clamd) | 3310 | TCP, **no TLS and no authentication** | `ingestion` (internal) | rag-worker (`ClamAv__Host: rag-clamav`, `ClamAv__Port: 3310`, INSTREAM; not with `ClamAv__Mode: off`, when the container doesn't run) | `images/clamav/clamd.conf` (`TCPSocket 3310`), `deploy/compose.ingestion.yaml` |
 | `rag-renderer` (Playwright `launch-server`, Chromium) | 3000 | WebSocket, **plain** (`ws://`), a secret path instead of TLS | `render` (internal; its only network) | rag-worker (`Render__Endpoint`, a secret file: `ws://rag-renderer:3000/<path>`) | `images/renderer/launch-server.json`, `deploy/compose.ingestion.yaml`, `deploy/init-deployment.sh` |
 | `rag-api`, `rag-admin` | 8443 | HTTPS | `edge`, `data`, `llm` | only through the published host ports of §2 | `deploy/compose.prod.yaml` (`Kestrel__Endpoints__Https__Url`) |
 | `rag-worker` | 8443 | HTTPS | `data`, `llm`, `ingestion`, `parser`, `render`, `crawl` | none: not published; its health check runs inside the container | `deploy/compose.ingestion.yaml` |
@@ -320,7 +320,9 @@ the proxy, rag-api sees that address only when the proxy is in the trusted proxi
 both.
 
 - **With it:** the `crawl`, `mirror`, `ingestion`, `parser` and `render` rules of §3 and §4 apply: egress to crawled sites, to
-  `database.clamav.net` (or the proxy) and to the gateway from `crawl`.
+  `database.clamav.net` (or the proxy) and to the gateway from `crawl`. With `--clamav off` no `rag-clamav` runs, so
+  nothing uses `mirror` and the worker sends nothing to port 3310; files are stored without a malware scan
+  (production-setup.md, *Malware scan*). The firewall still writes the `mirror` rules; they match nothing.
 - **Without it** (`docker compose -f deploy/compose.prod.yaml ...`): no rag-worker, parser, ClamAV or renderer, so no egress to
   crawled sites or ClamAV, and nothing is ingested. The firewall still writes rules for the unused subnets; they match
   nothing.
@@ -375,7 +377,7 @@ Outbound from <rag host>
   [ ] -> <dns resolvers>:53/udp+tcp                       always
   [ ] -> <crawled public sites>:80,443/tcp                ingestion (plus Settings.Crawl.AllowedPorts)
   [ ] -> <municipal ranges in UME_RAG_CRAWL_ALLOW>:80,443/tcp  ingestion
-  [ ] -> database.clamav.net:443/tcp, or <freshclam proxy>:<port>/tcp  ingestion
+  [ ] -> database.clamav.net:443/tcp, or <freshclam proxy>:<port>/tcp  ingestion, unless --clamav off
   [ ] -> <s3 endpoint>:443/tcp, or the backup share's protocol to <backup host>  always
   [ ] -> <proxy>:443/tcp                                  with Open WebUI (its model connection, the feedback import)
   [ ] -> <otlp collector>:<port>/tcp                      optional
@@ -419,7 +421,8 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | Trace sampling | edit `deploy/.env` | `UME_RAG_OTEL_TRACES_SAMPLER` (`parentbased_traceidratio`), `UME_RAG_OTEL_TRACES_SAMPLER_ARG` (`0.1`) | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` (api, admin, worker) |
 | Municipal crawl ranges | `--crawl-allow` | `UME_RAG_CRAWL_ALLOW` | `Crawl__AllowedPrivateRanges` (worker), the firewall (`crawl`) |
 | Extra crawl ports | admin UI | `Settings.Crawl.AllowedPorts` (database) | the worker's egress guard |
-| freshclam proxy | `--freshclam-proxy` | `UME_RAG_FRESHCLAM_PROXY`, `secrets/clamav/freshclam.conf` | freshclam, the firewall (`mirror`) |
+| freshclam proxy | `--freshclam-proxy` | `UME_RAG_FRESHCLAM_PROXY`, `secrets/clamav/freshclam.conf` (not with `--clamav off`) | freshclam, the firewall (`mirror`) |
+| Malware scan | `--clamav on\|off` | `UME_RAG_CLAMAV_MODE` and the profile `clamav` in `COMPOSE_PROFILES` | `ClamAv__Mode` (worker); whether `rag-clamav` runs |
 | S3 backup endpoint | `--backup-target s3://...` | `UME_RAG_BACKUP_ENDPOINT`, `secrets/pgbackrest/repo.conf` | pgBackRest, the firewall (`backup`) |
 | Subnets | fixed | the Compose files' `networks` | `docker-user-firewall.sh` (`--subnet` when they differ) |
 | One more destination, other resolvers | `--allow NETWORK=HOST[:PORT]`, `--dns IP` | a drop-in for `rag-firewall.service` (`systemctl edit`, [runbook](runbook.md#host-firewall)) | `docker-user-firewall.sh` |

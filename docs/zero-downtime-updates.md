@@ -116,7 +116,8 @@ Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of i
 It checks that all four slots are healthy, runs `rag-migrate`, then replaces `rag-api`, `rag-api-b`, `rag-admin` and
 `rag-admin-b` one after the other. It waits until each new slot is healthy, plus `UME_RAG_ROLLING_SETTLE_SECONDS` (15)
 so the proxy takes it back into rotation, before stopping the next, and refuses to stop a slot while its partner is
-unhealthy. Then it updates the worker (stop, then start), the parser, ClamAV and the renderer, each only if it changed.
+unhealthy. Then it updates the worker (stop, then start), the parser, ClamAV and the renderer (the last two where their
+profiles are on), each only if it changed.
 A slot whose image did not change is left alone; `--force` recreates it anyway, for example after `--renew-certs`.
 
 A new `POSTGRES_IMAGE` restarts the database, which is never rolling: the script stops with an error unless you pass

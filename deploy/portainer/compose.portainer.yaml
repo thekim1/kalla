@@ -40,9 +40,9 @@
 #
 # ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
 # The same stack also runs Ume Rag: rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker,
-# rag-parser, rag-clamav and, with COMPOSE_PROFILES=render, rag-renderer. Its one-shot rag-bootstrap creates RAG's
-# certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first start. Keep the stack
-# name: the gateway's volumes are found by it.
+# rag-parser and, with their profiles in COMPOSE_PROFILES, rag-clamav (clamav) and rag-renderer (render). Its one-shot
+# rag-bootstrap creates RAG's certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first
+# start. Keep the stack name: the gateway's volumes are found by it.
 #
 # Required variables (besides the gateway's above)
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
@@ -54,9 +54,11 @@
 #                             one the stack starts but that service's model calls are refused. To rotate one, change
 #                             it, update the stack, then restart that service (it reads the key at start).
 # Recommended
-#   COMPOSE_PROFILES=data     the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
+#   COMPOSE_PROFILES=data,clamav
+#                             data: the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
 #                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
-#                             with catalog.read
+#                             with catalog.read. clamav: rag-clamav, the malware scan, which the worker expects by
+#                             default: without it files wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
 #   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
 #                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (true)
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
@@ -67,7 +69,9 @@
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
-#   COMPOSE_PROFILES=data,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   COMPOSE_PROFILES=data,clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
+#                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
 #   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
 #                             ghcr.io as a registry in Portainer if the packages are private)
 # Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
@@ -219,6 +223,8 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/gateway.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/gateway.key
       Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
+      # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
+      Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem
@@ -267,6 +273,8 @@ services:
       Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:?Set UME_GATEWAY_PUBLIC_URL (https URL)}
       DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: https://gateway:8443
+      # Integration API (/integration/v1): requests per minute per credential key.
+      Admin__IntegrationRequestsPerMinute: ${UME_INTEGRATION_REQUESTS_PER_MINUTE:-60}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
       - {<<: *certs-mount, volume: {subpath: adminapi}}
@@ -549,6 +557,8 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
       Parser__BaseUrl: https://rag-parser:8000
+      # on needs rag-clamav (the clamav profile); off stores files without a malware scan.
+      ClamAv__Mode: ${UME_RAG_CLAMAV_MODE:-on}
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
@@ -571,7 +581,8 @@ services:
       rag-migrate: {condition: service_completed_successfully}
       # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while.
       rag-parser: {condition: service_started}
-      rag-clamav: {condition: service_started}
+      # Only with the clamav profile.
+      rag-clamav: {condition: service_started, required: false}
     # rag-crawl holds the default route (the Internet); llm reaches the gateway.
     networks:
       rag-data: {}
@@ -611,8 +622,10 @@ services:
     # Internal network only: no egress at all (parser design §11).
     networks: [rag-parser]
 
+  # The malware scan. Add clamav to COMPOSE_PROFILES; leave it out only with UME_RAG_CLAMAV_MODE=off.
   rag-clamav:
     <<: *hardened
+    profiles: [clamav]
     image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.2.0@sha256:88b90287deafedcdbc5209a9b3c485c72fc4c23ad395d9ff994d33b35cf1a0ec}
     user: "1000:1000"
     restart: unless-stopped

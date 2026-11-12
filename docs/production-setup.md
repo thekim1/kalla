@@ -1,8 +1,8 @@
 # Production setup
 
 The pilot runs on one Linux host with Docker Compose: six long-running containers (`postgres` with pgBackRest inside,
-`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`), with `--render` a seventh (`rag-renderer`, below), and
-the one-shot `rag-migrate`, all in the Compose project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and
+`rag-api`, `rag-admin`, `rag-worker`, `rag-parser` and, unless `--clamav off`, `rag-clamav`: *Malware scan*, below), with
+`--render` a seventh (`rag-renderer`, below), and the one-shot `rag-migrate`, all in the Compose project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and
 control zone, `deploy/compose.ingestion.yaml` the ingestion zone; `init-deployment.sh` lists both (and the overlays your options need) in `COMPOSE_FILE` in `deploy/.env`,
 so every command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory
 that holds `deploy/`.
@@ -70,8 +70,10 @@ The limits add up to about 12 GB on a 16 GB host and 18.75 GB on a 24 GB host (2
 Docker keep about 2 GB, and the limits are not all reached at once. Under CPU contention the data plane (weight 1024)
 gets about four times the CPU of each ingestion container, and the slice holds the ingestion zone at five cores. On a
 24 GB host ClamAV keeps its old engine during a signature reload (`ConcurrentDatabaseReload yes`) and test-loads
-updates (`TestDatabases yes`); on a 16 GB host it has no room for that. The R1 release test (P1) confirms or corrects
-these numbers. On-prem model capacity is the gateway's, measured with `scripts/capacity/`
+updates (`TestDatabases yes`); on a 16 GB host it has no room for that. Without ClamAV (`--clamav off`, *Malware scan*,
+below) the limits add up to 1.5 GB less on a 16 GB host and 3 GB less on a 24 GB host, with 1.2 GB less reserved and one
+CPU fewer in the ingestion zone; the slice's cap stays as it is. The R1 release test (P1) confirms or corrects these
+numbers. On-prem model capacity is the gateway's, measured with `scripts/capacity/`
 ([its README](../scripts/capacity/README.md)).
 
 ## Install
@@ -159,8 +161,9 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--backup-s3-credentials-file FILE` | – | with an `s3://` target: access key and secret key on two lines |
 | `--backup-s3-region R` | `us-east-1` | with an `s3://` target |
 | `--crawl-allow CIDR[,CIDR]` | – | private ranges the crawler may fetch (municipal hosts): `UME_RAG_CRAWL_ALLOW`, used by the worker and the firewall |
-| `--host-memory 16\|24` | 16 | the host profile; 24 adds `compose.host-24g.yaml` and the ClamAV confs |
+| `--host-memory 16\|24` | 16 | the host profile; 24 adds `compose.host-24g.yaml` and, with the malware scan on, the ClamAV confs |
 | `--freshclam-proxy HOST:PORT` | – | freshclam reaches `database.clamav.net` through this HTTP proxy |
+| `--clamav on\|off` | `on`; a re-run without it keeps the value in `deploy/.env` | the malware scan: `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and, with `on`, the profile `clamav` in `COMPOSE_PROFILES`, so `rag-clamav` runs. `off` runs no `rag-clamav`, writes no ClamAV confs (even with `--host-memory 24` or `--freshclam-proxy`) and says so at the end: files are stored without a malware scan (*Malware scan*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--render` | – | runs `rag-renderer` for sources with fetch mode `browser`: `COMPOSE_PROFILES=render` in `deploy/.env` and the worker's `secrets/worker/Render__Endpoint`. Without it neither, and those sources wait with `render.not_configured` (*Renderer*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--openwebui-host HOST` | – | the optional Open WebUI stack (below); the options below need it |
 | `--openwebui-oidc-client-id ID` | `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`) |
@@ -335,9 +338,36 @@ or a systemd mount unit that `docker.service` requires); the script creates the 
 999 (pgBackRest) and 1654 (the upload copy). Retention is 35 days (`repo1-retention-full=35`): a full backup expires
 once a newer one is at least 35 days old.
 
+## Malware scan
+
+The malware scan is the deployment's choice (Decisions "Malware scan optional"): `init-deployment.sh --clamav on|off`,
+`on` by default, sets the worker's `ClamAv:Mode` through `UME_RAG_CLAMAV_MODE` in `deploy/.env`.
+
+- **`on`** (the default): `rag-clamav` runs (the Compose profile `clamav` in `COMPOSE_PROFILES`), and the worker scans
+  every upload and every fetched file other than HTML, text and CSV before storing it. The scan fails closed: while
+  clamd is down or still loading its signatures, those files wait with `clamav.unavailable` and are retried.
+- **`off`**: no `rag-clamav` container runs and the worker contacts no clamd. Files are stored and parsed **without a
+  malware scan**: nothing is quarantined. The worker says so at every start with a warning and security event 5106
+  `rag.malware.scan_off` ([security events](security-events.md)); its `clamav` health check stays Healthy and says that
+  the scan is off; upload slots are `unscanned` (never `clean`) with no scan time, a run's report has
+  `malwareScan: "off"`, and the admin UI shows *Not scanned for malware* on those files and runs. Sizing: the
+  `rag-clamav` row of *Sizing* (above) drops out, and the `mirror` network and `database.clamav.net` are not used.
+
+Choose `off` only where the files come from sources you trust, or where they are scanned before they reach RAG. **Files
+stored while the scan is off are not scanned when you turn it on later**: they stay as they are and keep their
+*Not scanned for malware* mark; only new and changed files are scanned from then on.
+
+To change it, re-run `init-deployment.sh` with your options plus `--clamav off` or `--clamav on` (a re-run without the
+option keeps the current mode), then `docker compose --env-file deploy/.env up -d --wait`, which recreates the worker
+with the new mode. When turning it off, also `docker compose --env-file deploy/.env rm -sf rag-clamav` (`up` leaves a
+container of a profile that is off alone). When turning it on, freshclam downloads the signatures first (several
+minutes); files wait with `clamav.unavailable` until clamd is ready. On Kubernetes the same choice is the
+`components/clamav` component ([Kubernetes](kubernetes.md), *Malware scan*); in the Portainer stack, `clamav` in
+`COMPOSE_PROFILES` and `UME_RAG_CLAMAV_MODE`.
+
 ## ClamAV signatures
 
-freshclam updates the signatures straight from `database.clamav.net` (no internal mirror), four times a day, through
+With the malware scan on, freshclam updates the signatures straight from `database.clamav.net` (no internal mirror), four times a day, through
 the `mirror` network, which reaches nothing else. That host name is served by a CDN: the firewall resolves it when it
 runs (at Docker start and every 15 minutes), so an address change can block updates until the next run. **Where IT
 provides an egress proxy, use it**: `--freshclam-proxy HOST:PORT` writes `HTTPProxyServer`/`HTTPProxyPort` into a copy

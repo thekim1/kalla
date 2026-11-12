@@ -6,6 +6,9 @@
 #
 # The parser listens with TLS on 8000 with a certificate from the internal CA (init-deployment.sh); the worker trusts
 # that CA through SSL_CERT_FILE. clamd has no TLS or authentication, so it stays on the internal ingestion network.
+# It runs only with the clamav profile (in COMPOSE_PROFILES unless init-deployment.sh --clamav off, which also sets the
+# worker's ClamAv__Mode to off through UME_RAG_CLAMAV_MODE; §5.5). The worker asked for on with no clamd running fails
+# closed: files wait with clamav.unavailable.
 # The renderer (Chromium behind Playwright's launch-server, §5.4) has plain WebSocket on 3000 with a secret path, on
 # the internal render network only: the worker fetches every request the browser makes (connectors design §8.3).
 # It runs only with the render profile (COMPOSE_PROFILES=render in deploy/.env, from init-deployment.sh --render, which
@@ -40,6 +43,9 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
       Parser__BaseUrl: https://rag-parser:8000
+      # on (default): every upload and fetched file is scanned, fail-closed; off: stored unscanned, with no rag-clamav
+      # (init-deployment.sh --clamav; connectors design §11).
+      ClamAv__Mode: ${UME_RAG_CLAMAV_MODE:-on}
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
@@ -68,8 +74,8 @@ services:
       # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while; the worker
       # reports them in its own health and retries.
       rag-parser: {condition: service_started}
-      rag-clamav: {condition: service_started}
-      # Only with the render profile.
+      # Only with the clamav and render profiles.
+      rag-clamav: {condition: service_started, required: false}
       rag-renderer: {condition: service_started, required: false}
     # crawl: the only network with Internet egress, filtered by the host firewall (§6.1). All egress leaves through the
     # network that holds the default route, so gw_priority pins it to crawl, whose allow-list also has the gateway.
@@ -119,6 +125,8 @@ services:
 
   rag-clamav:
     <<: *hardened
+    # On by default (init-deployment.sh puts clamav in COMPOSE_PROFILES); --clamav off leaves it out.
+    profiles: [clamav]
     image: ${CLAMAV_IMAGE:-ume-rag/clamav:latest}
     # The image's clamav user (images/clamav/Dockerfile).
     user: "1000:1000"
