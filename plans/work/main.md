@@ -200,7 +200,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
 - **Waits on:** nothing since **gateway v0.10.0** (released 2026-11-12: phases 1–3, the credential bound,
   `organisation.read`, member groups). Member groups now come from the context (B-35, A-33). The live checks of
-  B-42–B-46, A-34 and A-35 wait on the interim gateway on v0.10.0.
+  B-42–B-46, A-34 and A-35 wait on the interim gateway on v0.10.1.
 - **Closed (2026-11-12):** the 401-vs-403 difference in the gateway's docs is reported on #580; "each service reads
   the features from its own context" is in Decisions "Gateway keys".
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;

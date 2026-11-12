@@ -447,7 +447,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   rerank) carries the document's or evaluation's collection's `GatewayKeyId` (engine §7.7); a collection without a key
   runs as the credential key. Engine §7.3 on B-42's typed refusal: `402 budget_exceeded` → attempt counted,
   `AvailableAt` the next full hour, after `MaxAttempts` `failed` with `gateway.budget_exhausted`; `403
-  delegation_not_allowed`, `403 key_disabled`, `401 key_revoked`/`key_expired` the same with `gateway.key_unavailable`;
+  delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired` the same with `gateway.key_unavailable`;
   a missing or different echo fatal `gateway.delegation_not_applied` with 5011 and nothing stored; the key's `429` as
   any `429`.
 - **Paths:** `src/Ume.Rag.Worker/**` (not `Processing/Pii/**`, `Engine/HnswIndexHealth.cs`),
@@ -457,7 +457,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   next full hour and the run item ends `failed` `gateway.budget_exhausted` after `MaxAttempts`; a disabled key gives
   `gateway.key_unavailable`; with `DropOnBehalfOfEcho` the job fails `gateway.delegation_not_applied`, 5011 is logged
   and no vector is stored; a set generation's calls carry the collection's key.
-- **Live check:** on the interim gateway on v0.10.0 (not deployed yet): an ingestion run of a knowledge base with an
+- **Live check:** on the interim gateway on v0.10.1 (not deployed yet): an ingestion run of a knowledge base with an
   assigned key shows under that key in the gateway's usage report, with the worker's credential key as the via key.
 - **Waits on:** B-42 (the shared reader and handler, the typed refusal, the FakeGateway's modes), B-36
   (`Collections.GatewayKeyId`), A-31 (the same clients: its cost reading goes first).
@@ -476,7 +476,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `docs/**` (not `docs/security-events.md`, `docs/accessibility-statement.md`).
 - **Done when:** `deploy-checks` pass; with the variable set the admin container gets `Gateway__IntegrationApiUrl`,
   unset it gets none; the runbook names each refusal reason and its fix.
-- **Live check:** on the test host with the gateway on v0.10.0: the admin's budget read-back answers for a real key.
+- **Live check:** on the test host with the gateway on v0.10.1: the admin's budget read-back answers for a real key.
 - **Waits on:** B-45 (the setting in code), A-30 (one credential key per service in the deployment).
 - **Read:** gateway-changes §5.6, §5.7; admin §8.6; identity §4.7, §10; engine §7.3; repo-and-deployment §6.3, §7.1.
 

@@ -345,7 +345,7 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429, or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
 | Gateway `402 budget_exceeded` (budget used up: the knowledge base's key, its team or department; the gateway's message names which) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
-| The knowledge base's gateway key unusable, on a call sent with `x-ume-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked` or `401 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
+| The knowledge base's gateway key unusable, on a call sent with `x-ume-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `403 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
 | Gateway 403 `max_residency_not_met`; 400 | fatal, reason `gateway.<code>` | – | – |
 | Gateway answer above the residency ceiling (`x-ume-residency`) | fatal, result discarded, event 5003 | – | – |
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |

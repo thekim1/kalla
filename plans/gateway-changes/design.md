@@ -336,7 +336,7 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
 in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
-groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
+groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). Ume.Rag pins **v0.10.1** (#86: a refusal of the assigned key is always `403`, §5.7). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
 `/v1/ume/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
 by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
 does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Ume.Rag relies on; where it and the
@@ -378,7 +378,7 @@ resolves it right after authenticating the credential key, before the body is re
 | Header not one GUID, or repeated | `400 invalid_request` (nothing logged) |
 | Caller not a credential key, the id not an assigned key of the same integration (unknown ids answer the same), or the two keys sharing no residency (§5.3) | `403 delegation_not_allowed` |
 | Assigned key disabled, or its team or department inactive | `403 key_disabled` |
-| Assigned key revoked or expired | `401 key_revoked` / `401 key_expired`, the codes a presented key gets; the gateway's `docs/integrations.md` and `integrations.json` say `403` here, the code answers `401` |
+| Assigned key revoked or expired | `403 key_revoked` / `403 key_expired` (gateway v0.10.1, #86; v0.10.0 answered `401 key_expired` and, for a revoked key, `403 delegation_not_allowed`). A `401` is always the credential key's own refusal |
 | Usable | the request runs as the assigned key; the answer carries `x-ume-on-behalf-of` with the applied id |
 
 - Ume.Rag sends the key's id, never a name, and only once the latest context's `gateway.features` contains
@@ -490,7 +490,8 @@ responsible for the money.
 | Gateway answer to a request with `x-ume-on-behalf-of` | Ume.Rag |
 |---|---|
 | `400 invalid_request` on the header | a bug in Ume.Rag: logged at Error, never retried |
-| `403 delegation_not_allowed`, `403 key_disabled`, `401 key_revoked`, `401 key_expired` | the object's key is unusable; final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1). A `401` is also what a revoked or expired credential key gets; the next context call tells them apart (a revoked assigned key leaves `assigned_keys`, a bad credential key fails the context call itself, admin §4.10) |
+| `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`, `403 key_expired` | the object's key is unusable; final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1) |
+| `401` (any code) | the credential key itself failed, not the object's key: a configuration fault, handled as any `401` from the gateway (alert the operators); never an attention item on the object |
 | `402 budget_exceeded` | as above, with the gateway's message (§5.4) |
 | `429 rate_limited` | the assigned key's own limit: as any `429` (chat §3.6 passes `Retry-After` on; the worker waits for it, engine §7.3) |
 | a `2xx` or `304` without the echo, or with another id | 5011 `rag.gateway.delegation_missing`, the call aborted before use (identity §10) |
