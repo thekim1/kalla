@@ -72,7 +72,7 @@ Nothing in the repository changes. You set values in one of two places:
 |---|---|---|
 | The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--ca-file`) |
 | Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
-| The org sync's Data API key (`catalog.read`) | `OrgSync:BaseUrl=https://<Data API host>` (no `/v1`; the address the gateway admin UI shows under *Access → Data API access*), `OrgSync:DataApiKey=<key>` (a Data API key with `catalog.read`; passed to the admin API only) | `--org-sync-key-file org-sync.key` |
+| The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/ume/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
 | The shared Keycloak for Open WebUI | stream B's `open-webui` resource (J9) | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
 | Open WebUI's client in rag-api | created by the AppHost seed (with J9) | create it in the admin API (Scalar): kind `open-webui`, its ceiling, `AllowedIpRanges` = the Open WebUI host (identity design §5.3); then `--openwebui-api-key-file open-webui.key --openwebui-rag-client-id <its id>` |
@@ -111,12 +111,12 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 | | Status |
 |---|---|
 | Stream B's gateway client, `EmbeddingProfile:*` seeder and canary recording (`GET /api/gateway/status`) | now (#123) |
-| The AppHost's real-gateway mode: `Gateway:Services:<service>:Key` per service, `OrgSync:*` passed to the admin API | now (#119, B-37) |
+| The AppHost's real-gateway mode: `Gateway:Services:<service>:Key` per service, `OrgSync:IntervalMinutes` passed to the admin API | now (#119, B-37) |
 | `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | now (#159: column, seeder, admin calls, query embedding; #162: the worker's embed, canary and evaluation calls) |
 | The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
 | `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
 | An API key for `/v1/retrieve`: `POST /api/keys` in the admin API (#185), or the dev seed's `--api-key` offline (§4.4) | now |
-| On the gateway: the integration *Ume.Rag* with one credential key per service, each allowing `OnPrem` and `Eu` only; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
+| On the gateway: the integration *Ume.Rag* with one credential key per service, each allowing `OnPrem` and `Eu` only; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; the scope `organisation.read` on the admin's key for the organisation and model syncs | now (the gateway session) |
 | `psql` on your machine, or the AppHost's Postgres container (`--docker` below); Python 3.12 | now |
 
 ### 4.2 User secrets
@@ -133,8 +133,6 @@ dotnet user-secrets --project $p set Gateway:MaxResidency Eu                    
 dotnet user-secrets --project $p set Gateway:Services:api:Key <rag-api's credential key>      # now
 dotnet user-secrets --project $p set Gateway:Services:admin:Key <rag-admin's credential key>  # now
 dotnet user-secrets --project $p set Gateway:Services:worker:Key <rag-worker's credential key>  # now
-dotnet user-secrets --project $p set OrgSync:BaseUrl https://<Data API host>             # now (not the gateway's host)
-dotnet user-secrets --project $p set OrgSync:DataApiKey <the catalog.read key>           # now
 dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # now
 dotnet user-secrets --project $p set EmbeddingProfile:Dimensions 1024                    # now
 dotnet user-secrets --project $p set EmbeddingProfile:RequestDimensions true             # now
@@ -150,11 +148,10 @@ migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfil
 exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
 profile differs from `EmbeddingProfile:*`).
 
-`OrgSync:BaseUrl` is the **Data API's** address, not the gateway's: on a deployed gateway the Data API
-(`/v1/catalog/*`) runs as its own service on its own host (gateway runbook, *Data API (optional)*). Give the address
-without `/v1`, as the gateway admin UI shows it under *Access → Data API access*, with a Data API key that has
-`catalog.read`. With the gateway's host both the model sync and the org sync fail with HTTP 404, the model mirror stays
-empty, and every model setting is refused (V32) (#440).
+The admin's organisation and model syncs read the gateway itself (`GET /v1/ume/context`, `GET /v1/models`) with
+`Gateway:Services:admin:Key`; there is no Data API key. Without the scope `organisation.read` on that key the
+organisation sync keeps departments and teams as they are and the admin's gateway status says why (`degraded`). Until
+the model sync has run, the model mirror is empty and every model setting is refused (V32).
 
 ### 4.3 Start
 
@@ -312,7 +309,6 @@ left it:
 p=src/Ume.Rag.AppHost
 for k in DevelopmentVolumes:Postgres FakeGateway:Enabled Gateway:BaseUrl \
          Gateway:Services:api:Key Gateway:Services:admin:Key Gateway:Services:worker:Key \
-         OrgSync:BaseUrl OrgSync:DataApiKey \
          EmbeddingProfile:GatewayModel EmbeddingProfile:Dimensions EmbeddingProfile:RequestDimensions \
          EmbeddingProfile:MaxInputTokens EmbeddingProfile:MaxResidency; do
   dotnet user-secrets --project $p remove $k

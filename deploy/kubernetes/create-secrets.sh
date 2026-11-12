@@ -6,7 +6,6 @@
 #       --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
 #       --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
 #       --gateway-credential-key-file worker=rag-worker.key \
-#       --org-sync-url https://llm-data.example.se --org-sync-key-file data.key \
 #       --backup-target s3://... --allow-file-keys [--render]
 #   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag [--datastores] [--renderer]
 #
@@ -32,7 +31,7 @@ while [ $# -gt 0 ]; do
     --renderer) renderer=1; shift;;
     --certs-dir) certs="$2"; shift 2;;
     --secrets-dir) secrets="$2"; shift 2;;
-    -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done

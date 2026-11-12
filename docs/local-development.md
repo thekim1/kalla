@@ -120,8 +120,8 @@ Clients: `ume-rag-admin` (the admin BFF, code + PKCE), `ume-rag-api-dev` (client
 
 Every model call goes through the gateway; locally that is `Ume.Rag.FakeGateway`
 ([`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.3). It serves 1024-dimension embeddings,
-chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and the catalogue
-(`/v1/catalog/departments`, `/v1/catalog/teams`). Like the real gateway it requires `x-ume-max-residency` and answers
+chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and `/v1/ume/context` (the
+organisation and the assigned keys, which the admin's syncs read). Like the real gateway it requires `x-ume-max-residency` and answers
 with `x-ume-residency`. Each service has its own dev credential key, as the gateway integration *Ume.Rag* gives
 (production-setup.md, *Gateway credential keys*): the service gets it as `Gateway__Key`, and the fake accepts api's and
 admin's at every ceiling and the worker's up to `Eu`, narrowing a higher ceiling to the key's residencies as the gateway
@@ -158,10 +158,12 @@ By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secre
 in the AppHost user secrets, made as production-setup.md, *Gateway credential keys*, says:
 `Gateway:Services:<service>:Key` (service `api`, `admin` or `worker`), which the service gets as `Gateway:Key`. The
 AppHost stops on an unknown service, and on the per-level keys of before B-37 (`Gateway:Keys:<level>`): remove them.
-Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all three, and `OrgSync:BaseUrl` and `OrgSync:DataApiKey`
-(the organisation sync's Data API key) to the admin API. The gateway's FakeLlm needs gateway release 1 for
-1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama provider with `bge-m3`. Every
-credential key must have PII policy `Off` or `Allow` for embeddings, never `Redact` or `Block`.
+Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all three, and `OrgSync:IntervalMinutes` to the admin API,
+whose organisation and model syncs read the gateway with its credential key (scope `organisation.read`). The AppHost
+stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before: remove them. The gateway's
+FakeLlm needs gateway release 1 for 1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama
+provider with `bge-m3`. Every credential key must have PII policy `Off` or `Allow` for embeddings, never `Redact` or
+`Block`.
 
 ## Build and test
 

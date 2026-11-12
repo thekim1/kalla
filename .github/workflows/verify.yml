@@ -360,20 +360,20 @@ jobs:
       - name: init-deployment.sh keeps its secrets on a re-run
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
         # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the
-        # gateway credential keys land one per service (a per-level key file left from before is deleted); the Open
-        # WebUI files render with the generated deploy/.env; --render turns the renderer's profile and the worker's
-        # endpoint on together; --clamav on|off sets the malware scan's profile, mode and confs, and a re-run keeps it.
+        # gateway credential keys land one per service (a per-level key file or the Data API key left from before is
+        # deleted, and the Data API options are refused); the Open WebUI files render with the generated deploy/.env;
+        # --render turns the renderer's profile and the worker's endpoint on together; --clamav on|off sets the malware
+        # scan's profile, mode and confs, and a re-run keeps it.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
-          for k in api admin worker owui-key owui-secret data-api; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
+          for k in api admin worker owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
           init() {
             bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
               --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
               --gateway-credential-key-file api="$d/keys/api" --gateway-credential-key-file admin="$d/keys/admin" \
               --gateway-credential-key-file worker="$d/keys/worker" --openwebui-host chat.example.se \
               --openwebui-api-key-file "$d/keys/owui-key" --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
-              --org-sync-url https://data.example.se/v1/ --org-sync-key-file "$d/keys/data-api" --proxy-address 10.1.2.3 \
-              --backup-target local --allow-file-keys --no-chown --yes "$@"
+              --proxy-address 10.1.2.3 --backup-target local --allow-file-keys --no-chown --yes "$@"
           }
           generated() {
             s="$d/deploy/secrets"
@@ -403,13 +403,17 @@ jobs:
             echo "a credential key for parser was accepted"; exit 1
           fi
           grep -q 'SERVICE is api, admin or worker' <<< "$out"
-          # The Data API (#453): the bare root in .env and the admin's environment, its key a secret.
-          grep -qx 'UME_RAG_ORG_SYNC_URL=https://data.example.se' "$d/deploy/.env"
-          [ "$(cat "$s/admin/OrgSync__DataApiKey")" = data-api-placeholder ]
+          # The Data API is gone (#580): the admin syncs with its credential key. A Data API key file of before is deleted
+          # and named, the old options are refused, and nothing in .env or the admin's environment points at it.
+          printf 'old\n' > "$s/admin/OrgSync__DataApiKey"
+          init --render > "$d/init.log"
+          [ ! -e "$s/admin/OrgSync__DataApiKey" ]
+          grep -q 'deleted the Data API key file admin/OrgSync__DataApiKey' "$d/init.log"
+          if out="$(init --org-sync-key-file "$d/keys/admin" 2>&1)"; then echo "--org-sync-key-file was accepted"; exit 1; fi
+          grep -q -- '--org-sync-key-file is gone' <<< "$out"
+          if grep -q ORG_SYNC "$d/deploy/.env"; then echo "deploy/.env still has a Data API setting"; exit 1; fi
           docker compose --env-file "$d/deploy/.env" config --format json \
-            | jq -e '.services["rag-admin"].environment.OrgSync__BaseUrl == "https://data.example.se"' >/dev/null
-          if out="$(init --org-sync-url http://data.example.se 2>&1)"; then echo "an http:// Data API was accepted"; exit 1; fi
-          grep -q 'org-sync-url must be an https:// URL' <<< "$out"
+            | jq -e '.services["rag-admin"].environment | has("OrgSync__BaseUrl") | not' >/dev/null
           # The published ports admit only the proxy (#453): --proxy-address lands in .env, the firewall rejects the rest.
           grep -qx 'UME_RAG_PROXY_SOURCES=10.1.2.3' "$d/deploy/.env"
           if out="$(init --proxy-address proxy.example.se 2>&1)"; then echo "a host name was accepted as --proxy-address"; exit 1; fi

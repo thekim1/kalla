@@ -2,9 +2,8 @@
 # the gateway's deploy/compose.portainer.yaml (taken unchanged) and inlines the "@INCLUDE path" lines, so the gateway
 # and RAG run as one Portainer stack. Every RAG name starts with rag- (services, networks, volumes, configs): nothing
 # of the gateway's is renamed, and its volumes keep their names. rag-api, rag-admin and rag-worker join the gateway's
-# llm network to reach https://gateway:8443, trusting the gateway's CA. The gateway's Data API is not on llm (a
-# standalone gateway has no reason to put it there), so the "@JOIN service network" lines below add one RAG network to
-# a gateway service's networks: dataapi joins rag-dataapi, which only rag-admin shares (https://dataapi:8443).
+# llm network to reach https://gateway:8443, trusting the gateway's CA. rag-admin's organisation and model syncs call
+# the gateway there too (/v1/ume/context and /v1/models, with its credential key).
 #
 # Differences from compose.prod.yaml + compose.ingestion.yaml, for a host without deploy/host/ and init-deployment.sh:
 # no fixed subnets and no host firewall, no ingestion slice (cgroup_parent), no pgBackRest (archive_mode off: back up
@@ -29,11 +28,8 @@
 #                             one the stack starts but that service's model calls are refused. To rotate one, change
 #                             it, update the stack, then restart that service (it reads the key at start).
 # Recommended
-#   COMPOSE_PROFILES=data,clamav
-#                             data: the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
-#                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
-#                             with catalog.read. clamav: rag-clamav, the malware scan, which the worker expects by
-#                             default: without it files wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
+#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan, which the worker expects by default: without it files
+#                             wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
 #   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
 #                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (true)
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
@@ -44,7 +40,7 @@
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
-#   COMPOSE_PROFILES=data,clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
 #   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
 #                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
 #   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
@@ -85,7 +81,6 @@ x-rag-secrets: &rag-secrets-mount
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
       UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
-      UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
     configs:
       - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
       - {source: rag-postgres-init, target: /config/postgres-init.sql}
@@ -253,8 +248,6 @@ x-rag-secrets: &rag-secrets-mount
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
-      # The gateway's Data API (COMPOSE_PROFILES=data): org sync and the model catalogue, with UME_RAG_ORG_SYNC_KEY.
-      OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-https://dataapi:8443}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -276,7 +269,6 @@ x-rag-secrets: &rag-secrets-mount
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
-      rag-dataapi: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
@@ -426,12 +418,8 @@ x-rag-secrets: &rag-secrets-mount
     content: |
       @INCLUDE postgres/app-roles.sql
 
-@SECTION join
-@JOIN dataapi rag-dataapi
-
 @SECTION networks
   rag-edge: {driver: bridge}
-  rag-dataapi: {driver: bridge, internal: true}
   rag-data: {driver: bridge, internal: true}
   rag-ingestion: {driver: bridge, internal: true}
   rag-parser: {driver: bridge, internal: true}

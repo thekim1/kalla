@@ -17,7 +17,7 @@
 #   data, ingestion, parser, render
 #              none (internal networks; dropped here as well). render holds the renderer's Chromium, which runs
 #              untrusted page scripts, and its bridge gateway answers at the IP level: the INPUT rule rejects it there
-#   llm        the gateway (UME_RAG_GATEWAY_URL), its Data API (UME_RAG_ORG_SYNC_URL: the admin's syncs), the OIDC
+#   llm        the gateway (UME_RAG_GATEWAY_URL; the admin's organisation and model syncs call it too), the OIDC
 #              authority (UME_RAG_OIDC_AUTHORITY), Open WebUI as rag-api calls it (UME_RAG_OPENWEBUI_BASE_URL: the
 #              feedback import), the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
 #   crawl      the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
@@ -139,7 +139,7 @@ add() { # add NETWORK URL-OR-HOST[:PORT] — nothing when the value is empty
   allows[$1]+="$(endpoint "$2" 443)"$'\n'
 }
 gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_RAG_OTEL_ENDPOINT)"
-add llm "$gateway"; add llm "$(env_value UME_RAG_ORG_SYNC_URL)"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"; add llm "$(env_value UME_RAG_OPENWEBUI_BASE_URL)"
+add llm "$gateway"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"; add llm "$(env_value UME_RAG_OPENWEBUI_BASE_URL)"
 add llm "$otel"
 add crawl "$gateway"; add crawl "$otel"
 proxy="$(env_value UME_RAG_FRESHCLAM_PROXY)"

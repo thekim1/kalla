@@ -1,5 +1,5 @@
 # GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it
-# from the gateway's deploy/compose.portainer.yaml (below, unchanged but: its dataapi joins rag-dataapi)
+# from the gateway's deploy/compose.portainer.yaml (below, unchanged)
 # and deploy/portainer/compose.rag.template.yaml.
 # Do not edit it by hand; the gateway's own note below refers to the gateway's part.
 #
@@ -54,11 +54,8 @@
 #                             one the stack starts but that service's model calls are refused. To rotate one, change
 #                             it, update the stack, then restart that service (it reads the key at start).
 # Recommended
-#   COMPOSE_PROFILES=data,clamav
-#                             data: the gateway's Data API, which RAG's admin reads for the model catalogue and org sync
-#                             (without it, model settings cannot be saved); with UME_RAG_ORG_SYNC_KEY, a Data API key
-#                             with catalog.read. clamav: rag-clamav, the malware scan, which the worker expects by
-#                             default: without it files wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
+#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan, which the worker expects by default: without it files
+#                             wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
 #   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
 #                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (true)
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
@@ -69,7 +66,7 @@
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
-#   COMPOSE_PROFILES=data,clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
 #   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
 #                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
 #   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
@@ -319,7 +316,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       migrations: {condition: service_completed_successfully}
-    networks: [edge, data, rag-dataapi]
+    networks: [edge, data]
     healthcheck:
       test: [CMD, dotnet, Ume.LlmGateway.DataApi.dll, --health-check]
       interval: 15s
@@ -339,7 +336,6 @@ services:
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
       UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
-      UME_RAG_ORG_SYNC_KEY: ${UME_RAG_ORG_SYNC_KEY:-}
     configs:
       - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
       - {source: rag-postgres-init, target: /config/postgres-init.sql}
@@ -507,8 +503,6 @@ services:
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
-      # The gateway's Data API (COMPOSE_PROFILES=data): org sync and the model catalogue, with UME_RAG_ORG_SYNC_KEY.
-      OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-https://dataapi:8443}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -530,7 +524,6 @@ services:
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
-      rag-dataapi: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
@@ -904,11 +897,10 @@ configs:
       # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
       # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
       # re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
-      # credential keys, the Data API key, the OIDC client secret) are written again on every start, and removed when the
-      # variable is empty.
+      # credential keys, the OIDC client secret) are written again on every start, and removed when the variable is empty.
       #
       # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
-      # volume, mounted at /gateway-certs), so https://gateway:8443 and https://dataapi:8443 verify.
+      # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
       set -eu
       umask 077
       C=/certs
@@ -1007,7 +999,11 @@ configs:
         rm -f "$$S/$$svc"/Gateway__Keys__*
       done
       put admin Oidc__ClientSecret "$${UME_RAG_OIDC_CLIENT_SECRET:-}"
-      put admin OrgSync__DataApiKey "$${UME_RAG_ORG_SYNC_KEY:-}"
+      # The Data API key of the admin's former org sync: the admin syncs with its credential key now.
+      if [ -e "$$S/admin/OrgSync__DataApiKey" ]; then
+        rm -f "$$S/admin/OrgSync__DataApiKey"
+        echo "rag-bootstrap: deleted admin/OrgSync__DataApiKey; ask the gateway admin to revoke that Data API key"
+      fi
 
       # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
       mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations"
@@ -1030,7 +1026,6 @@ configs:
       missing=""
       for svc in api admin worker; do [ -e "$$S/$$svc/Gateway__Key" ] || missing="$$missing $$svc"; done
       [ -z "$$missing" ] || echo "rag-bootstrap: no gateway credential key for$${missing}: set UME_RAG_<SERVICE>_GATEWAY_KEY"
-      [ -e "$$S/admin/OrgSync__DataApiKey" ] || echo "rag-bootstrap: no UME_RAG_ORG_SYNC_KEY: the model catalogue and org sync stay off"
       echo "rag-bootstrap: certificates and secrets ready"
   rag-postgres-init:
     content: |
@@ -1177,6 +1172,10 @@ configs:
       -- The gateway mirror (departments, teams): written by the admin's org sync, read by every service (scopes, audiences).
       GRANT SELECT, INSERT, UPDATE, DELETE ON config."Departments", config."Teams" TO ume_rag_admin;
       GRANT SELECT ON config."Departments", config."Teams" TO ume_rag_api, ume_rag_worker;
+      -- The assigned gateway keys' mirror (data-model §1.2, §2.1): the admin's sync writes it; the api reads an assistant's key
+      -- status and output cap before a call (chat §4.1, §6.3); the worker never needs it.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON config."GatewayKeys" TO ume_rag_admin;
+      GRANT SELECT ON config."GatewayKeys" TO ume_rag_api;
       -- Clients and keys: the admin manages them, the api authenticates with them; key use goes to KeyLastUse (api), so it
       -- never bumps the config version. The worker holds no keys.
       GRANT SELECT, INSERT, UPDATE, DELETE ON config."Clients", config."Keys" TO ume_rag_admin;
@@ -1250,6 +1249,10 @@ configs:
       GRANT SELECT ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns", content."EvaluationResults",
         content."RetrievalStats" TO ume_rag_admin;
       GRANT INSERT, UPDATE ON content."EvaluationRuns", content."EvaluationResults" TO ume_rag_admin;
+      -- Tokens and cost of the worker's model calls per knowledge base and step (data-model §2.2; cost-attribution §5 C3): the
+      -- worker writes them, the admin reads them for its cost report.
+      GRANT SELECT, INSERT, UPDATE, DELETE ON content."CollectionDailyUsage" TO ume_rag_worker;
+      GRANT SELECT ON content."CollectionDailyUsage" TO ume_rag_admin;
 
       -- chat (data-model §1.2, §2.3): the api owns it; the admin reads it and marks feedback reviewed (admin design §8.1); the
       -- worker has no access to the schema. P1 writes metadata and ratings only (weakness review §4).
@@ -1258,6 +1261,10 @@ configs:
       GRANT SELECT ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources", chat."Feedback",
         chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_admin;
       GRANT UPDATE ("ReviewState") ON chat."Feedback" TO ume_rag_admin;
+      -- Tokens and cost of every model call per assistant, client and step (data-model §2.3; chat design §8.3, §12.2): the api's
+      -- conversation writer upserts them; the admin upserts the test panel's calls too (admin design §4.9).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON chat."AssistantDailyUsage" TO ume_rag_api;
+      GRANT SELECT, INSERT, UPDATE ON chat."AssistantDailyUsage" TO ume_rag_admin;
 
       -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
       GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
@@ -1285,7 +1292,6 @@ networks:
   data: {driver: bridge, internal: true}
   llm: {driver: bridge}
   rag-edge: {driver: bridge}
-  rag-dataapi: {driver: bridge, internal: true}
   rag-data: {driver: bridge, internal: true}
   rag-ingestion: {driver: bridge, internal: true}
   rag-parser: {driver: bridge, internal: true}
