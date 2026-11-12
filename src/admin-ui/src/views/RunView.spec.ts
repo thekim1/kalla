@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { Run } from '@/api/types'
+import { RUN_PAGE } from '@/utils/labels'
 import RunView from './RunView.vue'
 
 const run: Run = {
@@ -40,6 +41,18 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     await wrapper.get('input[type=checkbox]').setValue(true)
     await flushPromises()
     expect(items).toHaveBeenLastCalledWith('r1', expect.objectContaining({ outcome: 'failed' }))
+  })
+
+  it('says a run’s files were not scanned for malware when its report says malwareScan off, and nothing otherwise (#535)', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.runs, 'get').mockResolvedValueOnce({ ...run, report: { ...run.report, malwareScan: 'off' } }).mockResolvedValueOnce(run)
+    const off = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(off.get('[data-test=not-scanned]').text()).toBe(RUN_PAGE.notScanned)
+    const on = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(on.find('[data-test=not-scanned]').exists()).toBe(false)
   })
 
   it('names the websites fetched with their own politeness and why robots.txt was ignored (connectors design §6.6)', async () => {

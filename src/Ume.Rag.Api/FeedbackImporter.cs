@@ -229,8 +229,8 @@ public sealed partial class FeedbackImporter(
             await using var totals = new NpgsqlCommand("""
                 INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
                     "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
-                    "AgentLimitHits", "InputTokens", "OutputTokens", "CostUsd")
-                VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 0, 0, 0, 0, 0, GREATEST($6, 0), GREATEST($7, 0), 0, 0, 0, 0, 0, 0)
+                    "AgentLimitHits")
+                VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 0, 0, 0, 0, 0, GREATEST($6, 0), GREATEST($7, 0), 0, 0, 0)
                 ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
                     "ThumbsUp" = GREATEST(t."ThumbsUp" + $6, 0), "ThumbsDown" = GREATEST(t."ThumbsDown" + $7, 0)
                 """, connection, transaction)

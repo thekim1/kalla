@@ -49,7 +49,9 @@ public sealed class EvalStopException : Exception
 /// <see cref="ModelNotAtCeiling"/> unless the gateway lists every model at that ceiling (<see cref="CatalogueClientName"/>);
 /// a gateway answer of 403 <c>max_residency_not_met</c> is refused the same way, and an answer from above the ceiling is
 /// discarded by the handler.
-/// Other status codes map as the embedding client's (engine design §7.3).
+/// Other status codes map as the embedding client's (engine design §7.3). Every completion carries <c>x-ume-run-id</c> and
+/// its answered call's usage (tokens and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the caller's
+/// <see cref="UsageSink"/> (engine design §7.7, §10.6); the catalogue read costs nothing and is not recorded.
 /// </summary>
 public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> gateway, TimeProvider clock)
 {
@@ -114,27 +116,48 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     }
 
     /// <summary>
-    /// One chat completion with JSON output at <paramref name="ceiling"/>, with <c>x-ume-step</c> <paramref name="step"/>. No
-    /// <c>temperature</c> is sent: some models refuse it, and the model's default applies.
+    /// One chat completion with JSON output at <paramref name="ceiling"/>, with <c>x-ume-step</c> <paramref name="step"/> and
+    /// <c>x-ume-run-id</c> <paramref name="runId"/>; its usage goes to <paramref name="usage"/>. No <c>temperature</c> is sent:
+    /// some models refuse it, and the model's default applies.
     /// </summary>
-    public async Task<ChatReply> CompleteAsync(string model, string step, Residency ceiling, string system, string user, CancellationToken cancellationToken)
+    public async Task<ChatReply> CompleteAsync(string model, string step, Residency ceiling, string system, string user, Guid runId, UsageSink usage,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(usage);
         using var request = new HttpRequestMessage(HttpMethod.Post, ChatPath)
         {
             Content = JsonContent.Create(new ChatRequest(model, [new ChatMessage("system", system), new ChatMessage("user", user)],
                 new ResponseFormat("json_object")), options: Json),
         };
         request.WithMaxResidency(ceiling);
+        request.Headers.Add(Processing.Embedding.EmbeddingClient.RunIdHeader, runId.ToString());
         request.Headers.Add(Processing.Embedding.EmbeddingClient.StepHeader, step);
         using var response = await SendAsync(HttpClientName, request, cancellationToken);
-        ChatResponse? body;
+        JsonDocument? document;
         try
         {
-            body = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, cancellationToken);
+            document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         }
         catch (JsonException)
         {
-            body = null;
+            document = null;
+        }
+
+        // The gateway charged the call whatever its body: without a readable one it counts 0 tokens (engine design §10.6).
+        await usage.RecordAsync(document is null
+            ? new GatewayCallUsage(step, model, default(GatewayTokens), GatewayUsageReader.CostHeader(response))
+            : GatewayUsageReader.Read(response, document.RootElement, step, model), cancellationToken);
+        ChatResponse? body;
+        using (document)
+        {
+            try
+            {
+                body = document?.RootElement.Deserialize<ChatResponse>(Json);
+            }
+            catch (JsonException)
+            {
+                body = null;
+            }
         }
 
         var choice = body?.Choices is { Count: > 0 } choices ? choices[0] : null;

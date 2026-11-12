@@ -36,17 +36,34 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     private readonly Counter<long>? _tokens = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.chat.tokens", description: "Model tokens of the chat role's gateway calls by direction and step");
 
+    private readonly Counter<double>? _cost = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<double>("rag.chat.cost", unit: "USD", description: "Cost of the chat role's gateway calls by step and source (gateway or estimate)");
+
     private readonly Counter<long>? _followUps = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.chat.follow_ups", description: "Follow-up suggestion calls and skips by outcome");
 
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
 
-    /// <summary>The id of the assistant with slug <paramref name="model"/> at the current snapshot, or <see cref="Guid.Empty"/>.</summary>
-    public Guid AssistantId(string model) => Resolved(snapshots.Current).Assistant(model)?.Id ?? Guid.Empty;
+    /// <summary>The assistant with slug <paramref name="model"/> at the current snapshot, or null.</summary>
+    public AssistantEntry? Assistant(string model) => Resolved(snapshots.Current).Assistant(model);
 
-    public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
+    /// <summary>
+    /// A new turn's usage records (§8.3), priced from the current snapshot's model mirror and counted in <c>rag.chat.tokens</c>
+    /// and <c>rag.chat.cost</c> (§17) when this service has meters.
+    /// </summary>
+    public TurnUsage Usage() => new(snapshots.Current.ModelPrices, time.GetUtcNow(), _tokens is null ? null : new Action<UsageRecord>(CountUsage));
+
+    /// <summary>The plan of a turn whose usage records nobody writes (the admin test panel until B-39).</summary>
+    public Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct) => PlanAsync(who, chat, Usage(), ct);
+
+    /// <summary>
+    /// Steps 5–12 of §4.1 up to the answer call. Condense, the query embedding and rerank add their usage to
+    /// <paramref name="usage"/> as they answer, so a turn that fails afterwards keeps it (§12.1); the plan carries it on.
+    /// </summary>
+    public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(usage);
         ArgumentNullException.ThrowIfNull(who);
         ArgumentNullException.ThrowIfNull(chat);
         var created = time.GetUtcNow();
@@ -85,6 +102,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             {
                 Query = query,
                 MaxTokensSource = source,
+                Usage = usage,
             };
         }
 
@@ -94,13 +112,13 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         {
             // §5, §5.1: a follow-up that is not self-contained, or any question over 2,000 characters, is rewritten for retrieval
             // only; the prompt keeps the user's question.
-            (query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
+            (query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, usage, ct);
             try
             {
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
                 retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
                     Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId,
-                    RerankCeiling: settings.Rerank is not null ? ceiling : null, Reranker: settings.Rerank ?? RerankerKind.ChatModel), ct);
+                    RerankCeiling: settings.Rerank is not null ? ceiling : null, Reranker: settings.Rerank ?? RerankerKind.ChatModel), usage.Add, ct);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
             {
@@ -143,11 +161,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// rewritten, and anything but an accepted rewrite keeps the question.
     /// </summary>
     private async Task<(string Query, CondenseOutcome Outcome, bool Failed)> CondenseAsync(ParsedChat chat, AssistantChatSettings settings,
-        PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
+        PlatformChatSettings platform, Residency ceiling, Guid messageId, TurnUsage usage, CancellationToken ct)
     {
         if (QueryNormalizer.Length(chat.Question) > QueryNormalizer.MaxLength)
         {
-            var (longQuery, longOutcome) = await CondenseLongAsync(chat, settings, platform, ceiling, messageId, ct);
+            var (longQuery, longOutcome) = await CondenseLongAsync(chat, settings, platform, ceiling, messageId, usage, ct);
             return (longQuery, longOutcome, longOutcome != CondenseOutcome.Rewritten);
         }
 
@@ -158,7 +176,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         var (rewritten, outcome) = await CallCondenseAsync(Condenser.Messages(chat.History, chat.Question, platform.Texts), Condenser.Step, options.Value.CondenseTimeout, platform,
-            ceiling, messageId, ct);
+            ceiling, messageId, usage, ct);
         Count(FollowUpKind, outcome);
         return (rewritten ?? chat.Question, outcome, rewritten is null);
     }
@@ -169,14 +187,14 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// until M2), times out, fails or is rejected; a fallback is logged with its reason, never the text.
     /// </summary>
     private async Task<(string Query, CondenseOutcome Outcome)> CondenseLongAsync(ParsedChat chat, AssistantChatSettings settings, PlatformChatSettings platform,
-        Residency ceiling, Guid messageId, CancellationToken ct)
+        Residency ceiling, Guid messageId, TurnUsage usage, CancellationToken ct)
     {
         string? rewritten = null;
         var outcome = CondenseOutcome.Disabled;
         if (settings.CondenseEnabled && platform.CondenseModel is not null && ceiling != Residency.OnPrem)
         {
             (rewritten, outcome) = await CallCondenseAsync(Condenser.LongMessages(chat.History, chat.Question, platform.Texts), Condenser.LongStep,
-                options.Value.LongQuestionCondenseTimeout, platform, ceiling, messageId, ct);
+                options.Value.LongQuestionCondenseTimeout, platform, ceiling, messageId, usage, ct);
         }
 
         Count(LongKind, outcome);
@@ -194,9 +212,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// rewrite, or null with the outcome.
     /// </summary>
     private async Task<(string? Rewritten, CondenseOutcome Outcome)> CallCondenseAsync(IReadOnlyList<ChatMessageIn> messages, string step, TimeSpan budget,
-        PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
+        PlatformChatSettings platform, Residency ceiling, Guid messageId, TurnUsage usage, CancellationToken ct)
     {
-        var (answer, failure) = await CallTaskModelAsync(messages, step, Condenser.MaxOutputTokens, budget, platform, ceiling, messageId, ct);
+        var (answer, failure) = await CallTaskModelAsync(messages, step, Condenser.MaxOutputTokens, budget, platform, ceiling, messageId, usage, ct);
         if (answer is null)
         {
             return (null, failure!.Value);
@@ -209,19 +227,19 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// One call to the platform's task model (§5 "Call", §5.1 "Model and call", §9.8 "Model and call"): non-streaming, the condense
     /// model at the condense ceiling (<see cref="Condenser.Ceiling"/>, never above the turn's <paramref name="ceiling"/>), no
     /// temperature, the reasoning effort when set, a hard <paramref name="budget"/> on <see cref="TimeProvider"/> without retry;
-    /// its tokens counted under <paramref name="step"/>. The answer, or null with why (<c>timeout</c>, <c>residency</c>, <c>error</c>).
-    /// The caller's own cancellation (a disconnect) is not caught.
+    /// its usage record under <paramref name="step"/> goes to <paramref name="usage"/> once it answers <c>2xx</c> (a malformed body
+    /// included: the gateway charged it). The answer, or null with why (<c>timeout</c>, <c>residency</c>, <c>error</c>). The
+    /// caller's own cancellation (a disconnect) is not caught.
     /// </summary>
     private async Task<(GatewayAnswer? Answer, CondenseOutcome? Failure)> CallTaskModelAsync(IReadOnlyList<ChatMessageIn> messages, string step, int maxTokens,
-        TimeSpan budget, PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
+        TimeSpan budget, PlatformChatSettings platform, Residency ceiling, Guid messageId, TurnUsage usage, CancellationToken ct)
     {
         using var timeout = new CancellationTokenSource(budget, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
             var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), messages, maxTokens, null, messageId, step, linked.Token,
-                platform.CondenseReasoningEffort);
-            CountTokens(step, answer);
+                platform.CondenseReasoningEffort, usage.Add);
             return (answer, null);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -286,7 +304,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var messages = FollowUps.Messages(count, plan.Language, plan.Query!, FollowUps.Answer(plan, delivered), FollowUps.Titles(plan.Prompt?.Sources ?? [], cited),
             plan.Platform.Texts);
         var (answer, failure) = await CallTaskModelAsync(messages, FollowUps.Step, FollowUps.TokensPerQuestion * count, options.Value.FollowUpTimeout,
-            plan.Platform, plan.Ceiling, plan.MessageId, ct);
+            plan.Platform, plan.Ceiling, plan.MessageId, plan.Usage, ct);
         IReadOnlyList<string> suggestions = answer is null ? [] : FollowUps.Accept(answer.Text, count, question, plan.Query);
         var outcome = answer is null ? Condenser.OutcomeName(failure!.Value) : suggestions.Count > 0 ? FollowUps.Used : FollowUps.Empty;
         _followUps?.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
@@ -297,11 +315,18 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     private void Count(string kind, CondenseOutcome outcome) =>
         _condense?.Add(1, new TagList { { "kind", kind }, { "outcome", Condenser.OutcomeName(outcome) } });
 
-    /// <summary><c>rag.chat.tokens{direction, step}</c> (§17) of a condense call; never in the response's usage (§3.2).</summary>
-    private void CountTokens(string step, GatewayAnswer answer)
+    /// <summary>
+    /// <c>rag.chat.tokens{direction, step}</c> and <c>rag.chat.cost{step, source}</c> (§17) of one model call of a turn; never in
+    /// the response's usage (§3.2). <c>input</c> is every input token, cached ones included (as the gateway reports them),
+    /// <c>cached-input</c> the cached part; the cost is the gateway's (<c>gateway</c>) or the mirror's estimate (<c>estimate</c>).
+    /// </summary>
+    private void CountUsage(UsageRecord record)
     {
-        _tokens?.Add(answer.PromptTokens, new TagList { { "direction", "input" }, { "step", step } });
-        _tokens?.Add(answer.CompletionTokens, new TagList { { "direction", "output" }, { "step", step } });
+        _tokens?.Add(record.InputTokens, new TagList { { "direction", "input" }, { "step", record.Step } });
+        _tokens?.Add(record.CachedInputTokens, new TagList { { "direction", "cached-input" }, { "step", record.Step } });
+        _tokens?.Add(record.OutputTokens, new TagList { { "direction", "output" }, { "step", record.Step } });
+        _cost?.Add((double)(record.Estimated ? record.EstimatedCostUsd : record.CostUsd),
+            new TagList { { "step", record.Step }, { "source", record.Estimated ? "estimate" : "gateway" } });
     }
 
     /// <summary>
@@ -324,14 +349,18 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             return new ChatAnswer(plan, this, gateway, response, null);
         }
 
-        var answer = await gateway.CompleteAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId, "chat-answer", ct);
+        var answer = await gateway.CompleteAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId,
+            GatewayChatClient.AnswerStep, ct, usage: plan.Usage.Add);
         return new ChatAnswer(plan, this, gateway, null, answer);
     }
 
-    /// <summary>The turn as one JSON answer: the events of <see cref="ChatAnswer.ReadAsync"/> folded into the content and its annotations.</summary>
-    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
+    /// <summary>
+    /// The turn as one JSON answer: the events of <see cref="ChatAnswer.ReadAsync"/> folded into the content and its annotations;
+    /// every call's usage in <paramref name="usage"/>.
+    /// </summary>
+    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct)
     {
-        var plan = await PlanAsync(who, chat, ct);
+        var plan = await PlanAsync(who, chat, usage, ct);
         using var answer = await OpenAnswerAsync(plan, stream: false, ct);
         var content = new System.Text.StringBuilder();
         var annotations = new List<UrlCitation>();

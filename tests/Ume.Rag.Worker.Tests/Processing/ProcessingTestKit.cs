@@ -8,8 +8,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Pipelines.Processing;
 using Ume.Rag.Retrieval.Text;
+using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Parsing;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
@@ -46,6 +48,100 @@ public static class Fixtures
         }
 
         throw new InvalidOperationException("UmeRag.slnx not found above the test output directory.");
+    }
+}
+
+/// <summary>The mirror's prices without a database: a fixed table; a model missing from it has none (estimated at 0).</summary>
+public sealed class FixedModelPrices(IReadOnlyDictionary<string, ModelPrices>? prices = null) : IGatewayModelPrices
+{
+    public Task<ModelPrices?> GetAsync(string model, CancellationToken cancellationToken) => Task.FromResult(prices?.GetValueOrDefault(model));
+}
+
+/// <summary>Model-call usage outside a job (stage, client and session tests): an attempt of its own under a fixed knowledge base.</summary>
+public static class TestUsage
+{
+    public static readonly UsageOwner Owner = new(Guid.Parse("01929b6e-0000-7000-8000-0000000c0001"), Ume.Rag.Domain.Classification.Internal,
+        Guid.Parse("01929b6e-0000-7000-8000-0000000d0001"));
+
+    public static UsageSink Sink(IGatewayModelPrices? prices = null) => new(new JobUsage(prices ?? new FixedModelPrices(), TimeProvider.System), Owner);
+}
+
+/// <summary>
+/// A gateway call as the worker sent it and the gateway answered it: its path, <c>x-ume-step</c>, <c>x-ume-run-id</c>, body,
+/// status, <c>x-ume-cost-usd</c> and the tokens of the answer's <c>usage</c>.
+/// </summary>
+public sealed record RecordedCall(string Path, string Step, string? RunId, string Body, int Status, decimal? CostUsd, long InputTokens, long CachedInputTokens,
+    long OutputTokens);
+
+/// <summary>
+/// Records every <c>POST</c> of the gateway clients it is added to (<see cref="Handler"/>: a new handler per client). With
+/// <see cref="RefuseFirst"/> the first call of that step is answered here with 503 and <c>Retry-After: 1</c>, a capacity
+/// refusal that never reaches the gateway.
+/// </summary>
+public sealed class GatewayCallRecorder
+{
+    private int _refused;
+
+    public ConcurrentQueue<RecordedCall> Calls { get; } = new();
+
+    public string? RefuseFirst { get; set; }
+
+    /// <summary>The calls the gateway answered with a success status (the ones it charged).</summary>
+    public IReadOnlyList<RecordedCall> Answered => [.. Calls.Where(c => c.Status is >= 200 and < 300)];
+
+    public DelegatingHandler Handler() => new RecordingHandler(this);
+
+    private sealed class RecordingHandler(GatewayCallRecorder recorder) : DelegatingHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method != HttpMethod.Post)
+            {
+                return await base.SendAsync(request, cancellationToken);
+            }
+
+            var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            var step = Header(request, "x-ume-step") ?? string.Empty;
+            var runId = Header(request, "x-ume-run-id");
+            var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            if (recorder.RefuseFirst == step && Interlocked.Exchange(ref recorder._refused, 1) == 0)
+            {
+                recorder.Calls.Enqueue(new RecordedCall(path, step, runId, body, 503, null, 0, 0, 0));
+                var refusal = new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("""{"error":{"code":"service_unavailable","message":"Busy."}}"""),
+                };
+                refusal.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(1));
+                return refusal;
+            }
+
+            var response = await base.SendAsync(request, cancellationToken);
+            await response.Content.LoadIntoBufferAsync(cancellationToken);
+            var (input, cached, output) = Tokens(await response.Content.ReadAsStringAsync(cancellationToken));
+            var cost = response.Headers.TryGetValues("x-ume-cost-usd", out var values)
+                ? decimal.Parse(values.Single(), System.Globalization.CultureInfo.InvariantCulture)
+                : (decimal?)null;
+            recorder.Calls.Enqueue(new RecordedCall(path, step, runId, body, (int)response.StatusCode, cost, input, cached, output));
+            return response;
+        }
+
+        private static string? Header(HttpRequestMessage request, string name) =>
+            request.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : null;
+
+        private static (long Input, long Cached, long Output) Tokens(string body)
+        {
+            try
+            {
+                var usage = JsonNode.Parse(body)?["usage"];
+                return (Long(usage?["prompt_tokens"]), Long(usage?["prompt_tokens_details"]?["cached_tokens"]), Long(usage?["completion_tokens"]));
+            }
+            catch (JsonException)
+            {
+                return (0, 0, 0);
+            }
+
+            static long Long(JsonNode? node) => node is JsonValue value && value.TryGetValue<long>(out var n) ? n : 0;
+        }
     }
 }
 

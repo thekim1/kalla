@@ -225,7 +225,10 @@ public sealed class ToolCall
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Statistics that outlive conversations (<c>chat."AssistantDailyTotals"</c>, data-model §8); the day is Europe/Stockholm.</summary>
+/// <summary>
+/// Statistics that outlive conversations (<c>chat."AssistantDailyTotals"</c>, data-model §2.3, §8); the day is Europe/Stockholm.
+/// Tokens and cost are in <see cref="AssistantDailyUsage"/>.
+/// </summary>
 public sealed class AssistantDailyTotal
 {
     public DateOnly Day { get; set; }
@@ -249,9 +252,6 @@ public sealed class AssistantDailyTotal
     public int ToolCalls { get; set; }
     public int ToolErrors { get; set; }
     public int AgentLimitHits { get; set; }
-    public long InputTokens { get; set; }
-    public long OutputTokens { get; set; }
-    public decimal CostUsd { get; set; }
 }
 
 /// <summary>

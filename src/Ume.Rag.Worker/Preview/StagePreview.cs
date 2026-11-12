@@ -63,7 +63,8 @@ public sealed partial class StagePreview(
     public const string UploadUnknown = "preview.upload_unknown";
     public const string DeadlineReached = "preview.deadline";
 
-    public async Task<JobResult> RunAsync(LeasedJob job, StagePreviewPayload payload, CancellationToken cancellationToken)
+    /// <summary>The preview; <paramref name="usage"/> takes its embedding calls, which the dispatcher writes with the job's completion.</summary>
+    public async Task<JobResult> RunAsync(LeasedJob job, StagePreviewPayload payload, JobUsage usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(payload);
@@ -103,7 +104,7 @@ public sealed partial class StagePreview(
         var level = source?.Classification ?? collection.Classification;
         // The preview's own outputs name no level in their keys; they are encrypted by this one (data-model §7, §9).
         var store = new PreviewStore(new PreviewBlobs(blobs.ForLevel(level), job.Id), nodeOutputs, payload.BasePreviewJobId);
-        var run = new PreviewRun(job.Id, pipeline, collection, Stages(pipeline.Pipeline, payload.UntilStage), store)
+        var run = new PreviewRun(job.Id, pipeline, collection, Stages(pipeline.Pipeline, payload.UntilStage), store, usage)
         {
             Embed = payload.Embed,
             PiiSpans = payload.PiiSpans,

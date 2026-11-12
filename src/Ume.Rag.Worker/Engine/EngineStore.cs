@@ -6,6 +6,7 @@ using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Connectors.Uploads;
+using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Persistence;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
@@ -419,6 +420,8 @@ public sealed class EngineCommit : IAsyncDisposable
 
     private const string SeedFailedSql = """UPDATE content."CrawlRuns" SET "SeedsFailed" = "SeedsFailed" + 1 WHERE "RunId" = $1""";
 
+    private (JobUsage Usage, int Written)? _usage;
+
     private EngineCommit(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         Connection = connection;
@@ -562,7 +565,25 @@ public sealed class EngineCommit : IAsyncDisposable
         return queue.CompleteAsync(jobId, owner, resultJson, Transaction, cancellationToken);
     }
 
-    public Task CommitAsync(CancellationToken cancellationToken) => Transaction.CommitAsync(cancellationToken);
+    /// <summary>
+    /// The job attempt's model calls added to <c>CollectionDailyUsage</c> (engine design §10.6): the last statement before
+    /// <see cref="CommitAsync"/>, which drops them from <paramref name="usage"/> once committed. A rollback leaves them pending.
+    /// </summary>
+    public async Task AddUsageAsync(JobUsage usage, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(usage);
+        _usage = (usage, await usage.WriteAsync(Connection, Transaction, cancellationToken));
+    }
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        await Transaction.CommitAsync(cancellationToken);
+        if (_usage is { } added)
+        {
+            added.Usage.Committed(added.Written);
+            _usage = null;
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {

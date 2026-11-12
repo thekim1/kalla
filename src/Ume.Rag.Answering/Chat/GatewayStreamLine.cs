@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Answering.Chat;
 
@@ -65,15 +66,12 @@ public static class GatewayStreamLine
                 }
             }
 
-            if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+            if (root.TryGetProperty("usage", out var usage) && GatewayUsageReader.UsageTokens(usage) is { } tokens)
             {
-                events.Add(new GatewayStreamEvent.Usage(Int(usage, "prompt_tokens"), Int(usage, "completion_tokens")));
+                events.Add(new GatewayStreamEvent.Usage(tokens));
             }
         }
 
         return true;
     }
-
-    private static int Int(JsonElement usage, string name) =>
-        usage.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) ? n : 0;
 }

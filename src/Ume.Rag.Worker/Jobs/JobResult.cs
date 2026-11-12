@@ -28,8 +28,12 @@ public abstract record JobResult
     public sealed record Committed : JobResult;
 }
 
-/// <summary>A leased job and the services of its own scope.</summary>
-public sealed record JobContext(LeasedJob Job, IServiceProvider Services);
+/// <summary>
+/// A leased job, the services of its own scope and the attempt's model calls (<see cref="JobUsage"/>): the transaction that
+/// records the outcome adds them to <c>CollectionDailyUsage</c>, and the dispatcher writes what is left with the outcome it
+/// writes itself.
+/// </summary>
+public sealed record JobContext(LeasedJob Job, IServiceProvider Services, JobUsage Usage);
 
 /// <summary>Runs the jobs of one class. One handler per class; registered as a singleton.</summary>
 public interface IJobHandler

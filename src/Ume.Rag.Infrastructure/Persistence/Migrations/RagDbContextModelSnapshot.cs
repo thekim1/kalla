@@ -311,10 +311,6 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<int>("Conversations")
                         .HasColumnType("integer");
 
-                    b.Property<decimal>("CostUsd")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
-
                     b.Property<int>("Degraded")
                         .HasColumnType("integer");
 
@@ -327,17 +323,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<int>("GeneralAnswers")
                         .HasColumnType("integer");
 
-                    b.Property<long>("InputTokens")
-                        .HasColumnType("bigint");
-
                     b.Property<int>("Messages")
                         .HasColumnType("integer");
 
                     b.Property<int>("NotFound")
                         .HasColumnType("integer");
-
-                    b.Property<long>("OutputTokens")
-                        .HasColumnType("bigint");
 
                     b.Property<int>("ThumbsDown")
                         .HasColumnType("integer");

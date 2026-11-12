@@ -20,7 +20,9 @@ namespace Ume.Rag.Worker.Evaluation;
 /// rerank latency, cost per question and <c>rerank_unavailable</c> count (<see cref="EvaluationSearchStats"/>, #399). Each job
 /// searches the set as it was at the start, then writes its runs, their per-question results and its completion in one
 /// transaction. A question whose embedding fails fails the run (knowledge design §5.5): the job is retried as the
-/// gateway error says, and nothing of it is kept.
+/// gateway error says, and nothing of it is kept. Each run's model calls (query embeddings that missed the cache, rerank
+/// calls) carry its id as <c>x-ume-run-id</c> and are counted under the collection; the job's commit adds them to
+/// <c>CollectionDailyUsage</c> (processing design §14.7; engine design §10.6).
 /// </summary>
 public sealed partial class EvaluationRunner(
     EvaluationStore store,
@@ -38,7 +40,7 @@ public sealed partial class EvaluationRunner(
     public const string SearchUnavailable = "eval.search_unavailable";
     public const string EmbeddingResidency = "eval.embedding_residency";
 
-    public Task<JobResult> OnDemandAsync(LeasedJob job, EvalOnDemandPayload payload, CancellationToken cancellationToken) =>
+    public Task<JobResult> OnDemandAsync(LeasedJob job, EvalOnDemandPayload payload, JobUsage usage, CancellationToken cancellationToken) =>
         GuardedAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(payload);
@@ -72,6 +74,7 @@ public sealed partial class EvaluationRunner(
             }
 
             using var session = evaluator.Open(target);
+            var calls = Calls(target, usage);
             var records = new List<EvaluationRunRecord>();
             var refs = new List<EvaluationRunRef>();
             var skipped = new List<SkippedVariant>();
@@ -85,7 +88,7 @@ public sealed partial class EvaluationRunner(
 
                 foreach (var (settings, isCandidate) in passes)
                 {
-                    var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.OnDemand, variant, settings, cancellationToken);
+                    var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.OnDemand, variant, settings, calls, cancellationToken);
                     var coverage = EvaluationScoring.Propose(outcomes);
                     record.Run.Candidate = isCandidate;
                     record.Run.ThresholdProposal = coverage is null ? null : ContractJson.Serialize(coverage);
@@ -107,11 +110,12 @@ public sealed partial class EvaluationRunner(
             }
 
             metrics.Runs(EvaluationRunKinds.OnDemand, records.Count);
-            return await store.CompleteAsync(job, queue, identity, records, new EvalOnDemandResult { Runs = refs, Skipped = skipped.Count > 0 ? skipped : null }, cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, records, new EvalOnDemandResult { Runs = refs, Skipped = skipped.Count > 0 ? skipped : null }, usage,
+                cancellationToken);
         });
 
     /// <summary>The full set after a publish or rollback; nothing to write without questions (no report is shown).</summary>
-    public Task<JobResult> PublishReportAsync(LeasedJob job, EvalPublishReportPayload payload, CancellationToken cancellationToken) =>
+    public Task<JobResult> PublishReportAsync(LeasedJob job, EvalPublishReportPayload payload, JobUsage usage, CancellationToken cancellationToken) =>
         GuardedAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(payload);
@@ -129,17 +133,17 @@ public sealed partial class EvaluationRunner(
             var compared = await store.LastComparableAsync(setId, publishedAt, cancellationToken);
             var version = await store.VersionNumberAsync(payload.PipelineVersionId, cancellationToken);
             using var session = evaluator.Open(target);
-            var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.PublishReport, EvaluationVariant.Hybrid, target.Settings, cancellationToken,
-                compared, payload.PipelineVersionId, version);
+            var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.PublishReport, EvaluationVariant.Hybrid, target.Settings, Calls(target, usage),
+                cancellationToken, compared, payload.PipelineVersionId, version);
             metrics.Runs(EvaluationRunKinds.PublishReport, 1);
-            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, recallAlert: false), cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, recallAlert: false), usage, cancellationToken);
         });
 
     /// <summary>
     /// The nightly run of a published collection (processing design §14.8); a collection unpublished, deleted or emptied
     /// since it was scheduled completes without a run.
     /// </summary>
-    public Task<JobResult> NightlyAsync(LeasedJob job, EvalNightlyPayload payload, CancellationToken cancellationToken) =>
+    public Task<JobResult> NightlyAsync(LeasedJob job, EvalNightlyPayload payload, JobUsage usage, CancellationToken cancellationToken) =>
         GuardedAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(payload);
@@ -152,7 +156,8 @@ public sealed partial class EvaluationRunner(
             var compared = await store.LastComparableAsync(setId, now, cancellationToken);
             var history = await store.NightlyRecallsAsync(setId, now - EvaluationScoring.AlertWindow, now, cancellationToken);
             using var session = evaluator.Open(target);
-            var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.Nightly, EvaluationVariant.Hybrid, target.Settings, cancellationToken, compared);
+            var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.Nightly, EvaluationVariant.Hybrid, target.Settings, Calls(target, usage),
+                cancellationToken, compared);
             var alert = EvaluationScoring.RecallAlert(record.Run.RecallAtK, history);
             if (record.Run.RecallAtK is { } recall)
             {
@@ -164,7 +169,7 @@ public sealed partial class EvaluationRunner(
             }
 
             metrics.Runs(EvaluationRunKinds.Nightly, 1);
-            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, alert), cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, alert), usage, cancellationToken);
         });
 
     /// <summary>The <c>EvaluationRuns</c> text of a variant; both reranked variants are <c>hybrid</c> with <c>Reranked</c> set.</summary>
@@ -176,7 +181,7 @@ public sealed partial class EvaluationRunner(
     };
 
     private async Task<(EvaluationRunRecord Record, IReadOnlyList<QuestionOutcome> Outcomes, EvaluationSearchStats Search)> RunAsync(
-        EvaluationSession session, string kind, EvaluationVariant variant, RetrievalSettings settings, CancellationToken cancellationToken,
+        EvaluationSession session, string kind, EvaluationVariant variant, RetrievalSettings settings, UsageSink calls, CancellationToken cancellationToken,
         ComparedRun? compared = null, Guid? subjectId = null, int? subjectVersion = null)
     {
         var target = session.Target;
@@ -184,7 +189,7 @@ public sealed partial class EvaluationRunner(
         var runId = Guid.CreateVersion7();
         var reranker = EvaluationSession.Reranker(variant);
         var reranked = reranker is not null;
-        var outcomes = await session.RunAsync(variant, settings, runId, cancellationToken);
+        var outcomes = await session.RunAsync(variant, settings, runId, calls, cancellationToken);
         var model = EvaluationScoring.RerankModel(outcomes, reranked, reranker is { } rerankerKind ? target.Platform.RerankModelFor(rerankerKind) : null);
         var price = model is null ? null : await store.PriceAsync(model, cancellationToken);
         var search = EvaluationScoring.Search(outcomes, reranked, model, price);
@@ -212,6 +217,10 @@ public sealed partial class EvaluationRunner(
         };
         return (new EvaluationRunRecord(run, [.. outcomes.Select(o => o.ToResult(run.Id, target.Classification))]), outcomes, search);
     }
+
+    /// <summary>The collection's knowledge base as the owner of the job's model calls, in the attempt's <paramref name="usage"/>.</summary>
+    private static UsageSink Calls(EvaluationTarget target, JobUsage usage) =>
+        new(usage, new UsageOwner(target.CollectionId, target.Classification, target.DepartmentId));
 
     private static EvalRunResult RunResult(EvaluationRunRecord record, IReadOnlyList<QuestionOutcome> outcomes, EvaluationSearchStats search, bool recallAlert) => new()
     {

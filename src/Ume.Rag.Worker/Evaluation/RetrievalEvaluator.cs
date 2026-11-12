@@ -4,6 +4,7 @@ using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
+using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Embedding;
 
@@ -56,7 +57,9 @@ public sealed class RetrievalEvaluator(
 
 /// <summary>
 /// The engines of one evaluation job: the collection's index, the scratch keyword copy for <c>hybrid-no-decompounder</c>,
-/// and the index with the reranker and its passage reader for <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>.
+/// and the index with the reranker and its passage reader for <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>. Every
+/// search belongs to an evaluation run: its query embedding (a cache miss of the job's first search of the question) and its
+/// rerank call carry the run's id and are counted in the run's <see cref="UsageSink"/> (processing design §14.7).
 /// </summary>
 public sealed class EvaluationSession : IDisposable
 {
@@ -64,10 +67,10 @@ public sealed class EvaluationSession : IDisposable
     private readonly RetrievalEngine _engine;
     private readonly RetrievalEngine _withoutDecompounder;
     private readonly RetrievalEngine _reranked;
-    private readonly QueryEmbedder _embed;
+    private readonly RunQueryEmbedder _embed;
     private readonly Dictionary<string, ReadOnlyMemory<float>> _vectors = new(StringComparer.Ordinal);
 
-    internal EvaluationSession(EvaluationTarget target, NpgsqlDataSource dataSource, QueryEmbedder embed, IReranker reranker, TimeProvider time)
+    internal EvaluationSession(EvaluationTarget target, NpgsqlDataSource dataSource, RunQueryEmbedder embed, IReranker reranker, TimeProvider time)
     {
         Target = target;
         var statements = new PostgresSearchOptions { StatementTimeout = RetrievalEvaluator.StatementTimeout };
@@ -116,9 +119,10 @@ public sealed class EvaluationSession : IDisposable
     /// <summary>
     /// The request a question is searched with: the same <see cref="SearchRequest"/> <c>POST /v1/retrieve</c> builds for
     /// this scope (issue #120), with the variant's mode and decompounding and <c>AllowDegraded = false</c>; a reranked
-    /// variant adds the rerank call with its reranker at <see cref="RerankCeiling"/> with <paramref name="runId"/> as <c>x-ume-run-id</c>.
+    /// variant adds the rerank call with its reranker at <see cref="RerankCeiling"/>. <paramref name="runId"/> is the
+    /// <c>x-ume-run-id</c> of the query embedding and the rerank call, and <paramref name="usage"/> takes the embedding's usage.
     /// </summary>
-    public SearchRequest Request(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid? runId = null)
+    public SearchRequest Request(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid runId, UsageSink usage)
     {
         ArgumentNullException.ThrowIfNull(question);
         return new SearchRequest(
@@ -126,39 +130,44 @@ public sealed class EvaluationSession : IDisposable
             Target.Scope(settings),
             TopK: Domain.Entities.EvaluationRun.DefaultK,
             Mode: variant == EvaluationVariant.Vector ? RetrievalMode.Vector : RetrievalMode.Hybrid,
-            Embed: EmbedOnceAsync,
+            Embed: (normalizedQuery, cancellationToken) => EmbedOnceAsync(normalizedQuery, runId, usage, cancellationToken),
             AllowDegraded: false,
             Decompound: variant != EvaluationVariant.HybridNoDecompounder,
             Rerank: Reranker(variant) is { } reranker ? new RerankCall(RerankCeiling, runId, reranker) : null);
     }
 
-    /// <summary>Searches one question without a run id.</summary>
-    public Task<SearchResult> SearchAsync(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, CancellationToken cancellationToken) =>
-        SearchAsync(question, variant, settings, null, cancellationToken);
-
     /// <summary>
-    /// Searches one question; <c>hybrid-no-decompounder</c> goes to the scratch keyword copy, a reranked variant to
-    /// the engine with the reranker.
+    /// Searches one question for the evaluation run <paramref name="runId"/>; <c>hybrid-no-decompounder</c> goes to the scratch
+    /// keyword copy, a reranked variant to the engine with the reranker. The rerank call's usage, when one answered, goes to
+    /// <paramref name="usage"/> with the embedding's.
     /// </summary>
-    public Task<SearchResult> SearchAsync(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid? runId,
-        CancellationToken cancellationToken)
+    public async Task<SearchResult> SearchAsync(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid runId,
+        UsageSink usage, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(usage);
         var engine = variant switch
         {
             EvaluationVariant.HybridNoDecompounder => _withoutDecompounder,
             EvaluationVariant.HybridRerank or EvaluationVariant.HybridRerankGateway => _reranked,
             _ => _engine,
         };
-        return engine.SearchAsync(Request(question, variant, settings, runId), cancellationToken);
+        var result = await engine.SearchAsync(Request(question, variant, settings, runId, usage), cancellationToken);
+        if (result.RerankUsage is { } rerank)
+        {
+            await usage.RecordAsync(rerank, cancellationToken);
+        }
+
+        return result;
     }
 
-    /// <summary>Every question of the set in its order, one after another; <paramref name="runId"/> goes with each rerank call.</summary>
-    public async Task<IReadOnlyList<QuestionOutcome>> RunAsync(EvaluationVariant variant, RetrievalSettings settings, Guid runId, CancellationToken cancellationToken)
+    /// <summary>Every question of the set in its order, one after another, for the evaluation run <paramref name="runId"/>.</summary>
+    public async Task<IReadOnlyList<QuestionOutcome>> RunAsync(EvaluationVariant variant, RetrievalSettings settings, Guid runId, UsageSink usage,
+        CancellationToken cancellationToken)
     {
         var outcomes = new List<QuestionOutcome>(Target.Questions.Count);
         foreach (var question in Target.Questions)
         {
-            var result = await SearchAsync(question, variant, settings, runId, cancellationToken);
+            var result = await SearchAsync(question, variant, settings, runId, usage, cancellationToken);
             outcomes.Add(new QuestionOutcome(question, result, question.Answerable ? EvaluationScoring.ExpectedRank(result, question.ExpectedDocumentIds) : null));
         }
 
@@ -173,11 +182,11 @@ public sealed class EvaluationSession : IDisposable
         _sizes.Dispose();
     }
 
-    private async Task<ReadOnlyMemory<float>> EmbedOnceAsync(string normalizedQuery, CancellationToken cancellationToken)
+    private async Task<ReadOnlyMemory<float>> EmbedOnceAsync(string normalizedQuery, Guid runId, UsageSink usage, CancellationToken cancellationToken)
     {
         if (!_vectors.TryGetValue(normalizedQuery, out var vector))
         {
-            vector = await _embed(normalizedQuery, cancellationToken);
+            vector = await _embed(normalizedQuery, runId, usage, cancellationToken);
             _vectors[normalizedQuery] = vector;
         }
 

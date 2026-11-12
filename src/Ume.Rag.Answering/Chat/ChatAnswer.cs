@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Answering.Chat;
 
@@ -23,7 +24,9 @@ public abstract record AnswerEvent
 /// One answer of a <see cref="ChatPlan"/>, opened by <see cref="ChatService.OpenAnswerAsync"/>: the gateway call has answered
 /// (status and residency checked, chat design §8.2) before this exists, so a refusal is still a JSON error. Then
 /// <see cref="ReadAsync"/> gives the events: the fixed text alone, or the caveat, the model's text through the transducer,
-/// the contact links and the end. <see cref="Finish"/> records the cited ranks and logs the answer (§9.5).
+/// the contact links and the end. <see cref="Finish"/> records the cited ranks and logs the answer (§9.5). A streamed answer
+/// adds its usage record to the plan's <see cref="ChatPlan.Usage"/> when the stream ends or breaks off (§8.3); a JSON answer's
+/// was added when the call answered.
 /// </summary>
 public sealed class ChatAnswer : IDisposable
 {
@@ -32,6 +35,7 @@ public sealed class ChatAnswer : IDisposable
     private readonly HttpResponseMessage? _stream;
     private readonly GatewayAnswer? _complete;
     private readonly AnswerTransducer? _transducer;
+    private bool _streamRecorded;
 
     internal ChatAnswer(ChatPlan plan, ChatService service, GatewayChatClient gateway, HttpResponseMessage? stream, GatewayAnswer? complete)
     {
@@ -73,20 +77,32 @@ public sealed class ChatAnswer : IDisposable
         }
         else
         {
-            await foreach (var item in _gateway.ReadAsync(_stream!, ct))
+            GatewayTokens? tokens = null;
+            try
             {
-                switch (item)
+                await foreach (var item in _gateway.ReadAsync(_stream!, ct))
                 {
-                    case GatewayStreamEvent.Delta delta:
-                        yield return new AnswerEvent.Pieces(transducer.Feed(delta.Text), caveat.Length);
-                        break;
-                    case GatewayStreamEvent.Finish f:
-                        finish = f.Reason;
-                        break;
-                    case GatewayStreamEvent.Usage u:
-                        (promptTokens, completionTokens) = (u.PromptTokens, u.CompletionTokens);
-                        break;
+                    switch (item)
+                    {
+                        case GatewayStreamEvent.Delta delta:
+                            yield return new AnswerEvent.Pieces(transducer.Feed(delta.Text), caveat.Length);
+                            break;
+                        case GatewayStreamEvent.Finish f:
+                            finish = f.Reason;
+                            break;
+                        case GatewayStreamEvent.Usage u:
+                            tokens = u.Tokens;
+                            (promptTokens, completionTokens) = ((int)u.Tokens.InputTokens, (int)u.Tokens.OutputTokens);
+                            break;
+                        case GatewayStreamEvent.End e:
+                            RecordStream(tokens, e.CostUsd);
+                            break;
+                    }
                 }
+            }
+            finally
+            {
+                RecordStream(null, null); // nothing when the end was recorded; else the stream broke off
             }
         }
 
@@ -109,5 +125,31 @@ public sealed class ChatAnswer : IDisposable
         }
     }
 
-    public void Dispose() => _stream?.Dispose();
+    /// <summary>
+    /// Disposes the stream (which cancels the gateway's); a stream that was opened and never read to its end is recorded as
+    /// broken off first (<see cref="RecordStream"/>).
+    /// </summary>
+    public void Dispose()
+    {
+        RecordStream(null, null);
+        _stream?.Dispose();
+    }
+
+    /// <summary>
+    /// The streamed answer's usage record, once (§8.3): at the stream's end the usage chunk's <paramref name="tokens"/> (the
+    /// prompt estimate when it sent none) and the comment's <paramref name="costUsd"/>; a stream that breaks off (a disconnect,
+    /// the idle or total timeout, an error event, a reader that stops) has neither and is recorded with the prompt estimate of
+    /// §6.3 as input, no output, at an estimated cost. Nothing for a JSON answer or a fixed text.
+    /// </summary>
+    private void RecordStream(GatewayTokens? tokens, decimal? costUsd)
+    {
+        if (_stream is null || _streamRecorded)
+        {
+            return;
+        }
+
+        _streamRecorded = true;
+        Plan.Usage.Add(new GatewayCallUsage(GatewayChatClient.AnswerStep, Plan.Assistant.Published!.GatewayModel,
+            tokens ?? new GatewayTokens(Plan.Prompt!.EstimatedTokens, 0, 0), costUsd));
+    }
 }

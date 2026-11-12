@@ -65,13 +65,23 @@ internal static class CommandPayload
 /// </summary>
 internal static class CommandCommit
 {
+    public static Task<JobResult> CompleteAsync<TResult>(EngineCommit commit, IJobQueue queue, LeasedJob job, WorkerIdentity identity, TResult result,
+        CancellationToken cancellationToken) =>
+        CompleteAsync(commit, queue, job, identity, result, null, cancellationToken);
+
+    /// <summary>The completion and the commit; a job's model calls (<paramref name="usage"/>) go to <c>CollectionDailyUsage</c> as the last statement.</summary>
     public static async Task<JobResult> CompleteAsync<TResult>(EngineCommit commit, IJobQueue queue, LeasedJob job, WorkerIdentity identity, TResult result,
-        CancellationToken cancellationToken)
+        JobUsage? usage, CancellationToken cancellationToken)
     {
         if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, ContractJson.Serialize(result), cancellationToken))
         {
             // The lease is gone: nothing is written; the dispatcher records the loss.
             return new JobResult.Success();
+        }
+
+        if (usage is not null)
+        {
+            await commit.AddUsageAsync(usage, cancellationToken);
         }
 
         await commit.CommitAsync(cancellationToken);

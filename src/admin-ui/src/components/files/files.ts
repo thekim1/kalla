@@ -18,6 +18,9 @@ export const restorable = (f: UploadFile): boolean => f.deletedAt !== null && Da
 export const sizeText = (bytes: number): string =>
   bytes === 0 ? '0 kB' : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${formatDecimal(bytes / 1024 / 1024, 1)} MB`
 
+/** The file's bytes were not checked by a malware scan: `unscanned`, or `indexed` without `scannedAt` (admin design §5.5.7). */
+export const notScanned = (f: UploadFile): boolean => f.state === 'unscanned' || (f.state === 'indexed' && !f.scannedAt)
+
 export const stateTone = (state: string): Tone => (state === 'indexed' ? 'ok' : state === 'malware' || state === 'refused' ? 'danger' : 'neutral')
 
 /** The folder of a relative path (`HR/Policys` of `HR/Policys/semester.pdf`), '' for a file without one. */

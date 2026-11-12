@@ -37,6 +37,9 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>A call of its own run, counted in an attempt of its own.</summary>
+    private static EmbeddingCall Call() => new(Guid.CreateVersion7(), TestUsage.Sink());
+
     private static ChunkSetDraft Chunks(int count, int tokens = 50) => new()
     {
         Chunks = [.. Enumerable.Range(0, count).Select(i => new ChunkDraft
@@ -81,7 +84,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var rig = Build();
 
-        var result = await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7()), Ct);
+        var result = await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, Call(), Ct);
 
         result.Vectors.Count.ShouldBe(3);
         result.Vectors.ShouldAllBe(v => v.Length == 1024);
@@ -95,7 +98,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         call.Body.ShouldContain("\"encoding_format\":\"float\"");
 
         var requests = rig.Recorder.Requests.Count;
-        var again = await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        var again = await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, Call(), Ct);
         again.CacheHits.ShouldBe(3);
         rig.Recorder.Requests.Count.ShouldBe(requests);
         again.Vectors.ShouldBe(result.Vectors);
@@ -113,9 +116,9 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task The_cache_is_per_level_and_profile()
     {
         using var rig = Build();
-        await rig.Stage.RunAsync(Chunks(2), Classification.Public, Pilot.Id, new EmbeddingCall(null), Ct);
+        await rig.Stage.RunAsync(Chunks(2), Classification.Public, Pilot.Id, Call(), Ct);
 
-        (await rig.Stage.RunAsync(Chunks(2), Classification.Internal, Pilot.Id, new EmbeddingCall(null), Ct)).CacheHits.ShouldBe(0);
+        (await rig.Stage.RunAsync(Chunks(2), Classification.Internal, Pilot.Id, Call(), Ct)).CacheHits.ShouldBe(0);
     }
 
     /// <summary>
@@ -136,7 +139,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         draft.Chunks.Sum(c => c.TokenCount).ShouldBeGreaterThan(50 * 6_000);
         var before = rig.Recorder.Requests.Count;
 
-        (await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(EmbedLimits.MaxInputs);
+        (await rig.Stage.RunAsync(draft, Level, Pilot.Id, Call(), Ct)).Vectors.Count.ShouldBe(EmbedLimits.MaxInputs);
 
         rig.Recorder.Requests.Count.ShouldBe(before + 1);
         Inputs(rig.Recorder.Requests[^1].Body).Count.ShouldBe(EmbedLimits.MaxInputs);
@@ -148,7 +151,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         using var rig = Build();
         var before = rig.Recorder.Requests.Count;
 
-        await rig.Stage.RunAsync(Chunks(130, tokens: Pilot.MaxInputTokens), Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        await rig.Stage.RunAsync(Chunks(130, tokens: Pilot.MaxInputTokens), Level, Pilot.Id, Call(), Ct);
 
         rig.Recorder.Requests.Skip(before).Select(r => Inputs(r.Body).Count).ShouldBe([64, 64, 2]);
     }
@@ -161,7 +164,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var draft = new ChunkSetDraft { Chunks = [.. Enumerable.Range(0, 64).Select(i => Swedish(i, $"Sophämtning vecka {i} {marker}."))] };
         var before = rig.Recorder.Requests.Count;
 
-        await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        await rig.Stage.RunAsync(draft, Level, Pilot.Id, Call(), Ct);
 
         rig.Recorder.Requests.Count.ShouldBe(before + 1);
         Inputs(rig.Recorder.Requests[^1].Body).Count.ShouldBe(64);
@@ -175,7 +178,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var draft = new ChunkSetDraft { Chunks = [one, one with { Ordinal = 1 }, one with { Ordinal = 2 }] };
         var before = rig.Recorder.Requests.Count;
 
-        var result = await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        var result = await rig.Stage.RunAsync(draft, Level, Pilot.Id, Call(), Ct);
 
         result.Vectors.Count.ShouldBe(3);
         rig.Recorder.Requests.Count.ShouldBe(before + 1);
@@ -190,7 +193,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
 
         await Task.WhenAll(Enumerable.Range(0, 6).Select(i =>
             rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Chunks(1).Chunks[0] with { TextHash = $"h{i}", Text = $"dokument {i}" }] },
-                Level, Pilot.Id, new EmbeddingCall(null), Ct)));
+                Level, Pilot.Id, Call(), Ct)));
 
         slow.MaxInFlight.ShouldBeLessThanOrEqualTo(2);
         slow.MaxInFlight.ShouldBeGreaterThan(0);
@@ -201,7 +204,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var rig = Build(profiles: Pilot with { CanaryCheckedAt = ProcessingHarness.Now, CanarySimilarity = 0.42 });
 
-        var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct));
+        var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, Call(), Ct));
         error.Code.ShouldBe("embed.canary_mismatch");
         error.CountsAttempt.ShouldBeFalse();
         rig.Recorder.Requests.ShouldBeEmpty();
@@ -216,7 +219,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var rig = Build(profiles: Pilot with { CanaryCheckedAt = similarity is null ? null : ProcessingHarness.Now, CanarySimilarity = similarity });
 
-        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(1);
+        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct)).Vectors.Count.ShouldBe(1);
         (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Healthy);
     }
 
@@ -225,7 +228,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var rig = Build(profiles: Pilot with { CanaryText = null, CanaryEmbedding = null });
 
-        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(1);
+        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct)).Vectors.Count.ShouldBe(1);
         rig.Recorder.Requests.Count.ShouldBe(1);
     }
 
@@ -233,15 +236,15 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task A_new_check_result_on_the_profile_row_applies_at_the_next_embed_without_a_restart()
     {
         using var rig = Build();
-        await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct);
 
         rig.Profiles.Profiles[0] = Pilot with { CanaryCheckedAt = ProcessingHarness.Now, CanarySimilarity = 0.9 };
-        (await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct)))
+        (await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, Call(), Ct)))
             .Code.ShouldBe("embed.canary_mismatch");
         (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Unhealthy);
 
         rig.Profiles.Profiles[0] = Pilot with { CanaryCheckedAt = ProcessingHarness.Now.AddMinutes(5), CanarySimilarity = 0.99995 };
-        (await rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(2);
+        (await rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, Call(), Ct)).Vectors.Count.ShouldBe(2);
         (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Healthy);
     }
 
@@ -279,7 +282,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var wrong = Pilot with { GatewayModel = "fake-wrong-residency-embed", CanaryEmbedding = null };
         using var rig = Build(profiles: wrong);
 
-        var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
+        var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct));
         error.Reason.ShouldBe("gateway.residency_above_ceiling");
         rig.Cache.Rows.ShouldBeEmpty();
     }
@@ -290,7 +293,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var other = Pilot with { Dimensions = 768, CanaryEmbedding = null };
         using var rig = Build(profiles: other);
 
-        (await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct))).Reason.ShouldBe("embed.bad_vector");
+        (await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct))).Reason.ShouldBe("embed.bad_vector");
         rig.Cache.Rows.ShouldBeEmpty();
     }
 
@@ -311,13 +314,13 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         using var rig = Build(profiles: shortened);
 
         var draft = new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}."), Swedish(1, $"Bygglov för garage {marker}.")] };
-        var result = await rig.Stage.RunAsync(draft, Level, shortened.Id, new EmbeddingCall(null), Ct);
+        var result = await rig.Stage.RunAsync(draft, Level, shortened.Id, Call(), Ct);
         result.Vectors.Count.ShouldBe(2);
         result.Vectors.ShouldAllBe(v => v.Length == 256);
         rig.Recorder.Requests[^1].Body.ShouldContain("\"dimensions\":256");
         var query = new Worker.Evaluation.EvaluationQueryEmbedder(rig.Host.Services.GetRequiredService<EmbeddingClient>(), rig.Cache, TimeProvider.System)
             .For(shortened, Level);
-        (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(256);
+        (await query($"när töms soptunnan {marker}", Guid.CreateVersion7(), TestUsage.Sink(), Ct)).Length.ShouldBe(256);
         Dimensions(rig.Recorder.Requests[^1].Body).ShouldBe(256);
         rig.Recorder.Requests.Count.ShouldBe(2);
     }
@@ -329,10 +332,10 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var marker = Guid.NewGuid().ToString("N");
         using var rig = Build();
 
-        await rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}.")] }, Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        await rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}.")] }, Level, Pilot.Id, Call(), Ct);
         var query = new Worker.Evaluation.EvaluationQueryEmbedder(rig.Host.Services.GetRequiredService<EmbeddingClient>(), rig.Cache, TimeProvider.System)
             .For(Pilot, Level);
-        (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(1024);
+        (await query($"när töms soptunnan {marker}", Guid.CreateVersion7(), TestUsage.Sink(), Ct)).Length.ShouldBe(1024);
 
         rig.Recorder.Requests.Count.ShouldBe(2);
         rig.Recorder.Requests.ShouldAllBe(r => Dimensions(r.Body) == null);
@@ -346,10 +349,47 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task Gateway_failures_are_transient_as_engine_design_7_3(HttpStatusCode status, bool countsAttempt, string code)
     {
         using var rig = Build(primary: new StatusHandler(status), profiles: Pilot with { CanaryEmbedding = null });
+        var sink = TestUsage.Sink();
 
-        var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
+        var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7(), sink), Ct));
         error.Code.ShouldBe(code);
         error.CountsAttempt.ShouldBe(countsAttempt);
+        sink.Usage.HasPending.ShouldBeFalse("a call answered with an error status records nothing");
+    }
+
+    /// <summary>
+    /// Engine design §10.6: an answered call's tokens and <c>x-ume-cost-usd</c> go to the attempt's usage; without the header
+    /// the cost is the estimate from the mirror's prices (here 0.02 USD per million input tokens).
+    /// </summary>
+    [Fact]
+    public async Task An_answered_call_adds_its_gateway_cost_to_the_attempt_and_without_one_its_estimate()
+    {
+        var priced = new GatewayCallRecorder();
+        var pricedHandler = priced.Handler();
+        pricedHandler.InnerHandler = gateway.Server.CreateHandler();
+        using (var rig = Build(primary: pricedHandler))
+        {
+            var sink = TestUsage.Sink();
+            await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7(), sink), Ct);
+
+            var call = priced.Answered.ShouldHaveSingleItem();
+            call.CostUsd.ShouldNotBeNull().ShouldBeGreaterThan(0m);
+            sink.Usage.PendingCostUsd.ShouldBe(call.CostUsd);
+        }
+
+        var unpriced = new GatewayCallRecorder();
+        var unpricedHandler = unpriced.Handler();
+        unpricedHandler.InnerHandler = new WithoutCostHandler(gateway.Server.CreateHandler());
+        using (var rig = Build(primary: unpricedHandler))
+        {
+            var sink = TestUsage.Sink(new FixedModelPrices(new Dictionary<string, ModelPrices> { [Pilot.GatewayModel] = new(0.02m, null, 0m) }));
+            await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7(), sink), Ct);
+
+            var call = unpriced.Answered.ShouldHaveSingleItem();
+            call.CostUsd.ShouldBeNull();
+            call.InputTokens.ShouldBeGreaterThan(0);
+            sink.Usage.PendingCostUsd.ShouldBe(Math.Round(call.InputTokens * 0.02m / 1_000_000m, 8, MidpointRounding.AwayFromZero));
+        }
     }
 
     [Theory]
@@ -359,7 +399,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var rig = Build(primary: new StatusHandler(status), profiles: Pilot with { CanaryEmbedding = null });
 
-        var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
+        var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, Call(), Ct));
         error.Reason.ShouldBe(reason);
         error.Outcome.ShouldBe(RunItemOutcome.Failed);
     }
@@ -433,6 +473,17 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
             {
                 Interlocked.Decrement(ref _inFlight);
             }
+        }
+    }
+
+    /// <summary>The gateway's answer without <c>x-ume-cost-usd</c>, as a gateway without the feature sends it.</summary>
+    private sealed class WithoutCostHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            response.Headers.Remove(GatewayHeaders.CostUsd);
+            return response;
         }
     }
 

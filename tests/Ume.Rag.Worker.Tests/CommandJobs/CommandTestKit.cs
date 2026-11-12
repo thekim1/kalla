@@ -52,7 +52,8 @@ internal sealed class CommandRunner(RagDatabaseFixture database, Action<IService
     public async Task<JobResult> RunAsync(LeasedJob job)
     {
         await using var scope = _services.CreateAsyncScope();
-        return await new CommandJobHandler().ExecuteAsync(new JobContext(job, scope.ServiceProvider), Ct);
+        var usage = new JobUsage(new Processing.FixedModelPrices(), TimeProvider.System);
+        return await new CommandJobHandler().ExecuteAsync(new JobContext(job, scope.ServiceProvider, usage), Ct);
     }
 
     /// <summary>Enqueues, leases and runs.</summary>

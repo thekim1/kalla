@@ -121,7 +121,7 @@ public sealed partial class ParseJobHandler(
         if (document.CurrentExecutionId != payload.ExecutionId)
         {
             return await ingest.TerminalAsync(source, runId, job, document, document.CanonicalIdentity, Outcome.Superseded, "execution.superseded",
-                payload.PipelineVersionId, null, cancellationToken);
+                payload.PipelineVersionId, null, null, cancellationToken);
         }
 
         try
@@ -183,7 +183,7 @@ public sealed partial class ParseJobHandler(
         }
 
         return await ingest.TerminalAsync(source, runId, job, document, document.CanonicalIdentity, Outcome.Superseded, "execution.superseded",
-            payload.PipelineVersionId, null, cancellationToken);
+            payload.PipelineVersionId, null, null, cancellationToken);
     }
 
     [LoggerMessage(LogLevel.Information, "Document {DocumentId}: the parse slice is used up; slice {Slice} continues at the next range")]
@@ -200,7 +200,9 @@ public sealed partial class ParseJobHandler(
 /// chunks are embedded (cache first), written invisible, and swapped in one fenced transaction with the run item and the
 /// job's completion. The swap re-checks that the source's published version is still the one written, so a slow write of
 /// an old version never overtakes a newer one; a set of a <c>public</c> collection that personal data flagged goes in
-/// <c>held</c>.
+/// <c>held</c>. The attempt's embedding calls (<see cref="JobContext.Usage"/>, counted under the source's collection and
+/// carrying the run's id) give the run item its <c>CostUsd</c> and go to <c>CollectionDailyUsage</c> in the transaction that
+/// writes the item (engine design §10.6).
 /// </summary>
 public sealed partial class EmbedJobHandler(
     SourceContexts sources,
@@ -230,6 +232,7 @@ public sealed partial class EmbedJobHandler(
         ArgumentNullException.ThrowIfNull(context);
         config.EnsureConfirmed();
         var job = context.Job;
+        var usage = context.Usage;
         if (SyncJobs.Read<EmbedPayload>(job) is not { } payload)
         {
             return new JobResult.FatalError("embed.invalid_payload");
@@ -244,12 +247,12 @@ public sealed partial class EmbedJobHandler(
 
         if (document.CurrentExecutionId != payload.ExecutionId)
         {
-            return await Terminal(source, payload, job, document, Outcome.Superseded, "execution.superseded", cancellationToken);
+            return await Terminal(source, payload, job, document, Outcome.Superseded, "execution.superseded", usage, cancellationToken);
         }
 
         try
         {
-            return await EmbedAsync(source, payload, job, document, contentHash, cancellationToken);
+            return await EmbedAsync(source, payload, job, document, contentHash, usage, cancellationToken);
         }
         catch (PipelineRefusedException refused)
         {
@@ -261,19 +264,19 @@ public sealed partial class EmbedJobHandler(
         }
         catch (StageFatalException fatal)
         {
-            return await Terminal(source, payload, job, document, fatal.Outcome, fatal.Reason, cancellationToken);
+            return await Terminal(source, payload, job, document, fatal.Outcome, fatal.Reason, usage, cancellationToken);
         }
     }
 
     private async Task<JobResult> EmbedAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash,
-        CancellationToken cancellationToken)
+        JobUsage usage, CancellationToken cancellationToken)
     {
         await sources.VersionAsync(payload.PipelineVersionId, source.Type, cancellationToken);
         var inputKey = Convert.FromHexString(payload.InputKey);
         if (await nodeOutputs.FindAsync(inputKey, cancellationToken) is not { } inputRow ||
             await outputs.GetAsync<ChunkSetDraft>(inputKey, cancellationToken) is not { } input)
         {
-            return await Terminal(source, payload, job, document, Outcome.Failed, "embed.input_missing", cancellationToken);
+            return await Terminal(source, payload, job, document, Outcome.Failed, "embed.input_missing", usage, cancellationToken);
         }
 
         var draft = input.Value;
@@ -282,7 +285,7 @@ public sealed partial class EmbedJobHandler(
         var live = await index.LiveAsync(document.Id, cancellationToken);
         if (live is not null && key.IsMetBy(live.Key))
         {
-            return await Terminal(source, payload, job, document, Outcome.Unchanged, null, cancellationToken);
+            return await Terminal(source, payload, job, document, Outcome.Unchanged, null, usage, cancellationToken);
         }
 
         var existing = await index.FindAsync(key, cancellationToken);
@@ -291,7 +294,7 @@ public sealed partial class EmbedJobHandler(
         {
             // Rollback within 14 days (engine design §12.3, §14 rule 1): swapped back, nothing written.
             var stored = await chunkSets.GetAsync(existing.Id, cancellationToken) ?? throw new InvalidOperationException("The set vanished.");
-            return await SwapAsync(source, payload, job, document, contentHash, stored, live, swappedBack: true, cancellationToken);
+            return await SwapAsync(source, payload, job, document, contentHash, stored, live, swappedBack: true, usage, cancellationToken);
         }
 
         if (existing is { State: ChunkSetStates.Writing })
@@ -303,12 +306,13 @@ public sealed partial class EmbedJobHandler(
         if (existing is null && live is not null && !ChunkSetSalt.IsForced(key.ParseRuleKey) && live.Key.EmbeddingProfileId == key.EmbeddingProfileId &&
             live.InputHash.AsSpan().SequenceEqual(inputRow.InputHash))
         {
-            return await ReKeyAsync(source, payload, job, document, contentHash, live, key, cancellationToken);
+            return await ReKeyAsync(source, payload, job, document, contentHash, live, key, usage, cancellationToken);
         }
 
         var profile = await profiles.GetAsync(source.EmbeddingProfileId, cancellationToken)
             ?? throw new StageFatalException(Outcome.Failed, "embed.profile_unknown");
-        var embedded = await embed.RunAsync(draft, document.Classification, profile.Id, new EmbeddingCall(payload.RunId), cancellationToken);
+        var embedded = await embed.RunAsync(draft, document.Classification, profile.Id, new EmbeddingCall(payload.RunId, new UsageSink(usage, source.UsageOwner)),
+            cancellationToken);
         var values = await settings.GetAsync(cancellationToken);
         var counts = draft.Pii ?? new PiiCounts();
         var set = new ChunkSetRecord(Guid.CreateVersion7(), key, document.Classification, source.CollectionId, inputRow.InputHash)
@@ -327,27 +331,27 @@ public sealed partial class EmbedJobHandler(
         if (rows.Count <= IndexWriter.BatchSize)
         {
             // Rule 2a (#501): the swap transaction inserts the set and its chunks once, after the profile guard.
-            return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken, new SetWrite(rows, profile));
+            return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, usage, cancellationToken, new SetWrite(rows, profile));
         }
 
         // Guarded: an admin may have changed the profile while this document was embedded (B-30, #554 review).
         await index.WriteInvisibleAsync(set, rows, profile, cancellationToken);
-        return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken);
+        return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, usage, cancellationToken);
     }
 
     private async Task<JobResult> SwapAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash,
-        ChunkSetRecord set, ChunkSetRow? live, bool swappedBack, CancellationToken cancellationToken, SetWrite? write = null) =>
+        ChunkSetRecord set, ChunkSetRow? live, bool swappedBack, JobUsage usage, CancellationToken cancellationToken, SetWrite? write = null) =>
         await swaps.SwapAsync(new SwapRequest(source, document, payload.ExecutionId, contentHash, payload.PipelineVersionId, payload.RunId, set, live,
-            swappedBack, job, write), cancellationToken) switch
+            swappedBack, job, write) { Usage = usage }, cancellationToken) switch
         {
             SwapResult.Swapped => new JobResult.Committed(),
             SwapResult.LeaseLost => new JobResult.Success(),
-            SwapResult.Fenced => await Terminal(source, payload, job, document, Outcome.Superseded, "execution.superseded", cancellationToken),
-            _ => await Terminal(source, payload, job, document, Outcome.Superseded, Republished, cancellationToken),
+            SwapResult.Fenced => await Terminal(source, payload, job, document, Outcome.Superseded, "execution.superseded", usage, cancellationToken),
+            _ => await Terminal(source, payload, job, document, Outcome.Superseded, Republished, usage, cancellationToken),
         };
 
     private async Task<JobResult> ReKeyAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash, ChunkSetRow live,
-        ChunkSetKey key, CancellationToken cancellationToken)
+        ChunkSetKey key, JobUsage usage, CancellationToken cancellationToken)
     {
         await using (var commit = await EngineCommit.BeginAsync(database, cancellationToken))
         {
@@ -368,18 +372,20 @@ public sealed partial class EmbedJobHandler(
                     return new JobResult.Success();
                 }
 
+                await commit.AddUsageAsync(usage, cancellationToken);
                 await commit.CommitAsync(cancellationToken);
                 LogSwapped(logger, document.Id, live.Id, "rekeyed", live.State);
                 return new JobResult.Committed();
             }
         }
 
-        return await Terminal(source, payload, job, document, Outcome.Superseded, Republished, cancellationToken);
+        return await Terminal(source, payload, job, document, Outcome.Superseded, Republished, usage, cancellationToken);
     }
 
     private Task<JobResult> Terminal(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, Outcome outcome, string? reason,
-        CancellationToken cancellationToken) =>
-        ingest.TerminalAsync(source, payload.RunId, job, document, document.CanonicalIdentity, outcome, reason, payload.PipelineVersionId, null, cancellationToken);
+        JobUsage usage, CancellationToken cancellationToken) =>
+        ingest.TerminalAsync(source, payload.RunId, job, document, document.CanonicalIdentity, outcome, reason, payload.PipelineVersionId, null, usage,
+            cancellationToken);
 
     /// <summary>A re-key's reason: another version (<c>version.unaffected</c>), only another rule part (<c>rule.unaffected</c>), else new content (<c>change.noise</c>).</summary>
     private static string ReKeyReason(ChunkSetKey live, ChunkSetKey key) =>

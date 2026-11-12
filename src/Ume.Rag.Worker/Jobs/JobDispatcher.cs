@@ -4,6 +4,7 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.ServiceDefaults;
+using Ume.Rag.Worker.Engine;
 
 namespace Ume.Rag.Worker.Jobs;
 
@@ -20,10 +21,15 @@ namespace Ume.Rag.Worker.Jobs;
 /// Each job runs in its own scope under the <c>ConfigVersion</c> log scope. Capacity refusals (an unconfirmed config, a
 /// transient result with <c>CountsAttempt = false</c>) requeue without an attempt. A clean stop stops dequeuing, gives
 /// running jobs <c>Worker:StopGraceSeconds</c>, then cancels the rest and releases them without an attempt. A process that
-/// dies writes nothing: the reaper reclaims its jobs.
+/// dies writes nothing: the reaper reclaims its jobs. Each attempt gets its own <see cref="JobUsage"/>: the calls a handler
+/// made and did not commit with its own outcome are written with the outcome the dispatcher writes (in the completion's
+/// transaction; after a retry, failure or release, which the queue writes without one), and dropped when the lease was lost
+/// (engine design §10.6).
 /// </remarks>
 public sealed partial class JobDispatcher(
     IJobQueue queue,
+    JobDatabase database,
+    IGatewayModelPrices prices,
     RunningJobs running,
     WorkerIdentity identity,
     JobWakeUps wakeUps,
@@ -187,13 +193,14 @@ public sealed partial class JobDispatcher(
         var job = entry.Job;
         var started = time.GetTimestamp();
         var outcome = "unrecorded";
+        var usage = new JobUsage(prices, time);
         try
         {
             using (ConfigVersionLogScope.Begin(logger, config))
             using (logger.BeginScope(JobScope(job)))
             {
-                var result = await ExecuteAsync(lane.Handler, entry);
-                outcome = result is null ? await CancelledAsync(entry, stoppingToken) : await ApplyAsync(job, result);
+                var result = await ExecuteAsync(lane.Handler, entry, usage);
+                outcome = result is null ? await CancelledAsync(entry, usage, stoppingToken) : await ApplyAsync(job, result, usage);
             }
         }
         catch (Exception ex)
@@ -211,12 +218,12 @@ public sealed partial class JobDispatcher(
     }
 
     /// <summary>Runs the handler; null when it was cancelled (lease lost or stopping).</summary>
-    private async Task<JobResult?> ExecuteAsync(IJobHandler handler, RunningJob entry)
+    private async Task<JobResult?> ExecuteAsync(IJobHandler handler, RunningJob entry, JobUsage usage)
     {
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            return await handler.ExecuteAsync(new JobContext(entry.Job, scope.ServiceProvider), entry.Token);
+            return await handler.ExecuteAsync(new JobContext(entry.Job, scope.ServiceProvider, usage), entry.Token);
         }
         catch (Exception) when (entry.Token.IsCancellationRequested)
         {
@@ -237,13 +244,13 @@ public sealed partial class JobDispatcher(
         }
     }
 
-    private async Task<string> ApplyAsync(LeasedJob job, JobResult result)
+    private async Task<string> ApplyAsync(LeasedJob job, JobResult result, JobUsage usage)
     {
         var owner = identity.InstanceId;
         switch (result)
         {
             case JobResult.Success success:
-                if (await queue.CompleteAsync(job.Id, owner, success.ResultJson, null, CancellationToken.None))
+                if (await CompleteAsync(job, success.ResultJson, usage))
                 {
                     LogSucceeded(logger, job.Id, job.Class);
                     return JobStatesOutcome.Succeeded;
@@ -252,6 +259,8 @@ public sealed partial class JobDispatcher(
                 return LeaseLost(job);
 
             case JobResult.Committed:
+                // The handler's own transaction carried its calls; calls a handler committed without stay pending and go on their own.
+                await WriteUsageAsync(job, usage);
                 LogSucceeded(logger, job.Id, job.Class);
                 return JobStatesOutcome.Succeeded;
 
@@ -261,28 +270,69 @@ public sealed partial class JobDispatcher(
                     return LeaseLost(job);
                 }
 
+                await WriteUsageAsync(job, usage);
                 metrics.Requeued(job.Class, refusal.Code);
                 LogRequeued(logger, job.Id, job.Class, refusal.Code);
                 return JobStatesOutcome.Requeued;
 
             case JobResult.TransientError transient:
-                return await FailAsync(job, transient.Code, fatal: false, transient.RetryAfter);
+                return await FailAsync(job, transient.Code, fatal: false, transient.RetryAfter, usage);
 
             case JobResult.FatalError fatal:
-                return await FailAsync(job, fatal.Code, fatal: true, retryAfter: null);
+                return await FailAsync(job, fatal.Code, fatal: true, retryAfter: null, usage);
 
             default:
                 throw new InvalidOperationException($"Unknown job result {result.GetType().Name}.");
         }
     }
 
-    private async Task<string> FailAsync(LeasedJob job, string code, bool fatal, TimeSpan? retryAfter)
+    /// <summary>
+    /// The job's completion; with calls pending, they are added to <c>CollectionDailyUsage</c> as the last statement of the
+    /// completion's transaction (engine design §10.6). False when the lease was lost (nothing is written).
+    /// </summary>
+    private async Task<bool> CompleteAsync(LeasedJob job, string? resultJson, JobUsage usage)
+    {
+        if (!usage.HasPending)
+        {
+            return await queue.CompleteAsync(job.Id, identity.InstanceId, resultJson, null, CancellationToken.None);
+        }
+
+        await using var commit = await EngineCommit.BeginAsync(database, CancellationToken.None);
+        if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, resultJson, CancellationToken.None))
+        {
+            return false;
+        }
+
+        await commit.AddUsageAsync(usage, CancellationToken.None);
+        await commit.CommitAsync(CancellationToken.None);
+        return true;
+    }
+
+    /// <summary>
+    /// The attempt's pending calls in their own transaction, after an outcome the queue wrote without one (the queue's
+    /// <c>FailAsync</c> and <c>ReleaseAsync</c> take none). A failure is logged; the outcome stands.
+    /// </summary>
+    private async Task WriteUsageAsync(LeasedJob job, JobUsage usage)
+    {
+        try
+        {
+            await usage.WriteOwnAsync(database, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            LogUsageFailed(logger, ex, job.Id, job.Class);
+        }
+    }
+
+    private async Task<string> FailAsync(LeasedJob job, string code, bool fatal, TimeSpan? retryAfter, JobUsage usage)
     {
         var state = await queue.FailAsync(job.Id, identity.InstanceId, code, fatal, retryAfter, CancellationToken.None);
         if (state is null)
         {
             return LeaseLost(job);
         }
+
+        await WriteUsageAsync(job, usage);
 
         if (state == Domain.Entities.JobStates.Dead)
         {
@@ -293,7 +343,7 @@ public sealed partial class JobDispatcher(
         return state;
     }
 
-    private async Task<string> CancelledAsync(RunningJob entry, CancellationToken stoppingToken)
+    private async Task<string> CancelledAsync(RunningJob entry, JobUsage usage, CancellationToken stoppingToken)
     {
         var job = entry.Job;
         if (entry.LeaseLost)
@@ -309,6 +359,7 @@ public sealed partial class JobDispatcher(
 
         if (await queue.ReleaseAsync(job.Id, identity.InstanceId, ShutdownReason, TimeSpan.Zero, CancellationToken.None))
         {
+            await WriteUsageAsync(job, usage);
             metrics.Requeued(job.Class, ShutdownReason);
             LogRequeued(logger, job.Id, job.Class, ShutdownReason);
             return JobStatesOutcome.Requeued;
@@ -389,6 +440,9 @@ public sealed partial class JobDispatcher(
 
     [LoggerMessage(LogLevel.Warning, "Job {JobId} ({JobClass}) lost its lease before its outcome was written")]
     private static partial void LogLeaseLost(ILogger logger, Guid jobId, string jobClass);
+
+    [LoggerMessage(LogLevel.Error, "The model-call usage of job {JobId} ({JobClass}) could not be recorded; its outcome stands")]
+    private static partial void LogUsageFailed(ILogger logger, Exception exception, Guid jobId, string jobClass);
 
     [LoggerMessage(LogLevel.Error, "The outcome of job {JobId} ({JobClass}) could not be written; the reaper returns it when its lease ends")]
     private static partial void LogOutcomeFailed(ILogger logger, Exception exception, Guid jobId, string jobClass);

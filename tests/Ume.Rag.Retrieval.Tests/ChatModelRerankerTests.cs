@@ -152,7 +152,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     }
 
     [Fact]
-    public async Task Malformed_output_keeps_the_fused_order_with_rerank_unavailable()
+    public async Task Malformed_output_keeps_the_fused_order_with_rerank_unavailable_and_the_calls_usage()
     {
         using var engine = Engine(new Gateway(_ => Ok("""{"scores": [{"id": 1, "score": 9}]}""")));
         var result = await engine.SearchAsync(Request(), Ct);
@@ -161,7 +161,8 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         result.Hits.ShouldAllBe(h => h.Scores.RerankScore == null);
         result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
         result.Coverage.Status.ShouldBe(CoverageStatus.Ok);
-        result.RerankUsage.ShouldBeNull();
+        // B-38: the 2xx answer was charged, so its usage stays with the result for the turn's rerank record (chat design §8.3).
+        result.RerankUsage.ShouldBe(new GatewayCallUsage(ChatModelReranker.Step, Model, 1200, 0, 80, null));
     }
 
     [Fact]

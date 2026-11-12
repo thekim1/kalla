@@ -67,7 +67,7 @@ public static class ChatEndpoints
                 limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user (or per key, when the key is the subject) and minute, before any model call
                 // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
                 // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
-                var assistantId = service.AssistantId(parsed.Model);
+                var assistantId = service.Assistant(parsed.Model)?.Id ?? Guid.Empty;
                 (Guid? Issued, string? External) conversation;
                 try
                 {
@@ -79,11 +79,21 @@ public static class ChatEndpoints
                     throw;
                 }
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                // §8.3, §12.1: every model call of the turn adds its usage record here; each record is written once, with the turn
+                // or, when the turn fails or breaks off after a call (or a call follows the turn's write), as a usage-only turn.
+                var usage = service.Usage();
                 ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion)
                 {
                     metrics.Completed(plan, who, parsed.Stream);
                     return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
-                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Usage = usage.Take() });
+                }
+                ValueTask EnqueueUsage()
+                {
+                    var records = usage.Take();
+                    return records.Count > 0 && service.Assistant(parsed.Model) is { } assistant
+                        ? writer.EnqueueAsync(ChatTurn.UsageOnlyOf(assistant.Id, assistant.DepartmentId, who.Client.Id, assistant.Classification, usage.Started, records))
+                        : ValueTask.CompletedTask;
                 }
                 UmeAnswer? Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited)
                 {
@@ -96,27 +106,38 @@ public static class ChatEndpoints
                     metrics.Ume(asked, ume, who);
                     return ume;
                 }
-                if (!parsed.Stream)
+                try
                 {
-                    var answer = await service.CompleteAsync(who, parsed, ct);
-                    await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
-                    var ume = Ume(answer.Plan!, answer.Cited);
-                    // §3.8, §9.8: the JSON answer is written when the follow-up call has returned or its budget has run out.
-                    if (ume is not null && service.FollowUpCount(answer.Plan!, parsed.Ume) is > 0 and var count)
+                    if (!parsed.Stream)
                     {
-                        ume = ume with { FollowUps = await service.FollowUpsAsync(answer.Plan!, parsed.Question, count, answer.Content, answer.Cited, ct) };
+                        var answer = await service.CompleteAsync(who, parsed, usage, ct);
+                        await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
+                        var ume = Ume(answer.Plan!, answer.Cited);
+                        // §3.8, §9.8: the JSON answer is written when the follow-up call has returned or its budget has run out.
+                        if (ume is not null && service.FollowUpCount(answer.Plan!, parsed.Ume) is > 0 and var count)
+                        {
+                            ume = ume with { FollowUps = await service.FollowUpsAsync(answer.Plan!, parsed.Question, count, answer.Content, answer.Cited, ct) };
+                            await EnqueueUsage(); // the follow-up call came after the turn's write
+                        }
+
+                        return Json(answer, ume);
                     }
 
-                    return Json(answer, ume);
+                    var plan = await service.PlanAsync(who, parsed, usage, ct);
+                    // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
+                    var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
+                    var followUps = service.FollowUpCount(plan, parsed.Ume);
+                    return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
+                        parsed.Ume is null ? null : cited => Ume(plan, cited)!,
+                        followUps > 0 ? (cited, delivered, token) => service.FollowUpsAsync(plan, parsed.Question, followUps, delivered, cited, token) : null,
+                        EnqueueUsage);
                 }
-
-                var plan = await service.PlanAsync(who, parsed, ct);
-                // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
-                var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
-                var followUps = service.FollowUpCount(plan, parsed.Ume);
-                return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
-                    parsed.Ume is null ? null : cited => Ume(plan, cited)!,
-                    followUps > 0 ? (cited, delivered, token) => service.FollowUpsAsync(plan, parsed.Question, followUps, delivered, cited, token) : null);
+                catch (Exception) when (usage.HasRecords)
+                {
+                    // A turn that fails after a model call (an answer call refused after condense and the query embedding) is usage-only.
+                    await EnqueueUsage();
+                    throw;
+                }
             }))
             .WithMetadata(new ChatBodyLimit())
             .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions, JSON or stream)");
