@@ -32,7 +32,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
-            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
         ]);
         builder.AddGatewayClient(ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
         var host = builder.Build();

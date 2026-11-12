@@ -333,7 +333,7 @@ export const EMBEDDING_TEST_MESSAGES: Record<string, string> = {
   residency_refused: 'The AI gateway answered from a residency ({residency}) above the profile\'s ceiling. Check the routes of {model} in the gateway.',
   canary_mismatch: 'The model now gives different embeddings than the ones already indexed, so the change is refused. Check which model the gateway serves under {model}.',
   gateway_not_configured: 'No AI gateway is configured for the admin service, so the profile cannot be tested.',
-  gateway_key_missing: 'The admin service has no AI gateway key for the residency {residency}. Add it to the deployment (Gateway:Keys).',
+  gateway_key_missing: 'The admin service may not call the AI gateway at the residency {residency}. Check its credential key (Gateway:Key) and Gateway:MaxResidency in the deployment.',
   gateway_unavailable: 'The AI gateway could not be reached or failed. Try again in a moment.',
 }
 

@@ -25,12 +25,6 @@ public sealed class GatewayOptions
     public Residency? ServiceMaximum { get; internal set; }
 
     /// <summary>
-    /// The per-level keys (<c>Gateway:Keys:&lt;level&gt;</c>), read only while <see cref="Key"/> is unset: the worker moves to
-    /// <see cref="Key"/> in its own PR (B-37 is split by stream ownership), then this goes.
-    /// </summary>
-    public Dictionary<Residency, string> Keys { get; set; } = [];
-
-    /// <summary>
     /// The highest ceiling this deployment calls models at (<c>Gateway:MaxResidency</c>), or none. Under M2 (no on-prem model
     /// hardware, every model call EU-hosted; P1 README §1) the pilot sets <c>Eu</c>, so a public assistant, whose level
     /// asks for <c>External</c>, is checked (V8) and answered at <c>Eu</c> with the <c>Eu</c> key (#237). It only lowers a
@@ -55,12 +49,9 @@ public sealed class GatewayOptions
 
     /// <summary>
     /// The key a call at <paramref name="ceiling"/> is sent with, or null when this service may not call there: the
-    /// credential key up to <see cref="Maximum"/>; without one, the per-level key of the ceiling.
+    /// credential key up to <see cref="Maximum"/>, none without one.
     /// </summary>
-    public string? KeyFor(Residency ceiling) =>
-        !string.IsNullOrEmpty(Key)
-            ? ceiling <= Maximum ? Key : null
-            : Keys.GetValueOrDefault(ceiling) is { Length: > 0 } key ? key : null;
+    public string? KeyFor(Residency ceiling) => !string.IsNullOrEmpty(Key) && ceiling <= Maximum ? Key : null;
 }
 
 /// <summary>Header names shared with the gateway (<c>Pipeline/GatewayHeaders.cs</c>, gateway design §2.1).</summary>

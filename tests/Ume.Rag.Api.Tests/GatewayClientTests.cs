@@ -16,7 +16,7 @@ namespace Ume.Rag.Api.Tests;
 
 /// <summary>
 /// The <see cref="ResidencyCeilingHandler"/> on a client registered with <c>AddGatewayClient</c> (P0 #8; chat design §8.1,
-/// identity design §4.7): no call leaves without an explicit ceiling and that level's key, and an answer from above the
+/// identity design §4.7): no call leaves without an explicit ceiling and the service's credential key, and an answer from above the
 /// ceiling is aborted before the caller reads it. The <see cref="GatewayRetryHandler"/> inside it sends a 502/504 once
 /// more with the same ceiling, never a wider one (#390 Feature B point 1), and a connection failure with no response
 /// once more within 300 ms, never after the first byte (chat design §8.3, B-17).
@@ -47,29 +47,6 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         request.Headers.TryAddWithoutValidation(GatewayHeaders.MaxResidency, ceiling);
 
         await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, request));
-        stub.Calls.ShouldBe(0);
-    }
-
-    [Fact]
-    public async Task A_call_with_another_levels_key_is_refused_before_sending()
-    {
-        var stub = new CountingHandler();
-        using var host = Build(stub);
-        var request = Post("v1/chat/completions").WithMaxResidency(Residency.OnPrem);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.ExternalKey);
-
-        await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, request));
-        stub.Calls.ShouldBe(0);
-    }
-
-    [Fact]
-    public async Task A_process_without_the_key_of_a_level_cannot_call_at_it()
-    {
-        // The worker holds OnPrem and Eu only (simplification pass §6).
-        var stub = new CountingHandler();
-        using var host = Build(stub, levels: ["OnPrem", "Eu"]);
-
-        (await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)))).Ceiling.ShouldBe(Residency.External);
         stub.Calls.ShouldBe(0);
     }
 
@@ -161,24 +138,6 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Theory]
-    [InlineData(Residency.OnPrem, "bge-m3", "v1/embeddings")]
-    [InlineData(Residency.Eu, "ume/chat-standard", "v1/chat/completions")]
-    [InlineData(Residency.External, "ume/chat-advanced", "v1/chat/completions")]
-    public async Task The_level_key_is_added_and_an_answer_within_the_ceiling_passes(Residency ceiling, string model, string path)
-    {
-        using var host = Build(fake.Server.CreateHandler());
-        var body = path.EndsWith("embeddings", StringComparison.Ordinal)
-            ? $$"""{"model":"{{model}}","input":"Bygglov"}"""
-            : $$"""{"model":"{{model}}","messages":[{"role":"user","content":"Hej"}]}""";
-
-        using var response = await SendAsync(host, Post(path, body).WithMaxResidency(ceiling));
-
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        ResidencyCeiling.TryParse(response.Headers.GetValues(GatewayHeaders.Residency).Single(), out var served).ShouldBeTrue();
-        ((int)served).ShouldBeLessThanOrEqualTo((int)ceiling);
-    }
-
-    [Theory]
     [InlineData("v1/chat/completions", """{"model":"fake-wrong-residency","messages":[{"role":"user","content":"Hej"}]}""")]
     [InlineData("v1/chat/completions", """{"model":"fake-wrong-residency","stream":true,"messages":[{"role":"user","content":"Hej"}]}""")]
     [InlineData("v1/embeddings", """{"model":"fake-wrong-residency-embed","input":"Hej"}""")]
@@ -241,7 +200,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         response.StatusCode.ShouldBe(status);
         recording.Calls.Count.ShouldBe(2);
         recording.Calls.ShouldAllBe(c => c.Ceiling == ResidencyCeiling.ToHeader(ceiling)); // never wider
-        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.Keys[ResidencyCeiling.ToHeader(ceiling)]]);
+        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
         recording.Calls.Select(c => c.Body).Distinct().Count().ShouldBe(1);
     }
 
@@ -315,7 +274,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
         recording.Calls.Count.ShouldBe(2);
         recording.Calls.Select(c => c.Ceiling).ShouldBe(["Eu", "Eu"]); // never wider
-        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.Keys["Eu"]]);
+        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
         recording.Calls.Select(c => c.Body).Distinct().Count().ShouldBe(1);
     }
 
@@ -413,8 +372,8 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
 
     private static string Chat(string model) => $$"""{"model":"{{model}}","messages":[{"role":"user","content":"Hej"}]}""";
 
-    private static IHost Build(HttpMessageHandler primary, string[]? levels = null, CapturingLoggerProvider? logs = null, bool retryFailed = true,
-        string? key = null, Residency? maxResidency = null, Residency? cap = null)
+    private static IHost Build(HttpMessageHandler primary, CapturingLoggerProvider? logs = null, bool retryFailed = true,
+        string key = FakeGatewayFactory.ApiCredentialKey, Residency? maxResidency = null, Residency? cap = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
@@ -423,8 +382,6 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
             new("Gateway:Key", key),
             new("Gateway:MaxResidency", maxResidency is { } max ? ResidencyCeiling.ToHeader(max) : null),
             new("Gateway:ServiceMaximum", "External"), // ignored: the maximum is set in code only
-            .. FakeGatewayFactory.Keys.Where(k => key is null && (levels is null || levels.Contains(k.Key)))
-                .Select(k => new KeyValuePair<string, string?>($"Gateway:Keys:{k.Key}", k.Value)),
         ]);
         builder.Logging.ClearProviders().AddProvider(logs ?? new CapturingLoggerProvider());
         if (cap is { } serviceMaximum)

@@ -24,8 +24,7 @@ namespace Ume.Rag.AdminApi.Tests;
 [Collection(AdminDatabaseGroup.Name)]
 public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
 {
-    private const string EuKey = "fake-eu-key-availability-0123456";
-    private const string ExternalKey = "fake-external-key-availability-01";
+    private const string AdminKey = "fake-eu-key-availability-0123456"; // rag-admin\'s credential key
     private const string Listed = "ume/chat-eu"; // the FakeGateway serves it at Eu
     private const string ListedRerank = "bge-reranker-v2-m3"; // served while FakeGateway:RerankEnabled
     private const string ExternalOnly = "ume/chat-advanced"; // served only at External
@@ -51,8 +50,7 @@ public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
-        web.UseSetting("FakeGateway:Keys:Eu", EuKey);
-        web.UseSetting("FakeGateway:Keys:External", ExternalKey);
+        web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
         web.UseSetting("FakeGateway:RerankEnabled", "true");
     });
 
@@ -60,8 +58,7 @@ public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
         database.HeaderFactory().WithWebHostBuilder(web =>
         {
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-            web.UseSetting("Gateway:Keys:Eu", EuKey);
-            web.UseSetting("Gateway:Keys:External", ExternalKey);
+            web.UseSetting("Gateway:Key", AdminKey);
             web.ConfigureTestServices(services =>
             {
                 services.AddHttpClient(GatewayApi.HttpClientName)

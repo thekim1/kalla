@@ -111,8 +111,8 @@ public static class InfrastructureExtensions
 
     /// <summary>
     /// A named gateway <see cref="HttpClient"/> (<c>gateway-chat</c>, <c>gateway-query</c>, …) with the
-    /// <see cref="ResidencyCeilingHandler"/>: base address <c>Gateway:BaseUrl</c>, the per-level keys from
-    /// <c>Gateway:Keys</c>, and no standard resilience handler (the gateway retries before its first byte; chat design
+    /// <see cref="ResidencyCeilingHandler"/>: base address <c>Gateway:BaseUrl</c>, the service's credential key
+    /// <c>Gateway:Key</c>, and no standard resilience handler (the gateway retries before its first byte; chat design
     /// §8.3). Inside it the <see cref="GatewayRetryHandler"/> sends a <c>502</c>/<c>504</c> once more with the same ceiling
     /// (#390), unless <paramref name="retryFailed"/> is false for a caller with its own retry (the query embedding,
     /// knowledge §5.3). Every gateway call of the services goes through a client registered here.

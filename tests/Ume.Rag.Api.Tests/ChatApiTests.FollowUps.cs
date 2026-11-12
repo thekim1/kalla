@@ -230,8 +230,7 @@ public sealed partial class ChatApiTests
         var calls = new ConcurrentQueue<GatewayCall>();
         using var logs = new CapturingLoggerProvider();
         await using var api = FollowUpHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs,
-            change: s => WithAssistant(s, a => a with { Classification = Domain.Classification.Public }),
-            settings: ("Gateway:Keys:External", FakeGatewayFactory.ExternalKey));
+            change: s => WithAssistant(s, a => a with { Classification = Domain.Classification.Public }));
         using var client = Client(api, db.IntegrationKey);
 
         var (_, ume) = await UmeAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":2}"""));
@@ -387,7 +386,7 @@ public sealed partial class ChatApiTests
         {
             // An OnPrem turn: the deployment's ceiling is OnPrem and the assistant's model runs there (no condense model until M2).
             change = s => WithAssistant(s, a => a with { Published = a.Published! with { GatewayModel = "ume/chat-onprem" } });
-            settings = [("Gateway:MaxResidency", "OnPrem"), ("Gateway:Keys:OnPrem", FakeGatewayFactory.OnPremKey)];
+            settings = [("Gateway:MaxResidency", "OnPrem")];
         }
 
         await using var api = FollowUpHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, change: change, settings: settings);

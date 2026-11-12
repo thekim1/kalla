@@ -35,7 +35,7 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         web.UseSetting("FakeGateway:Models:40:Targets:0:Residency", "Eu");
         web.UseSetting("FakeGateway:Models:41:Name", "fake-denied-embed");
         web.UseSetting("FakeGateway:Models:41:Kind", "embedding");
-        web.UseSetting("FakeGateway:Models:41:KeyLevels:0", "External");
+        web.UseSetting("FakeGateway:Models:41:KeyLevels:0", "OnPrem"); // keys up to OnPrem only: rag-admin's credential key may not
         web.UseSetting("FakeGateway:Models:41:Targets:0:Residency", "OnPrem");
     });
 
@@ -205,7 +205,7 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
     {
         var profile = await ProfileAsync();
         await using var gateway = Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.OnPrem, Residency.Eu);
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
         // Record the canary of today's values, then put a chunk set on the profile.
         using (var record = await platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile), Ct))
@@ -248,7 +248,7 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
     {
         var profile = await ProfileAsync();
         await using var gateway = Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.OnPrem, Residency.Eu);
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
         async Task<EmbeddingProfileTestResult> TestAsync(object body)
         {
