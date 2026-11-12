@@ -12,6 +12,7 @@ using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Processing;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Commands;
+using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
@@ -177,6 +178,6 @@ internal static class CommandSeeds
     {
         var db = database.Database(RagDatabase.Worker);
         return new RunFinalizer(db, database.Queue(RagDatabase.Worker), new EngineSettings(db, TimeProvider.System, NullLogger<EngineSettings>.Instance),
-            Options.Create(new WorkerOptions()), TimeProvider.System, NullLogger<RunFinalizer>.Instance);
+            Options.Create(new WorkerOptions()), Options.Create(new ClamAvOptions()), TimeProvider.System, NullLogger<RunFinalizer>.Instance);
     }
 }

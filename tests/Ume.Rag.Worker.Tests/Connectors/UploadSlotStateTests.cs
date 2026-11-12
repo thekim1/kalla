@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.TestKit;
+using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Tests.CommandJobs;
@@ -15,6 +16,8 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// commit (<see cref="EngineCommit.AddRunItemAsync"/>): <c>indexed</c> with its document when the live pointer names a set
 /// (live or held) of the slot's bytes, <c>refused</c> or <c>malware</c> with the reason when they ended without one; an
 /// item about other bytes (a replace in between), a superseded item and a deleted slot leave the slot as it is.
+/// <c>indexed</c> keeps the slot's <c>ScannedAt</c>; the fetch's mark (<c>clean</c> with it, <c>unscanned</c> without)
+/// applies only to the bytes it scanned.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class UploadSlotStateTests(RagDatabaseFixture database) : IAsyncLifetime
@@ -59,6 +62,44 @@ public sealed class UploadSlotStateTests(RagDatabaseFixture database) : IAsyncLi
         await ItemAsync(slot, document, outcome, reason, bytes);
 
         (await ReadSlotAsync(slot)).ShouldBe((UploadStates.Refused, reason, document));
+    }
+
+    [Fact]
+    public async Task Indexed_keeps_the_time_the_bytes_passed_the_scan()
+    {
+        var (slot, bytes) = await AddSlotAsync(UploadStates.Clean);
+        var scannedAt = new DateTime(2026, 11, 12, 9, 30, 0, DateTimeKind.Utc);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Uploads" SET "ScannedAt" = $2 WHERE "Id" = $1""", slot, scannedAt);
+        var document = await DocumentAsync(slot, bytes);
+        await CommandSeeds.SetAsync(database, _seed, document, ChunkSetStates.Live);
+
+        await ItemAsync(slot, document, Outcome.Added, null, bytes);
+
+        (await ReadSlotAsync(slot)).ShouldBe((UploadStates.Indexed, null, document));
+        (await ScannedAtAsync(slot)).ShouldBe(scannedAt);
+    }
+
+    [Fact]
+    public async Task The_fetch_marks_only_the_bytes_it_scanned_clean_with_their_time_or_unscanned_without_one()
+    {
+        var store = new PostgresUploadStore(database.Database(RagDatabase.Worker));
+        var (slot, bytes) = await AddSlotAsync(UploadStates.Received);
+        var scannedAt = new DateTimeOffset(2026, 11, 12, 9, 30, 0, TimeSpan.Zero);
+
+        // A fetch of bytes a replace has since swapped out leaves the slot alone.
+        await store.SetStateAsync(slot, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)), UploadState.Clean, scannedAt, null, null, null, Ct);
+        (await ReadSlotAsync(slot)).State.ShouldBe(UploadStates.Received);
+        (await ScannedAtAsync(slot)).ShouldBeNull();
+
+        await store.SetStateAsync(slot, Convert.ToHexStringLower(bytes), UploadState.Clean, scannedAt, null, null, null, Ct);
+        (await ReadSlotAsync(slot)).State.ShouldBe(UploadStates.Clean);
+        (await ScannedAtAsync(slot)).ShouldBe(scannedAt.UtcDateTime);
+
+        var (unscanned, unscannedBytes) = await AddSlotAsync(UploadStates.Received);
+        await store.SetStateAsync(unscanned, Convert.ToHexStringLower(unscannedBytes), UploadState.Unscanned, null, null, null, null, Ct);
+        (await ReadSlotAsync(unscanned)).State.ShouldBe(UploadStates.Unscanned);
+        (await ScannedAtAsync(unscanned)).ShouldBeNull();
+        (await store.ListAsync(_seed.SourceId, Ct)).Single(s => s.Id == unscanned).State.ShouldBe(UploadState.Unscanned);
     }
 
     [Fact]
@@ -151,6 +192,9 @@ public sealed class UploadSlotStateTests(RagDatabaseFixture database) : IAsyncLi
         }, Ct);
         await commit.CommitAsync(Ct);
     }
+
+    private Task<DateTime?> ScannedAtAsync(Guid slot) =>
+        Sql.ScalarAsync<DateTime?>(database.Connection(null), """SELECT "ScannedAt" FROM content."Uploads" WHERE "Id" = $1""", slot);
 
     private async Task<(string State, string? Reason, Guid? Document)> ReadSlotAsync(Guid slot)
     {

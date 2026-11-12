@@ -23,7 +23,8 @@ public sealed record UploadCheckpoint : ConnectorCheckpoint
 /// through the envelope by the source's level (an <c>internal</c> upload is <c>URB2</c>; one that is not, or whose segment
 /// fails its check, fails <see cref="BlobDamaged"/>), copies it to a local temp file (checking the plaintext's SHA-256),
 /// scans the plaintext with ClamAV (fail closed; a finding is copied to <c>quarantine/{sourceId}/{sha256}</c>, encrypted by
-/// the level, for the runner's row, event and tombstone of the upload blob), sniffs and checks the type, and returns the
+/// the level, for the runner's row, event and tombstone of the upload blob; with <c>ClamAv:Mode = off</c> nothing is
+/// scanned and <see cref="FetchFacts.ScannedAt"/> stays null), sniffs and checks the type, and returns the
 /// upload blob itself as the document's raw content (no copy). The content hash is the file's SHA-256, so identical bytes
 /// in a replace are <c>unchanged</c>.
 /// </summary>
@@ -188,6 +189,8 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
                     return new FetchOutcome.Transient(unavailable.Reason, RawContentWriter.ScanRetry, unavailable.CountsAttempt);
             }
 
+            // Clean, or not scanned at all with the scan off (§11): only a passed scan has a time.
+            DateTimeOffset? scanned = scan is ScanResult.CleanResult ? time.GetUtcNow() : null;
             TypeVerdict verdict;
             await using (var stream = body.OpenRead())
             {
@@ -202,6 +205,7 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
             var facts = new FetchFacts(null, item.CanonicalIdentity, [], null)
             {
                 Notes = verdict.DeclaredDiffers ? ["upload.declared_type_differs"] : [],
+                ScannedAt = scanned,
             };
             return new FetchOutcome.Content(new RawContentRef(key, body.Sha256, HtmlNoiseNormalizer.RulesVersion, verdict.MediaType!, body.Length), Validators.None, facts);
         }

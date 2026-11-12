@@ -426,7 +426,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
             var record = QuarantineRecord.For(finding, context, "virus.pdf", null, time.GetUtcNow());
             await quarantine.AddAsync(record, Ct);
             await quarantine.AddAsync(record, Ct);
-            await uploads.SetStateAsync(slot, UploadState.Malware, null, finding.Reason, null, Ct);
+            await uploads.SetStateAsync(slot, finding.Sha256, UploadState.Malware, null, null, finding.Reason, null, Ct);
 
             (await Sql.ScalarAsync<long>(database.Connection(null),
                 """SELECT count(*) FROM content."QuarantinedFiles" WHERE "SourceId" = $1 AND "Origin" = 'upload' AND "Signature" = $2 AND "PurgeAfter" = $3""",

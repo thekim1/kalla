@@ -68,7 +68,7 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 | Setting | Default | Effect |
 |---|---|---|
 | `Parser:Mode` | `container` | `container` builds `src/parser/Dockerfile`; `local` runs `uvicorn ume_parser.app:app` from `src/parser` with hot reload (see [the parser's README](../src/parser/README.md) for the models it then needs); `off` starts no parser |
-| `ClamAv:Mode` | `on` | `off` starts no ClamAV and gives the worker `ClamAv__Mode=off`: files are stored without a malware scan and marked as not scanned (Decisions "Malware scan optional"; until the worker reads the mode, A-36, it falls back to its EICAR-only development scanner) |
+| `ClamAv:Mode` | `on` | `off` starts no ClamAV and gives the worker `ClamAv__Mode=off`: files are stored without a malware scan and marked as not scanned (Decisions "Malware scan optional"). With `on` and no clamd configured, a Development worker run outside the AppHost uses its EICAR-only scanner |
 | `Render:Mode` | `container` | `container` builds `images/renderer` (Chromium behind Playwright's `launch-server`, hardened as in Compose with `images/renderer/seccomp.json`) and gives the worker `Render__Endpoint` with a generated secret path (parameter `render-ws-path`); `off` starts no renderer, and `browser` sources wait with `render.not_configured`. Unlike production the renderer is on Aspire's network, not an internal one |
 | `FakeGateway:Enabled` | `true` | `false` runs against a real gateway (below) |
 | `FakeGateway:Latency:*` | 0 (off) | a real gateway's timing on the fake (below) |

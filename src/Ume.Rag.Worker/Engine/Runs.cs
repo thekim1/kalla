@@ -6,6 +6,7 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
+using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Jobs;
 
@@ -253,7 +254,9 @@ public sealed class RunStore(JobDatabase database)
 /// <c>superseded</c> items are not counted), jobs that died without an item count as failed, and the state is set:
 /// <c>failed</c> when the sync job failed, every processed item failed or the crawl reached no seed; <c>awaiting-deletion-confirmation</c>
 /// while the guard holds proposals; <c>degraded</c> above <c>Settings.DegradedFailureRatio</c>, on any <c>malware</c>, or
-/// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>. A finished
+/// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>. While the
+/// malware scan is off (<c>ClamAv:Mode = off</c>) every run it finishes gets <c>malwareScan: "off"</c> in its report
+/// (connectors design §5.5). A finished
 /// <c>reprocess</c> run of a publish or rollback enqueues its <c>eval</c> <c>publish-report</c> in the same transaction, and
 /// a run that made more than 10 % of an embedding profile's live chunks live its <c>check-hnsw-index</c>
 /// (<see cref="HnswCheckTriggers.AfterRunAsync"/>, knowledge design §6.4). After the commit, each finished run's collection gets
@@ -264,6 +267,7 @@ public sealed partial class RunFinalizer(
     IJobQueue queue,
     EngineSettings settings,
     IOptions<WorkerOptions> options,
+    IOptions<ClamAvOptions> clamAv,
     TimeProvider time,
     ILogger<RunFinalizer> logger,
     KeywordStatisticsService? keywords = null) : BackgroundService
@@ -300,10 +304,12 @@ public sealed partial class RunFinalizer(
         FROM latest
         """;
 
+    // $10: the malware scan is off (ClamAv:Mode = off), which the report says (connectors design §5.5, §11).
     private const string FinishSql = """
         UPDATE content."Runs"
            SET "Added" = $2, "Updated" = $3, "Unchanged" = $4, "Deleted" = $5, "Failed" = $6, "ProposedDeletions" = $7, "CostUsd" = $8,
-               "State" = $9, "Phase" = 'done', "FinishedAt" = now()
+               "State" = $9, "Phase" = 'done', "FinishedAt" = now(),
+               "Report" = CASE WHEN $10 THEN coalesce("Report", '{}'::jsonb) || '{"malwareScan": "off"}'::jsonb ELSE "Report" END
          WHERE "Id" = $1 AND "State" = 'running'
         """;
 
@@ -396,7 +402,7 @@ public sealed partial class RunFinalizer(
                 Parameters =
                 {
                     Db.P(run.Id), Db.P((int)c.Added), Db.P((int)c.Updated), Db.P((int)c.Unchanged), Db.P((int)c.Deleted), Db.P((int)c.Failed),
-                    Db.P((int)c.Proposed), Db.P(c.Cost), Db.P(state),
+                    Db.P((int)c.Proposed), Db.P(c.Cost), Db.P(state), Db.P(clamAv.Value.ScanOff),
                 },
             };
             if (await finish.ExecuteNonQueryAsync(cancellationToken) == 0)

@@ -41,7 +41,7 @@
   "Connectors.Persistence.PostgresDeletionProposalStore.ListSql": ["RunId uuid", "DocumentId uuid", "SourceId uuid", "Classification character varying", "Reason character varying", "Exempt boolean", "Decision character varying", "DecidedBy character varying", "DecidedAt timestamp with time zone"],
   "Connectors.Persistence.PostgresDeletionProposalStore.WaitingSql": ["RunId uuid"],
   "Connectors.Persistence.PostgresSiteProfileReader.AppliedSql": ["Id uuid", "Number integer", "PresetId character varying", "Profile text"],
-  "Connectors.Persistence.PostgresUploadStore.ListSql": ["Id uuid", "SourceId uuid", "Classification character varying", "BatchId uuid", "FileName character varying", "DeclaredMediaType character varying", "SniffedMediaType character varying", "Bytes bigint", "Sha256 bytea", "State character varying", "Reason character varying", "DocumentId uuid", "UploadedBy character varying", "UploadedAt timestamp with time zone", "ReplacedAt timestamp with time zone", "DeletedAt timestamp with time zone"],
+  "Connectors.Persistence.PostgresUploadStore.ListSql": ["Id uuid", "SourceId uuid", "Classification character varying", "BatchId uuid", "FileName character varying", "DeclaredMediaType character varying", "SniffedMediaType character varying", "Bytes bigint", "Sha256 bytea", "State character varying", "Reason character varying", "DocumentId uuid", "UploadedBy character varying", "UploadedAt timestamp with time zone", "ReplacedAt timestamp with time zone", "DeletedAt timestamp with time zone", "ScannedAt timestamp with time zone"],
   "Engine.BlobPurgeSweep.BatchSql": ["Key character varying"],
   "Engine.ChunkSetSwap.PublishedSql": ["PublishedVersionId uuid"],
   "Engine.CrawlSourceRunner.BeyondDepthSql": ["Id uuid"],

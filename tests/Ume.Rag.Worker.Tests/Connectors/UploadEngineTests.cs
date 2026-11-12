@@ -23,7 +23,8 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// <c>upload.blob_damaged</c> once; a <c>public</c> upload is stored as received. A <c>path</c> rule of the
 /// <c>files</c> template matches the upload's display name and tags its chunks (processing design §7). Each slot ends in
 /// the state its bytes' processing reached (#533): <c>indexed</c> with its document (identical bytes again too),
-/// <c>refused</c> with the reason when the parse or the embed ended it.
+/// <c>refused</c> with the reason when the parse or the embed ended it. A passed scan gives the slot its <c>ScannedAt</c>,
+/// which <c>indexed</c> keeps and a replace clears until the new bytes pass (§9.1).
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -154,6 +155,51 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
         }
         finally
         {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_scanned_upload_keeps_its_ScannedAt_when_indexed_and_a_replace_clears_it_until_the_new_bytes_pass_the_scan()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        var seed = await SeedUploadAsync();
+        var scanner = new GatedScanner();
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("unused"))));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, logs: _logs,
+            services: services => services.AddSingleton<IMalwareScanner>(scanner));
+        try
+        {
+            var slot = Guid.NewGuid();
+            var before = DateTime.UtcNow;
+            var added = await CommitAsync(seed, (UploadOperation.Add, slot, "avfall.md", Note("Avfall " + marker)));
+
+            (await EngineKit.WaitForRunAsync(database, added)).ShouldBe(new RunCounters(RunStates.Succeeded, 1, 0, 0, 0, 0, 0));
+            var (state, first) = await ScanAsync(slot);
+            state.ShouldBe(UploadStates.Indexed);
+            first.ShouldNotBeNull("the scan passed, and indexed keeps its time").ShouldBeGreaterThanOrEqualTo(before.AddSeconds(-1));
+            (await Sql.ScalarAsync<string?>(database.Connection(null), """SELECT "Report" ->> 'malwareScan' FROM content."Runs" WHERE "Id" = $1""", added))
+                .ShouldBeNull("with the scan on the report has no malwareScan field");
+
+            // The replace's scan waits: the slot holds the new bytes, received, with no ScannedAt.
+            scanner.Arm();
+            var newBytes = Note("Avfall " + marker, "Nya hämtdagar gäller från mars.");
+            var replaced = await CommitAsync(seed, (UploadOperation.Replace, slot, "avfall.md", newBytes));
+            await scanner.Blocked.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+
+            (await ScanAsync(slot)).ShouldBe((UploadStates.Received, (DateTime?)null));
+            (await Sql.ScalarAsync<byte[]>(database.Connection(null), """SELECT "Sha256" FROM content."Uploads" WHERE "Id" = $1""", slot))
+                .ShouldBe(SHA256.HashData(newBytes));
+
+            scanner.Open();
+            (await EngineKit.WaitForRunAsync(database, replaced)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 1, 0, 0, 0, 0));
+            var (after, second) = await ScanAsync(slot);
+            after.ShouldBe(UploadStates.Indexed);
+            second.ShouldNotBeNull().ShouldBeGreaterThan(first.Value, "the new bytes passed a scan of their own");
+        }
+        finally
+        {
+            scanner.Open();
             await EngineKit.PauseAsync(database, seed);
         }
     }
@@ -320,6 +366,10 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
     private Task<string> SlotStateAsync(Guid slot) =>
         Sql.ScalarAsync<string>(database.Connection(null), """SELECT "State" FROM content."Uploads" WHERE "Id" = $1""", slot);
 
+    /// <summary>The slot's state and <c>ScannedAt</c> (connectors design §9.1).</summary>
+    private async Task<(string State, DateTime? ScannedAt)> ScanAsync(Guid slot) =>
+        (await SlotStateAsync(slot), await Sql.ScalarAsync<DateTime?>(database.Connection(null), """SELECT "ScannedAt" FROM content."Uploads" WHERE "Id" = $1""", slot));
+
     /// <summary>The slot's state, reason and document, as the worker wrote them (#533).</summary>
     private async Task<(string State, string? Reason, Guid? Document)> SlotAsync(Guid slot)
     {
@@ -336,6 +386,46 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             """SELECT "Id" FROM content."Documents" WHERE "SourceId" = $1 AND "CanonicalIdentity" = $2""", seed.SourceId, UploadConnector.IdentityOf(slot));
         var set = await Sql.ScalarAsync<Guid?>(database.Connection(null), """SELECT "LiveChunkSetId" FROM content."Documents" WHERE "Id" = $1""", id);
         return (id, set);
+    }
+}
+
+/// <summary>The development <see cref="EicarOnlyScanner"/>, whose scans wait while it is armed until <see cref="Open"/>.</summary>
+internal sealed class GatedScanner : IMalwareScanner
+{
+    private readonly EicarOnlyScanner _inner = new();
+    private volatile TaskCompletionSource _open = Opened();
+    private volatile TaskCompletionSource _blocked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completes when a scan waits at the armed gate.</summary>
+    public Task Blocked => _blocked.Task;
+
+    public void Arm()
+    {
+        _blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public void Open() => _open.TrySetResult();
+
+    public async Task<ScanResult> ScanAsync(Stream content, string origin, CancellationToken cancellationToken)
+    {
+        var gate = _open;
+        if (!gate.Task.IsCompleted)
+        {
+            _blocked.TrySetResult();
+            await gate.Task.WaitAsync(cancellationToken);
+        }
+
+        return await _inner.ScanAsync(content, origin, cancellationToken);
+    }
+
+    public Task<SignatureState> GetSignaturesAsync(CancellationToken cancellationToken) => _inner.GetSignaturesAsync(cancellationToken);
+
+    private static TaskCompletionSource Opened()
+    {
+        var source = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        source.SetResult();
+        return source;
     }
 }
 
