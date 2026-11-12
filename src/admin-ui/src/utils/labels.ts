@@ -1044,6 +1044,8 @@ export const ASSISTANT = {
   modelLimit: (tokens: string) => `Model limit: ${tokens} tokens`,
   modelLimitUnknown: 'Model limit unknown: the provider’s default applies. A platform administrator can enter it under Gateway models.',
   lengthStopped: 'The answer stopped at the length limit.',
+  /** The test turn's cost over all its model calls (admin design §4.9), e.g. "Cost: 0,0012 USD (estimated)". */
+  testCost: (cost: string, estimated: boolean) => (estimated ? `Cost: ${cost} USD (estimated)` : `Cost: ${cost} USD`),
   maxTokensSent: (tokens: string | null, source: string) =>
     tokens === null ? 'Answer length: the provider’s default (no limit sent)' : `Answer length: at most ${tokens} tokens (${source})`,
   maxTokensSources: {

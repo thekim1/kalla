@@ -983,6 +983,10 @@ export interface AssistantTestResult {
     maxTokensSource?: 'override' | 'model' | 'provider' | 'ceiling' | null
     /** `length`: the answer stopped at the limit. */
     finishReason?: string | null
+    /** The sum over every model call of the turn, in USD (admin design §4.9). */
+    costUsd: number
+    /** True when any part of `costUsd` is an estimate from the mirrored prices. */
+    costEstimated: boolean
   }
   durationMs: number
 }

@@ -54,7 +54,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// </summary>
     public TurnUsage Usage() => new(snapshots.Current.ModelPrices, time.GetUtcNow(), _tokens is null ? null : new Action<UsageRecord>(CountUsage));
 
-    /// <summary>The plan of a turn whose usage records nobody writes (the admin test panel until B-39).</summary>
+    /// <summary>The plan of a turn whose usage records nobody writes (tests; chat and the admin test panel pass their own).</summary>
     public Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct) => PlanAsync(who, chat, Usage(), ct);
 
     /// <summary>

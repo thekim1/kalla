@@ -21,7 +21,9 @@ namespace Ume.Rag.AdminApi;
 /// answers with different code than chat. The view: the assistant's draft (or published version) as its published
 /// version, its linked collections live even when not yet published, the principal <c>admin-console</c> with the admin's
 /// <c>oid</c>, and a policy that allows the assistant (the admin's department scope was checked; audiences are ignored).
-/// Nothing is stored: no audit entry, no 6007, no conversation; the retrieval counter of the panel is never flushed.
+/// Nothing is stored but the usage: no audit entry, no 6007, no conversation, no <c>AssistantDailyTotals</c>; the retrieval
+/// counter of the panel is never flushed. Every model call of the turn is upserted into <c>AssistantDailyUsage</c> under the
+/// assistant and the <c>admin-console</c> client row (§4.9; cost-attribution §5 C2).
 /// </summary>
 public static class AssistantTestEndpoints
 {
@@ -42,12 +44,18 @@ public static class AssistantTestEndpoints
 }
 
 /// <summary>Runs the panel: builds the snapshot view per call and the chat pipeline over it.</summary>
-public sealed class AdminTestPanel(
+public sealed partial class AdminTestPanel(
     PolicySnapshotStore snapshots, AdminRetrieval retrieval, GatewayChatClient gateway, IOptions<ChatOptions> chatOptions, IOptions<GatewayOptions> gatewayOptions,
     NpgsqlDataSource dataSource, TimeProvider time, ILoggerFactory loggers, IMeterFactory meters) : IDisposable
 {
     /// <summary>The candidate text shown per hit (§4.9).</summary>
     public const int TextLength = 600;
+
+    /// <summary>The client row the panel's usage is written under (identity §4.1: name <c>admin-console</c>, kind <c>internal</c>).</summary>
+    public const string ClientName = "admin-console";
+
+    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
+    private readonly ILogger _logger = loggers.CreateLogger<AdminTestPanel>();
 
     // Never started as a hosted service, so nothing it counts is written (§4.9: nothing is stored).
     private readonly RetrievalCounter _counter = new(dataSource, time, loggers.CreateLogger<RetrievalCounter>());
@@ -83,11 +91,14 @@ public sealed class AdminTestPanel(
         var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null);
 
         var started = Stopwatch.GetTimestamp();
+        // B-39 (§4.9, chat §8.3): the turn's usage records as chat collects them, written under admin-console whatever the outcome.
+        var usage = chat.Usage();
+        var row = AdminConsoleRow(current);
         // B-42 (cost-attribution §4.1): every call of the panel's turn, the answer included, runs as the assistant's gateway key.
         using var acting = GatewayCallScope.Begin(new GatewayCall(assistant.GatewayKeyId, AssistantId: assistant.Id));
         try
         {
-            var plan = await chat.PlanAsync(who, parsed, ct);
+            var plan = await chat.PlanAsync(who, parsed, usage, ct);
             GatewayAnswer? answer = null;
             string delivered;
             var filtered = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -101,7 +112,7 @@ public sealed class AdminTestPanel(
             {
                 var call = Stopwatch.GetTimestamp();
                 answer = await gateway.CompleteAsync(version.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId,
-                    "chat-answer", ct);
+                    "chat-answer", ct, usage: usage.Add);
                 latencyMs = Stopwatch.GetElapsedTime(call).TotalMilliseconds;
                 var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
                 var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>();
@@ -115,6 +126,8 @@ public sealed class AdminTestPanel(
             var linked = version.LinkedCollectionIds().Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
                 .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id) && c.PublishedAt is not null)).ToList();
             var result = plan.Retrieval;
+            var records = usage.Take();
+            await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, records);
             return new AssistantTestResult(
                 request.Target, version.Number,
                 new TestRetrieval(linked, result?.Coverage, result?.Degraded,
@@ -126,7 +139,8 @@ public sealed class AdminTestPanel(
                 new TestAnswer(answer?.Text, delivered, filtered, [.. cited.Select(s => new TestCitation(s.Number, s.Citation.Id, s.Citation.Title))],
                     ChatOutcomes.Name(plan.Outcome), plan.Language),
                 new TestGateway(version.GatewayModel, ResidencyCeiling.ToHeader(plan.Ceiling), latencyMs, answer?.PromptTokens, answer?.CompletionTokens,
-                    plan.Fixed is null ? plan.MaxTokens : null, plan.Fixed is null ? plan.MaxTokensSource : null, answer?.FinishReason),
+                    plan.Fixed is null ? plan.MaxTokens : null, plan.Fixed is null ? plan.MaxTokensSource : null, answer?.FinishReason,
+                    records.Sum(r => r.CostUsd + r.EstimatedCostUsd), records.Any(r => r.Estimated)),
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (ChatException ex)
@@ -140,7 +154,79 @@ public sealed class AdminTestPanel(
             throw AdminFaults.Of(AdminErrorCodes.GatewayKeyMissing,
                 new Dictionary<string, string> { ["model"] = version.GatewayModel, ["ceiling"] = ResidencyCeiling.ToHeader(missing.Ceiling) });
         }
+        finally
+        {
+            // A turn that failed after a model call still paid for it (chat §12.1); after an answer nothing is left to take.
+            await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, usage.Take());
+        }
     }
+
+    /// <summary>The registry's <c>admin-console</c> row of kind <c>internal</c> (identity §4.1), or null when there is none.</summary>
+    private static ClientEntry? AdminConsoleRow(PolicySnapshot snapshot) =>
+        snapshot.Clients.Values.FirstOrDefault(c => c.Name == ClientName && c.Kind == Domain.Entities.ClientKinds.Internal);
+
+    /// <summary>
+    /// Upserts <paramref name="records"/> into <c>chat."AssistantDailyUsage"</c> under the assistant and the <c>admin-console</c>
+    /// row <paramref name="row"/> at <paramref name="level"/> (§4.9): one delta per step, in step order as the chat writer's key
+    /// order (chat §12.2), in one transaction. Without the row nothing is written and a warning is logged; a failed write is
+    /// logged and dropped, so the test answer is unaffected. Never <c>AssistantDailyTotals</c>: test turns are not chat statistics.
+    /// </summary>
+    private async Task WriteUsageAsync(ClientEntry? row, Domain.Entities.Assistant assistant, string level, DateTimeOffset at, IReadOnlyList<UsageRecord> records)
+    {
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        if (row is null)
+        {
+            LogNoClientRow(_logger, assistant.Id, records.Count);
+            return;
+        }
+
+        try
+        {
+            var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime);
+            // Not cancelled with the request: the calls were paid for even when the admin left; the write is short.
+            await using var connection = await dataSource.OpenConnectionAsync(CancellationToken.None);
+            await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
+            foreach (var step in records.GroupBy(r => r.Step, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal))
+            {
+                await using var command = new NpgsqlCommand("""
+                    INSERT INTO chat."AssistantDailyUsage" AS u ("Day", "AssistantId", "ClientId", "Classification", "Step", "DepartmentId", "Calls", "InputTokens",
+                        "CachedInputTokens", "OutputTokens", "CostUsd", "EstimatedCalls", "EstimatedCostUsd")
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Step") DO UPDATE SET
+                        "Calls" = u."Calls" + excluded."Calls", "InputTokens" = u."InputTokens" + excluded."InputTokens",
+                        "CachedInputTokens" = u."CachedInputTokens" + excluded."CachedInputTokens", "OutputTokens" = u."OutputTokens" + excluded."OutputTokens",
+                        "CostUsd" = u."CostUsd" + excluded."CostUsd", "EstimatedCalls" = u."EstimatedCalls" + excluded."EstimatedCalls",
+                        "EstimatedCostUsd" = u."EstimatedCostUsd" + excluded."EstimatedCostUsd"
+                    """, connection, transaction)
+                {
+                    Parameters =
+                    {
+                        new() { Value = day }, new() { Value = assistant.Id }, new() { Value = row.Id }, new() { Value = level }, new() { Value = step.Key },
+                        new() { Value = assistant.DepartmentId }, new() { Value = step.Count() }, new() { Value = step.Sum(r => r.InputTokens) },
+                        new() { Value = step.Sum(r => r.CachedInputTokens) }, new() { Value = step.Sum(r => r.OutputTokens) },
+                        new() { Value = step.Sum(r => r.CostUsd) }, new() { Value = step.Count(r => r.Estimated) }, new() { Value = step.Sum(r => r.EstimatedCostUsd) },
+                    },
+                };
+                await command.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+
+            await transaction.CommitAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException)
+        {
+            LogUsageWriteFailed(_logger, ex, assistant.Id, records.Count);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Test panel usage of assistant {AssistantId} not written ({Calls} calls): no admin-console client row of kind internal")]
+    private static partial void LogNoClientRow(ILogger logger, Guid assistantId, int calls);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Test panel usage of assistant {AssistantId} not written ({Calls} calls)")]
+    private static partial void LogUsageWriteFailed(ILogger logger, Exception exception, Guid assistantId, int calls);
 
     /// <summary>
     /// The snapshot as the panel sees it: the tested version as the assistant's published one (active), its collections
@@ -184,7 +270,8 @@ public sealed class AdminTestPanel(
             }
         }
 
-        var client = new ClientEntry(Guid.CreateVersion7(), "admin-console", "internal", level, storesHistory, true);
+        // The admin-console row's id when the registry has it (§4.9: test traffic apart from real users' clients), at the turn's level.
+        var client = new ClientEntry(AdminConsoleRow(current)?.Id ?? Guid.CreateVersion7(), ClientName, Domain.Entities.ClientKinds.Internal, level, storesHistory, true);
         var clients = current.Clients.ToDictionary();
         clients[client.Id] = client;
         var assistants = current.Assistants.ToDictionary();
@@ -274,10 +361,12 @@ public sealed record TestAnswer(string? Raw, string Delivered, IReadOnlyDictiona
 /// <summary>
 /// The answer call (admin design §4.9): <see cref="MaxTokens"/> the <c>max_tokens</c> sent (null when left out),
 /// <see cref="MaxTokensSource"/> <c>override</c>/<c>model</c>/<c>provider</c>, <see cref="FinishReason"/> the gateway's
-/// (<c>length</c>: the answer stopped at the limit). Decisions "Answer length from the model".
+/// (<c>length</c>: the answer stopped at the limit). Decisions "Answer length from the model". <see cref="CostUsd"/> is the
+/// sum over every call of the turn (the gateway's cost and the estimate), <see cref="CostEstimated"/> true when any part is an
+/// estimate (§4.9).
 /// </summary>
 public sealed record TestGateway(string Model, string Residency, double? LatencyMs, int? InputTokens, int? OutputTokens, int? MaxTokens = null,
-    string? MaxTokensSource = null, string? FinishReason = null);
+    string? MaxTokensSource = null, string? FinishReason = null, decimal CostUsd = 0m, bool CostEstimated = false);
 
 public sealed record AssistantTestResult(
     AssistantTestTarget Target, int VersionNumber, TestRetrieval Retrieval, TestCondense Condense, TestAnswer Answer, TestGateway Gateway, double DurationMs);
