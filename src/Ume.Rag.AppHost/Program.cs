@@ -92,6 +92,11 @@ if (fakeGateway is not null)
     {
         fakeGateway.WithEnvironment($"FakeGateway__CredentialKeys__{service}__Key", key)
             .WithEnvironment($"FakeGateway__CredentialKeys__{service}__MaxResidency", service == "worker" ? "Eu" : "External");
+        if (service == "admin")
+        {
+            // rag-admin's key reads the whole organisation in the context (identity design §2.1, gateway-changes §5.5).
+            fakeGateway.WithEnvironment("FakeGateway__CredentialKeys__admin__Scopes__0", "organisation.read");
+        }
     }
 
     foreach (var setting in builder.Configuration.GetSection("FakeGateway:Latency").GetChildren())

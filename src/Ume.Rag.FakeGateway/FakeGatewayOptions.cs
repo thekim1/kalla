@@ -21,6 +21,18 @@ public sealed class FakeGatewayOptions
     /// </summary>
     public Dictionary<string, FakeCredentialKey> CredentialKeys { get; set; } = new(StringComparer.Ordinal);
 
+    /// <summary>What <c>/v1/ume/context</c> says about the gateway (<c>gateway.version</c>, <c>admin_url</c>, <c>features</c>).</summary>
+    public FakeGatewayInfo Gateway { get; set; } = new();
+
+    /// <summary>The integration the credential keys belong to (<c>/v1/ume/context</c>'s <c>integration</c>).</summary>
+    public FakeIntegration Integration { get; set; } = new();
+
+    /// <summary>
+    /// The integration's assigned keys (<c>FakeGateway:AssignedKeys</c>): a chatbot's or knowledge base's key, set up by its
+    /// department in the gateway. A revoked one is not listed, as the gateway lists only the keys that are not revoked.
+    /// </summary>
+    public List<FakeAssignedKey> AssignedKeys { get; set; } = [];
+
     /// <summary>
     /// Fake-only strictness: refuse with 403 <c>key_level_mismatch</c> when the ceiling is not the key's level. The real
     /// gateway would narrow silently; the fake makes a client that sends the wrong key for a level fail loudly.
@@ -84,6 +96,18 @@ public sealed class FakeModel
     public List<Residency> KeyLevels { get; set; } = [];
 
     public List<FakeTarget> Targets { get; set; } = [];
+
+    /// <summary>An alias's description on <c>/v1/models</c> (<c>ume.description</c>).</summary>
+    public string? Description { get; set; }
+
+    /// <summary><c>ume.context_window</c>; null when the gateway does not know it.</summary>
+    public int? ContextWindow { get; set; }
+
+    /// <summary><c>ume.max_output_tokens</c>; null when the gateway does not know it.</summary>
+    public int? MaxOutputTokens { get; set; }
+
+    /// <summary><c>ume.features</c> (<c>tools</c>, ...).</summary>
+    public List<string> Features { get; set; } = [];
 }
 
 /// <summary>One provider target of a model, as a gateway route target.</summary>
@@ -117,10 +141,86 @@ public enum FakeFailure
     Timeout,
 }
 
-/// <summary>A credential key of the fake: its secret and the highest residency it allows.</summary>
+/// <summary>A credential key of the fake: its secret, the highest residency it allows and its integration scopes.</summary>
 public sealed class FakeCredentialKey
 {
     public string Key { get; set; } = "";
 
     public Residency MaxResidency { get; set; } = Residency.External;
+
+    /// <summary>The key's id; a stable one per secret when not set.</summary>
+    public Guid? Id { get; set; }
+
+    public string? Name { get; set; }
+
+    /// <summary><c>organisation.read</c> (rag-admin's: every department and team in the context), later <c>usage.read</c>.</summary>
+    public List<string> Scopes { get; set; } = [];
+}
+
+/// <summary>The gateway part of <c>/v1/ume/context</c>.</summary>
+public sealed class FakeGatewayInfo
+{
+    public string? Version { get; set; } = "0.10.0-fake";
+
+    public string? AdminUrl { get; set; }
+
+    /// <summary>
+    /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
+    /// thekim1/llmgateway#84): <c>act-as-key</c>, <c>run-metadata</c> and <c>stream-cost</c> come with phase 2.
+    /// </summary>
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "credential-residencies", "organisation"];
+}
+
+/// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>
+public sealed class FakeIntegration
+{
+    public Guid Id { get; set; } = new("019a0000-0000-7000-8000-00000000a001");
+
+    public string Name { get; set; } = "Ume.Rag";
+
+    public Guid OwnerTeamId { get; set; } = FakeCatalog.DigitaliseringTeamId;
+}
+
+/// <summary>An assigned key as <c>/v1/ume/context</c> lists it (the contract's <c>AssignedKey</c>; never a secret).</summary>
+public sealed class FakeAssignedKey
+{
+    public Guid Id { get; set; }
+
+    public string Name { get; set; } = "";
+
+    public string? Description { get; set; }
+
+    public Guid TeamId { get; set; }
+
+    /// <summary><c>Active</c>, <c>InGracePeriod</c>, <c>Disabled</c>, <c>Expired</c> or <c>Revoked</c> (not listed).</summary>
+    public string Status { get; set; } = "Active";
+
+    public DateTimeOffset? ExpiresAt { get; set; }
+
+    public List<string> AllowedModels { get; set; } = [];
+
+    /// <summary>The key's own residencies; empty = all.</summary>
+    public List<Residency> AllowedResidencies { get; set; } = [];
+
+    public List<string> AllowedProviders { get; set; } = [];
+
+    public string PiiPolicy { get; set; } = "Block";
+
+    public string ContentGuardPolicy { get; set; } = "Off";
+
+    public string AttachmentPolicy { get; set; } = "Allow";
+
+    public bool AllowProviderTools { get; set; }
+
+    public bool AllowProviderStorage { get; set; }
+
+    public int? RequestsPerMinute { get; set; }
+
+    public int? TokensPerMinute { get; set; }
+
+    public int? MaxConcurrentRequests { get; set; }
+
+    public int? MaxOutputTokens { get; set; }
+
+    public bool HasSystemPrompt { get; set; }
 }

@@ -14,6 +14,9 @@ public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling, bool Crede
     public Residency Max => Ceiling is { } ceiling && ceiling < KeyLevel ? ceiling : KeyLevel;
 }
 
+/// <summary>An authenticated key: a per-level dev key (its level) or a credential key (its highest residency).</summary>
+public sealed record FakeKey(Residency Level, FakeCredentialKey? Credential);
+
 /// <summary>
 /// The gateway's step 1 and 1b and candidate selection as release 1 builds them (gateway PR thekim1/llmgateway#66:
 /// <c>RequestStages.ReadMaxResidency</c>, <c>RouteResolver.SelectCandidatesAsync</c>, <c>GatewayErrors</c>): the key, then
@@ -29,26 +32,44 @@ public static class FakeAccess
     public const string SessionHeader = "x-ume-session";
     public const string RequestIdHeader = "x-request-id";
 
+    /// <summary>
+    /// Authenticates the key only (the gateway's <c>RequestStages.AuthenticateAsync</c>, which <c>/v1/ume/context</c> uses
+    /// without a ceiling): a per-level dev key or a credential key; null = 401 (the error is in <paramref name="error"/>).
+    /// </summary>
+    public static FakeKey? Authenticate(HttpContext context, FakeGatewayOptions options, out IResult? error)
+    {
+        var presented = BearerOrApiKey(context.Request);
+        error = null;
+        if (presented is not null)
+        {
+            foreach (var (level, key) in options.Keys)
+            {
+                if (FixedTimeEquals(key, presented))
+                {
+                    return new FakeKey(level, null);
+                }
+            }
+
+            if (options.CredentialKeys.Values.FirstOrDefault(k => k.Key.Length > 0 && FixedTimeEquals(k.Key, presented)) is { } credential)
+            {
+                return new FakeKey(credential.MaxResidency, credential);
+            }
+        }
+
+        error = Error(context, StatusCodes.Status401Unauthorized, "invalid_api_key",
+            "The API key is missing or invalid. Send it as 'Authorization: Bearer ume-sk-…'.");
+        return null;
+    }
+
     /// <summary>Authenticates the key and reads the ceiling; null result = refused (the error is in <paramref name="error"/>).</summary>
     public static FakeCall? Authorize(HttpContext context, FakeGatewayOptions options, out IResult? error)
     {
-        var presented = BearerOrApiKey(context.Request);
-        var level = presented is null ? (Residency?)null : options.Keys
-            .Where(k => FixedTimeEquals(k.Value, presented))
-            .Select(k => (Residency?)k.Key).FirstOrDefault();
-        var credential = false;
-        if (level is null && presented is not null &&
-            options.CredentialKeys.Values.FirstOrDefault(k => k.Key.Length > 0 && FixedTimeEquals(k.Key, presented)) is { } credentialKey)
+        if (Authenticate(context, options, out error) is not { } authenticated)
         {
-            (level, credential) = (credentialKey.MaxResidency, true);
-        }
-
-        if (level is null)
-        {
-            error = Error(context, StatusCodes.Status401Unauthorized, "invalid_api_key",
-                "The API key is missing or invalid. Send it as 'Authorization: Bearer ume-sk-…'.");
             return null;
         }
+
+        var (level, credential) = (authenticated.Level, authenticated.Credential is not null);
 
         // As RequestStages.ReadMaxResidency: absent is "no ceiling" unless the key requires one; present, it must be exactly
         // one of the three names (an empty value, a list or a repeated header is refused, never ignored).
@@ -90,7 +111,7 @@ public static class FakeAccess
         }
 
         error = null;
-        return new FakeCall(level.Value, ceiling, credential);
+        return new FakeCall(level, ceiling, credential);
     }
 
     /// <summary>

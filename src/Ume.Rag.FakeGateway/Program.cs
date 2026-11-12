@@ -37,35 +37,74 @@ app.Use((ctx, next) =>
 app.MapDefaultEndpoints();
 app.MapGet("/", () => "Ume.Rag fake gateway – endast för test och utveckling.");
 
-app.MapGet("/v1/models", (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
+app.MapGet("/v1/models", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
 {
     var o = options.Value;
     if (FakeAccess.Authorize(ctx, o, out var error) is not { } call)
     {
-        return error!;
+        await error!.ExecuteAsync(ctx);
+        return;
     }
 
-    // As the gateway's ModelListEndpoint from release 1: only models with an available target within the ceiling
-    // (gateway design §3.4); a multi-target name is a route alias (ume.residencies), a single-target one a deployment
-    // (ume.residency), and ume.kind is the gateway's ModelKind name.
-    return Results.Json(new
+    // As the gateway's ModelListEndpoint (thekim1/llmgateway#84): only models with an available target within the
+    // ceiling (gateway design §3.4); a multi-target name is a route alias (ume.residencies, the limits all its targets
+    // have), a single-target one a deployment (ume.residency); ume.kind is the gateway's ModelKind name; an ETag.
+    var data = new JsonArray();
+    foreach (var (model, residencies) in o.Served
+                 .Select(m => (Model: m, Residencies: FakeAccess.ServableResidencies(m, call)))
+                 .Where(m => m.Residencies.Length > 0)
+                 .OrderBy(m => m.Model.Targets.Count == 1).ThenBy(m => m.Model.Name, StringComparer.Ordinal))
     {
-        @object = "list",
-        data = o.Served
-            .Select(m => (Model: m, Residencies: FakeAccess.ServableResidencies(m, call)))
-            .Where(m => m.Residencies.Length > 0)
-            .OrderBy(m => m.Model.Targets.Count == 1).ThenBy(m => m.Model.Name, StringComparer.Ordinal)
-            .Select(m => new
-            {
-                id = m.Model.Name,
-                @object = "model",
-                created = 0,
-                owned_by = m.Model.Targets.Count == 1 ? FakeCatalog.ProviderName(m.Residencies[0]) : "ume-llm-gateway",
-                ume = m.Model.Targets.Count == 1
-                    ? (object)new { type = "model", kind = FakeCatalog.KindName(m.Model.Kind), residency = Ume.Rag.Domain.ResidencyCeiling.ToHeader(m.Residencies[0]) }
-                    : new { type = "alias", kind = FakeCatalog.KindName(m.Model.Kind), residencies = m.Residencies.Select(Ume.Rag.Domain.ResidencyCeiling.ToHeader) },
-            }),
-    });
+        var alias = model.Targets.Count > 1;
+        var price = FakeCatalog.PriceOf(model);
+        var facts = new JsonObject
+        {
+            ["type"] = alias ? "alias" : "model",
+            ["kind"] = FakeCatalog.KindName(model.Kind),
+        };
+        if (alias)
+        {
+            facts["description"] = model.Description;
+            facts["residencies"] = new JsonArray([.. residencies.Select(r => (JsonNode?)Ume.Rag.Domain.ResidencyCeiling.ToHeader(r))]);
+        }
+        else
+        {
+            facts["residency"] = Ume.Rag.Domain.ResidencyCeiling.ToHeader(residencies[0]);
+        }
+
+        facts["context_window"] = model.ContextWindow;
+        facts["max_output_tokens"] = model.MaxOutputTokens;
+        facts["features"] = new JsonArray([.. model.Features.Order(StringComparer.Ordinal).Select(f => (JsonNode?)f)]);
+        facts["pricing"] = new JsonObject
+        {
+            ["input_per_million_usd"] = price.InputPerMillionUsd,
+            ["cached_input_per_million_usd"] = price.CachedInputPerMillionUsd ?? price.InputPerMillionUsd,
+            ["output_per_million_usd"] = price.OutputPerMillionUsd,
+        };
+        data.Add(new JsonObject
+        {
+            ["id"] = model.Name,
+            ["object"] = "model",
+            ["created"] = 0,
+            ["owned_by"] = alias ? "ume-llm-gateway" : FakeCatalog.ProviderName(residencies[0]),
+            ["ume"] = facts,
+        });
+    }
+
+    await CacheableJson.WriteAsync(ctx, new JsonObject { ["object"] = "list", ["data"] = data }, ctx.RequestAborted);
+});
+
+// GET /v1/ume/context (gateway integration phase 1, docs/integrations.md "Discovery"): the presented key, its
+// integration, assigned keys and organisation, with an ETag. No ceiling is read, as the gateway's ContextEndpoint.
+app.MapGet("/v1/ume/context", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
+{
+    if (FakeAccess.Authenticate(ctx, options.Value, out var error) is not { } key)
+    {
+        await error!.ExecuteAsync(ctx);
+        return;
+    }
+
+    await CacheableJson.WriteAsync(ctx, FakeContext.Build(key, options.Value, DateTimeOffset.UtcNow), ctx.RequestAborted);
 });
 
 app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options, FakeChatScripts scripts) =>
