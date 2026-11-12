@@ -89,10 +89,12 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
             throw new HttpRequestException($"The gateway answered the rerank call with {(int)response.StatusCode}.", null, response.StatusCode);
         }
 
-        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        using var json = await ReadJsonAsync(response, Step, request.Model, cancellationToken);
         var root = json.RootElement;
-        var content = root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
-                      choices[0].TryGetProperty("message", out var m) && m.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
+        var usage = GatewayUsageReader.Read(response, root, Step, request.Model);
+        var content = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array &&
+                      choices.GetArrayLength() > 0 && choices[0].ValueKind == JsonValueKind.Object && choices[0].TryGetProperty("message", out var m) &&
+                      m.ValueKind == JsonValueKind.Object && m.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
             ? c.GetString()!
             : "";
         IReadOnlyList<double?> scores;
@@ -100,10 +102,10 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
         {
             scores = Parse(content, request.Passages.Count);
         }
-        catch (RerankOutputException)
+        catch (RerankOutputException e)
         {
             LogInvalid(_logger, request.Model, content.Length);
-            throw;
+            throw new RerankOutputException(e.Message, e) { Usage = usage };
         }
 
         var unscored = scores.Count(s => s is null);
@@ -112,7 +114,23 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
             LogPartial(_logger, request.Model, unscored, scores.Count);
         }
 
-        return new RerankScores(scores, GatewayUsageReader.Read(response, root, Step, request.Model));
+        return new RerankScores(scores, usage);
+    }
+
+    /// <summary>
+    /// The JSON body of a <c>2xx</c> rerank answer; a body that is not JSON throws <see cref="RerankOutputException"/> with the
+    /// call's usage (no tokens, the gateway's <c>x-ume-cost-usd</c>), because the gateway charged the call.
+    /// </summary>
+    internal static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response, string step, string model, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        }
+        catch (JsonException e)
+        {
+            throw new RerankOutputException("The rerank answer is not JSON.", e) { Usage = GatewayUsageReader.Read(response, default, step, model) };
+        }
     }
 
     /// <summary>
@@ -211,9 +229,16 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
     private static partial void LogInvalid(ILogger logger, string model, int length);
 }
 
-/// <summary>The reranker's answer could not be read as one score per passage; the engine keeps the fused order.</summary>
+/// <summary>
+/// The reranker's answer could not be read as one score per passage; the engine keeps the fused order. A <c>2xx</c> answer
+/// was still charged by the gateway, so the call's <see cref="Usage"/> travels with the exception and the turn records it
+/// (chat design §8.3).
+/// </summary>
 public sealed class RerankOutputException : Exception
 {
+    /// <summary>The usage of the call whose answer could not be read; null when no call's answer was read.</summary>
+    public GatewayCallUsage? Usage { get; init; }
+
     public RerankOutputException()
     {
     }

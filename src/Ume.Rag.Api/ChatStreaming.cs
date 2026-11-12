@@ -17,11 +17,13 @@ namespace Ume.Rag.Api;
 /// follows the final chunk, made from the documents the answer cited, at once; with <paramref name="followUps"/> (§9.8) the writer
 /// keeps the delivered text and a second <c>ume</c> chunk with <c>follow_ups</c> follows when the follow-up call returns or its
 /// budget runs out; then the usage chunk and <c>[DONE]</c>. After the first byte an error is one error chunk and <c>[DONE]</c>,
-/// and no <c>ume</c> chunk; after a disconnect nothing more is written.
+/// and no <c>ume</c> chunk; after a disconnect nothing more is written. A turn that ends in either of those calls
+/// <paramref name="aborted"/> instead of <paramref name="finished"/>, once the answer is disposed (its broken-off stream
+/// recorded, chat design §8.3), so its usage is still written (§12.1).
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
     Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, UmeAnswer>? ume = null,
-    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<IReadOnlyList<string>>>? followUps = null) : IResult
+    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<IReadOnlyList<string>>>? followUps = null, Func<ValueTask>? aborted = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -50,65 +52,77 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
         using var content = new SseChunk();
         // §9.8: the delivered text, kept only for the follow-up call.
         var delivered = followUps is null ? null : new StringBuilder();
-        using (answer)
+        var completed = false;
+        try
         {
-            try
+            using (answer)
             {
-                await WriteAsync(response, Chunk(new { role = "assistant", content = "" }, null), ct);
-                AnswerEvent.End end = new("stop", 0, 0);
-                await foreach (var item in answer.ReadAsync(ct))
+                try
                 {
-                    switch (item)
+                    await WriteAsync(response, Chunk(new { role = "assistant", content = "" }, null), ct);
+                    AnswerEvent.End end = new("stop", 0, 0);
+                    await foreach (var item in answer.ReadAsync(ct))
                     {
-                        case AnswerEvent.Own own:
-                            delivered?.Append(own.Text);
-                            await WriteAsync(response, Chunk(new { content = own.Text }, null), ct);
-                            break;
-                        case AnswerEvent.Pieces pieces:
-                            if (delivered is not null)
-                            {
-                                foreach (var text in pieces.Items.OfType<AnswerPiece.Text>())
+                        switch (item)
+                        {
+                            case AnswerEvent.Own own:
+                                delivered?.Append(own.Text);
+                                await WriteAsync(response, Chunk(new { content = own.Text }, null), ct);
+                                break;
+                            case AnswerEvent.Pieces pieces:
+                                if (delivered is not null)
                                 {
-                                    delivered.Append(text.Content);
+                                    foreach (var text in pieces.Items.OfType<AnswerPiece.Text>())
+                                    {
+                                        delivered.Append(text.Content);
+                                    }
                                 }
-                            }
 
-                            await PiecesAsync(response, pieces.Items, pieces.Shift, Chunk, content, id, created, ct);
-                            break;
-                        case AnswerEvent.End e:
-                            end = e;
-                            break;
+                                await PiecesAsync(response, pieces.Items, pieces.Shift, Chunk, content, id, created, ct);
+                                break;
+                            case AnswerEvent.End e:
+                                end = e;
+                                break;
+                        }
+                    }
+
+                    await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
+                    if (ume is not null)
+                    {
+                        await UmeAsync(response, id, created, ume(answer.Cited), ct);
+                    }
+
+                    if (followUps is not null)
+                    {
+                        await UmeAsync(response, id, created, new { follow_ups = await followUps(answer.Cited, delivered!.ToString(), ct) }, ct);
+                    }
+
+                    await UsageAsync(response, id, created, end.PromptTokens, end.CompletionTokens, ct);
+                    await DoneAsync(response, ct);
+                    answer.Finish();
+                    completed = true;
+                    if (finished is not null)
+                    {
+                        await finished(answer.Cited, end.PromptTokens, end.CompletionTokens);
                     }
                 }
-
-                await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
-                if (ume is not null)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    await UmeAsync(response, id, created, ume(answer.Cited), ct);
+                    // The client went away; nothing more to write (§8.3).
                 }
-
-                if (followUps is not null)
+                catch (Exception ex) when (ex is ChatException or HttpRequestException or IOException or JsonException)
                 {
-                    await UmeAsync(response, id, created, new { follow_ups = await followUps(answer.Cited, delivered!.ToString(), ct) }, ct);
-                }
-
-                await UsageAsync(response, id, created, end.PromptTokens, end.CompletionTokens, ct);
-                await DoneAsync(response, ct);
-                answer.Finish();
-                if (finished is not null)
-                {
-                    await finished(answer.Cited, end.PromptTokens, end.CompletionTokens);
+                    // §9.6: after the first byte only an error chunk is possible.
+                    await WriteAsync(response, new { error = new { message = "The answer was interrupted.", type = "api_error", code = "stream_interrupted" } }, CancellationToken.None);
+                    await DoneAsync(response, CancellationToken.None);
                 }
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        }
+        finally
+        {
+            if (!completed && aborted is not null)
             {
-                // The client went away; nothing more to write (§8.3).
-            }
-            catch (Exception ex) when (ex is ChatException or HttpRequestException or IOException or JsonException)
-            {
-                // §9.6: after the first byte only an error chunk is possible.
-                await WriteAsync(response, new { error = new { message = "The answer was interrupted.", type = "api_error", code = "stream_interrupted" } }, CancellationToken.None);
-                await DoneAsync(response, CancellationToken.None);
+                await aborted();
             }
         }
     }

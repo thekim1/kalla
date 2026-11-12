@@ -52,8 +52,9 @@ public sealed record SearchRequest(
 /// <param name="VectorSearch">How statement V ran; null when it did not run.</param>
 /// <param name="Timings">Stage milliseconds.</param>
 /// <param name="RerankUsage">
-/// The rerank call's usage (tokens and the gateway's cost) when one answered: cost per query in the evaluation, the turn's
-/// <c>rerank</c> usage record in chat (chat design §8.3); else null.
+/// The rerank call's usage (tokens and the gateway's cost) when one answered <c>2xx</c>, its output readable or not (an
+/// unreadable answer keeps the fused order with <c>rerank_unavailable</c> but was charged): cost per query in the evaluation,
+/// the turn's <c>rerank</c> usage record in chat (chat design §8.3); else null.
 /// </param>
 public sealed record SearchResult(
     string NormalizedQuery,
@@ -346,7 +347,10 @@ public sealed class RetrievalEngine : IDisposable
             var scores = result.Scores;
             if (scores.Count != passages.Count || scores.Any(s => s is { } v && !double.IsFinite(v)) || scores.All(s => s is null))
             {
-                throw new RerankOutputException("The reranker returned a different number of scores than passages, a score that is not a number, or no score.");
+                throw new RerankOutputException("The reranker returned a different number of scores than passages, a score that is not a number, or no score.")
+                {
+                    Usage = result.Usage,
+                };
             }
 
             // Unscored passages (null, #403) stay out of byId, so they keep their fused order below the scored ones.
@@ -365,7 +369,8 @@ public sealed class RetrievalEngine : IDisposable
         catch (Exception e) when (!cancellationToken.IsCancellationRequested)
         {
             _metrics?.RerankUnavailable(e is OperationCanceledException && timeout.IsCancellationRequested ? "timeout" : e is RerankOutputException ? "invalid_output" : "error");
-            return (deduped, null, null, RetrievalDegradation.RerankUnavailable);
+            // A 2xx answer that could not be read was charged: its usage stays with the result (chat design §8.3).
+            return (deduped, null, (e as RerankOutputException)?.Usage, RetrievalDegradation.RerankUnavailable);
         }
     }
 

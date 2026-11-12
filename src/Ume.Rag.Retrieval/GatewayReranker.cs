@@ -101,14 +101,24 @@ public sealed partial class GatewayReranker(IHttpClientFactory clients, string h
                 throw new HttpRequestException($"The gateway answered the rerank call with {status}.", null, response.StatusCode);
             }
 
-            using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
-            var scores = Read(json.RootElement, request.Passages.Count);
+            using var json = await ChatModelReranker.ReadJsonAsync(response, Step, model, cancellationToken);
+            var usage = GatewayUsageReader.Read(response, json.RootElement, Step, model);
+            IReadOnlyList<double?> scores;
+            try
+            {
+                scores = Read(json.RootElement, request.Passages.Count);
+            }
+            catch (RerankOutputException e)
+            {
+                throw new RerankOutputException(e.Message, e) { Usage = usage };
+            }
+
             if (!_logged.IsEmpty)
             {
                 _logged.Clear();
             }
 
-            return new RerankScores(scores, GatewayUsageReader.Read(response, json.RootElement, Step, model));
+            return new RerankScores(scores, usage);
         }
     }
 

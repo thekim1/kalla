@@ -50,6 +50,12 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     /// </summary>
     public string? Query { get; init; }
 
+    /// <summary>
+    /// The usage records of the turn's model calls (§8.3, §12.1): condense and retrieval have added theirs; the answer and the
+    /// follow-ups add theirs when they answer.
+    /// </summary>
+    public required TurnUsage Usage { get; init; }
+
     /// <summary>Where <see cref="MaxTokens"/> came from (<see cref="MaxTokensSources"/>); null is left out of the request.</summary>
     public string MaxTokensSource { get; init; } = MaxTokensSources.Provider;
 

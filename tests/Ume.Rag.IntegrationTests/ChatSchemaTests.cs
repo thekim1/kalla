@@ -31,8 +31,8 @@ public sealed class ChatSchemaTests(RagDatabaseFixture database)
             VALUES (gen_random_uuid(), '{answer}', '{conversation}', 'internal', '{client}', 'api', 1);
             INSERT INTO chat."AssistantDailyTotals" ("Day", "AssistantId", "ClientId", "DepartmentId", "Classification", "Conversations", "Messages",
                 "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
-                "AgentLimitHits", "InputTokens", "OutputTokens", "CostUsd")
-            VALUES (current_date, gen_random_uuid(), '{client}', gen_random_uuid(), 'internal', 1, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 100, 50, 0.0001);
+                "AgentLimitHits")
+            VALUES (current_date, gen_random_uuid(), '{client}', gen_random_uuid(), 'internal', 1, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0);
             """);
 
         // Regeneration dedup, one api rating per message, the same Seq twice, an unknown outcome and a 0 rating are refused.

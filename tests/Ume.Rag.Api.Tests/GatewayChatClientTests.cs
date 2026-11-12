@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.Api.Tests;
@@ -12,7 +13,8 @@ namespace Ume.Rag.Api.Tests;
 /// <summary>
 /// #275: <c>temperature</c> is sent only when the assistant sets one (the gateway refuses it for models that deprecate it),
 /// and a refusal the chat maps to 502 leaves one Warning with the gateway's status, code and request id, without body text
-/// or address.
+/// or address. B-38 (chat design §8.3): a stream asks for its cost and ends with the comment's, which is never an event; a
+/// JSON answer gives its usage as soon as it answers.
 /// </summary>
 public sealed class GatewayChatClientTests
 {
@@ -94,5 +96,84 @@ public sealed class GatewayChatClientTests
         PlatformChatSettings.Parse("""{"condenseModel":"gpt-6-luna","condenseReasoningEffort":"none"}""", new ChatOptions()).CondenseReasoningEffort.ShouldBe("none");
         PlatformChatSettings.Parse("{}", new ChatOptions()).CondenseReasoningEffort.ShouldBeNull();
         new ChatOptions().CondenseTimeout.ShouldBe(TimeSpan.FromMilliseconds(1200));
+    }
+
+    /// <summary>A gateway that answers every call with <paramref name="body"/> as <paramref name="mediaType"/>, with <c>x-ume-cost-usd</c> when given.</summary>
+    private sealed class CostingGateway(string body, string mediaType, string? cost = null) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
+            if (cost is not null)
+            {
+                response.Headers.Add(GatewayHeaders.CostUsd, cost);
+            }
+
+            return Task.FromResult(response);
+        }
+    }
+
+    [Fact]
+    public async Task A_stream_asks_for_its_cost_and_ends_with_the_comments_cost_which_is_never_passed_on()
+    {
+        // Chat design §8.1, §8.3, §9.1: x-ume-stream-cost: 1 on the stream; the comment just before [DONE] is the call's cost.
+        const string Stream = """
+            data: {"choices":[{"index":0,"delta":{"content":"Hej"},"finish_reason":null}],"usage":null}
+
+            data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":null}
+
+            data: {"choices":[],"usage":{"prompt_tokens":900,"completion_tokens":40,"total_tokens":940,"prompt_tokens_details":{"cached_tokens":512}}}
+
+            : ume-cost-usd=0.000123
+
+            data: [DONE]
+
+            """;
+        using var gateway = new CostingGateway(Stream, "text/event-stream");
+        using var loggers = LoggerFactory.Create(_ => { });
+        var client = new GatewayChatClient(new Clients(gateway), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
+
+        using var response = await client.OpenStreamAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 64, null, Guid.CreateVersion7(), Ct);
+        var events = new List<GatewayStreamEvent>();
+        await foreach (var item in client.ReadAsync(response, Ct))
+        {
+            events.Add(item);
+        }
+
+        gateway.Requests.ShouldHaveSingleItem().Headers.GetValues(GatewayHeaders.StreamCost).ShouldBe(["1"]);
+        events.ShouldBe([
+            new GatewayStreamEvent.Delta("Hej"), new GatewayStreamEvent.Finish("stop"), new GatewayStreamEvent.Usage(new GatewayTokens(900, 512, 40)),
+            new GatewayStreamEvent.End(0.000123m)]);
+    }
+
+    [Fact]
+    public async Task A_json_answer_gives_its_usage_once_it_answers_even_when_its_body_then_fails()
+    {
+        const string Body = """{"choices":[{"message":{"content":"Svar."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1200,"completion_tokens":80,"prompt_tokens_details":{"cached_tokens":1024}}}""";
+        using var gateway = new CostingGateway(Body, "application/json", "0.00012345");
+        using var loggers = LoggerFactory.Create(_ => { });
+        var client = new GatewayChatClient(new Clients(gateway), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
+        var usage = new List<GatewayCallUsage>();
+
+        var answer = await client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null, Guid.CreateVersion7(), "condense", Ct,
+            usage: usage.Add);
+
+        (answer.Text, answer.PromptTokens, answer.CompletionTokens).ShouldBe(("Svar.", 1200, 80));
+        usage.ShouldBe([new GatewayCallUsage("condense", "ume/chat-eu", 1200, 1024, 80, 0.00012345m)]);
+        gateway.Requests.ShouldHaveSingleItem().Headers.Contains(GatewayHeaders.StreamCost).ShouldBeFalse();
+
+        // A 2xx answer without choices, or not JSON at all, was still charged: its usage first, then the failure.
+        foreach (var broken in new[] { "{}", "not json" })
+        {
+            using var malformed = new CostingGateway(broken, "application/json", "0.00000100");
+            var brokenClient = new GatewayChatClient(new Clients(malformed), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
+            usage.Clear();
+            await Should.ThrowAsync<Exception>(() => brokenClient.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null,
+                Guid.CreateVersion7(), "follow-ups", Ct, usage: usage.Add));
+            usage.ShouldBe([new GatewayCallUsage("follow-ups", "ume/chat-eu", 0, 0, 0, 0.000001m)]);
+        }
     }
 }

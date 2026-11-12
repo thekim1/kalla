@@ -50,6 +50,12 @@ public sealed record EmbeddingProfileEntry(
 /// </summary>
 public sealed record ModelLimitsEntry(int? ContextWindow, int? MaxOutputTokens);
 
+/// <summary>
+/// A gateway model's prices per million tokens from the <c>GatewayModels</c> mirror, for the estimate of a call the gateway
+/// gave no cost for (chat design §8.3): null when unknown.
+/// </summary>
+public sealed record ModelPricesEntry(decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd);
+
 /// <summary>A level's data-protection policy fields the policy needs (identity §4.3 step 9).</summary>
 public sealed record LevelPolicyEntry(string Classification, IReadOnlyList<string> AllowedHistoryModes, bool ClientsWithoutHistoryOnly);
 
@@ -93,6 +99,9 @@ public sealed record PolicySnapshot(
 
     /// <summary>The known limits of the mirror's models by name; a model without any is absent (chat design §6.3).</summary>
     public IReadOnlyDictionary<string, ModelLimitsEntry> ModelLimits { get; init; } = new Dictionary<string, ModelLimitsEntry>(StringComparer.Ordinal);
+
+    /// <summary>The known prices of the mirror's models by name; a model without any is absent (chat design §8.3).</summary>
+    public IReadOnlyDictionary<string, ModelPricesEntry> ModelPrices { get; init; } = new Dictionary<string, ModelPricesEntry>(StringComparer.Ordinal);
 
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),

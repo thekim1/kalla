@@ -149,6 +149,26 @@ public sealed class GatewayRerankerTests : IDisposable
     }
 
     [Theory]
+    [InlineData("""{"results":[],"usage":{"prompt_tokens":321,"total_tokens":321}}""", 321)]
+    [InlineData("not json", 0)]
+    public async Task An_unreadable_2xx_answer_keeps_the_fused_order_and_its_usage(string body, int tokens)
+    {
+        // B-38: the gateway charged the call, so its usage (the cost header, the tokens when the body has them) stays with the result.
+        using var engine = Engine(new Gateway(_ =>
+        {
+            var answer = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            answer.Headers.Add(GatewayHeaders.CostUsd, "0.00003210");
+            return answer;
+        }));
+
+        var result = await engine.SearchAsync(Request(), Ct);
+
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe(FusedOrder);
+        result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
+        result.RerankUsage.ShouldBe(new GatewayCallUsage(GatewayReranker.Step, Model, tokens, 0, 0, 0.0000321m));
+    }
+
+    [Theory]
     [InlineData("""{"usage":{"prompt_tokens":12,"total_tokens":15}}""", 12)]
     [InlineData("""{"usage":{"total_tokens":15}}""", 15)]
     [InlineData("""{"meta":{"billed_units":{"input_tokens":40}}}""", 40)]
