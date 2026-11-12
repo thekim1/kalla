@@ -10,9 +10,10 @@ namespace Ume.Rag.Worker.Jobs;
 /// 1,000. Rows still in <c>RunItems_default</c> afterwards mean maintenance lagged: a warning and the
 /// <c>rag.partitions.default_rows</c> gauge. Then the engine's sweeps: chunk sets never swapped or past the rollback window
 /// (<see cref="IndexWriter.SweepOrphansAsync"/>) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). The nightly
-/// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Last, every
-/// collection's keyword statistics are checked (<see cref="KeywordStatistics.CheckAllAsync"/>, knowledge design §6.2). Content
-/// retention of cache rows is not built yet.
+/// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Then every
+/// collection's keyword statistics are checked (<see cref="KeywordStatistics.CheckAllAsync"/>, knowledge design §6.2), and the
+/// content retention step removes the rows without blobs past their age (<see cref="ContentMaintenance.DeleteExpiredContentAsync"/>,
+/// data-model §8).
 /// </summary>
 public sealed partial class MaintenanceService(
     ContentMaintenance maintenance,
@@ -26,6 +27,9 @@ public sealed partial class MaintenanceService(
 {
     public static readonly TimeOnly RunAt = new(2, 0);
     public static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
+
+    /// <summary>The <c>table</c> tag of <c>rag.retention.deleted</c> for the content step, whose count spans its tables.</summary>
+    public const string ContentRetentionMetricTable = "content-step";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -102,6 +106,17 @@ public sealed partial class MaintenanceService(
                 LogStepFailed(logger, ex, "keyword statistics");
             }
         }
+
+        try
+        {
+            var retention = await maintenance.DeleteExpiredContentAsync(cancellationToken);
+            metrics.RetentionDeleted(ContentRetentionMetricTable, retention.Deleted);
+            LogContentRetention(logger, retention.Deleted, retention.Skipped);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogStepFailed(logger, ex, "content retention");
+        }
     }
 
     /// <summary>
@@ -146,6 +161,9 @@ public sealed partial class MaintenanceService(
 
     [LoggerMessage(LogLevel.Information, "Blob purge: {Purged} blobs purged, {Kept} tombstones dropped for keys referenced again")]
     private static partial void LogPurged(ILogger logger, long purged, long kept);
+
+    [LoggerMessage(LogLevel.Information, "Content retention removed {Count} rows (another instance held the lock: {Skipped})")]
+    private static partial void LogContentRetention(ILogger logger, long count, bool skipped);
 
     [LoggerMessage(LogLevel.Error, "Maintenance step {Step} failed; it runs again tomorrow")]
     private static partial void LogStepFailed(ILogger logger, Exception exception, string step);

@@ -34,6 +34,7 @@
   "Infrastructure.Config.ConfigVersionMonitor.ChangeAsync#2": ["EntityType character varying", "bool_or boolean"],
   "Infrastructure.Config.ConfigVersionMonitor.RefreshAsync#1": ["Version bigint"],
   "Infrastructure.Config.ConfigWrites.ExecuteConfigWriteAsync#1": ["Value bigint"],
+  "Infrastructure.Jobs.ContentMaintenance.ContentRetentionStepSql": ["case bigint"],
   "Infrastructure.Jobs.ContentMaintenance.DeleteTerminalJobsAsync#1": ["pg_try_advisory_xact_lock boolean"],
   "Infrastructure.Jobs.ContentMaintenance.MaintainPartitionsAsync#1": ["created integer", "dropped integer", "default_rows bigint"],
   "Infrastructure.Jobs.JobDatabase.NotifyAsync#1": ["pg_notify void"],
