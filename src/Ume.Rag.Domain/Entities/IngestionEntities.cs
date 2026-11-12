@@ -228,12 +228,16 @@ public static class UploadStates
 {
     public const string Received = "received";
     public const string Clean = "clean";
+
+    /// <summary>Accepted without a malware scan: the deployment runs with <c>ClamAv:Mode = off</c> (connectors design §11).</summary>
+    public const string Unscanned = "unscanned";
+
     public const string Malware = "malware";
     public const string Refused = "refused";
     public const string Indexed = "indexed";
     public const string Deleted = "deleted";
 
-    public static IReadOnlyList<string> All { get; } = [Received, Clean, Malware, Refused, Indexed, Deleted];
+    public static IReadOnlyList<string> All { get; } = [Received, Clean, Unscanned, Malware, Refused, Indexed, Deleted];
 }
 
 /// <summary>
@@ -259,6 +263,13 @@ public sealed class Upload
 
     public string State { get; set; } = UploadStates.Received;
     public string? Reason { get; set; }
+
+    /// <summary>
+    /// When the current bytes passed a malware scan; null for bytes never scanned. An add or a replace clears it, and
+    /// <c>indexed</c> keeps it, so an indexed slot without it was not scanned (connectors design §9.1).
+    /// </summary>
+    public DateTimeOffset? ScannedAt { get; set; }
+
     public Guid? DocumentId { get; set; }
     public string? UploadedBy { get; set; }
     public DateTimeOffset UploadedAt { get; set; }

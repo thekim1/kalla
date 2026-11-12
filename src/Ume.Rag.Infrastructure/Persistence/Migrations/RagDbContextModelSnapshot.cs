@@ -3564,6 +3564,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReplacedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("ScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("Sha256")
                         .IsRequired()
                         .HasColumnType("bytea");
@@ -3595,7 +3598,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Uploads_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
 
-                            t.HasCheckConstraint("CK_Uploads_State", "\"State\" IN ('received', 'clean', 'malware', 'refused', 'indexed', 'deleted')");
+                            t.HasCheckConstraint("CK_Uploads_State", "\"State\" IN ('received', 'clean', 'unscanned', 'malware', 'refused', 'indexed', 'deleted')");
                         });
                 });
 

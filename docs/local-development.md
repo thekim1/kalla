@@ -68,7 +68,7 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 | Setting | Default | Effect |
 |---|---|---|
 | `Parser:Mode` | `container` | `container` builds `src/parser/Dockerfile`; `local` runs `uvicorn ume_parser.app:app` from `src/parser` with hot reload (see [the parser's README](../src/parser/README.md) for the models it then needs); `off` starts no parser |
-| `ClamAv:Enabled` | `true` | `false` starts no ClamAV (the worker's EICAR-only fake scanner comes with its scan step, P1) |
+| `ClamAv:Mode` | `on` | `off` starts no ClamAV and gives the worker `ClamAv__Mode=off`: files are stored without a malware scan and marked as not scanned (Decisions "Malware scan optional"; until the worker reads the mode, A-36, it falls back to its EICAR-only development scanner) |
 | `Render:Mode` | `container` | `container` builds `images/renderer` (Chromium behind Playwright's `launch-server`, hardened as in Compose with `images/renderer/seccomp.json`) and gives the worker `Render__Endpoint` with a generated secret path (parameter `render-ws-path`); `off` starts no renderer, and `browser` sources wait with `render.not_configured`. Unlike production the renderer is on Aspire's network, not an internal one |
 | `FakeGateway:Enabled` | `true` | `false` runs against a real gateway (below) |
 | `FakeGateway:Latency:*` | 0 (off) | a real gateway's timing on the fake (below) |
@@ -315,6 +315,6 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
 | `docker compose up` of the production files fails with "Pool overlaps with other one on this network" | The Compose networks use fixed subnets in `172.30.0.0/16`, and another Docker network on your machine already uses one. List them with `docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'`; remove the network that collides, or keep `172.30.0.0/16` out of Docker's `default-address-pools` |
 | Integration tests pull `mirror.gcr.io/ume-rag/...` and fail | A local image without a registry part while `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` is set: name it `ume-rag.local/...` |
 | The parser stays unhealthy for minutes after a start | It warms up its slots (Docling, the models) and runs a self-test first; set `Parser:Mode=off` when you do not need it |
-| ClamAV is slow to become healthy on the first start | freshclam downloads the signatures into the `ume-rag-clamav-db` volume first; later starts reuse them. `ClamAv:Enabled=false` skips it |
+| ClamAV is slow to become healthy on the first start | freshclam downloads the signatures into the `ume-rag-clamav-db` volume first; later starts reuse them. `ClamAv:Mode=off` skips it |
 | Postgres authentication fails after you cleared the user secrets | The volume keeps the old password: restore `Parameters:postgres-password`, or delete the volume (and its data) |
 | `ume-rag-e2e-postgres` cannot be removed | A stack still uses it: `.\scripts\Start-E2E.ps1 -Stop`, or stop the AppHost first |
