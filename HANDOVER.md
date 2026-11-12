@@ -31,7 +31,10 @@ to enter on Gateway models, `dc restart postgres` for the A-22 settings). Releas
 branch) passed, and **dry run 5 on `main` at `714a58f` passed** (#43122068059, with A-29, B-33 and #586: verify,
 parser and build with the smoke test all green). Ask the user, then
 `git tag -a v0.4.0 -m "v0.4.0" 714a58f && git push origin v0.4.0` (it publishes images and the release). Fix the
-CHANGELOG date if the tag is on a later day.
+CHANGELOG date if the tag is on a later day. **After dry run 5** stream b merged A-25 (#589, write each chunk once),
+A-26 (#590, one stage runner) and A-28 (#588, worker SQL schema contract), unreviewed but green; main reviewed #589
+afterwards and ticked A-25 (`e3a1e67`). Tagging `714a58f` releases what dry run 5 tested and leaves them for 0.5.0
+(they need CHANGELOG lines); tagging `main` needs one more dry run first.
 
 **2. #580, the gateway integration (user decision, 2026-11-11).** Every assistant and knowledge base runs on an
 *assigned* gateway key of its department chosen by id; each service has one credential key and sends
