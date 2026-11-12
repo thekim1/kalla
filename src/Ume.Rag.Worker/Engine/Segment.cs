@@ -13,7 +13,6 @@ using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
-using Ume.Rag.Worker.Processing.Clean;
 using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Html;
 using Ume.Rag.Worker.Processing.Parse;
@@ -199,35 +198,30 @@ public sealed class ProcessingSegment(
     IParserBuild? parserBuild = null,
     ParseRuleCatalog? parseRules = null)
 {
-    private readonly StageParser _parser = new(html, planner, parseOptions, converter);
+    private readonly StageRunner _runner = new(detect, new StageParser(html, planner, parseOptions, converter), chunker, personalData, settings);
 
     public async Task<SegmentResult> RunAsync(SegmentInput input, string jobClass, byte[]? detectKey, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var written = new List<NodeOutputRecord>();
+        var store = new OutputCacheStore(outputs, input.Document.Classification);
         try
         {
-            return await RunStagesAsync(input, jobClass, detectKey, written, cancellationToken);
+            return await RunStagesAsync(input, jobClass, detectKey, store, cancellationToken);
         }
         catch (StageFatalException fatal)
         {
-            return new SegmentResult.Ended(fatal.Outcome, fatal.Reason, written);
+            return new SegmentResult.Ended(fatal.Outcome, fatal.Reason, store.Written);
         }
         catch (ParseYieldException)
         {
-            return new SegmentResult.Yielded(written);
+            return new SegmentResult.Yielded(store.Written);
         }
     }
 
     /// <summary>The <c>detect</c> key of content <paramref name="contentHash"/> under <paramref name="pipeline"/>: the input key of a <c>parse</c> job.</summary>
-    public static byte[] DetectKey(ResolvedPipeline pipeline, byte[] contentHash, string? bypass = null)
-    {
-        ArgumentNullException.ThrowIfNull(pipeline);
-        return StageKeys.Key(contentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect),
-            StageKeys.SettingsHash(pipeline, StageNames.Detect, null, Bypassed(null, bypass)));
-    }
+    public static byte[] DetectKey(ResolvedPipeline pipeline, byte[] contentHash, string? bypass = null) => StageRunner.DetectKey(pipeline, contentHash, bypass);
 
-    private async Task<SegmentResult> RunStagesAsync(SegmentInput input, string jobClass, byte[]? detectKey, List<NodeOutputRecord> written,
+    private async Task<SegmentResult> RunStagesAsync(SegmentInput input, string jobClass, byte[]? detectKey, OutputCacheStore store,
         CancellationToken cancellationToken)
     {
         var document = input.Document;
@@ -238,126 +232,47 @@ public sealed class ProcessingSegment(
             ? (Guid?)null
             : document.CurrentExecutionId ?? throw new InvalidOperationException("A forced reprocess has an execution id.");
         var salt = forcedExecutionId?.ToString("N");
-        string? Salt(string stage) => StageBypass.Covers(input.BypassFrom, stage) ? salt : null;
-        ReadOnlyMemory<byte>? raw = null;
-        async Task<ReadOnlyMemory<byte>> RawAsync()
+        var isParseJob = jobClass == Domain.Entities.JobClasses.Parse;
+        var plan = new StagePlan(pipeline, level, input.CollectionClassification, contentHash)
         {
-            if (raw is { } loaded)
-            {
-                return loaded;
-            }
-
             // An upload key names no level: it is read by the document's (data-model §7).
-            await using var stream = await blobs.ForLevel(level).OpenReadAsync(input.RawKey, null, cancellationToken)
-                ?? throw new StageTransientException("raw.missing", TimeSpan.FromMinutes(1), countsAttempt: true);
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer, cancellationToken);
-            raw = buffer.ToArray();
-            return raw.Value;
-        }
-
-        RawContent Raw(ReadOnlyMemory<byte> bytes) => new(bytes, input.DeclaredMediaType)
-        {
+            Raw = async ct =>
+            {
+                await using var stream = await blobs.ForLevel(level).OpenReadAsync(input.RawKey, null, ct)
+                    ?? throw new StageTransientException("raw.missing", TimeSpan.FromMinutes(1), countsAttempt: true);
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer, ct);
+                return buffer.ToArray();
+            },
+            ParseContext = async (detected, ct) =>
+            {
+                var parser = detected.Route == ParseRoute.Parser;
+                var rules = parser && parseRules is not null
+                    ? await parseRules.CandidatesAsync(level, document.SourceId, document.Url, detected.MediaType, ct)
+                    : [];
+                return new ParseContext(input.SiteProfile, input.ReliableLastmod, parser ? await ParserBuildAsync(ct) : null, rules);
+            },
+            DeclaredMediaType = input.DeclaredMediaType,
             Url = document.Url is { } url ? new Uri(url) : null,
             DisplayName = document.DisplayName,
             HttpLastModified = input.HttpLastModified,
+            Salt = stage => StageBypass.Covers(input.BypassFrom, stage) ? salt : null,
+            DetectKey = detectKey,
+            StopBeforeParserRoute = !isParseJob,
+            Progress = parseKey => isParseJob ? new ParseProgress(new BlobParseRanges(blobs, level, parseKey), input.Slice) : null,
+            RequestId = document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"),
         };
 
-        // detect
-        var detectSettings = StageKeys.SettingsHash(pipeline, StageNames.Detect, null, Bypassed(null, Salt(StageNames.Detect)));
-        var dKey = detectKey ?? DetectKey(pipeline, contentHash, Salt(StageNames.Detect));
-        DetectResult detected;
-        if (await outputs.GetAsync<DetectResult>(dKey, cancellationToken) is { } cachedDetect)
+        var run = await _runner.RunAsync(plan, store, EveryStage.Instance, cancellationToken);
+        if (run.StoppedBefore == StageNames.Parse)
         {
-            detected = cachedDetect.Value;
-        }
-        else
-        {
-            detected = await detect.RunAsync(Raw(await RawAsync()), cancellationToken);
-            written.Add(await outputs.PutAsync(level, StageNames.Detect, dKey, detectSettings, contentHash, detected, cancellationToken));
+            return new SegmentResult.Parse(run.DetectKey!, Facts(run.Detected!, null, null, null, input), store.Written) { BypassFrom = input.BypassFrom };
         }
 
-        if (detected.Route == ParseRoute.Parser && jobClass != Domain.Entities.JobClasses.Parse)
+        return new SegmentResult.Embed(run.PersonalDataKey!, Facts(run.Detected!, run.Parsed, run.Cleaned, run.ParseKey, input), store.Written)
         {
-            return new SegmentResult.Parse(dKey, Facts(detected, null, null, null, input), written) { BypassFrom = input.BypassFrom };
-        }
-
-        // parse
-        var parserBuildHash = detected.Route == ParseRoute.Parser ? await ParserBuildAsync(cancellationToken) : null;
-        var rules = detected.Route == ParseRoute.Parser && parseRules is not null
-            ? await parseRules.CandidatesAsync(level, document.SourceId, document.Url, detected.MediaType, cancellationToken)
-            : [];
-        var (parseKey, parseSettings) = ParseKey(pipeline, contentHash, detected.Route, input.SiteProfile?.Id, parserBuildHash, AdminParseRuleSet.Key(rules),
-            Salt(StageNames.Parse));
-        ParsedDocument parsed;
-        byte[] parsedHash;
-        if (await outputs.GetAsync<ParsedDocument>(parseKey, cancellationToken) is { } cachedParse)
-        {
-            (parsed, parsedHash) = cachedParse;
-        }
-        else
-        {
-            var progress = jobClass == Domain.Entities.JobClasses.Parse ? new ParseProgress(new BlobParseRanges(blobs, level, parseKey), input.Slice) : null;
-            var requestId = document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N");
-            parsed = await _parser.ParseAsync(await RawAsync(), detected, input.SiteProfile?.Profile,
-                StageInputs.Parse(pipeline), requestId, cancellationToken, progress, rules);
-            var row = await outputs.PutAsync(level, StageNames.Parse, parseKey, parseSettings, contentHash, parsed, cancellationToken);
-            written.Add(row);
-            parsedHash = row.OutputHash;
-        }
-
-        // clean
-        var (cleaned, cleanedHash) = await StageAsync(level, pipeline, StageNames.Clean, parsedHash, Bypassed(null, Salt(StageNames.Clean)), written,
-            () => Task.FromResult(Cleaner.Clean(parsed)), cancellationToken);
-        if (!cleaned.Blocks.Any(b => b.Kind != BlockKinds.Heading))
-        {
-            throw new StageFatalException(Pipelines.Jobs.RunItemOutcome.Skipped, "parse.empty");
-        }
-
-        // chunk (with metadata)
-        var metadataInput = StageInputs.Metadata(detected.MediaType, cleaned,
-            document.Url is { } address ? new Uri(address) : null, document.DisplayName, input.ReliableLastmod,
-            input.HttpLastModified);
-        var chunkInputs = Bypassed(new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) },
-            Salt(StageNames.Chunk));
-        var (chunks, chunksHash) = await StageAsync(level, pipeline, StageNames.Chunk, cleanedHash, chunkInputs, written, () =>
-        {
-            var metadata = Metadata.Apply(StageInputs.PathRules(pipeline), metadataInput);
-            return Task.FromResult(chunker.Chunk(cleaned, StageInputs.Chunk(pipeline), metadata));
-        }, cancellationToken);
-
-        // personal-data
-        var values = await settings.GetAsync(cancellationToken);
-        var pdInputs = Bypassed(new Dictionary<string, string>(StringComparer.Ordinal) { ["collectionLevel"] = input.CollectionClassification },
-            Salt(StageNames.PersonalData));
-        var pdSettings = StageKeys.SettingsHash(pipeline, StageNames.PersonalData, null, pdInputs);
-        var pdKey = StageKeys.Key(chunksHash, StageNames.PersonalData, StageVersion(pipeline, StageNames.PersonalData), pdSettings);
-        if (await outputs.GetAsync<ChunkSetDraft>(pdKey, cancellationToken) is null)
-        {
-            var (withPii, _) = await personalData.RunAsync(chunks, values.PersonalData(input.CollectionClassification), cancellationToken);
-            written.Add(await outputs.PutAsync(level, StageNames.PersonalData, pdKey, pdSettings, chunksHash, withPii, cancellationToken));
-        }
-
-        return new SegmentResult.Embed(pdKey, Facts(detected, parsed, cleaned, parseKey, input), written)
-        {
-            ParseRuleKey = ChunkSetSalt.Of(ChunkSetSalt.Rule(AdminParseRuleSet.Key(rules)), forcedExecutionId),
+            ParseRuleKey = ChunkSetSalt.Of(ChunkSetSalt.Rule(AdminParseRuleSet.Key(run.ParseContext!.Rules)), forcedExecutionId),
         };
-    }
-
-    private async Task<(T Value, byte[] Hash)> StageAsync<T>(string level, ResolvedPipeline pipeline, string stage, byte[] inputHash,
-        IReadOnlyDictionary<string, string>? inputs, List<NodeOutputRecord> written, Func<Task<T>> run, CancellationToken cancellationToken)
-    {
-        var settingsHash = StageKeys.SettingsHash(pipeline, stage, null, inputs);
-        var key = StageKeys.Key(inputHash, stage, StageVersion(pipeline, stage), settingsHash);
-        if (await outputs.GetAsync<T>(key, cancellationToken) is { } cached)
-        {
-            return cached;
-        }
-
-        var value = await run();
-        var row = await outputs.PutAsync(level, stage, key, settingsHash, inputHash, value, cancellationToken);
-        written.Add(row);
-        return (value, row.OutputHash);
     }
 
     private async Task<string> ParserBuildAsync(CancellationToken cancellationToken) =>
@@ -393,28 +308,14 @@ public sealed class ProcessingSegment(
             parseInputs["parseRule"] = parseRule;
         }
 
-        var settings = StageKeys.SettingsHash(pipeline, StageNames.Parse, RouteName(route), Bypassed(parseInputs, bypass));
+        var settings = StageKeys.SettingsHash(pipeline, StageNames.Parse, RouteName(route), StageRunner.Salted(parseInputs, bypass));
         var key = route == ParseRoute.Parser
             ? StageKeys.ParserKey(contentHash, parserBuildHash ?? throw new ArgumentNullException(nameof(parserBuildHash)), settings)
             : StageKeys.Key(contentHash, StageNames.Parse, parseVersion, settings);
         return (key, settings);
     }
 
-    /// <summary><paramref name="inputs"/> with the bypass salt (<see cref="StageBypass.Input"/>) when <paramref name="salt"/> is set.</summary>
-    private static Dictionary<string, string>? Bypassed(Dictionary<string, string>? inputs, string? salt)
-    {
-        if (salt is null)
-        {
-            return inputs;
-        }
-
-        inputs ??= new Dictionary<string, string>(StringComparer.Ordinal);
-        inputs[StageBypass.Input] = salt;
-        return inputs;
-    }
-
-    private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
-        pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;
+    private static int StageVersion(ResolvedPipeline pipeline, string stage) => StageRunner.StageVersion(pipeline, stage);
 
     private static string RouteName(ParseRoute route) => route switch
     {
@@ -423,6 +324,36 @@ public sealed class ProcessingSegment(
         ParseRoute.Csv => ParseRoutes.Csv,
         _ => ParseRoutes.Parser,
     };
+
+    /// <summary>The output cache as a stage run's store, collecting the rows the segment commit writes.</summary>
+    private sealed class OutputCacheStore(StageOutputs outputs, string level) : IStageStore
+    {
+        public List<NodeOutputRecord> Written { get; } = [];
+
+        public Task<(T Value, byte[] OutputHash)?> GetAsync<T>(string stage, byte[] key, CancellationToken cancellationToken) =>
+            outputs.GetAsync<T>(key, cancellationToken);
+
+        public async Task<byte[]> PutAsync<T>(string stage, byte[] key, byte[] settingsHash, byte[] inputHash, T value, CancellationToken cancellationToken)
+        {
+            var row = await outputs.PutAsync(level, stage, key, settingsHash, inputHash, value, cancellationToken);
+            Written.Add(row);
+            return row.OutputHash;
+        }
+    }
+
+    /// <summary>The engine runs every stage and shows nothing.</summary>
+    private sealed class EveryStage : IStageObserver
+    {
+        public static readonly EveryStage Instance = new();
+
+        public bool Wants(string stage) => true;
+
+        public void Begin(string stage)
+        {
+        }
+
+        public ValueTask DoneAsync(string stage, bool cacheHit, StageRunState run, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
 }
 
 /// <summary>Where a document's raw content lives (data-model §9): the fetched blob by content hash, or the upload itself.</summary>
