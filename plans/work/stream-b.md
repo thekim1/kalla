@@ -380,6 +380,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ## Live (the live block, see the roadmap)
 
+
+### [ ] B-34 Schema contract for stream b's positional SQL readers (#510, follow-up of A-28)
+- **Do:** add the raw-SQL statements of stream b's stores to A-28's schema contract (`SqlSchemaContractTests`,
+  `sql-shapes.json`, #588): the retrieval statements and hydrator (`src/Ume.Rag.Retrieval/Postgres/**`), the admin
+  API's and rag-api's raw readers, the column names and types each reader expects, with `CommandBehavior.SchemaOnly`.
+  Move the harness to `tests/Ume.Rag.ContractTests/**` if both streams' statements fit there better.
+- **Paths:** `tests/**` (the harness and shapes), `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.AdminApi/**`,
+  `src/Ume.Rag.Api/**` (only where a statement must be exposed as a constant).
+- **Done when:** a renamed column in a retrieval or admin statement fails the test.
+- **Waits on:** –
+- **Read:** #510, #588.
 ### [x] B-L1 Status green against the real gateway
 - **Done when:** `GET /api/gateway/status` green with the pilot keys; #95, #102, #162 rechecked.
 - **Waits on:** the gateway session (EU routes, pilot keys).

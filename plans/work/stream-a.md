@@ -270,7 +270,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-28.
 - **Read:** #509; processing §14.
 
-### [ ] A-25 Write each chunk once (#501)
+### [x] A-25 Write each chunk once (#501) (#589)
 - **Do:** engine §14 rule 2a: a chunk set of at most 1,000 chunks is inserted (set row and chunks) inside the swap
   transaction, visible at commit; larger sets keep today's path.
 - **Paths:** `src/Ume.Rag.Worker/Engine/**`.
