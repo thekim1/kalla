@@ -494,7 +494,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** cost-attribution §5; chat §8.3, §12.1, §12.2, §12.4, §17, §18.2; data-model §1.2, §2.2, §2.3, §8;
   gateway-changes §5.4, §7.1.
 
-### [ ] B-39 Cost per step: the test panel's calls under `admin-console` (cost-attribution C2)
+### [x] B-39 Cost per step: the test panel's calls under `admin-console` (cost-attribution C2) (#625)
 - **Do:** the test panel (admin §4.9) collects the usage records of its turn as chat does (B-38) and `rag-admin`
   upserts them into `AssistantDailyUsage` under the assistant and the `admin-console` client row (its id from the
   snapshot by name and kind `internal`; without the row the usage is not written and a warning is logged), never into
