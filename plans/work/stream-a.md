@@ -280,7 +280,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   inside the transaction, #554/#559).
 - **Read:** #501; engine §12, §14.
 
-### [ ] A-26 One stage runner for engine and preview (#508)
+### [x] A-26 One stage runner for engine and preview (#508)
 - **Do:** one runner with the stage order, input hashing and skip rules, parameterised by the output store and a stop
   stage; engine and preview call it; a test runs both on the same documents and compares outputs.
 - **Paths:** `src/Ume.Rag.Worker/Engine/**`, `src/Ume.Rag.Worker/Preview/**`.

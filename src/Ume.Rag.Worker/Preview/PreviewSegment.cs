@@ -11,7 +11,6 @@ using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
-using Ume.Rag.Worker.Processing.Clean;
 using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Embedding;
 using Ume.Rag.Worker.Processing.Html;
@@ -168,7 +167,7 @@ public sealed class PreviewSegment(
     public const int MaxPages = 50;
 
     private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), concurrency, time);
-    private readonly StageParser _parser = new(html, planner, parseOptions, converter);
+    private readonly StageRunner _runner = new(detect, new StageParser(html, planner, parseOptions, converter), chunker, personalData, settings);
 
     /// <summary>Runs the stages after <c>fetch</c>; returns the site profile's before/after of an HTML page with a URL.</summary>
     public async Task<PreviewSiteProfile?> RunAsync(PreviewRun run, PreviewContent content, PreviewStageLog log, CancellationToken cancellationToken)
@@ -179,171 +178,57 @@ public sealed class PreviewSegment(
         var store = run.Store;
         var pipeline = run.Pipeline.Pipeline;
         var level = content.Level;
-        var url = content.Url is { } address ? new Uri(address) : null;
-        ReadOnlyMemory<byte>? raw = null;
-        async Task<ReadOnlyMemory<byte>> RawAsync()
+        var plan = new StagePlan(pipeline, level, run.Collection.Classification, content.ContentHash)
         {
-            if (raw is { } loaded)
-            {
-                return loaded;
-            }
-
             // An upload key names no level: it is read by the document's, which may be below the preview's (data-model §7).
-            await using var stream = await store.Blobs.ForLevel(level).OpenReadAsync(content.RawKey, null, cancellationToken)
-                ?? throw new StageFatalException(RunItemOutcome.Failed, "raw.missing");
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer, cancellationToken);
-            raw = buffer.ToArray();
-            return raw.Value;
-        }
+            Raw = async ct =>
+            {
+                await using var stream = await store.Blobs.ForLevel(level).OpenReadAsync(content.RawKey, null, ct)
+                    ?? throw new StageFatalException(RunItemOutcome.Failed, "raw.missing");
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer, ct);
+                return buffer.ToArray();
+            },
+            ParseContext = async (detected, ct) =>
+            {
+                // The host's applied profile: the HTML parse applies it, and its lastmodReliable admits a stored sitemap
+                // lastmod as the chunk date of any route, as in the live segment (processing design §7).
+                var applied = detected.Route == ParseRoute.Html || content.SitemapLastMod is not null
+                    ? await siteProfiles.AppliedAsync(level, content.Url, ct)
+                    : null;
+                // The same key as the live segment (incl. the parser build), so a preview reuses live parses read-only.
+                string? parserBuildHash = null;
+                if (detected.Route == ParseRoute.Parser)
+                {
+                    parserBuildHash = parserBuild is not null && converter is not null
+                        ? await parserBuild.GetAsync(ct)
+                        : throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured");
+                }
 
-        if (!log.Wants(StageNames.Detect))
-        {
-            return null;
-        }
+                var rules = detected.Route == ParseRoute.Parser && parseRules is not null
+                    ? await ParseRuleCandidatesAsync(parseRules, run, content, detected.MediaType, ct)
+                    : [];
+                return new ParseContext(detected.Route == ParseRoute.Html ? applied : null,
+                    StageInputs.ReliableLastmod(content.SitemapLastMod, applied?.Profile.Profile), parserBuildHash, rules);
+            },
+            DeclaredMediaType = content.MediaType,
+            Url = content.Url is { } address ? new Uri(address) : null,
+            DisplayName = content.DisplayName,
+            HttpLastModified = content.HttpLastModified,
+            LimitParse = detected => detected.Inspect is { Pages.Count: > MaxPages } inspect
+                ? detected with { Inspect = inspect with { Pages = [.. inspect.Pages.OrderBy(p => p.Page).Take(MaxPages)] } }
+                : detected,
+        };
 
-        // detect
-        log.Begin(StageNames.Detect);
-        var detectSettings = StageKeys.SettingsHash(pipeline, StageNames.Detect, null);
-        var detectKey = StageKeys.Key(content.ContentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect), detectSettings);
-        var detected = (await store.GetAsync<DetectResult>(StageNames.Detect, detectKey, cancellationToken))?.Value;
-        var detectHit = detected is not null;
-        if (detected is null)
+        var observer = new Observer(this, run, content, log, settings, chunkSets);
+        var state = await _runner.RunAsync(plan, new Store(store), observer, cancellationToken);
+        if (state.StoppedBefore is not null || !log.Wants(StageNames.Embed))
         {
-            detected = await detect.RunAsync(new RawContent(await RawAsync(), content.MediaType) { Url = url, DisplayName = content.DisplayName }, cancellationToken);
-            await store.PutAsync(StageNames.Detect, detectKey, detected, cancellationToken);
-        }
-
-        log.Done(detectHit, new { detected.MediaType, route = RouteName(detected.Route), detected.Language, detected.PageCount });
-        if (!log.Wants(StageNames.Parse))
-        {
-            return null;
-        }
-
-        // parse, and for an HTML page the extraction without and with the site profile
-        log.Begin(StageNames.Parse);
-        // The host's applied profile: the HTML parse applies it, and its lastmodReliable admits a stored sitemap
-        // lastmod as the chunk date of any route, as in the live segment (processing design §7).
-        var applied = detected.Route == ParseRoute.Html || content.SitemapLastMod is not null
-            ? await siteProfiles.AppliedAsync(level, content.Url, cancellationToken)
-            : null;
-        var profile = detected.Route == ParseRoute.Html ? applied : null;
-        // The same key as the live segment (incl. the parser build), so a preview reuses live parses read-only.
-        string? parserBuildHash = null;
-        if (detected.Route == ParseRoute.Parser)
-        {
-            parserBuildHash = parserBuild is not null && converter is not null
-                ? await parserBuild.GetAsync(cancellationToken)
-                : throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured");
-        }
-
-        var rules = detected.Route == ParseRoute.Parser && parseRules is not null
-            ? await ParseRuleCandidatesAsync(parseRules, run, content, detected.MediaType, cancellationToken)
-            : [];
-        var (parseKey, _) = ProcessingSegment.ParseKey(pipeline, content.ContentHash, detected.Route, profile?.Id, parserBuildHash, AdminParseRuleSet.Key(rules));
-        var limited = detected.Inspect is { Pages.Count: > MaxPages } inspect
-            ? detected with { Inspect = inspect with { Pages = [.. inspect.Pages.OrderBy(p => p.Page).Take(MaxPages)] } }
-            : detected;
-        var parseHit = await store.GetAsync<ParsedDocument>(StageNames.Parse, parseKey, cancellationToken);
-        ParsedDocument parsed;
-        byte[] parsedHash;
-        if (parseHit is { } cachedParse)
-        {
-            (parsed, parsedHash) = cachedParse;
-        }
-        else
-        {
-            parsed = await _parser.ParseAsync(await RawAsync(), limited, profile?.Profile, StageInputs.Parse(pipeline),
-                Guid.CreateVersion7().ToString("N"), cancellationToken, rules: rules);
-            parsedHash = await store.PutAsync(StageNames.Parse, parseKey, parsed, cancellationToken);
-        }
-
-        var shownParse = await store.ShowAsync(content.Index, StageNames.Parse, StageNames.Parse, parsed, parsed.Blocks.Count, CutBlocks, cancellationToken);
-        PreviewSiteProfile? siteProfile = null;
-        if (detected.Route == ParseRoute.Html && url is not null)
-        {
-            siteProfile = await BeforeAfterAsync(run, content, url, await RawAsync(), profile, shownParse.Path, cancellationToken);
-        }
-
-        log.Done(parseHit is not null, new
-        {
-            parsed.Strategy,
-            blocks = parsed.Blocks.Count,
-            pages = parsed.Pages.Count,
-            pagesLimited = !ReferenceEquals(limited, detected) && parseHit is null,
-        }, shownParse.Path, shownParse.Truncated);
-        if (!log.Wants(StageNames.Clean))
-        {
-            return siteProfile;
-        }
-
-        // clean
-        log.Begin(StageNames.Clean);
-        var (cleaned, cleanedHash, cleanHit) = await StageAsync(store, pipeline, StageNames.Clean, parsedHash, null, () => Cleaner.Clean(parsed), cancellationToken);
-        var shownClean = await store.ShowAsync(content.Index, StageNames.Clean, StageNames.Clean, cleaned, cleaned.Blocks.Count, CutBlocks, cancellationToken);
-        if (!cleaned.Blocks.Any(b => b.Kind != BlockKinds.Heading))
-        {
-            throw new StageFatalException(RunItemOutcome.Skipped, "parse.empty");
-        }
-
-        log.Done(cleanHit, new { blocks = cleaned.Blocks.Count, cleaned.Language }, shownClean.Path, shownClean.Truncated);
-        if (!log.Wants(StageNames.Chunk))
-        {
-            return siteProfile;
-        }
-
-        // chunk (with metadata)
-        log.Begin(StageNames.Chunk);
-        var metadataInput = StageInputs.Metadata(detected.MediaType, cleaned, url, content.DisplayName,
-            StageInputs.ReliableLastmod(content.SitemapLastMod, applied?.Profile.Profile), content.HttpLastModified);
-        var chunkInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) };
-        var metadata = Metadata.Apply(StageInputs.PathRules(pipeline), metadataInput);
-        var (chunks, chunksHash, chunkHit) = await StageAsync(store, pipeline, StageNames.Chunk, cleanedHash,
-            chunkInputs, () => chunker.Chunk(cleaned, StageInputs.Chunk(pipeline), metadata), cancellationToken);
-        var shownChunks = await store.ShowAsync(content.Index, StageNames.Chunk, StageNames.Chunk, chunks, chunks.Chunks.Count, CutChunks, cancellationToken);
-        log.Done(chunkHit, new { chunks = chunks.Chunks.Count, tokens = chunks.Chunks.Sum(c => c.TokenCount) }, shownChunks.Path, shownChunks.Truncated);
-        log.Tagged(metadata.Tags);
-        if (!log.Wants(StageNames.PersonalData))
-        {
-            return siteProfile;
-        }
-
-        // personal-data, with the state the set would get in the collection
-        log.Begin(StageNames.PersonalData);
-        var values = await settings.GetAsync(cancellationToken);
-        var collectionLevel = run.Collection.Classification;
-        var pdInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["collectionLevel"] = collectionLevel };
-        var pdSettings = StageKeys.SettingsHash(pipeline, StageNames.PersonalData, null, pdInputs);
-        var pdKey = StageKeys.Key(chunksHash, StageNames.PersonalData, StageVersion(pipeline, StageNames.PersonalData), pdSettings);
-        var pdHit = await store.GetAsync<ChunkSetDraft>(StageNames.PersonalData, pdKey, cancellationToken);
-        ChunkSetDraft withPii;
-        if (pdHit is { } cachedPii)
-        {
-            withPii = cachedPii.Value;
-        }
-        else
-        {
-            (withPii, _) = await personalData.RunAsync(chunks, values.PersonalData(collectionLevel), cancellationToken);
-            await store.PutAsync(StageNames.PersonalData, pdKey, withPii, cancellationToken);
-        }
-
-        var counts = withPii.Pii ?? new PiiCounts();
-        var fired = PiiFlagPolicy.Fired(counts, values.PiiFlagRules);
-        var clearance = content.DocumentId is { } documentId ? await chunkSets.GetClearanceAsync(documentId, cancellationToken) : null;
-        var wouldBe = new ChunkSetRecord(Guid.Empty,
-            new ChunkSetKey(content.DocumentId ?? Guid.Empty, run.Pipeline.VersionId, profile?.Id, run.Collection.EmbeddingProfileId, content.ContentHash),
-            level, run.Collection.Id, chunksHash) { PiiFlagged = fired.Count > 0, PiiCounts = counts };
-        var state = PiiLifecycle.StateFor(wouldBe, collectionLevel, content.PiiMode, clearance, values.PiiFlagRules);
-        var pii = new PreviewPii(counts, fired, state) { Spans = run.PiiSpans ? Spans(withPii) : null };
-        var shownPii = await store.ShowAsync(content.Index, StageNames.PersonalData, StageNames.PersonalData, pii, pii.Spans?.Count ?? 0,
-            (p, n) => p with { Spans = p.Spans?.Take(n).ToList() }, cancellationToken);
-        log.Done(pdHit is not null, new { state, flagged = fired.Count > 0, types = fired, ner = counts.Ner }, shownPii.Path, shownPii.Truncated);
-        if (!log.Wants(StageNames.Embed))
-        {
-            return siteProfile;
+            return observer.SiteProfile;
         }
 
         // embed: counts only, unless asked to call the gateway
+        var withPii = state.WithPii!;
         log.Begin(StageNames.Embed);
         var tokens = withPii.Chunks.Sum(c => (long)c.TokenCount);
         if (run.Embed)
@@ -372,7 +257,91 @@ public sealed class PreviewSegment(
             log.Skip(StageNames.Index, new { wouldWrite = withPii.Chunks.Count });
         }
 
-        return siteProfile;
+        return observer.SiteProfile;
+    }
+
+    /// <summary>
+    /// What a preview shows of each stage: its facts and output in the log, an HTML page's site-profile before/after, and the
+    /// state the set would get in the collection.
+    /// </summary>
+    private sealed class Observer(PreviewSegment segment, PreviewRun run, PreviewContent content, PreviewStageLog log, EngineSettings settings,
+        IChunkSetStore chunkSets) : IStageObserver
+    {
+        public PreviewSiteProfile? SiteProfile { get; private set; }
+
+        public bool Wants(string stage) => log.Wants(stage);
+
+        public void Begin(string stage) => log.Begin(stage);
+
+        public async ValueTask DoneAsync(string stage, bool cacheHit, StageRunState state, CancellationToken cancellationToken)
+        {
+            var store = run.Store;
+            switch (stage)
+            {
+                case StageNames.Detect:
+                    var detected = state.Detected!;
+                    log.Done(cacheHit, new { detected.MediaType, route = RouteName(detected.Route), detected.Language, detected.PageCount });
+                    break;
+                case StageNames.Parse:
+                    var parsed = state.Parsed!;
+                    var shownParse = await store.ShowAsync(content.Index, StageNames.Parse, StageNames.Parse, parsed, parsed.Blocks.Count, CutBlocks, cancellationToken);
+                    if (state.Detected!.Route == ParseRoute.Html && state.Plan.Url is { } url)
+                    {
+                        SiteProfile = await segment.BeforeAfterAsync(run, content, url, await state.RawAsync(cancellationToken), state.ParseContext!.SiteProfile,
+                            shownParse.Path, cancellationToken);
+                    }
+
+                    log.Done(cacheHit, new { parsed.Strategy, blocks = parsed.Blocks.Count, pages = parsed.Pages.Count, pagesLimited = state.ParseLimited },
+                        shownParse.Path, shownParse.Truncated);
+                    break;
+                case StageNames.Clean:
+                    var cleaned = state.Cleaned!;
+                    var shownClean = await store.ShowAsync(content.Index, StageNames.Clean, StageNames.Clean, cleaned, cleaned.Blocks.Count, CutBlocks, cancellationToken);
+                    log.Done(cacheHit, new { blocks = cleaned.Blocks.Count, cleaned.Language }, shownClean.Path, shownClean.Truncated);
+                    break;
+                case StageNames.Chunk:
+                    var chunks = state.Chunks!;
+                    var shownChunks = await store.ShowAsync(content.Index, StageNames.Chunk, StageNames.Chunk, chunks, chunks.Chunks.Count, CutChunks, cancellationToken);
+                    log.Done(cacheHit, new { chunks = chunks.Chunks.Count, tokens = chunks.Chunks.Sum(c => c.TokenCount) }, shownChunks.Path, shownChunks.Truncated);
+                    log.Tagged(state.Metadata!.Tags);
+                    break;
+                case StageNames.PersonalData:
+                    await PersonalDataAsync(state, cacheHit, cancellationToken);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown stage {stage}.");
+            }
+        }
+
+        /// <summary>personal-data, with the state the set would get in the collection.</summary>
+        private async Task PersonalDataAsync(StageRunState state, bool cacheHit, CancellationToken cancellationToken)
+        {
+            var withPii = state.WithPii!;
+            var values = await settings.GetAsync(cancellationToken);
+            var collectionLevel = run.Collection.Classification;
+            var counts = withPii.Pii ?? new PiiCounts();
+            var fired = PiiFlagPolicy.Fired(counts, values.PiiFlagRules);
+            var clearance = content.DocumentId is { } documentId ? await chunkSets.GetClearanceAsync(documentId, cancellationToken) : null;
+            var wouldBe = new ChunkSetRecord(Guid.Empty,
+                new ChunkSetKey(content.DocumentId ?? Guid.Empty, run.Pipeline.VersionId, state.ParseContext!.SiteProfile?.Id, run.Collection.EmbeddingProfileId,
+                    content.ContentHash),
+                content.Level, run.Collection.Id, state.ChunksHash!) { PiiFlagged = fired.Count > 0, PiiCounts = counts };
+            var setState = PiiLifecycle.StateFor(wouldBe, collectionLevel, content.PiiMode, clearance, values.PiiFlagRules);
+            var pii = new PreviewPii(counts, fired, setState) { Spans = run.PiiSpans ? segment.Spans(withPii) : null };
+            var shownPii = await run.Store.ShowAsync(content.Index, StageNames.PersonalData, StageNames.PersonalData, pii, pii.Spans?.Count ?? 0,
+                (p, n) => p with { Spans = p.Spans?.Take(n).ToList() }, cancellationToken);
+            log.Done(cacheHit, new { state = setState, flagged = fired.Count > 0, types = fired, ner = counts.Ner }, shownPii.Path, shownPii.Truncated);
+        }
+    }
+
+    /// <summary>The preview store as a stage run's store (its own prefix, the live cache read-only, a base job's outputs).</summary>
+    private sealed class Store(PreviewStore store) : IStageStore
+    {
+        public Task<(T Value, byte[] OutputHash)?> GetAsync<T>(string stage, byte[] key, CancellationToken cancellationToken) =>
+            store.GetAsync<T>(stage, key, cancellationToken);
+
+        public Task<byte[]> PutAsync<T>(string stage, byte[] key, byte[] settingsHash, byte[] inputHash, T value, CancellationToken cancellationToken) =>
+            store.PutAsync(stage, key, value, cancellationToken);
     }
 
     private async Task<PreviewSiteProfile> BeforeAfterAsync(PreviewRun run, PreviewContent content, Uri url, ReadOnlyMemory<byte> bytes,
@@ -403,20 +372,6 @@ public sealed class PreviewSegment(
     private IReadOnlyList<PreviewPiiSpan> Spans(ChunkSetDraft chunks) =>
         [.. chunks.Chunks.SelectMany(c => patterns.Scan(c.Text).Select(m => new PreviewPiiSpan(c.Ordinal, m.Type, m.Start, m.Length)))];
 
-    private static async Task<(T Value, byte[] Hash, bool Hit)> StageAsync<T>(PreviewStore store, ResolvedPipeline pipeline, string stage, byte[] inputHash,
-        IReadOnlyDictionary<string, string>? inputs, Func<T> run, CancellationToken cancellationToken)
-    {
-        var settingsHash = StageKeys.SettingsHash(pipeline, stage, null, inputs);
-        var key = StageKeys.Key(inputHash, stage, StageVersion(pipeline, stage), settingsHash);
-        if (await store.GetAsync<T>(stage, key, cancellationToken) is { } cached)
-        {
-            return (cached.Value, cached.OutputHash, true);
-        }
-
-        var value = run();
-        return (value, await store.PutAsync(stage, key, value, cancellationToken), false);
-    }
-
     /// <summary>
     /// The document's admin-made parse-rule candidates, matched as the live segment matches them (the source's department,
     /// or the collection's for a URL without a source), so the preview's parse key is the live one.
@@ -430,9 +385,6 @@ public sealed class PreviewSegment(
     private static ParsedDocument CutBlocks(ParsedDocument document, int count) => document with { Blocks = [.. document.Blocks.Take(count)] };
 
     private static ChunkSetDraft CutChunks(ChunkSetDraft chunks, int count) => chunks with { Chunks = [.. chunks.Chunks.Take(count)] };
-
-    private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
-        pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;
 
     private static string RouteName(ParseRoute route) => route switch
     {
