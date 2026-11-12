@@ -184,9 +184,9 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
     cost and budget status per assistant and knowledge base (`src/Ume.Rag.AdminApi/**`, the two views); the
     FakeGateway's `/integration/v1`.
 - **Done when:** each merged phase has its stream items queued and the designs match what the gateway built.
-- **Waits on:** the gateway's phase PRs (user). Phase 2 waits on a gateway release with #84 (feature
-  `credential-residencies`); phase 3 on #83 merged. Department member groups wait for the gateway (feature C, not
-  scheduled; user, 2026-11-12: wait, no other source in Ume.Rag); until then they are entered by hand (identity §2).
+- **Waits on:** nothing since **gateway v0.10.0** (released 2026-11-12: phases 1–3, the credential bound,
+  `organisation.read`, member groups). Phase 2 and 3 items are next to queue. Member groups now come from the
+  context (B-35, A-33).
 - **Read:** Decisions "Cost attribution", "Gateway keys", "Gateway releases"; gateway-changes §5, §13.4;
   cost-attribution §4, §6; identity §4.7; admin §4.6 V39, §4.10, §5.5.4; data-model `GatewayKeys`; chat §8;
   repo-and-deployment §4.3.

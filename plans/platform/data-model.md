@@ -225,8 +225,8 @@ agent rules for every linking assistant (admin design V14, V18).
 
 **Organisation mirror.** The admin API syncs `Departments`, `Teams` and `GatewayKeys` from the gateway's
 `GET /v1/ume/context` (its credential key holds `organisation.read`; admin design §4.10) every 5 minutes and on demand;
-only changed rows are written, so a sync without changes does not bump the config version. The context has no member
-groups (§12.9); until it carries `member_groups`, `MemberGroups` is entered by hand by a platform admin (identity §2).
+only changed rows are written, so a sync without changes does not bump the config version. `MemberGroups` comes from
+the context's `member_groups` (feature `member-groups`, gateway v0.10.0; identity §2.1) and is never edited in Ume.Rag.
 
 **Schema details of the built `config` tables** (where they are narrower or more specific than the table above):
 - **`Settings`**: scalars are columns and groups (`WorkerConcurrency`, `DefaultSchedules`, `Crawl`, `PiiFlagRules`,
@@ -956,7 +956,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 | 6 | Retention granularity | 90 days per conversation from last activity would keep old messages of long conversations | Per-message `ExpiresAt`; each message under the bucket of its own expiry month |
 | 7 | Shared chunks vs dedup | Plan §3 "one set of chunks" vs knowledge §3 "deduplicated by document and chunk text hash" | Chunk sets per source; reuse by caches (§9); retrieval still dedups by (`DocumentId`, `TextHash`) |
 | 8 | Chunk level | "Classification lives on collections" vs isolation | A chunk carries its source's level; access by collection; isolation of `sensitive` = separate deployment (§6) |
-| 9 | Organisation sync | The gateway has departments and teams but no member groups | The admin syncs departments and teams every 5 min from `GET /v1/ume/context` with `organisation.read` (identity design §2.1); member groups entered by hand until the context carries `member_groups` (not scheduled in the gateway; #580) |
+| 9 | Organisation sync | Where departments, teams and member groups come from | The admin syncs them every 5 min from `GET /v1/ume/context` with `organisation.read` (identity design §2.1; member groups from gateway v0.10.0, feature `member-groups`) |
 | 10 | Encryption below `sensitive` | §8a requires encryption for `internal`/`sensitive`, optional for `public` | Chat encrypted at every level by default; blobs: `internal` encrypted, `public` not (encrypted disk only) |
 | 11 | Retention values missing in §8 | Jobs, run items, runs, observations, caches, outbox, stats, quarantine | Values marked *proposed* in §8–9; add to `Settings` and platform §8 |
 | 12 | Job classes | Worker §2 lists six classes | Add `command` (§12.2) |

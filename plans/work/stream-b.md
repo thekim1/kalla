@@ -396,7 +396,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   and nothing written on `304`: `GET /v1/ume/context` → `gateway.features`, `version`, `admin_url` in memory and on the
   Gateway page; `departments` and `teams` → `Departments`/`Teams`, taken only when `features` contains `organisation`
   and `key.integration_scopes` contains `organisation.read` (otherwise left as they are, `degraded` with the reason);
-  member groups left alone (hand-entered until the context carries `member_groups`, identity §2); `assigned_keys` →
+  member groups from each department's `member_groups` when `features` contains `member-groups` (identity §2.1), and
+  the hand-entry route `PUT /api/organisation/departments/{id}/member-groups` goes (stream a removes its platform UI
+  edit, A-33); `assigned_keys` →
   the `GatewayKeys` mirror with `Usable` (data-model §2.1; migration and grants, rag-api `S`); `GET /v1/models` →
   `GatewayModels` from the `ume` fields (`kind`, `residency`/`residencies`, `context_window`, `max_output_tokens`,
   `features`, `pricing`), the manual limit fields kept only while the gateway sends `null`. Drop the Data API path:
@@ -404,8 +406,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   the gateway's contract `docs/openapi/integrations.json` describes (`key.integration_scopes`, `key.allowed_residencies`,
   `usable`, the features `credential-residencies` and `organisation`; the admin's dev credential key holds
   `organisation.read` and gets every department and team, an inactive one included). Pin the document in
-  `contracts/gateway/` with the gateway commit it was taken from (thekim1/llmgateway#84 head `7b678a1` until #84 is
-  merged, then the merge commit), and a contract test checks the FakeGateway's `/v1/ume/context` and `/v1/models`
+  `contracts/gateway/` with the gateway release it was taken from (`v0.10.0`; part 1 pinned #84's `7b678a1`, which
+  lacks `member_groups` and the feature `member-groups`), and a contract test checks the FakeGateway's `/v1/ume/context` and `/v1/models`
   answers against its schemas: an undescribed field or a missing required one fails, as in the gateway's own tests.
 - **Paths:** `src/Ume.Rag.AdminApi/**` (`OrganisationSync.cs`, `GatewayModelSync.cs`, `GatewayEndpoints.cs`),
   `src/Ume.Rag.Domain/**`, `src/Ume.Rag.Infrastructure/Persistence/**`, `deploy/postgres/app-roles.sql` (+ its
@@ -414,12 +416,13 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `tests/**`.
 - **Done when:** against the FakeGateway: the sync fills `GatewayKeys` from `assigned_keys` (a revoked key's row goes,
   a disabled one keeps its `Status`, `usable: false` is stored); departments and teams come from the context, an
-  inactive one turns `IsActive = false`, hand-entered member groups survive a sync; without `organisation.read` the
+  inactive one turns `IsActive = false`, a department's `member_groups` replace its stored ones and the PUT route is
+  gone; without `organisation.read` the
   sync leaves departments and teams unchanged and reports `degraded`; a second run with an unchanged `ETag` writes
   nothing; a model's limits come from `ume.context_window`/`max_output_tokens` and the manual fields don't show for
   it; no `OrgSync:DataApiKey` or `/v1/catalog/` call is left; the contract test fails when the FakeGateway renames a
   field or drops a required one.
-- **Waits on:** –. The live run against the real gateway waits on a gateway release with #84 (feature `organisation`).
+- **Waits on:** –. The live run needs the gateway on v0.10.0 (released 2026-11-12).
   A-30 removes the Data API key from the deployment.
 - **Read:** Decisions "Gateway keys"; admin §4.10; identity §2, §2.1; data-model `GatewayKeys`; gateway-changes §5,
   §5.5; repo-and-deployment §4.3; the gateway's `docs/openapi/integrations.json` and `docs/integrations.md` at `7b678a1`;

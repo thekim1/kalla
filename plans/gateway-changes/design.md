@@ -335,9 +335,8 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 ## 5. Feature A: acting as an assigned key (gateway integrations)
 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
-in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1 and 2 merged (thekim1/llmgateway#81 `6a8f0a5`, #82
-`d90c590`), phase 3 in #83, and the credential bound, `organisation.read` and the contract document in #84 (draft,
-stacked on #83). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
+in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
+groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
 `/v1/ume/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
 by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
 does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Ume.Rag relies on; where it and the
@@ -347,9 +346,9 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 
 | Gateway phase | Content | Ume.Rag can then |
 |---|---|---|
-| 1 (merged, #81) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
-| 2 (merged, #82; the credential bound in #84) | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
-| 3 (#83) | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
+| 1 (v0.10.0, #81) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
+| 2 (v0.10.0, #82; the credential bound in #84) | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
+| 3 (v0.10.0, #83) | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
 
 ### 5.1 Model
 
@@ -439,16 +438,15 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
   are not listed; disabled and expired ones are, with their `status`. Without a scope, `departments` and `teams` are
   those of the assigned keys plus the owner team; with **`organisation.read`** (feature `organisation`; gateway admins
   set it on `rag-admin`'s credential key only) they are every department and team, inactive ones included with
-  `is_active: false`. The `ETag` changes when a department or team changes. Department member groups are not in it:
-  feature C is not scheduled in the gateway; if built, each department gains `member_groups` under the same scope.
+  `is_active: false`, and each department with its `member_groups` (feature `member-groups`, #85). The `ETag` changes
+  when a department or team changes.
 - **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
   `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
   `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
   With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models: the key's model picker and the save checks
   (admin §4.6 V8, V39).
 - **Settled (#580, 2026-11-12):** the admin reads departments and teams from the context with `organisation.read`
-  (admin §4.10), and Ume.Rag holds no Data API key. Member groups stay entered by hand on Ume.Rag's department record
-  until the context carries them (identity §2).
+  (admin §4.10), and Ume.Rag holds no Data API key. Member groups come from the same context (v0.10.0; identity §2.1).
 
 ### 5.6 Integration API (phase 3)
 
@@ -733,16 +731,16 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
   worker's has `AllowedResidencies = [OnPrem, Eu]` (an upper bound on every key it acts as, #84, §5.3);
   `rag-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-ume-max-residency`; calls
   run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned
-  keys, the models and (with `organisation.read`, #84) every department and team from `GET /v1/ume/context` and
-  `GET /v1/models` (admin §4.10); the Data API key is revoked. Member groups stay hand-entered (§5.5).
+  keys, the models and (with `organisation.read`) every department and team with its member groups from
+  `GET /v1/ume/context` and `GET /v1/models` (admin §4.10); the Data API key is revoked.
   Department admins make assigned keys, and editors choose them on assistants and knowledge bases.
 - **Phase 2** (`features` `act-as-key`): every call of an assistant or knowledge base with a key sends
   `x-ume-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
   check models with `GET /v1/models` as the object's key (admin §4.6 V8, V39); publishing an assistant needs a key.
 - **Phase 3:** `rag-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
   per assistant and knowledge base (§5.6).
-- With release 2 (feature C, not scheduled): `OrgSync` takes `member_groups` from the context's departments; the same
-  `TenantId`/`RefuseGuests` as the gateway.
+- Member groups (v0.10.0, feature `member-groups`): `OrgSync` takes `member_groups` from the context's departments.
+  Tenant and guest refusal (`TenantId`/`RefuseGuests`) is not built in the gateway yet.
 
 ## 14. Changes to other documents in this repo
 

@@ -328,9 +328,10 @@ from the gateway's data plane with the credential key, not the Data API: the gat
 the models with their limits and prices from `GET /v1/ume/context` and `GET /v1/models`, polled with `If-None-Match`;
 departments and teams from the same context, where `rag-admin`'s credential key (and only it) holds the scope
 `organisation.read` (every department and team, inactive ones included; feature `organisation`), so the Data API key
-goes. Department member groups are not in the gateway: they stay entered by hand on Ume.Rag's department record until
-the context carries them, and Ume.Rag builds no other source for them (decided by user, 2026-11-12, #580). The contract
-is the gateway's OpenAPI document `docs/openapi/integrations.json`, which changes by addition only. Detail:
+goes. Department member groups come from the same context (`member_groups` per department, feature `member-groups`,
+gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
+source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
+release tag), which changes by addition only. Detail:
 `gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
 *From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580); the organisation from the context and member

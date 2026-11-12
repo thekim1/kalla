@@ -429,3 +429,13 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   and one ingestion run read in the admin and the CSV and reconciled with the gateway's report, each difference named.
 - **Waits on:** B-40 (the report it describes), A-31.
 - **Read:** cost-attribution §5; admin §8.6; chat §8.3, §17; engine §10.6; gateway-changes §7.1.
+
+### [ ] A-33 Member groups read-only in the platform UI (#580, gateway v0.10.0)
+- **Do:** the platform resource view of departments shows `memberGroups` read-only with a link to the gateway's
+  *Organisation* page (`admin_url` + `/organisation`, admin §2.3); its `update` on
+  `/api/organisation/departments/{id}/member-groups` goes with the route (B-35 part 2). Labels in `labels.ts` only.
+- **Paths:** `src/admin-ui/src/platform/**`.
+- **Done when:** Vitest: the departments resource has no edit action and lists member groups; no call to the removed
+  route remains.
+- **Waits on:** B-35 part 2 (the route removed).
+- **Read:** identity §2.1; admin §4.5, §4.10.

@@ -219,34 +219,29 @@ may sign in to Open WebUI is open (§5.3, §16).
 
 ## 2. Feature C: department scope from member groups (both systems, claims only)
 
-**Phase** ([weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): the gateway delivers member groups in its catalogue with **release 2, in P2**. Our resolver
-(§2.3) is built and tested in P0 against the FakeGateway catalogue, but in production our mirror has no member groups
-from the gateway before release 2. So in P1 department scope comes from the `departmentCodes` claim **plus member
-groups entered by hand on our own department record** (`PUT /api/organisation/departments/{id}/member-groups`, admin
-design §4.5; reasoning: weakness review §5 "Pilot department scope"; plan §3), matched against the `groups` claim by
-the same resolver. The gateway has not scheduled member groups (#580, 2026-11-12); Ume.Rag waits for them rather than
-build another source (decided by user, 2026-11-12), so the hand-entered values are the source until then. On the shared Keycloak
-both are set on the account: `departmentCodes` is a user attribute shared with the gateway (one value scopes the user
-in both systems), and a member group is a Keycloak group name (§2.2, §2.5). The org sync replaces member groups only
-when the gateway's context carries them (`member_groups` per department, by addition, when the gateway builds feature
-C), so hand-entered values stay until then.
+**Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/llmgateway#85, 2026-11-12): each
+department of `GET /v1/ume/context` carries `member_groups` under the scope `organisation.read` (feature
+`member-groups`). Department scope comes from the `departmentCodes` claim **plus the mirrored member groups**, matched
+against the `groups` claim by the resolver (§2.3). The user chose to wait for the gateway rather than build another
+source (2026-11-12), so the interim hand entry on Ume.Rag's department record goes with the sync that reads them
+(B-35). On the shared Keycloak both are set on the account: `departmentCodes` is a user attribute shared with the
+gateway (one value scopes the user in both systems), and a member group is a Keycloak group name (§2.2, §2.5).
 
 ### 2.1 Where member groups live
 
 - **Gateway (source of truth)**: `Department` (`Domain/Entities/Entities.cs:8-19`) gains `MemberGroups`
   (`varchar(256)[]`, default empty), edited by gateway admins on the *Organisation* page; every change is an audit
   entry (`admin.change`).
-- **Gateway context**: when the gateway builds feature C, each department in `GET /v1/ume/context` gains
-  `member_groups` under the scope `organisation.read`, by addition (gateway-changes §5.5; not scheduled, #580).
+- **Gateway context**: each department in `GET /v1/ume/context` carries `member_groups` under the scope
+  `organisation.read` (feature `member-groups`, gateway v0.10.0; gateway-changes §5.5).
 - **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
   The admin API's `OrgSync` job reads departments and teams from `GET /v1/ume/context` every **5 minutes** and on
   demand (*Sync now* on our organisation page), with `rag-admin`'s credential key, which holds the scope
   `organisation.read` (gateway design §5.5, admin design §4.10); there is no Data API key. The credential key needs no
   IdP registration, which keeps the "no registration before the pilot" rule (plan §2). Only changed rows are written,
-  so an unchanged sync does not bump the config version (data-model §2.1). Until the context carries member groups, a
-  platform admin enters them on our department record through the admin API
-  (`PUT /api/organisation/departments/{id}/member-groups`) and the sync leaves them alone; from then on they are never
-  edited in our admin UI, which links to the gateway's page.
+  so an unchanged sync does not bump the config version (data-model §2.1). The sync replaces `MemberGroups` from
+  `member_groups` when `gateway.features` contains `member-groups`; they are never edited in our admin UI, which shows
+  them read-only and links to the gateway's *Organisation* page.
 
 **Freshness**: a change in the gateway reaches our mirror within 5 minutes (or at once with *Sync now*), and a
 signed-in admin's scope at their next sign-in (scopes are fixed at sign-in, §1.1). If the sync fails, the last mirror
@@ -320,7 +315,7 @@ admins (who need no departments) are never locked out.
 4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
    (tenant/guest refusals).
 5. Integration context: `member_groups` on each department of `GET /v1/ume/context` under `organisation.read` (teams
-   already carry `code`). Not scheduled in the gateway (#580, 2026-11-12).
+   already carry `code`). Built in v0.10.0 (thekim1/llmgateway#85).
 6. `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
    provider*.
