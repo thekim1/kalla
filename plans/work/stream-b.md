@@ -442,7 +442,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-35 (the mirror).
 - **Read:** admin §4.5, §4.6 V39, §5.5.2, §5.5.4; data-model §2.1; gateway-changes §5.3, §5.5; cost-attribution §4.
 
-### [ ] B-37 Gateway phase 1: one credential key per service (#580, cost-attribution B2, code part)
+### [x] B-37 Gateway phase 1: one credential key per service (#580, cost-attribution B2, code part)
 - **Do:** `Gateway:Key` (secret file `Gateway__Key`) in place of `Gateway:Keys:OnPrem/Eu/External` in the gateway
   client of api, admin and worker; `ResidencyCeilingHandler` refuses a call without a ceiling or with one above the
   service's maximum (the worker `Eu`; api and admin the top of their `Gateway:MaxResidency` ladder), unit-tested at
