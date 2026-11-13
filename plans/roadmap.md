@@ -51,7 +51,7 @@ Each becomes a queue item when the main session picks it up.
 - **Deploy rehearsal:** the `v0.5.0` release bundle on a stand-in host (a local VM), with the restore drill, so step 4
   is a re-run rather than a first attempt.
 - **Grading dry run:** `scripts/grading/` end to end on a small synthetic set, so step 3 starts on working tools.
-- **Upload gaps** ([`platform/upload-quality-review.md`](platform/upload-quality-review.md), U1–U7): measure on public
+- **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
   documents what the gaps cost before deciding them.
 - **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
   stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
@@ -94,7 +94,7 @@ work split is written when P1b is live.
   `/v1/rerank` (rerank itself is built and optional, pulled forward from P2: Decisions "Rerank pulled forward"), on-prem
   models when hardware exists (M2). Upload gaps U1–U7 (picture descriptions, e-mail,
   spreadsheet questions, rerank on, contextual chunk headers, near-duplicates, OCR languages) and their proposed order:
-  [`platform/upload-quality-review.md`](platform/upload-quality-review.md) (2026-11-09; measure on the support-assistant
+  [`proposals/upload-quality-review.md`](proposals/upload-quality-review.md) (2026-11-09; measure on the support-assistant
   proof of concept first).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),
   `/mcp` with `search_knowledge`, the mock municipal server `ume-mcp-kommun`.

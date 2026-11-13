@@ -4,8 +4,8 @@ Ume.Rag's plans in three layers. Read them in this order:
 
 1. **Decisions** — [`decisions.md`](decisions.md): one entry per topic, every entry binds, and they win over
    everything below.
-2. **Roadmap** — [`roadmap.md`](roadmap.md): what is done, what is left before go-live, what P2 and P3 hold, and what
-   waits on people. One page.
+2. **Roadmap** — [`roadmap.md`](roadmap.md): the one place for the plan ahead: what is done, the critical path to
+   go-live, what P2 and P3 hold, and what waits on people.
 3. **Work** — [`work/`](work/): one queue per stream ([`stream-a.md`](work/stream-a.md),
    [`stream-b.md`](work/stream-b.md)) and the main session's ([`main.md`](work/main.md)). Each item says what to do,
    where, its done-when, what it waits on and which design sections to read. Start prompts: [`work/prompts/`](work/prompts/).
@@ -25,8 +25,14 @@ nobody needs to read them end to end.
 | Tools (P2) | [`tools/design.md`](tools/design.md) | Skills, the tool hub, MCP |
 | Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Ume.Rag relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
 | Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: each assistant and knowledge base on its own assigned gateway key, the gateway's cost as the record, Ume.Rag's split per step |
-| Upload quality | [`platform/upload-quality-review.md`](platform/upload-quality-review.md) | Assessment (not binding): how well uploaded files are handled, the gaps U1–U7 and a proposed order |
-| Keys and budgets per assistant | [`platform/assistant-keys-and-budgets-options.md`](platform/assistant-keys-and-budgets-options.md) | Options paper (not binding); its outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open |
+
+**Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line:
+- [`architecture-plans.md`](proposals/architecture-plans.md): knowledge, assistants and models (2026-11-02); the roadmap
+  names the items still open.
+- [`upload-quality-review.md`](proposals/upload-quality-review.md): how well uploaded files are handled, the gaps U1–U7
+  and a proposed order.
+- [`assistant-keys-and-budgets-options.md`](proposals/assistant-keys-and-budgets-options.md): options paper; its
+  outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open.
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.

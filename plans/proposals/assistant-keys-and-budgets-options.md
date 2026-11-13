@@ -3,14 +3,14 @@
 > **Decided (user, 2026-11-11, #580), outbound:** an assistant, and a knowledge base, runs on an **assigned gateway key**
 > of its department, used by reference: Ume.Rag stores the key's id and sends `x-ume-on-behalf-of: <key id>` with its
 > credential key; the per-assistant budget is that key's budget in the gateway. None of options A–E below is taken as
-> written. The rules are in Decisions "Cost attribution" and "Gateway keys", [`cost-attribution.md`](cost-attribution.md)
+> written. The rules are in Decisions "Cost attribution" and "Gateway keys", [`cost-attribution.md`](../platform/cost-attribution.md)
 > §4 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §5. The inbound questions (§3, Q5) stay open.
 > The text below is kept as the record of the options and does not bind.
 
 Whether an assistant should have keys of its own, and how a cost limit per assistant should work with the LLM gateway.
 Status: **options for a decision, not binding** (main session, 2026-11-10). Nothing here changes a design. The
 decision that binds today is Decisions "Cost attribution (user, 2026-11-08)" and
-[`cost-attribution.md`](cost-attribution.md); this document reopens its option A and its "team per assistant"
+[`cost-attribution.md`](../platform/cost-attribution.md); this document reopens its option A and its "team per assistant"
 convention.
 
 Gateway facts are from `~/git/llmgateway` at `origin/main` v0.9.2 (`df6bf5e`), read on 2026-11-10.
