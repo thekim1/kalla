@@ -151,10 +151,12 @@ main session needs:
   `git worktree unlock` and `remove --force` the agent's worktree and delete its `worktree-agent-…` branch.
 - **`src/admin-ui/src/utils/labels.ts` and `messages.ts` are stream b's paths**, so a stream-a UI item that needs a
   text goes on a `main-session/` branch (A-33, #609), or `ownership` fails.
-- **Regenerating the Portainer stack:** `git -C ~/git/llmgateway show v0.10.0:deploy/compose.portainer.yaml >
-  <scratch file>`, then `deploy/portainer/build-stack.sh <scratch file>`. Any PR that changes
-  `deploy/postgres/app-roles.sql` leaves the stack stale until someone does this (#605 and #608 both did; #611 fixed
-  it). An agent's sandbox may refuse `git -C` on the gateway clone; it then fetches the file with `gh api … ?ref=v0.10.0`.
+- **Regenerating the Portainer stack:** `deploy/portainer/build-stack.sh` (the gateway's latest release asset, which
+  pins the gateway's images; or a tag, or a local file). Any PR that changes `deploy/postgres/app-roles.sql` or the
+  template leaves the stack stale until someone runs it (#605, #608; #611 fixed it). Ume.Rag's image pins in the
+  template follow each release (#657 set 0.5.0). **The Open WebUI profile (#657) was merged without a boot test**
+  (user, 2026-11-13): the first VM deploy is its test; suspect the entrypoint wrapper, the CA bundle and the data
+  volume's owner first.
 - **Waiting on a PR's checks in a loop:** test for an empty `conclusion`, not for `status != COMPLETED`; right after a
   push the rollup lists checks whose status is already final-looking while the conclusion is still empty.
 - **A `cd` into an agent's worktree makes it the session's working directory.** Use `git -C <path>` for other
