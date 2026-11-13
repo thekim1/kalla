@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { api } from '@/api'
 import type { CostRow, ObjectCosts } from '@/api/types'
 import { formatUsdCost } from '@/utils/format'
 import { COSTS } from '@/utils/labels'
@@ -79,6 +80,36 @@ describe('Cost card (admin design §8.6; B-41)', () => {
     expect(wrapper.text()).toContain('Indexing')
     expect(wrapper.text()).toContain('Answer judging')
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'costs', query: { departmentId: 'd1' } })
+  })
+
+  it('shows the gateway\'s figures for the key beside the stored ones by step, with the shared-key note (B-46)', async () => {
+    const source = vi.fn().mockResolvedValue(costs([row({ costUsd: 0.002 }), row({ step: 'query-embed', costUsd: 0.0001 })]))
+    const usage = vi.spyOn(api.gateway, 'keyUsage').mockResolvedValue({
+      from: '2026-10-14', to: '2026-11-12', granularity: 'day', rows: [
+        { period: '2026-11-10', step: 'chat-answer', requests: 2, successfulRequests: 2, inputTokens: 200, cachedInputTokens: 0, outputTokens: 40, costUsd: 0.003 },
+        { period: '2026-11-11', step: 'chat-answer', requests: 1, successfulRequests: 1, inputTokens: 100, cachedInputTokens: 0, outputTokens: 20, costUsd: 0.001 },
+      ],
+    })
+    const wrapper = mountCard({ kind: 'assistant', source, gatewayKeyId: 'k1', departmentId: 'd1' })
+    await flushPromises()
+
+    expect(usage).toHaveBeenCalledWith('k1', expect.objectContaining({ granularity: 'day' }))
+    const answerRow = wrapper.get('[data-test=cost-steps]').findAll('tr').find((r) => r.text().includes('Answer'))!
+    expect(answerRow.text()).toContain(formatUsdCost(0.002)) // ours
+    expect(answerRow.text()).toContain(formatUsdCost(0.004)) // the gateway's, summed over the period
+    expect(wrapper.get('[data-test=cost-gateway]').text()).toContain(COST_MESSAGES.gatewayFigures(formatUsdCost(0.004), '3'))
+    expect(wrapper.get('[data-test=cost-shared-key]').text()).toBe(COST_MESSAGES.sharedKey)
+    expect(wrapper.find('[data-test=cost-gateway-link]').exists()).toBe(false)
+  })
+
+  it('links the gateway\'s usage report when there is no read-back (B-46)', async () => {
+    vi.spyOn(api.gateway, 'keyUsage').mockResolvedValue(null)
+    vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: 'https://gateway-admin.example.invalid/', keys: [] })
+    const wrapper = mountCard({ kind: 'assistant', source: vi.fn().mockResolvedValue(costs([row({ costUsd: 0.002 })])), gatewayKeyId: 'k1', departmentId: 'd1' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test=cost-gateway]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=cost-gateway-link]').attributes('href')).toBe('https://gateway-admin.example.invalid/usage')
   })
 
   it('says so when there were no model calls, and shows no link without one', async () => {

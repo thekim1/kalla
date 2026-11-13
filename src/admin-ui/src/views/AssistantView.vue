@@ -27,6 +27,7 @@ import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import CostCard from '@/components/costs/CostCard.vue'
+import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
@@ -405,6 +406,7 @@ onMounted(load)
           {{ ASSISTANT.publish }}
         </UiButton>
       </PageHeader>
+      <KeyBudgetStatus class="mb-4" :gateway-key-id="assistant.data.value.gatewayKeyId" />
       <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
       <UiTabs id="assistant" v-model="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" />
 
@@ -540,7 +542,7 @@ onMounted(load)
       </div>
 
       <div v-else-if="tab === 'statistics'" id="assistant-panel-statistics" role="tabpanel" aria-labelledby="assistant-tab-statistics" class="grid max-w-3xl gap-5">
-        <CostCard kind="assistant" :source="assistantCosts" />
+        <CostCard kind="assistant" :source="assistantCosts" :gateway-key-id="assistant.data.value.gatewayKeyId" :department-id="assistant.data.value.departmentId" />
       </div>
 
       <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">

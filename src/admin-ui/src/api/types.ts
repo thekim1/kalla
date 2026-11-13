@@ -1173,3 +1173,36 @@ export interface CostReportQuery extends CostQuery {
   departmentId?: string
   kind?: 'assistant' | 'collection'
 }
+
+/** A budget that applies to a gateway key (`GET /api/gateway/keys/{id}/budget`, admin design §4.5; the gateway's Integration API). */
+export interface KeyBudget {
+  scope: 'key' | 'team' | 'department'
+  unit: 'usd' | 'tokens'
+  limit: number
+  spent: number
+  percentUsed: number
+  exhausted: boolean
+  residency: string | null
+  period: string
+  periodStart: IsoDateTime
+  periodEnd: IsoDateTime
+}
+
+/** A key's usage per period and step as the gateway counted it (`GET /api/gateway/keys/{id}/usage`, admin design §8.6). */
+export interface KeyUsageRow {
+  period: string
+  step: string | null
+  requests: number
+  successfulRequests: number
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+export interface KeyUsage {
+  from: string
+  to: string
+  granularity: CostGranularity
+  rows: KeyUsageRow[]
+}

@@ -25,6 +25,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import CostCard from '@/components/costs/CostCard.vue'
+import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -287,6 +288,7 @@ onMounted(load)
         <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
         <UiCard :title="COLLECTIONS.state">
           <KeyUnavailableBadge class="mb-2" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId" />
+          <KeyBudgetStatus class="mb-3" :gateway-key-id="collection.data.value.gatewayKeyId" />
           <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
           <dl>
             <DetailRow :label="COLLECTION.contact">
@@ -322,7 +324,7 @@ onMounted(load)
         </UiCard>
         <!-- Admin §8.6: indexing and evaluation of the last 30 days; this panel is the owning department's (a shared one sees no cost). -->
         <CostCard
-          kind="collection" :source="collectionCosts"
+          kind="collection" :source="collectionCosts" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId"
           :costs-link="canPublish ? { name: 'costs', query: { departmentId: collection.data.value.departmentId } } : null"
         />
       </div>
