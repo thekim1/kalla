@@ -101,6 +101,14 @@ export const navGroups: NavGroup[] = [
         keywords: [...NAV_KEYWORDS.feedback],
         roles: FEEDBACK_ROLES,
       },
+      {
+        name: 'costs',
+        label: PAGE.costs.title,
+        icon: 'payments',
+        description: PAGE.costs.description,
+        keywords: [...NAV_KEYWORDS.costs],
+        roles: MANAGE_ROLES,
+      },
     ],
   },
   {

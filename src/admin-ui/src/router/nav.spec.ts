@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
-import { routes } from '.'
+import { createAppRouter, routes } from '.'
 import { ALL_ROLES, filterEntries, mobileTabs, navGroups, searchEntries } from './nav'
 
 describe('menu structure (copied checks)', () => {
@@ -34,12 +35,12 @@ describe('search', () => {
   })
 
   it('lists only pages without a query', () => {
-    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'map', 'collections', 'assistants', 'feedback', 'organisation', 'platform', 'audit'])
+    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'map', 'collections', 'assistants', 'feedback', 'costs', 'organisation', 'platform', 'audit'])
   })
 
-  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback, then Organisation, Platform and Audit log (admin design §5.2)', () => {
+  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback and Costs, then Organisation, Platform and Audit log (admin design §5.2)', () => {
     expect(navGroups.map((g) => g.items.map((i) => i.label))).toEqual([
-      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback'], ['Organisation', 'Platform objects', 'Audit log'],
+      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback', 'Costs'], ['Organisation', 'Platform objects', 'Audit log'],
     ])
     expect(filterEntries(entries, 'responsible').map((e) => e.id)).toEqual(['map'])
   })
@@ -63,5 +64,31 @@ describe('roles', () => {
     expect(auth.canOpen({ roles: ALL_ROLES })).toBe(false)
     // The no-access page itself stays open, or the guard would redirect forever.
     expect(auth.canOpen(routes.find((r) => r.name === 'forbidden')!.meta!)).toBe(true)
+  })
+})
+
+describe('Costs (admin design §3.3, §8.6; B-41)', () => {
+  function signIn(roles: string[]) {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null }
+    auth.status = 'authenticated'
+    return auth
+  }
+
+  it('is in the menu for department and platform admins only', () => {
+    const costs = navGroups.flatMap((g) => g.items).find((i) => i.name === 'costs')!
+    expect(signIn(['rag-viewer']).canOpen(costs)).toBe(false)
+    expect(signIn(['rag-editor']).canOpen(costs)).toBe(false)
+    expect(signIn(['rag-department-admin']).canOpen(costs)).toBe(true)
+    expect(signIn(['rag-platform-admin']).canOpen(costs)).toBe(true)
+  })
+
+  it('sends a viewer who opens /costs to /forbidden', async () => {
+    signIn(['rag-viewer'])
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/costs')
+    expect(router.currentRoute.value.name).toBe('forbidden')
+    expect(router.currentRoute.value.query.from).toBe('/costs')
   })
 })

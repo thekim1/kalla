@@ -151,6 +151,7 @@ export const NAV_KEYWORDS = {
   organisation: ['department', 'team', 'cost centre', 'sync', 'gateway'],
   audit: ['log', 'changes', 'events', 'who', 'history', 'traceability'],
   feedback: ['feedback', 'thumbs', 'rating', 'reason', 'open webui', 'import'],
+  costs: ['cost', 'money', 'usd', 'tokens', 'budget', 'csv', 'charging', 'estimate'],
 } as const
 
 export const PAGE = {
@@ -165,6 +166,7 @@ export const PAGE = {
   publication: { title: 'Publication' },
   audit: { title: 'Audit log', description: 'Who changed what, and when' },
   feedback: { title: 'Feedback', description: 'Thumbs up and down on the answers of your assistants' },
+  costs: { title: 'Costs', description: 'What assistants and knowledge bases cost, per department and step' },
   forbidden: { title: 'No access' },
   notFound: { title: 'Page not found' },
 } as const
@@ -1021,7 +1023,7 @@ export const ASSISTANTS = {
 } as const
 
 export const ASSISTANT = {
-  tabs: { draft: 'Draft', test: 'Test', versions: 'Versions', audience: 'Audience', storage: 'Storage' },
+  tabs: { draft: 'Draft', test: 'Test', versions: 'Versions', audience: 'Audience', storage: 'Storage', statistics: 'Statistics' },
   tabsLabel: 'Parts of the assistant',
   modelName: (slug: string) => `Model name in Open WebUI: ${slug}`,
   publishedVersion: (n: number) => `Published: version ${n}`,
@@ -1612,3 +1614,60 @@ export const PROMPT_TEXTS = {
   } as Record<string, string>,
 } as const
 
+
+/** Cost (admin design §8.6): the cards on the assistant and knowledge base pages and the Costs page. */
+export const COSTS = {
+  card: 'Cost',
+  period: 'Period',
+  periods: { '30': 'Last 30 days', '90': 'Last 90 days', '365': 'Last 12 months' } as Record<string, string>,
+  granularity: 'Per',
+  granularities: { day: 'Day', month: 'Month' } as Record<string, string>,
+  total: 'Total',
+  gateway: 'From the AI gateway',
+  estimated: 'Estimated',
+  calls: 'Calls',
+  tokens: 'Tokens',
+  byStep: 'By step',
+  byClient: 'By client',
+  step: 'Step',
+  client: 'Client',
+  cost: 'Cost',
+  /** The model call steps (`x-ume-step`, chat design §8.3, engine design §10.6); P2 agent steps fall back to their code. */
+  steps: {
+    'chat-answer': 'Answer',
+    condense: 'Condense',
+    'condense-long': 'Long-question condense',
+    'follow-ups': 'Follow-up suggestions',
+    rerank: 'Rerank',
+    'query-embed': 'Query embedding',
+    embed: 'Indexing',
+    'eval-generate': 'Test question generation',
+    'eval-judge': 'Answer judging',
+    'eval-dedup': 'Test question de-duplication',
+    'assistant-test': 'Assistant test',
+    'eval-answer': 'Evaluation answer',
+  } as Record<string, string>,
+  /** The test panel's client row (admin design §4.9). */
+  testPanel: 'Test panel',
+  indexing: 'Indexing',
+  evaluation: 'Evaluation',
+  openCosts: 'Open the Costs page',
+  department: 'Department',
+  allDepartments: 'All departments',
+  kind: 'Kind',
+  kinds: { '': 'Assistants and knowledge bases', assistant: 'Assistants', collection: 'Knowledge bases' } as Record<string, string>,
+  from: 'From',
+  to: 'To',
+  object: 'Assistant or knowledge base',
+  kindAssistant: 'Assistant',
+  kindCollection: 'Knowledge base',
+  deleted: (id: string) => `${id} (deleted)`,
+  departmentTotal: (department: string) => `Total for ${department}`,
+  grandTotal: 'Total',
+  showSteps: 'Show steps',
+  hideSteps: 'Hide steps',
+  downloadCsv: 'Download CSV',
+  caption: 'Cost per assistant and knowledge base, highest first',
+  stepsCaption: (name: string) => `Cost of ${name} by step`,
+  filters: 'Cost filters',
+} as const
