@@ -72,6 +72,8 @@ Each becomes a queue item when the main session picks it up.
 - **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
   stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
+- **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
+  in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 
 ## Waiting on people
 

@@ -722,11 +722,11 @@ The admin copies the gateway's BFF and CSP; a write is one transaction with `xmi
 `ConfigRules`. UI text is English, all in `labels.ts` and `messages.ts`, so Swedish can be added later; WCAG 2.2 AA, with one NVDA
 pass of the pilot journey before the pilot. Pilot department admins set up their own collections and assistants,
 with the platform team pairing.
-P1 has pages for the department journey only, platform objects use generic forms and Scalar, except clients and keys, which have a page of their own (user, 2026-11-13; `admin/design.md` §5.9). The test panel runs
+P1 has pages for the department journey only, platform objects use generic forms and Scalar, except clients and keys, which have a page of their own (user, 2026-11-13; `admin/design.md` §5.9). An app is connected in one go (its assistants, its first key and how to connect, §5.9.1), every platform page is in the side menu and Settings is a page of sections (§5.10; user, 2026-11-13, M-16). The test panel runs
 chat's code on the draft, unpublished collections included; its extra detail and the Overview attention items are P2.
 Detail: `admin/design.md` §1, §4.9, §5.
 
-*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13.
+*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13; connect flow, menu and Settings page, user 2026-11-13.
 
 ### Assistants
 
