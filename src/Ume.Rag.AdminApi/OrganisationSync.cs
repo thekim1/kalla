@@ -34,10 +34,11 @@ public sealed record OrgSyncResult(int Departments, int Teams, int Keys)
 /// <summary>
 /// The last runs, for the platform admin's overview and the <i>Gateway</i> page (admin design §4.10).
 /// <see cref="Gateway"/> is the last context's version, admin URL and features; <see cref="Degraded"/> says why departments
-/// and teams were left as they are (null when they were taken).
+/// and teams were left as they are (null when they were taken). <see cref="AdminUrl"/> is the address for the gateway links
+/// (admin design §2.3): the context's <c>admin_url</c>, else <c>Admin:GatewayAdminUrl</c> (#619).
 /// </summary>
 public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, DateTimeOffset? LastSuccessAt, int ConsecutiveFailures, string? LastError,
-    OrgSyncResult? LastResult, GatewayContextInfo? Gateway, string? Degraded);
+    OrgSyncResult? LastResult, GatewayContextInfo? Gateway, string? Degraded, string? AdminUrl = null);
 
 /// <summary>
 /// Mirrors the gateway's <c>GET /v1/ume/context</c> (admin design §4.10, gateway-changes §5.5) with the admin's credential
@@ -53,7 +54,7 @@ public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, Date
 /// </summary>
 public sealed partial class OrganisationSync(
     IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time,
-    IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<OrganisationSync> logger) : BackgroundService, IHealthCheck
+    IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<OrganisationSync> logger, IOptions<AdminOptions>? adminOptions = null) : BackgroundService, IHealthCheck
 {
     /// <summary>Failed runs in a row after which health is <c>Degraded</c> (identity §2.1).</summary>
     public const int FailuresBeforeDegraded = 3;
@@ -80,7 +81,10 @@ public sealed partial class OrganisationSync(
     /// <summary>On when the gateway and this service's credential key are configured.</summary>
     public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.Value.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.Value.Key);
 
-    public OrgSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _gateway, _degraded);
+    public OrgSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _gateway, _degraded, AdminUrl);
+
+    /// <summary>The gateway links' address (admin design §2.3): the last context's <c>admin_url</c>, else <c>Admin:GatewayAdminUrl</c>.</summary>
+    public string? AdminUrl => _gateway?.AdminUrl is { Length: > 0 } url ? url : adminOptions?.Value.GatewayAdminUrl is { Length: > 0 } configured ? configured : null;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -37,7 +37,7 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     auth.status = 'authenticated'
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([department()])
     vi.spyOn(api.organisation, 'syncStatus').mockResolvedValue({
-      enabled: true, lastRunAt: '2026-10-30T12:00:00Z', lastSuccessAt: '2026-10-30T12:00:00Z', consecutiveFailures: 0, lastError: null, lastResult: null,
+      enabled: true, lastRunAt: '2026-10-30T12:00:00Z', lastSuccessAt: '2026-10-30T12:00:00Z', consecutiveFailures: 0, lastError: null, lastResult: null, gateway: null, degraded: null, adminUrl: null,
     })
     const sync = vi.spyOn(api.organisation, 'sync').mockResolvedValue({ departments: 2, teams: 0 })
 

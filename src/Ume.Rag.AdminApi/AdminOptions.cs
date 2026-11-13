@@ -62,6 +62,13 @@ public sealed class AdminOptions
     /// </summary>
     [StringLength(100)]
     public string? OrganisationName { get; set; } = "Umeå kommun";
+
+    /// <summary>
+    /// The gateway admin UI's address for the links (admin design §2.3) when the gateway's context carries no
+    /// <c>admin_url</c>; unset by default (#619). Only an absolute http(s) URL is used.
+    /// </summary>
+    [Url]
+    public string? GatewayAdminUrl { get; set; }
 }
 
 /// <summary>
