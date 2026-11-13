@@ -894,6 +894,20 @@ export const PLATFORM = {
     unknownVersion: 'Unknown',
     features: 'Features',
     noFeatures: 'None',
+    /** The Integration API read-back (#654, admin design §4.5, §8.6): cost and budgets from the AI gateway. */
+    readback: 'Cost and budgets from the AI gateway',
+    readbackOff: 'Off: Gateway:IntegrationApiUrl is not set, so cost cards show the platform’s own figures only.',
+    readbackOn: 'On: no refusal since the admin service started.',
+    readbackFailed: (reason: string, status: number | null, at: string) => `Not read at ${at}: ${reason}${status ? ` (HTTP ${status})` : ''}.`,
+    readbackReasons: {
+      unauthorized: 'the AI gateway refused the admin service’s credential key',
+      scope_missing: 'the admin service’s credential key lacks the scope usage.read',
+      rate_limited: 'too many reads for the key; it passes by itself',
+      not_found: 'the key is not one of the integration’s keys',
+      unavailable: 'no answer from the AI gateway (address, network or certificate)',
+      failed: 'the AI gateway answered with an error',
+    } as Record<string, string>,
+    readbackHelp: 'What each reason means and how to fix it: the runbook, “The read-back’s reasons”.',
   },
   form: {
     create: 'Create',

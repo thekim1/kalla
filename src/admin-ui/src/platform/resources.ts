@@ -93,7 +93,7 @@ export function urlOf(path: string, row: Row | null, key: string): string {
 }
 
 /** The organisation sync's status (`GET /api/organisation/sync`); null when it cannot be read. */
-async function orgSyncStatus(): Promise<OrgSyncStatus | null> {
+export async function orgSyncStatus(): Promise<OrgSyncStatus | null> {
   try {
     return await http.get<OrgSyncStatus>('/api/organisation/sync')
   } catch {

@@ -165,3 +165,43 @@ describe('Gateway models: the gateway\'s version and features (admin design §4.
     failed.wrapper.unmount()
   })
 })
+
+describe('Gateway models: the Integration API read-back (#654, admin design §4.5, §8.6)', () => {
+  const sync = (integration: unknown) => (url: string) =>
+    url === '/api/organisation/sync' ? json({ gateway: { version: '0.10.1', adminUrl: null, features: [] }, degraded: null, integration }) : undefined
+
+  it('says the read-back is off when Gateway:IntegrationApiUrl is not set', async () => {
+    const { wrapper } = mountModels(sync({ configured: false, lastError: null }))
+    await flushPromises()
+    const row = wrapper.get('[data-test="gateway-readback"]')
+    expect(row.attributes('data-state')).toBe('off')
+    expect(row.text()).toBe(PLATFORM.gatewayModels.readbackOff)
+    wrapper.unmount()
+  })
+
+  it('says the read-back works when it is set and nothing was refused', async () => {
+    const { wrapper } = mountModels(sync({ configured: true, lastError: null }))
+    await flushPromises()
+    const row = wrapper.get('[data-test="gateway-readback"]')
+    expect(row.attributes('data-state')).toBe('on')
+    expect(row.text()).toBe(PLATFORM.gatewayModels.readbackOn)
+    wrapper.unmount()
+  })
+
+  it('shows the last refusal\'s reason, its status and where the fix is', async () => {
+    const { wrapper } = mountModels(sync({ configured: true, lastError: { reason: 'scope_missing', status: 403, at: '2026-11-13T12:00:00Z' } }))
+    await flushPromises()
+    const row = wrapper.get('[data-test="gateway-readback"]')
+    expect(row.attributes('data-state')).toBe('failed')
+    expect(row.text()).toContain(`${PLATFORM.gatewayModels.readbackReasons.scope_missing} (HTTP 403).`)
+    expect(row.text()).toContain(PLATFORM.gatewayModels.readbackHelp)
+    wrapper.unmount()
+  })
+
+  it('names an unknown reason as a failure, and a missing status without HTTP', async () => {
+    const { wrapper } = mountModels(sync({ configured: true, lastError: { reason: 'unavailable', status: null, at: '2026-11-13T12:00:00Z' } }))
+    await flushPromises()
+    expect(wrapper.get('[data-test="gateway-readback"]').text()).not.toContain('HTTP')
+    wrapper.unmount()
+  })
+})

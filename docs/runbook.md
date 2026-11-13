@@ -120,7 +120,7 @@ key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=s
 - a line "The AI gateway counted … in … requests for the key." The requests include failed and cancelled ones, so
   compare Ume.Rag's calls with the gateway's successful requests, not with this figure;
 - the note that the gateway's figures are the key's: if other assistants or knowledge bases share the key, their calls
-  are in the gateway's column too (the note is always shown, whether or not the key is shared);
+  are in the gateway's column too (the note shows only when more than one assistant or knowledge base holds the key);
 - the key's budgets (*Budgets in the AI gateway*) at the top of the assistant page and in the knowledge base's state
   card.
 
@@ -129,7 +129,9 @@ The gateway's rows are Europe/Stockholm days too, cached 5 minutes per key and p
 the line's total but in no step row. Ume.Rag never overwrites its own figures with the gateway's.
 
 Without the read-back (the setting unset, the scope missing, the gateway refusing or rate-limiting), the card shows
-**See the key's usage in the AI gateway** instead, a link to the gateway's usage page. The reason is logged:
+**See the key's usage in the AI gateway** instead, a link to the gateway's usage page. The reason shows under
+*Platform objects → Gateway models*, in the *AI gateway* card's row *Cost and budgets from the AI gateway* (off, on, or
+the last refusal with its time), and is logged:
 
 ```bash
 dc logs --since 1h rag-admin | grep "Integration API"   # "refused or failed (HTTP 403, scope_missing); no read-back this time"
@@ -709,8 +711,9 @@ or at once with *Fetch now* under *Platform objects → Organisation*; chat and 
 | rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no client `admin-console` of type `internal`, so test-panel cost is not recorded (the panel still answers) | A platform admin creates it under *Platform objects → Clients*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off (production-setup.md, *Before the first use of the admin UI*). Turns made before it are not recovered |
 
 **The read-back's reasons.** With `UME_RAG_GATEWAY_INTEGRATION_API_URL` set, rag-admin reads the gateway's cost and
-budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). The *Gateway* page's
-status (`GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
+budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Platform objects →
+Gateway models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
+`GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
 `at` when the last read gave nothing; rag-admin also logs "The gateway's Integration API refused or failed (HTTP …,
 reason); no read-back this time". The *Cost* cards then show Ume.Rag's figures only, and a used-up budget shows no
 badge (the gateway still refuses the calls).
