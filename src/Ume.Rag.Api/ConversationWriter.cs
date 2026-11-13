@@ -41,6 +41,9 @@ public sealed record ChatTurn(
     /// </summary>
     public bool Unavailable { get; init; }
 
+    /// <summary>A usage-only turn that ended in an error after the user's message was accepted (B-48): one more of the day's <c>Errors</c>.</summary>
+    public bool Error { get; init; }
+
     /// <summary><c>Messages.CostUsd</c>: the answer call's cost, the gateway's or the estimate (§12.2); null without an answer call.</summary>
     public decimal? AnswerCostUsd => Usage.FirstOrDefault(r => r.Step == GatewayChatClient.AnswerStep) is { } answer
         ? answer.Estimated ? answer.EstimatedCostUsd : answer.CostUsd
@@ -265,6 +268,8 @@ public sealed partial class ConversationWriter : BackgroundService
         public int NotFound { get; set; }
         public int GeneralAnswers { get; set; }
         public int Unavailable { get; set; }
+        public int Errors { get; set; }
+        public int Cancelled { get; set; }
         public int Degraded { get; set; }
         public int UncitedAnswers { get; set; }
     }
@@ -335,7 +340,7 @@ public sealed partial class ConversationWriter : BackgroundService
             AddUsage(usage, turn);
             if (turn.UsageOnly)
             {
-                if (turn.Unavailable)
+                if (turn.Unavailable || turn.Error)
                 {
                     var refusedKey = new TotalsKey(Day(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
                     if (!totals.TryGetValue(refusedKey, out var refusedDay))
@@ -343,7 +348,8 @@ public sealed partial class ConversationWriter : BackgroundService
                         totals[refusedKey] = refusedDay = new Totals { DepartmentId = turn.DepartmentId };
                     }
 
-                    refusedDay.Unavailable++;
+                    refusedDay.Unavailable += turn.Unavailable ? 1 : 0;
+                    refusedDay.Errors += turn.Error ? 1 : 0;
                 }
 
                 continue;
@@ -402,6 +408,8 @@ public sealed partial class ConversationWriter : BackgroundService
             day.NotFound += turn.Outcome == "not-found" ? 1 : 0;
             day.GeneralAnswers += turn.Outcome == "answered-general" ? 1 : 0; // §10.4: apart from NotFound, never in UncitedAnswers
             day.Unavailable += turn.Outcome == "unavailable" ? 1 : 0;
+            day.Errors += turn.Outcome == "error" ? 1 : 0;
+            day.Cancelled += turn.Outcome == "cancelled" ? 1 : 0;
             day.Degraded += turn.Degraded is not null ? 1 : 0;
             day.UncitedAnswers += turn.Outcome == "answered" && turn.Sources.Count > 0 && !turn.Sources.Any(s => s.Used) ? 1 : 0;
         }
@@ -413,14 +421,15 @@ public sealed partial class ConversationWriter : BackgroundService
                 INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
                     "NotFound", "GeneralAnswers", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
                     "AgentLimitHits")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $12, $9, $10, 0, 0, $11, 0, 0, 0, 0, 0)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $12, $9, $10, $13, $14, $11, 0, 0, 0, 0, 0)
                 ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
                     "Conversations" = t."Conversations" + excluded."Conversations", "Messages" = t."Messages" + excluded."Messages",
                     "NotFound" = t."NotFound" + excluded."NotFound", "GeneralAnswers" = t."GeneralAnswers" + excluded."GeneralAnswers",
                     "Unavailable" = t."Unavailable" + excluded."Unavailable",
-                    "Degraded" = t."Degraded" + excluded."Degraded", "UncitedAnswers" = t."UncitedAnswers" + excluded."UncitedAnswers"
+                    "Degraded" = t."Degraded" + excluded."Degraded", "UncitedAnswers" = t."UncitedAnswers" + excluded."UncitedAnswers",
+                    "Errors" = t."Errors" + excluded."Errors", "Cancelled" = t."Cancelled" + excluded."Cancelled"
                 """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, day.DepartmentId, day.Conversations, day.Messages, day.NotFound, day.Unavailable,
-                day.Degraded, day.UncitedAnswers, day.GeneralAnswers);
+                day.Degraded, day.UncitedAnswers, day.GeneralAnswers, day.Errors, day.Cancelled);
         }
 
         // Then the usage per step (§12.2, data-model §2.3), also in key order; the department is the one of the row's first call.

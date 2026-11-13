@@ -72,6 +72,13 @@ export interface OrgSyncResult {
   teams: number
 }
 
+/** The gateway's last context as the organisation sync holds it (`GatewayContextInfo`, admin design §4.10). */
+export interface GatewayContextInfo {
+  version: string | null
+  adminUrl: string | null
+  features: string[]
+}
+
 export interface OrgSyncStatus {
   enabled: boolean
   lastRunAt: IsoDateTime | null
@@ -79,6 +86,12 @@ export interface OrgSyncStatus {
   consecutiveFailures: number
   lastError: string | null
   lastResult: OrgSyncResult | null
+  /** The last context's version, admin URL and features; null before the first read (#619). */
+  gateway: GatewayContextInfo | null
+  /** Why departments and teams were left as they are; null when they were taken. */
+  degraded: string | null
+  /** The gateway links' address: the context's `admin_url`, else `Admin:GatewayAdminUrl` (admin design §2.3). */
+  adminUrl: string | null
 }
 
 // ---------- Collections, sources, documents (admin design §4.5) ----------

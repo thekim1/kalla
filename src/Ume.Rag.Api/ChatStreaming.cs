@@ -23,7 +23,8 @@ namespace Ume.Rag.Api;
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
     Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, UmeAnswer>? ume = null,
-    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<IReadOnlyList<string>>>? followUps = null, Func<ValueTask>? aborted = null) : IResult
+    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<IReadOnlyList<string>>>? followUps = null,
+    Func<string, IReadOnlyList<PromptSource>, ValueTask>? aborted = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -53,6 +54,8 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
         // §9.8: the delivered text, kept only for the follow-up call.
         var delivered = followUps is null ? null : new StringBuilder();
         var completed = false;
+        // B-48 (§8.3, §12): a disconnect or the idle or total timeout ends the turn as cancelled; any other failure as error.
+        var outcome = Domain.Entities.MessageOutcomes.Cancelled;
         try
         {
             using (answer)
@@ -86,6 +89,8 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
                         }
                     }
 
+                    // A client that left while the gateway's stream ended did not get the answer: the turn is cancelled (B-48).
+                    ct.ThrowIfCancellationRequested();
                     await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
                     if (ume is not null)
                     {
@@ -112,6 +117,7 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
                 }
                 catch (Exception ex) when (ex is ChatException or HttpRequestException or IOException or JsonException)
                 {
+                    outcome = ex is ChatException { TimedOut: true } ? Domain.Entities.MessageOutcomes.Cancelled : Domain.Entities.MessageOutcomes.Error;
                     // §9.6: after the first byte only an error chunk is possible.
                     await WriteAsync(response, new { error = new { message = "The answer was interrupted.", type = "api_error", code = "stream_interrupted" } }, CancellationToken.None);
                     await DoneAsync(response, CancellationToken.None);
@@ -122,7 +128,7 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
         {
             if (!completed && aborted is not null)
             {
-                await aborted();
+                await aborted(outcome, answer.Cited);
             }
         }
     }

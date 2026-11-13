@@ -263,4 +263,26 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
         }, Ct);
         saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
     }
+
+    [Fact]
+    public async Task Without_an_admin_url_in_the_context_the_links_use_Admin_GatewayAdminUrl()
+    {
+        // #619 (admin design §2.3): the context's admin_url, else Admin:GatewayAdminUrl, wherever an adminUrl is returned.
+        var seed = await SeedAsync();
+        await using (var plain = database.HeaderFactory())
+        {
+            using var admin = await AdminDatabaseFixture.UserAsync(plain, RagRoles.DepartmentAdmin, seed.Code);
+            (await admin.GetFromJsonAsync<JsonElement>($"/api/gateway/keys?departmentId={seed.Department}", Ct)).GetProperty("adminUrl").ValueKind
+                .ShouldBe(JsonValueKind.Null); // no context read here, nothing configured
+        }
+
+        await using var factory = database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting("Admin:GatewayAdminUrl", "https://gateway.example.invalid"));
+        using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        (await departmentAdmin.GetFromJsonAsync<JsonElement>($"/api/gateway/keys?departmentId={seed.Department}", Ct)).GetProperty("adminUrl").GetString()
+            .ShouldBe("https://gateway.example.invalid");
+        var status = await platform.GetFromJsonAsync<JsonElement>("/api/organisation/sync", Ct);
+        status.GetProperty("adminUrl").GetString().ShouldBe("https://gateway.example.invalid");
+    }
 }

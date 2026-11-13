@@ -64,7 +64,8 @@ public sealed partial class ChatApiTests
 
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             var response = await base.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode || body.Contains("fake-stream-broken", StringComparison.Ordinal))
+            // A stream that breaks off or stalls is passed on unread, so rag-api sees the break or the stall as it happens (B-48).
+            if (!response.IsSuccessStatusCode || body.Contains("fake-stream-broken", StringComparison.Ordinal) || body.Contains("fake-stream-stall", StringComparison.Ordinal))
             {
                 return response;
             }
@@ -340,7 +341,7 @@ public sealed partial class ChatApiTests
     }
 
     [Fact]
-    public async Task A_stream_that_breaks_off_is_recorded_usage_only_at_the_prompt_estimate()
+    public async Task A_stream_that_breaks_off_is_recorded_as_an_error_turn_at_the_prompt_estimate()
     {
         var calls = new ConcurrentQueue<CostCall>();
         await using var gateway = CostFake();
@@ -359,7 +360,8 @@ public sealed partial class ChatApiTests
         answer.InputTokens.ShouldBeGreaterThan(0);
         answer.ShouldBe(new UsageRow(1, answer.InputTokens, 0, 0, 0m, 1, Math.Round(answer.InputTokens * 0.15m / 1_000_000m, 8, MidpointRounding.AwayFromZero)));
         added.ShouldContainKey(GatewayQueryEmbedder.Step);
-        (await TotalMessagesAsync()).ShouldBe(messages);
+        // B-48: a stream that breaks off (not a disconnect or a timeout) is an error turn: its rows and one more of the day's Errors.
+        (await TotalMessagesAsync()).ShouldBe(messages + 1);
     }
 
     [Fact]
