@@ -75,6 +75,16 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             throw NotFound(chat.Model);
         }
 
+        // §3.6, step 7 (B-44): an assistant whose gateway key is missing from the mirror or unusable answers before any model call.
+        if (assistant.GatewayKeyId is { } keyId)
+        {
+            var reason = snapshot.GatewayKeys.TryGetValue(keyId, out var key) ? key.UnusableReason : "missing";
+            if (reason is not null)
+            {
+                throw ChatRefusals.AssistantUnavailable(reason);
+            }
+        }
+
         // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3).
         var settings = resolved.Settings(assistant);
         // B-42 (identity §4.7, cost-attribution §4.1): every call of the turn runs as the assistant's gateway key.

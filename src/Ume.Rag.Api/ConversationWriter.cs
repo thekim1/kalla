@@ -35,6 +35,12 @@ public sealed record ChatTurn(
     /// <summary>Only <see cref="Usage"/> is written: the turn failed or broke off after a model call (§12.1).</summary>
     public bool UsageOnly { get; init; }
 
+    /// <summary>
+    /// A usage-only turn that ended <c>unavailable</c> (§3.6: the assistant's key unusable or its budget spent): it adds one to the
+    /// day's <c>AssistantDailyTotals.Unavailable</c>, with no conversation or message rows.
+    /// </summary>
+    public bool Unavailable { get; init; }
+
     /// <summary><c>Messages.CostUsd</c>: the answer call's cost, the gateway's or the estimate (§12.2); null without an answer call.</summary>
     public decimal? AnswerCostUsd => Usage.FirstOrDefault(r => r.Step == GatewayChatClient.AnswerStep) is { } answer
         ? answer.Estimated ? answer.EstimatedCostUsd : answer.CostUsd
@@ -329,6 +335,17 @@ public sealed partial class ConversationWriter : BackgroundService
             AddUsage(usage, turn);
             if (turn.UsageOnly)
             {
+                if (turn.Unavailable)
+                {
+                    var refusedKey = new TotalsKey(Day(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
+                    if (!totals.TryGetValue(refusedKey, out var refusedDay))
+                    {
+                        totals[refusedKey] = refusedDay = new Totals { DepartmentId = turn.DepartmentId };
+                    }
+
+                    refusedDay.Unavailable++;
+                }
+
                 continue;
             }
 

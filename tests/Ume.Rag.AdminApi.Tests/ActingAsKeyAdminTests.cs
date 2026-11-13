@@ -79,6 +79,13 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
         var profile = await writer.AddEmbeddingProfileAsync(8, Ct);
         await using var db = TestPostgres.Context(database.Connection(null));
         var department = new Department { Id = Guid.CreateVersion7(), Name = "Acting " + code, CostCenterCode = code, SyncedAt = DateTimeOffset.UtcNow };
+        // B-44: chat's step 7 needs the assistant's key in the mirror, usable.
+        await db.GatewayKeys.Where(k => k.Id == AssistantKey).ExecuteDeleteAsync(Ct);
+        db.GatewayKeys.Add(new GatewayKey
+        {
+            Id = AssistantKey, Name = "Acting " + code, TeamId = Guid.CreateVersion7(), DepartmentId = department.Id, Status = "Active", OwnerActive = true,
+            Usable = true, PiiPolicy = "Off", ContentGuardPolicy = "Off", SyncedAt = DateTimeOffset.UtcNow,
+        });
         var collection = new Collection
         {
             Slug = "acting-" + code.ToLowerInvariant(), Name = "Acting " + code, DepartmentId = department.Id, Classification = Classification.Internal,

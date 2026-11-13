@@ -97,7 +97,7 @@ public sealed partial class ChatApiTests
     /// <see cref="CostGateway"/> for chat, rerank and the query embedding.
     /// </summary>
     private WebApplicationFactory<Program> CostHost(ConcurrentQueue<CostCall> calls, WebApplicationFactory<fakegateway::Program> gateway, string model = "ume/chat-eu",
-        bool rerank = true, string? failStep = null, Guid? gatewayKeyId = null)
+        bool rerank = true, string? failStep = null, Guid? gatewayKeyId = null, GatewayKeyEntry? keyRow = null)
     {
         var snapshot = Snapshot();
         var bygg = snapshot.Assistants[db.AssistantId];
@@ -113,6 +113,10 @@ public sealed partial class ChatApiTests
                     Published = bygg.Published! with { GatewayModel = model, QuerySteps = rerank ? """{"retrieval":{"rerank":"chat"}}""" : bygg.Published.QuerySteps },
                 },
             },
+            // B-44: the assistant's key in the mirror (usable unless the test says otherwise), as chat's step 7 reads it.
+            GatewayKeys = gatewayKeyId is { } key
+                ? new Dictionary<Guid, GatewayKeyEntry> { [key] = keyRow ?? new GatewayKeyEntry(key, "Active", OwnerActive: true, Usable: true) }
+                : new Dictionary<Guid, GatewayKeyEntry>(),
             ModelPrices = new Dictionary<string, ModelPricesEntry>(StringComparer.Ordinal)
             {
                 ["ume/chat-eu"] = ChatPrices, [FakeCatalog.NoCostModel] = ChatPrices, ["fake-stream-broken"] = ChatPrices,

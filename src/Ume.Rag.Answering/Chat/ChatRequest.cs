@@ -17,6 +17,9 @@ public sealed class ChatException(int status, string code, string message, strin
 
     /// <summary>The gateway answered from a residency above the call's ceiling (event 5003 raised); the answer was discarded.</summary>
     public bool ResidencyRefused { get; init; }
+
+    /// <summary>The assistant's key is unusable or its budget is spent (§3.6): the turn's outcome is <c>unavailable</c>, counted in the totals.</summary>
+    public bool Unavailable { get; init; }
 }
 
 /// <summary>One message of the client's conversation as plain text (content parts concatenated).</summary>

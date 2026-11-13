@@ -663,7 +663,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Kort.', delivered: 'Kort.', outcome: 'answered', language: 'sv', citations: [] },
-        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00034, costEstimated: false },
+        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00002, costEstimated: false },
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -674,7 +674,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
       expect(wrapper.find('[data-test=length-stopped]').exists()).toBe(false)
       expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(null, ASSISTANT.maxTokensSources.provider!))
-      expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: 0,0003 USD')
+      expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: < 0,0001 USD') // #625 review: a cheap turn must not look free
     })
   })
 })
