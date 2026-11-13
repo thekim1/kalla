@@ -89,6 +89,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   publication_stale: 'The processing has changed since the plan was made. Make a new plan.',
   version_not_rollbackable: 'Only an earlier published version can be restored.',
   test_answer_failed: 'The model could not answer the test question ({reason}). Try again.',
+  test_assistant_unavailable: '{reason}',
+  test_budget_exceeded: '{reason}',
   search_unavailable: 'The search could not run right now. Try again in a moment.',
 }
 

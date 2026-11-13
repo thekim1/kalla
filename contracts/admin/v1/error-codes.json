@@ -430,6 +430,16 @@
       "code": "period_too_long",
       "status": 400,
       "message": "The period is too long: at most 400 days by day, or 36 months by month."
+    },
+    {
+      "code": "test_assistant_unavailable",
+      "status": 503,
+      "message": "{reason}"
+    },
+    {
+      "code": "test_budget_exceeded",
+      "status": 402,
+      "message": "{reason}"
     }
   ]
 }

@@ -140,6 +140,34 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         }
     }
 
+    [Fact]
+    public async Task A_disabled_key_shows_chats_reason_on_the_panel_and_makes_no_model_call()
+    {
+        // B-44 (chat §3.6): the panel runs chat's step 7, so an unusable key in the mirror refuses before any call, with chat's reason.
+        var code = "D" + Random.Shared.Next(100_000, 999_999);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var assistant = await SeedAsync(db, code);
+        var key = Guid.CreateVersion7();
+        db.GatewayKeys.Add(new GatewayKey
+        {
+            Id = key, Name = "Panel " + code, TeamId = Guid.CreateVersion7(), DepartmentId = assistant.DepartmentId, Status = "Disabled", OwnerActive = true,
+            Usable = true, PiiPolicy = "Off", ContentGuardPolicy = "Off", SyncedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+        await db.Assistants.Where(a => a.Id == assistant.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.GatewayKeyId, key), Ct);
+
+        await using var gateway = FakeGateway();
+        await using var factory = Admin(gateway);
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
+        using var response = await editor.PostAsJsonAsync($"/api/assistants/{assistant.Id}/test", new { question = $"Hur komposterar jag {code}?" }, Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable, await response.Content.ReadAsStringAsync(Ct));
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("code").GetString().ShouldBe("test_assistant_unavailable");
+        problem.GetProperty("params").GetProperty("reason").GetString().ShouldBe("The assistant is unavailable: its gateway key is disabled.");
+        gateway.Services.GetRequiredService<FakeUsage>().Records.ShouldBeEmpty();
+    }
+
     private static WebApplicationFactory<FakeGatewayProgram> FakeGateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
