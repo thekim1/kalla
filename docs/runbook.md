@@ -58,6 +58,186 @@ In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_
 `rag_upload_backup_last_success_timestamp_seconds` within the last 30 minutes (not with an S3 target). These are the
 thresholds of the proposed alerts below; anything else: *Where to look first*.
 
+## Reading Ume.Rag's cost beside the gateway's
+
+Ume.Rag meters its own model calls so editors can see what each assistant and knowledge base costs, per step and
+client. That is reporting only: **the gateway's usage report is the record for internal charging**, and the two never
+agree to the cent. This section says where Ume.Rag's figures come from and names every reason they differ from the
+gateway's for the same key and day. The design is `plans/platform/cost-attribution.md` §5 and admin design §8.6.
+
+### Where the figures come from
+
+Every model call that gets a `2xx` answer, and every streamed answer that breaks off, adds one call to a daily row, per
+Europe/Stockholm day:
+
+| Table | What it counts | Day |
+|---|---|---|
+| `chat."AssistantDailyUsage"` | every call of a chat turn, per assistant, client and step: `chat-answer`, `condense`, `condense-long`, `follow-ups`, `query-embed` (cache misses only), `rerank`; the test panel's calls under the client `admin-console` | the turn's start |
+| `content."CollectionDailyUsage"` | the worker's calls per knowledge base and step: `embed` (indexing, re-embedding, preview), `eval-generate`, `eval-judge`, `eval-dedup`, and the retrieval evaluation's `query-embed` and `rerank` | the call's answer |
+
+Each row holds calls, input tokens (cached ones included, as the gateway counts them), cached input tokens, output
+tokens, and the cost in two parts that are never mixed:
+
+- **From the AI gateway** (`CostUsd`): the gateway's own figure, from the `x-ume-cost-usd` header on a complete answer,
+  or from the stream comment `: ume-cost-usd=<usd>` the gateway writes before `data: [DONE]` (rag-api asks for it with
+  `x-ume-stream-cost: 1` and never passes it on).
+- **Estimated** (`EstimatedCostUsd`, `EstimatedCalls`): a call that came back without a gateway cost, priced from the
+  model list's mirrored prices: (input − cached) × input price + cached × cached price (the input price when that is
+  empty) + output × output price, per million tokens, rounded to 8 decimals. A model without prices is estimated at 0.
+
+A call answered with an error status adds nothing (the gateway charges no failed request). A `2xx` answer whose body
+can't be used (rerank output that doesn't parse, a condense that fails its check) still counts, since it was charged.
+
+Where to read them (each view shows the gateway part and the estimate apart):
+
+- **Assistant → Statistics → Cost**: the last 30 days, 90 days or 12 months, per day or month, by step and by client
+  (*Test panel* is `admin-console`). Anyone who can read the assistant sees it.
+- **Knowledge base → Overview → Cost**: the last 30 days, split into *Indexing* (`embed`) and *Evaluation* (the other
+  steps). Only the owning department sees it; a department the knowledge base is shared with does not.
+- **Costs** (department and platform admins): any period by day (at most 400 days) or month (at most 36 months), per
+  department, assistant or knowledge base and step, highest cost first, and **Download CSV**.
+
+The CSV is one row per period, department, object, step and client, `;`-separated, UTF-8 with a BOM, costs with a
+decimal comma as the gateway's own export:
+
+```text
+period;department;kind;object;step;client;calls;input_tokens;cached_input_tokens;output_tokens;cost_usd;estimated_cost_usd;estimated_calls
+2026-11-12;Stadsbyggnad;assistant;Bygglov;chat-answer;Open WebUI pilot;409;1840500;612000;163600;1,8301;0,0105;3
+```
+
+`client` is empty for knowledge bases, a month period is `yyyy-MM`, and a deleted object shows as `<id> (deleted)`. A
+row's department is the object's department when the call was made, so a moved object's earlier cost stays where it
+was. The CSV names objects, not gateway keys: note which key each assistant and knowledge base runs as (its page shows
+the key) before comparing with the gateway's export, which is per key.
+
+### The gateway's figures beside Ume.Rag's
+
+When rag-admin has `Gateway:IntegrationApiUrl` (environment `Gateway__IntegrationApiUrl`, the gateway Admin API's base
+URL) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
+key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=step&keyId=…`) for the same period:
+
+- a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-ume-step`;
+- a line "The AI gateway counted … in … requests for the key." The requests include failed and cancelled ones, so
+  compare Ume.Rag's calls with the gateway's successful requests, not with this figure;
+- the note that the gateway's figures are the key's: if other assistants or knowledge bases share the key, their calls
+  are in the gateway's column too (the note is always shown, whether or not the key is shared);
+- the key's budgets (*Budgets in the AI gateway*) at the top of the assistant page and in the knowledge base's state
+  card.
+
+The gateway's rows are Europe/Stockholm days too, cached 5 minutes per key and period. A gateway row without a step
+(another system using the key, or months older than the gateway's kept records, which have only monthly totals) is in
+the line's total but in no step row. Ume.Rag never overwrites its own figures with the gateway's.
+
+Without the read-back (the setting unset, the scope missing, the gateway refusing or rate-limiting), the card shows
+**See the key's usage in the AI gateway** instead, a link to the gateway's usage page. The reason is logged:
+
+```bash
+dc logs --since 1h rag-admin | grep "Integration API"   # "refused or failed (HTTP 403, scope_missing); no read-back this time"
+```
+
+A platform admin also sees it in `integration.lastError` of `GET /api/gateway/status` (the admin UI does not show it yet).
+
+### Why the totals differ
+
+Compare the same key, the same day and Ume.Rag's gateway part plus its estimate. The differences, in the order they
+usually matter:
+
+1. **Calls Ume.Rag never sees answered.** rag-api retries a `502`/`504` once, and a connection failure once; the gateway
+   has already tried its fallbacks before it answers `502`/`504`. The failed attempts are requests in the gateway
+   (usually at no cost, since no provider answered) and nothing in Ume.Rag; a fallback inside the gateway is one
+   request there, with its fallback count. A non-streamed call that Ume.Rag gives up on (a condense or follow-up
+   timeout) records nothing in Ume.Rag, but the gateway accounts for what it had used. A worker job attempt that
+   fails is counted in `CollectionDailyUsage`, but a crash between the job queue's write and the usage write, or a lost
+   lease, loses that attempt's usage: an undercount, never a double count. These make the gateway's figure the higher.
+2. **Estimated calls.** An estimate uses the model list's prices, which may lag the gateway's, and Ume.Rag's own token
+   counts. The CSV's `estimated_calls` and `estimated_cost_usd` say how much of a figure is estimated.
+3. **Aborted streams and cancelled turns.** When a user leaves, or the idle (`Chat:StreamIdleTimeout`) or total
+   (`Chat:MaxAnswerDuration`) timeout cuts an answer, the stream ends without usage or cost comment. Ume.Rag records the
+   turn (the user's message, the partial answer, the day's `Cancelled` count in `AssistantDailyTotals`) and the answer call at its prompt estimate
+   as input, no output, estimated. The gateway accounts the same request as `ClientCancelled` (499) with its own
+   figures, so the two estimates differ and the gateway counts it as a request but not a successful one.
+4. **Calls only the gateway counts.**
+   - Query embeddings of Knowledge API callers without an assistant (integration keys, token callers, MCP). They run as
+     the first searched knowledge base's key, so they show in that knowledge base's **Gateway** column under
+     *Query embedding* with nothing beside them in Ume.Rag.
+   - The admin's own calls outside the test panel: the retrieval test (on the knowledge base's key), and the embedding
+     canary, embedding profile test and status checks (on rag-admin's credential key).
+5. **The test panel.** Its calls run as the assistant's key and are counted under the client `admin-console`, so they
+   show as *Test panel*, apart from real use. Without a client row named `admin-console` of kind `internal` (created
+   by a platform admin under *Platform objects → Clients*; seeded only in development) nothing is written and rag-admin logs it:
+
+   ```bash
+   dc logs --since 24h rag-admin | grep "Test panel usage"   # "Test panel usage of assistant <id> not written (<n> calls): no admin-console client row of kind internal"
+   ```
+
+6. **Days.** Ume.Rag's days are Europe/Stockholm days: a chat turn is dated when it starts, a worker call when it is
+   answered. The gateway dates a usage record when the request ends. A turn that starts just before midnight can land
+   on the next day in the gateway. Which day the gateway's views use (gateway v0.10.1):
+   - the Integration API (the Cost card's **Gateway** column) and the Usage dashboard's day buckets: Europe/Stockholm;
+   - the date range of the usage page, the request list and the gateway's CSV export: midnight in the browser's time
+     zone, so read them on a computer set to Swedish time;
+   - the usage summary grouped by *day*: grouped on the record's timestamp date, not on Stockholm days, so its day
+     boundary can be an hour or two off. Don't use it to reconcile a day.
+7. **Objects without a key.** Their calls run as the service's credential key (rag-api's for chat, rag-worker's for
+   indexing, rag-admin's for the test panel), so in the gateway they are part of that key's line together with every
+   other object without a key. The Cost card has no **Gateway** column for them. The same holds for every object
+   until the gateway's `features` contain `act-as-key`.
+8. **Rounding.** The stream comment carries six decimals; sums over thousands of calls can differ in the fourth
+   decimal.
+
+An ingestion run's own cost (`Runs.CostUsd`) covers only the attempt that wrote each document, so it can be lower than
+the knowledge base's `embed` row and the gateway's for the same day; reconcile with the daily row, not the run.
+
+### Matching per step and per run
+
+Every call carries `x-ume-step` (the step names above) and `x-ume-run-id`, which the gateway stores on its usage record
+(gateway phase 2, `features` `run-metadata`):
+
+| Calls | `x-ume-run-id` |
+|---|---|
+| a chat turn's calls | the turn's message id: the answer's `chatcmpl-<id>` with the hyphens put back |
+| an ingestion run's calls | the run's id (the address of its run page, `/runs/<id>`) |
+| an evaluation run's calls | the evaluation run's id |
+| set generation and preview | the job's id |
+
+- **Per step:** the Cost card's **Gateway** column is the gateway's sum per `x-ume-step` for the key and period; set it
+  beside Ume.Rag's row of the same step.
+- **Per run or turn:** in the gateway's usage page, filter the request list by the key and a time range around the run
+  or turn, and open a request: its *Run* row shows the run id and step. At gateway v0.10.1 the request list has no
+  filter or column for the run, so for a large run compare per step and day instead. The Integration API's `runId=`
+  filter exists, but Ume.Rag's admin does not ask it.
+
+### What a rising estimated share means
+
+`rag.chat.cost` (USD) counts every chat call's cost by `step` and `source`: `gateway` or `estimate`. Normally almost all
+of it is `gateway`; the estimate is the aborted streams. When the `estimate` share rises:
+
+- by step `chat-answer` only, with more cancelled turns (`AssistantDailyTotals.Cancelled`): users leave or answers hit
+  the idle or total timeout. Look at the model's speed in the gateway;
+- on every step at once: the gateway stopped sending its cost. Check that the gateway is at a release with the stream
+  cost and `x-ume-cost-usd`, and that nothing between rag-api and the gateway strips the header;
+- an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Platform objects → Gateway
+  models*, filled by the model sync).
+
+`rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. The worker has no
+cost metric: for knowledge bases read `estimated_calls` in the Costs page or CSV.
+
+### A worked example
+
+One day, 2026-11-12, of the department Stadsbyggnad: two assistants, *Bygglov* (key `bygg-chat`) and *Planfrågor* (key
+`plan-chat`), and one sync of the knowledge base *Bygglov webb* (key `bygg-kb`). The operator downloads the Costs CSV for
+that day, opens each object's Cost card, and in the gateway reads the usage per key for 2026-11-12 (Integration API
+column or the usage page with the browser in Swedish time).
+
+| Key | Ume.Rag (gateway part + estimate) | Gateway | Difference and why |
+|---|---|---|---|
+| `bygg-chat` | 1.9859 + 0.0105 = 1.9964 USD, 1,327 calls (3 estimated) | 2.0012 USD, 1,336 requests, 1,327 successful | +0.0026 the gateway's own figures for the 3 aborted answers (item 3); +0.0004 two follow-ups that timed out in rag-api (item 1); +0.0018 a turn started at 23:59:58 on 11 November, whose calls the gateway dates the 12th (item 6). Requests: 4 retried `502`s, 3 cancelled answers, 2 cancelled follow-ups (items 1, 3) |
+| `plan-chat` | 0.6120 + 0 = 0.6120 USD, 402 calls | 0.6330 USD, 407 successful | +0.0210 five test-panel calls not written; rag-admin logged "Test panel usage of assistant … not written (5 calls)", there is no `admin-console` client row (item 5) |
+| `bygg-kb` | `embed` 0.0820 + 0 USD, 530 calls | `embed` 0.0820 USD; *Query embedding* 0.0035 USD | `embed` agrees, the 530 calls include 12 documents' first attempts that failed and were retried (item 1; the run's own `Runs.CostUsd` is 0.0790). The 0.0035 are query embeddings of Knowledge API callers without an assistant and two retrieval tests (item 4) |
+
+Every difference has a name, so the day is reconciled. A difference with no name, or one that grows from day to day on
+the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a call it should count.
+
 ## Backups
 
 ### What runs
