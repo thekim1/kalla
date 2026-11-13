@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `b26d877` plus
+State of the Ume.Rag work for the next session. Rewritten 2026-11-13, session 33 (`main` at `62e3e74` plus
 this file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`; **a dry run of 0.5.0 passed from
 `a49c848`**, run 43387199025). Earlier sessions are in the git history (`git log -- HANDOVER.md`). Repo
 `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
@@ -24,47 +24,28 @@ sink" monolith. Design and code live in this repo.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
 6. Not binding: `plans/platform/upload-quality-review.md` (upload gaps U1–U7, decisions still to take).
 
-## Start here: a look at CI (user, 2026-11-13)
+## Start here
 
-The user wants the next session to **take a quick look at the GitHub Actions workflows and see whether they can run
-faster or less often**. It's a review first: propose, and change only what the user agrees to. The binding rules today
-are repo-and-deployment §8.2 (lean pull requests) and the *Lean CI* preference below; `docs/ci-runner.md` has the
-runner notes.
+Stream a's queue is empty apart from live checks, and stream b's open items wait on live checks too. Everything live
+waits on **the interim gateway on v0.10.1** (*Waiting on the user*). Next: GitHub (below), then ask the user whether to
+tag **0.5.0** (it's outward-facing: ask first).
 
-**What runs now** (`.github/workflows/`, all on the two self-hosted runners `ume-rag` and `ume-rag2`, which share one
-Docker daemon and one user home):
+## CI review (session 33, 2026-11-13): done
 
-| Workflow | When | Jobs | Typical time |
-|---|---|---|---|
-| `verify.yml` | every non-draft PR; dispatch; called by release | `changes`, `ownership`, `doc-refs`; then by path: `backend` (builds the Postgres and ClamAV images, `dotnet build` + `dotnet test --solution` without Flaky and EvaluationSmoke), `evaluation-smoke`, `admin-ui`, `deploy-checks`, `images`, `renderer` | median 7 min per PR, max 34; `backend` 6–7 min on every code PR |
-| `parser.yml` | PRs (its own path filter), dispatch, called by release | `changes`, `parser`, `parser-image`, `contract` | usually skipped (0.2 min), 3.4 when it runs |
-| `release.yml` | tag push; dispatch = dry run | `verify` + `parser` (called), `build` (images, SBOM, bundle, smoke test in a local registry), `e2e` (optional), `publish` | about 17 min |
-| `e2e.yml` | dispatch or called by release when ticked | the browser tests (9 tests, ~10 min) | by hand only |
-| `audit.yml` | nightly 04:17 and dispatch | `dotnet`, `admin-ui`, `parser` vulnerability audits | — |
-| `evaluation.yml`, `perf.yml`, `entra.yml` | dispatch (entra also on its paths) | evaluation on a real gateway, capacity runs, Entra plan/apply | rarely |
-
-**Observations from session 32, to start from (not yet verified as the best fix):**
-- **`backend` runs on docs-only and deploy-only PRs.** The `changes` filter's `code` output is "anything besides
-  `plans/`, `platforms/` and root `*.md`", so a PR that changes only `docs/**` (#641: 6 min) or only `deploy/**` +
-  `docs/**` (#643) runs the full 6–7 minute backend build and test. `docs/**` and most of `deploy/**` build nothing
-  the backend tests read. Check what does read them first (the doc-refs check, `deploy/postgres/*.sql` in the
-  integration tests, the release bundle) before narrowing the filter.
-- **`backend` builds the Postgres and ClamAV images on every run** before the tests, even when `images/` is
-  unchanged. Look at whether the tests need fresh images or could reuse a tagged one (layer cache, or build only on
-  change).
-- **`dotnet test --solution` runs every test project** for any code change: a worker-only PR also runs the API,
-  AdminApi, Answering, integration and contract tests. Per-project selection by path is possible but risky (shared
-  Infrastructure: the API's `sql-shapes.json` covers Infrastructure statements, see *Lessons*); weigh it against the
-  6–7 minutes.
-- **Both runners share one Docker daemon**: a PR's backend run and another's container tests compete, and the flaky
-  renderer test (#645) failed both times with another job on the host. The open proposal (*Waiting on the user*:
-  one runner per Docker host, or release on GitHub-hosted runners) belongs to this review.
-- `evaluation-smoke` (about 1 min) runs whenever the worker, retrieval, answering, API, infrastructure, pipelines or
-  domain change, which is most code PRs.
-- Stream b's PRs are the bulk of the runs (it splits items into parts and pushes several fixes per PR). Draft PRs
-  skip everything; pushing as draft until ready is one lever that costs no workflow change.
-- How to measure: `gh run list --workflow verify.yml --limit 30 --json …` and `gh run view <id> --json jobs` give job
-  start and end times; session 32's numbers above came from the last 30 runs.
+Measured over 60 `verify.yml` runs: `backend` was 312 of 418 runner-minutes. Its build takes 50 s; the long pole was
+`Ume.Rag.AdminApi.Tests` (4–5 min), 40 classes serial in one xUnit collection. The image builds take about 1 s (cache),
+so they need no change.
+- **#648**: AdminApi.Tests in four collections `admin-db-1`..`4` (`AdminDatabaseGroup1`..`4`, a database each, spread
+  by measured time): AdminApi 4–5 min → 3:03 in CI, `backend` ~6.2 → ~4.5 min. Stream b told on #580.
+- **#647**: `backend` skips PRs that change only `docs/` and `deploy/`, except what its tests read (`deploy/postgres/`,
+  `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); §8.2 updated. The first docs-only PR is its live check.
+- **Not done, on purpose:** per-project test selection (risky, ~3 min at best); evaluation-smoke (off the critical
+  path). **Open:** AdminApi is still the long pole because each test starts its own `WebApplicationFactory` (one per
+  class would cut more; suggested to stream b on #580, not queued). The draft-PR ask to stream b wasn't approved, so it
+  wasn't sent. The runner layout (one Docker daemon for both runners) gets re-measured after a day of runs with the
+  extra Postgres containers: watch queue waits (up to 28 min seen) and renderer flakes.
+- How to measure: `gh run list --workflow verify.yml --limit 60 --json …`, `gh run view <id> --json jobs`, and the job
+  log's `Test run summary` for per-project times (`gh api --allow-escape-sequences …/actions/jobs/<id>/logs`).
 
 ## Then
 
@@ -75,25 +56,21 @@ Docker daemon and one user home):
   is stream a's `platform/**`.
 - **#580**: the gateway owner was asked whether the gateway's request list gets a `runId` filter (gateway-changes
   §7.1 describes v0.10.1 as built). Keep #580 open until the live checks pass.
-- **#645**: the flaky renderer test (twice in CI, both with another job on the Docker host).
 - Review stream b's new PRs (it merges its own); its open queue is B-42–B-46's live checks.
 
 **2. Stream a's queue is empty** apart from live checks: A-34 (worker as the knowledge base's key) and A-35 (a real
 read-back) both wait on the interim gateway.
 
-**3. The V39 rule needs the user's confirmation:** once the gateway acts as keys, a published assistant's key can't be
-cleared (#618 review, built). Ask.
-
-**4. Before tagging 0.5.0:** the dry run passed from `a49c848`; only A-40 (#646, worker metrics) landed after it. The
-upgrade guide says **rolling update: no** (`DailyTotalsWithoutCost`), and names `UME_RAG_GATEWAY_INTEGRATION_API_URL`
-and the `usage.read` scope. The CHANGELOG is current through #643 (#646 needs a line).
+**3. Before tagging 0.5.0 (ask the user first):** the dry run passed from `a49c848`. Since then A-40 (#646, worker
+metrics) and session 33's CI, test and design PRs (#647–#651) have landed; none changes an image or the deployment. The upgrade
+guide says **rolling update: no** (`DailyTotalsWithoutCost`), and names `UME_RAG_GATEWAY_INTEGRATION_API_URL` and the
+`usage.read` scope. The CHANGELOG is current through #648.
 
 **Waiting on the user:**
 - **The interim gateway (J10) on v0.10.1** (#86: a refusal of an assigned key is always `403`), with the integration
   *Ume.Rag* and three credential keys (`rag-api`, `rag-admin` with `organisation.read` and `usage.read`, `rag-worker`
   capped at `OnPrem`+`Eu`). Every live check of B-35–B-46, A-31, A-34 and A-35 waits on it. Gateway setup:
   `docs/production-setup.md` *Gateway credential keys* and *Cost and budget read-back*.
-- **The V39 rule** above.
 - **Local user secrets** (see *Environment notes*): the AppHost refuses `Gateway:Keys:Eu` and `ClamAv:Enabled`.
 - **CI runners** (proposal, "write it down, change nothing yet"): `ume-rag` and `ume-rag2` share one Docker daemon and
   one user home. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners. Part of the CI review.
@@ -112,6 +89,14 @@ and the `usage.read` scope. The CHANGELOG is current through #643 (#646 needs a 
 `plans/decisions.md`). It works fast (B-39–B-46 and B-48 in one night), splits items into parts, answers review
 findings with PRs rather than comments, and takes stream-a paths on `a/` branches when the user asks. It announces its
 work on #580. All of B-35–B-48 is merged; B-42–B-46 are unticked until their live checks.
+
+## Done in session 33 (2026-11-13)
+
+- **CI review** (see above): #647 (backend filter), #648 (AdminApi collections); CHANGELOG #649.
+- **#645** fixed in #650: the quiet-rule render test gives its page 15 s instead of 3 (ready after ~1.3 s; a loaded
+  runner made it `render.timeout`) and names the outcome's reason on failure. If it fails again, reopen #645 with that reason.
+- **V39 confirmed** by the user: a published assistant keeps a key of its own department once the gateway acts as keys
+  (#651, Decisions "Gateway keys").
 
 ## Done in session 32 (2026-11-12 evening to 2026-11-13 morning)
 
@@ -134,7 +119,6 @@ work on #580. All of B-35–B-48 is merged; B-42–B-46 are unticked until their
 
 - **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until the live checks of
   phases 2–3 pass.
-- **#645**, the flaky renderer test.
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)
