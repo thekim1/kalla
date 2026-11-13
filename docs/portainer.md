@@ -13,10 +13,10 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 
 ## Which file
 
-Use **`deploy/portainer/compose.portainer.yaml` from `main`** (or from the next release's assets). It pins the gateway's
-images (`v0.10.1`) and Ume.Rag's (`0.5.0`) by digest, so no image variable is needed, and it has Open WebUI as the
-profile `openwebui`. The `compose.portainer.yaml` asset of the `v0.5.0` release predates that: it has no Open WebUI and
-leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
+Use the **`compose.portainer.yaml` asset of the `v0.5.1` release** (or later), or the same file in the repository at
+`deploy/portainer/compose.portainer.yaml`. It pins the gateway's images (`v0.10.1`) and Ume.Rag's (`0.5.1`) by digest,
+so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
 
 ## What you need
 
