@@ -38,3 +38,35 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   check them in the test panel; collect the findings (T6) into the case plan, the upload gaps and the stream queues.
 - **Waits on:** T0–T1 (the user's deploy) and DoIT's files.
 - **Done when:** the test group has used it, and the findings are written back (T6).
+
+### [ ] M-16 Connect an app in one go; the platform menu; the Settings page (user, 2026-11-13)
+- **Owner:** the session on stream b's machine (GitHub `thekim1`), by the user; it crosses both streams' paths, so
+  each step is a PR on a `main-session/<slug>` branch, announced in the issue first (handbook, *How we work*).
+- **Do, in order** (each one PR or less):
+  1. **API** (admin §5.9.1): `assistantIds` on `POST /api/clients`, `PUT /api/clients/{id}/assistants`, `slug` and
+     `classification` on `ClientDto.assistants`, `GET /api/clients/connection` (`Admin:ApiPublicUrl`), `lastUsedAt` on
+     `KeyDto` and `ClientSummary`. Paths: `src/Ume.Rag.AdminApi/**`, `tests/Ume.Rag.AdminApi.Tests/**`,
+     `src/admin-ui/src/api/**`.
+  2. **Deploy:** rag-admin gets `Admin__ApiPublicUrl` from `UME_RAG_API_PUBLIC_URL` in the Compose, Kubernetes and
+     Portainer templates. Paths: `deploy/**`.
+  3. **Add app and the drawer:** the step *What it may use*, the result *How to connect*, the drawer's checklist and
+     *How to connect*, last use, **Connect a new app** on the assistant's *Who can use it*. Paths:
+     `src/admin-ui/src/platform/**`, `src/admin-ui/src/views/AssistantView.vue`, `src/admin-ui/src/utils/labels.ts`.
+  4. **Keys:** the short key form with *Restrictions*, scope lists from the app's audience, the **All keys** tab; the
+     generic `keys` resource goes; the page is named *Apps and keys*; `docs/portainer.md` step 7 follows. Paths:
+     `src/admin-ui/src/platform/**`, `labels.ts`, `docs/portainer.md`.
+  5. **Menu** (admin §5.10): the Platform group's five items, the index page gone, the generic `organisation`
+     resource's facts on the Organisation page, search entries. Paths: `src/admin-ui/src/router/**`,
+     `src/admin-ui/src/platform/**`, `src/admin-ui/src/views/OrganisationView.vue`, `labels.ts`, `tests/e2e/**` where a
+     spec opens `/plattform`.
+  6. **Settings, the shell:** the page with its section list and today's forms on the page; site profiles and data
+     protection as sections. Paths: `src/admin-ui/src/platform/**`, `labels.ts`.
+  7. **Settings, typed members:** Chat, Search, Processing, Personal data, one PR each. Paths as 6.
+  8. **Generic forms:** an id field as a select of the object's rows. Paths: `src/admin-ui/src/platform/**`.
+- **Done when:** a platform admin connects an integration without leaving the wizard, never types or looks up a GUID,
+  and a `curl` copied from *How to connect* answers through the picked assistant; the app's row shows the key's last
+  use; Apps and keys, Models and Settings open from the side menu in one click; no settings member of steps 6–7 needs
+  JSON; checked in the browser and by the Vitest and API tests of each step.
+- **Mind:** the open deploy-configuration proposal (#662, on its branch): its C4 makes Open WebUI's client deployment-managed (the wizard's Open WebUI block goes then), its C1
+  gives `UME_RAG_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
+- **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.

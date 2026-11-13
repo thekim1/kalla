@@ -929,6 +929,9 @@ Assistants, Feedback, Menu.
 └──────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+The Platform group of the drawing is replaced by §5.10's (Apps and keys, Models, Settings, Organisation, Audit log)
+once M-16 is built.
+
 **Home** shows the selected department's setup checklists, attention items and a one-line summary with its contacts;
 **Knowledge bases** has the tabs *Ours*, *Shared with us* and *All* (`view=`, §4.5). The department picker in the
 header filters every list; a user with one department never sees it.
@@ -1350,6 +1353,8 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
 - The same concurrency (`version`), error codes, audit and accessibility rules apply.
 - Clients and keys left the generic forms (§5.9, user 2026-11-13). Every generic form shows the row's `id` with a copy
   button, a schema `enum` as a select, and a `date-time` field as a date and time input.
+- §5.10 (not built yet) puts each platform page in the side menu, drops this index page and gives Settings a page of
+  its own; §5.9.1 removes the generic `keys` resource.
 
 ### 5.9 Clients and keys (user, 2026-11-13)
 
@@ -1404,6 +1409,112 @@ gains a client column.
 - `GET /api/clients` (`ClientSummary`) adds `activeKeys` (int). `GET /api/clients/{id}` (`ClientDto`) adds
   `assistants: [{ id, name, departmentId, published }]` (the assistants with a `client` audience row for it).
 - `GET /api/keys` keeps its `clientId` filter; `KeyDto` adds `clientName`.
+
+#### 5.9.1 Second pass: connect an app in one go (user, 2026-11-13; `work/main.md` M-16; not built yet)
+
+After §5.9's first pass a new client still cannot use anything (access is given on each assistant's page, one at a
+time), an integration's result is a secret and a GUID with no address or model name, the key form shows every assistant
+and knowledge base of the platform, and keys have a second page. This pass changes §5.9 as follows; where it differs
+from the text above, this wins once built.
+
+**Name.** The page is **Apps and keys** in the UI (`labels.ts`); the API, the tables and the code keep `client`.
+
+**Add app** has four steps:
+
+1. **Kind** (unchanged).
+2. **Fields** (unchanged).
+3. **What it may use**: the assistants this app offers, as a searchable checklist (name, department, *Published* or
+   *Draft*, information class) from `GET /api/assistants`. An assistant above the app's information class is disabled
+   with "Above this app's information class" (V7); a `sensitive` assistant is disabled for an app that keeps history
+   when the policy says so (V9). Nothing ticked is allowed and says "This app can't use any assistant yet". Opened from
+   an assistant's *Who can use it* tab (**Connect a new app**), that assistant is ticked.
+4. **First key** (unchanged).
+
+Client, audience rows, key and their audit rows are one transaction.
+
+**The result is "How to connect"**, built from what was just made, each value with a copy button:
+
+| Kind | Shown |
+|---|---|
+| `integration`, `internal` | the API address (`<apiBaseUrl>/v1`), the key (once), the model names (the slugs of the assistants picked in step 3, as `GET /v1/models` lists them), and one `curl` call of `POST /v1/chat/completions` with the first model, copied as a block |
+| `open-webui` | the two stack lines of §5.9, until Open WebUI's client is set up by the deployment (the deploy-configuration proposal of #662, its C4, if agreed); then the kind leaves the wizard and its client shows "Managed by the deployment" with no Rotate |
+
+The client id is under "Details", not in the main path: only the Open WebUI stack line needs it. Without
+`apiBaseUrl` the address row says "Ask the platform team for rag-api's address".
+
+**An app's drawer** gains **How to connect** (the same block, the key shown through *Show key*) and replaces *Used by*
+with the checklist of step 3 and a **Save** of its own. The list and the drawer show when each key was **last used**
+("Never used" until the app's first call), so the person connecting an app sees that it worked.
+
+**Key form.** A new key asks for its name only. Description, team, **Limit to assistants**, **Limit to knowledge
+bases**, expiry, allowed IP ranges and requests per minute are under a collapsed **Restrictions**, open when any of
+them is set. The two limit lists show only what the app's audience allows (its assistants, and their knowledge bases).
+
+**Keys page.** The generic resource `keys` and `/plattform/keys` go. The Apps and keys page has two tabs: **Apps** and
+**All keys** (every key with its app, status, expiry and last use; filter by status; a row opens its app's drawer at
+the key). Department admins' keys of own teams (§3.3) have no page today and get none here.
+
+**Other generic forms.** A field that takes another object's id (a GUID) is a select of that object's rows, by name;
+no form asks for a typed GUID.
+
+**API** (contract):
+- `POST /api/clients` takes an optional `assistantIds: [guid]`; each gets a `client` audience row for the new client,
+  checked as `PUT /api/assistants/{id}/audiences` checks it (V7, V8, V9). A refusal is a field error on `assistantIds`
+  that names the assistant.
+- `PUT /api/clients/{id}/assistants` with `{ assistantIds, version }` (policy `Admin`) makes the set of assistants
+  that have a `client` audience row for this client exactly `assistantIds`; same checks; one `audiences` audit row per
+  assistant that changed. Answers `ClientDto`.
+- `ClientDto.assistants` items add `slug` and `classification`.
+- `GET /api/clients/connection` answers `{ apiBaseUrl: string | null }` from the deployment knob `Admin:ApiPublicUrl`.
+  The deployment templates give rag-admin the value rag-api already gets as `Knowledge:PublicBaseUrl`
+  (`UME_RAG_API_PUBLIC_URL`, or its default from the host once the proposal's C1 is in): no new variable to fill in.
+- `KeyDto` adds `lastUsedAt` (from `KeyLastUse`, data-model §2.1); `ClientSummary` adds `lastUsedAt`, the latest of its
+  keys.
+
+### 5.10 Platform menu and the Settings page (user, 2026-11-13; `work/main.md` M-16; not built yet)
+
+Today the side menu's Platform group has one item, **Platform**, that opens an index of seven cards (§5.8), so every
+platform object is two clicks away; Organisation is both a menu item and a card; and Settings is a table of nine
+sections that each open a drawer with a generated form, several members as JSON text. Once built, this section
+replaces §5.2's Platform group and §5.8's index page.
+
+**Menu.** The Platform group lists its pages directly, filtered by role as before:
+
+| Item | Route | Holds | Roles |
+|---|---|---|---|
+| Apps and keys | `/plattform/clients` | §5.9, §5.9.1 | platform admin |
+| Models | `/plattform/gateway-models` | gateway models with their limits, the gateway's context, embedding profiles and the canary (the page as it is) | platform admin |
+| Settings | `/plattform/settings/:section?` | below | platform admin |
+| Organisation | `/organisation` | the page as it is, plus the member groups, the sharing summary and the gateway link of the generic resource `organisation`, which goes | every role |
+| Audit log | `/audit` | unchanged | as today |
+
+The index `/plattform` and `PlatformIndexView` go; search (Ctrl K) lists each page and each settings section. On
+phones the items are under Menu as today.
+
+**Settings** is one page: the sections in a list on the left (a select above the form on phones), the chosen
+section's form on the page, not in a drawer. The address names the section (`/plattform/settings/chat`); without one
+the first section opens. Sections, grouped by what they affect:
+
+| Group | Sections |
+|---|---|
+| Chat and answers | Chat (with the answer ceiling and the condense model), Prompt texts (the panel of chat design §7.3), Search (`retrieval`) |
+| Content | Website fetching (`crawl`, with the host politeness table), Site profiles, Processing (`worker`), Personal data (`pii`) |
+| Data protection | Data protection (the three levels), Retention, Deletion guard |
+| Quality | Evaluation |
+| Platform | Network |
+
+Site profiles and Data protection are lists (a row opens its form in a drawer, as today); they move here from the
+index. A section the deploy-configuration proposal adds (`Settings.Identity.RoleGroups`, its C10) is one more entry in
+the registry under Platform.
+
+A section's form is built in two steps:
+
+1. **The shell:** the forms as they are today (generated from the OpenAPI schema, with the dedicated ones for crawl
+   and prompt texts), on the page. Each save is one section, with its `version`, as today.
+2. **Typed members:** a member that is JSON today gets controls of its own (number, switch, select, a small table),
+   with a label, a hint and the default the code uses when it is unset, in `labels.ts`. Order: Chat, Search,
+   Processing, Personal data. JSON stays only under **Advanced (JSON)** for members with no control yet. The server's
+   validation is unchanged.
 
 ## 6. Pipelines
 
