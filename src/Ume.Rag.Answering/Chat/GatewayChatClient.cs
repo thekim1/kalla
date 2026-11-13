@@ -120,7 +120,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                throw new ChatException(502, "stream_interrupted", "The model stopped answering.");
+                throw new ChatException(502, "stream_interrupted", "The model stopped answering.") { TimedOut = true };
             }
 
             if (line is null || !GatewayStreamLine.Read(line, events))
