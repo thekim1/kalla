@@ -60,9 +60,8 @@ call), with each variable's destination, the decisions it needs, and an order. A
 
 - **`v0.5.1` released** (2026-11-13; release run 43436813015): the Portainer stack with every image pinned and Open
   WebUI as the profile `openwebui` (#657), `docs/portainer.md` (#658), the variables file, `rag-bootstrap`'s checklist
-  and secret files that reload (#659), #653's read-back texts. **The stack template still pins 0.5.0's images:** pin it
-  to 0.5.1's (from the release's `compose.portainer.yaml` asset) so the no-restart key changes apply; the docs already
-  say "from 0.5.1".
+  and secret files that reload (#659), #653's read-back texts. The repository's stack file is pinned to 0.5.1 (#661)
+  and identical to the release's `compose.portainer.yaml` asset: give either to whoever deploys.
 - **Not boot-tested:** the Portainer stack's Open WebUI profile (#657) and the whole stack were merged without a boot
   (user's call); the first VM deploy is the test (handbook *Lessons*).
 - **Now (roadmap):** the **test chatbot** on DoIT's uploaded documents for a small test group, on the gateway and Ume.Rag
@@ -77,7 +76,7 @@ call), with each variable's destination, the decisions it needs, and an order. A
 ## Next
 
 1. **The plan above** (the session's goal).
-2. Pin the Portainer stack to 0.5.1's images, if not done; GitHub (new stream-b PRs and issues; #580, #513, #550 stay
+2. GitHub (new stream-b PRs and issues; #580, #513, #550 stay
    open); A-41.
 3. When the user's VM deploy reports problems: fix the stack (Open WebUI's wrapper, CA bundle and data volume first).
 
