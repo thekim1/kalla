@@ -5,6 +5,32 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.5.1 (2026-11-13)
+
+Easier deploys with Portainer: the gateway and Ume.Rag as one stack with every image pinned, Open WebUI in it, a
+variables file, a checklist of what is still missing, and gateway keys that apply without restarts. **Rolling update:
+yes** from 0.5.0 (no migration). See `docs/portainer.md`.
+
+### Added
+
+- The Portainer stack runs Open WebUI with the profile `openwebui` (`rag-openwebui`, as `compose.openwebui.yaml`), on
+  plain HTTP for a TLS proxy in front, calling rag-api inside the stack (#657).
+- `deploy/portainer/stack.env.example` for Portainer's *Load variables from .env file*, and a checklist at the end of
+  `rag-bootstrap`'s log of what is still missing on every deploy: the gateway keys, example values, the ClamAV profile,
+  Open WebUI's settings (#659).
+- `docs/portainer.md`: a first deploy on a new VM and the upgrade to 0.5.x with Portainer, step by step (#658).
+- The admin's sync status carries the gateway's cost read-back state; the key picker counts the assistants and
+  knowledge bases holding each key, so the shared-key note shows only for a shared key; texts for
+  `gateway.key_unavailable` and `gateway.delegation_not_applied` (#653).
+
+### Changed
+
+- The Portainer stack pins the gateway's images (built from the gateway's `v0.10.1` release) and Ume.Rag's by digest,
+  so no image variable is needed; `deploy/portainer/build-stack.sh` builds from a gateway release by default (#657).
+- **The secret files reload on change:** a gateway credential key or the Open WebUI feedback key written by a stack
+  update applies within seconds, without restarting the services; a service started without its key begins its gateway
+  syncs once the key arrives (#659). rag-admin's OIDC client secret still needs a restart.
+
 ## 0.5.0 (2026-11-13)
 
 Ume.Rag on the gateway's integration (phases 1–3): one credential key per service, a gateway key per assistant and
