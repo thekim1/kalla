@@ -36,6 +36,33 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   metrics. The FakeGateway sends a cost and has `fake-no-cost` and `FakeGateway:CachedInputTokens` (#608, #615, #613).
 - The Files tab counts an `unscanned` file as *processing*, each file has `scannedAt`, and the admin UI shows *Not
   scanned for malware* on such a file and *Files in this run were not scanned for malware* on its run (#614, #535).
+- **Cost in the admin.** The cost report API (`GET /api/costs`, `/api/assistants/{id}/costs`,
+  `/api/collections/{id}/costs`: per assistant, knowledge base and department, by day or month, at most 400 days or
+  36 months, CSV), scoped by the department each call was charged to (#627). The assistant's and knowledge base's
+  *Cost* cards and the *Costs* page show the gateway's cost and the estimate apart, by step and client (#628). The
+  test panel's calls run as the assistant's key and count under the client `admin-console`, which a platform admin
+  creates in production (#625).
+- **The gateway's cost and budgets beside Ume.Rag's** (gateway phase 3). With `Gateway:IntegrationApiUrl` set and
+  rag-admin's credential key holding `usage.read`, rag-admin reads a key's cost per step and its budgets from the
+  gateway's Integration API (cached 5 minutes; #637), and the Cost cards show the gateway's figures and the budget
+  status beside Ume.Rag's (#638). Deployment: `UME_RAG_GATEWAY_INTEGRATION_API_URL`, and the host firewall allows it
+  for `llm` when set (#643).
+- **A key's refusal in chat and the admin** (gateway phase 2): an assistant whose key is disabled, revoked or expired
+  answers `503 assistant_unavailable` before any model call, and a spent budget `402 budget_exceeded` with the
+  gateway's message before the first byte (#632); the assistant page shows *Unavailable* with the reason, as does the
+  test panel (#634). Save checks V8 and V39 run as the object's key, a published assistant needs a key once the
+  gateway acts as keys and its key can't be cleared, and the status check makes an acted call (#618).
+- **A cancelled turn is recorded:** a client that leaves or an idle or total timeout stores the user's message and
+  the partial answer with `Outcome = cancelled` and counts the day's `Cancelled`; a broken stream is an error turn
+  (#636).
+- **The worker's content retention:** `content.rag_retention_content_step` removes, nightly and in batches, usage
+  rows older than 3 years, runs older than 13 months (keeping the ones the scheduler still reads), parse observations
+  older than 180 days, retrieval statistics older than 13 months, embedding cache entries unused for 30 days and old
+  superseded site profile versions. Migration `ContentRetentionStep` (#626).
+- The platform's *Gateway models* view shows the gateway's version and features; a model whose limits the gateway
+  sends shows them read-only (#623).
+- Runbook: reading Ume.Rag's cost beside the gateway's (#641), and the gateway keys, budgets and read-back with each
+  refusal and its fix (#643).
 
 ### Changed
 
@@ -73,6 +100,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - `chat."AssistantDailyTotals"` no longer holds tokens and cost (migration `DailyTotalsWithoutCost`): they are in
   `AssistantDailyUsage`, and the totals of earlier days lose them. **Rolling update: no** for this release; see
   `docs/upgrade-guide.md` (#615, #620).
+- **Gateway v0.10.1:** a refusal of the object's assigned key is `403` (`delegation_not_allowed`, `key_disabled`,
+  `key_revoked`, `key_expired`) and a `401` is always the credential key's own; the contract is pinned at `v0.10.1`
+  (#629).
+- A query embedding refused for one assistant's key no longer opens the circuit for the others, an answer without the
+  key's echo isn't retried, and the query-embedding cache is per acting key (#631).
+- The gateway links fall back to `Admin:GatewayAdminUrl` when the gateway's context has no admin URL (#633, #640).
 
 ## 0.4.0 (2026-11-11)
 
