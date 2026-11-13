@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ume.Rag.TestKit;
@@ -40,6 +41,43 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
 
     private Task<HttpResponseMessage> Retrieve(HttpClient client, object body) =>
         client.PostAsync(new Uri("/v1/retrieve", UriKind.Relative), JsonContent.Create(body), Ct);
+
+    [Fact]
+    public async Task A_keys_use_is_recorded_as_its_last_use_at_most_every_five_minutes()
+    {
+        // Identity §6.2, admin §5.9.1: rag-api writes config."KeyLastUse" beside the request; the admin shows it per key and app.
+        await using var api = db.ApiHost();
+        await using var context = TestPostgres.Context(db.Connection(RagDatabase.Admin));
+        var keyId = await context.Keys.AsNoTracking().Where(k => k.ClientId == db.InternalClient && k.Name == "rag-internal").Select(k => k.Id).SingleAsync(Ct);
+        // Other tests of this class use the key too (each on its own host): only a use from now on counts.
+        var started = DateTimeOffset.UtcNow;
+        var uses = context.KeyLastUse.AsNoTracking().Where(u => u.KeyId == keyId && u.LastUsedAt >= started);
+
+        // A refused key records nothing.
+        using (var refused = await Client("ume-rag-sk-" + new string('x', 40)).GetAsync(new Uri("/v1/collections", UriKind.Relative), Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+
+        using var client = api.CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", db.InternalKey);
+        using var response = await client.GetAsync(new Uri("/v1/collections", UriKind.Relative), Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // The write runs beside the request: wait for it.
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(60);
+        while (!await uses.AnyAsync(Ct))
+        {
+            DateTimeOffset.UtcNow.ShouldBeLessThan(deadline, "no KeyLastUse row a minute after the key was used");
+            await Task.Delay(100, Ct);
+        }
+
+        var at = await uses.Select(u => u.LastUsedAt).SingleAsync(Ct);
+        at.ShouldBeLessThanOrEqualTo(DateTimeOffset.UtcNow);
+        // Within the five minutes a further use writes nothing.
+        api.Services.GetRequiredService<KeyLastUseRecorder>().TouchAsync(keyId).IsCompletedSuccessfully.ShouldBeTrue();
+        (await uses.Select(u => u.LastUsedAt).SingleAsync(Ct)).ShouldBe(at);
+    }
 
     [Fact]
     public async Task A_search_without_an_assistant_runs_as_the_first_searched_collections_gateway_key()
