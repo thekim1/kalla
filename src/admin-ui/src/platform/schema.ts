@@ -1,4 +1,5 @@
 import { http } from '@/api/client'
+import { toLocalInput } from '@/utils/format'
 import { PLATFORM } from '@/utils/labels'
 
 /**
@@ -10,6 +11,7 @@ import { PLATFORM } from '@/utils/labels'
 export type JsonSchema = {
   $ref?: string
   type?: string | string[]
+  format?: string
   enum?: unknown[]
   oneOf?: JsonSchema[]
   anyOf?: JsonSchema[]
@@ -28,7 +30,7 @@ export type OpenApiDocument = {
   components?: { schemas?: Record<string, JsonSchema> }
 }
 
-export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'list' | 'json' | 'model'
+export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'datetime' | 'list' | 'json' | 'model'
 
 export interface FieldSpec {
   name: string
@@ -87,7 +89,10 @@ function fieldFor(doc: OpenApiDocument, name: string, raw: JsonSchema, required:
   }
   const t = types(schema).filter((x) => x !== 'null')
   const base = { name, label: PLATFORM.fields[name] ?? schema.title ?? fieldLabel(name), help: PLATFORM.fieldHints[name] ?? schema.description, required, nullable }
-  if (schema.enum) return { ...base, kind: 'select', options: schema.enum.map(String) }
+  // A nullable enum may list null among its values: the select's empty option stands for it.
+  if (schema.enum) {
+    return { ...base, nullable: base.nullable || schema.enum.includes(null), kind: 'select', options: schema.enum.filter((v) => v !== null).map(String) }
+  }
   if (t.includes('boolean')) return { ...base, kind: 'switch' }
   // ASP.NET's schemas allow numbers as strings too (`[integer, string]` with a pattern).
   if (t.includes('integer') || t.includes('number')) return { ...base, kind: 'number' }
@@ -95,7 +100,7 @@ function fieldFor(doc: OpenApiDocument, name: string, raw: JsonSchema, required:
     const item = resolve(doc, schema.items) ?? {}
     return { ...base, kind: types(item).includes('string') && !item.properties ? 'list' : 'json' }
   }
-  if (t.includes('string')) return { ...base, kind: 'text' }
+  if (t.includes('string')) return { ...base, kind: schema.format === 'date-time' ? 'datetime' : 'text' }
   return { ...base, kind: 'json' }
 }
 
@@ -116,6 +121,8 @@ export function toInput(field: FieldSpec, value: unknown): string | boolean {
       return Array.isArray(value) ? value.join('\n') : ''
     case 'json':
       return value === undefined || value === null ? '' : JSON.stringify(value, null, 2)
+    case 'datetime':
+      return typeof value === 'string' ? toLocalInput(value) : ''
     default:
       return value === undefined || value === null ? '' : String(value)
   }
@@ -136,6 +143,12 @@ export function fromInput(field: FieldSpec, input: string | boolean): unknown {
     }
     case 'list':
       return text.split('\n').map((l) => l.trim()).filter(Boolean)
+    case 'datetime': {
+      // The input's local date and time, sent as an ISO instant.
+      const date = new Date(text)
+      if (Number.isNaN(date.getTime())) throw new InputError('date')
+      return date.toISOString()
+    }
     case 'json':
       try {
         return JSON.parse(text) as unknown

@@ -928,6 +928,111 @@ export interface ClientSummary {
   isEnabled: boolean
   /** The client's own UI (admin design §5.4 step 13). */
   portalUrl?: string | null
+  /** Its keys that work now (admin design §5.9). */
+  activeKeys: number
+}
+
+// ---------- Clients and keys (admin design §5.9) ----------
+export type ClientKind = 'open-webui' | 'widget' | 'integration' | 'entra-app' | 'mcp-client' | 'own-client' | 'teams' | 'internal'
+
+/** An assistant with a `client` audience row for the client. */
+export interface ClientAssistant {
+  id: string
+  name: string
+  departmentId: string
+  published: boolean
+}
+
+/** `GET /api/clients/{id}` (`ClientDto`). */
+export interface Client {
+  id: string
+  name: string
+  kind: string
+  oAuthClientId: string | null
+  classificationCeiling: Level
+  storesHistory: boolean
+  clientRetentionDays: number | null
+  allowedOrigins: string[]
+  toolPolicy: string
+  portalUrl: string | null
+  isEnabled: boolean
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
+  assistants: ClientAssistant[]
+}
+
+/** `ClientRequest`; an update carries the `version` it read. */
+export interface ClientRequest {
+  name: string
+  kind: string
+  oAuthClientId: string | null
+  classificationCeiling: Level
+  storesHistory: boolean
+  clientRetentionDays: number | null
+  allowedOrigins: string[]
+  toolPolicy?: string
+  portalUrl: string | null
+  isEnabled: boolean
+  version?: string
+}
+
+/** `KeyDto`: never its secret. `status`: `active`, `in-grace-period`, `expired`, `revoked` or `disabled`. */
+export interface ApiKey {
+  id: string
+  clientId: string
+  clientName: string
+  teamId: string | null
+  kind: string
+  name: string
+  description: string | null
+  prefix: string
+  status: string
+  assistantIds: string[]
+  collectionIds: string[]
+  allowedIpRanges: string[]
+  requestsPerMinute: number | null
+  isEnabled: boolean
+  createdAt: IsoDateTime
+  createdBy: string | null
+  expiresAt: IsoDateTime | null
+  revokedAt: IsoDateTime | null
+  graceUntil: IsoDateTime | null
+  rotatedToKeyId: string | null
+}
+
+/** `KeyFields`: empty scopes are the client's audiences only. */
+export interface KeyRequest {
+  name: string
+  description: string | null
+  expiresAt: IsoDateTime | null
+  scopes: { assistantIds: string[]; collectionIds: string[] }
+  allowedIpRanges: string[]
+  requestsPerMinute: number | null
+  isEnabled: boolean
+}
+
+export interface KeyCreateRequest extends KeyRequest {
+  clientId: string
+  teamId: string | null
+}
+
+/** A new key with its secret, shown this once. */
+export interface KeyCreated {
+  key: ApiKey
+  secret: string
+}
+
+export interface KeyRotated extends KeyCreated {
+  previous: ApiKey
+}
+
+export type KeyRotationMode = 'RevokeImmediately' | 'Grace24Hours'
+
+/** `POST /api/clients` (`ClientCreatedDto`): the key is null without `firstKey`. */
+export interface ClientCreated {
+  client: Client
+  key: KeyCreated | null
 }
 
 /** An assigned gateway key of the mirror (`GET /api/gateway/keys`, admin design §4.5): read-only settings, never a secret. */

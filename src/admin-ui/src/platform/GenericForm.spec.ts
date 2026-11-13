@@ -101,6 +101,29 @@ describe('GenericForm', () => {
     expect(JSON.parse(fetch.mock.calls[1]![1].body)).toEqual({ value: { topK: 8, rerankModel: 'gpt-oss' }, version: '4' })
   })
 
+  it('edits a date-time field as a date and time input and sends it back as ISO (admin design §5.8)', async () => {
+    document.cookie = 'RAG-XSRF-TOKEN=t'
+    const fetch = vi.fn().mockResolvedValue(json({}))
+    vi.stubGlobal('fetch', fetch)
+    const field: FieldSpec = { name: 'expiresAt', label: 'expiresAt', kind: 'datetime', required: false, nullable: true }
+    const wrapper = mount(GenericForm, { props: { formId: 'f', fields: [field], initial: { expiresAt: '2026-12-31T12:00:00Z' }, method: 'put', url: '/api/x', submitLabel: 'Save' } })
+    const input = wrapper.get('#f-expiresAt')
+    expect(input.attributes('type')).toBe('datetime-local')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ expiresAt: '2026-12-31T12:00:00.000Z' })
+
+    await input.setValue('2027-01-15T08:30')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[1]![1].body)).toEqual({ expiresAt: new Date('2027-01-15T08:30').toISOString() })
+
+    await input.setValue('')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[2]![1].body)).toEqual({ expiresAt: null })
+  })
+
   it('sends an emptied model property as null', async () => {
     document.cookie = 'RAG-XSRF-TOKEN=t'
     const fetch = vi.fn().mockResolvedValue(json({}))

@@ -22,7 +22,16 @@ import type {
   AssistantVersion,
   AssistantVersionSummary,
   BffUser,
+  ApiKey,
+  Client,
+  ClientCreated,
+  ClientRequest,
   ClientSummary,
+  KeyCreated,
+  KeyCreateRequest,
+  KeyRequest,
+  KeyRotated,
+  KeyRotationMode,
   GatewayKeyList,
   GatewayModel,
   AccessExplanation,
@@ -185,6 +194,19 @@ export const api = {
   },
   clients: {
     list: () => http.get<ClientSummary[]>('/api/clients'),
+    get: (id: string) => http.get<Client>(`/api/clients/${id}`),
+    /** `firstKey`: a key made with the client in one transaction (admin design §5.9). */
+    create: (body: ClientRequest & { firstKey: { name: string; teamId?: string | null } | null }) => http.post<ClientCreated>('/api/clients', body),
+    update: (id: string, body: ClientRequest) => http.put<Client>(`/api/clients/${id}`, body),
+  },
+  keys: {
+    list: (clientId?: string) => http.get<ApiKey[]>('/api/keys', { clientId }),
+    create: (body: KeyCreateRequest) => http.post<KeyCreated>('/api/keys', body),
+    update: (id: string, body: KeyRequest) => http.put<ApiKey>(`/api/keys/${id}`, body),
+    rotate: (id: string, mode: KeyRotationMode) => http.post<KeyRotated>(`/api/keys/${id}/rotate`, { mode }),
+    /** Platform admins; every reveal is audited (identity §6.4). */
+    reveal: (id: string) => http.post<{ secret: string }>(`/api/keys/${id}/reveal`, { purpose: 'Reveal' }),
+    revoke: (id: string) => http.post<ApiKey>(`/api/keys/${id}/revoke`),
   },
   access: {
     explain: (body: ExplainAccessRequest) => http.post<AccessExplanation>('/api/access/explain', body),
