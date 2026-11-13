@@ -211,13 +211,18 @@ public static class AdminFaults
 
     /// <summary>
     /// A rule refusal about one of several objects a field names, as that field's error: the refusal's message after
-    /// <paramref name="subject"/> (the object's name), its code and params in <c>errorCodes</c>.
+    /// <paramref name="subject"/> (the object's name), its code and params in <c>errorCodes</c>, with the name as the param
+    /// <c>subject</c> so the UI can put it before its own text for the code.
     /// </summary>
     public static ApiFaultException Field(string field, string subject, ApiFaultException refusal)
     {
         ArgumentNullException.ThrowIfNull(refusal);
         var code = refusal.Extensions?.TryGetValue("code", out var c) == true ? c as string : null;
-        var parameters = refusal.Extensions?.TryGetValue("params", out var p) == true ? p as IReadOnlyDictionary<string, string> : null;
+        var parameters = new Dictionary<string, string>(
+            refusal.Extensions?.TryGetValue("params", out var p) == true && p is IReadOnlyDictionary<string, string> given ? given : new Dictionary<string, string>())
+        {
+            ["subject"] = subject,
+        };
         var members = new Dictionary<string, object?> { ["errors"] = new Dictionary<string, string[]> { [field] = [$"{subject}: {refusal.Message}"] } };
         if (code is not null)
         {

@@ -335,7 +335,10 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
             firstKey = new { name = "Key" },
         }, Ct), HttpStatusCode.BadRequest);
         refused.GetProperty("errors").GetProperty("assistantIds")[0].GetString()!.ShouldStartWith($"Assistant 1 {code}: ");
-        refused.GetProperty("errorCodes").GetProperty("assistantIds")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.AudienceAboveCeiling.Code);
+        var coded = refused.GetProperty("errorCodes").GetProperty("assistantIds")[0];
+        coded.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.AudienceAboveCeiling.Code);
+        (coded.GetProperty("params").GetProperty("subject").GetString(), coded.GetProperty("params").GetProperty("level").GetString())
+            .ShouldBe(($"Assistant 1 {code}", Classification.Sensitive));
 
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.Clients.AnyAsync(c => c.Name == "Too low " + code, Ct)).ShouldBeFalse();
