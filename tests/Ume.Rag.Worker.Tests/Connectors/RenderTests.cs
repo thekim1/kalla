@@ -168,11 +168,14 @@ public sealed class RenderTests : IAsyncLifetime
             },
         };
         await using var renderer = Renderer(browser);
-        await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions());
+        // Ready after about 1.3 s (the data, then the quiet period); 15 s so a loaded runner can't make it render.timeout (#645).
+        await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions(pageTimeoutSeconds: 15));
 
         var outcome = await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "h2"), Item("/"), Ct);
 
-        var content = outcome.ShouldBeOfType<FetchOutcome.Content>();
+        // The outcome with its reason in the message, so a failure says which (render.timeout or render.unavailable).
+        var content = outcome as FetchOutcome.Content;
+        content.ShouldNotBeNull($"the outcome was {outcome}");
         var stored = await ReadAsync(path.Blobs, content.Raw.Key);
         stored.ShouldContain("Starta en e-tjänst");
         stored.ShouldContain(SlowText, Case.Sensitive, "not ready on the label alone: the data request ended and the page was quiet first");
@@ -414,11 +417,15 @@ public sealed class RenderTests : IAsyncLifetime
             CreatePlaywright = browser.CreateAsync,
         };
 
-    /// <summary>A short page time for the real renderer's tests; the quiet period as configured by default.</summary>
-    private static RenderOptions RealRenderOptions()
+    /// <summary>
+    /// A short page time for the real renderer's tests (the ones that wait out the deadline), the quiet period as configured
+    /// by default. A test whose page becomes ready passes a longer one: it does not wait for the deadline, and a loaded runner
+    /// must not turn it into <c>render.timeout</c> (#645).
+    /// </summary>
+    private static RenderOptions RealRenderOptions(int pageTimeoutSeconds = 3)
     {
         var options = RenderTestKit.Options();
-        options.PageTimeout = TimeSpan.FromSeconds(3);
+        options.PageTimeout = TimeSpan.FromSeconds(pageTimeoutSeconds);
         return options;
     }
 
