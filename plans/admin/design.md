@@ -479,47 +479,274 @@ Levels order `public < internal < sensitive`; residency
 ladder `public → External`, `internal → Eu`, `sensitive → OnPrem`, ordered `OnPrem < Eu < External`. Retired numbers are
 kept so references stay stable.
 
-| # | Rule | Code | Re-checked when | Source |
-|---|---|---|---|---|
-| V1 | source level ≤ its collection's level | `source_above_collection` | source save; collection level lowered | data-model §2.1 |
-| V2 | lowering a collection's level below a source or below a linking assistant's need is refused; raising it is a config change the worker applies (engine §15; no membership recompute) | `collection_level_conflict` | collection save | engine §15 |
-| V3 | assistant level ≥ every linked collection (own or shared; collections are linked directly only) | `assistant_below_collection` | assistant save; publish; collection level raised | data-model §2.1, knowledge §4.3 |
-| V4 | assistant level ≥ every linked skill; skill level ≥ its tools' **result level** | `assistant_below_skill`, `skill_below_link` | skill draft/serve; tool server result level | tools §3.10 |
-| V5 | for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance** | `tool_clearance` | publish; level or audience save; skill serve; server edit | tools §5.3 |
-| V6 | every reachable tool server's result level ≤ assistant level | `tool_result_level` | as V5 | tools §5.3 |
-| V7 | an audience client's ceiling ≥ assistant level (else the assistant is invisible to it) | `audience_above_ceiling` | audience save; client ceiling lowered; assistant level raised | identity §4.1 |
-| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling**, from gateway phase 2 as the assistant's key (V39) (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503), `gateway_key_missing` (503: the ceiling is above what this service may send, or until gateway phase 1 it holds no key of that level, identity §4.7) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
-| V9 | `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly` | `client_stores_history` | audience save; policy change | platform §8a |
-| V10 | `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90) | `retention_outside_policy` | assistant save; policy tightened (lists assistants) | data-model §2.1 |
-| V11 | ≤ 20 collection links per assistant; each collection of the assistant's department or shared with it (`SharedWith`, `CollectionShares`, §3.2); ≤ 20 topics per link, each in the chunk tag format (processing §7) | `too_many_collections`, `collection_not_shared`, `topic_invalid` | publish; sharing narrowed | knowledge §4.2, §3.2 here |
-| V12 | ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; for an assistant without tools, skill bodies ≤ 6,000 estimated tokens in total | `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long` | publish; skill serve; share list narrowed | tools §3.4, §3.9 |
-| V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
-| V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
-| V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.allowedLinkHosts` (an empty or missing list refuses every link) | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
-| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
-| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` absent (the model's limit, chat §6.3) or 64 – the lowest of the model's `MaxOutputTokens`, the assistant's gateway key's output cap and `Settings.Chat.MaxAnswerTokens` (1,000,000 when neither is known), `answer.temperature` 0–1, `answer.language` `auto`/`sv`, `answer.generalKnowledge` `off`/`supplement`/`fallback`/`open`, `retrieval.rerank` `off`/`chat`/`gateway` (absent = `off`; a reranker the platform has no model for is allowed, knowledge §6.7); `answer.contextTokens` absent (the model's `ContextWindow`, else 16,384) or 4,096 – the model's `ContextWindow` (1,048,576 when unknown), `condense.enabled` a boolean; `topK`, `maxMessages`, `maxTokens`, `maxOutputTokens` and `contextTokens` are **integers** (V17 accepts exactly what the runtime reads, `AssistantChatSettings.Parse`: a fraction, a string or `10.0` is refused, never silently replaced by the default); the model's limits are those of the version's `GatewayModel` row and are rechecked when the sync or an admin lowers them (an override above the new limit is a warning on the draft and is lowered to the limit at run time, never a failed chat; the same when a platform admin lowers `Settings.Chat.MaxAnswerTokens` below it); not built yet: the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync; model limits edited; chat settings saved | chat §5–§6, §10.3 |
-| V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
-| V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
-| V20 | *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3) | – | – | – |
-| V21 | clients: `StoresHistory` ⇒ ceiling ≠ `sensitive`; `mcp-client` ⇒ ceiling ≤ `internal`; `ToolPolicy` per kind default | `client_ceiling_rule` | client save | data-model `CK_Clients_*`, tools §5.1 |
-| V22 | tool servers: `CK_ToolServers_Clearance`; `Hosting = hosted` (P2); approvers differ for new and unexpected definitions; system-owner approval and pre-registration only by a listed subject; `write` tools refused while `WriteToolsEnabled = false` | `toolserver_rule`, `same_approver` | server save; approval; pre-registration | tools §4.4–§4.5, §5.3 |
-| V23 | keys: team in the caller's departments; scopes only assistants/collections of the key team's department; `pk` keys only `public` assistants, exact origins | `key_scope_invalid` | key save; assistant level raised (lists `pk` keys) | identity §6.4–§6.5 |
-| V24 | pipeline: parameters valid against the template version's `paramsSchema`; template version supported by a running worker; the template matches the source type | `pipeline_params_invalid`, `template_unsupported` | parameters save; publish; template version change | engine (templates and parameters) |
-| V25 | source settings: URL list ≤ 5,000, exact duplicates refused (canonicalisation is the worker's: `UrlCanonicalizer` runs when it lists the URLs); crawl `include`/`exclude`/`demote` compile (`re:` with `NonBacktracking`, no match timeout, connectors §5.2), `demote` factor in (0, 1), default 0.5 (weakness review §3); `maxPages` ≤ the sources schema's maximum (there is no `Settings.Crawl` cap key); `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken` | `source_settings_invalid`, `impact_not_confirmed` | source save | connectors §4–§5, §9, §12.3 |
-| V26 | reasons: PII clear ≥ 10 and the document's source in the caller's departments; conversation access ≥ 20 (comment reveal: the fixed one-click text) | `reason_too_short`, `not_in_scope` | the action | processing §9.5 |
-| V27 | *retired* (collection floor before publish: evaluation is advisory) | – | – | – |
-| V28 | deletion decisions only by `Manage` of the source's department, while the run is `awaiting-deletion-confirmation` and the proposal is the current one | `deletion_superseded` | confirm/reject | connectors §13.3 |
-| V29 | data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
-| V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
-| V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
-| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` and `Settings.Retrieval.rerankModel` are `chat` rows, `Settings.Retrieval.gatewayRerankModel` a `rerank` row (empty = unset, knowledge §6.7), of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`); on save each set model is also listed by the gateway's `/v1/models` at the platform ceiling, as V8 (#447) | `settings_model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | settings save; model sync changed residency (warning on Overview, P2 with the attention items) | processing §13.1, chat §5, tools §3.7 |
-| V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
-| V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model a `chat` row of `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
-| V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
-| V36 | an assistant of level `public` with `answer.generalKnowledge` other than `off` needs an explicit confirmation (Decisions "General knowledge on a public assistant", #445): a `warnings[]` entry on draft save; publish, restore and a level change to `public` answer 409 until the request carries `confirmGeneralKnowledge: true`, which the audit event records as `generalKnowledgeConfirmed` | `general_knowledge_public_unconfirmed` (409) | draft save (warning); publish; restore; level change | chat §7.3, §10.4 |
-| V37 | a host's politeness profile in `Settings.Crawl.HostOverrides` (connectors §6.6): members within their ranges and the deployment's ceilings (`Crawl:MaxHostRate`, `Crawl:MaxHostConnections`); `robots: ignore` needs a non-empty `reason`; `userAgent` 1–256 printable ASCII; the host is a canonical host without a port | `crawl_politeness_invalid` | settings save | connectors §6.6 |
-| V38 | `Settings.Chat.Prompts` (chat §7.3, Decisions "Chat prompt texts configurable"): each member optional (absent or empty = the built-in default); `identity`, `sourcesLabel`, the rule lines, `conversational`, `degraded` ≤ 1,000 characters each, `condense` and `followUps` ≤ 2,000, each caveat ≤ 500 per language; no `<sources`, `</sources`, `<source`, `</source`, `<skill_` or `<tool_result` (any case, spaces allowed, as chat §7.2's neutralisation); no C0/C1 controls except line breaks; `sourcesLabel` one line; placeholders: `{assistant}` only in `identity`, `{N}` only in `followUps`, any other `{…}` refused; unknown members refused | `prompt_text_invalid` (field = the member) | settings save | chat §5, §7.2–§7.3, §9.8, §10.2, §10.4 |
-| V39 | **gateway key** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-ume-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on rag-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts | `gateway_key_invalid` (unknown, not active, another department), `gateway_key_residency`, `gateway_key_model` (`affected[]` = the models), `gateway_key_required` (409), `gateway_key_system_prompt` (warning only); `gateway_unavailable` (503) | object save (key, level, audience); draft save (warnings on the version's models and links); publish; restore; key sync (a key turned unusable or narrowed: an attention item, §5.5.1) | cost-attribution §4.2, data-model §2.1 |
+Each rule: what it requires, the problem code(s) it answers with, when it is re-checked, and its source.
+
+#### V1 Source level ≤ its collection's level
+
+- **Code:** `source_above_collection`
+- **Re-checked when:** source save; collection level lowered
+- **Source:** data-model §2.1
+
+#### V2 Lowering a collection's level
+
+- **Rule:** lowering a collection's level below a source or below a linking assistant's need is refused; raising it is a config change the worker applies (engine §15; no membership recompute)
+- **Code:** `collection_level_conflict`
+- **Re-checked when:** collection save
+- **Source:** engine §15
+
+#### V3 Assistant level covers its collections
+
+- **Rule:** assistant level ≥ every linked collection (own or shared; collections are linked directly only)
+- **Code:** `assistant_below_collection`
+- **Re-checked when:** assistant save; publish; collection level raised
+- **Source:** data-model §2.1, knowledge §4.3
+
+#### V4 Assistant level ≥ every linked skill; skill level ≥ its tools' **result level**
+
+- **Code:** `assistant_below_skill`, `skill_below_link`
+- **Re-checked when:** skill draft/serve; tool server result level
+- **Source:** tools §3.10
+
+#### V5 Tool server clearance
+
+- **Rule:** for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance**
+- **Code:** `tool_clearance`
+- **Re-checked when:** publish; level or audience save; skill serve; server edit
+- **Source:** tools §5.3
+
+#### V6 Every reachable tool server's result level ≤ assistant level
+
+- **Code:** `tool_result_level`
+- **Re-checked when:** as V5
+- **Source:** tools §5.3
+
+#### V7 An audience client's ceiling ≥ assistant level (else the assistant is invisible to it)
+
+- **Code:** `audience_above_ceiling`
+- **Re-checked when:** audience save; client ceiling lowered; assistant level raised
+- **Source:** identity §4.1
+
+#### V8 Residency
+
+- **Rule:** the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling**, from gateway phase 2 as the assistant's key (V39) (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later)
+- **Code:** `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503), `gateway_key_missing` (503: the ceiling is above what this service may send, or until gateway phase 1 it holds no key of that level, identity §4.7)
+- **Re-checked when:** publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call)
+- **Source:** chat §8.2, simplification pass §7
+
+#### V9 Sensitive assistants only for clients without history
+
+- **Rule:** `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly`
+- **Code:** `client_stores_history`
+- **Re-checked when:** audience save; policy change
+- **Source:** platform §8a
+
+#### V10 History mode and retention per level
+
+- **Rule:** `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90)
+- **Code:** `retention_outside_policy`
+- **Re-checked when:** assistant save; policy tightened (lists assistants)
+- **Source:** data-model §2.1
+
+#### V11 Collection links and topics per assistant
+
+- **Rule:** ≤ 20 collection links per assistant; each collection of the assistant's department or shared with it (`SharedWith`, `CollectionShares`, §3.2); ≤ 20 topics per link, each in the chunk tag format (processing §7)
+- **Code:** `too_many_collections`, `collection_not_shared`, `topic_invalid`
+- **Re-checked when:** publish; sharing narrowed
+- **Source:** knowledge §4.2, §3.2 here
+
+#### V12 Skills per assistant
+
+- **Rule:** ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; for an assistant without tools, skill bodies ≤ 6,000 estimated tokens in total
+- **Code:** `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long`
+- **Re-checked when:** publish; skill serve; share list narrowed
+- **Source:** tools §3.4, §3.9
+
+#### V13 Lethal trifecta false — a hard refusal, no acceptance in P2
+
+- **Code:** `lethal_trifecta`
+- **Re-checked when:** publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed
+- **Source:** tools §5.4
+
+#### V14 Assistants that use tools
+
+- **Rule:** assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps`
+- **Code:** `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap`
+- **Re-checked when:** publish; skill serve (it can switch an assistant to tools); settings change
+- **Source:** tools §6.4–§6.5
+
+#### V15 Not-found texts and links
+
+- **Rule:** not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.allowedLinkHosts` (an empty or missing list refuses every link)
+- **Code:** `link_host_not_allowed`
+- **Re-checked when:** publish; allow-list narrowed
+- **Source:** chat §9.4, §10.1
+
+#### V16 Retrieval settings ranges
+
+- **Rule:** `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows)
+- **Code:** `retrieval_settings_invalid`
+- **Re-checked when:** collection settings save
+- **Source:** knowledge §12.1
+
+#### V17 Query step ranges
+
+- **Rule:** `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` absent (the model's limit, chat §6.3) or 64 – the lowest of the model's `MaxOutputTokens`, the assistant's gateway key's output cap and `Settings.Chat.MaxAnswerTokens` (1,000,000 when neither is known), `answer.temperature` 0–1, `answer.language` `auto`/`sv`, `answer.generalKnowledge` `off`/`supplement`/`fallback`/`open`, `retrieval.rerank` `off`/`chat`/`gateway` (absent = `off`; a reranker the platform has no model for is allowed, knowledge §6.7); `answer.contextTokens` absent (the model's `ContextWindow`, else 16,384) or 4,096 – the model's `ContextWindow` (1,048,576 when unknown), `condense.enabled` a boolean; `topK`, `maxMessages`, `maxTokens`, `maxOutputTokens` and `contextTokens` are **integers** (V17 accepts exactly what the runtime reads, `AssistantChatSettings.Parse`: a fraction, a string or `10.0` is refused, never silently replaced by the default); the model's limits are those of the version's `GatewayModel` row and are rechecked when the sync or an admin lowers them (an override above the new limit is a warning on the draft and is lowered to the limit at run time, never a failed chat; the same when a platform admin lowers `Settings.Chat.MaxAnswerTokens` below it); not built yet: the condense model within the V32 ceiling
+- **Code:** `query_steps_invalid`
+- **Re-checked when:** publish; model sync; model limits edited; chat settings saved
+- **Source:** chat §5–§6, §10.3
+
+#### V18 Skill versions and serving
+
+- **Rule:** skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill
+- **Code:** `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants`
+- **Re-checked when:** skill publish/serve/rollback
+- **Source:** tools §3.5
+
+#### V19 Skill tool grants
+
+- **Rule:** skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools)
+- **Code:** `tool_grant_missing`
+- **Re-checked when:** skill draft; grant revoked (lists skills); share list widened
+- **Source:** tools §3.6
+
+#### V20 *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3)
+
+- **Code:** –
+- **Re-checked when:** –
+- **Source:** –
+
+#### V21 Client ceilings by kind
+
+- **Rule:** clients: `StoresHistory` ⇒ ceiling ≠ `sensitive`; `mcp-client` ⇒ ceiling ≤ `internal`; `ToolPolicy` per kind default
+- **Code:** `client_ceiling_rule`
+- **Re-checked when:** client save
+- **Source:** data-model `CK_Clients_*`, tools §5.1
+
+#### V22 Tool server registration
+
+- **Rule:** tool servers: `CK_ToolServers_Clearance`; `Hosting = hosted` (P2); approvers differ for new and unexpected definitions; system-owner approval and pre-registration only by a listed subject; `write` tools refused while `WriteToolsEnabled = false`
+- **Code:** `toolserver_rule`, `same_approver`
+- **Re-checked when:** server save; approval; pre-registration
+- **Source:** tools §4.4–§4.5, §5.3
+
+#### V23 Keys and their scopes
+
+- **Rule:** keys: team in the caller's departments; scopes only assistants/collections of the key team's department; `pk` keys only `public` assistants, exact origins
+- **Code:** `key_scope_invalid`
+- **Re-checked when:** key save; assistant level raised (lists `pk` keys)
+- **Source:** identity §6.4–§6.5
+
+#### V24 Pipeline parameters and template
+
+- **Rule:** pipeline: parameters valid against the template version's `paramsSchema`; template version supported by a running worker; the template matches the source type
+- **Code:** `pipeline_params_invalid`, `template_unsupported`
+- **Re-checked when:** parameters save; publish; template version change
+- **Source:** engine (templates and parameters)
+
+#### V25 Source settings
+
+- **Rule:** source settings: URL list ≤ 5,000, exact duplicates refused (canonicalisation is the worker's: `UrlCanonicalizer` runs when it lists the URLs); crawl `include`/`exclude`/`demote` compile (`re:` with `NonBacktracking`, no match timeout, connectors §5.2), `demote` factor in (0, 1), default 0.5 (weakness review §3); `maxPages` ≤ the sources schema's maximum (there is no `Settings.Crawl` cap key); `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken`
+- **Code:** `source_settings_invalid`, `impact_not_confirmed`
+- **Re-checked when:** source save
+- **Source:** connectors §4–§5, §9, §12.3
+
+#### V26 Reasons for PII clears and conversation access
+
+- **Rule:** reasons: PII clear ≥ 10 and the document's source in the caller's departments; conversation access ≥ 20 (comment reveal: the fixed one-click text)
+- **Code:** `reason_too_short`, `not_in_scope`
+- **Re-checked when:** the action
+- **Source:** processing §9.5
+
+#### V27 *retired* (collection floor before publish: evaluation is advisory)
+
+- **Code:** –
+- **Re-checked when:** –
+- **Source:** –
+
+#### V28 Deletion decisions
+
+- **Rule:** deletion decisions only by `Manage` of the source's department, while the run is `awaiting-deletion-confirmation` and the proposal is the current one
+- **Code:** `deletion_superseded`
+- **Re-checked when:** confirm/reject
+- **Source:** connectors §13.3
+
+#### V29 Data protection and history modes
+
+- **Rule:** data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered
+- **Code:** `policy_rule`
+- **Re-checked when:** policy save
+- **Source:** data-model `CK_DataProtectionPolicies_*`, simplification pass §5
+
+#### V30 Settings ranges
+
+- **Rule:** `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …)
+- **Code:** `setting_out_of_range`
+- **Re-checked when:** settings save
+- **Source:** data-model §2.1
+
+#### V31 Embedding profile per collection
+
+- **Rule:** embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3)
+- **Code:** `profile_admin_only`
+- **Re-checked when:** collection save
+- **Source:** R3
+
+#### V32 Platform model settings
+
+- **Rule:** platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` and `Settings.Retrieval.rerankModel` are `chat` rows, `Settings.Retrieval.gatewayRerankModel` a `rerank` row (empty = unset, knowledge §6.7), of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`); on save each set model is also listed by the gateway's `/v1/models` at the platform ceiling, as V8 (#447)
+- **Code:** `settings_model_residency`, `model_not_listed` (409), `gateway_unavailable` (503)
+- **Re-checked when:** settings save; model sync changed residency (warning on Overview, P2 with the attention items)
+- **Source:** processing §13.1, chat §5, tools §3.7
+
+#### V33 Assistant test questions
+
+- **Rule:** assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses)
+- **Code:** `test_question_invalid`, `test_question_document_unlinked`
+- **Re-checked when:** test-question save
+- **Source:** §7.4
+
+#### V34 Publish and restore resolve
+
+- **Rule:** publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model a `chat` row of `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed
+- **Code:** `version_link_missing`, `assistant_contact_missing`, `draft_base_changed`
+- **Re-checked when:** publish; restore
+- **Source:** §4.5, simplification pass §15
+
+#### V35 Narrowing a collection's sharing
+
+- **Rule:** narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments
+- **Code:** `collection_shared_in_use`
+- **Re-checked when:** sharing save
+- **Source:** §3.2, §4.5
+
+#### V36 General knowledge on a public assistant
+
+- **Rule:** an assistant of level `public` with `answer.generalKnowledge` other than `off` needs an explicit confirmation (Decisions "General knowledge on a public assistant", #445): a `warnings[]` entry on draft save; publish, restore and a level change to `public` answer 409 until the request carries `confirmGeneralKnowledge: true`, which the audit event records as `generalKnowledgeConfirmed`
+- **Code:** `general_knowledge_public_unconfirmed` (409)
+- **Re-checked when:** draft save (warning); publish; restore; level change
+- **Source:** chat §7.3, §10.4
+
+#### V37 Host politeness profiles
+
+- **Rule:** a host's politeness profile in `Settings.Crawl.HostOverrides` (connectors §6.6): members within their ranges and the deployment's ceilings (`Crawl:MaxHostRate`, `Crawl:MaxHostConnections`); `robots: ignore` needs a non-empty `reason`; `userAgent` 1–256 printable ASCII; the host is a canonical host without a port
+- **Code:** `crawl_politeness_invalid`
+- **Re-checked when:** settings save
+- **Source:** connectors §6.6
+
+#### V38 Chat prompt texts
+
+- **Rule:** `Settings.Chat.Prompts` (chat §7.3, Decisions "Chat prompt texts configurable"): each member optional (absent or empty = the built-in default); `identity`, `sourcesLabel`, the rule lines, `conversational`, `degraded` ≤ 1,000 characters each, `condense` and `followUps` ≤ 2,000, each caveat ≤ 500 per language; no `<sources`, `</sources`, `<source`, `</source`, `<skill_` or `<tool_result` (any case, spaces allowed, as chat §7.2's neutralisation); no C0/C1 controls except line breaks; `sourcesLabel` one line; placeholders: `{assistant}` only in `identity`, `{N}` only in `followUps`, any other `{…}` refused; unknown members refused
+- **Code:** `prompt_text_invalid` (field = the member)
+- **Re-checked when:** settings save
+- **Source:** chat §5, §7.2–§7.3, §9.8, §10.2, §10.4
+
+#### V39 Gateway key
+
+- **Rule:** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-ume-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on rag-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts
+- **Code:** `gateway_key_invalid` (unknown, not active, another department), `gateway_key_residency`, `gateway_key_model` (`affected[]` = the models), `gateway_key_required` (409), `gateway_key_system_prompt` (warning only); `gateway_unavailable` (503)
+- **Re-checked when:** object save (key, level, audience); draft save (warnings on the version's models and links); publish; restore; key sync (a key turned unusable or narrowed: an attention item, §5.5.1)
+- **Source:** cost-attribution §4.2, data-model §2.1
+
 
 ### 4.7 Jobs for the worker
 
