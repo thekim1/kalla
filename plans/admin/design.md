@@ -468,7 +468,7 @@ the caller's scope (P2; user 2026-11-07).
 **Cost** — §8.6: `GET /api/assistants/{id}/costs`, `GET /api/collections/{id}/costs` (Read) and `GET /api/costs`
 with its CSV (Manage).
 
-### 4.6 Cross-rules (V1–V38; V20 and V27 retired)
+### 4.6 Cross-rules (V1–V39; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
 dependant (column *Re-checked when*), and again inside the publish transaction. A failing dependant lists every
