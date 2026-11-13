@@ -44,7 +44,9 @@ Registers, kept current:
 
 **History** is in [`archive/`](archive/): the finished phase plans (`p0/`, `p1/`, `p1b/`), the cross-cutting passes
 (`passes/`, folded into the designs on 2026-11-01; each ends with a ledger of where its rules went), the first-level
-area plans (`area-plans/`, overtaken by the designs) and older proposals and reviews. Nothing there binds, except the
+area plans (`area-plans/`, overtaken by the designs), the designs' process sections (`design-history/`: summaries,
+milestones, questions, deferred lists; a moved section keeps its heading with a pointer, so its citations resolve), the
+finished queue items (`work/`) and older proposals and reviews. Nothing there binds, except the
 performance pass's capacity model as named in the roadmap.
 
 Working name: **Ume.Rag** (placeholder, register N1). Plain-language overview for stakeholders:

@@ -4,6 +4,8 @@
 A citation is a document name followed by a section number ("engine design §9.6", "data-model §2.1",
 "`plans/platform/repo-and-deployment.md` §3"); it resolves when the document has a heading with that number, or a
 numbered list item or table row under one ("data-model §12.3" is row 3 of §12).
+A section moved out of a document keeps its heading, followed by a line "Moved to [...](path#...)": a citation of that
+section or one under it resolves in the linked file, which keeps the moved text under its original numbers (M-14).
 A relative Markdown link resolves when its file exists and, with a #fragment, the file has a heading with that slug.
 Two headings with the same section number in one document are a miss too.
 
@@ -84,8 +86,9 @@ _headings = {}
 
 def headings(path):
     if path not in _headings:
-        numbers, slugs, counts, dupes, seen = set(), set(), {}, [], set()
+        numbers, slugs, counts, dupes, seen, moved = set(), set(), {}, [], set(), {}
         current = None
+        last_heading = None
         try:
             with open(os.path.join(ROOT, path), encoding="utf-8") as f:
                 fence = False
@@ -95,6 +98,11 @@ def headings(path):
                     if fence:
                         continue
                     m = HEADING.match(line)
+                    if not m and last_heading and line.strip():
+                        mv = re.match(r"^Moved to \[[^\]]*\]\(([^)#\s]+)", line.strip())
+                        if mv:
+                            moved[last_heading] = os.path.normpath(os.path.join(os.path.dirname(path), mv.group(1)))
+                        last_heading = None
                     if not m:
                         item = re.match(r"^(?:(\d+)\.\s|\|\s*\**(\d+)\**\s*\|)", line)
                         if item and current:
@@ -103,6 +111,7 @@ def headings(path):
                     text = m.group(2)
                     n = re.match(r"(?:§\s?)?(\d+[a-z]?(?:\.\d+[a-z]?)*)[.\s:)]", text + " ")
                     current = n.group(1).lower() if n else None
+                    last_heading = current
                     if n:
                         if current in seen:
                             dupes.append(current)
@@ -115,8 +124,22 @@ def headings(path):
         except OSError:
             _headings[path] = None
             return None
-        _headings[path] = (numbers, slugs, dupes)
+        _headings[path] = (numbers, slugs, dupes, moved)
     return _headings[path]
+
+
+def resolves(target, section):
+    """True when the document has the section, or moved the section (or one above it) to a file that has it."""
+    h = headings(target)
+    if not h or section in h[0]:
+        return True
+    parts = section.split(".")
+    for i in range(len(parts), 0, -1):
+        moved = h[3].get(".".join(parts[:i]))
+        if moved:
+            m = headings(moved)
+            return bool(m) and section in m[0]
+    return False
 
 
 def slug(text):
@@ -161,15 +184,13 @@ def check():
         for no, line in enumerate(lines, 1):
             for m in NAMED.finditer(line):
                 target = ALIASES[m.group(1).lower()]
-                h = headings(target)
-                if h and m.group(2).lower() not in h[0]:
+                if not resolves(target, m.group(2).lower()):
                     misses.append(f"{src}:{no}: section {m.group(1)} §{m.group(2)} -> {target}")
             for m in PATHED.finditer(line):
                 target = resolve_md(m.group(1), src)
                 if target is None:
                     continue
-                h = headings(target)
-                if h and m.group(2).lower() not in h[0]:
+                if not resolves(target, m.group(2).lower()):
                     misses.append(f"{src}:{no}: section {m.group(1)} §{m.group(2)} -> {target}")
             if not src.endswith(".md"):
                 continue
