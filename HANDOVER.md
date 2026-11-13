@@ -1,7 +1,7 @@
 # Handover
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.5.0`** (2026-11-13). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the
+**Last release `v0.5.1`** (2026-11-13). Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the
 session-19 machine), branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after every
 commit).
 
@@ -24,38 +24,70 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## State (2026-11-13, end of session 33)
+## Start here: a plan to move env files into settings and automatic setup (user, 2026-11-13)
 
-- **`v0.5.0` released** (2026-11-13, run 43427657518, 11 assets). Every code item is done except A-41 (#654, small, no
-  input needed); the rest is the live block, whose step 0, **the interim gateway on v0.10.1 with three credential
-  keys**, blocks every live check (roadmap *Now*).
-- **Plan files restructured** (M-14, #655, #656): the roadmap is the plan ahead, queues hold open items only, designs
-  hold the specification (history in `plans/archive/design-history/`), proposals in `plans/proposals/`. How they are
-  kept: handbook *Plan files*.
-- **Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches). It works fast,
-  splits items into parts, answers review findings with PRs, takes stream-a paths on `a/` branches when the user asks,
-  and announces its work on #580. B-42–B-46 are merged and unticked until their live checks.
-- **Local user secrets** still block the AppHost (handbook *Environment notes*): the user moves `Gateway:Keys:Eu` to
-  `Gateway:Services:<service>:Key` and drops `ClamAv:Enabled`.
+**The goal of the next session is a plan, not code:** push as much of the deployment's environment variables as
+possible into run-time settings (`Settings.<Section>.<Key>`, the admin UI) or automatic setup, so a deploy needs only
+what a process can't start without. Write it as a plan document (in `plans/proposals/` or as queue items, the user's
+call), with each variable's destination, the decisions it needs, and an order. Ask the user before building anything.
+
+**Starting material, measured in session 33:**
+- **The surface today:** the Ume.Rag part of the Portainer stack reads **48** `UME_RAG_*` variables
+  (`deploy/portainer/compose.rag.template.yaml`, listed with comments in `deploy/portainer/stack.env.example`); Compose
+  reads 41 (`deploy/compose.prod.yaml`, `compose.ingestion.yaml`), written by `deploy/init-deployment.sh` (723 lines).
+  Secret files come from `rag-bootstrap` (Portainer, `deploy/portainer/bootstrap.sh`) or `init-deployment.sh`.
+- **Binding rules to plan within:** Decisions "Settings rule" (deployment knobs `Section:Key`, run-time values in the
+  database); Decisions "Gateway keys" (each setting has one owner: departments, teams, models and a key's settings are
+  the gateway's; which key an object runs on, prompts, retrieval are Ume.Rag's); the services read secrets from files,
+  never from environment variables.
+- **A first sort, to check, not decided:**
+  - *Stays deploy-time:* host names and public URLs, ports and binds, the OIDC authority, database and certificates,
+    profiles, image pins, resource limits.
+  - *Could become settings:* the embedding model (already "seeded once", then edited in the UI: the variable could
+    go), the OIDC group-to-role mapping (`UME_RAG_OIDC_GROUPS_*`; the first platform admin is the chicken-and-egg),
+    `UME_RAG_GATEWAY_MAX_RESIDENCY`, `UME_RAG_CRAWL_ALLOW`, the Open WebUI feedback import's URL and interval, the
+    ClamAV mode, the telemetry sampler; `UME_RAG_GATEWAY_INTEGRATION_API_URL` might come from the gateway's context
+    (`admin_url`): check in the gateway's code.
+  - *Could be set up automatically:* the three gateway credential keys (a provisioning step against the gateway's
+    admin API, which needs a gateway change: #3 of the deploy-ease list), Open WebUI's client and key (rag-admin creates
+    them when the `openwebui` profile is on), the feedback service account's key (a one-shot job), the OIDC clients
+    (Keycloak realm import, `deploy/keycloak/`), the embedding model picked from the gateway's `/v1/models`.
+- **The deploy-ease list** (session 33, user chose 1 and 2, both built in #659): 3 automatic gateway integration
+  set-up (gateway change), 4 an optional TLS proxy profile in the stack, 5 each release boot-tests and pins the
+  Portainer stack. They belong in the same plan.
+
+## State
+
+- **`v0.5.1` released** (2026-11-13; release run 43436813015): the Portainer stack with every image pinned and Open
+  WebUI as the profile `openwebui` (#657), `docs/portainer.md` (#658), the variables file, `rag-bootstrap`'s checklist
+  and secret files that reload (#659), #653's read-back texts. **The stack template still pins 0.5.0's images:** pin it
+  to 0.5.1's (from the release's `compose.portainer.yaml` asset) so the no-restart key changes apply; the docs already
+  say "from 0.5.1".
+- **Not boot-tested:** the Portainer stack's Open WebUI profile (#657) and the whole stack were merged without a boot
+  (user's call); the first VM deploy is the test (handbook *Lessons*).
+- **Now (roadmap):** the **test chatbot** on DoIT's uploaded documents for a small test group, on the gateway and Ume.Rag
+  deployed by hand by the user with Portainer (T0–T6, M-15); then the umea.se pilot. Open question for the user and the
+  data protection officer: does the test group's use need the DPIA (G1) first?
+- Every code item is done except **A-41** (#654: the read-back on the platform's Gateway view, texts on a
+  `main-session/` branch).
+- **Stream b** (remote, GitHub only) works fast, answers findings with PRs, announces on #580. B-42–B-46 are merged
+  and unticked until their live checks.
+- **Local user secrets** still block the AppHost (handbook *Environment notes*).
 
 ## Next
 
-1. **GitHub:** review and answer new stream-b PRs and issues. **#642** (stream b): the read-back's reason is in no
-   view, the shared-key note shows on every key, `messages.ts` lacks `gateway.key_unavailable` and
-   `gateway.delegation_not_applied`, and `gateway.budget_exhausted` still blames "the platform's budget". **#580**
-   stays open until the live checks of phases 2–3 pass (the gateway owner was asked about a `runId` filter on the
-   request list); **#513** until #506, #507 and #511 close; **#550** until stream b acknowledges.
-2. **A-41** (#654): the read-back on the platform's Gateway view and the cost runbook (texts on a `main-session/` branch).
-3. The roadmap's *Meanwhile* list, as queue items, when the user agrees; the open product call on the support-assistant
-   track (roadmap *Now*).
+1. **The plan above** (the session's goal).
+2. Pin the Portainer stack to 0.5.1's images, if not done; GitHub (new stream-b PRs and issues; #580, #513, #550 stay
+   open); A-41.
+3. When the user's VM deploy reports problems: fix the stack (Open WebUI's wrapper, CA bundle and data volume first).
 
 ## Session 33 (2026-11-13)
 
-- **CI review:** `backend` was 312 of 418 runner-minutes, and its long pole `Ume.Rag.AdminApi.Tests` (40 classes serial
-  in one collection). #648 split it into four database collections (AdminApi 4–5 min → 3:03, `backend` ~6.2 → ~4.5
-  min); #647 skips `backend` on docs- and deploy-only PRs (confirmed live on #652). Not done on purpose: per-project
-  test selection, evaluation-smoke. Open: one `WebApplicationFactory` per class (suggested to stream b on #580); the
-  runner layout, after re-measuring queue waits.
-- **#645** fixed in #650 (the quiet-rule render test's page gets 15 s and names the reason on failure; reopen with it).
-- **V39 confirmed** by the user (#651). CHANGELOG #649; release 0.5.0 #652 and the tag.
-- **Plan review** and the restructuring (M-14, #655, #656); stream b fixed #642 in #653 (reviewed), A-41 queued for #654.
+- **CI:** `backend` ~6.2 → ~4.5 min (#648 AdminApi tests in four database collections; #647 skips docs- and deploy-only
+  PRs); #645 fixed (#650).
+- **Releases `v0.5.0` and `v0.5.1`**; V39 confirmed (#651).
+- **Plan files restructured** (M-14, #655, #656): the roadmap is the plan ahead, queues hold open items, designs hold
+  the specification, history in `plans/archive/design-history/`, proposals in `plans/proposals/`.
+- **Test chatbot before the umea.se pilot** decided (Decisions, roadmap *Now*).
+- **Deploy with Portainer:** #657 (stack: pinned images, Open WebUI), #658 (`docs/portainer.md`), #659 (variables file,
+  checklist, secrets reload). Stream b fixed #642 in #653 (reviewed); A-41 queued for #654.
