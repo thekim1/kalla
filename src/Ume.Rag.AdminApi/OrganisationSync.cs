@@ -54,7 +54,7 @@ public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, Date
 /// deleted. A failed run keeps the last mirror.
 /// </summary>
 public sealed partial class OrganisationSync(
-    IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time,
+    IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options, IOptionsMonitor<GatewayOptions> gatewayOptions, TimeProvider time,
     IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<OrganisationSync> logger, IOptions<AdminOptions>? adminOptions = null) : BackgroundService, IHealthCheck
 {
     /// <summary>Failed runs in a row after which health is <c>Degraded</c> (identity §2.1).</summary>
@@ -80,7 +80,7 @@ public sealed partial class OrganisationSync(
     private string? _etag;
 
     /// <summary>On when the gateway and this service's credential key are configured.</summary>
-    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.Value.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.Value.Key);
+    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.CurrentValue.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.CurrentValue.Key);
 
     public OrgSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _gateway, _degraded, AdminUrl);
 
@@ -89,7 +89,7 @@ public sealed partial class OrganisationSync(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!Enabled)
+        if (string.IsNullOrWhiteSpace(gatewayOptions.CurrentValue.BaseUrl))
         {
             LogDisabled(logger);
             return;
@@ -97,6 +97,13 @@ public sealed partial class OrganisationSync(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Without its credential key yet (a stack update writes it later): check again soon instead of stopping.
+            if (!Enabled)
+            {
+                await Task.Delay(GatewayContextReader.KeyWait, time, stoppingToken);
+                continue;
+            }
+
             await RunAsync(null, stoppingToken);
             await Task.Delay(TimeSpan.FromMinutes(options.Value.IntervalMinutes), time, stoppingToken);
         }

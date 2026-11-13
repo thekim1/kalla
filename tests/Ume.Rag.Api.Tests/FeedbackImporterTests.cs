@@ -3,7 +3,6 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Entities;
@@ -123,7 +122,7 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
         using var openWebUi = new FakeOpenWebUi(page);
         var assistant = new AssistantEntry(assistantId, "kompost", "Kompostguiden", "internal", "none", "active", department, null, null, []);
         var snapshot = PolicySnapshot.Empty with { Version = 1, Assistants = new Dictionary<Guid, AssistantEntry> { [assistantId] = assistant } };
-        var options = Options.Create(new OpenWebUiOptions
+        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions
         {
             ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test",
         });
@@ -177,7 +176,7 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
         var clientId = Guid.CreateVersion7();
         await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
         using var openWebUi = new FlakyOpenWebUi();
-        var options = Options.Create(new OpenWebUiOptions { ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
+        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions { ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
         using var meters = new Meters();
         var logs = new CapturingLoggerProvider();
         using var loggers = new LoggerFactory([logs]);

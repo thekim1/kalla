@@ -22,7 +22,9 @@ public static class InfrastructureExtensions
     public const string DataProtectionApplicationName = "Ume.Rag";
 
     /// <summary>
-    /// Secret files (<c>Security:SecretsDirectory</c>, one file per key) as configuration, as in the gateway.
+    /// Secret files (<c>Security:SecretsDirectory</c>, one file per key) as configuration, as in the gateway. Reloaded on
+    /// change, so a key written by a deployment's bootstrap (a Portainer stack update) applies without a restart where the
+    /// code reads it through <c>IOptionsMonitor</c>: the gateway credential key and the Open WebUI feedback key.
     /// </summary>
     public static IHostApplicationBuilder AddDeploymentSecrets(this IHostApplicationBuilder builder)
     {
@@ -30,7 +32,7 @@ public static class InfrastructureExtensions
         var directory = builder.Configuration["Security:SecretsDirectory"];
         if (!string.IsNullOrWhiteSpace(directory))
         {
-            builder.Configuration.AddKeyPerFile(directory, optional: false, reloadOnChange: false);
+            builder.Configuration.AddKeyPerFile(directory, optional: false, reloadOnChange: true);
         }
 
         return builder;
