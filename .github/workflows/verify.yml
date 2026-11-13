@@ -9,7 +9,7 @@ name: Verify
 # plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
-# Lean pull requests (user, 2026-11-05): images, renderer and evaluation-smoke run only when their paths changed; a dispatch and
+# Lean pull requests (user, 2026-11-05): backend skips docs- and deploy-only changes; images, renderer and evaluation-smoke run only when their paths changed; a dispatch and
 # release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml) or by hand.
 on:
   pull_request:
@@ -84,7 +84,12 @@ jobs:
             printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
-          code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
+          # The backend job: anything besides the design documents, docs/ and deploy/, except the files of docs/ and deploy/
+          # that the backend tests read (the Postgres init and role scripts and postgresql.conf, the Keycloak realm files,
+          # docs/security-events.md, docs/openapi/). deploy-checks covers the rest of deploy/, doc-refs the documents.
+          changed="$(git diff --name-only "$range")"
+          code="$(grep -vE '^(plans/|platforms/|docs/|deploy/)|^[^/]+\.md$' <<< "$changed" || true)"
+          code="$code$(grep -E '^(deploy/postgres/|deploy/keycloak/|docs/security-events\.md$|docs/openapi/)' <<< "$changed" || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
           # The admin UI, the error codes its Swedish texts are checked against, its size budget or audit script, its browser
