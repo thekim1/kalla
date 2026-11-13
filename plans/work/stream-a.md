@@ -416,7 +416,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-38 (the table, the shared reader and estimate, the FakeGateway's cost headers, the rerankers' usage).
 - **Read:** cost-attribution §5; engine §7.7, §10.2, §10.4, §10.6; processing §11, §13.1, §14.7; data-model §2.2.
 
-### [ ] A-32 Runbook: reading Ume.Rag's cost beside the gateway's (cost-attribution C6)
+### [x] A-32 (#641) Runbook: reading Ume.Rag's cost beside the gateway's (cost-attribution C6)
 - **Do:** a section in `docs/runbook.md`: where the figures come from (admin §8.6: `AssistantDailyUsage`,
   `CollectionDailyUsage`, the gateway's cost or an estimate), why they differ from the gateway's usage report for the
   same key and day (the gateway counts fallbacks and retries Ume.Rag doesn't see; estimated calls; aborted streams;
