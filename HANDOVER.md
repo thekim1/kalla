@@ -26,11 +26,12 @@ sink" monolith. Design and code live in this repo.
 
 ## State (2026-11-13, end of session 33)
 
-- **`v0.5.0` tagged** on `a07445f` (release run 43427657518). Every code item of both queues is done; what is left is the
-  live block, and its step 0, **the interim gateway on v0.10.1 with three credential keys**, blocks every live check
-  (roadmap *Now*).
-- **Plan restructuring** (user, 2026-11-13; `plans/work/main.md` M-14) is in progress: see M-14 for what is done and
-  what is left.
+- **`v0.5.0` released** (2026-11-13, run 43427657518, 11 assets). Every code item is done except A-41 (#654, small, no
+  input needed); the rest is the live block, whose step 0, **the interim gateway on v0.10.1 with three credential
+  keys**, blocks every live check (roadmap *Now*).
+- **Plan files restructured** (M-14, #655, #656): the roadmap is the plan ahead, queues hold open items only, designs
+  hold the specification (history in `plans/archive/design-history/`), proposals in `plans/proposals/`. How they are
+  kept: handbook *Plan files*.
 - **Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches). It works fast,
   splits items into parts, answers review findings with PRs, takes stream-a paths on `a/` branches when the user asks,
   and announces its work on #580. B-42–B-46 are merged and unticked until their live checks.
@@ -44,8 +45,9 @@ sink" monolith. Design and code live in this repo.
    `gateway.delegation_not_applied`, and `gateway.budget_exhausted` still blames "the platform's budget". **#580**
    stays open until the live checks of phases 2–3 pass (the gateway owner was asked about a `runId` filter on the
    request list); **#513** until #506, #507 and #511 close; **#550** until stream b acknowledges.
-2. **M-14**, the plan restructuring, where it stopped.
-3. The roadmap's *Meanwhile* list, as queue items, when the user agrees.
+2. **A-41** (#654): the read-back on the platform's Gateway view and the cost runbook (texts on a `main-session/` branch).
+3. The roadmap's *Meanwhile* list, as queue items, when the user agrees; the open product call on the support-assistant
+   track (roadmap *Now*).
 
 ## Session 33 (2026-11-13)
 
@@ -56,4 +58,4 @@ sink" monolith. Design and code live in this repo.
   runner layout, after re-measuring queue waits.
 - **#645** fixed in #650 (the quiet-rule render test's page gets 15 s and names the reason on failure; reopen with it).
 - **V39 confirmed** by the user (#651). CHANGELOG #649; release 0.5.0 #652 and the tag.
-- **Plan review** and the start of the restructuring (M-14).
+- **Plan review** and the restructuring (M-14, #655, #656); stream b fixed #642 in #653 (reviewed), A-41 queued for #654.
