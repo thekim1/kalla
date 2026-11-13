@@ -1092,3 +1092,71 @@ export interface ExplainAccessRequest {
   assistantId: string
   subject: { kind: string; id: string; departments?: string[]; groups?: string[] }
 }
+
+/** The cost report's period unit (admin design §8.6): Europe/Stockholm days or calendar months. */
+export type CostGranularity = 'day' | 'month'
+
+/** A cost query (admin design §8.6): inclusive dates; absent, the last 30 days by day. */
+export interface CostQuery {
+  from?: string
+  to?: string
+  granularity?: CostGranularity
+}
+
+/** The summed fields of a cost row (admin design §8.6): the gateway's cost apart from the estimate of calls without one. */
+export interface CostTotals {
+  calls: number
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  costUsd: number
+  estimatedCostUsd: number
+  estimatedCalls: number
+}
+
+/** An assistant's or knowledge base's cost per period, step and (assistants) client; `clientName` is `admin-console` for the test panel. */
+export interface CostRow extends CostTotals {
+  /** `yyyy-MM-dd`; a month's first day by month. */
+  period: string
+  step: string
+  clientId: string | null
+  clientName: string | null
+}
+
+/** `GET /api/assistants/{id}/costs`, `GET /api/collections/{id}/costs`. */
+export interface ObjectCosts {
+  from: string
+  to: string
+  granularity: CostGranularity
+  rows: CostRow[]
+  totals: CostTotals
+}
+
+/** A row of `GET /api/costs`: per period, department, object, step and client; `deleted` when the object is gone. */
+export interface DepartmentCostRow extends CostTotals {
+  period: string
+  departmentId: string
+  departmentName: string | null
+  kind: 'assistant' | 'collection'
+  objectId: string
+  objectName: string | null
+  deleted: boolean
+  step: string
+  clientId: string | null
+  clientName: string | null
+}
+
+/** `GET /api/costs` (admin design §8.6). */
+export interface CostReport {
+  from: string
+  to: string
+  granularity: CostGranularity
+  rows: DepartmentCostRow[]
+  totals: CostTotals
+}
+
+/** `GET /api/costs` filters. */
+export interface CostReportQuery extends CostQuery {
+  departmentId?: string
+  kind?: 'assistant' | 'collection'
+}

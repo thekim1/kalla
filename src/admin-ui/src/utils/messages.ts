@@ -358,6 +358,14 @@ export function embeddingTestMessage(
   })
 }
 
+/** The cost views' sentences (admin design §8.6). */
+export const COST_MESSAGES = {
+  estimatedNote: (calls: string) => `Estimated: ${calls} calls had no cost from the gateway and are priced from the model list.`,
+  gatewayRecord: 'The gateway’s figures are the record for internal charging; they also count retries and fallbacks.',
+  empty: 'No model calls in this period.',
+  ownDepartmentOnly: 'Only the department that owns the knowledge base sees its cost.',
+} as const
+
 /** When the problem has no code we know: by status. */
 export const STATUS_MESSAGES = {
   offline: 'The server cannot be reached. Check your connection and try again.',

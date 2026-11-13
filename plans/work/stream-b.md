@@ -528,7 +528,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   tests don't wait on it.
 - **Read:** admin §3.3, §3.4, §4.8, §8.6, §11.2; data-model §2.2, §2.3; cost-attribution §4.1, §5.
 
-### [ ] B-41 Cost in the admin UI: assistant and knowledge base cards, the Costs page (cost-attribution C5)
+### [x] B-41 Cost in the admin UI: assistant and knowledge base cards, the Costs page (cost-attribution C5) (#628)
 - **Do:** admin §8.6's UI: the *Cost* card on the assistant's Statistics tab (period picker, total with gateway and
   estimated parts, by step and client), the *Cost* card on the knowledge base's Overview (indexing and evaluation, last
   30 days, owning department only), and the *Costs* page under FOLLOW-UP for department and platform admins
