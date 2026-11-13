@@ -134,7 +134,7 @@ public sealed partial class GatewayContextReader(
 
 /// <summary>
 /// The gateway refused the object's assigned key on a call made as it (gateway-changes §5.7): <c>403 delegation_not_allowed</c>,
-/// <c>403 key_disabled</c>, <c>401 key_revoked</c>/<c>key_expired</c> or <c>402 budget_exceeded</c> (with the gateway's
+/// <c>403 key_disabled</c>, <c>403 key_revoked</c>/<c>key_expired</c> (gateway v0.10.1) or <c>402 budget_exceeded</c> (with the gateway's
 /// <see cref="GatewayMessage"/>). Final for the call; never retried. Callers map it (B-44, A-34).
 /// </summary>
 public sealed class GatewayKeyRefusedException(int status, string code, string? gatewayMessage, Guid gatewayKeyId)
@@ -148,8 +148,8 @@ public sealed class GatewayKeyRefusedException(int status, string code, string? 
     /// <summary>The refusals that mean the object's key cannot be used now (gateway-changes §5.7).</summary>
     public static bool IsKeyRefusal(int status, string? code) => (status, code) switch
     {
-        (403, "delegation_not_allowed" or "key_disabled") => true,
-        (401, "key_revoked" or "key_expired") => true,
+        // From gateway v0.10.1 every refusal of the acted key is 403; a 401 is always the credential key's own (#580).
+        (403, "delegation_not_allowed" or "key_disabled" or "key_revoked" or "key_expired") => true,
         (402, _) => true,
         _ => false,
     };

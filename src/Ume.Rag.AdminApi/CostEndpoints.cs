@@ -191,7 +191,8 @@ public sealed record CostPeriod(DateOnly From, DateOnly To, string Granularity)
         }
 
         var end = to ?? today;
-        var start = from ?? end.AddDays(1 - CostEndpoints.DefaultDays);
+        // Near DateOnly.MinValue the default start would not exist (#627 review): the period then starts at the first day.
+        var start = from ?? (end.DayNumber >= CostEndpoints.DefaultDays - 1 ? end.AddDays(1 - CostEndpoints.DefaultDays) : DateOnly.MinValue);
         if (start > end)
         {
             throw AdminFaults.Field("from", AdminErrorCodes.InvalidValue);
