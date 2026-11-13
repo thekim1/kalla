@@ -25,6 +25,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import CostCard from '@/components/costs/CostCard.vue'
+import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
@@ -285,6 +286,7 @@ onMounted(load)
       <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
         <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
         <UiCard :title="COLLECTIONS.state">
+          <KeyUnavailableBadge class="mb-2" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId" />
           <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
           <dl>
             <DetailRow :label="COLLECTION.contact">

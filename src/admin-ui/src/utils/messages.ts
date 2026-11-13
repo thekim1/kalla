@@ -358,6 +358,17 @@ export function embeddingTestMessage(
   })
 }
 
+/** Why an object's gateway key cannot be used now, beside its [Unavailable] badge (admin design §5.5.2, §5.5.4; B-44). */
+export const KEY_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  missing: 'The gateway key is not known to the platform.',
+  disabled: 'The gateway key is disabled.',
+  expired: 'The gateway key has expired.',
+  revoked: 'The gateway key has been revoked.',
+  not_active: 'The gateway key is not active.',
+  owner_inactive: 'The team or department of the gateway key is inactive.',
+  unusable: 'The gateway key allows no residency in common with the platform’s key.',
+}
+
 /** The cost views' sentences (admin design §8.6). */
 export const COST_MESSAGES = {
   estimatedNote: (calls: string) => `Estimated: ${calls} calls had no cost from the gateway and are priced from the model list.`,
