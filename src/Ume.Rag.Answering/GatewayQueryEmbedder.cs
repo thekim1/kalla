@@ -113,7 +113,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentException.ThrowIfNullOrEmpty(normalizedQuery);
-        var key = profile.Id.ToString("N") + ":" + QueryMac(normalizedQuery);
+        var key = CacheKey(profile.Id, GatewayCallScope.Current?.GatewayKeyId, QueryMac(normalizedQuery));
         if (_cache.TryGetValue(key, out float[]? cached) && cached is not null)
         {
             return new QueryEmbedding(cached, null);
@@ -132,6 +132,13 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         return ReferenceEquals(call, mine) ? embedding : embedding with { Usage = null };
     }
 
+    /// <summary>
+    /// The L1 and single-flight key <c>(profileId, gatewayKeyId, queryMac)</c> (knowledge-api §5.4): the key the call runs as
+    /// (<c>-</c>: none, the credential key), so each assistant's key pays for, and is checked on, its own query embeddings.
+    /// </summary>
+    public static string CacheKey(Guid profileId, Guid? gatewayKeyId, string queryMac) =>
+        profileId.ToString("N") + ":" + (gatewayKeyId?.ToString("N") ?? "-") + ":" + queryMac;
+
     /// <summary>Hex of the first 16 bytes of HMAC-SHA256(cache key, query): not reversible by dictionary without the key.</summary>
     public string QueryMac(string normalizedQuery) =>
         Convert.ToHexStringLower(HMACSHA256.HashData(_cacheKey, Encoding.UTF8.GetBytes(normalizedQuery)).AsSpan(0, 16));
@@ -144,6 +151,13 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             _cache.Set(key, vector, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = _options.CacheLifetime });
             RecordSuccess();
             return new QueryEmbedding(vector, usage);
+        }
+        catch (QueryEmbeddingUnavailableException ex) when (ex.InnerException is GatewayKeyRefusedException or GatewayDelegationEchoException)
+        {
+            // A refusal of the object's key or a failed echo says nothing about the gateway's health (§5.3): this request
+            // degrades, the circuit does not count it; a probe that met one leaves the decision to the next request.
+            ReleaseProbe();
+            throw;
         }
         catch (QueryEmbeddingUnavailableException)
         {
@@ -205,6 +219,11 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
                 LogNoKey(_logger, profile.Name);
                 throw new QueryEmbeddingUnavailableException(RetrievalDegradation.EmbeddingUnavailable, "This service holds no key for the profile's ceiling.", ex);
             }
+            catch (Exception ex) when (ex is GatewayKeyRefusedException or GatewayDelegationEchoException)
+            {
+                // Never retried (§5.3: a refusal of the key, or a failed response check); the handler logged 5011 for an echo.
+                throw Unavailable("The gateway refused the object's key, or did not echo it.", ex);
+            }
             catch (HttpRequestException ex) when (attempt == 1 && ex.StatusCode is null && !total.IsCancellationRequested)
             {
                 retryable = true; // a connection failure: one retry
@@ -265,6 +284,15 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
 
             _probing = true;
             return true;
+        }
+    }
+
+    /// <summary>Ends a probe without a verdict: the window has passed, so the next request probes again.</summary>
+    private void ReleaseProbe()
+    {
+        lock (_circuit)
+        {
+            _probing = false;
         }
     }
 

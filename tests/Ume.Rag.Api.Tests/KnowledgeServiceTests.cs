@@ -979,4 +979,124 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "en till", null, Ct));
         counting.Calls.ShouldBe(5); // 500 is not retried, and the open circuit makes no call
     }
+
+    /// <summary>
+    /// The gateway as seen by a call made as a key (knowledge-api §5.3, §5.4; #580 review): <paramref name="answer"/> per
+    /// call and acted key, a usable answer a 1024-dimension embedding with the key echoed unless <paramref name="echo"/> is false.
+    /// </summary>
+    private sealed class Acting(Func<int, Guid?, HttpResponseMessage?> answer, bool echo = true) : HttpMessageHandler
+    {
+        public int Calls;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref Calls);
+            var key = request.Headers.TryGetValues(GatewayHeaders.OnBehalfOf, out var values) ? Guid.Parse(values.Single()) : (Guid?)null;
+            var response = answer(call, key) ?? new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($$$"""{"data":[{"embedding":[{{{string.Join(",", Enumerable.Repeat("0.1", 1024))}}}]}],"usage":{"prompt_tokens":3,"total_tokens":3}}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            };
+            if (response.IsSuccessStatusCode)
+            {
+                response.Headers.Add(GatewayHeaders.Residency, "Eu");
+                if (echo && key is { } id)
+                {
+                    response.Headers.Add(GatewayHeaders.OnBehalfOf, id.ToString("D"));
+                }
+            }
+
+            return Task.FromResult(response);
+        }
+    }
+
+    private static HttpResponseMessage Refusal(int status, string code) => new((HttpStatusCode)status)
+    {
+        Content = new StringContent($$$"""{"error":{"code":"{{{code}}}","message":"Refused."}}""", System.Text.Encoding.UTF8, "application/json"),
+    };
+
+    private static (GatewayQueryEmbedder, IHost) BuildActing(HttpMessageHandler handler)
+    {
+        var (embedder, host) = Build(handler);
+        host.Services.GetRequiredService<GatewayFeatures>().Update([GatewayFeatures.ActAsKeyFeature]);
+        return (embedder, host);
+    }
+
+    [Theory]
+    [InlineData(403, "key_revoked")]
+    [InlineData(403, "key_disabled")]
+    [InlineData(402, "budget_exceeded")]
+    public async Task One_keys_refusals_degrade_its_requests_only_and_never_open_the_circuit(int status, string code)
+    {
+        // #580 review, point 1: five questions to an assistant whose key is refused must not switch the embedding off for others.
+        var refused = Guid.NewGuid();
+        var acting = new Acting((_, key) => key == refused ? Refusal(status, code) : null);
+        var (embedder, host) = BuildActing(acting);
+        using var _ = host;
+        using var __ = embedder;
+
+        using (GatewayCallScope.Begin(new GatewayCall(refused)))
+        {
+            for (var i = 0; i < 6; i++)
+            {
+                var failed = await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "spärrad " + i, null, Ct));
+                failed.InnerException.ShouldBeOfType<GatewayKeyRefusedException>();
+            }
+        }
+
+        embedder.CircuitOpen.ShouldBeFalse();
+        acting.Calls.ShouldBe(6); // each refused once, never retried
+        using (GatewayCallScope.Begin(new GatewayCall(Guid.NewGuid())))
+        {
+            (await embedder.EmbedAsync(Profile, "en annan assistent", null, Ct)).Vector.Length.ShouldBe(1024);
+        }
+    }
+
+    [Fact]
+    public async Task A_missing_echo_is_not_retried_and_does_not_count_toward_the_circuit()
+    {
+        // #580 review, point 2: the echo failure was retried once (a second 5011) and counted toward the circuit.
+        var acting = new Acting((_, _) => null, echo: false);
+        var (embedder, host) = BuildActing(acting);
+        using var _ = host;
+        using var __ = embedder;
+
+        using (GatewayCallScope.Begin(new GatewayCall(Guid.NewGuid())))
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                var failed = await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "eko " + i, null, Ct));
+                failed.InnerException.ShouldBeOfType<GatewayDelegationEchoException>();
+            }
+        }
+
+        acting.Calls.ShouldBe(5);
+        embedder.CircuitOpen.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task The_cache_and_the_single_flight_are_per_acting_key()
+    {
+        // #580 review, point 3 (knowledge-api §5.4): (profileId, gatewayKeyId, queryMac), so each assistant's key pays for its own.
+        var acting = new Acting((_, _) => null);
+        var (embedder, host) = BuildActing(acting);
+        using var _ = host;
+        using var __ = embedder;
+        Guid x = Guid.NewGuid(), y = Guid.NewGuid();
+
+        async Task<QueryEmbedding> As(Guid key)
+        {
+            using var scope = GatewayCallScope.Begin(new GatewayCall(key));
+            return await embedder.EmbedAsync(Profile, "bygglov altan", null, Ct);
+        }
+
+        var first = await As(x);
+        var cached = await As(x);
+        var other = await As(y);
+
+        acting.Calls.ShouldBe(2); // x once (then cached), y its own call
+        (first.Usage is not null, cached.Usage is null, other.Usage is not null).ShouldBe((true, true, true));
+        GatewayQueryEmbedder.CacheKey(Profile.Id, x, "m").ShouldNotBe(GatewayQueryEmbedder.CacheKey(Profile.Id, y, "m"));
+        GatewayQueryEmbedder.CacheKey(Profile.Id, null, "m").ShouldBe($"{Profile.Id:N}:-:m");
+    }
 }
