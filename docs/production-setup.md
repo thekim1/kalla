@@ -486,7 +486,8 @@ Keycloak of RAG's own, or Entra ID directly: see [Keycloak](keycloak.md).
 
 No shell access on the host? `deploy/portainer/compose.portainer.yaml` is the gateway's own Portainer stack with Ume
 Rag added, configured only through environment variables: paste it over the gateway's stack, keep the stack name, and
-set the RAG variables listed at the top of the file. See the runbook, *Portainer and other hosts without shell access*.
+set the RAG variables listed at the top of the file. See the runbook, *Portainer and other hosts without shell access*,
+and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 step by step.
 
 **On a new VM** (Docker and Portainer installed, nothing else):
 
