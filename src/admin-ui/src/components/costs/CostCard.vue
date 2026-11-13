@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { CostGranularity, CostQuery, KeyUsage, ObjectCosts } from '@/api/types'
+import type { CostGranularity, CostQuery, GatewayKeyList, KeyUsage, ObjectCosts } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import FilterSelect from '@/components/ui/FilterSelect.vue'
@@ -30,7 +30,8 @@ const props = defineProps<{
 const costs = useLoadable<ObjectCosts | null>(null)
 /** The gateway's figures for the key, same period; null without the read-back (then the gateway link is shown). */
 const gateway = ref<KeyUsage | null>(null)
-const gatewayLink = ref<string | null>(null)
+/** The department's keys, read once: the gateway link's address and how many objects hold the key (#642). */
+const keyList = ref<GatewayKeyList | null>(null)
 const days = ref('30')
 const granularity = ref<CostGranularity>('day')
 const periodOptions = Object.entries(COSTS.periods).map(([value, label]) => ({ value, label }))
@@ -39,16 +40,23 @@ const granularityOptions = (['day', 'month'] as const).map((value) => ({ value, 
 async function load(): Promise<void> {
   const query = { ...lastDays(Number(days.value)), granularity: granularity.value }
   const key = props.gatewayKeyId
-  const [, usage] = await Promise.all([
+  const departmentId = props.departmentId
+  const [, usage, list] = await Promise.all([
     costs.run(() => props.source(query)),
     key ? api.gateway.keyUsage(key, query).catch(() => null) : Promise.resolve(null),
+    key && departmentId && keyList.value === null ? api.gateway.keys(departmentId).catch(() => null) : Promise.resolve(keyList.value),
   ])
   gateway.value = usage
-  if (key && !usage && props.departmentId && gatewayLink.value === null) {
-    const url = await api.gateway.keys(props.departmentId).then((l) => l.adminUrl).catch(() => null)
-    gatewayLink.value = url && /^https?:\/\//i.test(url) ? `${url.replace(/\/+$/, '')}/usage` : null
-  }
+  keyList.value = list
 }
+
+/** The gateway's usage report, linked when there is no read-back. */
+const gatewayLink = computed(() => {
+  const url = keyList.value?.adminUrl
+  return url && /^https?:\/\//i.test(url) ? `${url.replace(/\/+$/, '')}/usage` : null
+})
+/** Admin §8.6: the note only when several assistants or knowledge bases share the key, so its figures include theirs. */
+const sharedKey = computed(() => (keyList.value?.keys.find((k) => k.id === props.gatewayKeyId)?.usedBy ?? 0) > 1)
 
 /** The gateway's cost per step for the key (its rows summed over the period). */
 const gatewayBySteps = computed(() => {
@@ -118,7 +126,7 @@ onMounted(load)
         </template>
         <div v-if="gateway" class="mt-3 text-small" data-test="cost-gateway">
           <p>{{ COST_MESSAGES.gatewayFigures(formatUsdCost(gatewayTotal), formatNumber(gatewayRequests)) }}</p>
-          <p class="text-fg-3" data-test="cost-shared-key">{{ COST_MESSAGES.sharedKey }}</p>
+          <p v-if="sharedKey" class="text-fg-3" data-test="cost-shared-key">{{ COST_MESSAGES.sharedKey }}</p>
         </div>
         <p v-if="totals.estimatedCalls > 0" class="mt-3 text-small text-fg-3" data-test="cost-estimated-note">
           {{ COST_MESSAGES.estimatedNote(formatNumber(totals.estimatedCalls)) }}

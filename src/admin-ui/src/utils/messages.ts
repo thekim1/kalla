@@ -266,7 +266,12 @@ export const JOB_MESSAGES: Record<string, string> = {
   'gateway.unreachable': 'The AI gateway could not be reached. It is tried again later.',
   'gateway.unavailable': 'The AI gateway is busy right now. It is tried again later.',
   'gateway.rate_limited': 'Too many calls to the AI gateway right now. It is tried again in a moment.',
-  'gateway.budget_exhausted': 'The platform’s budget in the AI gateway is used up for now. It is tried again at the next hour.',
+  'gateway.budget_exhausted':
+    'A budget in the AI gateway (the knowledge base’s key, its team’s or its department’s) is used up for now. It is tried again at the next hour.',
+  'gateway.key_unavailable':
+    'The knowledge base’s gateway key cannot be used: it is disabled, expired or revoked, or not assigned to the platform. It is tried again at the next hour. Choose another key or ask the gateway team.',
+  'gateway.delegation_not_applied':
+    'The AI gateway did not confirm that it ran the call as the knowledge base’s key, so the result was not used. Contact the platform team.',
   'gateway.residency_above_ceiling': 'The model runs at a location above what this level allows.',
   'gateway.forbidden': 'The AI gateway refused the call. Contact the platform team.',
   'eval.embedding_profile_unknown': 'The knowledge base’s embedding model does not exist. Contact the platform team.',

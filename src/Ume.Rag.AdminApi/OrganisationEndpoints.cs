@@ -55,8 +55,12 @@ public static class OrganisationEndpoints
                     ? Results.Ok(result)
                     : throw AdminFaults.Of(AdminErrorCodes.SyncFailed, new Dictionary<string, string> { ["error"] = sync.Status.LastError ?? "" }))
             .RequireAuthorization(AdminPolicies.Admin).WithName("SyncOrganisation").WithSummary("Sync departments, teams and gateway keys from the gateway's context now");
-        organisation.MapGet("/sync", (OrganisationSync sync) => sync.Status)
-            .RequireAuthorization(AdminPolicies.Admin).WithName("OrganisationSyncStatus").WithSummary("The organisation sync's last runs");
+        // The Integration API's read-back state rides along (#642), so the platform's Gateway view shows why a key's cost and
+        // budget are missing without the status's key checks.
+        organisation.MapGet("/sync", (OrganisationSync sync, IntegrationApiClient integration) =>
+                sync.Status with { Integration = new IntegrationReadback(integration.Configured, integration.LastError) })
+            .RequireAuthorization(AdminPolicies.Admin).WithName("OrganisationSyncStatus")
+            .WithSummary("The organisation sync's last runs and the Integration API read-back's state");
 
         return api;
     }

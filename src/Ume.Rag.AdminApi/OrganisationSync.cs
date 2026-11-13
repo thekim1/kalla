@@ -35,10 +35,11 @@ public sealed record OrgSyncResult(int Departments, int Teams, int Keys)
 /// The last runs, for the platform admin's overview and the <i>Gateway</i> page (admin design §4.10).
 /// <see cref="Gateway"/> is the last context's version, admin URL and features; <see cref="Degraded"/> says why departments
 /// and teams were left as they are (null when they were taken). <see cref="AdminUrl"/> is the address for the gateway links
-/// (admin design §2.3): the context's <c>admin_url</c>, else <c>Admin:GatewayAdminUrl</c> (#619).
+/// (admin design §2.3): the context's <c>admin_url</c>, else <c>Admin:GatewayAdminUrl</c> (#619). <see cref="Integration"/> is the
+/// Integration API read-back's state (B-45), filled by <c>GET /api/organisation/sync</c> (#642).
 /// </summary>
 public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, DateTimeOffset? LastSuccessAt, int ConsecutiveFailures, string? LastError,
-    OrgSyncResult? LastResult, GatewayContextInfo? Gateway, string? Degraded, string? AdminUrl = null);
+    OrgSyncResult? LastResult, GatewayContextInfo? Gateway, string? Degraded, string? AdminUrl = null, IntegrationReadback? Integration = null);
 
 /// <summary>
 /// Mirrors the gateway's <c>GET /v1/ume/context</c> (admin design §4.10, gateway-changes §5.5) with the admin's credential

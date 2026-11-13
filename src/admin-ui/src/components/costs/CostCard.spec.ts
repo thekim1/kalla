@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { api } from '@/api'
-import type { CostRow, ObjectCosts } from '@/api/types'
+import type { CostRow, GatewayKey, ObjectCosts } from '@/api/types'
 import { formatUsdCost } from '@/utils/format'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
@@ -22,6 +22,14 @@ function costs(rows: CostRow[]): ObjectCosts {
       calls: sum('calls'), inputTokens: sum('inputTokens'), cachedInputTokens: sum('cachedInputTokens'), outputTokens: sum('outputTokens'), costUsd: sum('costUsd'),
       estimatedCostUsd: sum('estimatedCostUsd'), estimatedCalls: sum('estimatedCalls'),
     },
+  }
+}
+
+function gatewayKey(id: string, usedBy: number): GatewayKey {
+  return {
+    id, name: id, teamId: 't1', teamName: null, departmentId: 'd1', status: 'Active', ownerActive: true, expiresAt: null, allowedModels: [], allowedResidencies: [],
+    piiPolicy: 'Off', contentGuardPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null, maxConcurrentRequests: null, maxOutputTokens: null,
+    hasSystemPrompt: false, usable: true, selectable: true, reason: null, syncedAt: '2026-11-12T10:00:00Z', usedBy,
   }
 }
 
@@ -82,7 +90,7 @@ describe('Cost card (admin design §8.6; B-41)', () => {
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'costs', query: { departmentId: 'd1' } })
   })
 
-  it('shows the gateway\'s figures for the key beside the stored ones by step, with the shared-key note (B-46)', async () => {
+  it('shows the gateway\'s figures for the key beside the stored ones by step, with the shared-key note when other objects share the key (B-46, #642)', async () => {
     const source = vi.fn().mockResolvedValue(costs([row({ costUsd: 0.002 }), row({ step: 'query-embed', costUsd: 0.0001 })]))
     const usage = vi.spyOn(api.gateway, 'keyUsage').mockResolvedValue({
       from: '2026-10-14', to: '2026-11-12', granularity: 'day', rows: [
@@ -90,16 +98,37 @@ describe('Cost card (admin design §8.6; B-41)', () => {
         { period: '2026-11-11', step: 'chat-answer', requests: 1, successfulRequests: 1, inputTokens: 100, cachedInputTokens: 0, outputTokens: 20, costUsd: 0.001 },
       ],
     })
+    const keys = vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: null, keys: [gatewayKey('k1', 2)] })
     const wrapper = mountCard({ kind: 'assistant', source, gatewayKeyId: 'k1', departmentId: 'd1' })
     await flushPromises()
 
     expect(usage).toHaveBeenCalledWith('k1', expect.objectContaining({ granularity: 'day' }))
+    expect(keys).toHaveBeenCalledWith('d1')
     const answerRow = wrapper.get('[data-test=cost-steps]').findAll('tr').find((r) => r.text().includes('Answer'))!
     expect(answerRow.text()).toContain(formatUsdCost(0.002)) // ours
     expect(answerRow.text()).toContain(formatUsdCost(0.004)) // the gateway's, summed over the period
     expect(wrapper.get('[data-test=cost-gateway]').text()).toContain(COST_MESSAGES.gatewayFigures(formatUsdCost(0.004), '3'))
     expect(wrapper.get('[data-test=cost-shared-key]').text()).toBe(COST_MESSAGES.sharedKey)
     expect(wrapper.find('[data-test=cost-gateway-link]').exists()).toBe(false)
+  })
+
+  it('leaves the shared-key note out when only this object holds the key (#642)', async () => {
+    vi.spyOn(api.gateway, 'keyUsage').mockResolvedValue({
+      from: '2026-10-14', to: '2026-11-12', granularity: 'day', rows: [
+        { period: '2026-11-10', step: 'chat-answer', requests: 1, successfulRequests: 1, inputTokens: 100, cachedInputTokens: 0, outputTokens: 20, costUsd: 0.001 },
+      ],
+    })
+    const keys = vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: null, keys: [gatewayKey('k1', 1), gatewayKey('k2', 3)] })
+    const wrapper = mountCard({ kind: 'assistant', source: vi.fn().mockResolvedValue(costs([row({ costUsd: 0.001 })])), gatewayKeyId: 'k1', departmentId: 'd1' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test=cost-gateway]').exists()).toBe(true)
+    expect(wrapper.find('[data-test=cost-shared-key]').exists()).toBe(false)
+
+    // The keys are read once, not again for a new period.
+    await wrapper.findAll('button').find((b) => b.text() === COSTS.granularities.month)!.trigger('click')
+    await flushPromises()
+    expect(keys).toHaveBeenCalledTimes(1)
   })
 
   it('links the gateway\'s usage report when there is no read-back (B-46)', async () => {

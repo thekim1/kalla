@@ -162,5 +162,9 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         integration.GetProperty("configured").GetBoolean().ShouldBeTrue();
         (integration.GetProperty("lastError").GetProperty("reason").GetString(), integration.GetProperty("lastError").GetProperty("status").GetInt32())
             .ShouldBe(("scope_missing", 403));
+
+        // #642: the organisation sync's status carries the same state, for the platform's Gateway view (no key checks).
+        var sync = (await platform.GetFromJsonAsync<JsonElement>("/api/organisation/sync", Ct)).GetProperty("integration");
+        (sync.GetProperty("configured").GetBoolean(), sync.GetProperty("lastError").GetProperty("reason").GetString()).ShouldBe((true, "scope_missing"));
     }
 }

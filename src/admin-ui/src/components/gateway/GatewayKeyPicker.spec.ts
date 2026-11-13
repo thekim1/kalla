@@ -10,7 +10,7 @@ function key(id: string, name: string, extra: Partial<GatewayKey> = {}): Gateway
     id, name, teamId: 't1', teamName: 'Kontaktcenter', departmentId: 'd1', status: 'Active', ownerActive: true, expiresAt: null,
     allowedModels: ['ume/chat-eu', 'bge-m3'], allowedResidencies: ['Eu'], piiPolicy: 'Mask', contentGuardPolicy: 'Block', requestsPerMinute: 60,
     tokensPerMinute: null, maxConcurrentRequests: null, maxOutputTokens: 4096, hasSystemPrompt: false, usable: true, selectable: true, reason: null,
-    syncedAt: '2026-11-12T10:00:00Z', ...extra,
+    syncedAt: '2026-11-12T10:00:00Z', usedBy: 1, ...extra,
   }
 }
 
