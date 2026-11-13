@@ -5,6 +5,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+### Changed
+
+- **Clients and keys have a page of their own** (*Platform → Clients*): the type picked from cards, only that type's
+  fields, the first key made with the client (for Open WebUI with the two stack lines to copy), and the client's keys and
+  assistants in its drawer; keys get pickers instead of JSON. `POST /api/clients` takes `firstKey` and answers
+  `{ client, key }` (#663).
+
 ## 0.5.1 (2026-11-13)
 
 Easier deploys with Portainer: the gateway and Ume.Rag as one stack with every image pinned, Open WebUI in it, a
