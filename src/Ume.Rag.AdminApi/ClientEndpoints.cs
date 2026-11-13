@@ -4,9 +4,11 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.ServiceDefaults;
 
 namespace Ume.Rag.AdminApi;
 
@@ -21,16 +23,26 @@ public static class ClientEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var clients = api.MapGroup("/clients").WithTags("Clients");
 
-        // Pickers show name, kind and level; the clients page also the number of active keys.
+        // What a platform admin tells the app's owner (admin design §5.9.1): rag-api's public address, when the deployment names it.
+        clients.MapGet("/connection", (IOptions<AdminOptions> options) =>
+                new ClientConnectionDto(options.Value.ApiPublicUrl is { Length: > 0 } url && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+                        ? url.TrimEnd('/')
+                        : null))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("GetClientConnection").WithSummary("How an app reaches rag-api: its public address, or null when unset");
+
+        // Pickers show name, kind and level; the clients page also the number of active keys and their last use.
         clients.MapGet("", async (AdminContext admin, CancellationToken ct) =>
             {
                 var now = admin.Now;
                 var keys = admin.Db.Keys;
+                var uses = admin.Db.KeyLastUse;
                 // The Active branch of ApiKey.GetStatus: not revoked, enabled, not expired, not in a rotation's grace period.
                 return await admin.Db.Clients.AsNoTracking().OrderBy(c => c.Name)
                     .Select(c => new ClientSummary(c.Id, c.Name, c.Kind, c.ClassificationCeiling, c.IsEnabled, c.PortalUrl,
                         keys.Count(k => k.ClientId == c.Id && (k.RevokedAt == null || k.RevokedAt > now) && k.IsEnabled && (k.ExpiresAt == null || k.ExpiresAt > now)
-                            && k.GraceUntil == null)))
+                            && k.GraceUntil == null),
+                        uses.Where(u => keys.Any(k => k.Id == u.KeyId && k.ClientId == c.Id)).Max(u => (DateTimeOffset?)u.LastUsedAt)))
                     .ToListAsync(ct);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListClients").WithSummary("Registered clients (picker fields and active keys)");
@@ -41,8 +53,9 @@ public static class ClientEndpoints
                 : throw AdminFaults.Of(AdminErrorCodes.NotFound))
             .RequireAuthorization(AdminPolicies.Admin).WithName("GetClient").WithSummary("One client and the assistants whose audience includes it");
 
-        // The client and its first key in one transaction, each with its audit entry (admin design §5.9).
-        clients.MapPost("", async (ClientCreateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
+        // The client, the assistants it offers and its first key in one transaction, each with its audit entry (admin design §5.9, §5.9.1).
+        clients.MapPost("", async (ClientCreateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection, GatewayModelCheck models,
+                CancellationToken ct) =>
             {
                 var generated = request.FirstKey is null ? null : hasher.Get().Generate();
                 var (client, key) = await admin.WriteAsync(async attempt =>
@@ -51,7 +64,7 @@ public static class ClientEndpoints
                     request.ApplyTo(client, admin);
                     admin.Db.Clients.Add(client);
                     KeyDto? key = null;
-                    List<AuditAlso> also = [];
+                    var also = await SetAssistantsAsync(admin, models, client, request.AssistantIds, [], attempt);
                     if (request.FirstKey is { } first)
                     {
                         var (created, department) = await KeyEndpoints.AddSecretKeyAsync(admin, client, first.Name, first.TeamId, null, generated!, protection, attempt,
@@ -66,7 +79,7 @@ public static class ClientEndpoints
                     };
                 }, ct);
                 return Results.Created($"/api/clients/{client.Id}",
-                    new ClientCreatedDto(ClientDto.Of(client, []), key is null ? null : new KeyCreatedDto(key, generated!.PlainText)));
+                    new ClientCreatedDto(await DtoAsync(admin, client, ct), key is null ? null : new KeyCreatedDto(key, generated!.PlainText)));
             })
             .RequireAuthorization(AdminPolicies.Admin).WithName("CreateClient").WithSummary("Register a client, optionally with its first key (the secret shown this once)");
 
@@ -83,6 +96,27 @@ public static class ClientEndpoints
                 };
             }, ct), ct))
             .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateClient").WithSummary("Change a client");
+
+        // The assistants that offer the client, set from the client's side (admin design §5.9.1): each changed assistant's audience
+        // is checked and audited as its own audience save.
+        clients.MapPut("/{id:guid}/assistants", async (Guid id, ClientAssistantsRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
+            await DtoAsync(admin, await admin.WriteAsync(async attempt =>
+            {
+                var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                admin.ExpectVersion(client, request.Version);
+                var current = await admin.Db.AssistantAudiences.Where(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == id).Select(a => a.AssistantId)
+                    .ToListAsync(attempt);
+                var also = await SetAssistantsAsync(admin, models, client, request.AssistantIds, current, attempt);
+                // The stamp moves the client's xmin, so a concurrent save of the same list conflicts (admin design §4.3).
+                client.UpdatedAt = admin.Now;
+                client.UpdatedBy = admin.Actor;
+                return new AdminChange<Client>(client, "assistants", AuditEntityTypes.Client, client.Id, new { assistantIds = current },
+                    new { assistantIds = request.AssistantIds.Distinct().ToList() })
+                {
+                    Classification = client.ClassificationCeiling, Also = also,
+                };
+            }, ct), ct))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("SetClientAssistants").WithSummary("The assistants that offer the client (V7, V8, V9 per assistant)");
 
         return api;
     }
@@ -106,21 +140,78 @@ public static class ClientEndpoints
         });
     }
 
+    /// <summary>
+    /// Makes <paramref name="assistantIds"/> the assistants with a <c>client</c> audience row for <paramref name="client"/>
+    /// (<paramref name="current"/> are those that have one now; none for a new client). Each assistant that gains or loses the client
+    /// gets its audience written by <see cref="AssistantEndpoints.ApplyAudienceAsync"/> and an <c>audiences</c> audit entry; a rule
+    /// refusal is a field error on <c>assistantIds</c> that names the assistant.
+    /// </summary>
+    private static async Task<List<AuditAlso>> SetAssistantsAsync(AdminContext admin, GatewayModelCheck models, Client client, IReadOnlyList<Guid> assistantIds,
+        IReadOnlyList<Guid> current, CancellationToken ct)
+    {
+        var wanted = assistantIds.Distinct().ToList();
+        var changed = wanted.Except(current).Concat(current.Except(wanted)).ToList();
+        List<AuditAlso> also = [];
+        if (changed.Count == 0)
+        {
+            return also;
+        }
+
+        var assistants = await admin.Db.Assistants.Where(a => changed.Contains(a.Id)).OrderBy(a => a.Name).ToListAsync(ct);
+        if (assistants.Count != changed.Count)
+        {
+            throw AdminFaults.Field("assistantIds", AdminErrorCodes.InvalidValue);
+        }
+
+        var clientId = client.Id;
+        foreach (var assistant in assistants)
+        {
+            var assistantId = assistant.Id;
+            var others = admin.Db.AssistantAudiences.Where(a => a.AssistantId == assistantId && a.Kind == AssistantAudienceKinds.Client && a.SubjectId != clientId)
+                .Select(a => a.SubjectId);
+            var audience = await admin.Db.Clients.AsNoTracking().Where(c => others.Contains(c.Id)).OrderBy(c => c.Name).ToListAsync(ct);
+            if (wanted.Contains(assistantId))
+            {
+                audience.Add(client);
+            }
+
+            try
+            {
+                var before = await AssistantEndpoints.ApplyAudienceAsync(admin, models, assistant, audience, ct);
+                also.Add(new AuditAlso("audiences", AuditEntityTypes.Assistant, assistantId, new { clientIds = before }, new { clientIds = audience.Select(c => c.Id).ToList() })
+                {
+                    DepartmentId = assistant.DepartmentId,
+                });
+            }
+            catch (ApiFaultException refusal) when (refusal.Status == StatusCodes.Status409Conflict)
+            {
+                throw AdminFaults.Field("assistantIds", assistant.Name, refusal);
+            }
+        }
+
+        return also;
+    }
+
     private static async Task<ClientDto> DtoAsync(AdminContext admin, Client client, CancellationToken ct)
     {
         var id = client.Id;
         var audience = admin.Db.AssistantAudiences.Where(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == id).Select(a => a.AssistantId);
         var assistants = await admin.Db.Assistants.AsNoTracking().Where(a => audience.Contains(a.Id)).OrderBy(a => a.Name)
-            .Select(a => new ClientAssistantDto(a.Id, a.Name, a.DepartmentId, a.PublishedVersionId != null)).ToListAsync(ct);
+            .Select(a => new ClientAssistantDto(a.Id, a.Name, a.DepartmentId, a.PublishedVersionId != null, a.Slug, a.Classification)).ToListAsync(ct);
         return ClientDto.Of(client, assistants);
     }
 }
 
 /// <summary>
 /// A picker row; <see cref="PortalUrl"/> is the client's own UI, linked from the assistant page (admin design §5.4 step 13).
-/// <see cref="ActiveKeys"/> counts the client's keys whose status is <c>active</c> now (a rotation's grace period not included).
+/// <see cref="ActiveKeys"/> counts the client's keys whose status is <c>active</c> now (a rotation's grace period not included);
+/// <see cref="LastUsedAt"/> is the latest use of any of its keys, null before the first call.
 /// </summary>
-public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl, int ActiveKeys);
+public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl, int ActiveKeys,
+    DateTimeOffset? LastUsedAt);
+
+/// <summary>rag-api's public address for the "How to connect" block (<c>Admin:ApiPublicUrl</c>); null when the deployment names none.</summary>
+public sealed record ClientConnectionDto(string? ApiBaseUrl);
 
 /// <summary>A client; <see cref="Assistants"/> are those with a <c>client</c> audience row for it (the drawer's "Used by").</summary>
 public sealed record ClientDto(
@@ -133,8 +224,11 @@ public sealed record ClientDto(
         c.Version.ToString(CultureInfo.InvariantCulture), assistants);
 }
 
-/// <summary>An assistant whose audience includes the client; <see cref="Published"/> as in the assistants list.</summary>
-public sealed record ClientAssistantDto(Guid Id, string Name, Guid DepartmentId, bool Published);
+/// <summary>
+/// An assistant whose audience includes the client; <see cref="Published"/> as in the assistants list, <see cref="Slug"/> its model
+/// name in <c>GET /v1/models</c>.
+/// </summary>
+public sealed record ClientAssistantDto(Guid Id, string Name, Guid DepartmentId, bool Published, string Slug, string Classification);
 
 /// <summary>A new client and, when <see cref="ClientCreateRequest.FirstKey"/> was given, its first key with the secret, shown this once.</summary>
 public sealed record ClientCreatedDto(ClientDto Client, KeyCreatedDto? Key);
@@ -238,6 +332,18 @@ public sealed record ClientCreateRequest : ClientRequest
 {
     /// <summary>A secret key created with the client in the same transaction; null creates none.</summary>
     public FirstKeyRequest? FirstKey { get; init; }
+
+    /// <summary>The assistants that offer the new client, each given a <c>client</c> audience row in the same transaction (admin design §5.9.1).</summary>
+    public IReadOnlyList<Guid> AssistantIds { get; init; } = [];
+}
+
+/// <summary>The assistants that offer a client, and the client's <c>version</c> the caller read (admin design §5.9.1).</summary>
+public sealed record ClientAssistantsRequest : AdminRequest
+{
+    public IReadOnlyList<Guid> AssistantIds { get; init; } = [];
+
+    [Required]
+    public string? Version { get; init; }
 }
 
 /// <summary>The first key's name and, optionally, its team for attribution; scopes, limits and expiry are set on the key later.</summary>

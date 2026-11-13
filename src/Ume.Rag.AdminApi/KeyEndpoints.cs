@@ -31,12 +31,14 @@ public static class KeyEndpoints
                 }
 
                 var items = await query.Include(k => k.Client).OrderBy(k => k.Name).ToListAsync(ct);
-                return items.Select(k => DtoOf(k, admin.Now)).ToList();
+                var ids = items.Select(k => k.Id).ToList();
+                var used = await admin.Db.KeyLastUse.AsNoTracking().Where(u => ids.Contains(u.KeyId)).ToDictionaryAsync(u => u.KeyId, u => u.LastUsedAt, ct);
+                return items.Select(k => KeyDto.Of(k, k.Client!.Name, admin.Now, used.TryGetValue(k.Id, out var at) ? at : null)).ToList();
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("ListKeys").WithSummary("Keys the caller manages; never their secrets");
 
         keys.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
-                DtoOf(await FindAsync(admin, id, ct), admin.Now))
+                await DtoAsync(admin, await FindAsync(admin, id, ct), ct))
             .RequireAuthorization(AdminPolicies.Manage).WithName("GetKey").WithSummary("One key");
 
         keys.MapPost("", async (KeyCreateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
@@ -57,7 +59,7 @@ public static class KeyEndpoints
             .RequireAuthorization(AdminPolicies.Manage).WithName("CreateKey").WithSummary("Create a key; the response holds its secret, shown this once");
 
         keys.MapPut("/{id:guid}", async (Guid id, KeyUpdateRequest request, AdminContext admin, CancellationToken ct) =>
-                DtoOf(await admin.WriteAsync(async attempt =>
+                await DtoAsync(admin, await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
                     var department = await CheckTeamAsync(admin, key.TeamId, attempt);
@@ -67,7 +69,7 @@ public static class KeyEndpoints
                     key.Name = request.Name.Trim();
                     Apply(key, request);
                     return new AdminChange<ApiKey>(key, "update", AuditEntityTypes.Key, key.Id, before, KeyAudit.Of(key)) { DepartmentId = department };
-                }, ct), admin.Now))
+                }, ct), ct))
             .RequireAuthorization(AdminPolicies.Manage).WithName("UpdateKey").WithSummary("Change a key's name, scopes, limits or expiry");
 
         keys.MapPost("/{id:guid}/rotate", async (Guid id, RotateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection,
@@ -90,7 +92,7 @@ public static class KeyEndpoints
                     return new AdminChange<(ApiKey, ApiKey)>((replacement, old), "rotate", AuditEntityTypes.Key, old.Id, before,
                         new { old = KeyAudit.Of(old), replacement = KeyAudit.Of(replacement) }) { DepartmentId = department };
                 }, ct);
-                return new KeyRotatedDto(KeyDto.Of(replacement, old.Client!.Name, admin.Now), generated.PlainText, DtoOf(old, admin.Now));
+                return new KeyRotatedDto(KeyDto.Of(replacement, old.Client!.Name, admin.Now), generated.PlainText, await DtoAsync(admin, old, ct));
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("RotateKey").WithSummary("Replace a key; the response holds the new secret, shown this once");
 
@@ -111,7 +113,7 @@ public static class KeyEndpoints
             .RequireAuthorization(AdminPolicies.Admin).WithName("RevealKey").WithSummary("A key's secret (platform admin; audited)");
 
         keys.MapPost("/{id:guid}/revoke", async (Guid id, AdminContext admin, CancellationToken ct) =>
-                DtoOf(await admin.WriteAsync(async attempt =>
+                await DtoAsync(admin, await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
                     var before = KeyAudit.Of(key);
@@ -120,7 +122,7 @@ public static class KeyEndpoints
                     {
                         DepartmentId = await CheckTeamAsync(admin, key.TeamId, attempt),
                     };
-                }, ct), admin.Now))
+                }, ct), ct))
             .RequireAuthorization(AdminPolicies.Manage).WithName("RevokeKey").WithSummary("Revoke a key now");
 
         return api;
@@ -139,15 +141,20 @@ public static class KeyEndpoints
         return admin.Db.Keys.Where(k => k.TeamId != null && teams.Contains(k.TeamId.Value));
     }
 
-    /// <summary>The key with its client, for <see cref="DtoOf"/>.</summary>
+    /// <summary>The key with its client, for <see cref="DtoAsync"/>.</summary>
     private static async Task<ApiKey> FindAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = false)
     {
         var query = (tracked ? Managed(admin) : Managed(admin).AsNoTracking()).Include(k => k.Client);
         return await query.SingleOrDefaultAsync(k => k.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
     }
 
-    /// <summary>A key loaded with its client (<see cref="FindAsync"/>, the list).</summary>
-    private static KeyDto DtoOf(ApiKey key, DateTimeOffset now) => KeyDto.Of(key, key.Client!.Name, now);
+    /// <summary>A key loaded with its client (<see cref="FindAsync"/>), with its last use.</summary>
+    private static async Task<KeyDto> DtoAsync(AdminContext admin, ApiKey key, CancellationToken ct)
+    {
+        var id = key.Id;
+        var used = await admin.Db.KeyLastUse.AsNoTracking().Where(u => u.KeyId == id).Select(u => (DateTimeOffset?)u.LastUsedAt).SingleOrDefaultAsync(ct);
+        return KeyDto.Of(key, key.Client!.Name, admin.Now, used);
+    }
 
     /// <summary>
     /// Adds a new secret key of <paramref name="client"/> to the caller's write (<see cref="AdminContext.WriteAsync{T}"/>): the team and
@@ -324,14 +331,16 @@ public sealed record RevealRequest : AdminRequest
 public sealed record KeyDto(
     Guid Id, Guid ClientId, string ClientName, Guid? TeamId, string Kind, string Name, string? Description, string Prefix, string Status,
     IReadOnlyList<Guid> AssistantIds, IReadOnlyList<Guid> CollectionIds, IReadOnlyList<string> AllowedIpRanges, int? RequestsPerMinute, bool IsEnabled,
-    DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? GraceUntil, Guid? RotatedToKeyId)
+    DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? GraceUntil, Guid? RotatedToKeyId,
+    DateTimeOffset? LastUsedAt)
 {
-    public static KeyDto Of(ApiKey k, string clientName, DateTimeOffset now)
+    /// <summary><paramref name="lastUsedAt"/> is the key's <c>KeyLastUse</c> row (data-model §2.1); null before its first call, and for a new key.</summary>
+    public static KeyDto Of(ApiKey k, string clientName, DateTimeOffset now, DateTimeOffset? lastUsedAt = null)
     {
         ArgumentNullException.ThrowIfNull(k);
         return new(k.Id, k.ClientId, clientName, k.TeamId, k.Kind, k.Name, k.Description, k.Prefix,
             System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(k.GetStatus(now).ToString()), k.Scopes.AssistantIds, k.Scopes.CollectionIds,
-            k.AllowedIpRanges, k.RequestsPerMinute, k.IsEnabled, k.CreatedAt, k.CreatedBy, k.ExpiresAt, k.RevokedAt, k.GraceUntil, k.RotatedToKeyId);
+            k.AllowedIpRanges, k.RequestsPerMinute, k.IsEnabled, k.CreatedAt, k.CreatedBy, k.ExpiresAt, k.RevokedAt, k.GraceUntil, k.RotatedToKeyId, lastUsedAt);
     }
 }
 

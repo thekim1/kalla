@@ -11,12 +11,12 @@ const L = PLATFORM_CLIENTS
 const client: Client = {
   id: '0199-client', name: 'Integration webb', kind: 'integration', oAuthClientId: 'webb-app', classificationCeiling: 'public', storesHistory: false,
   clientRetentionDays: null, allowedOrigins: [], toolPolicy: 'read', portalUrl: null, isEnabled: true, updatedAt: '2026-11-13T10:00:00Z', updatedBy: 'anna@umea.se',
-  version: '7', assistants: [{ id: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', published: true }],
+  version: '7', assistants: [{ id: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', published: true, slug: 'bygglov', classification: 'internal' }],
 }
 const key: ApiKey = {
   id: 'k1', clientId: client.id, clientName: client.name, teamId: null, kind: 'sk', name: 'Webb key', description: null, prefix: 'ume-rag-sk-ab12', status: 'active',
   assistantIds: [], collectionIds: [], allowedIpRanges: [], requestsPerMinute: null, isEnabled: true, createdAt: '2026-11-13T10:00:00Z', createdBy: null,
-  expiresAt: '2027-01-31T22:59:59Z', revokedAt: null, graceUntil: null, rotatedToKeyId: null,
+  expiresAt: '2027-01-31T22:59:59Z', revokedAt: null, graceUntil: null, rotatedToKeyId: null, lastUsedAt: null,
 }
 
 function mountDrawer() {
