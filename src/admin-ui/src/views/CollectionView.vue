@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Collection, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
+import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
 import CollectionTopics from '@/components/collections/CollectionTopics.vue'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
@@ -24,6 +24,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
+import CostCard from '@/components/costs/CostCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
@@ -73,6 +74,8 @@ const quality = computed(() => {
   const finished = (evaluation.value?.latestRuns ?? []).filter((r) => r.finishedAt && !r.candidate && r.recallAtK !== null)
   return finished.find((r) => r.variant === 'hybrid') ?? finished[0] ?? null
 })
+/** The Overview's Cost card (admin design §8.6). */
+const collectionCosts = (query: CostQuery) => api.costs.collection(collection.data.value!.id, query)
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const adding = ref(false)
@@ -315,6 +318,11 @@ onMounted(load)
             </DetailRow>
           </dl>
         </UiCard>
+        <!-- Admin §8.6: indexing and evaluation of the last 30 days; this panel is the owning department's (a shared one sees no cost). -->
+        <CostCard
+          kind="collection" :source="collectionCosts"
+          :costs-link="canPublish ? { name: 'costs', query: { departmentId: collection.data.value.departmentId } } : null"
+        />
       </div>
 
       <div v-else-if="tab === 'files'" id="collection-panel-files" role="tabpanel" aria-labelledby="collection-tab-files" class="grid gap-4">

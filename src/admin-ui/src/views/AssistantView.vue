@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type {
+  CostQuery,
   Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
   GatewayModel, GeneralKnowledge,
 } from '@/api/types'
@@ -25,6 +26,7 @@ import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
+import CostCard from '@/components/costs/CostCard.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -34,12 +36,14 @@ import { problemMessage } from '@/utils/problem'
 // V-rule warnings, Testa on the draft (POST /api/assistants/{id}/test, nothing stored), Publicera (V34, V8 at the gateway),
 // Målgrupp (the clients that offer it), Versioner with Återställ (publishes an earlier version again as a new one), Lagring
 // (history mode and retention days within the level's policy, V10) and Arkivera / Ta fram igen.
-type Tab = 'draft' | 'test' | 'versions' | 'audience' | 'storage'
+type Tab = 'draft' | 'test' | 'versions' | 'audience' | 'storage' | 'statistics'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const assistant = useLoadable<Assistant | null>(null)
 const tab = ref<Tab>('draft')
+/** The Statistics tab's Cost card (admin design §8.6). */
+const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
 const models = ref<GatewayModel[]>([])
 const collections = ref<CollectionSummary[]>([])
@@ -102,6 +106,7 @@ const tabs = [
   { value: 'versions' as const, label: ASSISTANT.tabs.versions },
   { value: 'audience' as const, label: ASSISTANT.tabs.audience },
   { value: 'storage' as const, label: ASSISTANT.tabs.storage },
+  { value: 'statistics' as const, label: ASSISTANT.tabs.statistics },
 ]
 const versionColumns: Column[] = [
   { key: 'number', label: ASSISTANT.version },
@@ -529,6 +534,10 @@ onMounted(load)
           :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
         />
         <div v-if="canManage"><UiButton variant="primary" :loading="busy === 'storage'" data-test="save-storage" @click="saveStorage">{{ ASSISTANT.saveStorage }}</UiButton></div>
+      </div>
+
+      <div v-else-if="tab === 'statistics'" id="assistant-panel-statistics" role="tabpanel" aria-labelledby="assistant-tab-statistics" class="grid max-w-3xl gap-5">
+        <CostCard kind="assistant" :source="assistantCosts" />
       </div>
 
       <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">

@@ -1,5 +1,9 @@
 import { buildUrl, http, postLogout, request } from './client'
 import type {
+  CostQuery,
+  CostReport,
+  CostReportQuery,
+  ObjectCosts,
   CollectionLink,
   CollectionUpdate,
   AssistantUpdate,
@@ -228,6 +232,13 @@ export const api = {
     results: (runId: string) => http.get<EvaluationResult[]>(`/api/evaluation-runs/${runId}/results`),
   },
   overview: () => http.get<Overview>('/api/overview'),
+  costs: {
+    assistant: (id: string, query: CostQuery = {}) => http.get<ObjectCosts>(`/api/assistants/${id}/costs`, { ...query }),
+    collection: (id: string, query: CostQuery = {}) => http.get<ObjectCosts>(`/api/collections/${id}/costs`, { ...query }),
+    report: (query: CostReportQuery = {}) => http.get<CostReport>('/api/costs', { ...query }),
+    /** The report's CSV with the same filters (admin design §8.6). */
+    csvUrl: (query: CostReportQuery = {}) => buildUrl('/api/costs', { ...query, format: 'csv' }),
+  },
   feedback: {
     list: (query: {
       from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; state?: string; after?: string; limit?: number
