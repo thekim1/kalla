@@ -207,15 +207,17 @@ public sealed record GatewayKeyListDto(string? AdminUrl, IReadOnlyList<GatewayKe
 public sealed record GatewayKeyDto(
     Guid Id, string Name, Guid TeamId, string? TeamName, Guid? DepartmentId, string Status, bool OwnerActive, DateTimeOffset? ExpiresAt,
     IReadOnlyList<string> AllowedModels, IReadOnlyList<string> AllowedResidencies, string PiiPolicy, string ContentGuardPolicy, int? RequestsPerMinute,
-    int? TokensPerMinute, int? MaxConcurrentRequests, int? MaxOutputTokens, bool HasSystemPrompt, bool Usable, bool Selectable, string? Reason, DateTimeOffset SyncedAt)
+    int? TokensPerMinute, int? MaxConcurrentRequests, int? MaxOutputTokens, bool HasSystemPrompt, bool Usable, bool Selectable, string? Reason, DateTimeOffset SyncedAt,
+    int UsedBy = 0)
 {
-    public static GatewayKeyDto Of(GatewayKey k, string? teamName)
+    /// <summary><paramref name="usedBy"/>: the assistants and knowledge bases that hold the key (the shared-key note, admin §8.6, #642).</summary>
+    public static GatewayKeyDto Of(GatewayKey k, string? teamName, int usedBy = 0)
     {
         ArgumentNullException.ThrowIfNull(k);
         var reason = GatewayKeyRules.UnusableReason(k);
         return new(k.Id, k.Name, k.TeamId, teamName, k.DepartmentId, k.Status, k.OwnerActive, k.ExpiresAt, k.AllowedModels, k.AllowedResidencies, k.PiiPolicy,
             k.ContentGuardPolicy, k.RequestsPerMinute, k.TokensPerMinute, k.MaxConcurrentRequests, k.MaxOutputTokens, k.HasSystemPrompt, k.Usable, reason is null,
-            reason, k.SyncedAt);
+            reason, k.SyncedAt, usedBy);
     }
 }
 
@@ -349,7 +351,14 @@ public static class GatewayEndpoints
 
                 var keys = await admin.Db.GatewayKeys.AsNoTracking().Where(k => k.DepartmentId == departmentId).OrderBy(k => k.Name).ToListAsync(ct);
                 var teams = await admin.Db.Teams.AsNoTracking().Where(t => t.DepartmentId == departmentId).ToDictionaryAsync(t => t.Id, t => t.Name, ct);
-                return new GatewayKeyListDto(organisation.AdminUrl, [.. keys.Select(k => GatewayKeyDto.Of(k, teams.GetValueOrDefault(k.TeamId)))]);
+                var ids = keys.Select(k => k.Id).ToList();
+                var assistants = await admin.Db.Assistants.AsNoTracking().Where(a => a.GatewayKeyId != null && ids.Contains(a.GatewayKeyId.Value))
+                    .GroupBy(a => a.GatewayKeyId!.Value).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+                var collections = await admin.Db.Collections.AsNoTracking()
+                    .Where(c => c.DeletedAt == null && c.GatewayKeyId != null && ids.Contains(c.GatewayKeyId.Value))
+                    .GroupBy(c => c.GatewayKeyId!.Value).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+                return new GatewayKeyListDto(organisation.AdminUrl, [.. keys.Select(k => GatewayKeyDto.Of(k, teams.GetValueOrDefault(k.TeamId),
+                    assistants.GetValueOrDefault(k.Id) + collections.GetValueOrDefault(k.Id)))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayKeys")
             .WithSummary("The department's assigned gateway keys for the key picker, with their settings and whether each can be chosen");

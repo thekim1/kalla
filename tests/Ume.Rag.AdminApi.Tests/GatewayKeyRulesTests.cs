@@ -111,6 +111,36 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task The_picker_counts_the_assistants_and_live_knowledge_bases_that_hold_each_key()
+    {
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var profile = await db.EmbeddingProfiles.Where(p => p.GatewayModel == seed.ProfileModel).Select(p => p.Id).FirstAsync(Ct);
+            Collection Kb(string name, Guid key, bool deleted = false) => new()
+            {
+                Slug = $"{name}-{seed.Code}".ToLowerInvariant(), Name = $"{name} {seed.Code}", DepartmentId = seed.Department, Classification = Classification.Internal,
+                EmbeddingProfileId = profile, GatewayKeyId = key, UpdatedAt = DateTimeOffset.UtcNow, DeletedAt = deleted ? DateTimeOffset.UtcNow : null,
+            };
+            db.Collections.AddRange(Kb("shared", seed.Active), Kb("gone", seed.Active, deleted: true), Kb("alone", seed.Disabled));
+            db.Assistants.Add(new Assistant
+            {
+                Slug = "shared-" + seed.Code.ToLowerInvariant(), Name = "Shared " + seed.Code, DepartmentId = seed.Department, Classification = Classification.Internal,
+                GatewayKeyId = seed.Active, UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        var keys = (await admin.GetFromJsonAsync<JsonElement>($"/api/gateway/keys?departmentId={seed.Department}", Ct)).GetProperty("keys").EnumerateArray()
+            .ToDictionary(k => k.GetProperty("id").GetGuid(), k => k.GetProperty("usedBy").GetInt32());
+
+        // #642: the Cost card's shared-key note shows only when more than one object holds the key; a deleted knowledge base does not count.
+        (keys[seed.Active], keys[seed.Disabled], keys[seed.Unusable]).ShouldBe((2, 1, 0));
+    }
+
+    [Fact]
     public async Task V39_refuses_a_knowledge_bases_key_of_another_department_disabled_unusable_out_of_ceiling_or_without_its_models()
     {
         var seed = await SeedAsync();

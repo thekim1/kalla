@@ -92,6 +92,14 @@ export interface OrgSyncStatus {
   degraded: string | null
   /** The gateway links' address: the context's `admin_url`, else `Admin:GatewayAdminUrl` (admin design §2.3). */
   adminUrl: string | null
+  /** The Integration API read-back's state (B-45, #642): why a key's cost and budget are missing. */
+  integration?: IntegrationReadback | null
+}
+
+/** Whether `Gateway:IntegrationApiUrl` is set, and the last read-back's refusal (`401`, `403` scope missing, `429`, or a failure). */
+export interface IntegrationReadback {
+  configured: boolean
+  lastError: { reason: string; status: number | null; at: IsoDateTime } | null
 }
 
 // ---------- Collections, sources, documents (admin design §4.5) ----------
@@ -949,6 +957,8 @@ export interface GatewayKey {
   /** Why it cannot be chosen, when `selectable` is false. */
   reason: string | null
   syncedAt: IsoDateTime
+  /** The assistants and live knowledge bases that hold the key (#642: the Cost card's shared-key note). */
+  usedBy: number
 }
 
 /** The key picker's list and the gateway admin UI address for links (null when unknown). */

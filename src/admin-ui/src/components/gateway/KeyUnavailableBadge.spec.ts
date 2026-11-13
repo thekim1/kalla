@@ -10,7 +10,7 @@ function key(id: string, extra: Partial<GatewayKey> = {}): GatewayKey {
   return {
     id, name: 'Bygglov – chat', teamId: 't1', teamName: 'Kontaktcenter', departmentId: 'd1', status: 'Active', ownerActive: true, expiresAt: null,
     allowedModels: [], allowedResidencies: [], piiPolicy: 'Off', contentGuardPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null,
-    maxConcurrentRequests: null, maxOutputTokens: null, hasSystemPrompt: false, usable: true, selectable: true, reason: null, syncedAt: '2026-11-12T10:00:00Z',
+    maxConcurrentRequests: null, maxOutputTokens: null, hasSystemPrompt: false, usable: true, selectable: true, reason: null, syncedAt: '2026-11-12T10:00:00Z', usedBy: 1,
     ...extra,
   }
 }
