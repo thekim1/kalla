@@ -281,6 +281,9 @@ public static class AdminErrorCodes
     /// <summary>V39, a warning only: the key has a system prompt.</summary>
     public static AdminErrorCode GatewayKeySystemPrompt { get; } = new("gateway_key_system_prompt", 409, "The AI gateway key {key} adds its team's system prompt to every call, which changes the assistant's prompts.");
 
+    /// <summary>A cost report's period beyond 400 days by day or 36 months by month (admin design §8.6).</summary>
+    public static AdminErrorCode PeriodTooLong { get; } = new("period_too_long", 400, "The period is too long: at most 400 days by day, or 36 months by month.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -290,5 +293,5 @@ public static class AdminErrorCodes
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
-            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt];
+            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong];
 }

@@ -64,6 +64,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   gateway_key_model: 'The AI gateway key {key} does not allow every model this uses.',
   gateway_key_required: 'No AI gateway key is chosen, so the calls are charged to the platform’s owner team.',
   gateway_key_system_prompt: 'The AI gateway key {key} adds its team’s system prompt to every call, which changes the assistant’s prompts.',
+  period_too_long: 'The period is too long: at most 400 days by day, or 36 months by month.',
   version_link_missing: 'The assistant refers to something that is missing: {link}.',
   too_many_collections: 'An assistant can use at most 20 knowledge bases.',
   collection_not_shared: 'A knowledge base belongs to another department and is not shared with yours.',

@@ -425,6 +425,11 @@
       "code": "gateway_key_system_prompt",
       "status": 409,
       "message": "The AI gateway key {key} adds its team\u0027s system prompt to every call, which changes the assistant\u0027s prompts."
+    },
+    {
+      "code": "period_too_long",
+      "status": 400,
+      "message": "The period is too long: at most 400 days by day, or 36 months by month."
     }
   ]
 }

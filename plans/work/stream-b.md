@@ -510,7 +510,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-38.
 - **Read:** admin §4.9, §11.2; chat §8.3, §12.2; identity §4.1; data-model §1.2, §2.3.
 
-### [ ] B-40 Cost report API: per assistant, knowledge base and department, by day or month, CSV (cost-attribution C4)
+### [x] B-40 Cost report API: per assistant, knowledge base and department, by day or month, CSV (cost-attribution C4) (#627)
 - **Do:** admin §8.6's routes `GET /api/assistants/{id}/costs`, `GET /api/collections/{id}/costs` (Read; the
   collection's own department only) and `GET /api/costs` with `format=csv` (Manage: department admins their
   departments, platform admins all) over `AssistantDailyUsage` and `CollectionDailyUsage`: per period (Europe/Stockholm

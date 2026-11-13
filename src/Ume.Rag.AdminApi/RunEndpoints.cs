@@ -186,19 +186,23 @@ public sealed record DeletionProposalDto(Guid DocumentId, string? Title, string?
 /// <summary>CSV for downloads: RFC 4180 quoting, and cells starting with <c>= + - @</c> prefixed with <c>'</c> (formula injection).</summary>
 public static class Csv
 {
-    public static string Of(IReadOnlyList<string> header, IEnumerable<IReadOnlyList<string?>> rows)
+    /// <summary>
+    /// The rows as CSV with <paramref name="delimiter"/> (<c>,</c>; the cost report's <c>;</c> as the gateway's
+    /// <c>ReportService.ExportCsvAsync</c>, admin design §8.6), a cell starting with a formula character prefixed with <c>'</c>.
+    /// </summary>
+    public static string Of(IReadOnlyList<string> header, IEnumerable<IReadOnlyList<string?>> rows, char delimiter = ',')
     {
         var text = new System.Text.StringBuilder();
-        text.AppendJoin(',', header.Select(Cell)).Append("\r\n");
+        text.AppendJoin(delimiter, header.Select(h => Cell(h, delimiter))).Append("\r\n");
         foreach (var row in rows)
         {
-            text.AppendJoin(',', row.Select(Cell)).Append("\r\n");
+            text.AppendJoin(delimiter, row.Select(c => Cell(c, delimiter))).Append("\r\n");
         }
 
         return text.ToString();
     }
 
-    private static string Cell(string? value)
+    private static string Cell(string? value, char delimiter)
     {
         var v = value ?? "";
         if (v.Length > 0 && v[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
@@ -206,7 +210,7 @@ public static class Csv
             v = "'" + v;
         }
 
-        return v.IndexOfAny([',', '"', '\r', '\n']) >= 0 ? "\"" + v.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : v;
+        return v.IndexOfAny([delimiter, '"', '\r', '\n']) >= 0 ? "\"" + v.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : v;
     }
 }
 
