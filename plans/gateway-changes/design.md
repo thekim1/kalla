@@ -535,9 +535,10 @@ them.
   truncated, never refused: metadata must not fail a model call); control characters replaced
   (`SecurityEvents.Printable`, `SecurityEvents.cs:30-49`, which allocates nothing when there is nothing to replace).
 - Stored on `UsageRecord` as `RunId varchar(100) NULL`, `Step varchar(100) NULL` (the gateway's migration
-  `UsageRunMetadata`). Not in monthly totals (retention summarises without them). No index: the admin filter `runId=` on
-  `/api/usage/requests` runs inside the time range like the other filters.
-- Exposed on `/v1/usage/records` (`runId`, `step`), in the admin request list (column hidden by default) and on the
+  `UsageRunMetadata`). Not in monthly totals (retention summarises without them). No index. At v0.10.1 the admin request list
+  (`/api/usage/requests`) has no `runId` filter or run column: the run id and step show only in a request's detail
+  (asked of the gateway owner on #580; the runbook matches per step and day meanwhile).
+- Exposed on `/v1/usage/records` (`runId`, `step`), in the admin request detail and on the
   Integration API's `usage` (`groupBy=step` groups by it, `runId=` filters on it; there is no grouping by run, §5.6),
   where Ume.Rag sets its per-step split beside the gateway's.
 - Documented as **opaque ids only**: no names, no content, no user ids (ADR 003). Ume.Rag sends GUIDs and its step names

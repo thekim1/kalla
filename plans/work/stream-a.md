@@ -560,3 +560,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** nothing.
 - **Read:** data-model §8, §9, §4.4; the chat step in migrations `ChatRetentionStep` and `DailyUsage`; ADR 016 in the
   gateway's `docs/adr.md`.
+
+### [ ] A-40 The worker's model-call metrics: `rag.embed.tokens` and `rag.ingestion.cost` (engine §17)
+- **Do:** the worker records `rag.embed.tokens` (counter, the input tokens of every embedding call) and
+  `rag.ingestion.cost` (counter, USD, tag `class`, with `source` = `gateway` | `estimate` as `rag.chat.cost` has it)
+  from the usage it already reads for `CollectionDailyUsage` (A-31), once per answered call, in the meter the worker
+  uses for its other `rag.*` metrics. The runbook's cost section (A-32) then names the metric for knowledge bases.
+- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`, `docs/runbook.md` (the one line).
+- **Done when:** a test with a `MeterListener` sees both after an indexing run on the FakeGateway, the cost split by
+  `source` (`fake-no-cost` gives `estimate`); no tag carries an id or text.
+- **Waits on:** nothing (A-32 for the runbook line).
+- **Read:** engine §17 (metrics), §10.6; chat §17 (`rag.chat.cost`).
