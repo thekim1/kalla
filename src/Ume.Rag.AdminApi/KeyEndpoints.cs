@@ -30,12 +30,13 @@ public static class KeyEndpoints
                     query = query.Where(k => k.ClientId == client);
                 }
 
-                var items = await query.OrderBy(k => k.Name).ToListAsync(ct);
-                return items.Select(k => KeyDto.Of(k, admin.Now)).ToList();
+                var items = await query.Include(k => k.Client).OrderBy(k => k.Name).ToListAsync(ct);
+                return items.Select(k => DtoOf(k, admin.Now)).ToList();
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("ListKeys").WithSummary("Keys the caller manages; never their secrets");
 
-        keys.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) => KeyDto.Of(await FindAsync(admin, id, ct), admin.Now))
+        keys.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
+                DtoOf(await FindAsync(admin, id, ct), admin.Now))
             .RequireAuthorization(AdminPolicies.Manage).WithName("GetKey").WithSummary("One key");
 
         keys.MapPost("", async (KeyCreateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
@@ -45,26 +46,18 @@ public static class KeyEndpoints
                 {
                     var client = await admin.Db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Id == request.ClientId, attempt)
                         ?? throw AdminFaults.Field("clientId", AdminErrorCodes.InvalidValue);
-                    var department = await CheckTeamAsync(admin, request.TeamId, attempt);
-                    await CheckScopesAsync(admin, department, request.Scopes, attempt, required: !admin.IsPlatformAdmin);
-                    var key = new ApiKey
-                    {
-                        ClientId = client.Id, TeamId = request.TeamId, Kind = KeyKinds.Secret, Name = request.Name.Trim(), Prefix = generated.Prefix,
-                        KeyHash = generated.Hash, EncryptedSecret = Protector(protection).Protect(generated.PlainText), CreatedAt = admin.Now, CreatedBy = admin.Actor,
-                    };
-                    Apply(key, request);
-                    admin.Db.Keys.Add(key);
-                    return new AdminChange<ApiKey>(key, "create", AuditEntityTypes.Key, key.Id, null, KeyAudit.Of(key))
+                    var (key, department) = await AddSecretKeyAsync(admin, client, request.Name, request.TeamId, request, generated, protection, attempt);
+                    return new AdminChange<KeyDto>(KeyDto.Of(key, client.Name, admin.Now), "create", AuditEntityTypes.Key, key.Id, null, KeyAudit.Of(key))
                     {
                         DepartmentId = department, Classification = client.ClassificationCeiling,
                     };
                 }, ct);
-                return Results.Created($"/api/keys/{key.Id}", new KeyCreatedDto(KeyDto.Of(key, admin.Now), generated.PlainText));
+                return Results.Created($"/api/keys/{key.Id}", new KeyCreatedDto(key, generated.PlainText));
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("CreateKey").WithSummary("Create a key; the response holds its secret, shown this once");
 
         keys.MapPut("/{id:guid}", async (Guid id, KeyUpdateRequest request, AdminContext admin, CancellationToken ct) =>
-                KeyDto.Of(await admin.WriteAsync(async attempt =>
+                DtoOf(await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
                     var department = await CheckTeamAsync(admin, key.TeamId, attempt);
@@ -97,7 +90,7 @@ public static class KeyEndpoints
                     return new AdminChange<(ApiKey, ApiKey)>((replacement, old), "rotate", AuditEntityTypes.Key, old.Id, before,
                         new { old = KeyAudit.Of(old), replacement = KeyAudit.Of(replacement) }) { DepartmentId = department };
                 }, ct);
-                return new KeyRotatedDto(KeyDto.Of(replacement, admin.Now), generated.PlainText, KeyDto.Of(old, admin.Now));
+                return new KeyRotatedDto(KeyDto.Of(replacement, old.Client!.Name, admin.Now), generated.PlainText, DtoOf(old, admin.Now));
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("RotateKey").WithSummary("Replace a key; the response holds the new secret, shown this once");
 
@@ -118,7 +111,7 @@ public static class KeyEndpoints
             .RequireAuthorization(AdminPolicies.Admin).WithName("RevealKey").WithSummary("A key's secret (platform admin; audited)");
 
         keys.MapPost("/{id:guid}/revoke", async (Guid id, AdminContext admin, CancellationToken ct) =>
-                KeyDto.Of(await admin.WriteAsync(async attempt =>
+                DtoOf(await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
                     var before = KeyAudit.Of(key);
@@ -146,23 +139,57 @@ public static class KeyEndpoints
         return admin.Db.Keys.Where(k => k.TeamId != null && teams.Contains(k.TeamId.Value));
     }
 
+    /// <summary>The key with its client, for <see cref="DtoOf"/>.</summary>
     private static async Task<ApiKey> FindAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = false)
     {
-        var query = tracked ? Managed(admin) : Managed(admin).AsNoTracking();
+        var query = (tracked ? Managed(admin) : Managed(admin).AsNoTracking()).Include(k => k.Client);
         return await query.SingleOrDefaultAsync(k => k.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
     }
 
-    /// <summary>The team's department; a department admin must name a team of theirs, a platform admin may give none.</summary>
-    private static async Task<Guid?> CheckTeamAsync(AdminContext admin, Guid? teamId, CancellationToken ct)
+    /// <summary>A key loaded with its client (<see cref="FindAsync"/>, the list).</summary>
+    private static KeyDto DtoOf(ApiKey key, DateTimeOffset now) => KeyDto.Of(key, key.Client!.Name, now);
+
+    /// <summary>
+    /// Adds a new secret key of <paramref name="client"/> to the caller's write (<see cref="AdminContext.WriteAsync{T}"/>): the team and
+    /// V23 scope checks, the stored HMAC and the protected secret for reveal. Shared by <c>POST /api/keys</c> and a client's first key
+    /// (<c>POST /api/clients</c>); without <paramref name="fields"/> the key has the defaults (no scopes, limits or expiry).
+    /// <paramref name="fieldPrefix"/> is the request member that holds the key, for field errors. Returns the key and its team's
+    /// department for the audit entry.
+    /// </summary>
+    internal static async Task<(ApiKey Key, Guid? DepartmentId)> AddSecretKeyAsync(AdminContext admin, Client client, string name, Guid? teamId,
+        KeyFields? fields, GeneratedKey generated, IDataProtectionProvider protection, CancellationToken ct, string fieldPrefix = "")
     {
+        ArgumentNullException.ThrowIfNull(admin);
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(generated);
+        var department = await CheckTeamAsync(admin, teamId, ct, fieldPrefix);
+        await CheckScopesAsync(admin, department, fields?.Scopes, ct, required: !admin.IsPlatformAdmin);
+        var key = new ApiKey
+        {
+            ClientId = client.Id, TeamId = teamId, Kind = KeyKinds.Secret, Name = name.Trim(), Prefix = generated.Prefix, KeyHash = generated.Hash,
+            EncryptedSecret = Protector(protection).Protect(generated.PlainText), CreatedAt = admin.Now, CreatedBy = admin.Actor,
+        };
+        if (fields is not null)
+        {
+            Apply(key, fields);
+        }
+
+        admin.Db.Keys.Add(key);
+        return (key, department);
+    }
+
+    /// <summary>The team's department; a department admin must name a team of theirs, a platform admin may give none.</summary>
+    private static async Task<Guid?> CheckTeamAsync(AdminContext admin, Guid? teamId, CancellationToken ct, string fieldPrefix = "")
+    {
+        var field = fieldPrefix + "teamId";
         if (teamId is not { } team)
         {
-            return admin.IsPlatformAdmin ? null : throw AdminFaults.Field("teamId", AdminErrorCodes.NotInScope);
+            return admin.IsPlatformAdmin ? null : throw AdminFaults.Field(field, AdminErrorCodes.NotInScope);
         }
 
         var departments = admin.Departments().Select(d => d.Id);
         return await admin.Db.Teams.AsNoTracking().Where(t => t.Id == team && departments.Contains(t.DepartmentId)).Select(t => (Guid?)t.DepartmentId).SingleOrDefaultAsync(ct)
-            ?? throw AdminFaults.Field("teamId", AdminErrorCodes.NotInScope);
+            ?? throw AdminFaults.Field(field, AdminErrorCodes.NotInScope);
     }
 
     /// <summary>
@@ -293,15 +320,16 @@ public sealed record RevealRequest : AdminRequest
     public RevealPurpose Purpose { get; init; } = RevealPurpose.Reveal;
 }
 
+/// <summary>A key, never its secret; <see cref="ClientName"/> is for the Keys page's client column (admin design §5.9).</summary>
 public sealed record KeyDto(
-    Guid Id, Guid ClientId, Guid? TeamId, string Kind, string Name, string? Description, string Prefix, string Status, IReadOnlyList<Guid> AssistantIds,
-    IReadOnlyList<Guid> CollectionIds, IReadOnlyList<string> AllowedIpRanges, int? RequestsPerMinute, bool IsEnabled, DateTimeOffset CreatedAt, string? CreatedBy,
-    DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? GraceUntil, Guid? RotatedToKeyId)
+    Guid Id, Guid ClientId, string ClientName, Guid? TeamId, string Kind, string Name, string? Description, string Prefix, string Status,
+    IReadOnlyList<Guid> AssistantIds, IReadOnlyList<Guid> CollectionIds, IReadOnlyList<string> AllowedIpRanges, int? RequestsPerMinute, bool IsEnabled,
+    DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? GraceUntil, Guid? RotatedToKeyId)
 {
-    public static KeyDto Of(ApiKey k, DateTimeOffset now)
+    public static KeyDto Of(ApiKey k, string clientName, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(k);
-        return new(k.Id, k.ClientId, k.TeamId, k.Kind, k.Name, k.Description, k.Prefix,
+        return new(k.Id, k.ClientId, clientName, k.TeamId, k.Kind, k.Name, k.Description, k.Prefix,
             System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(k.GetStatus(now).ToString()), k.Scopes.AssistantIds, k.Scopes.CollectionIds,
             k.AllowedIpRanges, k.RequestsPerMinute, k.IsEnabled, k.CreatedAt, k.CreatedBy, k.ExpiresAt, k.RevokedAt, k.GraceUntil, k.RotatedToKeyId);
     }

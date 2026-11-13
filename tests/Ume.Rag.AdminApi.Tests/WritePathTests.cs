@@ -25,9 +25,9 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static object NewClient(string name, string ceiling = "internal", bool storesHistory = false, string? oauthClientId = null) => new
+    private static object NewClient(string name, string? oauthClientId = null) => new
     {
-        name, kind = ClientKinds.Integration, classificationCeiling = ceiling, storesHistory, oAuthClientId = oauthClientId,
+        name, kind = ClientKinds.Integration, classificationCeiling = "internal", oAuthClientId = oauthClientId,
     };
 
     private async Task<long> ConfigVersionAsync()
@@ -51,7 +51,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
 
         using var created = await admin.PostAsJsonAsync("/api/clients", NewClient("Write path " + Guid.NewGuid()), Ct);
         created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
-        var client = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct));
+        var client = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("client");
         var id = client.GetProperty("id").GetString()!;
 
         var after = await ConfigVersionAsync();
@@ -94,9 +94,9 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
         await using var factory = database.HeaderFactory();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         using var created = await admin.PostAsJsonAsync("/api/clients", NewClient("Stale " + Guid.NewGuid()), Ct);
-        var client = await created.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var client = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("client");
         var id = client.GetProperty("id").GetString()!;
-        var first = client.GetProperty("version").GetString();
+        var first =client.GetProperty("version").GetString();
         var body = new { name = client.GetProperty("name").GetString(), kind = ClientKinds.Integration, classificationCeiling = "public", version = first };
         (await admin.PutAsJsonAsync($"/api/clients/{id}", body, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
@@ -120,13 +120,14 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = await ConfigVersionAsync();
 
-        // CK_Clients_History: a client that keeps chat history never reaches sensitive assistants.
-        using var refused = await admin.PostAsJsonAsync("/api/clients", NewClient("History " + Guid.NewGuid(), "sensitive", storesHistory: true), Ct);
+        // CK_Clients_Mcp: an MCP client is never sensitive (CK_Clients_History is a field error first, ClientEndpointsTests).
+        using var refused = await admin.PostAsJsonAsync("/api/clients",
+            new { name = "MCP " + Guid.NewGuid(), kind = ClientKinds.McpClient, classificationCeiling = "sensitive" }, Ct);
 
         refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Ct);
         problem.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.PlatformRule.Code);
-        problem.GetProperty("params").GetProperty("constraint").GetString().ShouldBe("CK_Clients_History");
+        problem.GetProperty("params").GetProperty("constraint").GetString().ShouldBe("CK_Clients_Mcp");
         (await ConfigVersionAsync()).ShouldBe(before);
     }
 

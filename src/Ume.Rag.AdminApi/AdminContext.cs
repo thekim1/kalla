@@ -32,8 +32,14 @@ public sealed record AdminChange<T>(T Result, string Action, string EntityType, 
     public IReadOnlyList<AuditAlso> Also { get; init; } = [];
 }
 
-/// <summary>A related change audited with an <see cref="AdminChange{T}"/> (same actor, version, department and level).</summary>
-public sealed record AuditAlso(string Action, string EntityType, object? EntityId, object? Before, object? After);
+/// <summary>
+/// A related change audited with an <see cref="AdminChange{T}"/> (same actor, version and level; the change's department unless
+/// <see cref="DepartmentId"/> names its own, e.g. a client's first key with a team).
+/// </summary>
+public sealed record AuditAlso(string Action, string EntityType, object? EntityId, object? Before, object? After)
+{
+    public Guid? DepartmentId { get; init; }
+}
 
 /// <summary>
 /// The signed-in user's view of the configuration and the admin write path (admin design §3.2, §4.4), adapted from the
@@ -117,7 +123,11 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
                 Db.AuditLog.Add(audit);
                 foreach (var also in change.Also)
                 {
-                    Db.AuditLog.Add(Audit(actor, change with { Action = also.Action, EntityType = also.EntityType, EntityId = also.EntityId, Before = also.Before, After = also.After }, version));
+                    Db.AuditLog.Add(Audit(actor, change with
+                    {
+                        Action = also.Action, EntityType = also.EntityType, EntityId = also.EntityId, Before = also.Before, After = also.After,
+                        DepartmentId = also.DepartmentId ?? change.DepartmentId,
+                    }, version));
                 }
 
                 await Db.SaveChangesAsync(attempt);
@@ -247,14 +257,14 @@ public sealed class AdminValidationFilter : IEndpointFilter
         {
             if (property.GetValue(argument) is AdminRequest nested)
             {
-                Validate(nested, prefix + property.Name + ".", errors);
+                Validate(nested, prefix + JsonNamingPolicy.CamelCase.ConvertName(property.Name) + ".", errors);
             }
             else if (property.GetValue(argument) is IEnumerable<AdminRequest> children)
             {
                 var i = 0;
                 foreach (var child in children)
                 {
-                    Validate(child, $"{prefix}{property.Name}[{i++}].", errors);
+                    Validate(child, $"{prefix}{JsonNamingPolicy.CamelCase.ConvertName(property.Name)}[{i++}].", errors);
                 }
             }
         }

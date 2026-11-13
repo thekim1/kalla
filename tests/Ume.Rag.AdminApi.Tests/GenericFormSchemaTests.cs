@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
+using Ume.Rag.Domain.Entities;
 
 namespace Ume.Rag.AdminApi.Tests;
 
@@ -90,6 +92,23 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
         var mode = Resolve(document, Body(document, "post", "/api/keys/{id}/rotate")["properties"]!["mode"]);
         Strings(mode["enum"]).ShouldBe(["RevokeImmediately", "Grace24Hours"]);
         Strings(Resolve(document, Body(document, "post", "/api/keys/{id}/reveal")["properties"]!["purpose"])["enum"]).ShouldBe(["Reveal", "Copy"]);
+
+        // A client's coded strings carry their allowed values (admin design §5.9; ClientEndpoints.AddClientSchemas), on create and update.
+        foreach (var (method, path) in new[] { ("post", "/api/clients"), ("put", "/api/clients/{id}") })
+        {
+            var client = Body(document, method, path)["properties"]!;
+            Strings(Resolve(document, client["kind"])["enum"]).ShouldBe(ClientKinds.All, $"{method} {path}");
+            Strings(Resolve(document, client["classificationCeiling"])["enum"]).ShouldBe(Classification.All, $"{method} {path}");
+            Strings(Resolve(document, client["toolPolicy"])["enum"]).ShouldBe(["none", "read"], $"{method} {path}");
+            Resolve(document, client["name"])["enum"].ShouldBeNull($"{method} {path}");
+        }
+
+        // The first key on create only (nullable: a oneOf of null and the request's $ref).
+        var firstKeyNode = Body(document, "post", "/api/clients")["properties"]!["firstKey"].ShouldNotBeNull();
+        var firstKey = Resolve(document, firstKeyNode["oneOf"] is JsonArray choices ? choices.Single(c => c?["$ref"] is not null) : firstKeyNode);
+        firstKey["properties"]!["name"].ShouldNotBeNull();
+        firstKey["properties"]!["teamId"].ShouldNotBeNull();
+        Body(document, "put", "/api/clients/{id}")["properties"]!["firstKey"].ShouldBeNull();
 
         // A jsonb member is an object: schema.ts gives it the JSON text area.
         foreach (var (path, member) in new[] { ("/api/settings/crawl", "value"), ("/api/settings/pii", "flagRules") })
