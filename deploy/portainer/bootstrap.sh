@@ -18,7 +18,7 @@ F=/conf
 : "${UME_RAG_API_HOST:?Set UME_RAG_API_HOST (public hostname of rag-api)}"
 ADMIN_HOST="${UME_RAG_ADMIN_HOST:-$UME_RAG_API_HOST}"
 for d in postgres api admin worker parser migrations; do mkdir -p "$C/$d"; done
-for d in postgres api admin worker migrations keys renderer; do mkdir -p "$S/$d"; done
+for d in postgres api admin worker migrations keys renderer openwebui; do mkdir -p "$S/$d"; done
 rand() { openssl rand -hex 32; }
 quiet() { "$@" >/dev/null 2>&1; }
 
@@ -79,6 +79,13 @@ for d in migrations api admin; do tr -d '\n' < "$S/.pepper" > "$S/$d/Security__K
 # Open WebUI's user JWT secret: unused without Open WebUI, but rag-api expects the file (identity design §5.2).
 [ -f "$S/.openwebui-jwt-secret" ] || rand > "$S/.openwebui-jwt-secret"
 tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/api/OpenWebUi__JwtSecret"
+# Open WebUI's own files (profile openwebui; harmless without it): the same user-JWT secret, its session key, the
+# feedback service account's password, and a CA bundle with the public CAs (its OIDC provider), RAG's (rag-api) and the
+# gateway's.
+tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/openwebui/jwt-secret"
+[ -f "$S/openwebui/webui_secret_key" ] || rand > "$S/openwebui/webui_secret_key"
+[ -f "$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$S/openwebui/admin-password"
+cat /etc/ssl/certs/ca-certificates.crt "$C/ca.pem" /gateway-certs/ca.pem > "$S/openwebui/ca.pem"
 [ -f "$S/worker/Security__CrawlKeyPepper" ] || rand | tr -d '\n' > "$S/worker/Security__CrawlKeyPepper"
 # The renderer's secret WebSocket path (connectors design §8.3): the worker gets the endpoint only while the render
 # profile is on, so without the renderer it refuses rendering instead of waiting for a browser that never starts.
@@ -108,6 +115,8 @@ for svc in api admin worker; do
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
+# The feedback service account's Open WebUI key, for rag-api's feedback import (chat design §13.3); empty = none.
+put api OpenWebUi__AdminApiKey "${UME_RAG_OPENWEBUI_ADMIN_API_KEY:-}"
 # The Data API key of the admin's former org sync: the admin syncs with its credential key now.
 if [ -e "$S/admin/OrgSync__DataApiKey" ]; then
   rm -f "$S/admin/OrgSync__DataApiKey"
@@ -130,6 +139,8 @@ chmod 0750 /blobs/rag /blobs/spool
 chown -R 999:999 "$C/postgres" "$S/postgres"
 chown -R 10001:10001 "$C/parser"
 chown -R 10002:10002 "$S/renderer"
+chown -R 1000:1000 "$S/openwebui" /openwebui-data
+chmod 0700 "$S/openwebui"
 chown -R 1654:1654 "$C/api" "$C/admin" "$C/worker" "$C/migrations" "$S/api" "$S/admin" "$S/worker" "$S/migrations" "$S/keys"
 chmod 755 "$C" "$S"
 missing=""

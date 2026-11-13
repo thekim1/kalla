@@ -70,10 +70,28 @@
 #                             API's URL as rag-admin reaches it, https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443> (adminapi
 #                             is not on llm); UME_RAG_ADMIN_GATEWAY_KEY needs the scope usage.read. Unset: no read-back
 #   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   COMPOSE_PROFILES=clamav,openwebui  also rag-openwebui, Open WebUI as the chat for users, on plain HTTP at
+#                             UME_RAG_OPENWEBUI_BIND (127.0.0.1):UME_RAG_OPENWEBUI_PORT (3000) for a TLS proxy in front
+#                             (it sets Secure cookies, so users reach it over HTTPS only). It calls rag-api inside the
+#                             stack. Set with it:
+#     UME_RAG_OPENWEBUI_HOST      its public hostname (chat.example.se)
+#     UME_RAG_OPENWEBUI_OIDC_CLIENT_ID, UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET  its OIDC client; redirect URI
+#                             https://<UME_RAG_OPENWEBUI_HOST>/oauth/oidc/login/callback. The provider is
+#                             UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL, default <UME_OIDC_AUTHORITY>/.well-known/openid-configuration
+#     UME_RAG_OPENWEBUI_API_KEY   the key of Open WebUI's client in RAG's admin UI (Clients: kind open-webui), and
+#     UME_RAG_OPENWEBUI_CLIENT_ID that client's id. First start without them, create the client, set both, update the stack
+#     Feedback import (optional): Open WebUI's first user is the service account feedback-import@localhost, its password
+#                             in <stack>_rag-secrets at openwebui/admin-password. With UME_RAG_OPENWEBUI_PASSWORD_AUTH=true
+#                             for a moment, sign in as it (POST /api/v1/auths/signin), mint its key (POST
+#                             /api/v1/auths/api_key), set it as UME_RAG_OPENWEBUI_ADMIN_API_KEY, set
+#                             UME_RAG_OPENWEBUI_BASE_URL=http://rag-openwebui:8080 and password auth back to false,
+#                             update the stack (docs/production-setup.md, "Open WebUI"; deploy/openwebui-feedback-key.sh
+#                             is the same for Compose)
 #   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
 #                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
-#   RAG_*_IMAGE               other RAG images (default: release 0.2.0 from ghcr.io/thekim1, pinned by digest; add
-#                             ghcr.io as a registry in Portainer if the packages are private)
+#   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
+#                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
+#                             Portainer if the packages are private)
 # Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
 # without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
 # with pg_dump or volume snapshots.
@@ -191,7 +209,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:?Set MIGRATIONS_IMAGE}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.1@sha256:f402b51b408d46f1790a8fbec4c1ad63e842e39a295d040ddf5b86babec241c9}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -210,7 +228,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:?Set GATEWAY_IMAGE}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.1@sha256:d22d4ecd71866aca64455ae8c983a895e2a68db6010a483390f3850a31dadcea}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -246,7 +264,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:?Set ADMINAPI_IMAGE}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.1@sha256:135276c9b9d482deb82217d585b72f8a71494529afc82307e983df078825eefc}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
@@ -296,7 +314,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ume-llm-gateway/dataapi:latest}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.1@sha256:04fbded22d6142e8d1bf47c4078cce7900dc9ad338ebd68035de5ed834ebc754}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
@@ -339,6 +357,7 @@ services:
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
       UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
+      UME_RAG_OPENWEBUI_ADMIN_API_KEY: ${UME_RAG_OPENWEBUI_ADMIN_API_KEY:-}
     configs:
       - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
       - {source: rag-postgres-init, target: /config/postgres-init.sql}
@@ -350,6 +369,7 @@ services:
       - rag-secrets:/secrets
       - rag-config:/conf
       - rag-blobs:/blobs
+      - rag-openwebui-data:/openwebui-data
       - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
     depends_on:
       bootstrap: {condition: service_completed_successfully}
@@ -357,7 +377,7 @@ services:
 
   rag-postgres:
     <<: *hardened
-    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.2.0@sha256:3e6b0818aba63e96b6fed69461f10f4b6856226d4f7a73cb6335b38f723433bb}
+    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.5.0@sha256:a1bbdab41da5da7ba745b97554dc9e75644269a7ba96ce85e8d0cf71e5e487ae}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -389,7 +409,7 @@ services:
 
   rag-migrate:
     <<: *hardened
-    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.2.0@sha256:7943dbef6500fd2210a1cd420bed718b741a5eddf3a9cb8694adb65df09f25d3}
+    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.5.0@sha256:e84c247e64317dc7d699d23cf931074b3cf68b350b7f6a29e9520ff17c103d48}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -419,7 +439,7 @@ services:
 
   rag-api:
     <<: *hardened
-    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.2.0@sha256:3fbb166acc7495044329bf5b4f3c701b09487dd54a4a0716f53356f3f21f235c}
+    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.5.0@sha256:365ce840ce7f97775b8ebde38f15a1ed4b52de5a330ac333a23f4c345dab853a}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -448,6 +468,11 @@ services:
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+      # Open WebUI (profile openwebui): its client in the registry, and the feedback import from it (identity §5.2,
+      # chat §13.3); an empty base URL = no import. The key is the secret file OpenWebUi__AdminApiKey (rag-bootstrap).
+      OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
+      OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
+      OpenWebUi__FeedbackImportInterval: ${UME_RAG_OPENWEBUI_FEEDBACK_IMPORT_INTERVAL:-00:15:00}
     volumes:
       - {<<: *rag-certs-mount, volume: {subpath: api}}
       - {<<: *rag-secrets-mount, volume: {subpath: api}}
@@ -471,7 +496,7 @@ services:
 
   rag-admin:
     <<: *hardened
-    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.2.0@sha256:2c8e3b12bbc3ed2118c87cc2a0612c74d3b76f95f935915bc728379c417638e2}
+    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.5.0@sha256:27f1e7b838db85dd9e5826561ce05649e8730ba24605745b9fd2455b22fba4fe}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -539,7 +564,7 @@ services:
 
   rag-worker:
     <<: *hardened
-    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.2.0@sha256:606e27dd997889b449c37e59ca96a259d768107f569962dc46741ddc4d5e1707}
+    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.5.0@sha256:98581e7fe2af1c8d6f4b88262bc0203874e6151668142e6c3eadd98c7a16654b}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -599,7 +624,7 @@ services:
 
   rag-parser:
     <<: *hardened
-    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.2.0@sha256:a3206d9b732bf91c329236a5ac9630748463875a50ccf98f6eb63e08ca6d9f50}
+    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.5.0@sha256:4e194b6c4b908d5090be36dd22cd7fbb1fe42904936e168ef641fd4c3a220bd0}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -624,7 +649,7 @@ services:
   rag-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.2.0@sha256:88b90287deafedcdbc5209a9b3c485c72fc4c23ad395d9ff994d33b35cf1a0ec}
+    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.5.0@sha256:da8037f7228478e74e606b86be595d277555e80d0c2bdd9bc2efe19b6b8c2af6}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -643,7 +668,7 @@ services:
   rag-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.2.0@sha256:bdef11f13cf5bc15fc3950b7cb464726563773338548281c3d524e276be131ef}
+    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.5.0@sha256:5db4f4bfa472d684d974d54fdcb409731434f0453ab64d36fae9b253df341fa9}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]
@@ -660,6 +685,93 @@ services:
     depends_on:
       rag-bootstrap: {condition: service_completed_successfully}
     networks: [rag-render]
+
+  rag-openwebui:
+    # Open WebUI as the users' chat (compose.openwebui.yaml in a Compose deployment; chat design §14), with the profile
+    # openwebui. Plain HTTP for a TLS proxy in front; it calls rag-api inside the stack, trusting RAG's CA through
+    # openwebui/ca.pem (the public CAs, RAG's and the gateway's, from rag-bootstrap).
+    <<: *hardened
+    profiles: [openwebui]
+    image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
+    user: "1000:1000"
+    restart: unless-stopped
+    tmpfs: [/tmp]
+    cpus: 1.0
+    cpu_shares: 512
+    mem_reservation: 512m
+    mem_limit: 1.5g
+    pids_limit: 256
+    ports: ["${UME_RAG_OPENWEBUI_BIND:-127.0.0.1}:${UME_RAG_OPENWEBUI_PORT:-3000}:8080"]
+    # Open WebUI takes the user-JWT secret and the service account's password only from its environment: read them from
+    # the volume, then start as the image does (bash start.sh in /app/backend).
+    entrypoint: [/bin/bash, -c, 'export FORWARD_USER_INFO_HEADER_JWT_SECRET="$$(cat /run/owui-secrets/jwt-secret)" WEBUI_ADMIN_PASSWORD="$$(cat /run/owui-secrets/admin-password)"; exec bash start.sh']
+    environment:
+      HOME: /tmp
+      DATA_DIR: /data
+      SSL_CERT_FILE: /run/owui-secrets/ca.pem
+      REQUESTS_CA_BUNDLE: /run/owui-secrets/ca.pem
+      WEBUI_SECRET_KEY_FILE: /run/owui-secrets/webui_secret_key
+      WEBUI_URL: https://${UME_RAG_OPENWEBUI_HOST:-localhost}
+      WEBUI_SESSION_COOKIE_SECURE: "true"
+      WEBUI_AUTH_COOKIE_SECURE: "true"
+      OFFLINE_MODE: "true"
+      ENABLE_PERSISTENT_CONFIG: "false"
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: https://rag-api:8443/v1
+      OPENAI_API_KEYS: ${UME_RAG_OPENWEBUI_API_KEY:-}
+      OPENAI_API_CONFIGS: '{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}'
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
+      BYPASS_MODEL_ACCESS_CONTROL: "true"
+      ENABLE_DIRECT_CONNECTIONS: "false"
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_RETRIEVAL_QUERY_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+      ENABLE_CONTEXT_COMPACTION: "false"
+      BYPASS_EMBEDDING_AND_RETRIEVAL: "true"
+      DEFAULT_MODEL_METADATA: '{"capabilities":{"builtin_tools":false}}'
+      ENABLE_WEB_SEARCH: "false"
+      ENABLE_CODE_EXECUTION: "false"
+      ENABLE_CODE_INTERPRETER: "false"
+      ENABLE_IMAGE_GENERATION: "false"
+      USER_PERMISSIONS_FEATURES_WEB_SEARCH: "false"
+      USER_PERMISSIONS_FEATURES_CODE_INTERPRETER: "false"
+      USER_PERMISSIONS_FEATURES_IMAGE_GENERATION: "false"
+      USER_PERMISSIONS_CHAT_FILE_UPLOAD: "false"
+      USER_PERMISSIONS_CHAT_WEB_UPLOAD: "false"
+      USER_PERMISSIONS_CHAT_SYSTEM_PROMPT: "false"
+      USER_PERMISSIONS_CHAT_PARAMS: "false"
+      ENABLE_ADMIN_CHAT_ACCESS: "false"
+      ENABLE_ADMIN_EXPORT: "false"
+      WEBUI_BANNERS: '[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":1793318400}]'
+      ENABLE_API_KEYS: "true"
+      ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: "true"
+      API_KEYS_ALLOWED_ENDPOINTS: /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
+      USER_PERMISSIONS_FEATURES_API_KEYS: "false"
+      # The feedback service account (Open WebUI's first user, never a person); its password comes from the volume.
+      WEBUI_ADMIN_EMAIL: feedback-import@localhost
+      WEBUI_ADMIN_NAME: Feedback import
+      ENABLE_LOGIN_FORM: "false"
+      ENABLE_PASSWORD_AUTH: ${UME_RAG_OPENWEBUI_PASSWORD_AUTH:-false}
+      DEFAULT_USER_ROLE: user
+      ENABLE_SIGNUP: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "false"
+      OAUTH_PROVIDER_NAME: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-Umeå kommun}
+      OAUTH_CLIENT_ID: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:-open-webui}
+      OAUTH_CLIENT_SECRET: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}
+      OPENID_PROVIDER_URL: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:-${UME_OIDC_AUTHORITY:-https://keycloak.invalid/realms/ume}/.well-known/openid-configuration}
+      OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST:-localhost}/oauth/oidc/login/callback
+    volumes:
+      - rag-openwebui-data:/data
+      - {type: volume, source: rag-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+      rag-api: {condition: service_started}
+    networks: [rag-edge]
 
 configs:
   bootstrap-script:
@@ -914,7 +1026,7 @@ configs:
       : "$${UME_RAG_API_HOST:?Set UME_RAG_API_HOST (public hostname of rag-api)}"
       ADMIN_HOST="$${UME_RAG_ADMIN_HOST:-$$UME_RAG_API_HOST}"
       for d in postgres api admin worker parser migrations; do mkdir -p "$$C/$$d"; done
-      for d in postgres api admin worker migrations keys renderer; do mkdir -p "$$S/$$d"; done
+      for d in postgres api admin worker migrations keys renderer openwebui; do mkdir -p "$$S/$$d"; done
       rand() { openssl rand -hex 32; }
       quiet() { "$$@" >/dev/null 2>&1; }
 
@@ -975,6 +1087,13 @@ configs:
       # Open WebUI's user JWT secret: unused without Open WebUI, but rag-api expects the file (identity design §5.2).
       [ -f "$$S/.openwebui-jwt-secret" ] || rand > "$$S/.openwebui-jwt-secret"
       tr -d '\n' < "$$S/.openwebui-jwt-secret" > "$$S/api/OpenWebUi__JwtSecret"
+      # Open WebUI's own files (profile openwebui; harmless without it): the same user-JWT secret, its session key, the
+      # feedback service account's password, and a CA bundle with the public CAs (its OIDC provider), RAG's (rag-api) and the
+      # gateway's.
+      tr -d '\n' < "$$S/.openwebui-jwt-secret" > "$$S/openwebui/jwt-secret"
+      [ -f "$$S/openwebui/webui_secret_key" ] || rand > "$$S/openwebui/webui_secret_key"
+      [ -f "$$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$$S/openwebui/admin-password"
+      cat /etc/ssl/certs/ca-certificates.crt "$$C/ca.pem" /gateway-certs/ca.pem > "$$S/openwebui/ca.pem"
       [ -f "$$S/worker/Security__CrawlKeyPepper" ] || rand | tr -d '\n' > "$$S/worker/Security__CrawlKeyPepper"
       # The renderer's secret WebSocket path (connectors design §8.3): the worker gets the endpoint only while the render
       # profile is on, so without the renderer it refuses rendering instead of waiting for a browser that never starts.
@@ -1004,6 +1123,8 @@ configs:
         rm -f "$$S/$$svc"/Gateway__Keys__*
       done
       put admin Oidc__ClientSecret "$${UME_RAG_OIDC_CLIENT_SECRET:-}"
+      # The feedback service account's Open WebUI key, for rag-api's feedback import (chat design §13.3); empty = none.
+      put api OpenWebUi__AdminApiKey "$${UME_RAG_OPENWEBUI_ADMIN_API_KEY:-}"
       # The Data API key of the admin's former org sync: the admin syncs with its credential key now.
       if [ -e "$$S/admin/OrgSync__DataApiKey" ]; then
         rm -f "$$S/admin/OrgSync__DataApiKey"
@@ -1026,6 +1147,8 @@ configs:
       chown -R 999:999 "$$C/postgres" "$$S/postgres"
       chown -R 10001:10001 "$$C/parser"
       chown -R 10002:10002 "$$S/renderer"
+      chown -R 1000:1000 "$$S/openwebui" /openwebui-data
+      chmod 0700 "$$S/openwebui"
       chown -R 1654:1654 "$$C/api" "$$C/admin" "$$C/worker" "$$C/migrations" "$$S/api" "$$S/admin" "$$S/worker" "$$S/migrations" "$$S/keys"
       chmod 755 "$$C" "$$S"
       missing=""
@@ -1312,6 +1435,7 @@ volumes:
   ume-secrets:
   ume-config:
   rag-postgres-data:
+  rag-openwebui-data:
   rag-certs:
   rag-secrets:
   rag-config:

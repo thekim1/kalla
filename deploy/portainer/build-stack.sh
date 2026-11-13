@@ -2,8 +2,12 @@
 # Generates deploy/portainer/compose.portainer.yaml: the gateway's Portainer stack (its deploy/compose.portainer.yaml,
 # unchanged) plus RAG's services from compose.rag.template.yaml, as one stack to paste into Portainer.
 #
-#   deploy/portainer/build-stack.sh                         # the gateway's file from github.com/thekim1/llmgateway main
-#   deploy/portainer/build-stack.sh ../llmgateway/deploy/compose.portainer.yaml   # or a local copy
+#   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
+#   deploy/portainer/build-stack.sh v0.10.1        # ... of that gateway release
+#   deploy/portainer/build-stack.sh ../llmgateway/deploy/compose.portainer.yaml   # or a local file
+#
+# A gateway release's asset pins the gateway's images by digest; its repository file does not (they are then required
+# variables), so build from a release unless testing an unreleased gateway change.
 #
 # Each "@SECTION name" block of the template goes into the same top-level section of the gateway's file (header: after
 # its comment, x: after its x- anchors), and "@INCLUDE path" lines (relative to deploy/) are inlined, indented, with $
@@ -12,8 +16,10 @@ set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 gateway="${1:-}"
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-if [ -z "$gateway" ]; then
-  gh api repos/thekim1/llmgateway/contents/deploy/compose.portainer.yaml --jq .content | base64 -d > "$tmp"
+if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
+  tag="${gateway:-$(gh release view -R thekim1/llmgateway --json tagName --jq .tagName)}"
+  gh release download "$tag" -R thekim1/llmgateway -p compose.portainer.yaml -O "$tmp" --clobber
+  echo "The gateway's stack from its release $tag"
   gateway="$tmp"
 fi
 python3 - "$gateway" "$here/compose.rag.template.yaml" "$here/.." "$here/compose.portainer.yaml" <<'EOF'

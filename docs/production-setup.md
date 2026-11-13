@@ -488,6 +488,32 @@ No shell access on the host? `deploy/portainer/compose.portainer.yaml` is the ga
 Rag added, configured only through environment variables: paste it over the gateway's stack, keep the stack name, and
 set the RAG variables listed at the top of the file. See the runbook, *Portainer and other hosts without shell access*.
 
+**On a new VM** (Docker and Portainer installed, nothing else):
+
+1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
+   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.10.1` for Ume.Rag
+   `0.5.0`) and Ume.Rag's by digest, so no image variable is needed.
+2. **Registry:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private: add `ghcr.io` as a registry in Portainer
+   with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
+   are public.
+3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
+   Ume.Rag's (`UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL`, the three `UME_RAG_*_GATEWAY_KEY`, `UME_RAG_EMBEDDING_MODEL`,
+   `UME_RAG_OIDC_CLIENT_SECRET` and the group variables), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
+   `render` for JavaScript pages). The credential keys come from the gateway once it runs: start the stack, issue the
+   keys in the gateway's admin (*Gateway credential keys* above), set them, and update the stack.
+4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI
+   (3000) serves plain HTTP on loopback. Put a reverse proxy with real certificates in front of the public names
+   (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
+   variables to match.
+5. **Open WebUI** (profile `openwebui`): set `UME_RAG_OPENWEBUI_HOST` and its OIDC client
+   (`UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`; redirect URI
+   `https://<host>/oauth/oidc/login/callback`). Once the stack runs, create Open WebUI's client in Ume.Rag's admin UI
+   (kind `open-webui`), set its key and id as `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID`, and update
+   the stack. The feedback import's key is minted as the file's header describes (the steps of
+   `deploy/openwebui-feedback-key.sh`, by hand) and set as `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, with
+   `UME_RAG_OPENWEBUI_BASE_URL=http://rag-openwebui:8080`. As with Compose, Open WebUI keeps its own copy of each chat
+   (W2, below).
+
 ## Reverse proxy and PKI
 
 The listeners default to loopback (`127.0.0.1:8543` and `:9543`). Behind the municipal reverse proxy, run
