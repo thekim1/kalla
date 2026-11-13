@@ -100,3 +100,30 @@ export function clientRequest(kind: string, form: ClientForm, base: Client | nul
 export function stackLines(secret: string, clientId: string): string {
   return `UME_RAG_OPENWEBUI_API_KEY=${secret}\nUME_RAG_OPENWEBUI_CLIENT_ID=${clientId}`
 }
+
+const LEVEL_RANK: Record<Level, number> = { public: 0, internal: 1, sensitive: 2 }
+
+/**
+ * V7: an app may offer an assistant whose level is at most its own information class. (V9, no `sensitive` assistant for an
+ * app that keeps history, follows from it: such an app cannot be `sensitive`.)
+ */
+export function assistantAllowed(assistantLevel: Level, ceiling: Level): boolean {
+  return LEVEL_RANK[assistantLevel] <= LEVEL_RANK[ceiling]
+}
+
+/** The OpenAI-compatible root an app calls (`GET /v1/models`, `POST /v1/chat/completions`). */
+export function apiAddress(apiBaseUrl: string): string {
+  return `${apiBaseUrl.replace(/\/+$/, '')}/v1`
+}
+
+/** One chat call to try the connection with; `<...>` stands for a value the page cannot show. */
+export function curlExample(apiBaseUrl: string | null, secret: string | null, model: string | null): string {
+  const address = apiBaseUrl ? apiAddress(apiBaseUrl) : 'https://<rag-api address>/v1'
+  const body = JSON.stringify({ model: model ?? '<model name>', messages: [{ role: 'user', content: 'Hello' }] })
+  return [
+    `curl ${address}/chat/completions \\`,
+    `  -H "Authorization: Bearer ${secret ?? '<key>'}" \\`,
+    '  -H "Content-Type: application/json" \\',
+    `  -d '${body}'`,
+  ].join('\n')
+}
