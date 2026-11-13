@@ -1,8 +1,10 @@
 # Deploy configuration: from environment variables to settings and automatic setup
 
-**Status:** proposal (main session, 2026-11-13, session 34). Not binding: nothing here is built until the user
-agrees, and a rule becomes binding only through a Decisions entry and the design for its area. Asked for by the user
-(HANDOVER, "Start here", 2026-11-13).
+**Status:** **agreed** (user, 2026-11-13: D1–D10 each as recommended, D9 nginx with the operator's certificates in
+Ume.Rag's template for all five hosts). The binding rules are in Decisions ("Deploy configuration", "Residency per
+level", "Role groups as a setting"); the work is `work/main.md` **M-17**; the gateway changes are thekim1/llmgateway
+#87 (G1), #88 (G2), #89 (G4), #90 (G5). G3 is not asked (the embedding dimensions are measured). Written by the main
+session, session 34.
 
 **Goal:** a deploy, and the Portainer stack most of all, needs only what a process can't start without. Everything
 else becomes a run-time setting (`Settings.<Section>.<Key>`, edited in the admin UI), is set up automatically, or
@@ -127,6 +129,9 @@ checklist: create the embedding profile, and optionally map groups to roles.
 
 ## 3. Decisions for the user
 
+**Decided** (user, 2026-11-13): every row as its option **A**; D9 nginx with the operator's certificate files, in Ume.Rag's
+template for all five host names.
+
 | # | Question | Options (recommended first) |
 |---|---|---|
 | D1 | The residency ceiling's owner | **A:** from the credential key's residencies in the context (one owner, the gateway; the variable goes). B: a setting `Settings.Gateway.MaxResidency`. C: keep the variable |
@@ -144,11 +149,11 @@ checklist: create the embedding profile, and optionally map groups to roles.
 
 | # | Change | For |
 |---|---|---|
-| G1 | **Integration manifest:** the gateway reads a declared integration (name, owner team code, credential keys with scopes, residencies, address list) at migration or start, creates it if absent (and the owner team if the manifest names one that doesn't exist), and writes each new key's secret to a file in a volume the stack shares; it never rewrites an existing key. A machine path that needs no admin session | C7, D8 |
-| G2 | A one-step "Add integration *Ume.Rag*" in the gateway's admin: the integration with its three credential keys, scopes and residencies preset, the three secrets shown once together | D8, Compose deployments |
-| G3 | Optional: an embedding model's dimensions in `/v1/models` (`ume.dimensions`) | C5 (measuring is enough without it) |
-| G4 | The organisation name from the gateway's branding in `/v1/ume/context` (`gateway.organisation_name`) | D5 |
-| G5 | The Integration API also on the gateway host (`https://gateway:8443/integration/v1`), same auth and rate limit | D7 |
+| G1 (llmgateway#87) | **Integration manifest:** the gateway reads a declared integration (name, owner team code, credential keys with scopes, residencies, address list) at migration or start, creates it if absent (and the owner team if the manifest names one that doesn't exist), and writes each new key's secret to a file in a volume the stack shares; it never rewrites an existing key. A machine path that needs no admin session | C7, D8 |
+| G2 (llmgateway#88) | A one-step "Add integration *Ume.Rag*" in the gateway's admin: the integration with its three credential keys, scopes and residencies preset, the three secrets shown once together | D8, Compose deployments |
+| G3 (not asked) | Optional: an embedding model's dimensions in `/v1/models` (`ume.dimensions`) | C5 (measuring is enough without it) |
+| G4 (llmgateway#89) | The organisation name from the gateway's branding in `/v1/ume/context` (`gateway.organisation_name`) | D5 |
+| G5 (llmgateway#90) | The Integration API also on the gateway host (`https://gateway:8443/integration/v1`), same auth and rate limit | D7 |
 
 The contract is the gateway's `docs/openapi/integrations.json` and changes by addition only (Decisions "Gateway keys"),
 so G3–G5 are additions; G1 and G2 are admin-side.

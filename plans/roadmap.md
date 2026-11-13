@@ -72,6 +72,8 @@ Each becomes a queue item when the main session picks it up.
 - **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
   stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
+- **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
+  only what a process can't start without; C0–C6 need no input, C7/C11/C12 wait on the gateway's #87, #90, #89.
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 
@@ -81,7 +83,6 @@ The inputs of the critical path are in its table. The other open calls:
 
 | What | Who | Blocks |
 |---|---|---|
-| Deploy configuration ([`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): decisions D1–D10 and gateway changes G1–G5 before its steps C4–C13 (C0–C3 need none) | user | nothing on the critical path; a simpler deploy |
 | N1 product name; W1 relation to `chat.umea.se` | user, product owner | go-live |
 | CI runners: the runners `ume-rag` and `ume-rag2` share one Docker daemon. **A:** one runner per Docker host; **B:** `release.yml` on GitHub-hosted runners. Re-measure after the #648 change first | user | nothing; record the choice in Decisions "CI on the self-hosted runner" |
 | Upload gaps U1–U7: suggested picture descriptions (U1, needs a decision entry) and rerank on (U4) first | user | nothing in P1b |
