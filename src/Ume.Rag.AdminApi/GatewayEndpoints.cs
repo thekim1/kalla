@@ -311,7 +311,7 @@ public static class GatewayEndpoints
 
                 var keys = await admin.Db.GatewayKeys.AsNoTracking().Where(k => k.DepartmentId == departmentId).OrderBy(k => k.Name).ToListAsync(ct);
                 var teams = await admin.Db.Teams.AsNoTracking().Where(t => t.DepartmentId == departmentId).ToDictionaryAsync(t => t.Id, t => t.Name, ct);
-                return new GatewayKeyListDto(organisation.Status.Gateway?.AdminUrl, [.. keys.Select(k => GatewayKeyDto.Of(k, teams.GetValueOrDefault(k.TeamId)))]);
+                return new GatewayKeyListDto(organisation.AdminUrl, [.. keys.Select(k => GatewayKeyDto.Of(k, teams.GetValueOrDefault(k.TeamId)))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayKeys")
             .WithSummary("The department's assigned gateway keys for the key picker, with their settings and whether each can be chosen");
