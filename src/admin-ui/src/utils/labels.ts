@@ -1048,6 +1048,8 @@ export const ASSISTANT = {
   lengthStopped: 'The answer stopped at the length limit.',
   /** The test turn's cost over all its model calls (admin design §4.9), e.g. "Cost: 0,0012 USD (estimated)". */
   testCost: (cost: string, estimated: boolean) => (estimated ? `Cost: ${cost} USD (estimated)` : `Cost: ${cost} USD`),
+  /** A cost that rounds to 0,0000 but is not nothing (#625 review): a cheap turn must not look free. */
+  costBelow: (smallest: string) => `< ${smallest}`,
   maxTokensSent: (tokens: string | null, source: string) =>
     tokens === null ? 'Answer length: the provider’s default (no limit sent)' : `Answer length: at most ${tokens} tokens (${source})`,
   maxTokensSources: {

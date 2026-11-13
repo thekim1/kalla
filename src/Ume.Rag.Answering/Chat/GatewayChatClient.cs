@@ -174,6 +174,14 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         {
             throw new ChatException(502, "upstream_error", "The model service answered in a way that could not be accepted.") { ResidencyRefused = true };
         }
+        catch (GatewayKeyRefusedException refused)
+        {
+            throw ChatRefusals.Of(refused); // §3.6 (B-44): 503 assistant_unavailable or 402 budget_exceeded, before the first byte
+        }
+        catch (GatewayDelegationEchoException)
+        {
+            throw new ChatException(502, "upstream_error", "The model service answered in a way that could not be accepted."); // §3.6: a failed key-echo check
+        }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
             throw new ChatException(503, "upstream_unavailable", "The model service is unavailable. Try again shortly.");
