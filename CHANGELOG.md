@@ -5,6 +5,16 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.5.0 (2026-11-13)
+
+Ume.Rag on the gateway's integration (phases 1–3): one credential key per service, a gateway key per assistant and
+knowledge base that every model call runs as, the organisation and models from the gateway's context instead of the
+Data API, tokens and cost of every model call with the gateway's cost and budgets beside them, a key's refusals in chat
+and the admin, cancelled turns, the worker's content retention, and the malware scan optional per deployment.
+**Rolling update: no** from 0.4.0 (`DailyTotalsWithoutCost`: stop rag-api and rag-admin before `rag-migrate`);
+re-run `init-deployment.sh` for the credential keys, the Data API's removal and the `clamav` profile. See
+`docs/upgrade-guide.md`.
+
 ### Added
 
 - The FakeGateway answers `GET /v1/ume/context` and gives `/v1/models` the gateway's model facts, both with an `ETag`

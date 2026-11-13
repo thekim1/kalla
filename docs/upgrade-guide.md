@@ -12,6 +12,8 @@ exception, with its own steps.
 
 ## Unreleased
 
+## 0.5.0
+
 - **One gateway credential key per service (#580, B-37, A-30).** rag-api, rag-admin and rag-worker each read only
   their credential key of the gateway integration *Ume.Rag*, the secret file `Gateway__Key`; the per-level keys
   (`Gateway__Keys__<level>`) are no longer read. **Apply:** a gateway admin issues the three keys
