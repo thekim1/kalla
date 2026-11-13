@@ -1,67 +1,74 @@
 # Roadmap
 
-Where Ume.Rag stands and what comes next, on one page. The binding rules are in the Decisions table
-([`decisions.md`](decisions.md)) and the design documents ([`README.md`](README.md)); the work
-itself is in [`work/`](work/). Updated by the main session when a phase step lands.
+Where Ume.Rag stands and what comes next: **the one place for the plan ahead.** The binding rules are in
+[`decisions.md`](decisions.md) and the design documents ([`README.md`](README.md)); the work items are in
+[`work/`](work/), and `HANDOVER.md` links here instead of restating it. The main session updates this page when a step
+lands or an input arrives.
 
 ## Done
 
-| Phase | Result | Record |
-|---|---|---|
-| **P0 Foundation** | Repo, AppHost, schema with config outbox, Postgres image with pgBackRest, Keycloak, FakeGateway, parser contract, worker and admin skeletons, CI; released as `v0.1.0` (2026-10-31) | [`archive/p0/`](archive/p0/README.md) |
-| **P1a Walking skeleton (code)** | Crawl, upload, parse, embed, hybrid retrieval with citations, chat API, one assistant in Open WebUI. **Demo 2026-11-01:** a 200-page slice of umea.se answered with citations in Open WebUI over the interim gateway | [`archive/p1/`](archive/p1/README.md) |
-| **P1b Pilot hardening (code)** | Freshness, preview, publish and rollback, evaluation harness, admin journey pages (English), assistant versions, feedback import, organisation (sharing, topics, Map), general knowledge per assistant, browser tests (green on the runner, #377), lean CI, licence notices (#381), optional rerank per assistant (chat-model and gateway rerankers, measured on #403), the M-2 calls (#380), the shared-realm Keycloak files (#409), the hot-path tidy (#411) | [`archive/p1b/`](archive/p1b/README.md) |
+| Release | Result |
+|---|---|
+| `v0.1.0` (2026-10-31) | **P0 foundation:** repo, AppHost, schema, Postgres image with pgBackRest, Keycloak, FakeGateway, parser contract, CI; deploys from a digest-pinned bundle, restore drilled locally ([`archive/p0/`](archive/p0/README.md)) |
+| `v0.2.0` (2026-11-08) | **P1a + P1b code:** crawl, upload, parse, embed, hybrid retrieval with citations, chat API behind Open WebUI, admin UI for the pilot journey, evaluation, publish and rollback, JavaScript rendering, optional rerank. Demo 2026-11-01 on a 200-page umea.se slice ([`archive/p1/`](archive/p1/README.md), [`archive/p1b/`](archive/p1b/README.md)) |
+| `v0.3.0` (2026-11-10) | Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, the #499–#513 review fixes |
+| `v0.4.0` (2026-11-11) | Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics in the worker, lower idle cost |
+| `v0.5.0` (2026-11-13) | **Gateway integration phases 1–3** (#580): one credential key per service, a gateway key per assistant and knowledge base that every call runs as, organisation and models from the gateway's context (no Data API), **cost attribution** stages 1 and 2 (built; stage 2's live done-when waits on step 0 below) with the gateway's cost and budgets beside Ume.Rag's, refusals in chat and admin, content retention, malware scan optional |
 
-## Now: finish P1b and go live
+Every code item of both stream queues is done. What is left before go-live is live work, and every step of it waits on
+an input from people.
 
-**P1b is done when** the go-live gate is met on hand-graded gold-set answers (correct ≥ 80 %, citation precision
-≥ 90 %, false not-found ≤ 10 %, off-topic answered "not found" ≥ 80 %), the DPIA (G1) is finished with W2 inside it,
-and one pilot department uses its assistant in Open WebUI.
+## Now: the critical path to go-live
 
-Three tracks:
+**Go-live** (P1b done): the gate is met on hand-graded gold-set answers (correct ≥ 80 %, citation precision ≥ 90 %,
+false not-found ≤ 10 %, off-topic answered "not found" ≥ 80 %), the DPIA (G1) is finished with W2 inside it, and one
+pilot department uses its assistant in Open WebUI. The steps, in order; a step starts when its input exists.
 
-1. **Code leftovers: P1b code done** (M-3, 2026-11-08): every code item of both queues is ticked, the deviations are
-   settled and the full CI set is green; released as `v0.2.0`. New code items still go to
-   [`work/stream-a.md`](work/stream-a.md), [`work/stream-b.md`](work/stream-b.md), [`work/main.md`](work/main.md).
-   **JavaScript rendering** (user, 2026-11-07; connectors design §8): some sites the platform will crawl need it, so
-   the renderer is built now (stream A, A-9 to A-13: spike, image, worker, settings and UI, live check). It is not a
-   go-live gate for the umea.se pilot, which is server-rendered.
-2. **The live block**, run in one go once its inputs exist (order where the inputs allow):
-   1. gateway and Keycloak for the pilot (gateway session: release 1, EU routes, pilot keys, shared realm);
-   2. U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass;
-   3. the gold set written with DoIT, entered, run three ways; not-found thresholds set from it;
-   4. test host: deploy, restore drill, R1 performance test, a week of nightly evaluation;
-   5. checks on the crawled collection: `lastmod` result, freshness and HNSW recall, personal-data dry run;
-   6. gateway release 1 switch, live feedback import, banner and public-records route (after G1);
-   7. the go-live gate graded by department reviewers, then the pilot goes live. Before it: the 7-day package rule
-      applies again, and GitHub Actions are pinned by commit SHA with automated pin bumps (A-20, A-27; postponed by
-      the user, 2026-11-08); LibreOffice stays in the parser or moves to a converter container, with the parser's
-      sandbox question (Decisions "Legacy Office and RTF uploads", 2026-11-09).
-3. **Decisions and inputs from people** (below).
+| # | Step | Input it waits on | Owner | Status |
+|---|---|---|---|---|
+| 0 | **Interim gateway (J10) on v0.10.1** with the integration *Ume.Rag* and three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`); `docs/production-setup.md` *Gateway credential keys* | the gateway upgrade | user (gateway repo) | **blocks every live check** (B-35–B-46, A-31, A-34, A-35) |
+| 1 | Gateway and Keycloak for the pilot: pilot accounts, the key that allows the model `turkos` is published on | step 0 | user | open |
+| 2 | U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass (A-L1, A-L4) | U1 page URL, owner, contact | user + web editors | open |
+| 3 | Gold set written with DoIT, entered, run three ways (`scripts/grading/`); not-found thresholds set from it | the gold set and its reviewers | user + DoIT | open |
+| 4 | Test host: deploy from the release bundle, restore drill, R1 performance test, a week of nightly evaluation (A-L5–A-L7) | test host, backup target, key-escrow location, runner (R1) | user, IT security | open |
+| 5 | Checks on the crawled collection: `lastmod` result, freshness and HNSW recall, personal-data dry run (A-L8, A-L9) | steps 2, 4 | stream a | open |
+| 6 | Live feedback import, banner and public-records route | G1 | user + data protection officer | open |
+| 7 | Before go-live: the 7-day package rule applies again; GitHub Actions pinned by SHA with automated bumps (A-20, A-27); LibreOffice placement with the parser sandbox question (Decisions "Legacy Office and RTF uploads") | – | streams, main | postponed on purpose (2026-11-08) |
+| 8 | The gate graded by department reviewers; the pilot goes live (M-4) | steps 1–7 | user + main | open |
 
-**Cost attribution, stage 1** (Decisions "Cost attribution", 2026-11-08; not a go-live gate): Ume.Rag meters tokens and
-cost of every model call per assistant, knowledge base, step and client and shows them in the admin UI
-([`platform/cost-attribution.md`](platform/cost-attribution.md) §5, steps C1–C6). It needs no gateway change; stage 2, the
-gateway's delegated attribution, follows in P2 before a second department.
+**Owners and dates.** The phase-start rule (`postponed-decisions.md`) asks for a named person and a date on every
+input that blocks a phase. Still unnamed: A1, G1, N1, U1, W2, R1 and the test host. Until the user names them, the
+table says "user".
 
-**Malware scan optional** (Decisions "Malware scan optional", user 2026-11-09, #535; not a go-live gate): a
-deployment may run without ClamAV (`ClamAv:Mode = off`), and its files are then marked as not scanned. Built
-2026-11-12 (#599, #602, #601) except the admin API's `scannedAt` and the admin UI's notes, which are the rest of B-47.
+**Open product call:** whether the **support-assistant pilot** (DoIT, [`cases/support-assistant/`](cases/support-assistant/README.md))
+waits for the umea.se go-live gate or runs on its own track. Its proof of concept on the local stack (`07-rollout.md`
+§0b, P1–P8) needs only the documents and about twenty anonymised tickets, and it goes ahead of everything else once
+those exist.
+
+## Meanwhile: work that needs no input
+
+Each becomes a queue item when the main session picks it up.
+- **Deploy rehearsal:** the `v0.5.0` release bundle on a stand-in host (a local VM), with the restore drill, so step 4
+  is a re-run rather than a first attempt.
+- **Grading dry run:** `scripts/grading/` end to end on a small synthetic set, so step 3 starts on working tools.
+- **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
+  documents what the gaps cost before deciding them.
+- **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
+  stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
+- **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 
 ## Waiting on people
 
+The inputs of the critical path are in its table. The other open calls:
+
 | What | Who | Blocks |
 |---|---|---|
-| Gold set (about 120–150 answerable, 30–50 unanswerable, ≥ 10 temporal) and the reviewers who grade | user + DoIT | thresholds, go-live gate |
-| G1 DPIA with the data protection officer (EU processor agreement, W2, banner, public-records route) | user | banner/route, go-live |
-| Gateway: v0.9.1 is deployed and release 1 is verified live (B-L4, #441: status green, `/v1/models` per ceiling; the Cohere reranker on Foundry, #421). Left: pilot accounts and the interim key allowing the model `turkos` is published on (`claude-opus-5-5` is refused today). Admin OTP is off for the pilot (user, 2026-11-06), which G1 records | user (gateway repo) | pilot accounts, `turkos` in Open WebUI |
-| Test host, backup target, key-escrow location; where the pilot runs at go-live (O7) | user | deploy, restore drill, R1 |
-| Self-hosted runner on the test host (R1), or the manual stopgap | IT security | R1 test, nightly evaluation in CI |
-| U1 (crawler about page) with the web editors | user | full umea.se crawl |
-| N1 product name; W1 relation to `chat.umea.se`; owners and dates for G1, W2, N1, U1, R1, A1 | user, product owner | go-live |
-| CI runners (proposal, 2026-11-08; nothing changed yet): the runners `ume-rag` and `ume-rag2` share one machine and one Docker daemon, so jobs collide (e2e beside `verify` failed, run 42469437132; a dry run's leftover registry). **A:** one runner per Docker host: remove `ume-rag2` (jobs queue, nothing collides, no workflow change), or give it its own machine or VM. **B:** `release.yml` on GitHub-hosted runners (clean host with sudo and .NET 8; paid minutes, private repo). Either way: a release dry run is part of the full CI set before every release, so host drift shows early (the v0.2.0 dry runs found three: no .NET 8, no sudo, no registry clean-up) | user | nothing; once decided, record it in the Decisions table and drop the collision notes (`docs/ci-runner.md`, `release.yml`) |
-| Review #513: #511 splitting the worker into libraries (stream b: only if it keeps growing in P2); #502 is answered and measured (to-verify #117, 2026-11-08: delta 0.0 points, so `halfvec` storage in P2); the rest is queued (A-20–A-28, B-25–B-29, M-10) | user | nothing in P1b |
-| Product calls: #333 findings 1–2; [`../architecture_plans.md`](../architecture_plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
+| N1 product name; W1 relation to `chat.umea.se` | user, product owner | go-live |
+| CI runners: the runners `ume-rag` and `ume-rag2` share one Docker daemon. **A:** one runner per Docker host; **B:** `release.yml` on GitHub-hosted runners. Re-measure after the #648 change first | user | nothing; record the choice in Decisions "CI on the self-hosted runner" |
+| Upload gaps U1–U7: suggested picture descriptions (U1, needs a decision entry) and rerank on (U4) first | user | nothing in P1b |
+| Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (`work/main.md` M-11) | user | P2 |
+| Product calls: #333 finding 1 (`exactScanMaxChunks`, after the recall check on the test host); [`proposals/architecture-plans.md`](proposals/architecture-plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
+| #511 splitting the worker into libraries | stream b | only if it keeps growing in P2 |
 
 Every postponed decision with its stopgap and deadline: [`postponed-decisions.md`](postponed-decisions.md).
 
@@ -71,8 +78,9 @@ Several departments, internal sources, tools, and the first multi-host deploymen
 work split is written when P1b is live.
 
 - **More departments:** gateway release 2 (delegation, member groups from claims) before a second department or a
-  group audience; **cost attribution** per department, team and assistant through that delegation, the long-term goal
-  of [`platform/cost-attribution.md`](platform/cost-attribution.md) (stage 2); Entra ID with RAG's own registrations; OBO and the E1 spike; one Open WebUI per department until W3
+  group audience; **cost attribution** stage 2's done-when (built in `v0.5.0`, steps B1–B7: two departments' objects as their own keys in
+  the gateway's usage report, a key budget stopping its assistant, the per-level keys revoked;
+  [`platform/cost-attribution.md`](platform/cost-attribution.md) §6); Entra ID with RAG's own registrations; OBO and the E1 spike; one Open WebUI per department until W3
   and E1 are solved; owner-team edit scoping.
 - **Assistants:** version diff, per-assistant test-question sets, templates and presets (architecture plan item 3),
   copy; unused-assistant attention items; the drawn Map.
@@ -86,7 +94,7 @@ work split is written when P1b is live.
   `/v1/rerank` (rerank itself is built and optional, pulled forward from P2: Decisions "Rerank pulled forward"), on-prem
   models when hardware exists (M2). Upload gaps U1–U7 (picture descriptions, e-mail,
   spreadsheet questions, rerank on, contextual chunk headers, near-duplicates, OCR languages) and their proposed order:
-  [`platform/upload-quality-review.md`](platform/upload-quality-review.md) (2026-11-09; measure on the support-assistant
+  [`proposals/upload-quality-review.md`](proposals/upload-quality-review.md) (2026-11-09; measure on the support-assistant
   proof of concept first).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),
   `/mcp` with `search_knowledge`, the mock municipal server `ume-mcp-kommun`.

@@ -215,15 +215,15 @@ changing the organisation decision.
 
 ### References
 
-Repository evidence: [assistant entities](src/Ume.Rag.Domain/Entities/AssistantEntities.cs),
-[knowledge service](src/Ume.Rag.Answering/KnowledgeService.cs),
-[Open WebUI user validation](src/Ume.Rag.Api/OpenWebUiUserJwt.cs),
-[access policy](src/Ume.Rag.Domain/Access/AccessPolicy.cs),
-[coverage evaluation](src/Ume.Rag.Retrieval/CoverageEvaluator.cs),
-[result diversity](src/Ume.Rag.Retrieval/ResultDiversifier.cs), and [current handover](HANDOVER.md).
-Binding details remain in the [decisions](plans/decisions.md), [organisation proposal](plans/archive/organisation-proposal.md),
-[knowledge design](plans/knowledge-api/design.md), [chat design](plans/chat-api/design.md),
-[connector design](plans/ingestion-worker/design-connectors.md), and [phase plan](plans/README.md).
+Repository evidence: [assistant entities](../../src/Ume.Rag.Domain/Entities/AssistantEntities.cs),
+[knowledge service](../../src/Ume.Rag.Answering/KnowledgeService.cs),
+[Open WebUI user validation](../../src/Ume.Rag.Api/OpenWebUiUserJwt.cs),
+[access policy](../../src/Ume.Rag.Domain/Access/AccessPolicy.cs),
+[coverage evaluation](../../src/Ume.Rag.Retrieval/CoverageEvaluator.cs),
+[result diversity](../../src/Ume.Rag.Retrieval/ResultDiversifier.cs), and [current handover](../../HANDOVER.md).
+Binding details remain in the [decisions](../decisions.md), [organisation proposal](../archive/organisation-proposal.md),
+[knowledge design](../knowledge-api/design.md), [chat design](../chat-api/design.md),
+[connector design](../ingestion-worker/design-connectors.md), and [phase plan](../README.md).
 
 External references support the evaluation and context recommendations, not a claim of measured improvement here:
 [Microsoft RAG design and evaluation](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/rag/rag-solution-design-and-evaluation-guide),
