@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
@@ -406,6 +406,20 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
     expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a4' })
     expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Open WebUI (pilot): everyone who can sign in to it.')
+    // Adding an app is a platform admin's job: a department admin gets no link.
+    expect(wrapper.find('[data-test=connect-app]').exists()).toBe(false)
+  })
+
+  it('links a platform admin from Who can use it to Add app, with this assistant ticked (admin design §5.9.1)', async () => {
+    signIn(['rag-platform-admin'])
+    mocks()
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await button(wrapper, 'Audience').trigger('click')
+    const link = wrapper.get('[data-test=connect-app]')
+    expect(link.text()).toBe('Connect a new app')
+    expect(wrapper.findAllComponents(RouterLinkStub).find((l) => l.find('[data-test=connect-app]').exists() || l.attributes('data-test') === 'connect-app')!.props('to'))
+      .toEqual({ name: 'platform-clients', query: { connect: 'a1' } })
   })
 
   it('restores an earlier version after one confirmation, keeping the draft', async () => {

@@ -561,6 +561,12 @@ onMounted(load)
           />
         </fieldset>
         <div v-if="canManage && clients.length"><UiButton variant="primary" :loading="busy === 'audience'" data-test="save-audience" @click="saveAudience">{{ ASSISTANT.saveAudience }}</UiButton></div>
+        <!-- Platform admins add apps; the wizard opens with this assistant ticked (admin design §5.9.1). -->
+        <p v-if="auth.isPlatformAdmin">
+          <RouterLink :to="{ name: 'platform-clients', query: { connect: id } }" class="font-medium text-accent-ink underline" data-test="connect-app">
+            {{ ASSISTANT.connectApp }}
+          </RouterLink>
+        </p>
         <ExplainAccess v-if="canManage && clients.length" :assistant-id="id" :clients="clients" class="mt-4" />
       </div>
       <ConfirmDialog

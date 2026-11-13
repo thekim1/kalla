@@ -31,7 +31,8 @@ export function englishDetail(error: unknown): string | null {
 
 /**
  * Maps a validation problem onto form field names (any casing), first message per field. A field's error code from
- * `errorCodes` wins over its English message (admin design §4.2). Adapted from the gateway.
+ * `errorCodes` wins over its English message (admin design §4.2); when the code's params name a `subject` (the one of several
+ * objects the field lists that was refused, admin design §5.9.1), the text starts with it. Adapted from the gateway.
  */
 export function mapFieldErrors(error: unknown, fields: readonly string[]): Record<string, string> {
   const result: Record<string, string> = {}
@@ -42,7 +43,9 @@ export function mapFieldErrors(error: unknown, fields: readonly string[]): Recor
     const match = fields.find((f) => f.toLowerCase() === key.toLowerCase().replace(/^\$\./, '').replace(/\[\d+\].*$/, ''))
     const coded = codes[key]?.[0]
     const template = codeMessage(coded?.code)
-    const message = template ? formatMessage(template, coded?.params) : messages[0]
+    const text = template ? formatMessage(template, coded?.params) : messages[0]
+    const subject = template ? coded?.params?.subject : undefined
+    const message = subject && text ? `${subject}: ${text}` : text
     if (match && message) result[match] = message
   }
   return result

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
-import type { ApiKey, Client } from '@/api/types'
+import type { ApiKey, AssistantSummary, Client } from '@/api/types'
 import { PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientDrawer from './ClientDrawer.vue'
 
@@ -23,13 +23,22 @@ function mountDrawer() {
   return mount(ClientDrawer, { props: { open: true, clientId: client.id }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
 }
 
-describe('A client\'s drawer (admin design §5.9)', () => {
+const assistant = (id: string, name: string, classification: AssistantSummary['classification']): AssistantSummary => ({
+  id, slug: name.toLowerCase(), name, departmentId: 'd1', classification, state: 'active', published: true, hasDraft: false, generalKnowledge: null,
+})
+
+describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.spyOn(api.keys, 'list').mockResolvedValue([key, { ...key, id: 'k0', name: 'Old key', status: 'revoked', expiresAt: null }])
+    vi.spyOn(api.keys, 'list').mockResolvedValue([
+      { ...key, lastUsedAt: '2026-11-01T08:00:00Z' }, { ...key, id: 'k0', name: 'Old key', status: 'revoked', expiresAt: null },
+    ])
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [assistant('a1', 'Bygglovsassistenten', 'public'), assistant('a2', 'Personal', 'internal')], total: 2 })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    vi.spyOn(api.clients, 'connection').mockResolvedValue({ apiBaseUrl: 'https://rag.example.se' })
   })
 
-  it('shows the facts, this client\'s keys and the assistants that use it', async () => {
+  it('shows the facts, this app\'s keys with their last use, the assistants it offers and how to connect', async () => {
     vi.spyOn(api.clients, 'get').mockResolvedValue(client)
     const wrapper = mountDrawer()
     await flushPromises()
@@ -48,19 +57,36 @@ describe('A client\'s drawer (admin design §5.9)', () => {
     expect(rows[1]!.text()).toContain(L.keyStatus.revoked)
     expect(rows[1]!.text()).toContain(L.keys.never)
     expect(rows[1]!.find('[data-test=revoke-k0]').exists()).toBe(false)
+    // A key that was used shows when; one that never was says so.
+    expect(rows[0]!.text()).not.toContain(L.neverUsed)
+    expect(rows[1]!.text()).toContain(L.neverUsed)
 
-    const usedBy = wrapper.get('[data-test=client-used-by]')
-    const link = usedBy.getComponent(RouterLinkStub)
-    expect(link.props('to')).toEqual({ name: 'assistant', params: { id: 'a1' } })
-    expect(usedBy.text()).toContain('Bygglovsassistenten')
+    // The assistants it offers are ticked; one above its class (public) cannot be.
+    const offered = wrapper.get('[data-test=client-assistants]')
+    expect((offered.get('[data-test=assistant-a1] input').element as HTMLInputElement).checked).toBe(true)
+    expect((offered.get('[data-test=assistant-a2] input').element as HTMLInputElement).disabled).toBe(true)
+
+    // How to connect, with no key on screen: where to find one, and placeholders in the call.
+    const connect = wrapper.get('[data-test=client-connect]')
+    expect(connect.get('[data-test=connect-address] [data-test=copy-value]').text()).toBe('https://rag.example.se/v1')
+    expect(connect.get('[data-test=connect-no-key]').text()).toBe(L.connect.showKey)
+    expect(connect.get('[data-test=connect-models] [data-test=copy-value]').text()).toBe('bygglov')
+    expect(connect.get('[data-test=connect-example] [data-test=copy-value]').text()).toContain('Bearer <key>')
     wrapper.unmount()
   })
 
-  it('says how to add the client to an assistant when none uses it', async () => {
-    vi.spyOn(api.clients, 'get').mockResolvedValue({ ...client, assistants: [] })
+  it('saves the assistants the app offers from its side, and says so when it offers none', async () => {
+    vi.spyOn(api.clients, 'get').mockResolvedValue(client)
+    const set = vi.spyOn(api.clients, 'setAssistants').mockResolvedValue({ ...client, assistants: [], version: '8' })
     const wrapper = mountDrawer()
     await flushPromises()
-    expect(wrapper.get('[data-test=client-used-by]').text()).toContain(L.usedBy.empty)
+    await wrapper.get('[data-test=assistant-a1] input').setValue(false)
+    await wrapper.get('[data-test=save-assistants]').trigger('click')
+    await flushPromises()
+    expect(set).toHaveBeenCalledWith(client.id, { assistantIds: [], version: '7' })
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    expect(wrapper.get('[data-test=nothing-picked]').text()).toBe(L.assistants.nothingPicked)
+    expect(wrapper.get('[data-test=connect-models]').text()).toContain(L.connect.noModels)
     wrapper.unmount()
   })
 
@@ -78,8 +104,6 @@ describe('A client\'s drawer (admin design §5.9)', () => {
       portalUrl: null, isEnabled: true, allowedOrigins: [], toolPolicy: 'read', version: '7',
     })
     expect(wrapper.emitted('saved')).toHaveLength(1)
-    // Who uses it stays, though the update's answer may leave it out.
-    expect(wrapper.get('[data-test=client-used-by]').text()).toContain('Bygglovsassistenten')
     wrapper.unmount()
   })
 
@@ -94,7 +118,9 @@ describe('A client\'s drawer (admin design §5.9)', () => {
     await wrapper.get('[data-test=reveal-k1]').trigger('click')
     await flushPromises()
     expect(api.keys.reveal).toHaveBeenCalledWith('k1')
-    expect(wrapper.get('[data-test=secret]').text()).toContain('ume-rag-sk-shown')
+    expect(wrapper.get('[data-test=client-keys] [data-test=secret]').text()).toContain('ume-rag-sk-shown')
+    // The call to try now carries the key that is on screen.
+    expect(wrapper.get('[data-test=connect-example] [data-test=copy-value]').text()).toContain('Bearer ume-rag-sk-shown')
 
     await wrapper.get('[data-test=new-key]').trigger('click')
     await flushPromises()

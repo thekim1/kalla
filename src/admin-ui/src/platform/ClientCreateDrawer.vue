@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Client, ClientCreated } from '@/api/types'
+import type { AssistantSummary, Client, ClientCreated, Department } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -10,22 +10,28 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
+import AssistantPicker from './AssistantPicker.vue'
 import ClientFields from './ClientFields.vue'
-import CopyValue from './CopyValue.vue'
-import SecretOnce from './SecretOnce.vue'
-import { AVAILABLE_KINDS, clientRequest, fieldsFor, LATER_KINDS, newClientForm, RetentionDaysError, stackLines, type ClientForm } from './clients'
+import HowToConnect from './HowToConnect.vue'
+import { assistantAllowed, AVAILABLE_KINDS, clientRequest, fieldsFor, LATER_KINDS, newClientForm, RetentionDaysError, type ClientForm } from './clients'
 
-// Add client (admin design §5.9): the kind, that kind's fields, and a first key made in the same transaction. The result
-// shows the secret and the client's id once, and for Open WebUI the two stack lines.
-const props = defineProps<{ open: boolean }>()
+// Add app (admin design §5.9, §5.9.1): the kind, that kind's fields, the assistants it offers and a first key, all made in
+// one transaction. The result is "How to connect". `assistantId` ticks one assistant (opened from its Who can use it tab).
+const props = defineProps<{ open: boolean; assistantId?: string | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'created', client: Client): void }>()
 
 const L = PLATFORM_CLIENTS
-const STEPS = [L.steps.kind, L.steps.fields, L.steps.firstKey]
+const STEPS = [L.steps.kind, L.steps.fields, L.steps.assistants, L.steps.firstKey]
+const LAST = STEPS.length
 const KINDS = [...AVAILABLE_KINDS, ...LATER_KINDS]
 const step = ref(1)
 const kind = ref('')
 const form = ref<ClientForm>(newClientForm(''))
+const assistantIds = ref<string[]>([])
+const assistants = ref<AssistantSummary[]>([])
+const departments = ref<Department[]>([])
+const apiBaseUrl = ref<string | null>(null)
+const loadingChoices = ref(false)
 const createKey = ref(true)
 const keyName = ref('')
 const saving = ref(false)
@@ -39,6 +45,7 @@ const errors = useFormErrors({
   oAuthClientId: 'client-new-oAuthClientId',
   portalUrl: 'client-new-portalUrl',
   isEnabled: 'client-new-isEnabled',
+  assistantIds: 'client-new-assistantIds',
   'firstKey.name': 'client-new-key-name',
 })
 // The key name follows the client's name until it is edited.
@@ -49,12 +56,25 @@ watch(() => props.open, (open) => {
   step.value = 1
   kind.value = ''
   form.value = newClientForm('')
+  assistantIds.value = props.assistantId ? [props.assistantId] : []
   createKey.value = true
   keyName.value = ''
   defaultKeyName = ''
   result.value = null
   errors.clear()
+  void loadChoices()
 })
+
+/** The picker's rows and the address of "How to connect"; a failed read leaves the step empty, not the drawer broken. */
+async function loadChoices(): Promise<void> {
+  loadingChoices.value = true
+  ;[assistants.value, departments.value, apiBaseUrl.value] = await Promise.all([
+    api.assistants.list({ pageSize: 200 }).then((p) => p.items.filter((a) => a.state === 'active')).catch(() => []),
+    api.organisation.departments().catch(() => []),
+    api.clients.connection().then((c) => c.apiBaseUrl).catch(() => null),
+  ])
+  loadingChoices.value = false
+}
 
 function chooseKind(value: string): void {
   if (value === kind.value) return
@@ -80,6 +100,9 @@ function next(): void {
     if (!ok) return
     if (keyName.value === defaultKeyName) keyName.value = L.firstKey.defaultName(form.value.name.trim())
     defaultKeyName = keyName.value
+    // An assistant above the information class just chosen cannot stay ticked (V7).
+    const level = new Map(assistants.value.map((a) => [a.id, a.classification]))
+    assistantIds.value = assistantIds.value.filter((id) => !level.has(id) || assistantAllowed(level.get(id)!, form.value.classificationCeiling))
   }
   step.value++
 }
@@ -94,12 +117,13 @@ async function create(): Promise<void> {
   if (!body || !errors.validate({ 'firstKey.name': createKey.value && !keyName.value.trim() && L.nameRequired })) return
   saving.value = true
   try {
-    result.value = await api.clients.create({ ...body, firstKey: createKey.value ? { name: keyName.value.trim() } : null })
+    result.value = await api.clients.create({ ...body, firstKey: createKey.value ? { name: keyName.value.trim() } : null, assistantIds: assistantIds.value })
     emit('created', result.value.client)
   } catch (e) {
     errors.applyServerError(e)
-    // A refused field of step 2 is shown where it is edited.
+    // A refused field is shown on the step where it is edited.
     if (fieldsFor(kind.value).some((f) => errors.errors[f])) step.value = 2
+    else if (errors.errors.assistantIds) step.value = 3
   } finally {
     saving.value = false
   }
@@ -108,20 +132,14 @@ async function create(): Promise<void> {
 
 <template>
   <UiDrawer :open="open" :title="L.add" wide @update:open="emit('update:open', $event)">
-    <div v-if="result" class="grid gap-6" data-test="client-created">
-      <SecretOnce v-if="result.key" :secret="result.key.secret" />
-      <p v-else class="text-fg-2">{{ L.result.noKey }}</p>
-      <div class="grid gap-2">
-        <h3 class="font-medium">{{ L.result.clientId }}</h3>
-        <CopyValue :value="result.client.id" data-test="client-id" />
-      </div>
-      <div v-if="result.key && result.client.kind === 'open-webui'" class="grid gap-2" data-test="stack-lines">
-        <h3 class="font-medium">{{ L.result.stackLines }}</h3>
-        <CopyValue :value="stackLines(result.key.secret, result.client.id)" :copy-label="L.result.copyLines" block />
-        <p class="text-small text-fg-2">{{ L.result.stackSentence }}</p>
-      </div>
+    <div v-if="result" class="grid gap-4" data-test="client-created">
+      <h3 class="text-caption text-fg-3">{{ L.connect.title }}</h3>
+      <HowToConnect
+        :kind="result.client.kind" :client-id="result.client.id" :api-base-url="apiBaseUrl" :secret="result.key?.secret ?? null"
+        :assistants="result.client.assistants" created
+      />
     </div>
-    <form v-else id="client-new" class="grid gap-5" novalidate @submit.prevent="step < 3 ? next() : create()">
+    <form v-else id="client-new" class="grid gap-5" novalidate @submit.prevent="step < LAST ? next() : create()">
       <p class="text-caption text-fg-3" data-test="step">{{ L.step(step, STEPS.length, STEPS[step - 1]!) }}</p>
       <fieldset v-if="step === 1" class="grid gap-2" data-test="kinds">
         <legend class="sr-only">{{ L.steps.kind }}</legend>
@@ -141,6 +159,10 @@ async function create(): Promise<void> {
         <p v-if="errors.errors.kind" class="text-small text-danger">{{ errors.errors.kind }}</p>
       </fieldset>
       <ClientFields v-else-if="step === 2" v-model="form" :kind="kind" id-prefix="client-new" :errors="errors.errors" />
+      <AssistantPicker
+        v-else-if="step === 3" v-model="assistantIds" id-prefix="client-new" :assistants="assistants" :departments="departments"
+        :ceiling="form.classificationCeiling" :error="errors.errors.assistantIds" :loading="loadingChoices"
+      />
       <div v-else class="grid gap-4">
         <CheckField v-model="createKey" :label="L.firstKey.create" :description="L.firstKey.hint" data-test="create-key" />
         <TextField v-if="createKey" id="client-new-key-name" v-model="keyName" :label="L.firstKey.name" :error="errors.errors['firstKey.name']" autocomplete="off" />
@@ -150,7 +172,7 @@ async function create(): Promise<void> {
     <template #footer>
       <UiButton v-if="result" @click="emit('update:open', false)">{{ COMMON.close }}</UiButton>
       <template v-else>
-        <UiButton v-if="step < 3" variant="primary" type="submit" form="client-new" data-test="next">{{ L.next }}</UiButton>
+        <UiButton v-if="step < LAST" variant="primary" type="submit" form="client-new" data-test="next">{{ L.next }}</UiButton>
         <UiButton v-else variant="primary" type="submit" form="client-new" :loading="saving" data-test="create">{{ L.create }}</UiButton>
         <UiButton v-if="step > 1" data-test="back" @click="back">{{ L.back }}</UiButton>
         <UiButton variant="quiet" @click="emit('update:open', false)">{{ COMMON.cancel }}</UiButton>

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { ApiKey, Client, KeyCreated, KeyRotationMode } from '@/api/types'
+import type { ApiKey, AssistantSummary, Client, Department, KeyCreated, KeyRotationMode } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -13,17 +12,20 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useUiStore } from '@/stores/ui'
-import { formatDate, formatDateTime } from '@/utils/format'
+import { formatDate, formatDateTime, formatRelative } from '@/utils/format'
 import { COMMON, PLATFORM, PLATFORM_CLIENTS, type Tone } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import AssistantPicker from './AssistantPicker.vue'
 import ClientFields from './ClientFields.vue'
 import CopyValue from './CopyValue.vue'
+import HowToConnect from './HowToConnect.vue'
 import KeyForm from './KeyForm.vue'
 import SecretOnce from './SecretOnce.vue'
 import { clientForm, clientRequest, newClientForm, RetentionDaysError, type ClientForm } from './clients'
 
-// A client's drawer (admin design §5.9): its facts, the edit form of its kind (the kind is fixed), its keys with
-// Rotate, Show key, Revoke and New key in place, and the assistants whose audience includes it.
+// An app's drawer (admin design §5.9, §5.9.1): its facts, the edit form of its kind (the kind is fixed), the assistants
+// it offers (a checklist with a save of its own), its keys with Rotate, Show key, Revoke and New key in place and each
+// key's last use, and "How to connect" with the key that is on screen.
 const props = defineProps<{ open: boolean; clientId: string | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved'): void }>()
 
@@ -35,6 +37,13 @@ const loading = ref(false)
 const loadError = ref<unknown>(null)
 const form = ref<ClientForm>(newClientForm(''))
 const saving = ref(false)
+/** The picker's rows, the ticked ones and the address of "How to connect". */
+const assistants = ref<AssistantSummary[]>([])
+const departments = ref<Department[]>([])
+const apiBaseUrl = ref<string | null>(null)
+const assistantIds = ref<string[]>([])
+const savingAssistants = ref(false)
+const assistantErrors = useFormErrors({ assistantIds: 'client-edit-assistantIds' })
 const errors = useFormErrors({
   name: 'client-edit-name',
   classificationCeiling: 'client-edit-classificationCeiling',
@@ -56,9 +65,9 @@ const revoking = ref<ApiKey | null>(null)
 
 const keyColumns: Column[] = [
   { key: 'name', label: L.keys.columns.name },
-  { key: 'prefix', label: L.keys.columns.prefix },
   { key: 'status', label: L.keys.columns.status },
   { key: 'expiresAt', label: L.keys.columns.expiresAt },
+  { key: 'lastUsed', label: L.keys.columns.lastUsed },
   { key: 'actions', label: L.keys.columns.actions, hideLabel: true },
 ]
 const STATUS_TONE: Record<string, Tone> = { active: 'ok', 'in-grace-period': 'warn', expired: 'neutral', revoked: 'danger', disabled: 'neutral' }
@@ -71,13 +80,42 @@ async function load(id: string): Promise<void> {
   loading.value = true
   loadError.value = null
   try {
-    const [loaded] = await Promise.all([api.clients.get(id), loadKeys(id)])
+    const [loaded] = await Promise.all([api.clients.get(id), loadKeys(id), loadChoices()])
     client.value = loaded
     form.value = clientForm(loaded)
+    assistantIds.value = loaded.assistants.map((a) => a.id)
   } catch (e) {
     loadError.value = e
   } finally {
     loading.value = false
+  }
+}
+
+/** A failed read leaves the list or the address empty, not the drawer broken. */
+async function loadChoices(): Promise<void> {
+  ;[assistants.value, departments.value, apiBaseUrl.value] = await Promise.all([
+    api.assistants.list({ pageSize: 200 }).then((p) => p.items).catch(() => []),
+    api.organisation.departments().catch(() => []),
+    api.clients.connection().then((c) => c.apiBaseUrl).catch(() => null),
+  ])
+}
+
+/** Active assistants, and any the app offers already (an archived one can still be unticked). */
+const pickable = computed(() => assistants.value.filter((a) => a.state === 'active' || assistantIds.value.includes(a.id)))
+
+async function saveAssistants(): Promise<void> {
+  const current = client.value!
+  savingAssistants.value = true
+  try {
+    client.value = await api.clients.setAssistants(current.id, { assistantIds: assistantIds.value, version: current.version })
+    assistantIds.value = client.value.assistants.map((a) => a.id)
+    assistantErrors.clear()
+    ui.notify(L.assistants.saved)
+    emit('saved')
+  } catch (e) {
+    assistantErrors.applyServerError(e)
+  } finally {
+    savingAssistants.value = false
   }
 }
 
@@ -89,6 +127,7 @@ watch(() => [props.open, props.clientId] as const, ([open, id]) => {
   secret.value = null
   keyError.value = null
   errors.clear()
+  assistantErrors.clear()
   void load(id)
 }, { immediate: true })
 
@@ -105,8 +144,7 @@ async function save(): Promise<void> {
   if (!errors.validate({ name: !body.name && L.nameRequired })) return
   saving.value = true
   try {
-    // The update's answer may leave out who uses the client; that has not changed.
-    client.value = { ...current, ...(await api.clients.update(current.id, body)) }
+    client.value = await api.clients.update(current.id, body)
     form.value = clientForm(client.value)
     ui.notify(L.saved)
     emit('saved')
@@ -183,6 +221,15 @@ async function revoke(): Promise<void> {
         </form>
       </section>
 
+      <section class="mb-8 grid gap-3" data-test="client-assistants">
+        <AssistantPicker
+          v-model="assistantIds" id-prefix="client-edit" :assistants="pickable" :departments="departments" :ceiling="client.classificationCeiling"
+          :error="assistantErrors.errors.assistantIds"
+        />
+        <InlineError v-if="assistantErrors.formError.value" :message="assistantErrors.formError.value" />
+        <div v-if="pickable.length"><UiButton :loading="savingAssistants" data-test="save-assistants" @click="saveAssistants">{{ L.assistants.save }}</UiButton></div>
+      </section>
+
       <section class="mb-8 grid gap-3" aria-labelledby="client-keys-title" data-test="client-keys">
         <div class="flex items-center justify-between gap-4">
           <h3 id="client-keys-title" class="text-caption text-fg-3">{{ L.keys.title }}</h3>
@@ -198,10 +245,16 @@ async function revoke(): Promise<void> {
           v-else :columns="keyColumns" :rows="keys" :row-key="(k) => k.id" :caption="L.keys.title" :empty-text="L.keys.empty" clickable
           @row-click="editKey"
         >
-          <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
-          <template #cell-prefix="{ row }"><span class="font-mono text-small whitespace-nowrap">{{ row.prefix }}</span></template>
+          <!-- The prefix under the name: the drawer is too narrow for a column of its own beside the last use. -->
+          <template #cell-name="{ row }">
+            <span class="block font-medium">{{ row.name }}</span>
+            <span class="block font-mono text-caption whitespace-nowrap text-fg-3">{{ row.prefix }}</span>
+          </template>
           <template #cell-status="{ row }"><UiBadge :tone="STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
           <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
+          <template #cell-lastUsed="{ row }">
+            <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
+          </template>
           <template #cell-actions="{ row }">
             <span v-if="row.status !== 'revoked'" class="flex flex-wrap justify-end gap-1">
               <UiButton v-if="row.status === 'active' && !row.rotatedToKeyId" size="sm" :data-test="`rotate-${row.id}`" @click.stop="startRotate(row)">
@@ -214,15 +267,9 @@ async function revoke(): Promise<void> {
         </DataTable>
       </section>
 
-      <section class="grid gap-2" aria-labelledby="client-used-by-title" data-test="client-used-by">
-        <h3 id="client-used-by-title" class="text-caption text-fg-3">{{ L.usedBy.title }}</h3>
-        <ul v-if="client.assistants.length" class="grid gap-1">
-          <li v-for="a in client.assistants" :key="a.id" class="flex items-center gap-2">
-            <RouterLink :to="{ name: 'assistant', params: { id: a.id } }" class="font-medium text-accent-ink underline">{{ a.name }}</RouterLink>
-            <UiBadge :tone="a.published ? 'ok' : 'neutral'" :label="a.published ? L.usedBy.published : L.usedBy.draft" />
-          </li>
-        </ul>
-        <p v-else class="text-fg-2">{{ L.usedBy.empty }}</p>
+      <section class="grid gap-3" aria-labelledby="client-connect-title" data-test="client-connect">
+        <h3 id="client-connect-title" class="text-caption text-fg-3">{{ L.connect.title }}</h3>
+        <HowToConnect :kind="client.kind" :client-id="client.id" :api-base-url="apiBaseUrl" :secret="secret" :assistants="client.assistants" />
       </section>
     </template>
   </UiDrawer>
