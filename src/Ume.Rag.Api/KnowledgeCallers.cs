@@ -26,7 +26,7 @@ public sealed class KnowledgeFaultException(int status, string code, string deta
 /// knowledge routes). Download grants are read by the content routes themselves.
 /// </summary>
 public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapshots, IOptions<KnowledgeOptions> options, KnowledgeSecurity security,
-    TimeProvider time)
+    TimeProvider time, KeyLastUseRecorder lastUse)
 {
     /// <summary>The principal of this request, kept for events 5002/5005 (<see cref="KnowledgeProblems"/>).</summary>
     public const string PrincipalItem = "ume-rag-principal";
@@ -96,6 +96,8 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
             new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds, key.RequestsPerMinute),
             new HashSet<string>(), MembershipFacts.None, snapshot.Version);
         http.Items[PrincipalItem] = who;
+        // Beside the request, at most every five minutes per key (identity §6.2).
+        _ = lastUse.TouchAsync(key.Id);
         return who;
     }
 }
