@@ -193,7 +193,7 @@ public sealed partial class JobDispatcher(
         var job = entry.Job;
         var started = time.GetTimestamp();
         var outcome = "unrecorded";
-        var usage = new JobUsage(prices, time);
+        var usage = new JobUsage(prices, time, (record, embedding) => metrics.ModelCall(job.Class, record, embedding));
         try
         {
             using (ConfigVersionLogScope.Begin(logger, config))
