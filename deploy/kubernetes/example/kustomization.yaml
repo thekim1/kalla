@@ -52,6 +52,9 @@ configMapGenerator:
       - Oidc__Authority=https://idp.example.se/realms/ume
       # - Oidc__RoleGroups__rag-platform-admin=GG-Rag-Admins
       # - Oidc__TenantId=<Entra tenant id>
+      # The gateway's cost and budget read-back: the base URL of the gateway's Admin API, which serves /integration/v1
+      # (rag-admin's credential key needs the scope usage.read). Without it, no read-back.
+      # - Gateway__IntegrationApiUrl=https://llm-admin.example.se
   - name: ume-rag-migrations-config
     behavior: merge
     literals:

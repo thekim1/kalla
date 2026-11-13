@@ -58,6 +58,10 @@ exception, with its own steps.
   Portainer: add `clamav` to `COMPOSE_PROFILES`, or set `UME_RAG_CLAMAV_MODE=off`, and
   update the stack with the new stack file. **Check:** `dc ps rag-clamav` is healthy (or absent with `--clamav off`,
   where the worker logs that the scan is off at its start).
+- **The gateway's cost and budget read-back (#580, B-45, A-35), optional:** a gateway admin adds the scope `usage.read`
+  to rag-admin's credential key, and the new `UME_RAG_GATEWAY_INTEGRATION_API_URL` in `deploy/.env` (rag-admin's
+  `Gateway__IntegrationApiUrl`; Kubernetes: that key in `ume-rag-admin-config`; Portainer: the variable) names the
+  gateway's Admin API; unset, there is no read-back (production-setup.md, *Cost and budget read-back*).
 - **Rolling update: no**, because of `DailyTotalsWithoutCost` below. Five more migrations since 0.4.0, besides
   `UploadScannedAt` above; `rag-migrate` applies them and the grants in `app-roles.sql`, with no superuser steps:
   - `GatewayKeys` adds `config."GatewayKeys"`, the mirror of the integration's assigned keys that rag-admin syncs from

@@ -230,6 +230,9 @@ services:
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
+      # The gateway Admin API's base URL for its Integration API (/integration/v1): the cost and budget read-back with
+      # this service's credential key, which needs the scope usage.read (#580). Empty: no read-back.
+      Gateway__IntegrationApiUrl: ${UME_RAG_GATEWAY_INTEGRATION_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}

@@ -158,6 +158,7 @@ machine).
 | Network (subnet) | Members | Destination | Port, protocol | Purpose | When | Config key |
 |---|---|---|---|---|---|---|
 | `llm` (172.30.3.0/24) | rag-api, rag-admin (default route); rag-worker is a member but leaves through `crawl` | the gateway, host of `UME_RAG_GATEWAY_URL` | the URL's port (443), HTTPS | every model call: chat, embeddings, rerank, model checks; rag-admin's organisation and model syncs | always | `--gateway-url` → `Gateway__BaseUrl` |
+| | | the gateway's Admin API, host of `UME_RAG_GATEWAY_INTEGRATION_API_URL` | the URL's port (443; 9443 in the gateway's own Compose stack), HTTPS | rag-admin's cost and budget read-back, `/integration/v1` (production-setup.md, *Cost and budget read-back*) | when set | set by hand in `deploy/.env` → `Gateway__IntegrationApiUrl` |
 | | | the OIDC authority, host of `UME_RAG_OIDC_AUTHORITY` | the URL's port (443), HTTPS | rag-admin's back channel: discovery, JWKS, token endpoint (code + PKCE). rag-api validates no OIDC tokens yet (`RagApi:Authority` is not built, identity design §7.1) | always | `--oidc-authority` → `Oidc__Authority` |
 | | | Open WebUI as rag-api calls it, host of `UME_RAG_OPENWEBUI_BASE_URL` | the URL's port (443), HTTPS, through the reverse proxy | rag-api's feedback import (`OpenWebUi__BaseUrl`, the same value) | with Open WebUI | `--openwebui-host` |
 | | | the OTLP endpoint, `UME_RAG_OTEL_ENDPOINT` | the URL's port, HTTP(S) | telemetry | optional | set by hand in `deploy/.env` |
@@ -187,8 +188,10 @@ Sources: `deploy/host/docker-user-firewall.sh` (allow-lists, DNS, `private=`, `I
 **The organisation and model syncs.** rag-admin reads the organisation, its assigned gateway keys and the model list
 from the gateway itself, `GET /v1/ume/context` and `GET /v1/models` at `Gateway:BaseUrl`, with its credential key, which
 holds the scope `organisation.read` ([production-setup.md](production-setup.md), *Gateway credential keys*;
-`src/Ume.Rag.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`). They take the gateway's row of `llm` above; RAG
-calls no other gateway service.
+`src/Ume.Rag.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`). They take the gateway's row of `llm` above. The
+only other gateway service RAG calls is the gateway's Admin API, for rag-admin's cost and budget read-back
+(`/integration/v1`, with the same credential key and its scope `usage.read`; `src/Ume.Rag.AdminApi/IntegrationApiClient.cs`),
+and only while `UME_RAG_GATEWAY_INTEGRATION_API_URL` is set.
 
 ### 3.2 From the host itself
 
@@ -370,6 +373,7 @@ Reverse proxy
 
 Outbound from <rag host>
   [ ] -> <gateway host>:<gateway port, 443>/tcp          HTTPS  always
+  [ ] -> <gateway admin host>:<admin API port, 443>/tcp  HTTPS  with the cost and budget read-back
   [ ] -> <oidc authority host>:443/tcp                    HTTPS  always (Keycloak, Entra or AD FS)
   [ ] -> <dns resolvers>:53/udp+tcp                       always
   [ ] -> <crawled public sites>:80,443/tcp                ingestion (plus Settings.Crawl.AllowedPorts)
@@ -407,6 +411,7 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | clamd 3310 | fixed | `images/clamav/clamd.conf` (`TCPSocket`), `ClamAv__Port` in `deploy/compose.ingestion.yaml` | rag-worker |
 | Renderer 3000 and its secret path | fixed port; the path generated once (`secrets/.render-ws-path`) | `images/renderer/launch-server.json` (`port`), `secrets/renderer.env` (`UME_RAG_RENDER_WS_PATH`), `secrets/worker/Render__Endpoint` | rag-renderer, rag-worker |
 | Gateway URL | `--gateway-url` | `UME_RAG_GATEWAY_URL` | `Gateway__BaseUrl` (api, admin, worker), the firewall (`llm`, `crawl`) |
+| Gateway Admin API (cost and budget read-back) | edit `deploy/.env` (no option; a re-run of `init-deployment.sh` writes it commented out) | `UME_RAG_GATEWAY_INTEGRATION_API_URL` (empty: no read-back) | `Gateway__IntegrationApiUrl` (admin), the firewall (`llm`) |
 | OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin), the firewall (`llm`), Open WebUI's default provider URL |
 | Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | `OPENID_PROVIDER_URL`, the firewall (`openwebui`) |
 | rag-api's public URL | `--api-host`, `--api-port`, `--proxy` | `UME_RAG_API_PUBLIC_URL` | `Knowledge__PublicBaseUrl`, Open WebUI's `OPENAI_API_BASE_URLS`, the firewall (`openwebui`) |

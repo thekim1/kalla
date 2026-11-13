@@ -267,6 +267,16 @@ sudo curl --cacert deploy/certs/ca.pem https://localhost:9543/health/ready
 
 Every .NET service also answers `/health/live` and `/version`.
 
+### 6. Before the first use of the admin UI
+
+A platform admin signs in to the admin UI and creates the **`admin-console` client** under *Platform objects →
+Clients*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off
+(identity design §4.1). The assistant test panel writes the cost of each test turn under that client, so test use shows
+apart from real use on the *Costs* pages. Create it before anyone uses the test panel: without it the panel still
+answers, but its cost is not recorded, and rag-admin's log warns "Test panel usage of assistant … not written (… calls):
+no admin-console client row of kind internal" (runbook, *Gateway keys, budgets and the read-back*). The development seed
+creates this row; a production database starts without it.
+
 ## Gateway credential keys
 
 Each RAG service calls the LLM gateway with its own key: rag-api, rag-admin and rag-worker each hold one **credential
@@ -294,8 +304,8 @@ never holds another service's key. A gateway admin issues the three keys in the 
      numbers in it.
    - **Models**: none listed (all) or every model the platform calls, the embedding model among them.
    - **Scopes** on rag-admin's key only: `organisation.read` (the whole organisation in `GET /v1/ume/context`, which the
-     admin's organisation sync reads) and, once the gateway's Integration API is used, `usage.read` (cost and budget
-     read-back). rag-api's and the worker's keys hold no scope, so a key that serves public chat reads nothing else.
+     admin's organisation sync reads) and `usage.read` (the cost and budget read-back, below). rag-api's and the
+     worker's keys hold no scope, so a key that serves public chat reads nothing else.
    - An expiry as your key policy sets it; rotate before it (below).
 3. **Hand them over** as one file per key, holding the key alone on one line, and pass them to `init-deployment.sh`:
    `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key
@@ -319,6 +329,38 @@ every generated secret. Then restart the service, which reads its secret files a
 rewrites the file), then restart that service's container. A key that
 leaked is rotated without the grace period (*revoke immediately*): the service fails its model calls until it is
 restarted with the new key.
+
+### Cost and budget read-back
+
+From gateway v0.10 (its integration phase 3) the admin UI shows the gateway's own figures for an assistant's or
+knowledge base's gateway key beside Ume.Rag's: its requests, tokens and cost per day or month and step on the *Cost*
+cards, and its budgets with how much is spent (an *Unavailable* badge once one is used up). rag-admin reads them from
+the gateway's **Integration API**, `/integration/v1/usage` and `/integration/v1/budgets` on the gateway's **Admin API**
+(not the gateway address of `--gateway-url`), with its own credential key. It is optional; without it the admin UI
+shows Ume.Rag's figures only.
+
+1. **The scope.** A gateway admin adds the scope `usage.read` to rag-admin's credential key (`Ume.Rag admin` in the
+   naming above), next to `organisation.read`. Only rag-admin's key gets it. The key's status, expiry and address list
+   apply on the Admin API as on the gateway, so the list must hold the address the Admin API sees rag-admin's requests
+   from.
+2. **The address.** Set `UME_RAG_GATEWAY_INTEGRATION_API_URL` in `deploy/.env` to the Admin API's base URL, without
+   `/integration/v1`, for example `UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.intern.umea.se` (the gateway's
+   Compose stack publishes the Admin API on 9443; behind its proxy, usually its own host name on 443). It is not a
+   secret. rag-admin gets it as `Gateway__IntegrationApiUrl`; while it is unset or empty there is no read-back.
+   `init-deployment.sh` has no option for it and writes the line commented out, so carry it over after a re-run.
+3. **The firewall.** The host firewall adds the URL's host and port to the `llm` network's allow-list
+   (`deploy/host/docker-user-firewall.sh`, *Host firewall* in the runbook). Outside the host, the network firewall
+   must let the RAG host reach `<gateway admin host>:<port>` over HTTPS ([Network and ports](network-and-ports.md)).
+   rag-admin must trust the Admin API's certificate: its CA in `--ca-file` if it is not the gateway's own.
+4. **Apply:** `sudo systemctl start rag-firewall.service`, then `docker compose --env-file deploy/.env up -d --wait`
+   (rag-admin is recreated with the setting).
+
+**Check:** the *Gateway* page's status, `GET /api/gateway/status`, has `integration.configured: true` and no
+`integration.lastError` after an assistant's or knowledge base's *Cost* card has been opened; a reason there is in the
+runbook (*Gateway keys, budgets and the read-back*). Kubernetes: `Gateway__IntegrationApiUrl` in your overlay's
+`ume-rag-admin-config` (commented in `deploy/kubernetes/example`), and the Admin API's port in your egress rules.
+Portainer: the variable `UME_RAG_GATEWAY_INTEGRATION_API_URL`, for example `https://<UME_ADMIN_HOST>:9443` (the
+gateway's `adminapi` is not on the `llm` network, so rag-admin reaches it through its published port).
 
 ## Backup target
 

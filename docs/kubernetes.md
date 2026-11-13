@@ -71,6 +71,8 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
      `imagePullSecret` for ghcr.io, or mirror them.
    - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl`, `Oidc__Authority`, `EmbeddingProfile__GatewayModel` and the role
      groups (`Oidc__RoleGroups__rag-platform-admin`, ...), as in [production setup](production-setup.md), *Sign-in*.
+   - Optionally `Gateway__IntegrationApiUrl` in `ume-rag-admin-config`, the gateway Admin API's base URL for the cost
+     and budget read-back (production setup, *Cost and budget read-back*); without it, no read-back.
    - The blob volume's `storageClassName` (ReadWriteMany). With ReadWriteOnce, every pod that mounts it (rag-api,
      rag-admin, rag-worker) must run on one node.
    - The Ingress host names and TLS secrets. The pods speak HTTPS, so the controller must connect with TLS: the example
@@ -187,8 +189,8 @@ rag-api and rag-admin (gateway, IdP), HTTP and HTTPS from the worker (the crawl,
 Before enabling it, adjust the lines marked `change` in `networkpolicies.yaml`:
 
 - **Ingress controller.** The policies admit the namespace `ingress-nginx`; use the namespace (or pods) of yours.
-- **Ports other than 443:** the gateway (its Compose stack publishes 8443), an IdP not on 443,
-  the OTLP collector (4317), pgBackRest's S3 store from Postgres.
+- **Ports other than 443:** the gateway (its Compose stack publishes 8443) and its Admin API with the read-back (9443),
+  an IdP not on 443, the OTLP collector (4317), pgBackRest's S3 store from Postgres.
 - **Your own Postgres:** replace the rules that name the `postgres` pods with an `ipBlock` for your database.
 - **The crawl:** NetworkPolicy cannot filter by host name. The crawler refuses private addresses outside
   `Crawl:AllowedPrivateRanges` itself; an `ipBlock` with `except` for your internal ranges is a second layer.
