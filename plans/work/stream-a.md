@@ -28,7 +28,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** A-20.
 - **Read:** #507; AGENTS.md "7-day package rule".
 
-### [ ] A-41 The Integration API read-back on the platform's Gateway view; the cost runbook after #642 (#654)
+### [x] A-41 The Integration API read-back on the platform's Gateway view; the cost runbook after #642 (#654)
 - **Do:** the platform's *Gateway models* view (A-38) shows the read-back from `GET /api/organisation/sync`'s
   `integration` (`IntegrationReadback` in `src/admin-ui/src/api/types.ts`): not configured, working, or the last
   refusal's reason (`401`, `403` scope missing, `429`, a failure), as admin §4.5 and §8.6 have the *Gateway* page do;
