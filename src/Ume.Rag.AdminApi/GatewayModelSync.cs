@@ -39,7 +39,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// </summary>
 public sealed partial class GatewayModelSync(
     IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options,
-    IOptions<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
+    IOptionsMonitor<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
 {
     /// <summary>The audit actor of a run and of a recorded canary.</summary>
     public const string SystemActor = "system:gateway-sync";
@@ -60,7 +60,7 @@ public sealed partial class GatewayModelSync(
     private string? _etag;
 
     /// <summary>On when the gateway and this service's credential key are configured.</summary>
-    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.Value.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.Value.Key);
+    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.CurrentValue.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.CurrentValue.Key);
 
     public GatewayModelSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _lastCanaryError);
 
@@ -69,7 +69,8 @@ public sealed partial class GatewayModelSync(
         while (!stoppingToken.IsCancellationRequested)
         {
             await RunAsync(null, stoppingToken);
-            await Task.Delay(TimeSpan.FromMinutes(options.Value.IntervalMinutes), time, stoppingToken);
+            // Without its credential key yet, check again soon: a stack update may write it (the secret files reload).
+            await Task.Delay(Enabled ? TimeSpan.FromMinutes(options.Value.IntervalMinutes) : GatewayContextReader.KeyWait, time, stoppingToken);
         }
     }
 
@@ -104,7 +105,7 @@ public sealed partial class GatewayModelSync(
     {
         try
         {
-            var answer = await gateway.GetModelListAsync(gatewayOptions.Value.Maximum, _etag, cancellationToken);
+            var answer = await gateway.GetModelListAsync(gatewayOptions.CurrentValue.Maximum, _etag, cancellationToken);
             if (answer.Models is not { } models)
             {
                 // 304: the list is as at the last run, which was written.
@@ -268,7 +269,7 @@ public sealed partial class GatewayModelSync(
     /// </summary>
     public async Task<int> RecordCanariesAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(gatewayOptions.Value.BaseUrl))
+        if (string.IsNullOrEmpty(gatewayOptions.CurrentValue.BaseUrl))
         {
             return 0; // no gateway configured: nothing can be recorded
         }

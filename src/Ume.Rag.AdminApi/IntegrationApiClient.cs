@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi;
 /// minute per key). Unset, nothing is asked and the answers are null; a refusal (<c>401</c>, <c>403</c> without the scope,
 /// <c>429</c>) or a failure is null too, with its reason in <see cref="LastError"/> for the <i>Gateway</i> page.
 /// </summary>
-public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOptions<GatewayOptions> options, IMemoryCache cache, TimeProvider time,
+public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> options, IMemoryCache cache, TimeProvider time,
     ILogger<IntegrationApiClient> logger)
 {
     public const string HttpClientName = "gateway-integration";
@@ -25,7 +25,7 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
     private IntegrationApiError? _lastError;
 
     /// <summary>Whether <c>Gateway:IntegrationApiUrl</c> is set.</summary>
-    public bool Configured => Uri.TryCreate(options.Value.IntegrationApiUrl, UriKind.Absolute, out _);
+    public bool Configured => Uri.TryCreate(options.CurrentValue.IntegrationApiUrl, UriKind.Absolute, out _);
 
     /// <summary>The last refusal or failure (null after a success or before any call), shown on the <i>Gateway</i> page.</summary>
     public IntegrationApiError? LastError => Volatile.Read(ref _lastError);
@@ -52,9 +52,9 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
             return cached;
         }
 
-        var baseUrl = options.Value.IntegrationApiUrl!.TrimEnd('/') + "/";
+        var baseUrl = options.CurrentValue.IntegrationApiUrl!.TrimEnd('/') + "/";
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(baseUrl), path));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.Key);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.CurrentValue.Key);
         try
         {
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, ct);

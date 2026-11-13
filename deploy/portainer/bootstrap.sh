@@ -143,7 +143,37 @@ chown -R 1000:1000 "$S/openwebui" /openwebui-data
 chmod 0700 "$S/openwebui"
 chown -R 1654:1654 "$C/api" "$C/admin" "$C/worker" "$C/migrations" "$S/api" "$S/admin" "$S/worker" "$S/migrations" "$S/keys"
 chmod 755 "$C" "$S"
-missing=""
-for svc in api admin worker; do [ -e "$S/$svc/Gateway__Key" ] || missing="$missing $svc"; done
-[ -z "$missing" ] || echo "rag-bootstrap: no gateway credential key for${missing}: set UME_RAG_<SERVICE>_GATEWAY_KEY"
 echo "rag-bootstrap: certificates and secrets ready"
+
+# --- What is still missing: a checklist at the end of the log (never fatal: the stack starts and waits) ------------
+todo=""
+note() { todo="$todo
+  - $1"; }
+example() { case "$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
+for svc in api admin worker; do
+  up="$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
+  [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: issue rag-$svc's credential key in the gateway's admin (integration Ume.Rag) and update the stack; no restart needed"
+done
+example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
+case "${UME_RAG_API_PUBLIC_URL:-}" in https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
+  https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
+example "${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
+example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
+example "${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}" && note "UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: nobody gets the role rag-platform-admin"
+case ",${COMPOSE_PROFILES:-}," in
+  *,clamav,*) ;;
+  *) [ "${UME_RAG_CLAMAV_MODE:-on}" = off ] || note "COMPOSE_PROFILES lacks clamav while UME_RAG_CLAMAV_MODE is on: uploads wait with clamav.unavailable" ;;
+esac
+case ",${COMPOSE_PROFILES:-}," in
+  *,openwebui,*)
+    example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"
+    example "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: users can't sign in to Open WebUI"
+    if [ -z "${UME_RAG_OPENWEBUI_API_KEY:-}" ] || [ -z "${UME_RAG_OPENWEBUI_CLIENT_ID:-}" ]; then
+      note "UME_RAG_OPENWEBUI_API_KEY and UME_RAG_OPENWEBUI_CLIENT_ID: create Open WebUI's client in Ume.Rag's admin (Platform > Clients, kind open-webui)"
+    fi ;;
+esac
+if [ -n "$todo" ]; then
+  echo "rag-bootstrap: still to do (docs/portainer.md):$todo"
+else
+  echo "rag-bootstrap: every setting it checks is in place"
+fi

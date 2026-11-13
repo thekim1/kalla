@@ -1,4 +1,4 @@
-# Deploying and upgrading with Portainer (0.5.0)
+# Deploying and upgrading with Portainer (0.5.x)
 
 How to run Ume.Rag `0.5.0` with the LLM gateway `v0.10.1` as one Portainer stack: a first deploy on a new VM, and the
 upgrade of an existing stack from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
@@ -35,7 +35,9 @@ leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by han
 
 1. **Create the stack.** *Stacks → Add stack*, a name you will keep (the volumes are found by it), *Web editor*: paste
    the file. Pick the `ghcr.io` registry.
-2. **Variables** (*Environment variables*, advanced mode accepts `NAME=value` lines):
+2. **Variables:** *Environment variables → Load variables from .env file* with
+   [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace every value its comments
+   mark CHANGE. The essentials:
 
    ```text
    # The gateway
@@ -62,7 +64,9 @@ leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by han
    settings) are in the file's header.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `rag-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the services start. Ume.Rag's
-   services log that they have no gateway credential key: expected until step 5.
+   services log that they have no gateway credential key: expected until step 5. **The end of `rag-bootstrap`'s log
+   lists what is still missing** (keys, example values left in, the ClamAV profile, Open WebUI's settings); it is
+   printed again on every deploy, until it says every setting it checks is in place.
 4. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field):
    - *Access → Integrations*: create the integration `Ume.Rag` with its owner team.
@@ -82,15 +86,15 @@ leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by han
    UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.example.se:9443   # optional: the gateway's cost and budgets
    ```
 
-   *Update the stack*, then restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*): they read
-   their keys at start. The read-back URL is the gateway admin's address as `rag-admin` reaches it: `adminapi` isn't on
+   *Update the stack*. From `0.5.1` the services pick up the new keys within seconds (the secret files reload); with
+   `0.5.0`'s images restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*). The read-back URL is the gateway admin's address as `rag-admin` reaches it: `adminapi` isn't on
    the `llm` network, so use its published address (`https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443>`); without it
    there is no read-back.
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Platform → Gateway models* shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models; the
    embedding canary passes under *Embedding profiles* on the same page.
-7. **Open WebUI:** in Ume.Rag's admin, *Platform → Clients*, a new client of kind `open-webui`. Set its key and id, update the stack, and
-   restart `rag-api` and `rag-openwebui`:
+7. **Open WebUI:** in Ume.Rag's admin, *Platform → Clients*, a new client of kind `open-webui`. Set its key and id and update
+   the stack (it recreates `rag-api` and `rag-openwebui`, whose settings changed):
 
    ```text
    UME_RAG_OPENWEBUI_API_KEY=<the client's key>
@@ -129,7 +133,7 @@ rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgr
    the grants, then `rag-api` and `rag-admin` start on the new
    schema. `rag-bootstrap` deletes the old per-level key files and the Data API key file and logs it.
 5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 4–5; update the stack
-   and restart `rag-api`, `rag-admin` and `rag-worker`. Until then their model calls are refused.
+   (`0.5.0`'s images: then restart `rag-api`, `rag-admin` and `rag-worker`). Until then their model calls are refused.
 6. **Revoke** the old per-level keys and the Data API key in the gateway's admin.
 7. **Check** as in *First deploy* step 6, then give each existing assistant and knowledge base one of its department's
    assigned keys (they have none after the upgrade, and a published assistant can't be republished without one).
@@ -146,7 +150,7 @@ on they are recorded per model call.
 |---|---|
 | The stack won't deploy: `pull access denied` for `ghcr.io/thekim1/ume-rag/...` | the `ghcr.io` registry in Portainer and its token's `read:packages`; pick it on the stack |
 | `rag-bootstrap` exits non-zero | its log; `the gateway's CA is missing` means the gateway's `bootstrap` didn't run first (keep the stack name) |
-| Ume.Rag's services log `gateway_key_missing` or the gateway answers `401` | the three `UME_RAG_*_GATEWAY_KEY` variables, then restart the service |
+| Ume.Rag's services log `gateway_key_missing` or the gateway answers `401` | the three `UME_RAG_*_GATEWAY_KEY` variables and `rag-bootstrap`'s checklist; update the stack (`0.5.0`'s images: restart the service) |
 | The gateway answers `403` to Ume.Rag | the credential key's address list (the `llm` subnet) and its integration role *Credential* |
 | *Platform → Gateway models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |

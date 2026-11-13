@@ -20,7 +20,7 @@ public sealed record OwuiFeedback(string Id, string UserId, long UpdatedAt, shor
 /// the client's <c>ClientRetentionDays</c> through its API.
 /// </summary>
 public sealed partial class FeedbackImporter(
-    IHttpClientFactory clients, NpgsqlDataSource data, IPolicySnapshotSource snapshots, IOptions<OpenWebUiOptions> options, TimeProvider time,
+    IHttpClientFactory clients, NpgsqlDataSource data, IPolicySnapshotSource snapshots, IOptionsMonitor<OpenWebUiOptions> options, TimeProvider time,
     IMeterFactory meters, ILogger<FeedbackImporter> logger) : BackgroundService
 {
     public const string HttpClientName = "openwebui-admin";
@@ -34,7 +34,7 @@ public sealed partial class FeedbackImporter(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(options.Value.FeedbackImportInterval, time);
+        using var timer = new PeriodicTimer(options.CurrentValue.FeedbackImportInterval, time);
         do
         {
             await RunOnceAsync(stoppingToken);
@@ -45,7 +45,7 @@ public sealed partial class FeedbackImporter(
     /// <summary>One run; false when it did not run (not configured, or another instance holds the lock) or failed.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         if (o.BaseUrl is null || string.IsNullOrEmpty(o.AdminApiKey) || o.Client is not { } clientId)
         {
             return false;

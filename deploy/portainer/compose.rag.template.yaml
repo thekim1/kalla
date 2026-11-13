@@ -18,6 +18,10 @@
 # rag-bootstrap creates RAG's certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first
 # start. Keep the stack name: the gateway's volumes are found by it.
 #
+# Start from deploy/portainer/stack.env.example (Portainer: "Load variables from .env file"); after each deploy the end
+# of rag-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
+# them (built from a gateway release). Steps: docs/portainer.md.
+#
 # Required variables (besides the gateway's above)
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
 #   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
@@ -25,8 +29,8 @@
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
 #                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
 #                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
-#                             one the stack starts but that service's model calls are refused. To rotate one, change
-#                             it, update the stack, then restart that service (it reads the key at start).
+#                             one the stack starts but that service's model calls are refused. To add or rotate one,
+#                             change it and update the stack: the services pick it up within seconds, no restart.
 # Recommended
 #   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan, which the worker expects by default: without it files
 #                             wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
@@ -103,6 +107,15 @@ x-rag-secrets: &rag-secrets-mount
       UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
       UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
       UME_RAG_OPENWEBUI_ADMIN_API_KEY: ${UME_RAG_OPENWEBUI_ADMIN_API_KEY:-}
+      # For the checklist of what is still missing, which rag-bootstrap prints at the end of its log.
+      UME_RAG_API_PUBLIC_URL: ${UME_RAG_API_PUBLIC_URL:-}
+      UME_RAG_EMBEDDING_MODEL: ${UME_RAG_EMBEDDING_MODEL:-}
+      UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
+      UME_RAG_CLAMAV_MODE: ${UME_RAG_CLAMAV_MODE:-on}
+      UME_RAG_OPENWEBUI_HOST: ${UME_RAG_OPENWEBUI_HOST:-}
+      UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}
+      UME_RAG_OPENWEBUI_API_KEY: ${UME_RAG_OPENWEBUI_API_KEY:-}
+      UME_RAG_OPENWEBUI_CLIENT_ID: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
     configs:
       - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
       - {source: rag-postgres-init, target: /config/postgres-init.sql}

@@ -68,9 +68,12 @@ public sealed class GatewayFeatures
 /// Off without a gateway or a key. A failed read keeps the last features.
 /// </summary>
 public sealed partial class GatewayContextReader(
-    IHttpClientFactory clients, GatewayFeatures features, IOptions<GatewayOptions> options, TimeProvider time, ILogger<GatewayContextReader> logger) : BackgroundService
+    IHttpClientFactory clients, GatewayFeatures features, IOptionsMonitor<GatewayOptions> options, TimeProvider time, ILogger<GatewayContextReader> logger) : BackgroundService
 {
     public const string HttpClientName = "gateway-context";
+
+    /// <summary>How often a service without its credential key checks for one (the secret files reload on change).</summary>
+    public static readonly TimeSpan KeyWait = TimeSpan.FromSeconds(15);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
@@ -78,15 +81,22 @@ public sealed partial class GatewayContextReader(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (string.IsNullOrWhiteSpace(options.Value.BaseUrl) || string.IsNullOrEmpty(options.Value.Key))
+        if (string.IsNullOrWhiteSpace(options.CurrentValue.BaseUrl))
         {
             return;
         }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // A key added after the start (a secret file written by a stack update) is picked up within KeyWait.
+            if (string.IsNullOrEmpty(options.CurrentValue.Key))
+            {
+                await Task.Delay(KeyWait, time, stoppingToken);
+                continue;
+            }
+
             await ReadAsync(stoppingToken);
-            await Task.Delay(options.Value.ContextInterval, time, stoppingToken);
+            await Task.Delay(options.CurrentValue.ContextInterval, time, stoppingToken);
         }
     }
 
