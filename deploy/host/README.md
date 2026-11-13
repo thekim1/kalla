@@ -42,12 +42,13 @@ sudo iptables -S UME-RAG-EGRESS
 ```
 
 A container sends all its egress through the network that holds its default route. Compose pins it with
-`gw_priority` (rag-api and rag-admin: `llm`; rag-worker: `crawl`), so `llm` allows the gateway, the OIDC authority, the
-Open WebUI host and the OTLP endpoint, and `crawl` the gateway, the OTLP endpoint, `UME_RAG_CRAWL_ALLOW` and the public
-Internet. The allow-lists name hosts, resolved when the script runs: a CDN-hosted name (`login.microsoftonline.com`,
-`database.clamav.net`) can move to addresses the rules do not have yet, until the next run. Where IT provides an egress
-proxy, send freshclam through it (`init-deployment.sh --freshclam-proxy`). `--allow NETWORK=HOST[:PORT]` adds a
-destination. `--remove` takes the rules out.
+`gw_priority` (rag-api and rag-admin: `llm`; rag-worker: `crawl`), so `llm` allows the gateway, its Admin API (with
+`UME_RAG_GATEWAY_INTEGRATION_API_URL`), the OIDC authority, the Open WebUI host and the OTLP endpoint, and `crawl` the
+gateway, the OTLP endpoint, `UME_RAG_CRAWL_ALLOW` and the public Internet. The allow-lists name hosts, resolved when
+the script runs: a CDN-hosted name (`login.microsoftonline.com`, `database.clamav.net`) can move to addresses the rules
+do not have yet, until the next run. Where IT provides an egress proxy, send freshclam through it
+(`init-deployment.sh --freshclam-proxy`). `--allow NETWORK=HOST[:PORT]` adds a destination. `--remove` takes the rules
+out.
 
 ## Metrics and alerts (§7.4 rule 5)
 

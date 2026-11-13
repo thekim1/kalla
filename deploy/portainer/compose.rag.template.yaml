@@ -40,6 +40,9 @@
 # Optional
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
+#   UME_RAG_GATEWAY_INTEGRATION_API_URL  the gateway's cost and budget read-back in RAG's admin UI: the gateway admin
+#                             API's URL as rag-admin reaches it, https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443> (adminapi
+#                             is not on llm); UME_RAG_ADMIN_GATEWAY_KEY needs the scope usage.read. Unset: no read-back
 #   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
 #   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
 #                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
@@ -248,6 +251,8 @@ x-rag-secrets: &rag-secrets-mount
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
+      # The gateway admin API's Integration API (/integration/v1), the cost and budget read-back (#580); empty: none.
+      Gateway__IntegrationApiUrl: ${UME_RAG_GATEWAY_INTEGRATION_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}

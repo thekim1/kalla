@@ -48,7 +48,8 @@ spec:
     # publishes 8443), and the OTLP collector's (4317).
     - ports: [{protocol: TCP, port: 443}]
 ---
-# rag-admin: browsers through the Ingress controller; out to Postgres, the gateway and the IdP.
+# rag-admin: browsers through the Ingress controller; out to Postgres, the gateway (with Gateway__IntegrationApiUrl
+# also its Admin API) and the IdP.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -68,9 +69,9 @@ spec:
         - podSelector:
             matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
       ports: [{protocol: TCP, port: 5432}]
-    # The gateway, the OIDC authority, Open WebUI: NetworkPolicy cannot filter by host name, so keep the destinations
-    # in your egress firewall or proxy. change: add the gateway's port if not 443 (the gateway's Compose stack
-    # publishes 8443), and the OTLP collector's (4317).
+    # The gateway, its Admin API, the OIDC authority, Open WebUI: NetworkPolicy cannot filter by host name, so keep the
+    # destinations in your egress firewall or proxy. change: add the gateway's port if not 443 (the gateway's Compose
+    # stack publishes 8443, its Admin API 9443), and the OTLP collector's (4317).
     - ports: [{protocol: TCP, port: 443}]
 ---
 # rag-migrate: Postgres only (Compose: data).

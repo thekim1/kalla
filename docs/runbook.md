@@ -564,7 +564,7 @@ the allow-lists are host names, resolved when it runs.
 | Network | May reach |
 |---|---|
 | `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
-| `llm` (api, admin) | the gateway, the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
+| `llm` (api, admin) | the gateway, the gateway's Admin API (with `UME_RAG_GATEWAY_INTEGRATION_API_URL`), the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
 | `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
 | `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused with `--clamav off` |
 | `backup` (postgres) | the S3 endpoint, DNS; nothing with a mounted share |
@@ -680,6 +680,48 @@ Also for G1 and W2:
 - *Feedback snapshots* cover only rated conversations, as of the rating.
 - *Backups of Open WebUI's data directory*: none in P0, so a deleted conversation cannot be recovered.
 - The Open WebUI stack is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
+
+## Gateway keys, budgets and the read-back
+
+Each service calls the gateway with its own **credential key** (production-setup.md, *Gateway credential keys*). From
+the gateway's integration phase 2, a call for an assistant or knowledge base that has a gateway key of its own is made
+**as that key**: the service sends its credential key and the object's key id (`x-ume-on-behalf-of`), and the gateway
+charges the call to that key's budget and limits (identity design §4.7). So two different keys can fail:
+
+- **The object's key** belongs to a department. The gateway refuses it with `403 delegation_not_allowed`,
+  `key_disabled`, `key_revoked` or `key_expired`, or with `402 budget_exceeded` when its own, its team's or its
+  department's budget is used up. The department fixes it in the gateway; nothing is wrong with the deployment.
+- **The service's credential key**: every gateway `401` is that key's own, whichever object the call was for. That is
+  for the operators and the gateway admin.
+
+Rag-admin's mirror of the gateway keys (`config."GatewayKeys"`) is refreshed every 5 minutes by the organisation sync,
+or at once with *Fetch now* under *Platform objects → Organisation*; chat and the admin UI judge a key by it.
+
+| Symptom | Meaning | Fix |
+|---|---|---|
+| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; the *Gateway* page's acting check says `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-ume-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
+| Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
+| Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
+| Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
+| A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, restart that service |
+| rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no client `admin-console` of type `internal`, so test-panel cost is not recorded (the panel still answers) | A platform admin creates it under *Platform objects → Clients*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off (production-setup.md, *Before the first use of the admin UI*). Turns made before it are not recovered |
+
+**The read-back's reasons.** With `UME_RAG_GATEWAY_INTEGRATION_API_URL` set, rag-admin reads the gateway's cost and
+budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). The *Gateway* page's
+status (`GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
+`at` when the last read gave nothing; rag-admin also logs "The gateway's Integration API refused or failed (HTTP …,
+reason); no read-back this time". The *Cost* cards then show Ume.Rag's figures only, and a used-up budget shows no
+badge (the gateway still refuses the calls).
+
+| `configured` / `reason` | Meaning | Fix |
+|---|---|---|
+| `configured: false` | `UME_RAG_GATEWAY_INTEGRATION_API_URL` is unset or empty (Kubernetes: `Gateway__IntegrationApiUrl`) | Set it as production-setup.md says, if the read-back is wanted |
+| `scope_missing` (403) | rag-admin's credential key lacks the scope `usage.read` | The gateway admin adds `usage.read` to that key; the next read picks it up (only answers are cached), no restart needed |
+| `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
+| `unauthorized` (401) | rag-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
+| `not_found` (404) | The key is not one of the integration *Ume.Rag*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
+| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` takes the URL's host and port when `rag-firewall.service` runs), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the URL in `deploy/.env`, `sudo systemctl start rag-firewall.service`, and `--ca-file` for the Admin API's CA |
+| `failed` | Any other answer (a `5xx`, a `400`) | rag-admin's log has the status; ask the gateway team |
 
 ## Incidents
 
