@@ -729,7 +729,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "Malware scan optional"; connectors §9.1, §11; admin §4.5, §5.5.7; identity §10;
   repo-and-deployment §4.1.
 
-### [ ] B-48 A cancelled turn is recorded: the user's message, the partial answer, its usage, the `Cancelled` count (chat §8.3)
+### [x] B-48 A cancelled turn is recorded: the user's message, the partial answer, its usage, the `Cancelled` count (chat §8.3) (#636)
 - **Do:** when the client disconnects or the idle or total timeout ends a streamed answer (chat §8.3), the writer gets
   the turn as any other (§12): the user's message, the partial answer as delivered so far with `Outcome = cancelled`,
   the turn's usage records (the aborted answer at its prompt estimate, as B-38 records it now, plus the calls before
