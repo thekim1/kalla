@@ -240,4 +240,33 @@ public sealed class FakeAssignedKey
     /// request made as the key answers <c>402 budget_exceeded</c> with the gateway's message for that scope (gateway-changes §5.4).
     /// </summary>
     public string? BudgetExceeded { get; set; }
+
+    /// <summary>
+    /// The budgets that apply to the key, for <c>GET /integration/v1/budgets</c> (gateway phase 3, gateway-changes §5.6;
+    /// <c>FakeGateway:AssignedKeys:&lt;n&gt;:Budgets:&lt;m&gt;</c>).
+    /// </summary>
+    public List<FakeBudget> Budgets { get; set; } = [];
+}
+
+/// <summary>A budget as the gateway's Integration API shows it (gateway-changes §5.6, <c>IntegrationBudget</c>).</summary>
+public sealed class FakeBudget
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    /// <summary><c>VirtualKey</c>, <c>Team</c> or <c>Department</c>.</summary>
+    public string Scope { get; set; } = "VirtualKey";
+
+    /// <summary>The key's, its team's or its department's id; derived from the key when unset.</summary>
+    public Guid? ScopeId { get; set; }
+
+    /// <summary><c>Usd</c> or <c>Tokens</c>.</summary>
+    public string Unit { get; set; } = "Usd";
+
+    public decimal Limit { get; set; } = 50m;
+    public string? Residency { get; set; }
+
+    /// <summary><c>Month</c>, <c>Week</c> or <c>Day</c>, as the gateway's budget periods.</summary>
+    public string Period { get; set; } = "Month";
+
+    public decimal Spent { get; set; }
 }

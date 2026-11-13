@@ -95,6 +95,8 @@ if (fakeGateway is not null)
         {
             // rag-admin's key reads the whole organisation in the context (identity design §2.1, gateway-changes §5.5).
             fakeGateway.WithEnvironment("FakeGateway__CredentialKeys__admin__Scopes__0", "organisation.read");
+            // ... and only it reads the Integration API (gateway phase 3, gateway-changes §5.6; B-45).
+            fakeGateway.WithEnvironment("FakeGateway__CredentialKeys__admin__Scopes__1", "usage.read");
         }
     }
 
@@ -350,6 +352,9 @@ if (fakeGateway is not null)
         service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway)
             .WithEnvironment("Gateway__Key", gatewayKeys[name]);
     }
+
+    // B-45 (gateway-changes §5.6): the fake serves the Integration API on its own address, read by the admin only.
+    adminApi.WithEnvironment("Gateway__IntegrationApiUrl", fakeGateway.GetEndpoint("https"));
 }
 else
 {

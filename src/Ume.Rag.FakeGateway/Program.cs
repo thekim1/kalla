@@ -311,6 +311,8 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
 // or { text }, results[] with index and relevance_score (and document with return_documents), usage in input tokens.
 // Optional: with FakeGateway:RerankEnabled off (the default) no rerank model exists, so the call answers 404 (400 for a
 // model of another kind), as the gateway does without a rerank provider. Scores from word overlap, deterministic.
+app.MapFakeIntegration(); // gateway phase 3: /integration/v1 usage and budgets (gateway-changes §5.6)
+
 app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
 {
     var o = options.Value;

@@ -71,6 +71,10 @@ builder.Services.AddHealthChecks().AddCheck<OrganisationSync>("organisation-sync
 // The gateway client of item 13: the model mirror, canary embeddings and checks, V8's /v1/models check and the key status.
 builder.AddGatewayClient(GatewayApi.HttpClientName);
 builder.Services.AddSingleton<GatewayApi>();
+// B-45 (gateway-changes §5.6): the Integration API's read-back of a key's usage and budgets, on the gateway's Admin API.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient(IntegrationApiClient.HttpClientName);
+builder.Services.AddSingleton<IntegrationApiClient>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
