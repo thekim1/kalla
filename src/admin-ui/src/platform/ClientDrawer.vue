@@ -171,7 +171,7 @@ async function revoke(): Promise<void> {
       <DetailSection :title="L.facts.title" data-test="client-facts">
         <DetailRow :label="PLATFORM.form.id"><CopyValue :value="client.id" /></DetailRow>
         <DetailRow :label="L.facts.kind">{{ L.kinds[client.kind]?.title ?? client.kind }}</DetailRow>
-        <DetailRow :label="L.facts.updated">{{ formatDateTime(client.updatedAt) }}<template v-if="client.updatedBy"> · {{ client.updatedBy }}</template></DetailRow>
+        <DetailRow :label="L.facts.updated">{{ formatDateTime(client.updatedAt) }}</DetailRow>
       </DetailSection>
 
       <section class="mb-8 grid gap-4" aria-labelledby="client-edit-title">
@@ -199,7 +199,7 @@ async function revoke(): Promise<void> {
           @row-click="editKey"
         >
           <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
-          <template #cell-prefix="{ row }"><span class="font-mono text-small">{{ row.prefix }}</span></template>
+          <template #cell-prefix="{ row }"><span class="font-mono text-small whitespace-nowrap">{{ row.prefix }}</span></template>
           <template #cell-status="{ row }"><UiBadge :tone="STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
           <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
           <template #cell-actions="{ row }">
