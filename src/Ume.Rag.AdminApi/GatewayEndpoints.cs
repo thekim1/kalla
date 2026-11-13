@@ -166,7 +166,29 @@ public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string G
 /// (admin design §4.10: the Gateway page shows them), <see cref="Organisation"/> the organisation sync with its <c>degraded</c> reason.
 /// </summary>
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
-    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation, GatewayActedStatus? Acted = null);
+    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation, GatewayActedStatus? Acted = null)
+{
+    /// <summary>The Integration API's read-back (B-45): whether <c>Gateway:IntegrationApiUrl</c> is set and its last refusal (<c>401</c>, <c>403</c>, <c>429</c>).</summary>
+    public IntegrationReadback? Integration { get; init; }
+}
+
+/// <summary>The Integration API on the <i>Gateway</i> page (admin §4.5): configured or not, and why the last read-back gave nothing.</summary>
+public sealed record IntegrationReadback(bool Configured, IntegrationApiError? LastError);
+
+/// <summary>A key's budget as the admin shows it (admin §4.5): <c>scope</c> <c>key</c>, <c>team</c> or <c>department</c>; <c>unit</c> <c>usd</c> or <c>tokens</c>.</summary>
+public sealed record KeyBudgetDto(string Scope, string Unit, decimal Limit, decimal Spent, decimal PercentUsed, bool Exhausted, string? Residency, string Period,
+    DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd)
+{
+    public static KeyBudgetDto Of(IntegrationBudget b) => new(b.Scope switch { "VirtualKey" => "key", "Team" => "team", "Department" => "department", _ => b.Scope.ToLowerInvariant() },
+        b.Unit.ToLowerInvariant(), b.Limit, b.Spent, b.PercentUsed, b.Exhausted, b.Residency, b.Period, b.PeriodStart, b.PeriodEnd);
+}
+
+/// <summary>A key's gateway usage per period and step (admin §8.6): what the gateway counted for the key, the record for charging.</summary>
+public sealed record KeyUsageRowDto(DateOnly Period, string? Step, long Requests, long SuccessfulRequests, long InputTokens, long CachedInputTokens, long OutputTokens,
+    decimal CostUsd);
+
+/// <summary><c>GET /api/gateway/keys/{id}/usage</c>: the period and the gateway's rows.</summary>
+public sealed record KeyUsageDto(DateOnly From, DateOnly To, string Granularity, IReadOnlyList<KeyUsageRowDto> Rows);
 
 /// <summary>
 /// One <c>GET /v1/models</c> made as the first usable mirrored key while the gateway acts as keys (admin §4.5, B-43).
@@ -238,6 +260,22 @@ public static class GatewayEndpoints
 
     /// <summary>The input of a status call: fixed, carries no content.</summary>
     public const string StatusProbeText = "status";
+
+    /// <summary>The longest period of a key's gateway usage (admin §8.6; the Integration API's own limit, gateway-changes §5.6).</summary>
+    public const int MaxIntegrationDays = 366;
+
+    /// <summary>A JSON <c>null</c> body (a minimal API writes nothing for a null value): "no read-back" (admin §4.5, §8.6).</summary>
+    private static IResult JsonNull() => Results.Content("null", "application/json");
+
+    /// <summary>404 unless <paramref name="keyId"/> is a mirrored key of a department in the caller's scope (admin §4.5, as <c>/keys</c>).</summary>
+    private static async Task InScopeKeyAsync(AdminContext admin, Guid keyId, CancellationToken ct)
+    {
+        var departments = admin.Departments().Select(d => d.Id);
+        if (!await admin.Db.GatewayKeys.AsNoTracking().AnyAsync(k => k.Id == keyId && k.DepartmentId != null && departments.Contains(k.DepartmentId.Value), ct))
+        {
+            throw AdminFaults.Of(AdminErrorCodes.NotFound);
+        }
+    }
 
     public static RouteGroupBuilder MapGateway(this RouteGroupBuilder api)
     {
@@ -316,6 +354,31 @@ public static class GatewayEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayKeys")
             .WithSummary("The department's assigned gateway keys for the key picker, with their settings and whether each can be chosen");
 
+        // B-45 (admin §4.5, §8.6; gateway-changes §5.6): a key's budgets and its usage as the gateway counted them. The key's
+        // department must be in scope (404 before any gateway call); null when Gateway:IntegrationApiUrl is unset or the gateway
+        // gives nothing (the Gateway page shows why).
+        gateway.MapGet("/keys/{id:guid}/budget", async (Guid id, AdminContext admin, IntegrationApiClient integration, CancellationToken ct) =>
+            {
+                await InScopeKeyAsync(admin, id, ct);
+                var budgets = await integration.BudgetsAsync(id, ct);
+                return budgets is null ? JsonNull() : Results.Json(budgets.Items.Select(KeyBudgetDto.Of).ToList());
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetGatewayKeyBudget")
+            .WithSummary("The budgets that apply to a gateway key, from the gateway's Integration API (null without the read-back)");
+
+        gateway.MapGet("/keys/{id:guid}/usage", async (Guid id, DateOnly? from, DateOnly? to, string? granularity, AdminContext admin, IntegrationApiClient integration,
+                CancellationToken ct) =>
+            {
+                await InScopeKeyAsync(admin, id, ct);
+                var period = CostPeriod.Of(from, to, granularity, DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now,
+                    TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm")).DateTime), maxDays: MaxIntegrationDays);
+                var usage = await integration.UsageAsync(id, period.From, period.To, period.Granularity, ct);
+                return usage is null ? JsonNull() : Results.Json(new KeyUsageDto(usage.From, usage.To, usage.Granularity, [.. usage.Items.Select(r =>
+                    new KeyUsageRowDto(r.Period, r.Step, r.Requests, r.SuccessfulRequests, r.InputTokens, r.CachedInputTokens, r.OutputTokens, r.CostUsd))]));
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetGatewayKeyUsage")
+            .WithSummary("A gateway key's requests, tokens and cost per period and step as the gateway counted them (null without the read-back)");
+
         gateway.MapGet("/status", StatusAsync)
             .RequireAuthorization(AdminPolicies.Admin).WithName("GatewayStatus").WithSummary("Per level key: one embedding call at that ceiling; sync and canary state");
 
@@ -337,7 +400,7 @@ public static class GatewayEndpoints
     /// level is reported as <c>error</c> with <see cref="GatewayModelSync.ErrorText"/>, so the page always answers.
     /// </summary>
     private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, OrganisationSync organisation,
-        IOptions<GatewayOptions> options, GatewayFeatures features, CancellationToken ct)
+        IOptions<GatewayOptions> options, GatewayFeatures features, IntegrationApiClient integration, CancellationToken ct)
     {
         var profiles = await db.EmbeddingProfiles.AsNoTracking().Where(p => p.State == EmbeddingProfileStates.Active)
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.Name).ToListAsync(ct);
@@ -385,7 +448,10 @@ public static class GatewayEndpoints
 
         var context = organisation.Status;
         var acted = configured && features.ActAsKey ? await ActedAsync(db, gateway, options.Value, ct) : null;
-        return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context, acted);
+        return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context, acted)
+        {
+            Integration = new IntegrationReadback(integration.Configured, integration.LastError),
+        };
     }
 
     /// <summary>The acted check of the status (B-43): <c>/v1/models</c> as the first usable mirrored key, at the service's maximum.</summary>

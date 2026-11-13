@@ -181,8 +181,11 @@ public static class CostEndpoints
 /// <summary>A report's period (admin §8.6): inclusive dates, <c>day</c> or <c>month</c>, within the limits.</summary>
 public sealed record CostPeriod(DateOnly From, DateOnly To, string Granularity)
 {
-    /// <summary>The period of a query: default the last 30 days by day; <c>from</c> after <c>to</c> is invalid; too long is <c>period_too_long</c>.</summary>
-    public static CostPeriod Of(DateOnly? from, DateOnly? to, string? granularity, DateOnly today)
+    /// <summary>
+    /// The period of a query: default the last 30 days by day; <c>from</c> after <c>to</c> is invalid; too long is
+    /// <c>period_too_long</c>: 400 days by day and 36 months by month, or <paramref name="maxDays"/> whatever the granularity.
+    /// </summary>
+    public static CostPeriod Of(DateOnly? from, DateOnly? to, string? granularity, DateOnly today, int? maxDays = null)
     {
         var unit = granularity ?? CostEndpoints.Day;
         if (unit is not (CostEndpoints.Day or CostEndpoints.Month))
@@ -198,7 +201,8 @@ public sealed record CostPeriod(DateOnly From, DateOnly To, string Granularity)
             throw AdminFaults.Field("from", AdminErrorCodes.InvalidValue);
         }
 
-        var tooLong = unit == CostEndpoints.Day
+        var tooLong = maxDays is { } days ? end.DayNumber - start.DayNumber + 1 > days
+            : unit == CostEndpoints.Day
             ? end.DayNumber - start.DayNumber + 1 > CostEndpoints.MaxDays
             : (end.Year * 12 + end.Month) - (start.Year * 12 + start.Month) + 1 > CostEndpoints.MaxMonths;
         return tooLong ? throw AdminFaults.Of(AdminErrorCodes.PeriodTooLong) : new CostPeriod(start, end, unit);
