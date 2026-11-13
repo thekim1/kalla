@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// and no foreign rows from <c>/api/costs</c>, a platform admin sees all, a department a knowledge base is shared with sees
 /// no cost); deleted objects; the CSV's headers; <c>period_too_long</c>.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class CostEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

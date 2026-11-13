@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// Evaluation (admin design §4.5, §4.7; P1a item 14d): human questions through <c>edit-eval-question</c>, on-demand runs with
 /// variants, the set's overview and a run's results; and member groups by hand (admin design §4.10).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

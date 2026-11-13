@@ -10,7 +10,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// An Open WebUI client's feedback retention (chat design §13.3, #343): created without a value it keeps 90 days, it cannot
 /// be cleared, and another value is kept; other kinds may leave it empty.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// role answers 403 exactly when the matrix denies one of its policies; a user without a rag-* role gets 403 everywhere and
 /// an anonymous caller 401.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class PermissionMatrixTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

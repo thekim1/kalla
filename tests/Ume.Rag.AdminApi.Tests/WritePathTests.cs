@@ -20,7 +20,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// The admin write path (admin design §4.4, §11.2): the version lock, the change, the outbox row and version bump, and one
 /// audit entry with that version, in one transaction; database refusals answer their error codes.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class WritePathTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

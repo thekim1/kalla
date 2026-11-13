@@ -10,7 +10,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// address, leaves no log line with the host, at any level, including Polly's retry telemetry of the standard resilience
 /// handler.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class ClientAddressLoggingTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

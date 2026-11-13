@@ -13,7 +13,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// Collections (admin design §4.5, P1a item 14b): create on the default profile, department scope, update with V2/V3,
 /// publish, retrieval settings (V16) with the advisory evaluation job, delete refused while used; every write audited.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// a client in the assistant's audience (allowed, with level and ceiling), one outside it, and an unknown one; department
 /// admins only for their own departments' assistants.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class ExplainAccessTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

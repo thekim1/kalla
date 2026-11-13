@@ -17,7 +17,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// and stored only as the pepper's HMAC (and Data-Protection-encrypted for reveal), department admins manage the keys of
 /// their teams, V23 scopes, rotation with grace, reveal by platform admins only and audited, revoke.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
 {
     private const string Pepper = "key-endpoints-test-pepper-0123456789abcdef";

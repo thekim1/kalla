@@ -25,7 +25,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <c>act-as-key</c>, V39 checks an object's models with <c>/v1/models</c> as its key, the picker's availability follows the
 /// key, publish needs a key, a knowledge base without one still saves, and the status makes one acted call.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "sk-ume-checks-as-key-0000000000000";

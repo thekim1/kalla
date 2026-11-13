@@ -20,7 +20,7 @@ using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
 
-/// <summary>A ragdb with the production roles for the admin API's database tests (one per test run).</summary>
+/// <summary>A ragdb with the production roles for the admin API's database tests (one per admin-db-N collection).</summary>
 public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
 {
     /// <summary>The admin API on this database as <c>ume_rag_admin</c>, with a placeholder identity provider.</summary>
@@ -83,10 +83,32 @@ public static class GatewaySyncTestExtensions
     }
 }
 
+// The admin-db collections, each with its own database, as the worker tests' ragdb-N. The classes of one collection run one
+// after the other, the collections in parallel. Classes are spread by measured duration (about 46 s each locally), so the
+// collections end at about the same time; a new class goes to the one that is shortest then.
+
 [CollectionDefinition(Name)]
-public sealed class AdminDatabaseGroup : ICollectionFixture<AdminDatabaseFixture>
+public sealed class AdminDatabaseGroup1 : ICollectionFixture<AdminDatabaseFixture>
 {
-    public const string Name = "admin-db";
+    public const string Name = "admin-db-1";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup2 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-2";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup3 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-3";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup4 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-4";
 }
 
 /// <summary>
@@ -94,7 +116,7 @@ public sealed class AdminDatabaseGroup : ICollectionFixture<AdminDatabaseFixture
 /// gateway's <c>AdminSessionTests</c>; the store is <see cref="PostgresAdminSessionStore"/> on <c>config."AdminSessions"</c>
 /// as <c>ume_rag_admin</c> instead of the gateway's in-memory one (to-verify #163).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class AdminSessionTests(AdminDatabaseFixture database)
 {
     private static readonly TimeSpan MaxSession = TimeSpan.FromHours(12);

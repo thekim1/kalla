@@ -3,7 +3,7 @@ using System.Net;
 namespace Ume.Rag.AdminApi.Tests;
 
 /// <summary>Every service answers the probes and /version (P0 checklist #4); the admin API now needs its database.</summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class HealthEndpointTests(AdminDatabaseFixture database)
 {
     [Theory]

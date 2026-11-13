@@ -22,7 +22,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// from the gateway's Integration API with its credential key (<c>usage.read</c>), cached 5 minutes per key and query; without
 /// <c>Gateway:IntegrationApiUrl</c> the routes answer null without a call; a refusal is null with its reason on the status.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "sk-ume-readback-admin-00000000000000";

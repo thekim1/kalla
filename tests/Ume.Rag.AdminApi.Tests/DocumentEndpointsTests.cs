@@ -18,7 +18,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// and keyset, a document's chunk sets and PII state, the live chunks, and the decisions as <c>command</c> jobs whose
 /// payloads match the worker's contracts (<c>contracts/jobs/v1</c>).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -21,7 +21,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// The model pickers' availability flag and V32 at the gateway (Decisions "Model pickers show what the key may use", #447;
 /// admin design §4.5 <c>GET /api/gateway/models?level=</c>, §4.6 V32).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "fake-eu-key-availability-0123456"; // rag-admin\'s credential key

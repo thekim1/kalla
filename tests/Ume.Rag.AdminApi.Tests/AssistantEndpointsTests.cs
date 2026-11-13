@@ -23,7 +23,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// with V34 and the rules as refusals and V8 at the FakeGateway, a second version superseding the first, audiences of kind
 /// client with V7, and the level change re-checks.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "fake-eu-key-assistants-0123456789"; // rag-admin\'s credential key
