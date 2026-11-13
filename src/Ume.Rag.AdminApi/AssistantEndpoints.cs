@@ -48,7 +48,7 @@ public static class AssistantEndpoints
                 await DetailAsync(admin, await LoadAsync(admin, id, ct, tracked: false), ct))
             .RequireAuthorization(AdminPolicies.Read).WithName("GetAssistant").WithSummary("One assistant: own fields, versions, audiences");
 
-        assistants.MapPost("", async (AssistantCreateRequest request, AdminContext admin, CancellationToken ct) =>
+        assistants.MapPost("", async (AssistantCreateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
                 var created = await admin.WriteAsync(async attempt =>
                 {
@@ -75,7 +75,7 @@ public static class AssistantEndpoints
                     // V39 (admin design §4.6): a key chosen at create is checked for status, department and residency; the
                     // draft that follows has no models yet.
                     Refuse(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId,
-                        ResidencyCeiling.ForLevel(assistant.Classification), [], attempt));
+                        ResidencyCeiling.ForLevel(assistant.Classification), [], attempt, models));
                     admin.Db.Assistants.Add(assistant);
                     await admin.Db.SaveChangesAsync(attempt);
                     // Created with only a draft: no published version, so no client lists it (admin design §4.5). The draft starts from
@@ -114,13 +114,20 @@ public static class AssistantEndpoints
                     request.ApplyTo(assistant);
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
+                    // V39: once the gateway acts as keys, a published assistant's key cannot be cleared: it would then run on
+                    // rag-api's credential key, outside its department's budget (#618 review).
+                    if (keyChanged && assistant.GatewayKeyId is null && assistant.PublishedVersionId is not null && models.ActsAsKeys)
+                    {
+                        Refuse([new(AdminErrorCodes.GatewayKeyRequired, null, [])]);
+                    }
+
                     if (levelChanged && assistant.PublishedVersionId is { } published)
                     {
                         // Dependants are re-checked against the published version (admin design §4.6): V3, V7, V9 and V8.
                         var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, attempt);
                         var audience = await AudienceClientsAsync(admin, assistant.Id, attempt);
-                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, audience, attempt, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
-                        await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, audience, attempt, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge, asKey: models));
+                        await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt, assistant.GatewayKeyId);
                         confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps);
                     }
                     else if (keyChanged && (assistant.PublishedVersionId ?? assistant.DraftVersionId) is { } current)
@@ -129,7 +136,7 @@ public static class AssistantEndpoints
                         var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == current, attempt);
                         var audience = await AudienceClientsAsync(admin, assistant.Id, attempt);
                         Refuse(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId, AssistantRules.Ceiling(assistant, audience),
-                            await GatewayKeyRules.AssistantModelsAsync(admin, version, attempt), attempt));
+                            await GatewayKeyRules.AssistantModelsAsync(admin, version, attempt), attempt, models));
                     }
 
                     object after = confirmed ? new { assistant = AssistantAudit.Of(assistant), generalKnowledgeConfirmed = true } : AssistantAudit.Of(assistant);
@@ -237,8 +244,9 @@ public static class AssistantEndpoints
                     }
 
                     var audience = await AudienceClientsAsync(admin, id, attempt);
-                    Refuse(await AssistantRules.CheckAsync(admin, assistant, draft, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
-                    await models.EnsureServableAsync(draft.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+                    Refuse(await AssistantRules.CheckAsync(admin, assistant, draft, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge,
+                        asKey: models));
+                    await models.EnsureServableAsync(draft.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt, assistant.GatewayKeyId);
 
                     var before = AssistantAudit.Of(assistant);
                     var confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, draft.QuerySteps);
@@ -283,8 +291,8 @@ public static class AssistantEndpoints
                     if (assistant.PublishedVersionId is { } published)
                     {
                         var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, attempt);
-                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, attempt));
-                        await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), attempt);
+                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, attempt, asKey: models));
+                        await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), attempt, assistant.GatewayKeyId);
                     }
                     else
                     {
@@ -355,8 +363,9 @@ public static class AssistantEndpoints
 
                     // Exactly as publish (admin design §4.5): V34, then every assistant rule as refusals and V8's /v1/models call.
                     var audience = await AudienceClientsAsync(admin, id, attempt);
-                    Refuse(await AssistantRules.CheckAsync(admin, assistant, restored, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
-                    await models.EnsureServableAsync(restored.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+                    Refuse(await AssistantRules.CheckAsync(admin, assistant, restored, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge,
+                        asKey: models));
+                    await models.EnsureServableAsync(restored.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt, assistant.GatewayKeyId);
                     var confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, restored.QuerySteps);
 
                     var before = AssistantAudit.Of(assistant);
@@ -588,7 +597,7 @@ public static class AssistantRules
     }
 
     public static async Task<IReadOnlyList<RuleProblem>> CheckAsync(AdminContext admin, Assistant assistant, AssistantVersion version, IReadOnlyList<Client> audience,
-        CancellationToken ct, bool publishing = false, bool confirmGeneralKnowledge = false)
+        CancellationToken ct, bool publishing = false, bool confirmGeneralKnowledge = false, GatewayModelCheck? asKey = null)
     {
         ArgumentNullException.ThrowIfNull(admin);
         ArgumentNullException.ThrowIfNull(assistant);
@@ -663,9 +672,15 @@ public static class AssistantRules
         }
 
         problems.AddRange(await NotFoundAsync(admin, version.NotFound, ct));
-        // V39: the assistant's gateway key against this version's models at the V8 ceiling.
+        // V39: the assistant's gateway key against this version's models at the V8 ceiling; as the key once the gateway acts as
+        // keys (B-43), when then publish and restore also need a key.
+        if (publishing && asKey is { ActsAsKeys: true } && assistant.GatewayKeyId is null)
+        {
+            problems.Add(new(AdminErrorCodes.GatewayKeyRequired, null, []));
+        }
+
         problems.AddRange(await GatewayKeyRules.CheckAsync(admin, assistant.GatewayKeyId, assistant.DepartmentId, Ceiling(assistant, audience),
-            await GatewayKeyRules.AssistantModelsAsync(admin, version, ct), ct));
+            await GatewayKeyRules.AssistantModelsAsync(admin, version, ct), ct, asKey));
         return problems;
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import { englishDetail, mapFieldErrors, problemMessage } from './problem'
+import { englishDetail, mapFieldErrors, problemLines, problemMessage } from './problem'
 
 describe('problemMessage', () => {
   it('shows the UI text of the code with its params, never the API detail', () => {
@@ -33,5 +33,27 @@ describe('mapFieldErrors', () => {
   it('prefers the UI text of a field error code', () => {
     const error = new ApiError(400, 'POST', { errors: { kind: ['Kind must be one of …'] }, errorCodes: { kind: [{ code: 'invalid_value' }] } })
     expect(mapFieldErrors(error, ['kind'])).toEqual({ kind: 'The value is not valid. Check the field.' })
+  })
+})
+
+describe('problemLines for the gateway key (B-36, B-43)', () => {
+  it('shows each key refusal of a save or a publish in its own words, with the models it names', () => {
+    const error = new ApiError(409, 'POST', {
+      code: 'gateway_key_required',
+      problems: [
+        { code: 'gateway_key_required' },
+        { code: 'gateway_key_model', params: { key: 'Kontaktcenter – chatbot' }, affected: ['ume/chat-standard'] },
+        { code: 'gateway_key_invalid', params: { key: 'Bokning', reason: 'key_disabled' } },
+        { code: 'gateway_key_residency', params: { key: 'Webb', ceiling: 'OnPrem' }, affected: ['External'] },
+        { code: 'gateway_unavailable' },
+      ],
+    })
+    expect(problemLines(error)).toEqual([
+      'No AI gateway key is chosen, so the calls are charged to the platform’s owner team.',
+      'The AI gateway key Kontaktcenter – chatbot does not allow every model this uses. (ume/chat-standard)',
+      'The AI gateway key Bokning cannot be used (key_disabled). Choose an active key of this department.',
+      'The AI gateway key Webb allows no residency within OnPrem. Choose a key that may run at this information class. (External)',
+      expect.stringContaining('AI gateway'),
+    ])
   })
 })

@@ -15,13 +15,18 @@ namespace Ume.Rag.AdminApi;
 /// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-ume-on-behalf-of</c>.
 /// The ceiling is capped by <c>Gateway:MaxResidency</c> first, as chat caps it (#237).
 /// </summary>
-public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOptions<GatewayOptions> options)
+public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOptions<GatewayOptions> options, GatewayFeatures features)
 {
+    /// <summary>The gateway acts as keys (feature <c>act-as-key</c> in this service's context, gateway phase 2; B-43).</summary>
+    public bool ActsAsKeys => features.ActAsKey;
+
     /// <summary>
     /// Throws the V8 fault (<c>model_residency</c>, <c>model_not_listed</c>, <c>gateway_key_missing</c>,
-    /// <c>gateway_unavailable</c>) unless servable.
+    /// <c>gateway_unavailable</c>) unless servable. With <paramref name="gatewayKeyId"/> and while the gateway acts as keys,
+    /// the list is the object's key's (admin §4.6 V8, B-43): a refusal of the key is <c>gateway_key_invalid</c>, a missing
+    /// echo <c>gateway_unavailable</c> (event 5011 is logged by the handler).
     /// </summary>
-    public async Task EnsureServableAsync(string model, Residency ceiling, CancellationToken cancellationToken)
+    public async Task EnsureServableAsync(string model, Residency ceiling, CancellationToken cancellationToken, Guid? gatewayKeyId = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(model);
         ceiling = options.Value.Cap(ceiling);
@@ -32,23 +37,71 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
             throw AdminFaults.Of(AdminErrorCodes.ModelResidency, parameters);
         }
 
+        var listed = await ListAsync(ceiling, ActsAsKeys ? gatewayKeyId : null, parameters, cancellationToken);
+        if (!listed.Contains(model))
+        {
+            throw AdminFaults.Of(AdminErrorCodes.ModelNotListed, parameters);
+        }
+    }
+
+    /// <summary>
+    /// V39's model part as the key (admin §4.6, B-43): while the gateway acts as keys, <c>GET /v1/models</c> as
+    /// <paramref name="key"/> at <paramref name="ceiling"/>, and each model the object uses that it does not list is named in
+    /// <c>gateway_key_model</c>; a refusal of the key is <c>gateway_key_invalid</c>. Empty when the gateway does not act as keys.
+    /// </summary>
+    public async Task<IReadOnlyList<RuleProblem>> KeyModelsAsync(GatewayKey key, Residency ceiling, IEnumerable<string?> models, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(models);
+        if (!ActsAsKeys)
+        {
+            return [];
+        }
+
+        ceiling = options.Value.Cap(ceiling);
         IReadOnlySet<string> listed;
         try
         {
-            listed = await gateway.ListModelsAsync(ceiling, cancellationToken);
+            listed = await gateway.ListModelsAsync(ceiling, cancellationToken, key.Id);
+        }
+        catch (GatewayKeyRefusedException refused)
+        {
+            return [new(AdminErrorCodes.GatewayKeyInvalid, new Dictionary<string, string> { ["key"] = key.Name, ["reason"] = refused.Code }, [key.Id.ToString()])];
+        }
+        catch (GatewayKeyMissingException)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.GatewayKeyMissing, new Dictionary<string, string> { ["model"] = "", ["ceiling"] = ResidencyCeiling.ToHeader(ceiling) });
+        }
+        catch (Exception ex) when (ex is GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException or GatewayCallRefusedException
+                                       or GatewayDelegationEchoException)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.GatewayUnavailable, new Dictionary<string, string> { ["model"] = "", ["ceiling"] = ResidencyCeiling.ToHeader(ceiling) });
+        }
+
+        var missing = models.OfType<string>().Where(m => m.Length > 0).Distinct(StringComparer.Ordinal).Where(m => !listed.Contains(m))
+            .Order(StringComparer.Ordinal).ToList();
+        return missing.Count == 0 ? [] : [new(AdminErrorCodes.GatewayKeyModel, new Dictionary<string, string> { ["key"] = key.Name }, missing)];
+    }
+
+    private async Task<IReadOnlySet<string>> ListAsync(Residency ceiling, Guid? asKey, Dictionary<string, string> parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await gateway.ListModelsAsync(ceiling, cancellationToken, asKey);
         }
         catch (GatewayKeyMissingException)
         {
             throw AdminFaults.Of(AdminErrorCodes.GatewayKeyMissing, parameters);
         }
-        catch (Exception ex) when (ex is GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException or GatewayCallRefusedException)
+        catch (GatewayKeyRefusedException refused)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.GatewayKeyInvalid,
+                new Dictionary<string, string>(parameters) { ["key"] = parameters.GetValueOrDefault("key") ?? refused.GatewayKeyId.ToString(), ["reason"] = refused.Code });
+        }
+        catch (Exception ex) when (ex is GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException or GatewayCallRefusedException
+                                       or GatewayDelegationEchoException)
         {
             throw AdminFaults.Of(AdminErrorCodes.GatewayUnavailable, parameters);
-        }
-
-        if (!listed.Contains(model))
-        {
-            throw AdminFaults.Of(AdminErrorCodes.ModelNotListed, parameters);
         }
     }
 }
@@ -58,14 +111,19 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
 /// (capped by <c>Gateway:MaxResidency</c>), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
 /// for the level, unreachable, refused); a failure is not cached, so the next picker load asks again.
 /// </summary>
-public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, TimeProvider time)
+public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, TimeProvider time, GatewayFeatures features)
 {
     public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(5);
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Residency, (DateTimeOffset At, IReadOnlySet<string> Models)> _cache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(Residency, Guid?), (DateTimeOffset At, IReadOnlySet<string> Models)> _cache = new();
 
-    public async Task<IReadOnlySet<string>?> ListedAsync(Residency ceiling, CancellationToken cancellationToken)
+    /// <summary>
+    /// The models listed at <paramref name="ceiling"/>; with <paramref name="gatewayKeyId"/>, while the gateway acts as keys,
+    /// as that key (admin §4.5, B-43: the picker shows what the object's key may use), cached per ceiling and key.
+    /// </summary>
+    public async Task<IReadOnlySet<string>?> ListedAsync(Residency ceiling, CancellationToken cancellationToken, Guid? gatewayKeyId = null)
     {
+        var asKey = features.ActAsKey ? gatewayKeyId : null;
         if (string.IsNullOrWhiteSpace(options.Value.BaseUrl))
         {
             return null; // no gateway configured here: availability unknown
@@ -73,19 +131,19 @@ public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<Gatewa
 
         ceiling = options.Value.Cap(ceiling);
         var now = time.GetUtcNow();
-        if (_cache.TryGetValue(ceiling, out var cached) && now - cached.At < CacheFor)
+        if (_cache.TryGetValue((ceiling, asKey), out var cached) && now - cached.At < CacheFor)
         {
             return cached.Models;
         }
 
         try
         {
-            var models = await gateway.ListModelsAsync(ceiling, cancellationToken);
-            _cache[ceiling] = (now, models);
+            var models = await gateway.ListModelsAsync(ceiling, cancellationToken, asKey);
+            _cache[(ceiling, asKey)] = (now, models);
             return models;
         }
         catch (Exception ex) when (ex is GatewayKeyMissingException or GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException
-                                       or GatewayCallRefusedException)
+                                       or GatewayCallRefusedException or GatewayKeyRefusedException or GatewayDelegationEchoException)
         {
             return null;
         }
@@ -108,7 +166,14 @@ public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string G
 /// (admin design §4.10: the Gateway page shows them), <see cref="Organisation"/> the organisation sync with its <c>degraded</c> reason.
 /// </summary>
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
-    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation);
+    IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation, GatewayActedStatus? Acted = null);
+
+/// <summary>
+/// One <c>GET /v1/models</c> made as the first usable mirrored key while the gateway acts as keys (admin §4.5, B-43).
+/// <c>Outcome</c>: <c>ok</c> (echoed), <c>echo_missing</c> (event 5011), <c>refused</c> (the gateway refused the key, <c>Code</c>),
+/// <c>unavailable</c>, <c>no_key</c> (no usable key in the mirror); null when the gateway does not act as keys.
+/// </summary>
+public sealed record GatewayActedStatus(Guid? GatewayKeyId, string? KeyName, string Outcome, string? Code);
 
 /// <summary>The key picker's list and the gateway's admin UI address for links to a key (null when unknown).</summary>
 public sealed record GatewayKeyListDto(string? AdminUrl, IReadOnlyList<GatewayKeyDto> Keys);
@@ -179,8 +244,19 @@ public static class GatewayEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var gateway = api.MapGroup("/gateway").WithTags("Gateway");
 
-        gateway.MapGet("/models", async (string? level, RagDbContext db, GatewayModelAvailability availability, CancellationToken ct) =>
+        gateway.MapGet("/models", async (string? level, Guid? gatewayKeyId, AdminContext admin, RagDbContext db, GatewayModelAvailability availability,
+                CancellationToken ct) =>
             {
+                // A key of a department outside the caller's scope is 404 before any gateway call, as /keys (admin §4.5; #618 review).
+                if (gatewayKeyId is { } keyId)
+                {
+                    var departments = admin.Departments().Select(d => d.Id);
+                    if (!await db.GatewayKeys.AsNoTracking().AnyAsync(k => k.Id == keyId && k.DepartmentId != null && departments.Contains(k.DepartmentId.Value), ct))
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    }
+                }
+
                 // level = an assistant's level (its ceiling); absent: the platform ceiling of the Settings pickers (V32).
                 if (level is not null && !Classification.IsValid(level))
                 {
@@ -188,12 +264,12 @@ public static class GatewayEndpoints
                 }
 
                 var ceiling = level is null ? PlatformModelRules.Ceiling : ResidencyCeiling.ForLevel(level);
-                var listed = await availability.ListedAsync(ceiling, ct);
+                var listed = await availability.ListedAsync(ceiling, ct, gatewayKeyId);
                 return (await db.GatewayModels.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct))
                     .Select(m => GatewayModelDto.Of(m, listed?.Contains(m.Name))).ToList();
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels")
-            .WithSummary("The gateway model mirror with residencies, prices and whether the platform's key may use each model (?level=)");
+            .WithSummary("The gateway model mirror with residencies, prices and whether the platform's key, or the object's (?gatewayKeyId=), may use each model (?level=)");
 
         // The limits of a row the gateway sends none for (Decisions "Answer length from the model", admin §4.10): once
         // /v1/models carries them (LimitsSource catalog) the manual fields go, and a write is refused (platform_rule).
@@ -261,7 +337,7 @@ public static class GatewayEndpoints
     /// level is reported as <c>error</c> with <see cref="GatewayModelSync.ErrorText"/>, so the page always answers.
     /// </summary>
     private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, OrganisationSync organisation,
-        IOptions<GatewayOptions> options, CancellationToken ct)
+        IOptions<GatewayOptions> options, GatewayFeatures features, CancellationToken ct)
     {
         var profiles = await db.EmbeddingProfiles.AsNoTracking().Where(p => p.State == EmbeddingProfileStates.Active)
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.Name).ToListAsync(ct);
@@ -308,6 +384,35 @@ public static class GatewayEndpoints
         }
 
         var context = organisation.Status;
-        return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context);
+        var acted = configured && features.ActAsKey ? await ActedAsync(db, gateway, options.Value, ct) : null;
+        return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context, acted);
+    }
+
+    /// <summary>The acted check of the status (B-43): <c>/v1/models</c> as the first usable mirrored key, at the service's maximum.</summary>
+    private static async Task<GatewayActedStatus> ActedAsync(RagDbContext db, GatewayApi gateway, GatewayOptions options, CancellationToken ct)
+    {
+        var key = await db.GatewayKeys.AsNoTracking().Where(k => k.Status == "Active" && k.OwnerActive && k.Usable).OrderBy(k => k.Name).FirstOrDefaultAsync(ct);
+        if (key is null)
+        {
+            return new GatewayActedStatus(null, null, "no_key", null);
+        }
+
+        try
+        {
+            await gateway.ListModelsAsync(options.Maximum, ct, key.Id);
+            return new GatewayActedStatus(key.Id, key.Name, "ok", null);
+        }
+        catch (GatewayDelegationEchoException)
+        {
+            return new GatewayActedStatus(key.Id, key.Name, "echo_missing", null);
+        }
+        catch (GatewayKeyRefusedException refused)
+        {
+            return new GatewayActedStatus(key.Id, key.Name, "refused", refused.Code);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return new GatewayActedStatus(key.Id, key.Name, "unavailable", GatewayModelSync.ErrorText(ex));
+        }
     }
 }

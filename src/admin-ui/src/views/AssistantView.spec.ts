@@ -347,7 +347,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
 
-    expect(models).toHaveBeenCalledWith('internal')
+    expect(models).toHaveBeenCalledWith('internal', undefined) // no gateway key: the platform key's availability (B-43)
     const options = [...wrapper.get<HTMLSelectElement>('#assistant-model').element.options].map((o) => ({ value: o.value, label: o.text, disabled: o.disabled }))
     expect(options).toContainEqual({ value: 'ume/chat-eu', label: 'ume/chat-eu', disabled: false })
     expect(options).toContainEqual({ value: 'claude-opus-5-5', label: `claude-opus-5-5 — ${MODEL_AVAILABILITY.notAvailable}`, disabled: true })
