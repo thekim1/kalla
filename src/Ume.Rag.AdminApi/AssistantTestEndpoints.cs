@@ -143,6 +143,13 @@ public sealed partial class AdminTestPanel(
                     records.Sum(r => r.CostUsd + r.EstimatedCostUsd), records.Any(r => r.Estimated)),
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
+        catch (ChatException ex) when (ex.Unavailable)
+        {
+            // B-44 (chat §3.6): the same reason chat gives, the key's state or the gateway's budget message; never the key's name.
+            _runs.Add(1, new KeyValuePair<string, object?>("outcome", "unavailable"));
+            throw AdminFaults.Of(ex.Status == 402 ? AdminErrorCodes.TestBudgetExceeded : AdminErrorCodes.TestAssistantUnavailable,
+                new Dictionary<string, string> { ["reason"] = ex.Message });
+        }
         catch (ChatException ex)
         {
             _runs.Add(1, new KeyValuePair<string, object?>("outcome", "error"));

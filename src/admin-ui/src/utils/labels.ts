@@ -1513,6 +1513,8 @@ export const EDIT_DRAWER = {
 /** The gateway key picker on an assistant's and a knowledge base's edit drawer (admin design §5.5.2, §5.5.4; B-36, V39). */
 export const GATEWAY_KEY = {
   label: 'AI gateway key',
+  /** The badge of an object whose key cannot be used now (admin design §5.5.2, §5.5.4). */
+  unavailable: 'Unavailable',
   assistantHint: 'The key in the AI gateway that this assistant’s calls run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
   collectionHint: 'The key in the AI gateway that indexing and evaluation run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
   none: 'No key (charged to the platform’s owner team)',

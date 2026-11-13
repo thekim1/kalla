@@ -89,6 +89,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   publication_stale: 'The processing has changed since the plan was made. Make a new plan.',
   version_not_rollbackable: 'Only an earlier published version can be restored.',
   test_answer_failed: 'The model could not answer the test question ({reason}). Try again.',
+  test_assistant_unavailable: '{reason}',
+  test_budget_exceeded: '{reason}',
   search_unavailable: 'The search could not run right now. Try again in a moment.',
 }
 
@@ -356,6 +358,17 @@ export function embeddingTestMessage(
     dimensions: result.dimensions ?? undefined,
     expected: profile.dimensions,
   })
+}
+
+/** Why an object's gateway key cannot be used now, beside its [Unavailable] badge (admin design §5.5.2, §5.5.4; B-44). */
+export const KEY_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  missing: 'The gateway key is not known to the platform.',
+  disabled: 'The gateway key is disabled.',
+  expired: 'The gateway key has expired.',
+  revoked: 'The gateway key has been revoked.',
+  not_active: 'The gateway key is not active.',
+  owner_inactive: 'The team or department of the gateway key is inactive.',
+  unusable: 'The gateway key allows no residency in common with the platform’s key.',
 }
 
 /** The cost views' sentences (admin design §8.6). */
