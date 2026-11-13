@@ -884,7 +884,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 
 ### 8.2 What runs on every PR (`verify.yml`, `parser.yml`)
 
-Pull requests stay lean (user, 2026-11-05): `images` runs only when `images/postgres/`, `images/clamav/` or
+Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/` and `deploy/`, where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `images` runs only when `images/postgres/`, `images/clamav/` or
 `deploy/postgres/` changed, `evaluation-smoke` only when the code on its path (worker, retrieval, answering, api,
 infrastructure, pipelines, domain), `tests/evaluation/`, the Postgres image or the package and build files changed, and
 the parser jobs only when the parser changed; `e2e` runs only by hand (dispatch) or from `release.yml` when asked
