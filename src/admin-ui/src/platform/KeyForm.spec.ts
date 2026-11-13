@@ -8,7 +8,7 @@ import KeyForm from './KeyForm.vue'
 const key: ApiKey = {
   id: 'k1', clientId: 'c1', clientName: 'Webb', teamId: 't1', kind: 'sk', name: 'Webb key', description: 'Sök på umea.se', prefix: 'ume-rag-sk-ab12', status: 'active',
   assistantIds: ['a1'], collectionIds: [], allowedIpRanges: ['10.0.0.0/8'], requestsPerMinute: 60, isEnabled: true, createdAt: '2026-11-13T10:00:00Z', createdBy: null,
-  expiresAt: new Date('2027-01-31T23:59:59').toISOString(), revokedAt: null, graceUntil: null, rotatedToKeyId: null,
+  expiresAt: new Date('2027-01-31T23:59:59').toISOString(), revokedAt: null, graceUntil: null, rotatedToKeyId: null, lastUsedAt: null,
 }
 
 function mountForm(props: { apiKey: ApiKey | null; clientId: string | null }) {
@@ -79,7 +79,7 @@ describe('Key form (admin design §5.9)', () => {
   })
 
   it('on the Keys page, picks the client first and requires it', async () => {
-    vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'c1', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, activeKeys: 0 }])
+    vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'c1', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, activeKeys: 0, lastUsedAt: null }])
     const create = vi.spyOn(api.keys, 'create').mockResolvedValue({ key, secret: 's' })
     const wrapper = mountForm({ apiKey: null, clientId: null })
     await flushPromises()

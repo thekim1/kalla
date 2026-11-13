@@ -24,6 +24,7 @@ import type {
   BffUser,
   ApiKey,
   Client,
+  ClientConnection,
   ClientCreated,
   ClientRequest,
   ClientSummary,
@@ -195,9 +196,13 @@ export const api = {
   clients: {
     list: () => http.get<ClientSummary[]>('/api/clients'),
     get: (id: string) => http.get<Client>(`/api/clients/${id}`),
-    /** `firstKey`: a key made with the client in one transaction (admin design §5.9). */
-    create: (body: ClientRequest & { firstKey: { name: string; teamId?: string | null } | null }) => http.post<ClientCreated>('/api/clients', body),
+    /** `firstKey` and `assistantIds`: a key and the assistants it offers, made with the client in one transaction (admin design §5.9, §5.9.1). */
+    create: (body: ClientRequest & { firstKey: { name: string; teamId?: string | null } | null; assistantIds?: string[] }) =>
+      http.post<ClientCreated>('/api/clients', body),
     update: (id: string, body: ClientRequest) => http.put<Client>(`/api/clients/${id}`, body),
+    /** The assistants that offer the client, set from its side; `version` is the client's. */
+    setAssistants: (id: string, body: { assistantIds: string[]; version: string }) => http.put<Client>(`/api/clients/${id}/assistants`, body),
+    connection: () => http.get<ClientConnection>('/api/clients/connection'),
   },
   keys: {
     list: (clientId?: string) => http.get<ApiKey[]>('/api/keys', { clientId }),

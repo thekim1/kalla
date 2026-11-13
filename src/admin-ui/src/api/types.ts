@@ -930,6 +930,8 @@ export interface ClientSummary {
   portalUrl?: string | null
   /** Its keys that work now (admin design §5.9). */
   activeKeys: number
+  /** The latest use of any of its keys; null before the app's first call (admin design §5.9.1). */
+  lastUsedAt: IsoDateTime | null
 }
 
 // ---------- Clients and keys (admin design §5.9) ----------
@@ -941,6 +943,14 @@ export interface ClientAssistant {
   name: string
   departmentId: string
   published: boolean
+  /** Its model name in `GET /v1/models`. */
+  slug: string
+  classification: Level
+}
+
+/** `GET /api/clients/connection`: rag-api's public address, or null when the deployment names none (admin design §5.9.1). */
+export interface ClientConnection {
+  apiBaseUrl: string | null
 }
 
 /** `GET /api/clients/{id}` (`ClientDto`). */
@@ -999,6 +1009,8 @@ export interface ApiKey {
   revokedAt: IsoDateTime | null
   graceUntil: IsoDateTime | null
   rotatedToKeyId: string | null
+  /** Null before the key's first call. */
+  lastUsedAt: IsoDateTime | null
 }
 
 /** `KeyFields`: empty scopes are the client's audiences only. */

@@ -282,34 +282,13 @@ public static class AssistantEndpoints
                     var assistant = await LoadAsync(admin, id, attempt);
                     admin.ExpectVersion(assistant, request.Version);
                     var ids = request.ClientIds.Distinct().ToList();
-                    var clients = await admin.Db.Clients.AsNoTracking().Where(c => ids.Contains(c.Id)).ToListAsync(attempt);
-                    if (clients.Count != ids.Count)
+                    var found = await admin.Db.Clients.AsNoTracking().Where(c => ids.Contains(c.Id)).ToListAsync(attempt);
+                    if (found.Count != ids.Count)
                     {
                         throw AdminFaults.Field("clientIds", AdminErrorCodes.InvalidValue);
                     }
 
-                    if (assistant.PublishedVersionId is { } published)
-                    {
-                        var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, attempt);
-                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, attempt, asKey: models));
-                        await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), attempt, assistant.GatewayKeyId);
-                    }
-                    else
-                    {
-                        Refuse(await AssistantRules.AudienceRulesAsync(admin, assistant, clients, attempt));
-                    }
-
-                    var current = await admin.Db.AssistantAudiences.Where(a => a.AssistantId == id).ToListAsync(attempt);
-                    var before = current.Select(a => a.SubjectId).ToList();
-                    admin.Db.AssistantAudiences.RemoveRange(current.Where(a => a.Kind != AssistantAudienceKinds.Client || !ids.Contains(a.SubjectId ?? Guid.Empty)));
-                    foreach (var client in ids.Where(c => !current.Any(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == c)))
-                    {
-                        admin.Db.AssistantAudiences.Add(new AssistantAudience { AssistantId = id, Kind = AssistantAudienceKinds.Client, SubjectId = client });
-                    }
-
-                    // The aggregate root's stamp moves its xmin, so a concurrent audience save conflicts (admin design §4.3).
-                    assistant.UpdatedAt = admin.Now;
-                    assistant.UpdatedBy = admin.Actor;
+                    var before = await ApplyAudienceAsync(admin, models, assistant, [.. ids.Select(i => found.Single(c => c.Id == i))], attempt);
                     return new AdminChange<Assistant>(assistant, "audiences", AuditEntityTypes.Assistant, assistant.Id, new { clientIds = before }, new { clientIds = ids })
                     {
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
@@ -473,6 +452,42 @@ public static class AssistantEndpoints
     {
         var departments = admin.Departments().Select(d => d.Id);
         return admin.Db.Assistants.Where(a => departments.Contains(a.DepartmentId));
+    }
+
+    /// <summary>
+    /// Makes <paramref name="clients"/> the assistant's audience within the caller's write: V7 and V9, for a published assistant its
+    /// whole rule set and V8 at the gateway, then the rows and the assistant's stamp. Shared by the assistant's own audience save
+    /// and a client's assistants (<c>POST /api/clients</c>, <c>PUT /api/clients/{id}/assistants</c>, admin design §5.9.1), where a
+    /// client may be new in this write. Returns the audience before, for the audit entry.
+    /// </summary>
+    internal static async Task<List<Guid?>> ApplyAudienceAsync(AdminContext admin, GatewayModelCheck models, Assistant assistant, IReadOnlyList<Client> clients,
+        CancellationToken ct)
+    {
+        if (assistant.PublishedVersionId is { } published)
+        {
+            var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, ct);
+            Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, ct, asKey: models));
+            await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), ct, assistant.GatewayKeyId);
+        }
+        else
+        {
+            Refuse(await AssistantRules.AudienceRulesAsync(admin, assistant, clients, ct));
+        }
+
+        var ids = clients.Select(c => c.Id).ToList();
+        var id = assistant.Id;
+        var current = await admin.Db.AssistantAudiences.Where(a => a.AssistantId == id).ToListAsync(ct);
+        var before = current.Select(a => a.SubjectId).ToList();
+        admin.Db.AssistantAudiences.RemoveRange(current.Where(a => a.Kind != AssistantAudienceKinds.Client || !ids.Contains(a.SubjectId ?? Guid.Empty)));
+        foreach (var client in ids.Where(c => !current.Any(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == c)))
+        {
+            admin.Db.AssistantAudiences.Add(new AssistantAudience { AssistantId = id, Kind = AssistantAudienceKinds.Client, SubjectId = client });
+        }
+
+        // The aggregate root's stamp moves its xmin, so a concurrent audience save conflicts (admin design §4.3).
+        assistant.UpdatedAt = admin.Now;
+        assistant.UpdatedBy = admin.Actor;
+        return before;
     }
 
     private static async Task<Assistant> LoadAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = true) =>

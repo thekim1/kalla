@@ -69,6 +69,13 @@ public sealed class AdminOptions
     /// </summary>
     [Url]
     public string? GatewayAdminUrl { get; set; }
+
+    /// <summary>
+    /// rag-api's public address, shown to a platform admin who connects an app (<c>GET /api/clients/connection</c>, admin design
+    /// §5.9.1): the value rag-api has as <c>Knowledge:PublicBaseUrl</c>. Unset by default; only an absolute http(s) URL is used.
+    /// </summary>
+    [Url]
+    public string? ApiPublicUrl { get; set; }
 }
 
 /// <summary>

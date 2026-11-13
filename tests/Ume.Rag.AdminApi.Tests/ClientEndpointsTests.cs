@@ -15,7 +15,8 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <summary>
 /// The clients page's API (admin design §5.9): an Open WebUI client's feedback retention (chat design §13.3, #343), no chat
 /// history at <c>sensitive</c> as a field error, a client created with its first key in one transaction, the list's active keys
-/// and the client's assistants.
+/// and the client's assistants; §5.9.1: the assistants a client offers set with it and from its side, the keys' last use, and
+/// rag-api's address for "How to connect".
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
 public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
@@ -241,5 +242,122 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
         (first.GetProperty("id").GetGuid(), first.GetProperty("name").GetString(), first.GetProperty("departmentId").GetGuid(), first.GetProperty("published").GetBoolean())
             .ShouldBe((published, "A assistant " + code, department, true));
         (second.GetProperty("id").GetGuid(), second.GetProperty("published").GetBoolean()).ShouldBe((draft, false));
+    }
+
+    /// <summary>Draft assistants of a department: no published version, so only V7 and V9 apply to their audience.</summary>
+    private async Task<Guid[]> SeedAssistantsAsync(string code, Guid department, params string[] levels)
+    {
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var assistants = levels.Select((level, i) => new Assistant
+        {
+            Slug = $"ca-{i}-{code.ToLowerInvariant()}", Name = $"Assistant {i} {code}", DepartmentId = department, Classification = level, UpdatedAt = DateTimeOffset.UtcNow,
+        }).ToList();
+        db.AddRange(assistants);
+        await db.SaveChangesAsync(Ct);
+        return [.. assistants.Select(a => a.Id)];
+    }
+
+    [Fact]
+    public async Task A_client_is_created_with_the_assistants_it_offers_and_they_are_changed_from_its_side()
+    {
+        var (code, department, _) = await SeedTeamAsync();
+        var ids = await SeedAssistantsAsync(code, department, Classification.Internal, Classification.Public, Classification.Internal);
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        var body = await Ok(await admin.PostAsJsonAsync("/api/clients", new
+        {
+            name = "Integration " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, assistantIds = new[] { ids[0], ids[1] },
+            firstKey = new { name = "Key " + code },
+        }, Ct), HttpStatusCode.Created);
+        var client = body.GetProperty("client");
+        var clientId = client.GetProperty("id").GetGuid();
+        var keyId = body.GetProperty("key").GetProperty("key").GetProperty("id").GetGuid();
+        body.GetProperty("key").GetProperty("key").GetProperty("lastUsedAt").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // The answer lists them with what "How to connect" shows: the model name (slug) and the level.
+        var offered = client.GetProperty("assistants").EnumerateArray().ToList();
+        offered.Select(a => a.GetProperty("id").GetGuid()).ShouldBe([ids[0], ids[1]]);
+        (offered[0].GetProperty("slug").GetString(), offered[0].GetProperty("classification").GetString()).ShouldBe(($"ca-0-{code.ToLowerInvariant()}", Classification.Internal));
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.AssistantAudiences.AsNoTracking().Where(a => a.SubjectId == clientId).Select(a => a.AssistantId).ToListAsync(Ct)).ShouldBe([ids[0], ids[1]], ignoreOrder: true);
+            // One write: the client's entry and an audiences entry per assistant, in the assistant's department.
+            var clientAudit = await db.AuditLog.AsNoTracking().SingleAsync(a => a.EntityType == AuditEntityTypes.Client && a.EntityId == clientId.ToString(), Ct);
+            var audiences = await db.AuditLog.AsNoTracking()
+                .Where(a => a.EntityType == AuditEntityTypes.Assistant && a.Action == "audiences" && a.ConfigVersion == clientAudit.ConfigVersion).ToListAsync(Ct);
+            audiences.Select(a => a.EntityId).ShouldBe([ids[0].ToString(), ids[1].ToString()], ignoreOrder: true);
+            audiences.ShouldAllBe(a => a.DepartmentId == department);
+            db.KeyLastUse.Add(new KeyLastUse { KeyId = keyId, LastUsedAt = new DateTimeOffset(2026, 11, 13, 9, 30, 0, TimeSpan.Zero) });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        // The key's last use on the key and, as the latest of its keys, on the client's row.
+        var used = new DateTimeOffset(2026, 11, 13, 9, 30, 0, TimeSpan.Zero);
+        (await admin.GetFromJsonAsync<JsonElement[]>($"/api/keys?clientId={clientId}", Ct))!.ShouldHaveSingleItem().GetProperty("lastUsedAt").GetDateTimeOffset().ShouldBe(used);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/keys/{keyId}", Ct)).GetProperty("lastUsedAt").GetDateTimeOffset().ShouldBe(used);
+        var row = (await admin.GetFromJsonAsync<JsonElement[]>("/api/clients", Ct))!.Single(r => r.GetProperty("id").GetGuid() == clientId);
+        row.GetProperty("lastUsedAt").GetDateTimeOffset().ShouldBe(used);
+
+        // From the client's side: the first assistant goes, the third comes, the second stays untouched.
+        var version = client.GetProperty("version").GetString();
+        var changed = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}/assistants", new { assistantIds = new[] { ids[1], ids[2] }, version }, Ct));
+        changed.GetProperty("assistants").EnumerateArray().Select(a => a.GetProperty("id").GetGuid()).ShouldBe([ids[1], ids[2]]);
+        changed.GetProperty("version").GetString().ShouldNotBe(version);
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.AssistantAudiences.AsNoTracking().Where(a => a.SubjectId == clientId).Select(a => a.AssistantId).ToListAsync(Ct)).ShouldBe([ids[1], ids[2]], ignoreOrder: true);
+            var audit = await db.AuditLog.AsNoTracking().SingleAsync(a => a.EntityType == AuditEntityTypes.Client && a.EntityId == clientId.ToString() && a.Action == "assistants", Ct);
+            (await db.AuditLog.AsNoTracking().Where(a => a.Action == "audiences" && a.ConfigVersion == audit.ConfigVersion).Select(a => a.EntityId).ToListAsync(Ct))
+                .ShouldBe([ids[0].ToString(), ids[2].ToString()], ignoreOrder: true);
+        }
+
+        // The version read before that save is stale now; an assistant that does not exist is a field error.
+        (await admin.PutAsJsonAsync($"/api/clients/{clientId}/assistants", new { assistantIds = Array.Empty<Guid>(), version }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var unknown = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}/assistants",
+            new { assistantIds = new[] { Guid.NewGuid() }, version = changed.GetProperty("version").GetString() }, Ct), HttpStatusCode.BadRequest);
+        unknown.GetProperty("errorCodes").GetProperty("assistantIds")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.InvalidValue.Code);
+    }
+
+    [Fact]
+    public async Task An_assistant_above_the_clients_level_is_a_field_error_that_names_it_and_leaves_no_client()
+    {
+        var (code, department, _) = await SeedTeamAsync();
+        var ids = await SeedAssistantsAsync(code, department, Classification.Public, Classification.Sensitive);
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        // V7: an internal client cannot show a sensitive assistant; nothing of the write stays, the allowed assistant's row included.
+        var refused = await Ok(await admin.PostAsJsonAsync("/api/clients", new
+        {
+            name = "Too low " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, assistantIds = ids,
+            firstKey = new { name = "Key" },
+        }, Ct), HttpStatusCode.BadRequest);
+        refused.GetProperty("errors").GetProperty("assistantIds")[0].GetString()!.ShouldStartWith($"Assistant 1 {code}: ");
+        var coded = refused.GetProperty("errorCodes").GetProperty("assistantIds")[0];
+        coded.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.AudienceAboveCeiling.Code);
+        (coded.GetProperty("params").GetProperty("subject").GetString(), coded.GetProperty("params").GetProperty("level").GetString())
+            .ShouldBe(($"Assistant 1 {code}", Classification.Sensitive));
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        (await db.Clients.AnyAsync(c => c.Name == "Too low " + code, Ct)).ShouldBeFalse();
+        (await db.AssistantAudiences.AnyAsync(a => ids.Contains(a.AssistantId), Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task The_connection_names_rag_apis_public_address_when_the_deployment_sets_it()
+    {
+        await using var unset = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(unset, RagRoles.PlatformAdmin);
+        (await admin.GetFromJsonAsync<JsonElement>("/api/clients/connection", Ct)).GetProperty("apiBaseUrl").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        await using var set = Factory().WithWebHostBuilder(web => web.UseSetting("Admin:ApiPublicUrl", "https://rag.example.se/"));
+        using var other = await AdminDatabaseFixture.UserAsync(set, RagRoles.PlatformAdmin);
+        (await other.GetFromJsonAsync<JsonElement>("/api/clients/connection", Ct)).GetProperty("apiBaseUrl").GetString().ShouldBe("https://rag.example.se");
+
+        // Platform admins only: the address is for the person who connects an app.
+        using var departmentAdmin = await AdminDatabaseFixture.UserAsync(set, RagRoles.DepartmentAdmin);
+        (await departmentAdmin.GetAsync("/api/clients/connection", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 }

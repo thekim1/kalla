@@ -13,7 +13,7 @@ describe('Clients page (admin design §5.9)', () => {
   it('lists each client with its kind, information class, state and active keys, and opens its drawer', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.clients, 'list').mockResolvedValue([
-      { id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 2 },
+      { id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 2, lastUsedAt: null },
     ])
     const get = vi.spyOn(api.clients, 'get').mockResolvedValue({ id: 'c1', name: 'Open WebUI', kind: 'open-webui', assistants: [] } as unknown as Client)
     vi.spyOn(api.keys, 'list').mockResolvedValue([])
