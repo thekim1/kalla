@@ -55,6 +55,9 @@ configMapGenerator:
       # The gateway's cost and budget read-back: the base URL of the gateway's Admin API, which serves /integration/v1
       # (rag-admin's credential key needs the scope usage.read). Without it, no read-back.
       # - Gateway__IntegrationApiUrl=https://llm-admin.example.se
+      # change: rag-api's public address again (Knowledge__PublicBaseUrl above), shown to a platform admin who connects
+      # an app.
+      - Admin__ApiPublicUrl=https://rag.example.se
   - name: ume-rag-migrations-config
     behavior: merge
     literals:

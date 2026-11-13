@@ -240,6 +240,8 @@ services:
       OTEL_SERVICE_NAME: rag-admin
       # The organisation the admin UI names in its header and sign-in texts; empty names none (#544).
       Admin__OrganisationName: ${UME_RAG_ORGANISATION_NAME-Umeå kommun}
+      # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
+      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:

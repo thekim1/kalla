@@ -414,7 +414,7 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | Gateway Admin API (cost and budget read-back) | edit `deploy/.env` (no option; a re-run of `init-deployment.sh` writes it commented out) | `UME_RAG_GATEWAY_INTEGRATION_API_URL` (empty: no read-back) | `Gateway__IntegrationApiUrl` (admin), the firewall (`llm`) |
 | OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin), the firewall (`llm`), Open WebUI's default provider URL |
 | Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | `OPENID_PROVIDER_URL`, the firewall (`openwebui`) |
-| rag-api's public URL | `--api-host`, `--api-port`, `--proxy` | `UME_RAG_API_PUBLIC_URL` | `Knowledge__PublicBaseUrl`, Open WebUI's `OPENAI_API_BASE_URLS`, the firewall (`openwebui`) |
+| rag-api's public URL | `--api-host`, `--api-port`, `--proxy` | `UME_RAG_API_PUBLIC_URL` | `Knowledge__PublicBaseUrl`, rag-admin's `Admin__ApiPublicUrl` (the address in *How to connect*), Open WebUI's `OPENAI_API_BASE_URLS`, the firewall (`openwebui`) |
 | Open WebUI host | `--openwebui-host` | `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OPENWEBUI_BASE_URL` | `OpenWebUi__BaseUrl` and the firewall (`llm`), both from `..._BASE_URL`, so a hand edit moves both (#453) |
 | Reverse proxy sources | `--proxy-address` | `UME_RAG_PROXY_SOURCES` | the firewall: the published ports accept only these |
 | OTLP endpoint | edit `deploy/.env` | `UME_RAG_OTEL_ENDPOINT` | `OTEL_EXPORTER_OTLP_ENDPOINT` (api, admin, worker), the firewall (`llm`, `crawl`) |
