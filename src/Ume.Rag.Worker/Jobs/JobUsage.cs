@@ -23,7 +23,13 @@ public sealed record UsageOwner(Guid CollectionId, string Classification, Guid D
 public sealed record UsageSink(JobUsage Usage, UsageOwner Owner)
 {
     /// <summary>Adds <paramref name="call"/>, answered by the gateway, to the attempt's usage (<see cref="JobUsage.RecordAsync"/>).</summary>
-    public Task RecordAsync(GatewayCallUsage call, CancellationToken cancellationToken) => Usage.RecordAsync(Owner, call, cancellationToken);
+    public Task RecordAsync(GatewayCallUsage call, CancellationToken cancellationToken) => Usage.RecordAsync(Owner, call, embedding: false, cancellationToken);
+
+    /// <summary>
+    /// Adds the embedding call <paramref name="call"/>, answered by the gateway, to the attempt's usage; its input tokens also count
+    /// in <c>rag.embed.tokens</c> (<see cref="JobUsage.RecordAsync"/>).
+    /// </summary>
+    public Task RecordEmbeddingAsync(GatewayCallUsage call, CancellationToken cancellationToken) => Usage.RecordAsync(Owner, call, embedding: true, cancellationToken);
 }
 
 /// <summary>A model's prices as the mirror holds them (<c>config."GatewayModels"</c>, data-model §2.1), for the estimate of a call without a gateway cost.</summary>
@@ -59,9 +65,11 @@ public sealed class PostgresGatewayModelPrices(JobDatabase database) : IGatewayM
 /// Europe/Stockholm day of the call. The transaction that records the attempt's outcome adds them to
 /// <c>content."CollectionDailyUsage"</c> as its last statement (<see cref="WriteAsync"/>, keys sorted) and drops them once it
 /// has committed (<see cref="Committed"/>), so a rolled-back outcome leaves them for the next one and a retried attempt
-/// counts only its own calls. Created by the dispatcher for each attempt (<see cref="JobContext.Usage"/>).
+/// counts only its own calls. Created by the dispatcher for each attempt (<see cref="JobContext.Usage"/>), with
+/// <paramref name="counted"/> counting each call in the metrics as it is added (<see cref="JobMetrics.ModelCall"/>: the call's
+/// record and whether it was an embedding call); without it (tests) the calls are not counted.
 /// </summary>
-public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time)
+public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time, Action<UsageRecord, bool>? counted = null)
 {
     // One statement for every row of the attempt, in the order of the sorted arrays, so concurrent attempts lock the hot rows
     // in the same order and cannot deadlock (performance pass §3.2).
@@ -116,9 +124,10 @@ public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time)
 
     /// <summary>
     /// Adds a call the gateway answered: <see cref="UsageRecord.From"/> with the mirror's prices of its model when it carries
-    /// no cost, on today's Europe/Stockholm date.
+    /// no cost, on today's Europe/Stockholm date. The metrics count it here, once, whatever becomes of the attempt
+    /// (<paramref name="embedding"/>: an embedding call, whose input tokens count in <c>rag.embed.tokens</c>).
     /// </summary>
-    public async Task RecordAsync(UsageOwner owner, GatewayCallUsage call, CancellationToken cancellationToken)
+    public async Task RecordAsync(UsageOwner owner, GatewayCallUsage call, bool embedding, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(call);
@@ -128,6 +137,8 @@ public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time)
         {
             _pending.Add(new Entry(day, owner, record));
         }
+
+        counted?.Invoke(record, embedding);
     }
 
     /// <summary>

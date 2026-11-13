@@ -219,8 +219,10 @@ of it is `gateway`; the estimate is the aborted streams. When the `estimate` sha
 - an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Platform objects → Gateway
   models*, filled by the model sync).
 
-`rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. The worker has no
-cost metric: for knowledge bases read `estimated_calls` in the Costs page or CSV.
+`rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. For knowledge bases,
+`rag.ingestion.cost` (USD) counts every worker call's cost by job `class` and `source` in the same way, and
+`rag.embed.tokens` the input tokens of its embedding calls; every worker call has a gateway cost, so any `estimate`
+there means the gateway stopped sending `x-ume-cost-usd`.
 
 ### A worked example
 
