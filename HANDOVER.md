@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `da27bcf` plus
+State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `a8da614` plus
 this file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`; a **dry run of 0.5.0 passed** from `be37df0`).
 Earlier sessions are in the git history (`git log -- HANDOVER.md`). Repo `~/research/rag` on this machine
 (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
@@ -26,37 +26,29 @@ sink" monolith. Design and code live in this repo.
 
 ## Start here
 
-**Nothing waits in the main session's own queue.** Stream a's open code items (A-32, A-35) wait on stream b, and A-34
-waits only on its live check. So the next session starts with GitHub:
+**Stream a's queue is empty apart from live checks and A-40.** All of gateway phases 1–3 and cost attribution are
+built on both streams; what remains is live checks on the interim gateway and small follow-ups:
 
-**1. Stream b's answers on #580.** Session 32 asked for (all in stream b's paths):
-- **Gateway v0.10.1** (`5b0526f`): the contract pin to `v0.10.1`; `GatewayKeyRefusedException.IsKeyRefusal`
-  (`src/Ume.Rag.Infrastructure/Gateway/GatewayActing.cs`) must match `403 key_revoked`/`key_expired` (it matches
-  `401`, so a revoked or expired key isn't recognised on v0.10.1: the worker then fails the document fatal
-  `gateway.key_revoked` instead of waiting); the FakeGateway answers `403` for them. Design: a `401` is always the
-  credential key's own refusal.
-- **Review of #616/#617** (`4fba45d` settled the design): key refusals and echo failures must not count toward the
-  query-embedding circuit nor be retried (`GatewayQueryEmbedder`); the query-embedding cache and single flight keyed
-  by `(profileId, gatewayKeyId, queryMac)`.
-- **Review of #618 (B-43, open):** a save that clears a published assistant's key must be refused
-  (`gateway_key_required`, admin V39); `GET /api/gateway/models?gatewayKeyId=` must check the key's department.
-  **The V39 rule is a design call the user hasn't confirmed yet** (asked in session 32): an editor can no longer
-  remove the key of a live assistant once `act-as-key` is on. Ask again if they haven't answered.
-- **B-48** (a cancelled turn recorded: the user's message, the partial answer, `Cancelled` counted) is queued for
-  stream b; **#619** (`Admin:GatewayAdminUrl`, `OrgSyncStatus.gateway`) and **#624** (two admin advisory locks share
-  `0x5241_4730_0011`) are filed.
+**1. A-40** (the worker's `rag.embed.tokens` and `rag.ingestion.cost`, engine §17): the next stream-a code item, waits
+on nothing. Then point the runbook's cost section at it.
 
-**2. Review stream b's open PRs:** #618 (B-43) and #625 (B-39), security-relevant parts.
+**2. GitHub:**
+- **#642** (stream b): the read-back's reason in no view, the shared-key note on every key, and the missing
+  `messages.ts` texts for `gateway.key_unavailable`/`delegation_not_applied` (and `budget_exhausted` blaming "the
+  platform's budget"). If stream b says the reason belongs on the platform's *Gateway models* view, that's
+  stream a's `platform/**`.
+- **#580**: the gateway owner was asked whether the request list gets a `runId` filter (gateway-changes §7.1 now
+  describes v0.10.1 as built).
+- **#645**: the flaky renderer test, now filed (twice in CI, both with another job on the Docker host).
+- Review stream b's new PRs (it merges its own); its queue now has B-42–B-46 waiting only on live checks.
 
-**3. Take stream a's items as they unblock:** A-32 (cost runbook) after B-40; A-35 (`Gateway__IntegrationApiUrl` and
-the runbook) after B-45. A-34's live check and every live check of B-35–B-46 wait on the interim gateway.
+**3. The live block, once the user has the interim gateway on v0.10.1:** A-34, A-35 (a real read-back) and every
+B-35–B-46 live check. **The V39 rule** (a published assistant's key can't be cleared once `act-as-key` is on) is
+built (#618 review) but the user hasn't confirmed it: ask again.
 
-**4. Taking a stream b item** is allowed (user, 2026-11-12): ask on #580 first and wait for the answer. B-48 is
-independent of the gateway work and a candidate.
-
-**5. Before the next release:** the dry run of 0.5.0 passed (session 32, smoke test with the scan-off phase). Run it
-again if much lands before the tag, and the full CI set. The upgrade guide says **rolling update: no**
-(`DailyTotalsWithoutCost`).
+**4. Before the next release (0.5.0):** the dry run passed from `be37df0`, but much landed since (B-39–B-48, A-32–A-39,
+the content retention migration). Run the dry run again and the full CI set; the upgrade guide says **rolling update:
+no** and names `UME_RAG_GATEWAY_INTEGRATION_API_URL` and `usage.read`. The CHANGELOG is current through #643.
 
 **Waiting on the user:**
 - **The interim gateway (J10) on v0.10.1** (not v0.10.0: #86 makes a refusal of an assigned key always `403`), with the integration *Ume.Rag* and three credential keys (`rag-api`,
@@ -106,6 +98,11 @@ its live check); open: B-43 (#618), B-39 (#625); next B-40, B-41, B-44–B-46, B
 - **Issues:** #535, #604, #606 closed (the last two with a correction: the upgrade guide hadn't named their
   migrations); #619 and #624 filed for stream b.
 - **Release dry run `0.5.0-dryrun`** (run 43318830850): green, smoke test with every phase including scan off.
+- **Later the same night:** stream b built B-39–B-46 and B-48 and fixed every review finding (#629 v0.10.1, #631
+  query embedding, #618's two); session 32 reviewed #625 and #627 (no blocking findings), merged #640 (#635's gateway
+  link fallback), A-32 #641 (the cost runbook), A-35 #643 (`UME_RAG_GATEWAY_INTEGRATION_API_URL`, the firewall, the
+  runbook's refusals, the `admin-console` client in production setup; unticked for its live check), CHANGELOG #644;
+  queued A-40; filed #642 and #645.
 
 ## Done in session 31 (2026-11-12, evening)
 
