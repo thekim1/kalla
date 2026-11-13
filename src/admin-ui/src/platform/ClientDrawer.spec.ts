@@ -107,6 +107,21 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     wrapper.unmount()
   })
 
+  it('opens at the key it was asked for (a row of All keys), with the key form and this app\'s assistants to limit it to', async () => {
+    vi.spyOn(api.clients, 'get').mockResolvedValue(client)
+    vi.spyOn(api.collections, 'list').mockResolvedValue({ items: [], total: 0 })
+    const wrapper = mount(ClientDrawer, {
+      props: { open: true, clientId: client.id, keyId: 'k1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain(L.keys.editTitle('Webb key'))
+    expect((wrapper.get('#client-key-name').element as HTMLInputElement).value).toBe('Webb key')
+    const scoped = wrapper.get('[data-test=scope-assistants]')
+    expect(scoped.findAll('input[type=checkbox]')).toHaveLength(1)
+    expect(scoped.text()).toContain('Bygglovsassistenten')
+    wrapper.unmount()
+  })
+
   it('shows a revealed secret once and opens the key form in place for a new key', async () => {
     vi.spyOn(api.clients, 'get').mockResolvedValue(client)
     vi.spyOn(api.keys, 'reveal').mockResolvedValue({ secret: 'ume-rag-sk-shown' })
@@ -126,8 +141,8 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     await flushPromises()
     expect(wrapper.find('[data-test=secret]').exists()).toBe(false)
     expect(wrapper.find('[data-test=key-form]').exists()).toBe(true)
-    // The client is this one: no client picker.
-    expect(wrapper.find('#client-key-clientId').exists()).toBe(false)
+    // A new key asks for its name; the rest is collapsed.
+    expect((wrapper.get('[data-test=key-restrictions]').element as HTMLDetailsElement).open).toBe(false)
     wrapper.unmount()
   })
 })

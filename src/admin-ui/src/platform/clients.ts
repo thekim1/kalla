@@ -1,4 +1,5 @@
 import type { Client, ClientKind, ClientRequest, Level } from '@/api/types'
+import type { Tone } from '@/utils/labels'
 
 /**
  * The Clients page's rules (admin design §5.9): which kinds can be made now, which fields each kind shows, and the
@@ -127,3 +128,6 @@ export function curlExample(apiBaseUrl: string | null, secret: string | null, mo
     `  -d '${body}'`,
   ].join('\n')
 }
+
+/** A key status's badge tone, in the app's drawer and on All keys. */
+export const KEY_STATUS_TONE: Record<string, Tone> = { active: 'ok', 'in-grace-period': 'warn', expired: 'neutral', revoked: 'danger', disabled: 'neutral' }

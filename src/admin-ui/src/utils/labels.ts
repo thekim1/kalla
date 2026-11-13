@@ -708,8 +708,11 @@ export const PLATFORM = {
     maxAnswerTokens: 'Caps every assistant’s answer length, overrides included; leave empty to use each model’s limit.',
   } as Record<string, string>,
   resources: {
-    clients: { label: 'Apps and keys', description: 'The apps that use the platform (Open WebUI, integrations, internal tools), their keys and the assistants they offer' },
-    keys: { label: 'Keys', description: 'API keys per client; create, rotate, show and revoke' },
+    clients: {
+      label: 'Apps and keys',
+      description: 'The apps that use the platform (Open WebUI, integrations, internal tools), their keys and the assistants they offer',
+      keywords: ['keys', 'api keys', 'clients', 'integrations', 'rotate', 'revoke', 'connect'],
+    },
     settings: { label: 'Settings', description: 'The platform’s settings per section' },
     dataProtection: { label: 'Data protection', description: 'History, retention and encryption per information class' },
     siteProfiles: { label: 'Site profiles', description: 'How a website’s pages are read: content, noise and identity' },
@@ -1029,6 +1032,15 @@ export const PLATFORM_CLIENTS = {
     columns: { name: 'Name', status: 'Status', expiresAt: 'Expires', lastUsed: 'Last used', actions: 'Actions' },
     never: 'Never',
   },
+  /** The page's tabs (admin design §5.9.1): the apps, and every key with its app. */
+  tabs: { label: 'Apps and keys', apps: 'Apps', keys: 'All keys' },
+  allKeys: {
+    columns: { name: 'Key', app: 'App', status: 'Status', expiresAt: 'Expires', lastUsed: 'Last used' },
+    status: 'Status',
+    anyStatus: 'Any status',
+    empty: 'No key yet. Keys are made with an app, or under Keys when you open one.',
+    noMatch: 'No key has this status.',
+  },
   keyStatus: {
     active: 'Active',
     'in-grace-period': 'In grace period',
@@ -1047,20 +1059,21 @@ export const PLATFORM_CLIENTS = {
 
 /** The key form (admin design §5.9), in a client's drawer and on the Keys page. */
 export const KEY_FORM = {
-  client: 'Client',
-  chooseClient: 'Choose a client',
-  clientRequired: 'Choose a client.',
   name: 'Name',
   nameRequired: 'Enter a name.',
+  restrictions: 'Restrictions',
+  restrictionsHint: 'Optional: a description, a team for the costs, limits, an expiry, addresses and a rate limit.',
   description: 'Description',
   team: 'Team',
   noTeam: '(no team)',
   teamFixed: 'The team is set when the key is made.',
   assistants: 'Limit to assistants',
   collections: 'Limit to knowledge bases',
-  scopeHint: 'Empty: everything this client’s audience allows.',
-  noAssistants: 'There are no assistants.',
+  scopeHint: 'Empty: every assistant this app offers.',
+  collectionsHint: 'Empty: every knowledge base the app may search.',
+  noAssistants: 'This app offers no assistant yet.',
   noCollections: 'There are no knowledge bases.',
+  notOffered: 'no longer offered by this app',
   expiresAt: 'Expires',
   expiresHint: 'Empty: never expires. The key stops working at the end of the day.',
   allowedIpRanges: 'Allowed IP ranges',

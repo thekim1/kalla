@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
-import type { Client } from '@/api/types'
+import type { ApiKey, Client } from '@/api/types'
 import { LEVEL_LABEL, PLATFORM_CLIENTS } from '@/utils/labels'
 import { platformEntries } from './resources'
 import ClientsView from './ClientsView.vue'
@@ -47,6 +47,46 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     await flushPromises()
     expect(wrapper.findComponent({ name: 'ClientCreateDrawer' }).props()).toMatchObject({ open: true, assistantId: 'a1' })
     expect(replace).toHaveBeenCalledWith({ query: { connect: undefined } })
+    route.query = {}
+    wrapper.unmount()
+  })
+
+  it('lists every key with its app on All keys, filters by status, and opens the key in its app\'s drawer', async () => {
+    setActivePinia(createPinia())
+    route.query = { tab: 'keys' }
+    const key = (id: string, name: string, clientId: string, clientName: string, status: string, lastUsedAt: string | null = null) =>
+      ({ id, name, clientId, clientName, status, prefix: `ume-rag-sk-${id}`, expiresAt: null, lastUsedAt }) as ApiKey
+    vi.spyOn(api.clients, 'list').mockResolvedValue([])
+    const list = vi.spyOn(api.keys, 'list').mockResolvedValue([
+      key('k1', 'Webb key', 'c1', 'Webb', 'active', new Date().toISOString()), key('k2', 'Old key', 'c2', 'Intranät', 'revoked'),
+    ])
+    const get = vi.spyOn(api.clients, 'get').mockResolvedValue({ id: 'c2', name: 'Intranät', kind: 'integration', assistants: [] } as unknown as Client)
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0 })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    vi.spyOn(api.clients, 'connection').mockResolvedValue({ apiBaseUrl: null })
+    const wrapper = mount(ClientsView, { attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+
+    // Opened from the old Keys page's address: All keys, every key the caller manages.
+    expect(wrapper.get('#clients-tab-keys').attributes('aria-selected')).toBe('true')
+    expect(list).toHaveBeenCalledWith()
+    const rows = () => wrapper.get('[data-test=all-keys]').findAll('tbody tr')
+    expect(rows()).toHaveLength(2)
+    expect(rows()[0]!.text()).toContain('Webb')
+    expect(rows()[0]!.text()).toContain('ume-rag-sk-k1')
+    expect(rows()[0]!.text()).not.toContain(L.neverUsed)
+    expect(rows()[1]!.text()).toContain(L.keyStatus.revoked)
+    expect(rows()[1]!.text()).toContain(L.neverUsed)
+
+    await wrapper.get('#all-keys-status').setValue('revoked')
+    expect(rows()).toHaveLength(1)
+    await rows()[0]!.trigger('click')
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith('c2')
+    expect(wrapper.findComponent({ name: 'ClientDrawer' }).props()).toMatchObject({ open: true, clientId: 'c2', keyId: 'k2' })
+
+    await wrapper.get('#all-keys-status').setValue('expired')
+    expect(wrapper.get('[data-test=all-keys]').text()).toContain(L.allKeys.noMatch)
     route.query = {}
     wrapper.unmount()
   })

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { filterEntries, navGroups, searchEntries } from '@/router/nav'
 import { PLATFORM } from '@/utils/labels'
 import PlatformResourceView from './PlatformResourceView.vue'
+import { platformEntries } from './resources'
 import { resetOpenApiCache } from './schema'
 
 const departments = [
@@ -22,17 +23,6 @@ afterEach(() => {
   vi.unstubAllGlobals()
   resetOpenApiCache()
 })
-
-/** The Keys page's calls: the document, the keys, and the key form's pickers. */
-function keysFetch(doc: unknown, keys: unknown[], clients: unknown[] = []) {
-  return vi.fn<(url: string, init?: RequestInit) => Promise<Response>>((url) => {
-    if (url === '/openapi/v1.json') return Promise.resolve(json(doc))
-    if (url === '/api/keys') return Promise.resolve(json(keys))
-    if (url === '/api/clients') return Promise.resolve(json(clients))
-    if (url.startsWith('/api/assistants') || url.startsWith('/api/collections')) return Promise.resolve(json({ items: [], total: 0 }))
-    return Promise.resolve(json([]))
-  })
-}
 
 describe('Platform objects: organisation (admin design §5.8)', () => {
   function mountOrganisation(syncStatus: unknown) {
@@ -124,67 +114,24 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
 
   it('shows a row\'s actions above its edit form', async () => {
     setActivePinia(createPinia())
-    const keys = [{ id: 'k1', name: 'Open WebUI', prefix: 'rag_ab', status: 'active', assistantIds: [], collectionIds: [] }]
-    const doc = { paths: { '/api/keys/{id}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { name: { type: 'string' } } } } } } } } } }
-    vi.stubGlobal('fetch', keysFetch(doc, keys))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'keys' }, attachTo: document.body })
+    const profiles = [{ id: 'sp1', host: 'www.umea.se', presetId: 'sitevision', appliedVersion: 2, appliedAt: '2026-11-01T12:00:00Z' }]
+    const doc = { paths: { '/api/site-profiles/{id}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { presetId: { type: 'string' } } } } } } } } } }
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(
+      url === '/openapi/v1.json' ? doc : url === '/api/site-profiles' ? profiles : { profile: {} },
+    ))))
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'site-profiles' }, attachTo: document.body })
     await flushPromises()
     await wrapper.get('tbody tr').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-test="action-rotate"]').exists()).toBe(true)
+    expect(document.body.querySelector('[data-test="action-rollback"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-test="row-id"]')!.textContent).toContain('sp1')
     expect(wrapper.find('[data-test="details"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('shows the per-key chat limit hint under a key\'s requests per minute (chat design §4.1 step 4)', async () => {
-    setActivePinia(createPinia())
-    const keys = [{ id: 'k1', name: 'Support app', prefix: 'rag_ab', status: 'active', assistantIds: [], collectionIds: [], requestsPerMinute: 60 }]
-    const schema = { properties: { name: { type: 'string' }, requestsPerMinute: { type: ['null', 'integer'], format: 'int32', maximum: 100000, minimum: 1 } } }
-    const doc = { paths: { '/api/keys/{id}': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
-    vi.stubGlobal('fetch', keysFetch(doc, keys))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'keys' }, attachTo: document.body })
-    await flushPromises()
-    await wrapper.get('tbody tr').trigger('click')
-    await flushPromises()
-    expect((wrapper.get('#platform-keys-requestsPerMinute').element as HTMLInputElement).value).toBe('60')
-    expect(wrapper.text()).toContain(PLATFORM.fieldHints.requestsPerMinute)
-    wrapper.unmount()
-  })
-
-  it('lists keys with their client, edits a key with the key form and shows the row\'s id with a copy button (admin design §5.8, §5.9)', async () => {
-    setActivePinia(createPinia())
-    const keys = [{ id: 'k1', clientId: 'c1', clientName: 'Open WebUI', name: 'Pilot', prefix: 'rag_ab', status: 'active', assistantIds: [], collectionIds: [], allowedIpRanges: [] }]
-    const scopes = { type: 'object', properties: { assistantIds: { type: 'array', items: { type: 'string' } } } }
-    const doc = { paths: { '/api/keys/{id}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { name: { type: 'string' }, scopes } } } } } } } } }
-    vi.stubGlobal('fetch', keysFetch(doc, keys))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'keys' }, attachTo: document.body })
-    await flushPromises()
-    expect(wrapper.findAll('thead th').map((th) => th.text())).toContain(PLATFORM.columns.client)
-    expect(wrapper.get('tbody tr').text()).toContain('Open WebUI')
-
-    await wrapper.get('tbody tr').trigger('click')
-    await flushPromises()
-    expect(document.body.querySelector('[data-test=row-id]')!.textContent).toContain('k1')
-    expect(document.body.querySelector('[data-test=key-form]')).not.toBeNull()
-    expect(document.body.querySelector('#platform-keys-scopes')!.tagName).toBe('FIELDSET')
-    expect(document.body.querySelector('textarea#platform-keys-scopes')).toBeNull()
-    expect(document.body.querySelector<HTMLInputElement>('#platform-keys-name')!.value).toBe('Pilot')
-    wrapper.unmount()
-  })
-
-  it('makes a new key on the Keys page from a client picked first (admin design §5.9)', async () => {
-    setActivePinia(createPinia())
-    const doc = { paths: { '/api/keys': { post: { requestBody: { content: { 'application/json': { schema: { properties: { name: { type: 'string' } } } } } } } } } }
-    const fetch = keysFetch(doc, [], [{ id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 0 }])
-    vi.stubGlobal('fetch', fetch)
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'keys' }, attachTo: document.body })
-    await flushPromises()
-    await wrapper.get('[data-test=create]').trigger('click')
-    await flushPromises()
-    const select = document.body.querySelector<HTMLSelectElement>('select#platform-keys-clientId')!
-    expect([...select.options].map((o) => o.text)).toContain('Open WebUI')
-    expect(document.body.querySelector('[data-test=row-id]')).toBeNull()
-    wrapper.unmount()
+  it('has no generic Keys page: keys are under Apps and keys (admin design §5.9.1)', () => {
+    expect(platformEntries.map((e) => e.id)).not.toContain('keys')
+    expect(filterEntries(searchEntries(navGroups), 'api keys').map((e) => e.label)).toContain(PLATFORM.resources.clients.label)
   })
 
   it('edits the crawl section with the host politeness table instead of its JSON (admin design §5.8)', async () => {

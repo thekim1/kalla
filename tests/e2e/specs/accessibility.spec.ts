@@ -10,7 +10,7 @@ const themeStorageKey = 'ume-theme'
 
 /** Every page of src/admin-ui/src/router (and platform/routes.ts), plus the 404 page. Keep in sync with the router. */
 const listPages = ['/', '/map', '/collections', '/assistants', '/feedback', '/audit', '/organisation', '/plattform',
-  '/plattform/clients', '/plattform/keys', '/plattform/settings', '/plattform/data-protection', '/plattform/site-profiles',
+  '/plattform/clients', '/plattform/settings', '/plattform/data-protection', '/plattform/site-profiles',
   '/plattform/gateway-models', '/plattform/organisation', '/forbidden', '/no-such-page']
 
 test.afterEach(async ({ page }) => { await page.close() })
