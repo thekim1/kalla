@@ -580,6 +580,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Live check:** on the interim gateway on v0.10.1 (not deployed yet): one chat turn of an assistant with an assigned
   key shows under that key in the gateway's usage report, with rag-api's credential key as the via key and the turn's
   run id and steps.
+- **Code merged** (#616, #617; review follow-ups #629, #631): only the live check is left.
 - **Waits on:** B-35 (the contract pinned at v0.10.0, the FakeGateway's assigned keys), B-36 (`GatewayKeyId` on
   assistants and collections and in rag-api's snapshot). The stream cost (`x-ume-stream-cost`, the comment) and the
   usage records are B-38's: not repeated here.
@@ -604,6 +605,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   answer reports the echo; Vitest shows each refusal's text.
 - **Live check:** on the interim gateway on v0.10.1: the key picker's model availability and V39 follow a real
   assigned key's models; the status page's echo is ok.
+- **Code merged** (#618): only the live check is left.
 - **Waits on:** B-42 (the handler and the FakeGateway's acting), B-36 (V39 and the picker).
 - **Read:** admin §4.5, §4.6 V8, V39, §5.5.2, §5.5.4; gateway-changes §5.5; cost-attribution §4.2.
 
@@ -627,6 +629,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   shows both reasons; the assistant page shows `[Unavailable]` with "The gateway key is disabled".
 - **Live check:** on the interim gateway on v0.10.1: a small key budget set in the gateway stops the assistant with the
   planned message (cost-attribution §6's done-when).
+- **Code merged** (#632 chat, #634 admin): only the live check is left.
 - **Waits on:** B-42 (the typed refusal, the FakeGateway's modes), B-36 (the key on the assistant and its page).
 - **Read:** chat §3.6, §4.1, §8.2, §9.6; knowledge §5.2, §5.5; admin §5.5.1, §5.5.2, §5.5.4; gateway-changes §5.4,
   §5.7; cost-attribution §4.2.
@@ -651,6 +654,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   call; the contract test fails on a renamed or missing field.
 - **Live check:** on the interim gateway on v0.10.1 with `usage.read` on rag-admin's key: an assistant key's cost for
   a day equals the gateway's usage report for that key.
+- **Code merged** (#637): only the live check is left.
 - **Waits on:** B-42 (the FakeGateway's record per request under the acting key), B-36 (keys on objects), B-35 (the
   pin at v0.10.0).
 - **Read:** gateway-changes §5.6; admin §4.5, §8.6; repo-and-deployment §3 (`Gateway:IntegrationApiUrl`), §4.3;
@@ -667,6 +671,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   beside the stored ones by step, the shared-key note, `null` showing the link; no UI string outside
   `labels.ts`/`messages.ts`.
 - **Live check:** on the interim gateway on v0.10.1: a real assistant's card shows its key's gateway cost and budget.
+- **Code merged** (#638): only the live check is left.
 - **Waits on:** B-45, B-41 (the cards).
 - **Read:** admin §5.5.4, §8.6; Decisions "Admin UI in English".
 
