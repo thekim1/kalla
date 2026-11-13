@@ -59,6 +59,8 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   rows older than 3 years, runs older than 13 months (keeping the ones the scheduler still reads), parse observations
   older than 180 days, retrieval statistics older than 13 months, embedding cache entries unused for 30 days and old
   superseded site profile versions. Migration `ContentRetentionStep` (#626).
+- Worker metrics `rag.embed.tokens` (input tokens of every answered embedding call) and `rag.ingestion.cost` (USD, tags
+  `class` and `source` = `gateway` | `estimate`, as `rag.chat.cost`) (#646).
 - The platform's *Gateway models* view shows the gateway's version and features; a model whose limits the gateway
   sends shows them read-only (#623).
 - Runbook: reading Ume.Rag's cost beside the gateway's (#641), and the gateway keys, budgets and read-back with each
@@ -106,6 +108,9 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - A query embedding refused for one assistant's key no longer opens the circuit for the others, an answer without the
   key's echo isn't retried, and the query-embedding cache is per acting key (#631).
 - The gateway links fall back to `Admin:GatewayAdminUrl` when the gateway's context has no admin URL (#633, #640).
+- CI: `backend` skips pull requests that change only `docs/` and `deploy/`, except the files its tests read (#647),
+  and the admin API's database tests run in four collections with a database each, which takes `backend` from about
+  6 to 4.5 minutes (#648).
 
 ## 0.4.0 (2026-11-11)
 
