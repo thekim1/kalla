@@ -1,5 +1,7 @@
 import { buildUrl, http, postLogout, request } from './client'
 import type {
+  KeyBudget,
+  KeyUsage,
   CostQuery,
   CostReport,
   CostReportQuery,
@@ -194,6 +196,10 @@ export const api = {
       http.get<GatewayModel[]>('/api/gateway/models', { ...(level ? { level } : {}), ...(gatewayKeyId ? { gatewayKeyId } : {}) }),
     /** The department's assigned gateway keys for the key picker (B-36). */
     keys: (departmentId: string) => http.get<GatewayKeyList>('/api/gateway/keys', { departmentId }),
+    /** A key's budgets from the gateway's Integration API (B-45); null without the read-back. */
+    keyBudget: (id: string) => http.get<KeyBudget[] | null>(`/api/gateway/keys/${id}/budget`),
+    /** A key's usage per period and step as the gateway counted it (B-45); null without the read-back. */
+    keyUsage: (id: string, query: CostQuery = {}) => http.get<KeyUsage | null>(`/api/gateway/keys/${id}/usage`, { ...query }),
   },
   pipelines: {
     get: (id: string) => http.get<Pipeline>(`/api/pipelines/${id}`),

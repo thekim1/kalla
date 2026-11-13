@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { GatewayKey } from '@/api/types'
+import type { GatewayKey, KeyBudget } from '@/api/types'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import { GATEWAY_KEY } from '@/utils/labels'
 import { KEY_UNAVAILABLE_MESSAGES } from '@/utils/messages'
@@ -13,13 +13,21 @@ import { KEY_UNAVAILABLE_MESSAGES } from '@/utils/messages'
 const props = defineProps<{ gatewayKeyId: string | null | undefined; departmentId: string }>()
 
 const keys = ref<GatewayKey[] | null>(null)
+// B-46: a spent budget (the Integration API's `exhausted`, B-45) is a reason too; null without the read-back.
+const budgets = ref<KeyBudget[] | null>(null)
 
 watch(
   () => [props.gatewayKeyId, props.departmentId] as const,
   async ([key, department]) => {
     keys.value = null
+    budgets.value = null
     if (!key) return
-    keys.value = await api.gateway.keys(department).then((l) => l.keys).catch(() => null)
+    const [list, spent] = await Promise.all([
+      api.gateway.keys(department).then((l) => l.keys).catch(() => null),
+      api.gateway.keyBudget(key).catch(() => null),
+    ])
+    keys.value = list
+    budgets.value = spent
   },
   { immediate: true },
 )
@@ -32,7 +40,8 @@ const reason = computed<string | null>(() => {
   if (key.status !== 'Active') return ({ Disabled: 'disabled', Expired: 'expired', Revoked: 'revoked' } as Record<string, string>)[key.status] ?? 'not_active'
   if (!key.ownerActive) return 'owner_inactive'
   if (!key.usable) return 'unusable'
-  return null
+  const spent = budgets.value?.find((b) => b.exhausted)
+  return spent ? `budget_${spent.scope}` : null
 })
 </script>
 

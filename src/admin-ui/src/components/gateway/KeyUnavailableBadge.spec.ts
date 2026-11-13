@@ -43,6 +43,15 @@ describe('[Unavailable] badge (admin design §5.5.2, §5.5.4; B-44)', () => {
     expect(wrapper.get('[data-test=key-unavailable-reason]').text()).toBe(KEY_UNAVAILABLE_MESSAGES[reason])
   })
 
+  it('names a spent budget from the gateway (B-46)', async () => {
+    vi.spyOn(api.gateway, 'keyBudget').mockResolvedValue([
+      { scope: 'department', unit: 'usd', limit: 1000, spent: 1000, percentUsed: 100, exhausted: true, residency: null, period: 'Month',
+        periodStart: '2026-11-01T00:00:00Z', periodEnd: '2026-12-01T00:00:00Z' },
+    ])
+    const { wrapper } = await badge('k1', [key('k1')])
+    expect(wrapper.get('[data-test=key-unavailable-reason]').text()).toBe(KEY_UNAVAILABLE_MESSAGES.budget_department)
+  })
+
   it('says so when the key is no longer in the mirror', async () => {
     const { wrapper } = await badge('gone', [key('k1')])
     expect(wrapper.get('[data-test=key-unavailable-reason]').text()).toBe(KEY_UNAVAILABLE_MESSAGES.missing)

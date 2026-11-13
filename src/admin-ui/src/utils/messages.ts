@@ -369,6 +369,9 @@ export const KEY_UNAVAILABLE_MESSAGES: Record<string, string> = {
   not_active: 'The gateway key is not active.',
   owner_inactive: 'The team or department of the gateway key is inactive.',
   unusable: 'The gateway key allows no residency in common with the platform’s key.',
+  budget_key: 'The key’s budget is used up.',
+  budget_team: 'The team’s budget is used up.',
+  budget_department: 'The department’s budget is used up.',
 }
 
 /** The cost views' sentences (admin design §8.6). */
@@ -377,6 +380,8 @@ export const COST_MESSAGES = {
   gatewayRecord: 'The gateway’s figures are the record for internal charging; they also count retries and fallbacks.',
   empty: 'No model calls in this period.',
   ownDepartmentOnly: 'Only the department that owns the knowledge base sees its cost.',
+  gatewayFigures: (cost: string, requests: string) => `The AI gateway counted ${cost} in ${requests} requests for the key.`,
+  sharedKey: 'The gateway’s figures are the key’s: when other assistants or knowledge bases share the key, theirs are included.',
 } as const
 
 /** When the problem has no code we know: by status. */

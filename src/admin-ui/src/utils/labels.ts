@@ -1515,6 +1515,12 @@ export const GATEWAY_KEY = {
   label: 'AI gateway key',
   /** The badge of an object whose key cannot be used now (admin design §5.5.2, §5.5.4). */
   unavailable: 'Unavailable',
+  /** The key's budget status (admin design §5.5.4; B-46). */
+  budgets: 'Budgets in the AI gateway',
+  budgetScopes: { key: 'Key budget', team: 'Team budget', department: 'Department budget' } as Record<string, string>,
+  spentOf: (spent: string, limit: string, percent: string) => `${spent} of ${limit} (${percent})`,
+  until: (date: string) => `until ${date}`,
+  usedUp: 'Used up',
   assistantHint: 'The key in the AI gateway that this assistant’s calls run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
   collectionHint: 'The key in the AI gateway that indexing and evaluation run as, so their cost lands on the key’s team. Its settings are kept in the gateway.',
   none: 'No key (charged to the platform’s owner team)',
@@ -1653,6 +1659,9 @@ export const COSTS = {
   } as Record<string, string>,
   /** The test panel's client row (admin design §4.9). */
   testPanel: 'Test panel',
+  /** B-46: the gateway's figures beside Ume.Rag's (admin design §8.6). */
+  gatewayCounted: 'Gateway',
+  gatewayReport: 'See the key’s usage in the AI gateway',
   indexing: 'Indexing',
   evaluation: 'Evaluation',
   openCosts: 'Open the Costs page',
