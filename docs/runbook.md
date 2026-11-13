@@ -510,7 +510,7 @@ journalctl -u rag-restart-unhealthy.service --since today
 through environment variables, for hosts where `init-deployment.sh` cannot run. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged, plus RAG's services (all named `rag-…`): rag-postgres, rag-migrate,
 rag-api (8543), rag-admin (9543), rag-worker, rag-parser and, with their profiles, rag-clamav (`clamav`) and
-rag-renderer (`render`). Open WebUI is not part of it.
+rag-renderer (`render`) and rag-openwebui (`openwebui`, #657). Step by step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
 gateway's volumes `<stack>_ume-certs`, `<stack>_ume-secrets` and its database are found by it), add the variables
