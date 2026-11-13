@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
-import { PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
+import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientCreateDrawer from './ClientCreateDrawer.vue'
 
 const L = PLATFORM_CLIENTS
@@ -212,6 +212,22 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     expect(example).toContain('Authorization: Bearer ume-rag-sk-secret')
     expect(example).toContain('"model":"bygglov"')
     expect(result.find('[data-test=stack-lines]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('says the assistants are being read, not that there are none, until they arrive', async () => {
+    let arrive!: (page: { items: AssistantSummary[]; total: number }) => void
+    vi.spyOn(api.assistants, 'list').mockReturnValue(new Promise((resolve) => (arrive = resolve)))
+    const wrapper = await open()
+    await pick(wrapper, 'integration')
+    await wrapper.get('#client-new-name').setValue('Webb')
+    await submit(wrapper)
+    const picker = wrapper.get('[data-test=assistant-picker]')
+    expect(picker.text()).not.toContain(L.assistants.none)
+    expect(picker.get('[role=status]').text()).toBe(COMMON.loading)
+    arrive({ items: assistants, total: assistants.length })
+    await flushPromises()
+    expect(picker.find('[data-test=assistant-a1]').exists()).toBe(true)
     wrapper.unmount()
   })
 

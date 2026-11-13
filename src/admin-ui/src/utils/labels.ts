@@ -1026,7 +1026,7 @@ export const PLATFORM_CLIENTS = {
     newTitle: 'New key',
     editTitle: (name: string) => `Key: ${name}`,
     empty: 'No key yet.',
-    columns: { name: 'Name', prefix: 'Prefix', status: 'Status', expiresAt: 'Expires', lastUsed: 'Last used', actions: 'Actions' },
+    columns: { name: 'Name', status: 'Status', expiresAt: 'Expires', lastUsed: 'Last used', actions: 'Actions' },
     never: 'Never',
   },
   keyStatus: {

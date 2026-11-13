@@ -31,6 +31,7 @@ const assistantIds = ref<string[]>([])
 const assistants = ref<AssistantSummary[]>([])
 const departments = ref<Department[]>([])
 const apiBaseUrl = ref<string | null>(null)
+const loadingChoices = ref(false)
 const createKey = ref(true)
 const keyName = ref('')
 const saving = ref(false)
@@ -66,11 +67,13 @@ watch(() => props.open, (open) => {
 
 /** The picker's rows and the address of "How to connect"; a failed read leaves the step empty, not the drawer broken. */
 async function loadChoices(): Promise<void> {
+  loadingChoices.value = true
   ;[assistants.value, departments.value, apiBaseUrl.value] = await Promise.all([
     api.assistants.list({ pageSize: 200 }).then((p) => p.items.filter((a) => a.state === 'active')).catch(() => []),
     api.organisation.departments().catch(() => []),
     api.clients.connection().then((c) => c.apiBaseUrl).catch(() => null),
   ])
+  loadingChoices.value = false
 }
 
 function chooseKind(value: string): void {
@@ -158,7 +161,7 @@ async function create(): Promise<void> {
       <ClientFields v-else-if="step === 2" v-model="form" :kind="kind" id-prefix="client-new" :errors="errors.errors" />
       <AssistantPicker
         v-else-if="step === 3" v-model="assistantIds" id-prefix="client-new" :assistants="assistants" :departments="departments"
-        :ceiling="form.classificationCeiling" :error="errors.errors.assistantIds"
+        :ceiling="form.classificationCeiling" :error="errors.errors.assistantIds" :loading="loadingChoices"
       />
       <div v-else class="grid gap-4">
         <CheckField v-model="createKey" :label="L.firstKey.create" :description="L.firstKey.hint" data-test="create-key" />

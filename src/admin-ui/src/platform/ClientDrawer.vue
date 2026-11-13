@@ -65,7 +65,6 @@ const revoking = ref<ApiKey | null>(null)
 
 const keyColumns: Column[] = [
   { key: 'name', label: L.keys.columns.name },
-  { key: 'prefix', label: L.keys.columns.prefix },
   { key: 'status', label: L.keys.columns.status },
   { key: 'expiresAt', label: L.keys.columns.expiresAt },
   { key: 'lastUsed', label: L.keys.columns.lastUsed },
@@ -228,7 +227,7 @@ async function revoke(): Promise<void> {
           :error="assistantErrors.errors.assistantIds"
         />
         <InlineError v-if="assistantErrors.formError.value" :message="assistantErrors.formError.value" />
-        <div><UiButton :loading="savingAssistants" data-test="save-assistants" @click="saveAssistants">{{ L.assistants.save }}</UiButton></div>
+        <div v-if="pickable.length"><UiButton :loading="savingAssistants" data-test="save-assistants" @click="saveAssistants">{{ L.assistants.save }}</UiButton></div>
       </section>
 
       <section class="mb-8 grid gap-3" aria-labelledby="client-keys-title" data-test="client-keys">
@@ -246,8 +245,11 @@ async function revoke(): Promise<void> {
           v-else :columns="keyColumns" :rows="keys" :row-key="(k) => k.id" :caption="L.keys.title" :empty-text="L.keys.empty" clickable
           @row-click="editKey"
         >
-          <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
-          <template #cell-prefix="{ row }"><span class="font-mono text-small whitespace-nowrap">{{ row.prefix }}</span></template>
+          <!-- The prefix under the name: the drawer is too narrow for a column of its own beside the last use. -->
+          <template #cell-name="{ row }">
+            <span class="block font-medium">{{ row.name }}</span>
+            <span class="block font-mono text-caption whitespace-nowrap text-fg-3">{{ row.prefix }}</span>
+          </template>
           <template #cell-status="{ row }"><UiBadge :tone="STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
           <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
           <template #cell-lastUsed="{ row }">
