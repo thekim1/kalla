@@ -18,7 +18,28 @@ lands or an input arrives.
 Every code item of both stream queues is done. What is left before go-live is live work, and every step of it waits on
 an input from people.
 
-## Now: the critical path to go-live
+## Now: the test chatbot (before the umea.se pilot)
+
+Decided by the user, 2026-11-13 (Decisions "Test chatbot before the umea.se pilot"): a test chatbot on **DoIT's support
+documents**, uploaded, for a **small test group** in Open WebUI, on `v0.5.0` and the gateway, **both deployed by hand by
+the user**. It shows how well uploaded documents answer real questions before the umea.se pilot. Case plan:
+[`cases/support-assistant/`](cases/support-assistant/README.md) (`07-rollout.md` §0b and §1).
+
+| # | Step | Input it waits on | Owner | Status |
+|---|---|---|---|---|
+| T0 | Gateway on v0.10.1 with the integration *Ume.Rag* and three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
+| T1 | Ume.Rag `v0.5.0` deployed from the release bundle (`docs/production-setup.md`; `init-deployment.sh`, Keycloak realm, Open WebUI, ClamAV on), checked with the production-setup's read-backs | T0 | user | open |
+| T2 | The test group's accounts (Keycloak or the gateway's sign-in) and their Open WebUI access; DoIT's admin in the admin UI | T1 | user | open |
+| T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user + DoIT; main session helps | open |
+| T4 | Assistant `support`: the instructions of `04-assistant.md` §3, the knowledge base's key (V39), general knowledge `fallback`, a not-found text with the real escalation links; checked in the test panel with about twenty anonymised or invented tickets | T3 | main session + DoIT | open |
+| T5 | The test group uses it in Open WebUI; feedback import on | T2, T4 | test group | open |
+| T6 | Findings back: answer quality per ticket, misses and their documents, upload gaps (U1–U7) seen on real files, the condense model, the live checks of the gateway integration (B-42–B-46, A-34, A-35) | T5 | main session | open |
+
+**Open question (user, with the data protection officer):** whether the test group's use needs the DPIA (G1), or part of
+it, before T5: the documents are internal, Open WebUI keeps its own copy of each chat (W2), and real tickets wait for G1
+in the case plan.
+
+## Then: the umea.se pilot
 
 **Go-live** (P1b done): the gate is met on hand-graded gold-set answers (correct ≥ 80 %, citation precision ≥ 90 %,
 false not-found ≤ 10 %, off-topic answered "not found" ≥ 80 %), the DPIA (G1) is finished with W2 inside it, and one
@@ -26,7 +47,7 @@ pilot department uses its assistant in Open WebUI. The steps, in order; a step s
 
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
-| 0 | **Interim gateway (J10) on v0.10.1** with the integration *Ume.Rag* and three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`); `docs/production-setup.md` *Gateway credential keys* | the gateway upgrade | user (gateway repo) | **blocks every live check** (B-35–B-46, A-31, A-34, A-35) |
+| 0 | The gateway and Ume.Rag as deployed for the test chatbot (T0, T1), or the test host's own | T0–T1 | user | after the test chatbot |
 | 1 | Gateway and Keycloak for the pilot: pilot accounts, the key that allows the model `turkos` is published on | step 0 | user | open |
 | 2 | U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass (A-L1, A-L4) | U1 page URL, owner, contact | user + web editors | open |
 | 3 | Gold set written with DoIT, entered, run three ways (`scripts/grading/`); not-found thresholds set from it | the gold set and its reviewers | user + DoIT | open |
@@ -36,20 +57,15 @@ pilot department uses its assistant in Open WebUI. The steps, in order; a step s
 | 7 | Before go-live: the 7-day package rule applies again; GitHub Actions pinned by SHA with automated bumps (A-20, A-27); LibreOffice placement with the parser sandbox question (Decisions "Legacy Office and RTF uploads") | – | streams, main | postponed on purpose (2026-11-08) |
 | 8 | The gate graded by department reviewers; the pilot goes live (M-4) | steps 1–7 | user + main | open |
 
-**Owners and dates.** The phase-start rule (`postponed-decisions.md`) asks for a named person and a date on every
+**Owners and dates** (umea.se pilot). The phase-start rule (`postponed-decisions.md`) asks for a named person and a date on every
 input that blocks a phase. Still unnamed: A1, G1, N1, U1, W2, R1 and the test host. Until the user names them, the
 table says "user".
-
-**Open product call:** whether the **support-assistant pilot** (DoIT, [`cases/support-assistant/`](cases/support-assistant/README.md))
-waits for the umea.se go-live gate or runs on its own track. Its proof of concept on the local stack (`07-rollout.md`
-§0b, P1–P8) needs only the documents and about twenty anonymised tickets, and it goes ahead of everything else once
-those exist.
 
 ## Meanwhile: work that needs no input
 
 Each becomes a queue item when the main session picks it up.
-- **Deploy rehearsal:** the `v0.5.0` release bundle on a stand-in host (a local VM), with the restore drill, so step 4
-  is a re-run rather than a first attempt.
+- **Test chatbot support:** a checklist for T1's manual deploy from the production setup's read-backs, and the
+  knowledge base and assistant settings of T3–T4 ready to enter (`work/main.md` M-15).
 - **Grading dry run:** `scripts/grading/` end to end on a small synthetic set, so step 3 starts on working tools.
 - **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
   documents what the gaps cost before deciding them.

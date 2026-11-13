@@ -20,6 +20,16 @@ department. Detail: `roadmap.md` "Done", "Now".
 
 *From:* log row 5; decided by user, 2026-10-29.
 
+### Test chatbot before the umea.se pilot
+
+Before the umea.se pilot, a **test chatbot** runs on the latest release and the gateway: DoIT's support documents
+uploaded into one knowledge base, one assistant, used by a small test group in Open WebUI. The user deploys the gateway
+and Ume.Rag by hand. The umea.se pilot (full crawl, gold set, go-live gate) follows it. The case plan is
+`cases/support-assistant/` (non-binding); tickets in it are anonymised or invented until G1 allows real ones. Detail:
+`roadmap.md` "Now".
+
+*From:* decided by user, 2026-11-13.
+
 ### Code first, live testing last
 
 P1 code is built against FakeGateway, fixtures and the dev Keycloak first; the live block (real gateway and EU routes,
