@@ -1,5 +1,4 @@
 import { http } from '@/api/client'
-import type { GatewayContextInfo, OrgSyncStatus } from '@/api/types'
 import { formatNumber } from '@/utils/format'
 import { PLATFORM } from '@/utils/labels'
 import type { ModelField } from './modelFields'
@@ -82,7 +81,11 @@ export function urlOf(path: string, row: Row | null, key: string): string {
 }
 
 /** The gateway's last context as the organisation sync holds it (`GatewayContextInfo`, admin design §4.10). */
-export type GatewayContext = GatewayContextInfo
+export interface GatewayContext {
+  version: string | null
+  adminUrl: string | null
+  features: string[]
+}
 
 /**
  * The gateway's last context from the organisation sync's status, which holds it in memory without a gateway call (the
@@ -91,24 +94,18 @@ export type GatewayContext = GatewayContextInfo
  */
 export async function gatewayContext(): Promise<GatewayContext | null> {
   try {
-    return (await http.get<OrgSyncStatus>('/api/organisation/sync')).gateway ?? null
+    return (await http.get<{ gateway: GatewayContext | null }>('/api/organisation/sync')).gateway ?? null
   } catch {
     return null
   }
 }
 
 /**
- * The gateway's admin URL (admin design §2.3, §4.10): the context's `admin_url`, else `Admin:GatewayAdminUrl`, as the sync's
- * status resolves it (#619); null when there is neither, the status cannot be read, or the address is not an http(s) URL
- * (it becomes a link's `href`).
+ * The gateway's admin URL from its last context (`gateway.admin_url`, admin design §2.3, §4.10); null when there is no
+ * context, the context has none, or the address is not an http(s) URL (it becomes a link's `href`).
  */
 export async function gatewayAdminUrl(): Promise<string | null> {
-  let url: string | null | undefined
-  try {
-    url = (await http.get<OrgSyncStatus>('/api/organisation/sync')).adminUrl
-  } catch {
-    return null
-  }
+  const url = (await gatewayContext())?.adminUrl
   return url && /^https?:\/\//i.test(url) ? url : null
 }
 

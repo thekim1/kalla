@@ -63,9 +63,7 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
   })
 
   it('links the gateway\'s Organisation page in a new tab when the sync knows the gateway\'s admin URL (admin design §2.3)', async () => {
-    const { wrapper } = mountOrganisation({
-      gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] }, adminUrl: 'https://gateway-admin.example.invalid/',
-    })
+    const { wrapper } = mountOrganisation({ gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] } })
     await flushPromises()
 
     const link = wrapper.get('[data-test="gateway-page"]')
@@ -77,17 +75,9 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
     wrapper.unmount()
   })
 
-  it('links the configured Admin:GatewayAdminUrl when the context has no admin_url (#619)', async () => {
-    // The status resolves the fallback server side (OrgSyncStatus.adminUrl), so a context without admin_url still links.
-    const { wrapper } = mountOrganisation({ gateway: { version: '0.10.1', adminUrl: null, features: [] }, adminUrl: 'https://gateway.example.invalid' })
-    await flushPromises()
-    expect(wrapper.get('[data-test="gateway-page"]').attributes('href')).toBe('https://gateway.example.invalid/organisation')
-    wrapper.unmount()
-  })
-
   it('shows no gateway link when the admin URL is unknown or not an http(s) address, or the sync status cannot be read', async () => {
-    const notALink = { gateway: { version: '0.10.0', adminUrl: 'javascript:alert(1)', features: [] }, adminUrl: 'javascript:alert(1)' }
-    for (const status of [{ gateway: { version: '0.10.0', adminUrl: null, features: [] }, adminUrl: null }, { gateway: null, adminUrl: null }, notALink]) {
+    const notALink = { gateway: { version: '0.10.0', adminUrl: 'javascript:alert(1)', features: [] } }
+    for (const status of [{ gateway: { version: '0.10.0', adminUrl: null, features: [] } }, { gateway: null }, notALink]) {
       const { wrapper } = mountOrganisation(status)
       await flushPromises()
       expect(wrapper.find('tbody tr').exists()).toBe(true)
