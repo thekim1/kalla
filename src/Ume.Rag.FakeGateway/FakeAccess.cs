@@ -144,7 +144,7 @@ public static class FakeAccess
     /// <c>x-ume-on-behalf-of</c> as the gateway resolves it right after authentication (gateway v0.10.0
     /// <c>RequestStages.cs:118-180</c>; gateway-changes §5.2): none = the presented key; not one GUID or repeated = 400; a
     /// caller that is no credential key, an id not assigned to the integration, or no residency in common = 403
-    /// <c>delegation_not_allowed</c>; a disabled key or an inactive owner = 403 <c>key_disabled</c>; revoked or expired = 401.
+    /// <c>delegation_not_allowed</c>; a disabled key or an inactive owner = 403 <c>key_disabled</c>; revoked or expired = 403 <c>key_revoked</c>/<c>key_expired</c> (gateway v0.10.1; a 401 is only ever the credential key's).
     /// A usable key is echoed in the D form on every later answer, unless <see cref="FakeGatewayOptions.DropOnBehalfOfEcho"/>.
     /// </summary>
     private static bool TryResolveActing(HttpContext context, FakeGatewayOptions options, FakeKey key, out FakeAssignedKey? acting, out IResult? error)
@@ -173,13 +173,13 @@ public static class FakeAccess
 
         if (assigned.Status == "Revoked")
         {
-            error = Error(context, StatusCodes.Status401Unauthorized, "key_revoked", "The API key has been revoked.");
+            error = Error(context, StatusCodes.Status403Forbidden, "key_revoked", "The API key has been revoked.");
             return false;
         }
 
         if (assigned.Status == "Expired" || assigned.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow)
         {
-            error = Error(context, StatusCodes.Status401Unauthorized, "key_expired", "The API key has expired.");
+            error = Error(context, StatusCodes.Status403Forbidden, "key_expired", "The API key has expired.");
             return false;
         }
 

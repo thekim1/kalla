@@ -217,5 +217,7 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database)
         (await platform.GetAsync("/api/costs?from=2022-02-01&to=2025-01-31&granularity=month", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await platform.GetAsync("/api/costs?from=2025-02-01&to=2025-01-31", Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await platform.GetAsync("/api/costs?granularity=week", Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        // The earliest date without a start: a short period from the first day, not a 500 (#627 review).
+        (await platform.GetAsync("/api/costs?to=0001-01-01", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 }

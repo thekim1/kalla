@@ -182,8 +182,8 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
         (await RefusedAsync(Guid.NewGuid())).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("delegation_not_allowed"));
         (await RefusedAsync(Paused)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_disabled"));
-        (await RefusedAsync(OnPromOnly, "ume/chat-onprem", Residency.OnPrem)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(401), e => e.Code.ShouldBe("key_expired"));
-        (await RefusedAsync(Revoked)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(401), e => e.Code.ShouldBe("key_revoked"));
+        (await RefusedAsync(OnPromOnly, "ume/chat-onprem", Residency.OnPrem)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_expired"));
+        (await RefusedAsync(Revoked)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_revoked"));
         var budget = await RefusedAsync(Chatbot);
         (budget.Status, budget.Code, budget.GatewayKeyId).ShouldBe((402, "budget_exceeded", Chatbot));
         budget.GatewayMessage.ShouldNotBeNull().ShouldStartWith("The team's budget");

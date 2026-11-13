@@ -18,8 +18,12 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
     /// <summary>Rows per step and table; each call is its own short transaction.</summary>
     public const int BatchSize = 5000;
 
-    /// <summary>Advisory lock key of the config step ("RAG0" + 0x11).</summary>
-    public const long ConfigStepLockKey = 0x5241_4730_0011;
+    /// <summary>Advisory lock key of the config step ("RAG0" + 0x13; #624: 0x11 is the model sync's).</summary>
+    /// <remarks>
+    /// The advisory lock keys in use, each held by one job only: 0x01 job reaper, 0x02 content cleanup, 0x03 content
+    /// retention, 0x10 organisation sync, 0x11 model sync, 0x12 chat retention step, 0x13 this step, 0x21 feedback import.
+    /// </remarks>
+    public const long ConfigStepLockKey = 0x5241_4730_0013;
 
     /// <summary>The chat step's advisory lock (chat design §13.1).</summary>
     public const long ChatStepLockKey = 0x5241_4730_0012;
