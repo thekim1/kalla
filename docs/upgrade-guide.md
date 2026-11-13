@@ -12,6 +12,14 @@ exception, with its own steps.
 
 ## Unreleased
 
+## 0.5.1
+
+- **Rolling update: yes** from 0.5.0: no migration, no configuration change for Compose or Kubernetes.
+- **Portainer:** paste the new `deploy/portainer/compose.portainer.yaml` over the stack (it pins the gateway's and
+  Ume.Rag's images and adds the optional `openwebui` profile) and update it. From this release a changed gateway key or
+  Open WebUI feedback key applies without restarts; the end of `rag-bootstrap`'s log lists what is still missing
+  ([portainer.md](portainer.md)).
+
 ## 0.5.0
 
 - **One gateway credential key per service (#580, B-37, A-30).** rag-api, rag-admin and rag-worker each read only
