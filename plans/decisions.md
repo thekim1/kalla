@@ -333,11 +333,14 @@ goes. Department member groups come from the same context (`member_groups` per d
 gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
 source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
 release tag), which changes by addition only. Each service reads the gateway's `features` from its own
-`/v1/ume/context`, so it acts as a key only once its own gateway instance says `act-as-key`. Detail:
+`/v1/ume/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
+key of its own department: publishing or restoring one without a key is refused, and so is a save that clears the key of a
+published assistant (V39, `gateway_key_required`); to drop its key, an admin unpublishes it or picks another key, so it never
+runs on rag-api's credential key outside its department's budget (confirmed by user, 2026-11-13). Detail:
 `gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
 *From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580); the organisation from the context and member
-groups by hand until the gateway has them, decided by user, 2026-11-12 (#580).
+groups by hand until the gateway has them, decided by user, 2026-11-12 (#580); V39's required key on a published assistant confirmed by user, 2026-11-13.
 
 ### Gateway releases
 
