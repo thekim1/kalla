@@ -28,3 +28,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   section of `decisions.md` into the roadmap.
 - **Rule:** no section is renumbered (§-numbers are cited about 2,800 times in code); `scripts/check-doc-refs.py` green.
 - **Done when:** (1)–(6) merged; the later ones are noted in the handbook.
+- **Status (2026-11-13):** (1)–(4) merged in #655 (`01-general-idea.md` stays in the root: code and the citation check
+  read it by path); (5)–(6) in #656 (the citation check follows a moved section's "Moved to" line). The later ones are in
+  the handbook's *Lessons* (stable IDs) and *Plan files*.

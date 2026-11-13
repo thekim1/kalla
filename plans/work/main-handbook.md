@@ -172,6 +172,20 @@ main session needs:
   the next free number. Cite stable IDs (V39, a rule's name) where one exists.
 - **AdminApi.Tests database classes** go into one of `AdminDatabaseGroup1`..`4`, the shortest by measured time
   (#648); the per-project test times are in the `backend` job log's *Test run summary*.
+## Plan files (how they are kept, M-14)
+
+- **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
+  the roadmap's critical path first.
+- **At each release** move the queues' ticked items to `plans/archive/work/to-v<version>.md` (unchanged, links fixed
+  for the depth), and the CHANGELOG's and upgrade guide's *Unreleased* to the version.
+- **Designs hold the specification.** History (answered questions, deferred items, milestones) goes to
+  `plans/archive/design-history/<area>.md`; a moved section keeps its number and heading with a `Moved to [...]` line,
+  which `scripts/check-doc-refs.py` follows. Non-binding papers go to `plans/proposals/` with a status line.
+- **Left for when each area is next worked on:** cite stable IDs (V39, a rule's name, a heading anchor) in new
+  citations rather than bare §-numbers; triage `to-verify.md` (124 open rows, 23 with their context in archived passes)
+  into live block, before go-live and P2, closing what no longer applies; move the *Phases and planning* section of
+  `decisions.md` into the roadmap, keeping only binding rules there.
+
 ## Environment notes
 
 - `rag_key.txt` in the repo root holds the interim-gateway key (mode 600, excluded in `.git/info/exclude`); the
