@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// and OpenAPI/Scalar for platform admins. The database is shared by the collection, so each test reads the current
 /// version before it writes.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

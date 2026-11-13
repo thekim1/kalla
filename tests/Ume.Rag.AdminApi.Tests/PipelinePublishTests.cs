@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// V24, the plan (publish-plan job), confirm refused while the plan is not ready or after the pipeline changed, publish
 /// with one reprocess sync per source, and rollback.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class PipelinePublishTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

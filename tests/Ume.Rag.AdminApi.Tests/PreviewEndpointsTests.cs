@@ -21,7 +21,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// unsaved settings (V25 first, a URL list's first 20 URLs), the PII highlights (<c>stage-preview</c> to personal-data,
 /// audited <c>pii.view</c>), and a preview output read only from the job's own <c>previews/{jobId}/</c>.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

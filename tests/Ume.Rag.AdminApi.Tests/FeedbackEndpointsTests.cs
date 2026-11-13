@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// Återkoppling (admin design §8.1, chat design §14.4): ratings of the caller's departments' assistants without content,
 /// the period's totals and import health, and Markera som hanterad (FeedbackComments, audited).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

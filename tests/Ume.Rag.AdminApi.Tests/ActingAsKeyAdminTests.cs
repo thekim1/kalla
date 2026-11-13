@@ -25,7 +25,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// the retrieval test its query embedding as the knowledge base's; the FakeGateway acts as the key and records the answer
 /// under it.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "sk-ume-acting-admin-000000000000000"; // rag-admin's credential key

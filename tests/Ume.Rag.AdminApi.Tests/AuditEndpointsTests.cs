@@ -12,7 +12,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// entries; the filters and the keyset (newest first); the detail with the snapshot JSON as text; editors and viewers are
 /// refused.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

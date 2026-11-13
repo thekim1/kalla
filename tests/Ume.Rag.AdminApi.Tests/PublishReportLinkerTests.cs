@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// #129 request 2: a pipeline version keeps its publish report past job retention. The linker copies the newest succeeded
 /// <c>publish-report</c> job's <c>evaluationRunId</c> into <c>PipelineVersions.EvaluationRunId</c>, once, and never overwrites.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class PublishReportLinkerTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

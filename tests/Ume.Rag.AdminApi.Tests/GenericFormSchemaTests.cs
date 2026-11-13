@@ -10,7 +10,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// API validates with into JSON Schema keywords (ranges, lengths, required members, enums), and a <c>jsonb</c> member is an
 /// object that comes back from the database as it was sent.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

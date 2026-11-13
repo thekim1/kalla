@@ -12,7 +12,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// without messages whose <c>ExpiresAt</c> passed; a live conversation, and an expired one that still has a live message,
 /// stay.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class ChatRetentionTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

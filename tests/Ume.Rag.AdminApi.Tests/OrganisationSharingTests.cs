@@ -17,7 +17,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// topics, the Map route, contact fields, V11 widened to shared collections and topics, and the owner team defaulted on
 /// create. Another department sees a shared collection's summary and topics and gets 404 on its sources and documents.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
 {
     private const string Model = "ume/chat-eu";

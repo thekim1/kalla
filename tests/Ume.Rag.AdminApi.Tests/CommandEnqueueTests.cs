@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// Step 7 of the write path (admin design §4.4, §4.7, §11.2 "Jobs"; H4, #28): a change's <c>command</c> jobs are enqueued in
 /// its transaction, notify <c>rag_jobs</c> only on commit, and roll back with it.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class CommandEnqueueTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

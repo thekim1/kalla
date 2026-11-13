@@ -117,7 +117,7 @@ public sealed class TenantCheckTests
 }
 
 /// <summary>The BFF endpoints and the sign-in steps against the real database (identity design §1).</summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class BffTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

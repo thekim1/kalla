@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// The web editors' report (issue #175): held and flagged-but-live documents of a <c>piiMode: report</c> source in a
 /// <c>public</c> collection, with counts per type (numbers only) and the last <c>pii.flagged</c> run item.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

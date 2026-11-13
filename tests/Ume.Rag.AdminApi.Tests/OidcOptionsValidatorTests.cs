@@ -7,7 +7,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// #413: in the shared Keycloak realm the group claim carries every group by its short name, the gateway's included, so
 /// a role group must be a <c>rag-</c> name or an Entra object id; the admin API refuses to start otherwise.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class OidcOptionsValidatorTests(AdminDatabaseFixture database)
 {
     private static ValidateOptionsResult Validate(Dictionary<string, string> roleGroups) =>

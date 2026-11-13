@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// demote patterns, hits are hydrated with title, heading path, a 600-character text and the per-list scores; scope and
 /// policy as the collection's; nothing is audited.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class TestRetrievalTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

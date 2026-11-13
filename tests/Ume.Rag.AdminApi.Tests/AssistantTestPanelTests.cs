@@ -23,7 +23,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// over a collection that is not published; raw and delivered answers, candidates and the gateway call are shown;
 /// nothing is stored.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // rag-admin\'s credential key

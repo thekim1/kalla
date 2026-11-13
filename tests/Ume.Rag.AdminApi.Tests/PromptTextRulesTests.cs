@@ -11,7 +11,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// V38 (admin design; chat design §7.3; Decisions "Chat prompt texts configurable"): <c>Settings.Chat.prompts</c> on
 /// <c>PUT /api/settings/chat</c>, and the Settings panel's <c>GET /api/settings/chat/prompts</c>.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup3.Name)]
 public sealed class PromptTextRulesTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// The setup checklist "Kom igång" (admin design §5.4, §5.5.2) computed from state, and the overview listing the
 /// collections whose checklist is not done (§5.5.1).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup1.Name)]
 public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

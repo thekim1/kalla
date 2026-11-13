@@ -29,7 +29,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// to the Open WebUI client. The department and the model mirror are the syncs' (seeded as they write them; the syncs have
 /// their own tests).
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup2.Name)]
 public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
 {
     private const string AdminKey = "fake-eu-key-pilot-setup-0123456789"; // rag-admin\'s credential key

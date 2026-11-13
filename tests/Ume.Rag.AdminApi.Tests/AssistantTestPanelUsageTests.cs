@@ -25,7 +25,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// cost, never into <c>AssistantDailyTotals</c>; the response's <c>costUsd</c> is the sum of the turn's calls and
 /// <c>costEstimated</c> is true on <c>fake-no-cost</c>; a failed write leaves the answer intact.
 /// </summary>
-[Collection(AdminDatabaseGroup.Name)]
+[Collection(AdminDatabaseGroup4.Name)]
 public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
 {
     private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // rag-admin's credential key
