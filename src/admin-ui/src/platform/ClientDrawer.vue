@@ -13,7 +13,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useUiStore } from '@/stores/ui'
 import { formatDate, formatDateTime, formatRelative } from '@/utils/format'
-import { COMMON, PLATFORM, PLATFORM_CLIENTS, type Tone } from '@/utils/labels'
+import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import AssistantPicker from './AssistantPicker.vue'
 import ClientFields from './ClientFields.vue'
@@ -21,12 +21,13 @@ import CopyValue from './CopyValue.vue'
 import HowToConnect from './HowToConnect.vue'
 import KeyForm from './KeyForm.vue'
 import SecretOnce from './SecretOnce.vue'
-import { clientForm, clientRequest, newClientForm, RetentionDaysError, type ClientForm } from './clients'
+import { clientForm, clientRequest, KEY_STATUS_TONE, newClientForm, RetentionDaysError, type ClientForm } from './clients'
 
 // An app's drawer (admin design §5.9, §5.9.1): its facts, the edit form of its kind (the kind is fixed), the assistants
 // it offers (a checklist with a save of its own), its keys with Rotate, Show key, Revoke and New key in place and each
 // key's last use, and "How to connect" with the key that is on screen.
-const props = defineProps<{ open: boolean; clientId: string | null }>()
+// `keyId` opens that key's form once the drawer has loaded (a row of All keys).
+const props = defineProps<{ open: boolean; clientId: string | null; keyId?: string | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved'): void }>()
 
 const L = PLATFORM_CLIENTS
@@ -70,7 +71,6 @@ const keyColumns: Column[] = [
   { key: 'lastUsed', label: L.keys.columns.lastUsed },
   { key: 'actions', label: L.keys.columns.actions, hideLabel: true },
 ]
-const STATUS_TONE: Record<string, Tone> = { active: 'ok', 'in-grace-period': 'warn', expired: 'neutral', revoked: 'danger', disabled: 'neutral' }
 
 async function loadKeys(id: string): Promise<void> {
   keys.value = await api.keys.list(id)
@@ -84,6 +84,8 @@ async function load(id: string): Promise<void> {
     client.value = loaded
     form.value = clientForm(loaded)
     assistantIds.value = loaded.assistants.map((a) => a.id)
+    const opened = props.keyId ? keys.value.find((k) => k.id === props.keyId) : undefined
+    if (opened) editKey(opened)
   } catch (e) {
     loadError.value = e
   } finally {
@@ -119,7 +121,7 @@ async function saveAssistants(): Promise<void> {
   }
 }
 
-watch(() => [props.open, props.clientId] as const, ([open, id]) => {
+watch(() => [props.open, props.clientId, props.keyId] as const, ([open, id]) => {
   if (!open || !id) return
   client.value = null
   keys.value = []
@@ -239,7 +241,9 @@ async function revoke(): Promise<void> {
         <InlineError v-if="keyError" :message="problemMessage(keyError)" />
         <div v-if="keyEdit" class="grid gap-3">
           <h4 class="font-medium">{{ keyEdit.key ? L.keys.editTitle(keyEdit.key.name) : L.keys.newTitle }}</h4>
-          <KeyForm :key="keyFormKey" form-id="client-key" :api-key="keyEdit.key" :client-id="client.id" @saved="keySaved" @cancel="keyEdit = null" />
+          <KeyForm :key="keyFormKey" form-id="client-key" :api-key="keyEdit.key" :client-id="client.id"
+            :audience-ids="client.assistants.map((a) => a.id)" @saved="keySaved" @cancel="keyEdit = null"
+          />
         </div>
         <DataTable
           v-else :columns="keyColumns" :rows="keys" :row-key="(k) => k.id" :caption="L.keys.title" :empty-text="L.keys.empty" clickable
@@ -250,7 +254,7 @@ async function revoke(): Promise<void> {
             <span class="block font-medium">{{ row.name }}</span>
             <span class="block font-mono text-caption whitespace-nowrap text-fg-3">{{ row.prefix }}</span>
           </template>
-          <template #cell-status="{ row }"><UiBadge :tone="STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
+          <template #cell-status="{ row }"><UiBadge :tone="KEY_STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
           <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
           <template #cell-lastUsed="{ row }">
             <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>

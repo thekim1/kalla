@@ -1448,7 +1448,11 @@ with the checklist of step 3 and a **Save** of its own. The list and the drawer 
 
 **Key form.** A new key asks for its name only. Description, team, **Limit to assistants**, **Limit to knowledge
 bases**, expiry, allowed IP ranges and requests per minute are under a collapsed **Restrictions**, open when any of
-them is set. The two limit lists show only what the app's audience allows (its assistants, and their knowledge bases).
+them is set (or one of them is refused). A new key has no Enabled switch; an edit has it beside the name. **Limit to
+assistants** lists the assistants the app offers, and any the key still names that it no longer offers, marked so they
+can be unticked. **Limit to knowledge bases** lists every knowledge base: it also limits the knowledge routes, which an
+`internal` app calls without an assistant (`Knowledge:OpenToClientKinds`), and an assistant whose published knowledge
+bases are all outside it (the access policy's key scope).
 
 **Keys page.** The generic resource `keys` and `/plattform/keys` go. The Apps and keys page has two tabs: **Apps** and
 **All keys** (every key with its app, status, expiry and last use; filter by status; a row opens its app's drawer at

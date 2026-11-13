@@ -73,7 +73,7 @@ export interface PlatformResource {
   /** Panels shown above the list, in order. */
   panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
   /** A form of its own instead of the generic one, for a row's edit or (`null`) a create. */
-  form?: (row: Row | null) => 'crawl-settings' | 'key' | undefined
+  form?: (row: Row | null) => 'crawl-settings' | undefined
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
   modelFields?: (row: Row) => readonly ModelField[] | undefined
 }
@@ -159,29 +159,6 @@ const SETTINGS_MODEL_FIELDS: Partial<Record<(typeof SETTINGS_SECTIONS)[number], 
 const L = PLATFORM.resources
 
 export const platformResources: PlatformResource[] = [
-  {
-    id: 'keys',
-    ...L.keys,
-    icon: 'key',
-    list: '/api/keys',
-    key: 'id',
-    columns: [
-      { key: 'name', label: PLATFORM.columns.name },
-      { key: 'clientName', label: PLATFORM.columns.client },
-      { key: 'prefix', label: PLATFORM.columns.prefix },
-      { key: 'status', label: PLATFORM.columns.status },
-      { key: 'expiresAt', label: PLATFORM.columns.expiresAt },
-    ],
-    create: { method: 'post', path: '/api/keys' },
-    update: { method: 'put', path: '/api/keys/{id}' },
-    // Pickers for the client, team and scopes instead of a JSON scope object (admin design §5.9).
-    form: () => 'key',
-    actions: [
-      { id: 'rotate', label: PLATFORM.actions.rotate, method: 'post', path: '/api/keys/{id}/rotate' },
-      { id: 'reveal', label: PLATFORM.actions.reveal, method: 'post', path: '/api/keys/{id}/reveal' },
-      { id: 'revoke', label: PLATFORM.actions.revoke, method: 'post', path: '/api/keys/{id}/revoke', confirm: PLATFORM.actions.revokeConfirm },
-    ],
-  },
   {
     id: 'settings',
     ...L.settings,
@@ -306,7 +283,7 @@ export const platformResources: PlatformResource[] = [
   },
 ]
 
-/** Clients have a page of their own (admin design §5.9) and keep their place first in the list. */
+/** Apps and keys have a page of their own (admin design §5.9, §5.9.1; the generic Keys page went) and keep their place first. */
 export const platformEntries: PlatformEntry[] = [
   { id: 'clients', ...L.clients, icon: 'apps', to: { name: 'platform-clients' } },
   ...platformResources.map((r) => ({

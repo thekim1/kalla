@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { api } from '@/api'
 import { request } from '@/api/client'
-import type { ApiKey, GatewayModel } from '@/api/types'
+import type { GatewayModel } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -23,7 +23,6 @@ import GatewayContextPanel from './GatewayContextPanel.vue'
 import PromptTextsPanel from './PromptTextsPanel.vue'
 import SecretOnce from './SecretOnce.vue'
 import GenericForm from './GenericForm.vue'
-import KeyForm from './KeyForm.vue'
 import { withModelFields } from './modelFields'
 import { gatewayAdminUrl, gatewayLink, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
@@ -71,8 +70,6 @@ const ownForm = computed(() => {
 })
 // Every generic drawer shows the row's id with a copy button (admin design §5.8).
 const rowId = computed(() => (typeof selected.value?.id === 'string' ? selected.value.id : null))
-// The Keys page's rows are keys (`KeyDto`).
-const selectedKey = computed(() => selected.value as unknown as ApiKey | null)
 
 async function load(): Promise<void> {
   if (!resource.value) return
@@ -244,10 +241,6 @@ watch(() => props.resource, () => {
         </div>
         <CrawlSettingsForm
           v-if="openForm && ownForm === 'crawl-settings'" :key="formKey" :initial="openForm.initial" :url="openForm.url" :submit-label="openForm.submitLabel"
-          @saved="saved" @cancel="drawerOpen = false"
-        />
-        <KeyForm
-          v-else-if="openForm && ownForm === 'key'" :key="formKey" :form-id="`platform-${resource.id}`" :api-key="selectedKey" :client-id="null"
           @saved="saved" @cancel="drawerOpen = false"
         />
         <GenericForm
