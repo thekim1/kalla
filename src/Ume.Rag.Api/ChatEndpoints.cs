@@ -88,14 +88,20 @@ public static class ChatEndpoints
                     return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
                         (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Usage = usage.Take() });
                 }
-                ValueTask EnqueueUsage(bool unavailable = false)
+                ValueTask EnqueueUsage(bool unavailable = false, bool error = false)
                 {
                     var records = usage.Take();
-                    return (records.Count > 0 || unavailable) && service.Assistant(parsed.Model) is { } assistant
+                    return (records.Count > 0 || unavailable || error) && service.Assistant(parsed.Model) is { } assistant
                         ? writer.EnqueueAsync(ChatTurn.UsageOnlyOf(assistant.Id, assistant.DepartmentId, who.Client.Id, assistant.Classification, usage.Started, records)
-                            with { Unavailable = unavailable })
+                            with { Unavailable = unavailable, Error = error })
                         : ValueTask.CompletedTask;
                 }
+                // B-48 (§8.3, §12): a stream that a disconnect or a timeout ended (cancelled), or a failure broke off (error), is
+                // recorded as any turn: the user's message, the answer with its outcome, the usage (the aborted answer at its
+                // prompt estimate) and the day's Cancelled or Errors, in the writer's one transaction.
+                ValueTask EnqueueAborted(ChatPlan plan, string outcome, IReadOnlyList<PromptSource> cited) =>
+                    writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, plan.Prompt?.EstimatedTokens ?? 0, 0,
+                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Outcome = outcome, Usage = usage.Take() });
                 UmeAnswer? Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited)
                 {
                     if (parsed.Ume is not { } asked)
@@ -131,12 +137,18 @@ public static class ChatEndpoints
                     return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
                         parsed.Ume is null ? null : cited => Ume(plan, cited)!,
                         followUps > 0 ? (cited, delivered, token) => service.FollowUpsAsync(plan, parsed.Question, followUps, delivered, cited, token) : null,
-                        () => EnqueueUsage());
+                        (outcome, cited) => EnqueueAborted(plan, outcome, cited));
                 }
                 catch (ChatException refused) when (refused.Unavailable)
                 {
                     // §3.6 (B-44): an unusable key or a spent budget: the turn's outcome is unavailable, counted in the day's totals.
                     await EnqueueUsage(unavailable: true);
+                    throw;
+                }
+                catch (ChatException failed) when (failed.Status >= 500)
+                {
+                    // B-48: a turn that ends in error after the user's message was accepted counts in the day's Errors.
+                    await EnqueueUsage(error: true);
                     throw;
                 }
                 catch (Exception) when (usage.HasRecords)

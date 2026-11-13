@@ -20,6 +20,9 @@ public sealed class ChatException(int status, string code, string message, strin
 
     /// <summary>The assistant's key is unusable or its budget is spent (§3.6): the turn's outcome is <c>unavailable</c>, counted in the totals.</summary>
     public bool Unavailable { get; init; }
+
+    /// <summary>The stream's idle or total timeout ended the answer (§8.3): the turn is recorded as <c>cancelled</c>, not <c>error</c> (B-48).</summary>
+    public bool TimedOut { get; init; }
 }
 
 /// <summary>One message of the client's conversation as plain text (content parts concatenated).</summary>
