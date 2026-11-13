@@ -95,6 +95,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         secret.ShouldStartWith("ume-rag-sk-");
         body.GetProperty("key").GetProperty("prefix").GetString().ShouldBe(secret[..15]);
         body.GetProperty("key").GetProperty("status").GetString().ShouldBe("active");
+        body.GetProperty("key").GetProperty("clientName").GetString().ShouldBe("Integration " + code);
 
         await using (var db = TestPostgres.Context(database.Connection(null)))
         {
@@ -108,7 +109,10 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
             audit.Details!.ShouldNotContain(stored.KeyHash);
         }
 
-        (await admin.GetFromJsonAsync<JsonElement[]>($"/api/keys?clientId={client}", Ct))!.ShouldHaveSingleItem().TryGetProperty("secret", out _).ShouldBeFalse();
+        var listed = (await admin.GetFromJsonAsync<JsonElement[]>($"/api/keys?clientId={client}", Ct))!.ShouldHaveSingleItem();
+        listed.TryGetProperty("secret", out _).ShouldBeFalse();
+        listed.GetProperty("clientName").GetString().ShouldBe("Integration " + code); // the Keys page's client column
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/keys/{id}", Ct)).GetProperty("clientName").GetString().ShouldBe("Integration " + code);
         using (var cleared = await admin.PutAsJsonAsync($"/api/keys/{id}", new { name = "Bygglov-portalen", scopes = new { collectionIds = Array.Empty<Guid>() } }, Ct))
         {
             cleared.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -151,6 +155,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         body.GetProperty("previous").GetProperty("status").GetString().ShouldBe("in-grace-period");
         var replacement = body.GetProperty("key").GetProperty("id").GetGuid();
         body.GetProperty("previous").GetProperty("rotatedToKeyId").GetGuid().ShouldBe(replacement);
+        body.GetProperty("key").GetProperty("clientName").GetString().ShouldBe("Integration " + code);
 
         using (var again = await admin.PostAsJsonAsync($"/api/keys/{id}/rotate", new { }, Ct))
         {
@@ -159,7 +164,9 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         }
 
         using var revoked = await admin.PostAsync($"/api/keys/{replacement}/revoke", null, Ct);
-        (await Json(revoked)).GetProperty("status").GetString().ShouldBe("revoked");
+        var revokedBody = await Json(revoked);
+        revokedBody.GetProperty("status").GetString().ShouldBe("revoked");
+        revokedBody.GetProperty("clientName").GetString().ShouldBe("Integration " + code);
 
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "key" && (a.EntityId == id.ToString() || a.EntityId == replacement.ToString()))

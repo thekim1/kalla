@@ -1348,6 +1348,62 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
   edit (the umea.se Sitevision preset first): no proposals, so only editing and **Restore**.
 - Gateway models: a **Check embedding canary** button (`POST /api/gateway/canary-check`, processing §11) shows each active profile's similarity, pass or fail and time; on opening, the page shows the last check from `GET /api/gateway/canary-check` and calls nothing that reaches the gateway. It is the only way the canary runs.
 - The same concurrency (`version`), error codes, audit and accessibility rules apply.
+- Clients and keys left the generic forms (§5.9, user 2026-11-13). Every generic form shows the row's `id` with a copy
+  button, a schema `enum` as a select, and a `date-time` field as a date and time input.
+
+### 5.9 Clients and keys (user, 2026-11-13)
+
+Connecting an app took two generic forms, free-text kinds and levels, a client GUID nobody could see and a JSON scope
+object (session 34 review). Clients get a page of their own, and keys are made from their client.
+
+**Page `/plattform/clients`** (platform admins; it replaces the generic resource `clients` and keeps its place in the
+Platform index). The list shows name, kind (its label), information class, enabled and the number of active keys.
+**Add client** opens a drawer in three steps:
+
+1. **Kind**, as cards with one sentence each (`PLATFORM_CLIENTS.kinds` in `labels.ts`). `open-webui`, `integration`
+   and `internal` can be picked; `widget`, `own-client`, `teams`, `mcp-client` and `entra-app` show "Later" and are
+   disabled (P2).
+2. **Fields for that kind** only:
+
+   | Field | Control | Shown for |
+   |---|---|---|
+   | Name | text | all |
+   | Information class (`classificationCeiling`) | select `public`/`internal`/`sensitive`; default `internal` for `open-webui`, `sensitive` for `internal`, `public` for `integration` | all |
+   | Stores chat history | switch; disabled with the reason at `sensitive` (`StoresHistory ⇒ ceiling ≠ sensitive`); default on for `open-webui` | `open-webui`, `integration` |
+   | Feedback kept (days) (`clientRetentionDays`) | number, default 90 | `open-webui` |
+   | OAuth client ID | text, with the hint "the `azp` of the app's tokens" | `internal`, `integration` |
+   | Portal URL | URL | `open-webui` |
+   | Enabled | switch, default on | all |
+
+   `toolPolicy` is not shown (P2): the server's default stays. `allowedOrigins` waits for `widget`.
+3. **First key**: "Create a key now" (on by default) with the key's name (default "<client name> key"). Created with
+   the client in one transaction. The result shows the secret once with a copy button and the client's id with a copy
+   button; for `open-webui` also the two stack lines `UME_RAG_OPENWEBUI_API_KEY=<secret>` and
+   `UME_RAG_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
+   stack is updated.
+
+**A client's drawer** has the facts (id with copy, kind, created/updated), the edit form of step 2 (the kind is fixed
+after creation), **Keys** (this client's keys: name, prefix, status, expiry; **Rotate**, **Reveal**, **Revoke** and
+**New key** in place) and **Used by** (the assistants whose audience includes it, linked to their pages; "No assistant
+yet: add this client under an assistant's *Who can use it*" when there is none).
+
+**Key form** (`KeyForm.vue`, in the client's drawer and on the Keys page): name, description, team (a picker of the
+organisation's teams, optional), **Limit to assistants** and **Limit to knowledge bases** (multi-selects; hint "Empty:
+everything this client's audience allows"), expiry (a date; empty never expires), allowed IP ranges (one per line),
+requests per minute (with the hint of §5.8). On the Keys page a new key first picks its client from a select; the list
+gains a client column.
+
+**API** (contract for the page):
+- `ClientRequest`'s `kind`, `classificationCeiling` and `toolPolicy` carry their allowed values as `enum` in the OpenAPI
+  document.
+- A client with `storesHistory` at `sensitive` answers `400` with a field error on `storesHistory` ("A client that keeps
+  chat history cannot be sensitive.") before the database check.
+- `POST /api/clients` takes an optional `firstKey: { name, teamId? }` and answers `201` with
+  `ClientCreatedDto { client: ClientDto, key: KeyCreatedDto | null }`; client, key and both audit rows are one
+  transaction.
+- `GET /api/clients` (`ClientSummary`) adds `activeKeys` (int). `GET /api/clients/{id}` (`ClientDto`) adds
+  `assistants: [{ id, name, departmentId, published }]` (the assistants with a `client` audience row for it).
+- `GET /api/keys` keeps its `clientId` filter; `KeyDto` adds `clientName`.
 
 ## 6. Pipelines
 

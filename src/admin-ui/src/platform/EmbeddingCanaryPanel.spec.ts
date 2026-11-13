@@ -71,7 +71,7 @@ describe('Gateway models: embedding canary on demand (admin design §4.5, §5.8)
   it('is not shown on other platform pages', async () => {
     setActivePinia(createPinia())
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json([]))))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'clients' }, attachTo: document.body })
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'data-protection' }, attachTo: document.body })
     await flushPromises()
     expect(wrapper.find('[data-test="embedding-canary"]').exists()).toBe(false)
     wrapper.unmount()

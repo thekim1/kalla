@@ -1,6 +1,6 @@
 import type { NavItem } from '@/router/nav'
 import { PAGE } from '@/utils/labels'
-import { platformResources } from './resources'
+import { platformEntries } from './resources'
 
 export const platformNavItems: NavItem[] = [
   {
@@ -9,12 +9,8 @@ export const platformNavItems: NavItem[] = [
     icon: 'settings',
     description: PAGE.platform.description,
     keywords: ['clients', 'keys', 'settings', 'data protection', 'site profiles', 'models', 'templates', 'member groups', 'sharing'],
-    sections: platformResources.map((r) => ({
-      label: r.label,
-      to: { name: 'platform-resource', params: { resource: r.id } },
-      keywords: r.keywords ? [...r.keywords] : undefined,
-    })),
-    children: ['platform-resource'],
+    sections: platformEntries.map((e) => ({ label: e.label, to: e.to, keywords: e.keywords ? [...e.keywords] : undefined })),
+    children: ['platform-clients', 'platform-resource'],
     roles: ['rag-platform-admin'],
   },
 ]

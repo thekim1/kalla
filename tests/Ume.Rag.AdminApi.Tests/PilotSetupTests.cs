@@ -120,7 +120,7 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
         // 2. The Open WebUI client and its key (secret shown once).
         var client = await Ok(await admin.PostAsJsonAsync("/api/clients", new { name = "Open WebUI " + code, kind = ClientKinds.OpenWebUi, classificationCeiling = "internal" }, Ct),
             HttpStatusCode.Created);
-        var clientId = client.GetProperty("id").GetGuid();
+        var clientId = client.GetProperty("client").GetProperty("id").GetGuid();
         var key = await Ok(await admin.PostAsJsonAsync("/api/keys", new { clientId, name = "Open WebUI" }, Ct), HttpStatusCode.Created);
         key.GetProperty("secret").GetString()!.ShouldStartWith("ume-rag-sk-");
 

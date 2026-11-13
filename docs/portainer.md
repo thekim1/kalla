@@ -93,8 +93,9 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Platform → Gateway models* shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models; the
    embedding canary passes under *Embedding profiles* on the same page.
-7. **Open WebUI:** in Ume.Rag's admin, *Platform → Clients*, a new client of kind `open-webui`. Set its key and id and update
-   the stack (it recreates `rag-api` and `rag-openwebui`, whose settings changed):
+7. **Open WebUI:** in Ume.Rag's admin, *Platform → Clients → Add client*, type *Open WebUI*, with *Create a key now* on.
+   The last step shows the two lines below with one copy button; paste them into the stack's variables and update it
+   (it recreates `rag-api` and `rag-openwebui`, whose settings changed):
 
    ```text
    UME_RAG_OPENWEBUI_API_KEY=<the client's key>

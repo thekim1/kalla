@@ -48,6 +48,29 @@ describe('generic form schema (admin design §5.8, §6.3)', () => {
     expect(fromInput(name!, '')).toBeUndefined()
     expect(() => fromInput(scopes!, '{nope')).toThrow('json')
   })
+
+  it('makes a nullable enum a select without a null option, and a date-time a date and time input that round-trips as ISO (§5.8)', () => {
+    const schema = {
+      properties: {
+        mode: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/Mode' }] },
+        policy: { type: ['null', 'string'], enum: ['none', 'read', null] },
+        expiresAt: { type: ['null', 'string'], format: 'date-time' },
+      },
+    }
+    const withMode = { ...doc, components: { schemas: { ...doc.components.schemas, Mode: { type: 'string', enum: ['RevokeImmediately', 'Grace24Hours'] } } } }
+    const [mode, policy, expiresAt] = fieldsOf(withMode, schema)
+    expect([mode!.kind, mode!.nullable, mode!.options]).toEqual(['select', true, ['RevokeImmediately', 'Grace24Hours']])
+    expect([policy!.kind, policy!.nullable, policy!.options]).toEqual(['select', true, ['none', 'read']])
+    expect(fromInput(policy!, '')).toBeNull()
+
+    expect(expiresAt!.kind).toBe('datetime')
+    const input = toInput(expiresAt!, '2026-12-31T22:59:59Z')
+    expect(input).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
+    expect(fromInput(expiresAt!, input)).toBe('2026-12-31T22:59:59.000Z')
+    expect(fromInput(expiresAt!, '')).toBeNull()
+    expect(toInput(expiresAt!, null)).toBe('')
+    expect(() => fromInput(expiresAt!, 'tomorrow')).toThrow('date')
+  })
 })
 
 describe('fieldLabel', () => {

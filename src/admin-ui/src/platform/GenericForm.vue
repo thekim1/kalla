@@ -77,7 +77,7 @@ function collect(): Record<string, unknown> | null {
       else if (field.required) problems[field.name] = PLATFORM.form.required
     } catch (e) {
       if (!(e instanceof InputError)) throw e
-      problems[field.name] = e.message === 'json' ? PLATFORM.form.invalidJson : PLATFORM.form.invalidNumber
+      problems[field.name] = { json: PLATFORM.form.invalidJson, date: PLATFORM.form.invalidDate }[e.message] ?? PLATFORM.form.invalidNumber
     }
   }
   for (const parent of new Set(props.fields.flatMap((f) => (f.parent ? [f.parent] : [])))) {
@@ -132,6 +132,10 @@ async function save(): Promise<void> {
       <TextAreaField
         v-else-if="field.kind === 'json' || field.kind === 'list'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
         :hint="hint(field)" :error="form.errors[field.name]" :rows="field.kind === 'json' ? 8 : 3" mono
+      />
+      <TextField
+        v-else-if="field.kind === 'datetime'" :id="idOf(field.name)" v-model="values[field.name] as string" type="datetime-local" :label="field.label" :hint="field.help"
+        :disabled="readOnly.includes(field.name)" :error="form.errors[field.name]"
       />
       <TextField
         v-else :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.help" :disabled="readOnly.includes(field.name)"

@@ -58,7 +58,7 @@ builder.Services.AddSingleton<IAdminSessionStore, PostgresAdminSessionStore>();
 builder.Services.AddSingleton<AccessDeniedThrottle>();
 builder.Services.AddSingleton<AdminClientAddresses>();
 // The OpenAPI document and Scalar (admin design §4.1, copied): in P1 also the action UI for platform objects without a page.
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(o => o.AddClientSchemas());
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ConfigLockMetrics>();
 builder.Services.AddScoped<AdminContext>();

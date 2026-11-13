@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { api } from '@/api'
 import { request } from '@/api/client'
-import type { GatewayModel } from '@/api/types'
+import type { ApiKey, GatewayModel } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -10,18 +10,20 @@ import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
-import { useCopy } from '@/composables/useCopy'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import CopyValue from './CopyValue.vue'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
 import GatewayContextPanel from './GatewayContextPanel.vue'
 import PromptTextsPanel from './PromptTextsPanel.vue'
+import SecretOnce from './SecretOnce.vue'
 import GenericForm from './GenericForm.vue'
+import KeyForm from './KeyForm.vue'
 import { withModelFields } from './modelFields'
 import { gatewayAdminUrl, gatewayLink, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
@@ -29,7 +31,6 @@ import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocum
 // A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions.
 const props = defineProps<{ resource: string }>()
 const ui = useUiStore()
-const { copy } = useCopy()
 const resource = computed(() => resourceById(props.resource))
 const rows = useLoadable<Row[]>([])
 const adminUrl = ref<string | null>(null)
@@ -60,7 +61,18 @@ const details = computed(() => (selected.value && resource.value?.details ? reso
 const showDetails = computed(() => details.value.length > 0 && (!editable(selected.value!) || openForm.value?.operation === resource.value!.update))
 const drawerTitle = computed(() => openForm.value?.title ?? (selected.value && resource.value ? rowTitle(selected.value) : resource.value?.label ?? ''))
 const gatewayHref = computed(() => (adminUrl.value && resource.value?.gatewayPage ? gatewayLink(adminUrl.value, resource.value.gatewayPage) : null))
-const ownForm = computed(() => (selected.value && openForm.value?.operation === resource.value?.update ? resource.value?.form?.(selected.value) : undefined))
+// A row's edit or a create can have a form of its own; an action's form is always the generic one.
+const ownForm = computed(() => {
+  const r = resource.value
+  const form = openForm.value
+  if (!r?.form || !form) return undefined
+  if (form.operation === r.update && selected.value) return r.form(selected.value)
+  return form.operation === r.create ? r.form(null) : undefined
+})
+// Every generic drawer shows the row's id with a copy button (admin design §5.8).
+const rowId = computed(() => (typeof selected.value?.id === 'string' ? selected.value.id : null))
+// The Keys page's rows are keys (`KeyDto`).
+const selectedKey = computed(() => selected.value as unknown as ApiKey | null)
 
 async function load(): Promise<void> {
   if (!resource.value) return
@@ -201,15 +213,15 @@ watch(() => props.resource, () => {
     </AsyncState>
 
     <UiDrawer v-model:open="drawerOpen" :title="drawerTitle" wide>
-      <div v-if="secret" class="grid gap-3" data-test="secret">
-        <p class="font-medium">{{ PLATFORM.form.secretOnce }}</p>
-        <code class="break-all rounded-card bg-sunken p-3 font-mono">{{ secret }}</code>
-        <div class="flex gap-2">
-          <UiButton icon="content_copy" @click="copy(secret)">{{ PLATFORM.form.copy }}</UiButton>
-          <UiButton variant="quiet" @click="drawerOpen = false">{{ COMMON.close }}</UiButton>
-        </div>
+      <div v-if="secret" class="grid gap-3">
+        <SecretOnce :secret="secret" />
+        <div><UiButton variant="quiet" @click="drawerOpen = false">{{ COMMON.close }}</UiButton></div>
       </div>
       <template v-else>
+        <div v-if="rowId" class="mb-6 grid gap-1" data-test="row-id">
+          <span class="text-caption text-fg-3">{{ PLATFORM.form.id }}</span>
+          <CopyValue :value="rowId" />
+        </div>
         <p v-if="opening">{{ COMMON.loading }}</p>
         <InlineError v-if="openError" :message="problemMessage(openError)" class="mb-4" />
         <template v-if="showDetails">
@@ -232,6 +244,10 @@ watch(() => props.resource, () => {
         </div>
         <CrawlSettingsForm
           v-if="openForm && ownForm === 'crawl-settings'" :key="formKey" :initial="openForm.initial" :url="openForm.url" :submit-label="openForm.submitLabel"
+          @saved="saved" @cancel="drawerOpen = false"
+        />
+        <KeyForm
+          v-else-if="openForm && ownForm === 'key'" :key="formKey" :form-id="`platform-${resource.id}`" :api-key="selectedKey" :client-id="null"
           @saved="saved" @cancel="drawerOpen = false"
         />
         <GenericForm

@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from 'vue-router'
 import { http } from '@/api/client'
 import type { GatewayContextInfo, OrgSyncStatus } from '@/api/types'
 import { formatNumber } from '@/utils/format'
@@ -71,10 +72,20 @@ export interface PlatformResource {
   actions?: RowAction[]
   /** Panels shown above the list, in order. */
   panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
-  /** A row whose edit is a form of its own instead of the generic one. */
-  form?: (row: Row) => 'crawl-settings' | undefined
+  /** A form of its own instead of the generic one, for a row's edit or (`null`) a create. */
+  form?: (row: Row | null) => 'crawl-settings' | 'key' | undefined
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
   modelFields?: (row: Row) => readonly ModelField[] | undefined
+}
+
+/** An entry of the Platform objects page and its search sections: a generic resource or a page of its own. */
+export interface PlatformEntry {
+  id: string
+  label: string
+  description: string
+  keywords?: readonly string[]
+  icon: string
+  to: RouteLocationRaw
 }
 
 export function urlOf(path: string, row: Row | null, key: string): string {
@@ -149,22 +160,6 @@ const L = PLATFORM.resources
 
 export const platformResources: PlatformResource[] = [
   {
-    id: 'clients',
-    ...L.clients,
-    icon: 'apps',
-    list: '/api/clients',
-    key: 'id',
-    columns: [
-      { key: 'name', label: PLATFORM.columns.name },
-      { key: 'kind', label: PLATFORM.columns.kind },
-      { key: 'classificationCeiling', label: PLATFORM.columns.ceiling },
-      { key: 'isEnabled', label: PLATFORM.columns.enabled },
-    ],
-    create: { method: 'post', path: '/api/clients' },
-    update: { method: 'put', path: '/api/clients/{id}' },
-    load: (row) => http.get<Row>(urlOf('/api/clients/{id}', row, 'id')),
-  },
-  {
     id: 'keys',
     ...L.keys,
     icon: 'key',
@@ -172,14 +167,15 @@ export const platformResources: PlatformResource[] = [
     key: 'id',
     columns: [
       { key: 'name', label: PLATFORM.columns.name },
+      { key: 'clientName', label: PLATFORM.columns.client },
       { key: 'prefix', label: PLATFORM.columns.prefix },
       { key: 'status', label: PLATFORM.columns.status },
       { key: 'expiresAt', label: PLATFORM.columns.expiresAt },
     ],
     create: { method: 'post', path: '/api/keys' },
     update: { method: 'put', path: '/api/keys/{id}' },
-    // The key's scopes are flat on the row; the update request takes them as one object.
-    load: async (row) => ({ ...row, scopes: { assistantIds: row.assistantIds ?? [], collectionIds: row.collectionIds ?? [] } }),
+    // Pickers for the client, team and scopes instead of a JSON scope object (admin design §5.9).
+    form: () => 'key',
     actions: [
       { id: 'rotate', label: PLATFORM.actions.rotate, method: 'post', path: '/api/keys/{id}/rotate' },
       { id: 'reveal', label: PLATFORM.actions.reveal, method: 'post', path: '/api/keys/{id}/reveal' },
@@ -195,7 +191,7 @@ export const platformResources: PlatformResource[] = [
     update: { method: 'put', path: '/api/settings/{section}' },
     load: (row) => http.get<Row>(`/api/settings/${String(row.section)}`),
     // The crawl section's host politeness is a table with a drawer per host, not JSON (admin design §5.8).
-    form: (row) => (row.section === 'crawl' ? 'crawl-settings' : undefined),
+    form: (row) => (row?.section === 'crawl' ? 'crawl-settings' : undefined),
     modelFields: (row) => SETTINGS_MODEL_FIELDS[row.section as (typeof SETTINGS_SECTIONS)[number]],
     // The platform's prompt texts (chat design §7.3): the whole frame in order, saved into the chat section's prompts.
     panels: ['prompt-texts'],
@@ -308,6 +304,14 @@ export const platformResources: PlatformResource[] = [
     },
     gatewayPage: { path: '/organisation', label: PLATFORM.organisation.gatewayLink },
   },
+]
+
+/** Clients have a page of their own (admin design §5.9) and keep their place first in the list. */
+export const platformEntries: PlatformEntry[] = [
+  { id: 'clients', ...L.clients, icon: 'apps', to: { name: 'platform-clients' } },
+  ...platformResources.map((r) => ({
+    id: r.id, label: r.label, description: r.description, keywords: r.keywords, icon: r.icon, to: { name: 'platform-resource', params: { resource: r.id } },
+  })),
 ]
 
 /** Settings have no list endpoint: one row per section of `config."Settings"` (admin design §4.8). */

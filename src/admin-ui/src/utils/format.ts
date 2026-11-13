@@ -156,6 +156,17 @@ export function toIsoDate(value: Date): string {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
+/**
+ * `YYYY-MM-DDTHH:mm:ss` in the browser's time zone, the value of `<input type="datetime-local">` (its first ten
+ * characters fit `type="date"`); empty for a missing or invalid instant. `new Date(value)` reads it back as local time.
+ */
+export function toLocalInput(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  if (!date) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 export function startOfMonthIso(now: Date = new Date()): string {
   return `${toIsoDate(now).slice(0, 8)}01`
 }
