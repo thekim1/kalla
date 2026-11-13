@@ -1,9 +1,9 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `a8da614` plus
-this file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`; a **dry run of 0.5.0 passed** from `be37df0`).
-Earlier sessions are in the git history (`git log -- HANDOVER.md`). Repo `~/research/rag` on this machine
-(`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
+State of the Ume.Rag work for the next session. Rewritten 2026-11-13, end of session 32 (`main` at `b26d877` plus
+this file; **last release `v0.4.0`**, published 2026-11-12 from `714a58f`; **a dry run of 0.5.0 passed from
+`a49c848`**, run 43387199025). Earlier sessions are in the git history (`git log -- HANDOVER.md`). Repo
+`~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit).
 
 ## What this is
@@ -24,117 +24,117 @@ sink" monolith. Design and code live in this repo.
 5. **`plans/cases/support-assistant/`**: the first case plan (internal support assistant, DoIT).
 6. Not binding: `plans/platform/upload-quality-review.md` (upload gaps U1–U7, decisions still to take).
 
-## Start here
+## Start here: a look at CI (user, 2026-11-13)
 
-**Stream a's queue is empty apart from live checks and A-40.** All of gateway phases 1–3 and cost attribution are
-built on both streams; what remains is live checks on the interim gateway and small follow-ups:
+The user wants the next session to **take a quick look at the GitHub Actions workflows and see whether they can run
+faster or less often**. It's a review first: propose, and change only what the user agrees to. The binding rules today
+are repo-and-deployment §8.2 (lean pull requests) and the *Lean CI* preference below; `docs/ci-runner.md` has the
+runner notes.
 
-**1. A-40** (the worker's `rag.embed.tokens` and `rag.ingestion.cost`, engine §17): the next stream-a code item, waits
-on nothing. Then point the runbook's cost section at it.
+**What runs now** (`.github/workflows/`, all on the two self-hosted runners `ume-rag` and `ume-rag2`, which share one
+Docker daemon and one user home):
 
-**2. GitHub:**
-- **#642** (stream b): the read-back's reason in no view, the shared-key note on every key, and the missing
-  `messages.ts` texts for `gateway.key_unavailable`/`delegation_not_applied` (and `budget_exhausted` blaming "the
-  platform's budget"). If stream b says the reason belongs on the platform's *Gateway models* view, that's
-  stream a's `platform/**`.
-- **#580**: the gateway owner was asked whether the request list gets a `runId` filter (gateway-changes §7.1 now
-  describes v0.10.1 as built).
-- **#645**: the flaky renderer test, now filed (twice in CI, both with another job on the Docker host).
-- Review stream b's new PRs (it merges its own); its queue now has B-42–B-46 waiting only on live checks.
+| Workflow | When | Jobs | Typical time |
+|---|---|---|---|
+| `verify.yml` | every non-draft PR; dispatch; called by release | `changes`, `ownership`, `doc-refs`; then by path: `backend` (builds the Postgres and ClamAV images, `dotnet build` + `dotnet test --solution` without Flaky and EvaluationSmoke), `evaluation-smoke`, `admin-ui`, `deploy-checks`, `images`, `renderer` | median 7 min per PR, max 34; `backend` 6–7 min on every code PR |
+| `parser.yml` | PRs (its own path filter), dispatch, called by release | `changes`, `parser`, `parser-image`, `contract` | usually skipped (0.2 min), 3.4 when it runs |
+| `release.yml` | tag push; dispatch = dry run | `verify` + `parser` (called), `build` (images, SBOM, bundle, smoke test in a local registry), `e2e` (optional), `publish` | about 17 min |
+| `e2e.yml` | dispatch or called by release when ticked | the browser tests (9 tests, ~10 min) | by hand only |
+| `audit.yml` | nightly 04:17 and dispatch | `dotnet`, `admin-ui`, `parser` vulnerability audits | — |
+| `evaluation.yml`, `perf.yml`, `entra.yml` | dispatch (entra also on its paths) | evaluation on a real gateway, capacity runs, Entra plan/apply | rarely |
 
-**3. The live block, once the user has the interim gateway on v0.10.1:** A-34, A-35 (a real read-back) and every
-B-35–B-46 live check. **The V39 rule** (a published assistant's key can't be cleared once `act-as-key` is on) is
-built (#618 review) but the user hasn't confirmed it: ask again.
+**Observations from session 32, to start from (not yet verified as the best fix):**
+- **`backend` runs on docs-only and deploy-only PRs.** The `changes` filter's `code` output is "anything besides
+  `plans/`, `platforms/` and root `*.md`", so a PR that changes only `docs/**` (#641: 6 min) or only `deploy/**` +
+  `docs/**` (#643) runs the full 6–7 minute backend build and test. `docs/**` and most of `deploy/**` build nothing
+  the backend tests read. Check what does read them first (the doc-refs check, `deploy/postgres/*.sql` in the
+  integration tests, the release bundle) before narrowing the filter.
+- **`backend` builds the Postgres and ClamAV images on every run** before the tests, even when `images/` is
+  unchanged. Look at whether the tests need fresh images or could reuse a tagged one (layer cache, or build only on
+  change).
+- **`dotnet test --solution` runs every test project** for any code change: a worker-only PR also runs the API,
+  AdminApi, Answering, integration and contract tests. Per-project selection by path is possible but risky (shared
+  Infrastructure: the API's `sql-shapes.json` covers Infrastructure statements, see *Lessons*); weigh it against the
+  6–7 minutes.
+- **Both runners share one Docker daemon**: a PR's backend run and another's container tests compete, and the flaky
+  renderer test (#645) failed both times with another job on the host. The open proposal (*Waiting on the user*:
+  one runner per Docker host, or release on GitHub-hosted runners) belongs to this review.
+- `evaluation-smoke` (about 1 min) runs whenever the worker, retrieval, answering, API, infrastructure, pipelines or
+  domain change, which is most code PRs.
+- Stream b's PRs are the bulk of the runs (it splits items into parts and pushes several fixes per PR). Draft PRs
+  skip everything; pushing as draft until ready is one lever that costs no workflow change.
+- How to measure: `gh run list --workflow verify.yml --limit 30 --json …` and `gh run view <id> --json jobs` give job
+  start and end times; session 32's numbers above came from the last 30 runs.
 
-**4. Before the next release (0.5.0):** the dry run passed from `be37df0`, but much landed since (B-39–B-48, A-32–A-39,
-the content retention migration). Run the dry run again and the full CI set; the upgrade guide says **rolling update:
-no** and names `UME_RAG_GATEWAY_INTEGRATION_API_URL` and `usage.read`. The CHANGELOG is current through #643.
+## Then
+
+**1. GitHub:**
+- **#642** (stream b): the read-back's reason is in no view, the shared-key note shows on every key, and `messages.ts`
+  lacks texts for `gateway.key_unavailable`/`gateway.delegation_not_applied` (and `gateway.budget_exhausted` still
+  blames "the platform's budget"). If stream b says the reason belongs on the platform's *Gateway models* view, that
+  is stream a's `platform/**`.
+- **#580**: the gateway owner was asked whether the gateway's request list gets a `runId` filter (gateway-changes
+  §7.1 describes v0.10.1 as built). Keep #580 open until the live checks pass.
+- **#645**: the flaky renderer test (twice in CI, both with another job on the Docker host).
+- Review stream b's new PRs (it merges its own); its open queue is B-42–B-46's live checks.
+
+**2. Stream a's queue is empty** apart from live checks: A-34 (worker as the knowledge base's key) and A-35 (a real
+read-back) both wait on the interim gateway.
+
+**3. The V39 rule needs the user's confirmation:** once the gateway acts as keys, a published assistant's key can't be
+cleared (#618 review, built). Ask.
+
+**4. Before tagging 0.5.0:** the dry run passed from `a49c848`; only A-40 (#646, worker metrics) landed after it. The
+upgrade guide says **rolling update: no** (`DailyTotalsWithoutCost`), and names `UME_RAG_GATEWAY_INTEGRATION_API_URL`
+and the `usage.read` scope. The CHANGELOG is current through #643 (#646 needs a line).
 
 **Waiting on the user:**
-- **The interim gateway (J10) on v0.10.1** (not v0.10.0: #86 makes a refusal of an assigned key always `403`), with the integration *Ume.Rag* and three credential keys (`rag-api`,
-  `rag-admin` with `organisation.read`, `rag-worker` capped at `OnPrem`+`Eu`). **It is needed now:** B-35 is merged,
-  so the organisation, keys and model syncs read only `/v1/ume/context` and `/v1/models`, which v0.9.x doesn't have.
-  Every live check of B-35–B-46, A-31, A-34 and A-35 waits on it. Gateway setup: `docs/production-setup.md` *Gateway
-  credential keys*.
-- **Local user secrets** (see *Environment notes*): the AppHost refuses `Gateway:Keys:Eu`, and since #599 also
-  `ClamAv:Enabled` (use `ClamAv:Mode`).
+- **The interim gateway (J10) on v0.10.1** (#86: a refusal of an assigned key is always `403`), with the integration
+  *Ume.Rag* and three credential keys (`rag-api`, `rag-admin` with `organisation.read` and `usage.read`, `rag-worker`
+  capped at `OnPrem`+`Eu`). Every live check of B-35–B-46, A-31, A-34 and A-35 waits on it. Gateway setup:
+  `docs/production-setup.md` *Gateway credential keys* and *Cost and budget read-back*.
+- **The V39 rule** above.
+- **Local user secrets** (see *Environment notes*): the AppHost refuses `Gateway:Keys:Eu` and `ClamAv:Enabled`.
+- **CI runners** (proposal, "write it down, change nothing yet"): `ume-rag` and `ume-rag2` share one Docker daemon and
+  one user home. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners. Part of the CI review.
 - **Upload gaps** from `upload-quality-review.md`. Suggested: picture descriptions (U1, needs a decision entry) and
   rerank on (U4, when the gold set shows a gain), then `.msg`/`.eml` (U2), a contextual-header trial (U5) and a
   near-duplicate warning (U6).
 - **Ask-a-file workspaces** (P2): owned by teams and individuals, against "Organisation" (departments own all content).
   Answer before P2 (`plans/work/main.md` M-11).
 - **LibreOffice placement**, decided again before go-live with the parser sandbox question (Decisions "Parser").
-- **CI runners** (proposal only, user: "write it down, change nothing yet"): `ume-rag` and `ume-rag2` share one Docker
-  daemon and one user home. A: one runner per Docker host; B: `release.yml` on GitHub-hosted runners.
 - **Support-assistant proof of concept** (`plans/cases/support-assistant/07-rollout.md` §0b, P1–P8): needs the
   documents and about twenty anonymised tickets. It goes ahead of everything else once they exist.
 - The live block's inputs: gold set with DoIT, G1/DPIA, test host, U1, pilot accounts on the gateway.
 - **#511** (split the worker into libraries): only if it keeps growing in P2.
-- From the gateway owner on #580: the gateway's docs say `403` for a revoked or expired assigned key, while the code
-  answers `401` (Ume.Rag follows the code). Not built and not asked for: a platform-wide cap on acted requests, the
-  Graph group lookup, tenant and guest refusal.
 
 **Stream b** (remote, GitHub only) has its own main session (design PRs on `main-session/` branches, decisions in
-`plans/decisions.md`). It works fast (B-35 parts 2–3 and B-36 in one evening), splits items into parts, and also takes
-stream-a paths on `a/` branches when the user asks. It announces its work on the issue (#580). B-42 and B-47 are merged (B-42 unticked until
-its live check); open: B-43 (#618), B-39 (#625); next B-40, B-41, B-44–B-46, B-48.
+`plans/decisions.md`). It works fast (B-39–B-46 and B-48 in one night), splits items into parts, answers review
+findings with PRs rather than comments, and takes stream-a paths on `a/` branches when the user asks. It announces its
+work on #580. All of B-35–B-48 is merged; B-42–B-46 are unticked until their live checks.
 
-## Done in session 32 (2026-11-12 night)
+## Done in session 32 (2026-11-12 evening to 2026-11-13 morning)
 
-- **Gateway v0.10.1** checked in the gateway's code and put in the design (`5b0526f`): refusals of the assigned key are
-  `403`; a `401` is the credential key's. Nine documents and the queues' live checks updated; stream b asked on #580.
-- **Reviewed #616, #617, #618** (agent, findings verified in the code): no high; two medium (one key's refusal opens
-  the query-embedding circuit for all; clearing a published assistant's key bypasses publish-needs-a-key) and three
-  low. Design settled in `4fba45d`; code to stream b on #580 and #618.
-- **A-34 #621** (agent): every worker job's calls as the knowledge base's key; a refused key waits until the next full
-  hour, then `failed` with the reason; a missing echo is fatal with 5011. Unticked until the live check.
-- **A-38 #623** (agent, checked in the browser on a FakeGateway stack): the gateway's limits read-only and its version
-  and features on *Gateway models*.
-- **A-39 #626** (agent): `content.rag_retention_content_step`, the age rules of data-model §8 for rows without blobs,
-  run nightly by the worker's maintenance. CI caught a missing line in the API's `sql-shapes.json` (see *Lessons*).
-- **B-38 part 2's deviations** settled in chat §8.3 and §17 (`be37df0`); the cancelled turn kept and queued as B-48.
-- **Docs and changelog:** #620 (the five migrations since 0.4.0 in the upgrade guide, rolling update no;
-  `fake-no-cost`, `CachedInputTokens`), #622 (CHANGELOG through #621).
-- **Issues:** #535, #604, #606 closed (the last two with a correction: the upgrade guide hadn't named their
-  migrations); #619 and #624 filed for stream b.
-- **Release dry run `0.5.0-dryrun`** (run 43318830850): green, smoke test with every phase including scan off.
-- **Later the same night:** stream b built B-39–B-46 and B-48 and fixed every review finding (#629 v0.10.1, #631
-  query embedding, #618's two); session 32 reviewed #625 and #627 (no blocking findings), merged #640 (#635's gateway
-  link fallback), A-32 #641 (the cost runbook), A-35 #643 (`UME_RAG_GATEWAY_INTEGRATION_API_URL`, the firewall, the
-  runbook's refusals, the `admin-console` client in production setup; unticked for its live check), CHANGELOG #644;
-  queued A-40; filed #642 and #645.
-
-## Done in session 31 (2026-11-12, evening)
-
-- **#535, the malware scan is optional** (user's three calls: a separate `unscanned` state, health Healthy with
-  "malware scan off", no re-scan when it is turned on):
-  - **M-13** (`fe64205`): Decisions "Malware scan optional", the designs, B-47, A-36 and A-37 queued.
-  - **B-47 part 1 #599** (main session, stream b's paths): `UploadStates.Unscanned`, `Uploads.ScannedAt` (migration
-    `UploadScannedAt`), event 5106, the AppHost's `ClamAv:Mode`. README #600.
-  - **A-36 #602:** the worker reads `ClamAv:Mode`; `unscanned` slots, `ScannedAt`, `malwareScan: "off"` in the run
-    report. Outside Development a worker with the scan on and no `ClamAv:Host` refuses to start.
-  - **A-37 #601:** the Compose profile `clamav`, `init-deployment.sh --clamav on|off`, `components/clamav`, Portainer,
-    docs. An existing deployment must re-run `init-deployment.sh` (upgrade guide).
-- **Cost attribution stage 1, code:**
-  - **B-38** (taken from stream b with its agreement on #580): part 1 #608 (the usage tables, the shared reader and
-    estimate in `src/Ume.Rag.Infrastructure/Gateway/GatewayUsage.cs`, usage from the rerankers and the query
-    embedder, the FakeGateway's cost), part 2 #615 (the chat turn's usage per step, `AssistantDailyUsage` written
-    with the turn, the totals without tokens and cost, the metrics).
-  - **A-31 #613:** every worker model call's tokens and cost per knowledge base, `RunItems.CostUsd`, `x-ume-run-id`.
-    Its deviations are in engine §10.6 and §11 (`6d326a8`).
-- **Gateway phase 1, stream a's side:** A-30 part 2 #611 (the Data API is gone from the deployment and docs; the
-  Portainer stack regenerated at gateway `v0.10.0` with the grants it lacked), A-33 #609 (member groups read-only in
-  the platform UI, with a link to the gateway).
-- **Stream b merged:** B-35 parts 2 and 3 (#605, #607), B-36 (#610, #612).
-- **CHANGELOG:** #598 (through #597), #603 (the malware scan).
+- **Gateway v0.10.1** checked in the gateway's code and put in the design (`5b0526f`): a refusal of the assigned key
+  is `403`; a `401` is the credential key's. Stream b fixed the code (#629).
+- **Reviews of stream b** (agents, findings verified in the code): #616/#617/#618 (two medium, three low; design
+  settled in `4fba45d`; stream b fixed all in #618, #631), #625 and #627 (no blocking findings).
+- **Stream a, merged:** A-34 #621 (the worker as the knowledge base's key), A-38 #623 (the gateway's limits and
+  version in the platform UI, checked in the browser), A-39 #626 (`content.rag_retention_content_step`), #640 (the
+  gateway links' fallback, #635), A-32 #641 (the cost runbook), A-35 #643 (`UME_RAG_GATEWAY_INTEGRATION_API_URL`, the
+  firewall, the runbook's refusals, `admin-console` in production setup; #630), A-40 #646 (`rag.embed.tokens`,
+  `rag.ingestion.cost`). A-34 and A-35 stay unticked for their live checks.
+- **Design:** B-38's deviations settled (`be37df0`), B-48 queued and built by stream b; V39 refuses clearing a
+  published assistant's key; the query-embedding cache per acting key; gateway-changes §7.1 as built.
+- **Docs and changelog:** #620 (upgrade guide's migrations, rolling update no), #622 and #644 (CHANGELOG through #643).
+- **Issues:** closed #535, #604, #606, #630, #635 (stream b closed #619, #624); filed #619, #624, #642, #645.
+- **Two release dry runs**, both green, the second from `a49c848` with the content retention migration and A-35.
 
 ## Open
 
-- **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until phases 2–3 are
-  built (phase 1 is done on both streams).
-- **A flaky test to watch:** `RenderTests.The_real_renderer_waits_for_the_quiet_rule_after_the_ready_selector_holds_text`
-  failed once in CI (#613's first backend run: `Transient` instead of `Content`), with another PR's job on the same
-  runner; it passed on the re-run and locally. File it if it comes back.
+- **#513** stays open until its items close; **#550** until stream b acknowledges; **#580** until the live checks of
+  phases 2–3 pass.
+- **#645**, the flaky renderer test.
 - The live block (M-4), in the roadmap's order.
 
 ## Local stack (this machine)

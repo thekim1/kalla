@@ -561,7 +561,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** data-model §8, §9, §4.4; the chat step in migrations `ChatRetentionStep` and `DailyUsage`; ADR 016 in the
   gateway's `docs/adr.md`.
 
-### [ ] A-40 The worker's model-call metrics: `rag.embed.tokens` and `rag.ingestion.cost` (engine §17)
+### [x] A-40 (#646) The worker's model-call metrics: `rag.embed.tokens` and `rag.ingestion.cost` (engine §17)
 - **Do:** the worker records `rag.embed.tokens` (counter, the input tokens of every embedding call) and
   `rag.ingestion.cost` (counter, USD, tag `class`, with `source` = `gateway` | `estimate` as `rag.chat.cost` has it)
   from the usage it already reads for `CollectionDailyUsage` (A-31), once per answered call, in the meter the worker
