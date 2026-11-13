@@ -27,6 +27,7 @@ import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import CostCard from '@/components/costs/CostCard.vue'
+import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -385,6 +386,7 @@ onMounted(load)
         <UiBadge :label="LEVEL_LABEL[assistant.data.value.classification]" />
         <UiBadge v-if="assistant.data.value.publishedVersion" tone="ok" :label="ASSISTANT.publishedVersion(assistant.data.value.publishedVersion)" data-test="published" />
         <UiBadge v-if="archived" tone="warn" :label="ASSISTANT.archived" data-test="archived" />
+        <KeyUnavailableBadge :gateway-key-id="assistant.data.value.gatewayKeyId" :department-id="assistant.data.value.departmentId" />
         <UiBadge
           v-if="assistant.data.value.generalKnowledge && assistant.data.value.generalKnowledge !== 'off'" :label="ASSISTANT.generalKnowledgeBadge"
           data-test="general-knowledge-badge"

@@ -284,6 +284,12 @@ public static class AdminErrorCodes
     /// <summary>A cost report's period beyond 400 days by day or 36 months by month (admin design §8.6).</summary>
     public static AdminErrorCode PeriodTooLong { get; } = new("period_too_long", 400, "The period is too long: at most 400 days by day, or 36 months by month.");
 
+    /// <summary>The test panel's turn met an unusable gateway key (chat §3.6, B-44); <c>{reason}</c> is chat's message.</summary>
+    public static AdminErrorCode TestAssistantUnavailable { get; } = new("test_assistant_unavailable", 503, "{reason}");
+
+    /// <summary>The test panel's turn met a spent budget (chat §3.6, B-44); <c>{reason}</c> is the gateway's message, which names the scope.</summary>
+    public static AdminErrorCode TestBudgetExceeded { get; } = new("test_budget_exceeded", 402, "{reason}");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -293,5 +299,5 @@ public static class AdminErrorCodes
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
-            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong];
+            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded];
 }

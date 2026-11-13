@@ -656,6 +656,25 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: 0,0012 USD (estimated)')
     })
 
+    it('the test panel shows chat\'s reason when the assistant\'s key is unusable or its budget spent (B-44)', async () => {
+      signIn(['rag-editor'])
+      mocks()
+      for (const [code, reason] of [
+        ['test_assistant_unavailable', 'The assistant is unavailable: its gateway key is disabled.'],
+        ['test_budget_exceeded', 'The department\'s budget (USD 1000 per month) is used up. Ask the department\'s administrator to raise it.'],
+      ] as const) {
+        vi.spyOn(api.assistants, 'test').mockRejectedValueOnce(new ApiError(503, 'POST', { status: 503, code, params: { reason } }))
+        const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+        await flushPromises()
+        await button(wrapper, 'Test').trigger('click')
+        await wrapper.get('#assistant-question').setValue('Hej?')
+        await wrapper.get('form').trigger('submit')
+        await flushPromises()
+        expect(wrapper.text()).toContain(reason)
+        wrapper.unmount()
+      }
+    })
+
     it('the test panel shows no length notice for a complete answer, and the provider\'s default when no limit was sent', async () => {
       signIn(['rag-editor'])
       mocks()
