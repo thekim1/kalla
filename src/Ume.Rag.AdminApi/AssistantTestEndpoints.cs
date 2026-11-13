@@ -161,9 +161,12 @@ public sealed partial class AdminTestPanel(
         }
     }
 
-    /// <summary>The registry's <c>admin-console</c> row of kind <c>internal</c> (identity §4.1), or null when there is none.</summary>
+    /// <summary>
+    /// The registry's <c>admin-console</c> row of kind <c>internal</c> (identity §4.1), or null when there is none. Names are not
+    /// unique, so with two such rows the oldest (lowest version-7 id) is taken, the same on every call (#625 review).
+    /// </summary>
     private static ClientEntry? AdminConsoleRow(PolicySnapshot snapshot) =>
-        snapshot.Clients.Values.FirstOrDefault(c => c.Name == ClientName && c.Kind == Domain.Entities.ClientKinds.Internal);
+        snapshot.Clients.Values.Where(c => c.Name == ClientName && c.Kind == Domain.Entities.ClientKinds.Internal).OrderBy(c => c.Id).FirstOrDefault();
 
     /// <summary>
     /// Upserts <paramref name="records"/> into <c>chat."AssistantDailyUsage"</c> under the assistant and the <c>admin-console</c>

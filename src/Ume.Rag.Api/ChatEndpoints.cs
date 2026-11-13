@@ -88,11 +88,12 @@ public static class ChatEndpoints
                     return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
                         (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Usage = usage.Take() });
                 }
-                ValueTask EnqueueUsage()
+                ValueTask EnqueueUsage(bool unavailable = false)
                 {
                     var records = usage.Take();
-                    return records.Count > 0 && service.Assistant(parsed.Model) is { } assistant
-                        ? writer.EnqueueAsync(ChatTurn.UsageOnlyOf(assistant.Id, assistant.DepartmentId, who.Client.Id, assistant.Classification, usage.Started, records))
+                    return (records.Count > 0 || unavailable) && service.Assistant(parsed.Model) is { } assistant
+                        ? writer.EnqueueAsync(ChatTurn.UsageOnlyOf(assistant.Id, assistant.DepartmentId, who.Client.Id, assistant.Classification, usage.Started, records)
+                            with { Unavailable = unavailable })
                         : ValueTask.CompletedTask;
                 }
                 UmeAnswer? Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited)
@@ -130,7 +131,13 @@ public static class ChatEndpoints
                     return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
                         parsed.Ume is null ? null : cited => Ume(plan, cited)!,
                         followUps > 0 ? (cited, delivered, token) => service.FollowUpsAsync(plan, parsed.Question, followUps, delivered, cited, token) : null,
-                        EnqueueUsage);
+                        () => EnqueueUsage());
+                }
+                catch (ChatException refused) when (refused.Unavailable)
+                {
+                    // §3.6 (B-44): an unusable key or a spent budget: the turn's outcome is unavailable, counted in the day's totals.
+                    await EnqueueUsage(unavailable: true);
+                    throw;
                 }
                 catch (Exception) when (usage.HasRecords)
                 {

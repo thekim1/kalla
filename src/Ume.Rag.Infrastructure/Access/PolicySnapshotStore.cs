@@ -30,7 +30,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
     public static IReadOnlySet<string> EntityTypes { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         "Clients", "Assistants", "AssistantVersions", "AssistantAudiences", "Collections", "Sources", "EmbeddingProfiles",
-        "DataProtectionPolicies", "Departments", "Settings",
+        "DataProtectionPolicies", "Departments", "Settings", "GatewayModels", "GatewayKeys",
     };
 
     private PolicySnapshot _current = PolicySnapshot.Empty;
@@ -190,6 +190,11 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             }
         }, cancellationToken);
 
+        // The keys mirror (chat design §3.6, step 7: an assistant whose key is missing or unusable answers before any model call).
+        var keys = new Dictionary<Guid, GatewayKeyEntry>();
+        await ReadAsync(connection, transaction, """SELECT "Id", "Status", "OwnerActive", "Usable" FROM config."GatewayKeys" """,
+            r => keys[r.GetGuid(0)] = new GatewayKeyEntry(r.GetGuid(0), r.GetString(1), r.GetBoolean(2), r.GetBoolean(3)), cancellationToken);
+
         string? retrieval = null;
         string? chat = null;
         string[] trustedProxies = [];
@@ -204,6 +209,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             TrustedProxies = [.. NetworkRanges.ParseValid(trustedProxies)],
             ModelLimits = limits,
             ModelPrices = prices,
+            GatewayKeys = keys,
         };
     }
 

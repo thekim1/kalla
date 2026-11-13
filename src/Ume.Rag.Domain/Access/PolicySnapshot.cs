@@ -60,6 +60,28 @@ public sealed record ModelLimitsEntry(int? ContextWindow, int? MaxOutputTokens);
 /// </summary>
 public sealed record ModelPricesEntry(decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd);
 
+/// <summary>
+/// A row of the gateway keys mirror (<c>config."GatewayKeys"</c>, data-model §2.1) as chat's step 7 needs it (chat design §3.6):
+/// its status, whether its owner is active and whether the gateway calls it usable.
+/// </summary>
+public sealed record GatewayKeyEntry(Guid Id, string Status, bool OwnerActive, bool Usable)
+{
+    /// <summary>
+    /// Why the key cannot be used now, as the admin's V39 (only <c>Active</c> is usable): <c>disabled</c>, <c>expired</c>,
+    /// <c>revoked</c>, <c>not_active</c> (another status), <c>owner_inactive</c> or <c>unusable</c> (no residency in common); null when usable.
+    /// </summary>
+    public string? UnusableReason => Status switch
+    {
+        "Active" when !OwnerActive => "owner_inactive",
+        "Active" when !Usable => "unusable",
+        "Active" => null,
+        "Disabled" => "disabled",
+        "Expired" => "expired",
+        "Revoked" => "revoked",
+        _ => "not_active",
+    };
+}
+
 /// <summary>A level's data-protection policy fields the policy needs (identity §4.3 step 9).</summary>
 public sealed record LevelPolicyEntry(string Classification, IReadOnlyList<string> AllowedHistoryModes, bool ClientsWithoutHistoryOnly);
 
@@ -103,6 +125,9 @@ public sealed record PolicySnapshot(
 
     /// <summary>The known limits of the mirror's models by name; a model without any is absent (chat design §6.3).</summary>
     public IReadOnlyDictionary<string, ModelLimitsEntry> ModelLimits { get; init; } = new Dictionary<string, ModelLimitsEntry>(StringComparer.Ordinal);
+
+    /// <summary>The gateway keys mirror by id (chat design §3.6, step 7); a key missing here is unusable.</summary>
+    public IReadOnlyDictionary<Guid, GatewayKeyEntry> GatewayKeys { get; init; } = new Dictionary<Guid, GatewayKeyEntry>();
 
     /// <summary>The known prices of the mirror's models by name; a model without any is absent (chat design §8.3).</summary>
     public IReadOnlyDictionary<string, ModelPricesEntry> ModelPrices { get; init; } = new Dictionary<string, ModelPricesEntry>(StringComparer.Ordinal);

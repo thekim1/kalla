@@ -485,7 +485,7 @@ onMounted(load)
                                          ASSISTANT.maxTokensSources[result.gateway.maxTokensSource] ?? result.gateway.maxTokensSource) }}
             </p>
             <p class="text-small text-fg-3" data-test="test-cost">
-              {{ ASSISTANT.testCost(formatDecimal(result.gateway.costUsd, 4, 4), result.gateway.costEstimated) }}
+              {{ ASSISTANT.testCost(result.gateway.costUsd > 0 && result.gateway.costUsd < 0.00005 ? ASSISTANT.costBelow(formatDecimal(0.0001, 4, 4)) : formatDecimal(result.gateway.costUsd, 4, 4), result.gateway.costEstimated) }}
             </p>
             <p v-if="result.gateway.finishReason === 'length'" role="status" class="mt-2 font-medium text-warn" data-test="length-stopped">
               {{ ASSISTANT.lengthStopped }}
