@@ -70,3 +70,17 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Mind:** the open deploy-configuration proposal (#662, on its branch): its C4 makes Open WebUI's client deployment-managed (the wizard's Open WebUI block goes then), its C1
   gives `UME_RAG_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
 - **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.
+
+### [ ] M-17 Deploy configuration: settings, automatic setup and the gateway (user, 2026-11-13; #662)
+- **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their
+  order, one PR per step, each step's paths, done-when and stream as listed there. Decided: Decisions "Deploy
+  configuration", "Residency per level", "Role groups as a setting". C0–C6, C8–C10 and C13 need nothing more; C7 waits
+  on llmgateway#87 (G1), C11 on #90 (G5), C12 on #89 (G4), each released and pinned.
+- **Mind:** M-16 (another session) builds the Apps and Settings pages: C4 removes the wizard's Open WebUI type and makes
+  its client "Managed by the deployment"; C5's create form goes on the Models page and C10's role groups on the
+  Settings page (§5.10). Main updates identity §4.7 (C9), §5.2 (C4) and repo-and-deployment §6 before the step that
+  changes them.
+- **Done when:** C0–C13 merged (C7, C11, C12 once their gateway release exists); a fresh Portainer stack boots with the
+  proposal's §2 "Net effect" (six values, no pasted keys once G1 is pinned), checked by C0's release boot test.
+- **Waits on:** nothing for C0; the gateway releases for C7, C11, C12.
+- **Read:** the proposal; Decisions above; docs/portainer.md; deploy/portainer/.
