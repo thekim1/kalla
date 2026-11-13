@@ -2,11 +2,12 @@
 import { onMounted, ref } from 'vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { PLATFORM } from '@/utils/labels'
-import { gatewayContext, type GatewayContext } from './resources'
+import type { GatewayContextInfo } from '@/api/types'
+import { gatewayContext } from './resources'
 
 // The gateway's version and features from its last context (admin design §4.10); nothing until the sync has read one.
 const G = PLATFORM.gatewayModels
-const context = ref<GatewayContext | null>(null)
+const context = ref<GatewayContextInfo | null>(null)
 
 onMounted(async () => {
   context.value = await gatewayContext()

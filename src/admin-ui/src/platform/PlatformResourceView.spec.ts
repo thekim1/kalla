@@ -63,7 +63,10 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
   })
 
   it('links the gateway\'s Organisation page in a new tab when the sync knows the gateway\'s admin URL (admin design §2.3)', async () => {
-    const { wrapper } = mountOrganisation({ gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] } })
+    const { wrapper } = mountOrganisation({
+      gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] },
+      adminUrl: 'https://gateway-admin.example.invalid/',
+    })
     await flushPromises()
 
     const link = wrapper.get('[data-test="gateway-page"]')
@@ -75,9 +78,22 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
     wrapper.unmount()
   })
 
+  it('links the configured fallback when the gateway\'s context has no admin URL (Admin:GatewayAdminUrl, #635)', async () => {
+    const { wrapper } = mountOrganisation({
+      gateway: { version: '0.10.0', adminUrl: null, features: [] },
+      adminUrl: 'https://gateway-fallback.example.invalid',
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="gateway-page"]').attributes('href')).toBe('https://gateway-fallback.example.invalid/organisation')
+    wrapper.unmount()
+  })
+
   it('shows no gateway link when the admin URL is unknown or not an http(s) address, or the sync status cannot be read', async () => {
-    const notALink = { gateway: { version: '0.10.0', adminUrl: 'javascript:alert(1)', features: [] } }
-    for (const status of [{ gateway: { version: '0.10.0', adminUrl: null, features: [] } }, { gateway: null }, notALink]) {
+    const notALink = { gateway: { version: '0.10.0', adminUrl: 'javascript:alert(1)', features: [] }, adminUrl: 'javascript:alert(1)' }
+    // A context's admin URL alone no longer links: the status's adminUrl is the one the links use.
+    const contextOnly = { gateway: { version: '0.10.0', adminUrl: 'https://gateway-admin.example.invalid/', features: [] }, adminUrl: null }
+    for (const status of [{ gateway: { version: '0.10.0', adminUrl: null, features: [] }, adminUrl: null }, { gateway: null, adminUrl: null }, notALink, contextOnly]) {
       const { wrapper } = mountOrganisation(status)
       await flushPromises()
       expect(wrapper.find('tbody tr').exists()).toBe(true)
