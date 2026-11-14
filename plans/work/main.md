@@ -75,8 +75,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Status (2026-11-14):** steps 1–8 built: #668, #669, #671, #672, #673 (step 6, before 5), #675, #676 (step 7 for Chat,
   Search and Processing's schedules) and step 8 in the PR that says so, with #670 (rag-api records a key's last use, which
   nothing wrote before), and Personal data's flag rules as a table (the PR that says so). Left: Open WebUI's block and *Managed by the
-  deployment* once M-17's C4 lands; `Settings.Identity.RoleGroups` as a Settings section once C10 lands; #677 (Processing's
-  concurrency is not read).
+  deployment* once M-17's C4 lands. The Role groups section came with C10 (#693); #677 was M-18 (#686).
 
 ### [ ] M-17 Deploy configuration: settings, automatic setup and the gateway (user, 2026-11-13; #662)
 - **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their
@@ -93,7 +92,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   proposal's §2 "Net effect" (six values, no pasted keys once G1 is pinned), checked by C0's release boot test.
 - **Waits on:** nothing for C0; the gateway releases for C7, C11, C12.
 - **Read:** the proposal; Decisions above; docs/portainer.md; deploy/portainer/.
-- **Status (2026-11-14):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
+- **Status (2026-11-15):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
   repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
   M-16 session), C4 (#684; the upgrade note for hand-made Open WebUI clients is in `docs/upgrade-guide.md`'s
   *Unreleased*), C5 (the PR that says so: `POST /api/embedding-profiles`, *Create profile* on *Models*, the Home card;
@@ -101,8 +100,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   mints the feedback key with a session token signed with Open WebUI's secret, as the spike on #667 found;
   `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `_PASSWORD_AUTH` and `openwebui-feedback-key.sh` gone; #689), C8 (#690: profile
   `proxy`, `rag-proxy` nginx with the operator's certificate from `UME_RAG_PROXY_CERTS_DIR`, a host directory by the
-  user's choice), C9 (the PR that says so: each service's ceiling is its credential key's residencies from the context,
-  `OnPrem` before the first one; `Gateway:MaxResidency` gone). The M-16 session continues with the next steps in order and announces each on #667.
+  user's choice; upstream re-resolution #692), C9 (#691: each service's ceiling is its credential key's residencies from
+  the context, `OnPrem` before the first one; `Gateway:MaxResidency` gone), C10 (#693: `Settings.Identity.RoleGroups`,
+  *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass). Left: C7, C11 and
+  C12 on the gateway's releases (#580), and C13. The M-16 session continues with the next steps in order and announces each on #667.
 
 ### [x] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
 - **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the

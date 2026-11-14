@@ -57,7 +57,7 @@ sink" monolith. Design and code live in this repo.
 
 ## Next
 
-0. **Review #694** (successor to #513): #695 (#713), #699 (#714) merged; #704 done by main (#717, decided 2026-11-15: no shared caches on a tag release now, a separate-user `release` runner before go-live). **Approved, waiting for merge:** #715 (#698), #716 (#701), #691 (C9, fix verified), #693 (C10; its design — identity's group table, admin §5.10, data-model §2.1 — is main's after merge). Next from the M-16 session: #702. #712 item 8 (`admin-console` seeded) is decided (identity §4.1). The gateway answered #87–#90 on #580; the proposal's C7/C11/C12 rows follow it.
+0. **Review #694** (successor to #513): merged #713 (#695), #714 (#699), #715 (#698), #716 (#701); #704 done by main (#717). **M-17:** C9 (#691) and C10 (#693) merged on 2026-11-15, their design on `main`; left C7, C11, C12 (gateway releases, plan follows #580) and C13. Next from the M-16 session: #702. #712 item 8 decided (`admin-console` seeded, identity §4.1).
 
 1. GitHub: review M-17's PRs as they come (security-relevant parts), answer #667 and #580.
 2. The 0.6.0 release when the user asks (checklist above).
