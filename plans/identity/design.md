@@ -539,17 +539,23 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 | `internal` | `Eu` |
 | `sensitive` | `OnPrem` |
 
-The deployment knob **`Gateway:MaxResidency`** (api and admin; unset by default) caps the ladder: every call's ceiling is
-`min(ForLevel(level), cap)`, for chat (and its condense call) and the admin's V8 `/v1/models` check and test panel. It
-implements register M2 (every model call EU-hosted until on-prem hardware exists): the pilot sets `Eu`, so a `public`
-assistant is checked and answered at `Eu`. It only lowers a ceiling, and is unset (or `External`) once External routes
-exist. The worker's ceilings never exceed `Eu`. A call whose ceiling is above the service's maximum is refused before
-sending (admin `gateway_key_missing`, admin design §4.6 V8).
+**The gateway sets each service's maximum** (Decisions "Residency per level"; M-17 C9): the highest of its credential
+key's `allowed_residencies` in its own `GET /v1/ume/context` (an empty list allows every residency, `External`; a list
+with no value Ume.Rag knows gives `OnPrem`), lowered to the service's fixed maximum (the worker's `Eu`). There is no
+residency knob in Ume.Rag's configuration. Every call's ceiling is `min(ForLevel(level), maximum)`: chat (and its
+condense call), the admin's V8 `/v1/models` check, model pickers and test panel, and the worker's evaluation. Register
+M2 (every model call EU-hosted until on-prem hardware exists) is set on the keys in the gateway: the api's and admin's
+allow `OnPrem` and `Eu`, so a `public` assistant is checked and answered at `Eu`; once External routes exist the keys
+allow `External` too. Before the first context answer the maximum is `OnPrem` (fail closed), and a call made then waits
+up to 10 s for one shared context read rather than running at `OnPrem` right after a start. The context is read again
+every 5 minutes, so a key narrowed in the gateway applies here within that time (the gateway enforces it at once). A
+call whose ceiling is above the service's maximum is refused before sending (admin `gateway_key_missing`, admin design
+§4.6 V8).
 
 **Keys.** From the gateway's integration phase 1 (gateway design §5.1, §13.4) each service holds **one credential key**
 of the integration *Ume.Rag* (`rag-api`, `rag-admin`, `rag-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
-and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow every
-residency the platform uses; the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
+and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow the
+residencies their assistants may use, which is their ceiling (above); the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
 whole organisation in the context, §2.1) and, from phase 3, `usage.read`.
 
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
@@ -571,7 +577,7 @@ residencies **intersected with the credential key's** (decided by user, 2026-11-
 built in thekim1/llmgateway#84, feature `credential-residencies`). An older gateway instance during a rolling update
 does not apply the bound, which is one more reason the ceiling header goes on every call. Each service's credential key is therefore capped at the highest level that service serves: the worker's at
 `Eu` (it never sends `External`), rag-api's and rag-admin's at the highest level their assistants may use (`Eu`
-while `Gateway:MaxResidency` is `Eu`). The
+while register M2 holds). The
 handler below stays required on every gateway client and tested at every call site.
 
 A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
@@ -696,7 +702,8 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   feedback routes and feedback creation (prefix match).
 - Open WebUI settings required for user trust: `ENABLE_LOGIN_FORM=false` and `ENABLE_SIGNUP=false` (only OIDC
   login; `backend/open_webui/config.py:1692-1694`), `ENABLE_PASSWORD_AUTH=false` (the form setting only hides the
-  form and does not block API password sign-in; on only while the service account's key is minted),
+  form and does not block API password sign-in; always off, since the deployment's setup job mints the service
+  account's key without it, chat design §14.2),
   `DEFAULT_USER_ROLE=user` (with the default `pending` and no person as admin, no OIDC account could chat), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
   `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2570`),
   `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/login/callback` (`:2629`; the `oidc` provider registers only

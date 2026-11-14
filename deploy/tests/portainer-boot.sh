@@ -14,7 +14,8 @@
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
 #   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
-#   - the TLS proxy (M-17 C8): each of the five host names answers through rag-proxy with the test's certificate
+#   - the TLS proxy (M-17 C8): each of the five host names answers through rag-proxy with the test's certificate,
+#     and it still reaches rag-api after rag-api is recreated on another address (its resolver)
 #   - Open WebUI: /health = 200 on its published port; password sign-in refused; rag-openwebui-setup completed and the
 #     feedback key it minted (M-17 C6) answers the feedback list (200), is refused elsewhere (403), and is the file rag-api
 #     reads
@@ -118,6 +119,7 @@ cleanup() {
     echo "Kept: docker compose -p $project -f $stack --env-file $example --env-file $work/test.env ..."
     return
   fi
+  docker rm -f "$project-placeholder" >/dev/null 2>&1 || true
   dc down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -246,6 +248,22 @@ rag-admin.boot.test / rag-admin
 chat.boot.test /health Open WebUI
 CHECKS
 ok "rag-proxy answers each of the five host names with the operator's certificate (verified upstream TLS)"
+# A stack update recreates services while rag-proxy keeps running. Docker gives a new container the lowest free address,
+# so a placeholder takes rag-api's address first, and the recreated rag-api must still be reached by name (the proxy's
+# resolver, not an address kept from its start).
+api_net="${project}_rag-edge"
+api_ip() { docker inspect -f "{{(index .NetworkSettings.Networks \"$api_net\").IPAddress}}" "$(dc ps -q rag-api)"; }
+old_ip="$(api_ip)"
+dc rm -sf rag-api >/dev/null 2>&1 || fail "could not remove rag-api"
+docker run -d --rm --name "$project-placeholder" --network "$api_net" --entrypoint sleep \
+  "$(docker inspect -f '{{.Config.Image}}' "$(dc ps -q rag-proxy)")" 600 >/dev/null || fail "could not start the placeholder"
+dc up -d --no-deps --wait --wait-timeout "$wait_timeout" rag-api >/dev/null 2>&1 || fail "rag-api did not come back healthy"
+new_ip="$(api_ip)"
+docker rm -f "$project-placeholder" >/dev/null 2>&1 || true
+[ "$new_ip" != "$old_ip" ] || fail "rag-api came back on its old address $old_ip; the check below would prove nothing"
+wait_for 30 reached rag.boot.test /health/ready \
+  || fail "rag-proxy: rag-api recreated at $new_ip (was $old_ip), https://rag.boot.test/health/ready answered $(through rag.boot.test /health/ready)"
+ok "rag-proxy follows a recreated rag-api to its new address ($old_ip → $new_ip) without a restart"
 
 echo "== Open WebUI"
 owui() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$openwebui_port/health")" = 200 ]; }
