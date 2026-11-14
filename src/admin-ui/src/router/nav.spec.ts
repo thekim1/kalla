@@ -55,7 +55,8 @@ describe('search', () => {
       await router.push(from!)
       expect(router.currentRoute.value.fullPath).toBe(to)
     }
-  })
+    // Each navigation loads the page's code: longer than the default 5 s under a full parallel run.
+  }, 30_000)
 
   it('lists only pages without a query', () => {
     expect(filterEntries(entries, '').map((e) => e.id)).toEqual([
