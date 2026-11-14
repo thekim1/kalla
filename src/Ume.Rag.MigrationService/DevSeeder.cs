@@ -10,8 +10,8 @@ namespace Ume.Rag.MigrationService;
 /// The development seeder (data-model §10), run after the migrations when <c>Seed:Enabled</c> is true (the AppHost sets
 /// it in run mode only). Insert-if-absent, so it is safe on every start. Seeds the development embedding profile with the
 /// fixed id of data-model §3.2: 1024 dimensions (FakeGateway's <c>bge-m3</c>), ceiling <c>Eu</c> as the pilot's EU-hosted
-/// profile (P1 README §1, §8 O1), its canary text and its partial HNSW index. The pilot profile comes from
-/// <see cref="EmbeddingProfileSeeder"/>; the admin API records each profile's canary embedding from the gateway.
+/// profile (P1 README §1, §8 O1), its canary text and its partial HNSW index. A deployment's profile is created by a platform
+/// admin in the admin UI (Decisions "Deploy configuration"); the admin API records each profile's canary embedding.
 /// </summary>
 public static class DevSeeder
 {
@@ -40,14 +40,14 @@ public static class DevSeeder
                 CanaryText = EmbeddingCanaryText.Default,
                 IsDefault = !await db.EmbeddingProfiles.AnyAsync(p => p.IsDefault, cancellationToken),
                 UpdatedAt = clock.GetUtcNow(),
-                UpdatedBy = EmbeddingProfileSeeder.Actor,
+                UpdatedBy = SettingsSeeder.Actor,
             };
             db.EmbeddingProfiles.Add(profile);
             await db.SaveChangesAsync(cancellationToken);
         }
 
         // A profile seeded before item 13 gets its canary text now; the admin API records the canary embedding.
-        await EmbeddingProfileSeeder.EnsureCanaryTextAndIndexAsync(db, profile, clock, cancellationToken);
+        await EnsureCanaryTextAndIndexAsync(db, profile, clock, cancellationToken);
 
         // Identity §4.1's pilot row: the admin test panel's usage is written under it (admin §4.9, B-39). Insert-if-absent by name and kind.
         if (!await db.Clients.AnyAsync(c => c.Name == AdminConsoleClientName && c.Kind == ClientKinds.Internal, cancellationToken))
@@ -58,10 +58,24 @@ public static class DevSeeder
                 Kind = ClientKinds.Internal,
                 ClassificationCeiling = Classification.Sensitive,
                 UpdatedAt = clock.GetUtcNow(),
-                UpdatedBy = EmbeddingProfileSeeder.Actor,
+                UpdatedBy = SettingsSeeder.Actor,
             });
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    /// <summary>Sets the canary text when the profile has none, and creates the profile's partial HNSW index once.</summary>
+    private static async Task EnsureCanaryTextAndIndexAsync(RagDbContext db, EmbeddingProfile profile, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (profile.CanaryText is null)
+        {
+            profile.CanaryText = EmbeddingCanaryText.Default;
+            profile.UpdatedAt = clock.GetUtcNow();
+            profile.UpdatedBy = SettingsSeeder.Actor;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await db.Database.ExecuteSqlAsync($"SELECT content.rag_ensure_profile_index({profile.Id}, {profile.Dimensions})", cancellationToken);
     }
 
     /// <summary>The admin test panel's client (identity §4.1: kind <c>internal</c>, ceiling <c>sensitive</c>, no history).</summary>

@@ -32,7 +32,23 @@ const schema = {
     version: { type: 'string' },
   },
 }
-const doc = { paths: { '/api/embedding-profiles/{id}': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
+const createSchema = {
+  required: ['gatewayModel'],
+  properties: {
+    name: { type: ['null', 'string'] },
+    gatewayModel: { type: 'string', maxLength: 200 },
+    requestDimensions: { type: 'boolean' },
+    dimensions: { type: ['null', 'integer', 'string'] },
+    maxInputTokens: { type: ['null', 'integer', 'string'] },
+    maxResidency: { type: ['null', 'string'] },
+  },
+}
+const doc = {
+  paths: {
+    '/api/embedding-profiles/{id}': { put: { requestBody: { content: { 'application/json': { schema } } } } },
+    '/api/embedding-profiles': { post: { requestBody: { content: { 'application/json': { schema: createSchema } } } } },
+  },
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': `application/${status >= 400 ? 'problem+' : ''}json` } })
@@ -44,11 +60,12 @@ afterEach(() => {
   document.cookie = 'RAG-XSRF-TOKEN=; Max-Age=0; path=/'
 })
 
-function stub(answers: { test?: unknown; put?: () => Response } = {}) {
+function stub(answers: { test?: unknown; put?: () => Response; post?: () => Response; list?: unknown[] } = {}) {
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/openapi/v1.json') return Promise.resolve(json(doc))
     if (url === '/api/gateway/models') return Promise.resolve(json(models))
-    if (url === '/api/embedding-profiles') return Promise.resolve(json(profiles))
+    if (url === '/api/embedding-profiles' && init?.method === 'POST') return Promise.resolve(answers.post ? answers.post() : json(profiles[0], 201))
+    if (url === '/api/embedding-profiles') return Promise.resolve(json(answers.list ?? profiles))
     if (url.endsWith('/test')) return Promise.resolve(json(answers.test))
     if (init?.method === 'PUT') return Promise.resolve(answers.put ? answers.put() : json(profiles[0]))
     return Promise.resolve(json([]))
@@ -163,6 +180,58 @@ describe('Gateway models: embedding profiles editable before use (admin design Â
     q<HTMLFormElement>('form#embedding-profile')!.dispatchEvent(new Event('submit'))
     await flushPromises()
     expect(document.body.textContent).toContain(ERROR_MESSAGES.profile_in_use!.replace('{profile}', 'used'))
+    wrapper.unmount()
+  })
+
+  it('creates a profile from an embedding model, leaving out what the server takes from the model', async () => {
+    setActivePinia(createPinia())
+    document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+    const fetch = stub({ list: [] })
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.get('[data-test=profiles-empty]').text()).toBe(E.none)
+    await wrapper.get('[data-test=profile-create]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain(E.createLead)
+    const model = q<HTMLSelectElement>('select#embedding-profile-create-gatewayModel')!
+    expect([...model.options].map((o) => o.value)).toEqual(['text-embedding-3-large', 'bge-m3'])
+    const ceiling = q<HTMLSelectElement>('select#embedding-profile-create-maxResidency')!
+    expect([...ceiling.options].map((o) => o.value)).toEqual(['', 'OnPrem', 'Eu'])
+    expect(document.body.textContent).toContain(E.createHints.dimensions)
+    model.value = 'bge-m3'
+    model.dispatchEvent(new Event('change'))
+    q<HTMLFormElement>('form#embedding-profile-create')!.dispatchEvent(new Event('submit'))
+    await flushPromises()
+
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(post[0]).toBe('/api/embedding-profiles')
+    // Empty fields go as null: the server takes them from the model (or measures the size).
+    expect(body(post)).toEqual({ name: null, gatewayModel: 'bge-m3', requestDimensions: false, dimensions: null, maxInputTokens: null, maxResidency: null })
+    wrapper.unmount()
+  })
+
+  it('says why a create was refused when its test embedding failed', async () => {
+    setActivePinia(createPinia())
+    document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+    const test = { ok: false, dimensions: null, residency: null, error: 'model_not_allowed', detail: null }
+    stub({
+      list: [],
+      post: () => json({ title: 'Unprocessable', status: 422, code: 'profile_test_failed', params: { error: 'model_not_allowed' }, test }, 422),
+    })
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
+    await flushPromises()
+    await wrapper.get('[data-test=profile-create]').trigger('click')
+    await flushPromises()
+    const model = q<HTMLSelectElement>('select#embedding-profile-create-gatewayModel')!
+    model.value = 'text-embedding-3-large'
+    model.dispatchEvent(new Event('change'))
+    q<HTMLFormElement>('form#embedding-profile-create')!.dispatchEvent(new Event('submit'))
+    await flushPromises()
+
+    expect(q('[data-test=profile-create-result]')!.textContent).toBe(
+      embeddingTestMessage(test, { gatewayModel: 'text-embedding-3-large', dimensions: 0, maxResidency: '' }),
+    )
     wrapper.unmount()
   })
 })

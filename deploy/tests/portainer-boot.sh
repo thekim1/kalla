@@ -74,7 +74,6 @@ UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
 UME_ADMIN_HOST=llm-admin.boot.test
 UME_RAG_API_HOST=rag.boot.test
 UME_RAG_ADMIN_HOST=rag-admin.boot.test
-UME_RAG_EMBEDDING_MODEL=boot-test-embedding
 UME_RAG_OIDC_CLIENT_SECRET=boot-test-admin-client-secret
 UME_RAG_OPENWEBUI_HOST=chat.boot.test
 UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=boot-test-openwebui-client-secret

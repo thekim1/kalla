@@ -27,7 +27,7 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
         ("put", "/api/settings/worker"),
         ("put", "/api/data-protection/{level}"),
         ("post", "/api/site-profiles"), ("put", "/api/site-profiles/{id}"), ("post", "/api/site-profiles/{id}/rollback"),
-        ("put", "/api/embedding-profiles/{id}"), ("put", "/api/gateway/models/{name}"),
+        ("post", "/api/embedding-profiles"), ("put", "/api/embedding-profiles/{id}"), ("put", "/api/gateway/models/{name}"),
     ];
 
     private static async Task<JsonObject> OpenApiAsync(HttpClient admin) =>

@@ -58,11 +58,6 @@ configMapGenerator:
       # change: rag-api's public address again (Knowledge__PublicBaseUrl above), shown to a platform admin who connects
       # an app.
       - Admin__ApiPublicUrl=https://rag.example.se
-  - name: ume-rag-migrations-config
-    behavior: merge
-    literals:
-      # change: the gateway's model id of the embedding model (seeded once as the platform profile).
-      - EmbeddingProfile__GatewayModel=embedding-model
   - name: ume-rag-worker-config
     behavior: merge
     literals:

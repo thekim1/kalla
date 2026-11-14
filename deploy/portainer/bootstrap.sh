@@ -178,7 +178,6 @@ example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
 case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
-example "${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)

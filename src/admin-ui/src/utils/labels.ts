@@ -195,6 +195,9 @@ export const OVERVIEW = {
   noDepartments: 'No departments are linked to your account.',
   unknownDepartment: (code: string) => `Unknown department (code ${code})`,
   allDepartments: 'As a platform administrator you see all departments.',
+  profileTitle: 'Set up the platform',
+  profileText: 'Create the embedding profile first: it is the model that indexes the content, and no knowledge base can be created without it.',
+  profileAction: 'Create the embedding profile',
 } as const
 
 export const ORGANISATION = {
@@ -1786,7 +1789,19 @@ export const EMBEDDING_PROFILES = {
   testing: 'Testing…',
   testLead: 'Test runs one embedding with the values in the form. Nothing is saved.',
   saved: 'Embedding profile saved',
-  none: 'There is no embedding profile yet. The migration service creates it from EmbeddingProfile:* in the deployment.',
+  none: 'There is no embedding profile yet. Create one from the AI gateway’s embedding model: knowledge bases can be created only after that.',
+  create: 'Create profile',
+  createTitle: 'New embedding profile',
+  createLead:
+    'Pick one of the AI gateway’s embedding models. Empty fields come from the model. Creating runs one test embedding, which measures the size of the vectors and is kept as the profile’s canary. The first profile is the default for new knowledge bases.',
+  created: 'Embedding profile created',
+  /** The create form's hints, where a field left empty means something else than in the edit form. */
+  createHints: {
+    name: 'Empty: the model’s name.',
+    dimensions: 'Only with Send dimensions: the size the model is asked for. Otherwise the test embedding measures it.',
+    maxInputTokens: 'Empty: the model’s context window, as the AI gateway lists it.',
+    maxResidency: 'Empty: the highest residency the model runs at, at most EU.',
+  } as Record<string, string>,
 } as const
 
 /** The Settings page's Prompt texts panel (admin design §4.5; chat design §7.3; Decisions "Chat prompt texts configurable"). */

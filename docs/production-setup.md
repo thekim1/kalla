@@ -496,7 +496,7 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
 3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
-   Ume.Rag's (`UME_RAG_API_HOST`, the three `UME_RAG_*_GATEWAY_KEY`, `UME_RAG_EMBEDDING_MODEL` and
+   Ume.Rag's (`UME_RAG_API_HOST`, the three `UME_RAG_*_GATEWAY_KEY` and
    `UME_RAG_OIDC_CLIENT_SECRET`), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
    `render` for JavaScript pages). The credential keys come from the gateway once it runs: start the stack, issue the
    keys in the gateway's admin (*Gateway credential keys* above), set them, and update the stack.
@@ -512,6 +512,9 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    `deploy/openwebui-feedback-key.sh`, by hand) and set as `UME_RAG_OPENWEBUI_ADMIN_API_KEY`; `rag-bootstrap` points
    rag-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
+6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Ume.Rag's admin
+   (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 6). Until then no knowledge base
+   can be created.
 
 ## Reverse proxy and PKI
 

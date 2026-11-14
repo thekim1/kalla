@@ -4,6 +4,7 @@ import { api } from '@/api'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
+import { OVERVIEW } from '@/utils/labels'
 import OverviewView from './OverviewView.vue'
 
 function signIn(overrides: Parameters<typeof bffUser>[0]) {
@@ -20,7 +21,7 @@ describe('Overview: your access (P0 checklist #9)', () => {
       departmentCodes: ['1000', '3000'],
       departmentSources: [{ code: '1000', source: 'claim' }, { code: '3000', source: 'group' }],
     })
-    vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: true, setup: [] })
+    vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: true, setup: [], needsEmbeddingProfile: false })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([
       { id: 'd1', name: 'Bygg och miljö', costCenterCode: '1000', isActive: true, syncedAt: '2026-11-01T10:00:00Z', teams: [] },
     ])
@@ -49,6 +50,7 @@ describe('Overview: your access (P0 checklist #9)', () => {
         collectionId: 'c1', name: 'Bygglov', sources: 1, firstSyncDone: false, syncRunning: true, testQuestions: 0, evaluated: false, evaluating: false,
         published: false, assistantId: null, assistantPublished: false, available: false, done: false,
       }],
+      needsEmbeddingProfile: false,
     })
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
     await flushPromises()
@@ -58,10 +60,27 @@ describe('Overview: your access (P0 checklist #9)', () => {
     expect(wrapper.get('[data-test=step-sync]').text()).toContain('Fetching')
     expect(wrapper.get('[data-test=step-available]').attributes('data-state')).toBe('todo')
 
-    overview.mockResolvedValue({ hasCollections: false, setup: [] })
+    overview.mockResolvedValue({ hasCollections: false, setup: [], needsEmbeddingProfile: false })
     const empty = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
     await flushPromises()
     expect(empty.get('[data-test=empty]').text()).toContain('You have no knowledge bases yet.')
     expect(empty.find('[data-test=create]').exists()).toBe(true)
+  })
+
+  it('asks a platform admin to create the embedding profile until one exists, above the empty state', async () => {
+    signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: false, setup: [], needsEmbeddingProfile: true })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    const card = wrapper.get('[data-test=needs-profile]')
+    expect(card.text()).toContain(OVERVIEW.profileText)
+    expect(card.get('[data-test=create-profile]').text()).toContain(OVERVIEW.profileAction)
+    expect(wrapper.find('[data-test=empty]').exists()).toBe(true)
+
+    overview.mockResolvedValue({ hasCollections: false, setup: [], needsEmbeddingProfile: false })
+    const done = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(done.find('[data-test=needs-profile]').exists()).toBe(false)
   })
 })

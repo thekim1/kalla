@@ -1160,6 +1160,8 @@ export interface CollectionSetup {
 export interface Overview {
   hasCollections: boolean
   setup: CollectionSetup[]
+  /** A platform admin, and no active default embedding profile yet (the platform's first-run step). */
+  needsEmbeddingProfile: boolean
 }
 
 /** `GET /api/audit`: an entry of the audit log (admin design §9.1). */

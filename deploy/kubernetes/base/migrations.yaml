@@ -25,8 +25,6 @@ spec:
       containers:
         - name: rag-migrate
           image: ume-rag/migrations:latest
-          envFrom:
-            - configMapRef: {name: ume-rag-migrations-config}
           env:
             - {name: DOTNET_ENVIRONMENT, value: Production}
             - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}

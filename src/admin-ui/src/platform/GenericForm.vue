@@ -33,7 +33,12 @@ const props = withDefaults(
   }>(),
   { models: () => [], readOnly: () => [] },
 )
-const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void }>()
+const emit = defineEmits<{
+  (e: 'saved', response: unknown): void
+  (e: 'cancel'): void
+  /** The save was refused; the form shows the error itself, and a parent may say more (an embedding profile's test outcome). */
+  (e: 'failed', error: unknown, body: Record<string, unknown>): void
+}>()
 
 // Mounted per form (the parent keys it), so fields and the start values are read once.
 const idOf = (name: string) => `${props.formId}-${name}`
@@ -105,6 +110,7 @@ async function save(): Promise<void> {
     form.applyServerError(e)
     const rule = platformRuleMessage(e)
     if (rule) form.formError.value = rule
+    emit('failed', e, body)
   } finally {
     saving.value = false
   }
