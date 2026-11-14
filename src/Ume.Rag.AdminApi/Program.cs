@@ -73,7 +73,9 @@ builder.AddGatewayClient(GatewayApi.HttpClientName);
 builder.Services.AddSingleton<GatewayApi>();
 // B-45 (gateway-changes §5.6): the Integration API's read-back of a key's usage and budgets, on the gateway's Admin API.
 builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient(IntegrationApiClient.HttpClientName);
+// #701: no standard resilience handler (its retries spend the API's 60 requests a minute on refused calls, and its timeout and
+// circuit exceptions escaped the client's catch); one try within IntegrationApiClient.Timeout instead.
+builder.Services.AddHttpClient(IntegrationApiClient.HttpClientName, c => c.Timeout = IntegrationApiClient.Timeout).RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<IntegrationApiClient>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
