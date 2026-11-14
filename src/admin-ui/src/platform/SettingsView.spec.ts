@@ -83,6 +83,75 @@ describe('Settings page (admin design §5.10)', () => {
     wrapper.unmount()
   })
 
+  it('edits the Search section\'s members as fields with their defaults, keeps the rest under Advanced, and leaves an emptied field out (admin design §5.10 step 2)', async () => {
+    const value = { candidates: 150, maxChunksPerDocument: 2, rerankModel: 'gpt-oss', recency: null, futureMember: 'kept' }
+    const schema = { properties: { value: { type: 'object' } } }
+    const doc = { paths: { '/api/settings/retrieval': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
+    const models = [{ name: 'gpt-oss', kind: 'model', modelKind: 'chat', residencies: ['onprem'], available: true }]
+    const fetch = vi.fn((url: string, init?: RequestInit) => Promise.resolve(json(
+      url === '/openapi/v1.json' ? doc : url === '/api/gateway/models' ? models : init?.method === 'PUT' ? { value, version: '5' } : { value, version: '4' },
+    )))
+    vi.stubGlobal('fetch', fetch)
+    document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+    const wrapper = mountPage('retrieval')
+    await flushPromises()
+
+    const input = (name: string) => wrapper.get(`#settings-retrieval-${name}`).element as HTMLInputElement
+    expect(input('candidates').value).toBe('150')
+    expect(input('vectorWeight').value).toBe('')
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints.candidates)
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints.minHnswSelectivity)
+    // The JSON holds only what has no field, and is folded away.
+    const advanced = wrapper.get('[data-test=advanced-json]')
+    expect((advanced.element as HTMLDetailsElement).open).toBe(false)
+    expect(JSON.parse((wrapper.get('#settings-retrieval-value').element as HTMLTextAreaElement).value)).toEqual({ recency: null, futureMember: 'kept' })
+
+    await wrapper.get('#settings-retrieval-candidates').setValue('')
+    await wrapper.get('#settings-retrieval-vectorWeight').setValue('0,5')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect(JSON.parse(String(put[1]!.body))).toEqual({
+      value: { recency: null, futureMember: 'kept', maxChunksPerDocument: 2, vectorWeight: 0.5, rerankModel: 'gpt-oss' }, version: '4',
+    })
+    wrapper.unmount()
+  })
+
+  it('edits the Processing section\'s default schedules as fields, and the chat section\'s link hosts one per line', async () => {
+    const worker = { concurrency: { parse: 2 }, degradedFailureRatio: 0.05, scheduleJitterMinutes: 90, previewMaxUsd: 0.5, defaultSchedules: { crawl: '0 3 * * 0' }, version: '7' }
+    const workerSchema = {
+      properties: {
+        concurrency: { type: 'object' }, degradedFailureRatio: { type: 'number' }, scheduleJitterMinutes: { type: 'integer' }, previewMaxUsd: { type: 'number' },
+        defaultSchedules: { type: 'object' },
+      },
+    }
+    const chat = { value: { allowedLinkHosts: ['umea.se', '*.umea.se'] }, version: '2' }
+    const body = (schema: unknown) => ({ put: { requestBody: { content: { 'application/json': { schema } } } } })
+    const doc = { paths: { '/api/settings/worker': body(workerSchema), '/api/settings/chat': body({ properties: { value: { type: 'object' } } }) } }
+    const fetch = vi.fn((url: string, init?: RequestInit) => Promise.resolve(json(
+      url === '/openapi/v1.json' ? doc : url === '/api/gateway/models' ? [] : url === '/api/settings/chat' ? chat : init?.method === 'PUT' ? worker : worker,
+    )))
+    vi.stubGlobal('fetch', fetch)
+    document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+    const wrapper = mountPage('worker')
+    await flushPromises()
+    expect((wrapper.get('#settings-worker-crawl').element as HTMLInputElement).value).toBe('0 3 * * 0')
+    expect((wrapper.get('#settings-worker-url-list').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints['url-list'])
+    await wrapper.get('#settings-worker-url-list').setValue('0 4 * * *')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect(JSON.parse(String(put[1]!.body)).defaultSchedules).toEqual({ crawl: '0 3 * * 0', 'url-list': '0 4 * * *' })
+
+    await wrapper.setProps({ section: 'chat' })
+    await flushPromises()
+    expect((wrapper.get('#settings-chat-allowedLinkHosts').element as HTMLTextAreaElement).value).toBe('umea.se\n*.umea.se')
+    // Only the model fields need the gateway's models; the worker's schedules do not.
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/gateway/models')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('shows site profiles and data protection as sections with their lists, and the prompt texts as a section', async () => {
     const profiles = [{ id: 'sp1', host: 'www.umea.se', presetId: 'sitevision', appliedVersion: 2, appliedAt: '2026-11-01T12:00:00Z' }]
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/api/site-profiles' ? profiles : url.startsWith('/api/settings/chat/prompts') ? { sections: [] } : []))))

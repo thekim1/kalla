@@ -72,7 +72,7 @@ function collect(): Record<string, unknown> | null {
       const value = fromInput(field, values[field.name] ?? '')
       // An unset member is left out: the section's reader treats a missing member as unset.
       if (field.parent) {
-        if (value !== undefined && value !== null) (members[field.parent] ??= {})[field.name] = value
+        if (value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0)) (members[field.parent] ??= {})[field.name] = value
       } else if (value !== undefined) body[field.name] = value
       else if (field.required) problems[field.name] = PLATFORM.form.required
     } catch (e) {
@@ -129,6 +129,15 @@ async function save(): Promise<void> {
         v-else-if="field.kind === 'model'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
         :options="modelOptions(field, models, values[field.name] as string)" :hint="modelHint(field, models)" :error="form.errors[field.name]"
       />
+      <!-- A JSON field whose members have fields above holds only the rest: under Advanced, open when it is refused. -->
+      <details v-else-if="field.kind === 'json' && membersOf(field.name).length > 0" :open="!!form.errors[field.name]" data-test="advanced-json">
+        <summary class="cursor-pointer font-medium">{{ PLATFORM.form.advancedJson }}</summary>
+        <p class="mt-1 text-small text-fg-3">{{ PLATFORM.form.advancedJsonHint }}</p>
+        <TextAreaField
+          :id="idOf(field.name)" v-model="values[field.name] as string" class="mt-3" :label="field.label" :hint="hint(field)" :error="form.errors[field.name]"
+          :rows="8" mono
+        />
+      </details>
       <TextAreaField
         v-else-if="field.kind === 'json' || field.kind === 'list'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
         :hint="hint(field)" :error="form.errors[field.name]" :rows="field.kind === 'json' ? 8 : 3" mono

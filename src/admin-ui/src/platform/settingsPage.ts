@@ -11,18 +11,51 @@ import type { ModelField } from './modelFields'
 export const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker'] as const
 export type SettingsSectionName = (typeof SETTINGS_SECTIONS)[number]
 
-/** The settings sections' model fields, as V32 checks them (`rerankModel` is a chat model; `gatewayRerankModel` a rerank model). */
+/**
+ * The settings sections' fields beyond the request schema (admin design §5.10 step 2): the model fields as pickers, as V32
+ * checks them (`rerankModel` is a chat model; `gatewayRerankModel` a rerank model), and the members of a JSON property as
+ * fields of their own, in form order, with their readers' defaults in the hints (`PLATFORM.fieldHints`). What has no field
+ * stays in the JSON, under Advanced. Members as the readers read them: `PlatformChatSettings.Parse` (chat),
+ * `RetrievalSettingsResolver.Platform` (retrieval), `EngineSettings` (the worker's default schedules).
+ */
 export const SETTINGS_MODEL_FIELDS: Partial<Record<SettingsSectionName, readonly ModelField[]>> = {
   evaluation: [
     { name: 'evaluationModel', modelKind: 'chat' },
     { name: 'evaluationJudgeModel', modelKind: 'chat' },
   ],
   // The platform answer ceiling (Decisions "Answer length from the model", admin design §4.5): a number of its own above the JSON.
-  chat: [{ name: 'condenseModel', modelKind: 'chat', in: 'value' }, { name: 'maxAnswerTokens', kind: 'number', in: 'value' }],
+  chat: [
+    { name: 'condenseModel', modelKind: 'chat', in: 'value' },
+    { name: 'condenseReasoningEffort', kind: 'text', in: 'value' },
+    { name: 'maxAnswerTokens', kind: 'number', in: 'value' },
+    { name: 'messagesPerMinutePerUser', kind: 'number', in: 'value' },
+    { name: 'allowedLinkHosts', kind: 'list', in: 'value' },
+  ],
   retrieval: [
+    { name: 'candidates', kind: 'number', in: 'value' },
+    { name: 'maxChunksPerDocument', kind: 'number', in: 'value' },
+    { name: 'vectorWeight', kind: 'number', in: 'value' },
+    { name: 'keywordWeight', kind: 'number', in: 'value' },
+    { name: 'coverageMaxDistance', kind: 'number', in: 'value' },
+    { name: 'coverageMinKeywordScore', kind: 'number', in: 'value' },
+    { name: 'expandMaxTokens', kind: 'number', in: 'value' },
+    { name: 'expandTotalMaxTokens', kind: 'number', in: 'value' },
     { name: 'rerankModel', modelKind: 'chat', in: 'value' },
     { name: 'gatewayRerankModel', modelKind: 'rerank', in: 'value' },
+    { name: 'rerankCandidates', kind: 'number', in: 'value' },
+    { name: 'coverageMinRerankScore', kind: 'number', in: 'value' },
+    { name: 'exactScanMaxChunks', kind: 'number', in: 'value' },
+    { name: 'minHnswSelectivity', kind: 'number', in: 'value' },
   ],
+  worker: [
+    { name: 'url-list', kind: 'text', in: 'defaultSchedules' },
+    { name: 'crawl', kind: 'text', in: 'defaultSchedules' },
+  ],
+}
+
+/** The fields that pick a model: only these need the gateway mirror. */
+export function needsModels(fields: readonly ModelField[]): boolean {
+  return fields.some((f) => !f.kind)
 }
 
 export type SettingsGroup = keyof typeof SETTINGS_PAGE.groups
