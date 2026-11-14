@@ -762,9 +762,8 @@ its key in Open WebUI and places the file (chat design §14.2): `--openwebui-hos
 `WEBUI_ADMIN_PASSWORD` in `secrets/openwebui.env`; Open WebUI creates it as its first user on an empty store), and the
 operator then runs `deploy/openwebui-feedback-key.sh` (shipped in the release bundle), which mints the key with
 password sign-in briefly on and writes `secrets/api/OpenWebUi__AdminApiKey` (chat design §4.3, §14.2).
-The migrator's embedding profile knobs (`EmbeddingProfile__*`, data-model §2.1) come
-from `deploy/.env` lines `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS` and
-`_MAX_RESIDENCY` that the operator appends (empty model: no profile seeded); the script has no options for them yet.
+The embedding profile has no deployment knobs: a platform admin creates it in the admin UI after the first sign-in
+(admin design §4.5, Decisions "Deploy configuration").
 **Gateway keys per deployable** (plan §6; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate query-embedding route/replica follows only when its trigger fires

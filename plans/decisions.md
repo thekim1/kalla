@@ -443,7 +443,7 @@ A platform admin edits an embedding profile in the admin UI (`GatewayModel`, `Di
 the platform ceiling, and a model or dimension change is the P3 profile migration. Every save first runs one canary
 embedding with the new values and is refused if it fails, then stores that canary. **Test** runs the same call without
 saving and names the outcome in plain words (the gateway's refusal code, the residency, or the dimension count
-returned). The migrator still seeds the profile once from `EmbeddingProfile:*`. Detail: `admin/design.md` §4.5;
+returned). A platform admin creates the profile in the admin UI; nothing seeds it (Decisions "Deploy configuration"). Detail: `admin/design.md` §4.5;
 `platform/data-model.md` §2.1; `ingestion-worker/design-processing.md` §11.
 
 *From:* decided by user, 2026-11-11 (#547).
