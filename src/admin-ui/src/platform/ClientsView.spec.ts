@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { ApiKey, Client } from '@/api/types'
 import { LEVEL_LABEL, PLATFORM_CLIENTS } from '@/utils/labels'
-import { platformEntries } from './resources'
+import { navGroups } from '@/router/nav'
 import ClientsView from './ClientsView.vue'
 
 const L = PLATFORM_CLIENTS
@@ -91,8 +91,7 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     wrapper.unmount()
   })
 
-  it('keeps Clients first on the Platform objects page, linked to its own page', () => {
-    expect(platformEntries[0]).toMatchObject({ id: 'clients', icon: 'apps', to: { name: 'platform-clients' } })
-    expect(platformEntries.filter((e) => e.id === 'clients')).toHaveLength(1)
+  it('is the first page of the menu\'s Platform group (admin design §5.10)', () => {
+    expect(navGroups.find((g) => g.id === 'platform')!.items[0]).toMatchObject({ name: 'platform-clients', icon: 'apps', label: 'Apps and keys' })
   })
 })

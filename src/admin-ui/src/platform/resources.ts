@@ -1,4 +1,3 @@
-import type { RouteLocationRaw } from 'vue-router'
 import { http } from '@/api/client'
 import type { GatewayContextInfo, OrgSyncStatus } from '@/api/types'
 import { formatNumber } from '@/utils/format'
@@ -76,16 +75,6 @@ export interface PlatformResource {
   modelFields?: (row: Row) => readonly ModelField[] | undefined
 }
 
-/** An entry of the Platform objects page and its search sections: a generic resource or a page of its own. */
-export interface PlatformEntry {
-  id: string
-  label: string
-  description: string
-  keywords?: readonly string[]
-  icon: string
-  to: RouteLocationRaw
-}
-
 export function urlOf(path: string, row: Row | null, key: string): string {
   return row ? path.replace(/\{[^}]+\}/, encodeURIComponent(String(row[key]))) : path
 }
@@ -125,17 +114,6 @@ export function gatewayLink(adminUrl: string, page: GatewayPage): string {
 export async function listRows(resource: PlatformResource): Promise<Row[]> {
   const payload = await http.get<Row[] | { items: Row[] }>(resource.list!)
   return Array.isArray(payload) ? payload : payload.items
-}
-
-export interface SharingSummary {
-  department: number
-  selected: number
-  municipality: number
-  sharedWithDepartments: number
-}
-
-function sharingOf(row: Row): SharingSummary {
-  return (row.sharing as SharingSummary | undefined) ?? { department: 0, selected: 0, municipality: 0, sharedWithDepartments: 0 }
 }
 
 const L = PLATFORM.resources
@@ -210,59 +188,6 @@ export const platformResources: PlatformResource[] = [
         : [],
     panels: ['gateway-context', 'embedding-profiles', 'embedding-canary'],
   },
-  {
-    id: 'organisation',
-    ...L.organisation,
-    icon: 'account_tree',
-    list: '/api/organisation/departments',
-    key: 'id',
-    columns: [
-      { key: 'name', label: PLATFORM.columns.name },
-      { key: 'costCenterCode', label: PLATFORM.columns.costCenter },
-      { key: 'memberGroups', label: PLATFORM.columns.memberGroups },
-      {
-        key: 'sharing',
-        label: PLATFORM.columns.sharing,
-        value: (row) => {
-          const s = sharingOf(row)
-          return PLATFORM.organisation.summary(s.department, s.selected, s.municipality)
-        },
-      },
-    ],
-    // Member groups come from the gateway's context (identity §2.1) and are edited on its Organisation page.
-    details: (row) => {
-      const s = sharingOf(row)
-      const O = PLATFORM.organisation
-      const groups = (row.memberGroups as string[] | undefined) ?? []
-      return [
-        { title: O.memberGroups, lines: groups.length ? groups : [O.noMemberGroups] },
-        {
-          title: O.sharing,
-          items: [
-            { label: O.department, value: String(s.department) },
-            { label: O.selected, value: String(s.selected) },
-            { label: O.sharedWith, value: String(s.sharedWithDepartments) },
-            { label: O.municipality, value: String(s.municipality) },
-          ],
-        },
-      ]
-    },
-    gatewayPage: { path: '/organisation', label: PLATFORM.organisation.gatewayLink },
-  },
-]
-
-/**
- * The Platform objects page's entries and their search sections: Apps and keys and Settings are pages of their own
- * (admin design §5.9, §5.10); site profiles and data protection are sections of Settings, so they are not listed here.
- */
-const IN_SETTINGS = new Set(['site-profiles', 'data-protection'])
-
-export const platformEntries: PlatformEntry[] = [
-  { id: 'clients', ...L.clients, icon: 'apps', to: { name: 'platform-clients' } },
-  { id: 'settings', ...L.settings, icon: 'tune', to: { name: 'platform-settings' } },
-  ...platformResources.filter((r) => !IN_SETTINGS.has(r.id)).map((r) => ({
-    id: r.id, label: r.label, description: r.description, keywords: r.keywords, icon: r.icon, to: { name: 'platform-resource', params: { resource: r.id } },
-  })),
 ]
 
 export async function rowsOf(resource: PlatformResource): Promise<Row[]> {

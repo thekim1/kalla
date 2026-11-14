@@ -130,7 +130,7 @@ the line's total but in no step row. Ume.Rag never overwrites its own figures wi
 
 Without the read-back (the setting unset, the scope missing, the gateway refusing or rate-limiting), the card shows
 **See the key's usage in the AI gateway** instead, a link to the gateway's usage page. The reason shows under
-*Platform objects → Gateway models*, in the *AI gateway* card's row *Cost and budgets from the AI gateway* (off, on, or
+*Models*, in the *AI gateway* card's row *Cost and budgets from the AI gateway* (off, on, or
 the last refusal with its time), and is logged:
 
 ```bash
@@ -166,7 +166,7 @@ usually matter:
      canary, embedding profile test and status checks (on rag-admin's credential key).
 5. **The test panel.** Its calls run as the assistant's key and are counted under the client `admin-console`, so they
    show as *Test panel*, apart from real use. Without a client row named `admin-console` of kind `internal` (created
-   by a platform admin under *Platform objects → Clients*; seeded only in development) nothing is written and rag-admin logs it:
+   by a platform admin under *Apps and keys*; seeded only in development) nothing is written and rag-admin logs it:
 
    ```bash
    dc logs --since 24h rag-admin | grep "Test panel usage"   # "Test panel usage of assistant <id> not written (<n> calls): no admin-console client row of kind internal"
@@ -218,8 +218,7 @@ of it is `gateway`; the estimate is the aborted streams. When the `estimate` sha
   the idle or total timeout. Look at the model's speed in the gateway;
 - on every step at once: the gateway stopped sending its cost. Check that the gateway is at a release with the stream
   cost and `x-ume-cost-usd`, and that nothing between rag-api and the gateway strips the header;
-- an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Platform objects → Gateway
-  models*, filled by the model sync).
+- an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Models*, filled by the model sync).
 
 `rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. For knowledge bases,
 `rag.ingestion.cost` (USD) counts every worker call's cost by job `class` and `source` in the same way, and
@@ -488,7 +487,7 @@ renderer (when its `render` profile is on) can be restarted on their own: the wo
 `render.unavailable` and keeps the page's last good content).
 
 **After any change to the gateway's models** (a new deployment behind an alias, a provider switch, a gateway upgrade),
-a platform admin runs **Check embedding canary** on Platform → Gateway models. The platform makes no model calls of its
+a platform admin runs **Check embedding canary** on *Models*. The platform makes no model calls of its
 own to notice a changed embedding model: the check embeds each active profile's canary text once and stores the
 similarity on the profile. Below 0.999 the worker refuses the profile until a later check passes (*Where to look
 first*).
@@ -604,7 +603,7 @@ By default the crawler is polite: 1 request a second and 1 connection per extern
 hosts in `Settings.Crawl.MunicipalHosts`), robots.txt and its `Crawl-delay` respected, slower when the site is slow,
 back-off on 429/503, a 30-minute pause when half of the last 100 answers fail, and scheduled crawls only in the source's
 night window (connectors design §5.1, §6.3–§6.6). A platform admin can change that **per host** in the admin UI:
-*Platform objects → Settings → Website fetching → Host politeness*. Each row is one host name (no scheme or port) with a
+*Settings → Website fetching → Host politeness*. Each row is one host name (no scheme or port) with a
 preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override it; it is stored in
 `Settings.Crawl.HostOverrides`, checked on save (V37, `crawl_politeness_invalid`) and audited as `settings.update`.
 
@@ -699,7 +698,7 @@ charges the call to that key's budget and limits (identity design §4.7). So two
   for the operators and the gateway admin.
 
 Rag-admin's mirror of the gateway keys (`config."GatewayKeys"`) is refreshed every 5 minutes by the organisation sync,
-or at once with *Fetch now* under *Platform objects → Organisation*; chat and the admin UI judge a key by it.
+or at once with *Fetch now* on the *Organisation* page; chat and the admin UI judge a key by it.
 
 | Symptom | Meaning | Fix |
 |---|---|---|
@@ -708,11 +707,10 @@ or at once with *Fetch now* under *Platform objects → Organisation*; chat and 
 | Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
 | Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
 | A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, restart that service |
-| rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no client `admin-console` of type `internal`, so test-panel cost is not recorded (the panel still answers) | A platform admin creates it under *Platform objects → Clients*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off (production-setup.md, *Before the first use of the admin UI*). Turns made before it are not recovered |
+| rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no client `admin-console` of type `internal`, so test-panel cost is not recorded (the panel still answers) | A platform admin creates it under *Apps and keys*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off (production-setup.md, *Before the first use of the admin UI*). Turns made before it are not recovered |
 
 **The read-back's reasons.** With `UME_RAG_GATEWAY_INTEGRATION_API_URL` set, rag-admin reads the gateway's cost and
-budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Platform objects →
-Gateway models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
+budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
 `GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
 `at` when the last read gave nothing; rag-admin also logs "The gateway's Integration API refused or failed (HTTP …,
 reason); no read-back this time". The *Cost* cards then show Ume.Rag's figures only, and a used-up budget shows no
@@ -766,7 +764,7 @@ badge (the gateway still refuses the calls).
 | Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh` with your options plus `--render`, then `dc up -d --wait` and `dc restart rag-worker` |
 | Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `secrets/worker/Render__Endpoint` but `COMPOSE_PROFILES` in `deploy/.env` lacks `render`: re-run `init-deployment.sh` with or without `--render`, so the two match, then `dc up -d --wait` and `dc restart rag-worker` |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
-| Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, Platform → Gateway models). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
+| Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, *Models*). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 
 ## Secrets and certificates
 
