@@ -1788,6 +1788,36 @@ export const EMBEDDING_PROFILES = {
 } as const
 
 /** The Settings page's Prompt texts panel (admin design §4.5; chat design §7.3; Decisions "Chat prompt texts configurable"). */
+/** The Personal data section's flag rules (processing design §9.4) as a table, on the Settings page (admin design §5.10). */
+export const PII_RULES = {
+  ownDomains: 'Our own e-mail domains',
+  ownDomainsHint: 'One per line, such as umea.se. An address outside them counts as an external e-mail address.',
+  nerMinScore: 'Lowest certainty for a name',
+  nerMinScoreHint: 'How sure the language model must be that a word is a person’s name, 0–1. Default: 0.8.',
+  rules: 'When a document is flagged',
+  rulesHint: 'A flagged document waits for a person before it is searchable in a public knowledge base. It is flagged when any rule below fires.',
+  type: 'Personal data',
+  flag: 'Flag the document',
+  min: 'From',
+  types: {
+    personnummer: 'Personal identity number',
+    samordningsnummer: 'Coordination number',
+    email: 'E-mail address in our domains',
+    emailExternal: 'E-mail address outside our domains',
+    phone: 'Phone number',
+    name: 'Name',
+  } as Record<string, string>,
+  modes: { always: 'Always', threshold: 'From a number', never: 'Never' } as Record<string, string>,
+  minHint: (type: string) => `How many of ${type.toLowerCase()} before the document is flagged.`,
+  listLike: 'Lists of people',
+  listLikeHint: 'Flags member lists, attendance lists and case lists: many names together with phone numbers or e-mail addresses.',
+  listLikeOn: 'Flag lists of people',
+  minNames: 'Names, at least',
+  minContacts: 'Phone numbers or e-mail addresses, at least',
+  wholeNumber: 'Enter a whole number of at least 1.',
+  scoreRange: 'Enter a number from 0 to 1.',
+} as const
+
 /** The Settings page (admin design §5.10): every platform setting, a section at a time, grouped by what it affects. */
 export const SETTINGS_PAGE = {
   title: 'Settings',

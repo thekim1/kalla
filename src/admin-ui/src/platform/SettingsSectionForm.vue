@@ -9,13 +9,14 @@ import { COMMON, PLATFORM, SETTINGS_PAGE } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import GenericForm from './GenericForm.vue'
+import PiiSettingsForm from './PiiSettingsForm.vue'
 import { withModelFields } from './modelFields'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec } from './schema'
 import { needsModels, SETTINGS_MODEL_FIELDS, type SettingsSectionName } from './settingsPage'
 
 // One section of the platform settings on the Settings page (admin design §5.10, §4.8): its fields from the request schema of
 // `PUT /api/settings/{section}` (§5.8), the model fields as pickers over the gateway mirror at the platform ceiling (#466),
-// and the crawl section's host politeness as a table. A save is that section alone, with the version read; Cancel goes
+// the crawl section's host politeness and the personal-data flag rules as tables. A save is that section alone, with the version read; Cancel goes
 // back to the saved values.
 const props = defineProps<{ section: SettingsSectionName; label: string }>()
 const ui = useUiStore()
@@ -72,6 +73,9 @@ watch(() => props.section, load, { immediate: true })
     <template v-if="loaded">
       <CrawlSettingsForm
         v-if="section === 'crawl'" :key="formKey" :initial="loaded.initial" :url="url()" :submit-label="PLATFORM.form.save" @saved="saved" @cancel="reset"
+      />
+      <PiiSettingsForm
+        v-else-if="section === 'pii'" :key="formKey" :initial="loaded.initial" :url="url()" :submit-label="PLATFORM.form.save" @saved="saved" @cancel="reset"
       />
       <GenericForm
         v-else :key="formKey" :form-id="`settings-${section}`" :fields="loaded.fields" :initial="loaded.initial" method="put" :url="url()"

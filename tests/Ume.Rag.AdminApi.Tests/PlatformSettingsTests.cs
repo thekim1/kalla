@@ -71,6 +71,12 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             ("/api/settings/network", new { trustedProxies = new[] { "0.0.0.0/0" }, version }),
             ("/api/settings/network", new { trustedProxies = new[] { "not-an-address" }, version }),
             ("/api/settings/retrieval", new { value = new { candidates = 5 }, version }),
+            // Personal-data flag rules the worker could not read, or would read wrongly (processing design §9.4).
+            ("/api/settings/pii", new { flagRules = new { types = new { passport = new { flag = "always" } } }, ownDomains = Array.Empty<string>(), nerMinScore = 0.8, version }),
+            ("/api/settings/pii", new { flagRules = new { types = new { phone = new { flag = "sometimes" } } }, ownDomains = Array.Empty<string>(), nerMinScore = 0.8, version }),
+            ("/api/settings/pii", new { flagRules = new { types = new { phone = new { flag = "threshold", min = 0 } } }, ownDomains = Array.Empty<string>(), nerMinScore = 0.8, version }),
+            ("/api/settings/pii", new { flagRules = new { types = "all" }, ownDomains = Array.Empty<string>(), nerMinScore = 0.8, version }),
+            ("/api/settings/pii", new { flagRules = new { listLike = new { minNames = 0, minContacts = 5 } }, ownDomains = Array.Empty<string>(), nerMinScore = 0.8, version }),
         })
         {
             using var response = await admin.PutAsJsonAsync(path, body, Ct);
@@ -79,6 +85,22 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
 
         var saved = await Json(await admin.PutAsJsonAsync("/api/settings/network", new { trustedProxies = new[] { " 10.20.0.0/16 ", "192.0.2.10/32" }, version }, Ct));
         saved.GetProperty("trustedProxies").EnumerateArray().Select(p => p.GetString()).ShouldBe(["10.20.0.0/16", "192.0.2.10"]);
+
+        // A full table of rules as the Settings page sends it, the list rule off, is saved as sent.
+        var pii = await Json(await admin.GetAsync("/api/settings/pii", Ct));
+        var rules = new
+        {
+            types = new
+            {
+                personnummer = new { flag = "always", min = 1 }, samordningsnummer = new { flag = "always", min = 1 }, email = new { flag = "never", min = 1 },
+                emailExternal = new { flag = "threshold", min = 2 }, phone = new { flag = "never", min = 1 }, name = new { flag = "never", min = 1 },
+            },
+            listLike = (object?)null,
+        };
+        var stored = await Json(await admin.PutAsJsonAsync("/api/settings/pii",
+            new { flagRules = rules, ownDomains = new[] { "umea.se" }, nerMinScore = 0.8, version = pii.GetProperty("version").GetString() }, Ct));
+        stored.GetProperty("flagRules").GetProperty("types").GetProperty("emailExternal").GetProperty("min").GetInt32().ShouldBe(2);
+        stored.GetProperty("flagRules").GetProperty("listLike").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]
