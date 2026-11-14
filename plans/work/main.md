@@ -89,3 +89,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   proposal's §2 "Net effect" (six values, no pasted keys once G1 is pinned), checked by C0's release boot test.
 - **Waits on:** nothing for C0; the gateway releases for C7, C11, C12.
 - **Read:** the proposal; Decisions above; docs/portainer.md; deploy/portainer/.
+- **Status (2026-11-14):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
+  repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
+  M-16 session). The M-16 session continues with the next steps in order and announces each on #667.
