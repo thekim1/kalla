@@ -503,7 +503,8 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
     [Fact]
     public async Task A_longer_context_window_than_a_profile_takes_is_capped_and_concurrent_creates_both_succeed()
     {
-        // #687 review: the model's window is held to maxInputTokens' range; creates run one at a time.
+        // #687 review: the model's window is held to maxInputTokens' range. Concurrent creates both succeed: every config
+        // write takes the ConfigVersion row lock first (ConfigWrites), so the second sees the first's default.
         await using var gateway = Gateway();
         await using var admin = database.AdminApi(gateway, Residency.Eu);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);

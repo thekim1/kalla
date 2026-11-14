@@ -287,9 +287,6 @@ public static class EmbeddingProfileEndpoints
 
         var created = await admin.WriteAsync(async attempt =>
         {
-            // Creates one at a time (#687 review): two first creates would both see no default, and the partial unique index
-            // would refuse the second as already_exists. The lock is the transaction's.
-            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtext('config.create_embedding_profile'))", attempt);
             var profile = new EmbeddingProfile
             {
                 Name = name,
