@@ -343,10 +343,50 @@ public sealed record PiiSettings(JsonObject FlagRules, IReadOnlyList<string> Own
         s.PiiOwnDomains, s.NerMinScore, SettingsEndpoints.Version(s));
 }
 
-public sealed record PiiSettingsRequest : SettingsRequest
+/// <summary>
+/// The personal-data section. <see cref="FlagRules"/> is checked as the worker reads it (<c>EngineSettings</c>,
+/// <c>ContractJson</c> into <see cref="Ume.Rag.Pipelines.Processing.PiiFlagRules"/>, processing design §9.4): a shape the
+/// worker cannot read, an unknown type or a threshold below 1 is a field error here, not a failed run later.
+/// </summary>
+public sealed record PiiSettingsRequest : SettingsRequest, IValidatableObject
 {
     [Required]
     public JsonObject FlagRules { get; init; } = [];
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        string? error = null;
+        if (FlagRules.Count > 0)
+        {
+            try
+            {
+                var rules = Ume.Rag.Pipelines.Json.ContractJson.Deserialize<Ume.Rag.Pipelines.Processing.PiiFlagRules>(
+                    System.Text.Json.JsonSerializer.SerializeToElement(FlagRules));
+                var unknown = rules.Types.Keys.Where(t => !Ume.Rag.Pipelines.Processing.PiiTypes.All.Contains(t, StringComparer.Ordinal)).ToList();
+                if (unknown.Count > 0)
+                {
+                    error = $"Unknown personal-data type: {string.Join(", ", unknown)}. Known: {string.Join(", ", Ume.Rag.Pipelines.Processing.PiiTypes.All)}.";
+                }
+                else if (rules.Types.Values.Any(r => r.Flag == Ume.Rag.Pipelines.Processing.PiiFlagMode.Threshold && r.Min < 1))
+                {
+                    error = "A threshold is at least 1.";
+                }
+                else if (rules.ListLike is { } list && (list.MinNames < 1 || list.MinContacts < 1))
+                {
+                    error = "The list rule's numbers are at least 1.";
+                }
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                error = $"The flag rules cannot be read: {ex.Message}";
+            }
+        }
+
+        if (error is not null)
+        {
+            yield return new ValidationResult(error, [nameof(FlagRules)]);
+        }
+    }
 
     [MaxLength(50)]
     public IReadOnlyList<string> OwnDomains { get; init; } = [];

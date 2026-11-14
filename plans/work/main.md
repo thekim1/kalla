@@ -72,7 +72,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.
 - **Status (2026-11-14):** steps 1–8 built: #668, #669, #671, #672, #673 (step 6, before 5), #675, #676 (step 7 for Chat,
   Search and Processing's schedules) and step 8 in the PR that says so, with #670 (rag-api records a key's last use, which
-  nothing wrote before). Left: Personal data's flag rules as a table (step 7); Open WebUI's block and *Managed by the
+  nothing wrote before), and Personal data's flag rules as a table (the PR that says so). Left: Open WebUI's block and *Managed by the
   deployment* once M-17's C4 lands; `Settings.Identity.RoleGroups` as a Settings section once C10 lands; #677 (Processing's
   concurrency is not read).
 
