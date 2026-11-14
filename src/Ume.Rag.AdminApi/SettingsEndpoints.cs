@@ -86,7 +86,6 @@ public static class SettingsEndpoints
         });
         Section(settings, "worker", WorkerSettings.Of, (WorkerSettingsRequest r, PlatformSettings s) =>
         {
-            s.WorkerConcurrency = r.Concurrency.ToJsonString();
             s.DegradedFailureRatio = r.DegradedFailureRatio;
             s.ScheduleJitterMinutes = r.ScheduleJitterMinutes;
             s.PreviewMaxUsd = r.PreviewMaxUsd;
@@ -395,20 +394,16 @@ public sealed record PiiSettingsRequest : SettingsRequest, IValidatableObject
     public decimal NerMinScore { get; init; } = 0.80m;
 }
 
-public sealed record WorkerSettings(JsonObject Concurrency, decimal DegradedFailureRatio, int ScheduleJitterMinutes, decimal PreviewMaxUsd, JsonObject DefaultSchedules,
-    string Version)
+public sealed record WorkerSettings(decimal DegradedFailureRatio, int ScheduleJitterMinutes, decimal PreviewMaxUsd, JsonObject DefaultSchedules, string Version)
 {
-    public static WorkerSettings Of(PlatformSettings s) => new(Parse(s.WorkerConcurrency), s.DegradedFailureRatio, s.ScheduleJitterMinutes, s.PreviewMaxUsd,
-        Parse(s.DefaultSchedules), SettingsEndpoints.Version(s));
+    public static WorkerSettings Of(PlatformSettings s) => new(s.DegradedFailureRatio, s.ScheduleJitterMinutes, s.PreviewMaxUsd, Parse(s.DefaultSchedules),
+        SettingsEndpoints.Version(s));
 
     private static JsonObject Parse(string text) => JsonNode.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text) as JsonObject ?? [];
 }
 
 public sealed record WorkerSettingsRequest : SettingsRequest
 {
-    [Required]
-    public JsonObject Concurrency { get; init; } = [];
-
     [Range(0.0, 1.0)]
     public decimal DegradedFailureRatio { get; init; } = 0.05m;
 

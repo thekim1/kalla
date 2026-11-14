@@ -118,11 +118,10 @@ describe('Settings page (admin design §5.10)', () => {
   })
 
   it('edits the Processing section\'s default schedules as fields, and the chat section\'s link hosts one per line', async () => {
-    const worker = { concurrency: { parse: 2 }, degradedFailureRatio: 0.05, scheduleJitterMinutes: 90, previewMaxUsd: 0.5, defaultSchedules: { crawl: '0 3 * * 0' }, version: '7' }
+    const worker = { degradedFailureRatio: 0.05, scheduleJitterMinutes: 90, previewMaxUsd: 0.5, defaultSchedules: { crawl: '0 3 * * 0' }, version: '7' }
     const workerSchema = {
       properties: {
-        concurrency: { type: 'object' }, degradedFailureRatio: { type: 'number' }, scheduleJitterMinutes: { type: 'integer' }, previewMaxUsd: { type: 'number' },
-        defaultSchedules: { type: 'object' },
+        degradedFailureRatio: { type: 'number' }, scheduleJitterMinutes: { type: 'integer' }, previewMaxUsd: { type: 'number' }, defaultSchedules: { type: 'object' },
       },
     }
     const chat = { value: { allowedLinkHosts: ['umea.se', '*.umea.se'] }, version: '2' }
