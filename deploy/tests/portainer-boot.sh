@@ -9,10 +9,11 @@
 #     gateway credential keys and Open WebUI's client
 #   - rag-api: /health/ready = 200 (TLS verified against rag-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key
+#   - rag-api's public URL, which no variable sets, is https://<UME_RAG_API_HOST> for citation links and for rag-admin
 #   - rag-admin: / = 200 with the admin UI's index.html
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
-#   - rag-clamav runs and the worker has ClamAv__Mode=on
+#   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
 #   - Open WebUI: /health = 200 on its published port
 #
 #   deploy/tests/portainer-boot.sh STACK.yaml [options]
@@ -40,7 +41,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stack=""; version=""; example="$here/../portainer/stack.env.example"; offset=10000; project=ume-rag-portainer-boot
 wait_timeout=900; keep=0; files=()
-usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version="$2"; shift 2;;
@@ -72,11 +73,9 @@ UME_GATEWAY_HOST=llm.boot.test
 UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
 UME_ADMIN_HOST=llm-admin.boot.test
 UME_RAG_API_HOST=rag.boot.test
-UME_RAG_API_PUBLIC_URL=https://rag.boot.test
 UME_RAG_ADMIN_HOST=rag-admin.boot.test
 UME_RAG_EMBEDDING_MODEL=boot-test-embedding
 UME_RAG_OIDC_CLIENT_SECRET=boot-test-admin-client-secret
-UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=rag-platform-admins
 UME_RAG_OPENWEBUI_HOST=chat.boot.test
 UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=boot-test-openwebui-client-secret
 UME_GATEWAY_PORT=$gateway_port
@@ -181,6 +180,13 @@ status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/v1/m
 [ "$status" = 401 ] || fail "rag-api /v1/models answered $status without a key, expected 401"
 ok "rag-api /v1/models = 401 without a key"
 
+env_of() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(dc ps -q "$1")"; }
+env_of rag-api | grep -qx 'Knowledge__PublicBaseUrl=https://rag.boot.test' \
+  || fail "rag-api's Knowledge__PublicBaseUrl is not https://rag.boot.test with UME_RAG_API_PUBLIC_URL unset"
+env_of rag-admin | grep -qx 'Admin__ApiPublicUrl=https://rag.boot.test' \
+  || fail "rag-admin's Admin__ApiPublicUrl is not https://rag.boot.test with UME_RAG_API_PUBLIC_URL unset"
+ok "rag-api's public URL defaults to https://rag.boot.test (citation links; rag-admin's How to connect)"
+
 echo "== rag-admin"
 status="$(https -o "$work/admin-index.html" -w '%{http_code}' "https://localhost:$admin_port/")"
 [ "$status" = 200 ] || fail "rag-admin / answered $status"
@@ -194,11 +200,14 @@ ok "the gateway's /health/ready answered 2xx to rag-worker (the llm network, the
 wait_for "$wait_timeout" probe https://rag-parser:8000/v1/info || fail "rag-worker could not reach the parser's /v1/info within ${wait_timeout}s"
 ok "the parser's /v1/info answered 2xx to rag-worker (HTTPS, rag-bootstrap's CA)"
 
-echo "== malware scan"
-worker="$(dc ps -q rag-worker)"
-docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$worker" | grep -qx 'ClamAv__Mode=on' \
-  || fail "rag-worker does not run with ClamAv__Mode=on"
-ok "rag-clamav runs (the clamav profile) and rag-worker has ClamAv__Mode=on"
+echo "== malware scan and the feedback import's address, from the profiles"
+# rag-bootstrap writes both as secret files (M-17 C2, C3); docker cp reads them from images without a shell.
+secret_of() { docker cp "$(dc ps -q "$1"):/run/app-secrets/$2" - 2>/dev/null | tar -xO; }
+[ "$(secret_of rag-worker ClamAv__Mode)" = on ] || fail "rag-worker's secret file ClamAv__Mode is not on with the clamav profile"
+ok "rag-clamav runs (the clamav profile) and rag-worker's ClamAv__Mode is on"
+[ "$(secret_of rag-api OpenWebUi__BaseUrl)" = http://rag-openwebui:8080 ] \
+  || fail "rag-api's secret file OpenWebUi__BaseUrl is not http://rag-openwebui:8080 with the openwebui profile"
+ok "rag-api's OpenWebUi__BaseUrl is the stack's rag-openwebui (the openwebui profile)"
 
 echo "== Open WebUI"
 owui() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$openwebui_port/health")" = 200 ]; }
