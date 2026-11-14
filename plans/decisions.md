@@ -403,7 +403,7 @@ Levels are `public`, `internal` and `sensitive`; `sensitive`, the municipality's
 
 Every model call sends an explicit ceiling from its data's level: `public` `External`, `internal` `Eu`, `sensitive`
 `OnPrem`. The worker never sends `External`, so its calls run `public` at `Eu`; embedding calls use the profile's
-`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/ume/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; until M-17 C9 is built, `Gateway:MaxResidency` still lowers it). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
+`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/ume/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; built in M-17 C9, #691). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
 
 *From:* log rows 14, 17, 25, 55, 77, 100; decided by user, 2026-10-30.
 
@@ -731,8 +731,8 @@ Go-live and the pilot's end need hand-graded answers: correct ≥ 80 %, citation
 
 Retrieval evaluation is advisory and never blocks: no gates, no `building` state, no floor. Questions point at
 documents; generated sets (up to 100 judge-filtered questions) are made and judged at the collection's ceiling
-(`sensitive` `OnPrem`, `internal` and `public` `Eu`, as the worker never sends `External`; lowered by
-`Gateway:MaxResidency`) by any gateway chat model listed there (`Settings.EvaluationModel`, `EvaluationJudgeModel`),
+(`sensitive` `OnPrem`, `internal` and `public` `Eu`, as the worker never sends `External`; lowered to the
+worker's credential-key ceiling, "Residency per level") by any gateway chat model listed there (`Settings.EvaluationModel`, `EvaluationJudgeModel`),
 without `temperature`, JSON output, a fenced reply accepted. recall@10 and MRR run on the full collection after each
 publish and nightly; question embeddings come from the cache. Feedback enters only as editor-rewritten questions without personal data; answer judging is P2.
 Detail: `ingestion-worker/design-processing.md` §13, §14.
