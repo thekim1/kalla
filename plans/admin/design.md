@@ -153,7 +153,7 @@ roles add up.
 `rag-reviewer` (visible in the audit actor roles). `rag-reviewer` is granted per department: in P1 as the realm role `rag-reviewer`
 in the shared Keycloak, given to the account or a Keycloak group per department (identity §1.6, §11.2, 2026-10-31);
 from P2 by assigning a group per department (Entra app role assignment on `ume-rag-admin` or
-`UME_RAG_OIDC_GROUPS_REVIEWER`). The UI mirrors the policies
+*Settings → Role groups*, `Settings.Identity.RoleGroups`). The UI mirrors the policies
 with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-69`), but the API decides.
 
 ### 3.2 Department scoping and sharing
@@ -455,7 +455,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 | `GET/POST/PUT/DELETE /api/clients[/{id}]` | Read (pickers) / Admin | `CK_Clients_*` as field rules (V21); raising a ceiling or changing `StoresHistory` re-validates every assistant offered to the client |
 | `GET /api/clients/{id}/health` | Admin | missing `X-Rag-Owui-Message-Id` warning (chat §11.4), feedback import state (§8.1) |
 | `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `ume-rag-sk-`/`-pk-` (identity §6.4) |
-| `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`; `tools` from P2) | Admin | sections of `config."Settings"`; `chat` carries `maxAnswerTokens` (optional integer 256–1,000,000, absent = no platform ceiling; shown as **Longest answer, all assistants** with the hint "Caps every assistant's answer length, overrides included; leave empty to use each model's limit", chat §6.3, Decisions "Answer length from the model") and `prompts` (V38): the Settings page's **Prompt texts** panel shows the whole frame in order, each editable text as a field prefilled with its current value and a **Reset to default** link, the locked lines read-only between them, and a note that a save changes every assistant's answers at once (Decisions "Chat prompt texts configurable"); `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
+| `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`, `identity`; `tools` from P2) | Admin | sections of `config."Settings"`; `chat` carries `maxAnswerTokens` (optional integer 256–1,000,000, absent = no platform ceiling; shown as **Longest answer, all assistants** with the hint "Caps every assistant's answer length, overrides included; leave empty to use each model's limit", chat §6.3, Decisions "Answer length from the model") and `prompts` (V38): the Settings page's **Prompt texts** panel shows the whole frame in order, each editable text as a field prefilled with its current value and a **Reset to default** link, the locked lines read-only between them, and a note that a save changes every assistant's answers at once (Decisions "Chat prompt texts configurable"); `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
 | `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; allowed history modes `none` only and the shredding switch off until A1 (weakness review §4) |
 | `GET /api/embedding-profiles[/{id}]` | Read | every profile, with `inUse` (true when a `ChunkSets` row of any state names it) and the canary state (recorded, last check). No profile is seeded: a platform admin creates the first one (next row). Until an active default profile exists, `GET /api/overview` answers `needsEmbeddingProfile: true` to a platform admin and Home shows a card that leads to the Embedding profiles panel; a new collection needs the profile (`no_embedding_profile`) |
 | `POST /api/embedding-profiles` `{ gatewayModel, name?, requestDimensions, dimensions?, maxInputTokens?, maxResidency? }` | Admin | Decisions "Deploy configuration". `gatewayModel` is one of the gateway mirror's embedding models served at a residency within the platform ceiling, else 400 with `settings_model_residency` on `gatewayModel` (`setting` = "the embedding profile", `kind` = `embedding`). Each member left out comes from the model: `maxResidency` the highest residency it runs at within the ceiling, `maxInputTokens` its context window (`invalid_value` when the mirror has none), `name` the model's name. `dimensions` is required with `requestDimensions` (the size the model is asked for); otherwise the length of the test vector is the profile's `Dimensions`. The create first embeds the canary text with these values, as **Test** does; if that fails, 422 `profile_test_failed` with the outcome. The test's vector is stored as `CanaryEmbedding`. A taken name answers 409 `already_exists`. The first profile becomes the default (`IsDefault`), which new collections use. The worker creates the profile's partial HNSW index before its first chunk (data-model §3.2). Audited `create` on `embedding-profile`; 201 with the profile |
@@ -1506,11 +1506,14 @@ the first section opens. Sections, grouped by what they affect:
 | Content | Website fetching (`crawl`, with the host politeness table), Site profiles, Processing (`worker`), Personal data (`pii`) |
 | Data protection | Data protection (the three levels), Retention, Deletion guard |
 | Quality | Evaluation |
-| Platform | Network |
+| Platform | Network, Role groups (`identity`) |
 
 Site profiles and Data protection are lists (a row opens its form in a drawer, as today); they move here from the
-index. A section the deploy-configuration proposal adds (`Settings.Identity.RoleGroups`, its C10) is one more entry in
-the registry under Platform.
+index. **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
+platform admin, department admin, pipeline editor, reviewer, editor, viewer. A group must be a `rag-` name or an Entra
+object id; groups are trimmed and de-duplicated case-insensitively, and a role without groups isn't stored. The hints say
+that a role in the sign-in token counts too, that the deployment's break-glass group (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`)
+always applies, and that a change applies at each user's next sign-in (identity §2.5, Decisions "Role groups as a setting").
 
 A section's form is built in two steps:
 

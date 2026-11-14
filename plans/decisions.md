@@ -314,7 +314,7 @@ Ume.Rag copies the gateway's identity model (OIDC code + PKCE BFF, claims, `UME_
 Which IdP groups grant which Ume.Rag role is `Settings.Identity.RoleGroups`, edited by platform admins and read at
 each sign-in. `Oidc:RoleGroups:rag-platform-admin` (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`) stays as a break-glass for
 the first platform admin and is merged with the setting, never replaced; the other four variables go. Roles in the
-token's role claim still count. Until M-17 C10 is built, the five variables apply.
+token's role claim still count. Built in M-17 C10 (#693).
 
 *From:* decided by user, 2026-11-13 (deploy-configuration D2).
 

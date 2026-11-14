@@ -104,8 +104,12 @@ reads this name).
 
 `ApplyClaimMapping` is copied unchanged: it expands JSON-array claims for the role, department, team and group claims
 (`AdminAuthentication.cs:24-36`), copies differently named claims to `roles`/`departmentCodes`/`teamCodes`
-(`:37-39`, `:51-65`) and adds a role for each `Oidc:RoleGroups:<role>` entry whose `;`-separated, case-insensitive
-groups intersect the group claim (`:40-48`).
+(`:37-39`, `:51-65`) and adds a role for each role whose groups intersect the group claim, case-insensitively (`:40-48`). The groups come
+from `Settings.Identity.RoleGroups` (edited under *Settings → Role groups*, read at each sign-in, so a change applies
+at the next sign-in on every instance) merged with the deployment's `Oidc:RoleGroups` (`;`-separated), which only
+adds: `Oidc:RoleGroups:rag-platform-admin` is the break-glass and the setting can't remove it (Decisions "Role groups
+as a setting"; M-17 C10, #693). A removed mapping takes effect at the user's next sign-in, at the latest when the
+admin session's fixed lifetime ends; to revoke at once, also end the user's admin sessions.
 
 | Role value | Policy membership | Scope |
 |---|---|---|
@@ -147,13 +151,8 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
 | `UME_RAG_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
 | `UME_RAG_OIDC_GROUP_CLAIM` | `Oidc:GroupClaim` | `groups` | |
-| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
-| `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:rag-department-admin` | – | |
-| `UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR` | `Oidc:RoleGroups:rag-pipeline-editor` | – | |
-| `UME_RAG_OIDC_GROUPS_REVIEWER` | `Oidc:RoleGroups:rag-reviewer` | – | P1 (admin design §3.1) |
-| `UME_RAG_OIDC_GROUPS_SKILL_EDITOR` | `Oidc:RoleGroups:rag-skill-editor` | – | P2 (tools design §3.6) |
-| `UME_RAG_OIDC_GROUPS_EDITOR` | `Oidc:RoleGroups:rag-editor` | – | P2 |
-| `UME_RAG_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:rag-viewer` | – | |
+| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | the break-glass for the first platform admin: `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
+| *(no variable)* | `Settings.Identity.RoleGroups` (database, *Settings → Role groups*) | – | the groups of `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-editor` and `rag-viewer` (`rag-skill-editor` from P2); the same `rag-`-or-object-id rule, refused by the admin API on save; merged with the row above (M-17 C10) |
 | `UME_RAG_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
 | `UME_RAG_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7). **Unset in P1**: Keycloak tokens carry no `tid`, so a set value refuses every sign-in (`src/Ume.Rag.AdminApi/TenantCheck.cs:19-23`); set with Entra in P2 |
 | `UME_RAG_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | **new** (§1.7); harmless on Keycloak (no-op) |
@@ -289,9 +288,9 @@ token does not show adds nothing.
   to ID token* on, `docs/identity-and-roles.md:145-147`; dev realm `dev/keycloak/ume-realm.json:765-842`) and member groups entered
   as names. In the shared realm the claim lists every group of the account, the gateway's included; only names
   entered as member groups count (§2.3 step 3). No overage limit applies. Because a role group named like a gateway
-  group would grant an Ume.Rag role by accident, every `Oidc:RoleGroups` group is a `rag-` name (case-insensitive,
+  group would grant an Ume.Rag role by accident, every role group (`Oidc:RoleGroups` and `Settings.Identity.RoleGroups`) is a `rag-` name (case-insensitive,
   longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Ume.Rag.AdminApi/AdminOptions.cs`)
-  refuses to start otherwise, and the gateway gives none of its groups a `rag-` name (`deploy/keycloak/README.md`,
+  refuses to start otherwise, and `PUT /api/settings/identity` refuses to save one, and the gateway gives none of its groups a `rag-` name (`deploy/keycloak/README.md`,
   *Group names*). Member groups are not checked: they give department scope only, never a role, and are the
   gateway's groups on purpose (§2.1). AD FS role groups need `rag-` names too.
 - **AD FS**: group claim `group` with unqualified names (`:199-215`).
