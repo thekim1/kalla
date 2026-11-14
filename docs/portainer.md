@@ -26,10 +26,33 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
   registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
   (`ume-admin`), Ume.Rag's admin (`ume-rag-admin`) and, for the chat, Open WebUI (`open-webui`).
-- **Host names** and a **reverse proxy with real certificates** in front of them: the gateway API, the gateway admin,
-  rag-api, Ume.Rag's admin and Open WebUI. The services serve certificates from their own internal CAs (Open WebUI plain
-  HTTP), so the proxy terminates TLS; routes and body sizes: [production-setup.md](production-setup.md#reverse-proxy-and-pki).
+- **Host names** and **real certificates** for the gateway API, the gateway admin, rag-api, Ume.Rag's admin and Open
+  WebUI. The services serve certificates from their own internal CAs (Open WebUI plain HTTP), so something in front
+  terminates TLS: your own reverse proxy (routes and body sizes:
+  [production-setup.md](production-setup.md#reverse-proxy-and-pki)), or the stack's optional **proxy profile** (*TLS
+  proxy* below).
 - The **embedding and chat models** on the gateway, EU-hosted for now.
+
+## TLS proxy
+
+With `proxy` in `COMPOSE_PROFILES` the stack runs `rag-proxy`: nginx on `UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT`
+(`0.0.0.0:443`) in front of all five host names, with the routes and body sizes of production-setup.md. It re-encrypts
+to the services and verifies them against their internal CAs, so nothing else needs to be published.
+
+1. On the host, put one certificate for all five names (SAN or wildcard) in a directory, as `tls.crt` (with its chain)
+   and `tls.key`, readable by uid 101 (`chown 101 tls.key && chmod 0400 tls.key`), and set
+   `UME_RAG_PROXY_CERTS_DIR` to it (default `/etc/ume-rag/proxy-certs`). Without it `rag-proxy` doesn't start.
+2. Give each service a host name of its own: `UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`,
+   `UME_RAG_ADMIN_HOST`, `UME_RAG_OPENWEBUI_HOST`. A name shared with another service gets no route, and
+   `rag-bootstrap`'s checklist says which. The public URLs are then plain `https://<host>` (`UME_GATEWAY_PUBLIC_URL`,
+   the OIDC redirect URIs without a port).
+3. Bind the other published ports to loopback (`UME_GATEWAY_BIND`, `UME_ADMIN_BIND`, `UME_RAG_API_BIND`,
+   `UME_RAG_ADMIN_BIND` = `127.0.0.1`), so only the proxy is reachable.
+4. After the first deploy, list the proxy as a trusted proxy in both admins (the gateway's *Settings → Trusted proxies*,
+   Ume.Rag's *Settings → Network*): its address on the stack's `edge` and `rag-edge` networks (Portainer: *Networks*),
+   or the clients' addresses are the proxy's.
+
+**Renewing the certificate:** replace both files and restart `rag-proxy` (*Containers*, select, *Restart*).
 
 ## First deploy
 

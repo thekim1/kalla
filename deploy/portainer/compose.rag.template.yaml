@@ -65,6 +65,14 @@
 #   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
+#   COMPOSE_PROFILES=proxy    rag-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
+#                             gateway (UME_GATEWAY_HOST), its admin (UME_ADMIN_HOST), rag-api (UME_RAG_API_HOST),
+#                             rag-admin (UME_RAG_ADMIN_HOST) and Open WebUI (UME_RAG_OPENWEBUI_HOST), each a name of its
+#                             own, on UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT (0.0.0.0:443). UME_RAG_PROXY_CERTS_DIR
+#                             (/etc/ume-rag/proxy-certs) is a host directory with tls.crt (full chain) and tls.key for
+#                             every name (SAN or wildcard), readable by uid 101; renewing it: replace both files and
+#                             restart rag-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
+#                             variables) and list the proxy as a trusted proxy in both admins (docs/portainer.md)
 # Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
 # without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
 # with pg_dump or volume snapshots.
@@ -96,6 +104,9 @@ x-rag-secrets: &rag-secrets-mount
     environment:
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
+      # The TLS proxy's host names (profile proxy).
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
@@ -111,6 +122,7 @@ x-rag-secrets: &rag-secrets-mount
       - {source: rag-postgres-hba, target: /config/pg_hba.conf}
       - {source: rag-postgres-conf, target: /config/postgresql.conf}
       - {source: rag-app-roles, target: /config/app-roles.sql}
+      - {source: rag-proxy-conf-template, target: /config/nginx-proxy.conf.template}
     volumes:
       - rag-certs:/certs
       - rag-secrets:/secrets
@@ -523,6 +535,37 @@ x-rag-secrets: &rag-secrets-mount
       rag-api: {condition: service_started}
     networks: [rag-edge]
 
+  rag-proxy:
+    # Profile proxy (M-17 C8, Decisions "Deploy configuration" D9): TLS for the five host names with the operator's
+    # certificate, re-encrypting to the services and verifying them against the internal CAs. rag-bootstrap writes its
+    # nginx.conf (deploy/proxy/nginx.portainer.conf.template) and the two CA certificates into rag-config/proxy.
+    <<: *hardened
+    profiles: [proxy]
+    # nginx 1.31.6, as the browser tests' fixture site (src/Ume.Rag.AppHost); the index digest.
+    image: ${RAG_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
+    user: "101:101"
+    restart: unless-stopped
+    command: [nginx, -c, /etc/nginx/ume/nginx.conf, -g, "daemon off;"]
+    cpus: 0.5
+    mem_limit: 128m
+    pids_limit: 128
+    ports: ["${UME_RAG_PROXY_BIND:-0.0.0.0}:${UME_RAG_PROXY_PORT:-443}:8443"]
+    volumes:
+      - {type: volume, source: rag-config, target: /etc/nginx/ume, read_only: true, volume: {subpath: proxy}}
+      # The operator's certificate: a host directory, not created when missing (the container then does not start).
+      - type: bind
+        source: ${UME_RAG_PROXY_CERTS_DIR:-/etc/ume-rag/proxy-certs}
+        target: /run/proxy-certs
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+      gateway: {condition: service_started}
+      adminapi: {condition: service_started}
+      rag-api: {condition: service_started}
+      rag-admin: {condition: service_started}
+    networks: [edge, rag-edge]
+
   rag-openwebui-setup:
     # One-shot, profile openwebui (M-17 C6): the feedback service account's API key for rag-api's import, minted with a
     # short session token signed with Open WebUI's secret key, since password sign-in is off (deploy/openwebui/
@@ -567,6 +610,9 @@ x-rag-secrets: &rag-secrets-mount
   rag-openwebui-setup-script:
     content: |
       @INCLUDE openwebui/feedback-key-setup.py
+  rag-proxy-conf-template:
+    content: |
+      @INCLUDE proxy/nginx.portainer.conf.template
 
 @SECTION networks
   rag-edge: {driver: bridge}
