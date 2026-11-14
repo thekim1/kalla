@@ -4,15 +4,19 @@ import { MODEL_AVAILABILITY, PLATFORM } from '@/utils/labels'
 import { fieldLabel, type FieldSpec } from './schema'
 
 /**
- * Model settings as pickers over the gateway mirror (Decisions "Model pickers show what the key may use", #447/#466).
- * A model field is a request property (`evaluationModel`) or a member of a JSON property (`condenseModel` in `value`).
+ * Model settings as pickers over the gateway mirror (Decisions "Model pickers show what the key may use", #447/#466), and
+ * other members of a JSON property edited as fields of their own (admin design §5.10 step 2). A field is a request property
+ * (`evaluationModel`) or a member of a JSON property (`condenseModel` in `value`).
  */
 export interface ModelField {
   name: string
   /** The models the picker offers; absent for a plain `number` member (`kind`). */
   modelKind?: 'chat' | 'rerank' | 'embedding'
-  /** `number`: a whole-number member edited as its own field (the chat section's answer ceiling, B-31); default a model picker. */
-  kind?: 'number'
+  /**
+   * Not a model: `number` (the chat section's answer ceiling, B-31), `list` (one value per line) or `text`. Empty leaves the
+   * member out, so the reader's default applies; the hint says what that default is. Default: a model picker.
+   */
+  kind?: 'number' | 'list' | 'text'
   /** The JSON property the member lives in; absent for a property of its own. */
   in?: string
 }

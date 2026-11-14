@@ -11,7 +11,7 @@ import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec } from './schema'
-import { SETTINGS_MODEL_FIELDS, type SettingsSectionName } from './settingsPage'
+import { needsModels, SETTINGS_MODEL_FIELDS, type SettingsSectionName } from './settingsPage'
 
 // One section of the platform settings on the Settings page (admin design §5.10, §4.8): its fields from the request schema of
 // `PUT /api/settings/{section}` (§5.8), the model fields as pickers over the gateway mirror at the platform ceiling (#466),
@@ -39,7 +39,7 @@ async function load(): Promise<void> {
     const [doc, initial, models] = await Promise.all([
       loadOpenApi(),
       http.get<Record<string, unknown>>(url()),
-      modelFields.length ? api.gateway.models() : Promise.resolve([] as GatewayModel[]),
+      needsModels(modelFields) ? api.gateway.models() : Promise.resolve([] as GatewayModel[]),
     ])
     const schema = requestSchema(doc, 'put', url()) ?? requestSchema(doc, 'put', '/api/settings/{section}')
     loaded.value = { fields: withModelFields(fieldsOf(doc, schema), modelFields), initial, models }
