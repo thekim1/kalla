@@ -105,7 +105,7 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
 
    Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag) is
    optional: the file's header has the steps (password sign-in on for a moment, mint the service account's key, set
-   `UME_RAG_OPENWEBUI_ADMIN_API_KEY` and `UME_RAG_OPENWEBUI_BASE_URL=http://rag-openwebui:8080`, password sign-in off).
+   `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, password sign-in off). rag-api finds Open WebUI in the stack by itself.
 8. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
    `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
    database restored without them is unusable. The stack has no WAL archiving: use `pg_dump` or volume snapshots.
@@ -125,8 +125,9 @@ rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgr
 3. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
    - remove the per-level keys `UME_RAG_*GATEWAY_KEY_<level>` and the Data API's `UME_RAG_ORG_SYNC_KEY` and
      `UME_RAG_ORG_SYNC_URL`; drop `data` from `COMPOSE_PROFILES` unless the gateway's Data API serves something else;
-   - add `clamav` to `COMPOSE_PROFILES` (without it uploads wait with `clamav.unavailable`), or set
-     `UME_RAG_CLAMAV_MODE=off` to store files without a malware scan;
+   - add `clamav` to `COMPOSE_PROFILES` for the malware scan; without it files are stored without a scan, marked so
+     (`rag-bootstrap` sets the worker's mode from the profile; the stack no longer reads `UME_RAG_CLAMAV_MODE` or
+     `UME_RAG_OPENWEBUI_BASE_URL`, so remove them if you set them);
    - add `openwebui` and its variables if you want the chat in this stack;
    - optionally `UME_ADMIN_PUBLIC_URL` for the gateway.
 4. **Update the stack** (*Re-pull image and redeploy* on). The gateway moves to `v0.10.1` and migrates, `rag-migrate`
