@@ -82,7 +82,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their
   order, one PR per step, each step's paths, done-when and stream as listed there. Decided: Decisions "Deploy
   configuration", "Residency per level", "Role groups as a setting". C0–C6, C8–C10 and C13 need nothing more; C7 waits
-  on llmgateway#87 (G1), C11 on #90 (G5), C12 on #89 (G4), each released and pinned.
+  on llmgateway#87 (G1, accepted with changes: create-only, its own volume), C11 on #90's replacement (the context's
+  `integration_api_url`; G5 itself declined), C12 on #89 (G4, accepted), each released and pinned; the gateway's order
+  is #89, #90's discovery part, #87, #88 (#580, 2026-11-14).
 - **Mind:** M-16 (another session) builds the Apps and Settings pages: C4 removes the wizard's Open WebUI type and makes
   its client "Managed by the deployment"; C5's create form goes on the Models page and C10's role groups on the
   Settings page (§5.10). Main updates identity §4.7 (C9), §5.2 (C4) and repo-and-deployment §6 before the step that
