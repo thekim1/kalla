@@ -118,6 +118,7 @@ internal static class EvaluationSmokeKit
 
         web.ConfigureTestServices(services =>
         {
+            services.UseGatewayCredentialCeiling();
             services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
         });

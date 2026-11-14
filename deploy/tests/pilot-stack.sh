@@ -80,8 +80,6 @@ if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail 
 env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
 env_is "$base" rag-api OpenWebUi__BaseUrl ""
-env_is "$base" rag-api Gateway__MaxResidency ""
-env_is "$base" rag-admin Gateway__MaxResidency ""
 # The Integration API read-back (#580): empty, so off, unless UME_RAG_GATEWAY_INTEGRATION_API_URL is set.
 env_is "$base" rag-admin Gateway__IntegrationApiUrl ""
 readback="$(UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.example.se render compose.prod.yaml compose.rolling.yaml)"
@@ -159,8 +157,8 @@ else fail "init-deployment.sh: no secrets/openwebui-feedback"; fi
 if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
   ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
 else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi
-if grep -qx "UME_RAG_GATEWAY_MAX_RESIDENCY=Eu" "$i/deploy/.env"; then ok "init-deployment.sh: Gateway:MaxResidency Eu (register M2)"
-else fail "init-deployment.sh: no UME_RAG_GATEWAY_MAX_RESIDENCY=Eu in deploy/.env"; fi
+if ! grep -q "UME_RAG_GATEWAY_MAX_RESIDENCY" "$i/deploy/.env"; then ok "init-deployment.sh: no residency variable (the credential keys' residencies, M-17 C9)"
+else fail "init-deployment.sh: deploy/.env still sets UME_RAG_GATEWAY_MAX_RESIDENCY"; fi
 if grep -q "compose.host-24g.yaml" "$i/deploy/.env"; then ok "init-deployment.sh --host-memory 24: COMPOSE_FILE has compose.host-24g.yaml"
 else fail "init-deployment.sh --host-memory 24: compose.host-24g.yaml not in COMPOSE_FILE"; fi
 if (

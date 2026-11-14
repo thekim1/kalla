@@ -61,7 +61,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
         web.UseSetting("Gateway:Key", AdminKey);
         web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
     });
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) => await response.Content.ReadFromJsonAsync<JsonElement>(Ct);

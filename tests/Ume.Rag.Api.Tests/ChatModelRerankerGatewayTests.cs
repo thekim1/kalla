@@ -1,5 +1,7 @@
 extern alias fakegateway;
 
+using Ume.Rag.TestKit;
+
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -54,6 +56,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
             outer.InnerHandler = gateway.Server.CreateHandler();
             return outer;
         });
+        builder.Services.UseGatewayCredentialCeiling();
         return builder.Build();
     }
 

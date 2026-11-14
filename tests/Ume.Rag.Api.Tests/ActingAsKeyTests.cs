@@ -54,6 +54,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         ]);
         builder.Logging.ClearProviders().AddProvider(logs ?? new CapturingLoggerProvider());
         builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => primary);
+        builder.Services.UseGatewayCredentialCeiling();
         builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => primary);
         var host = builder.Build();
         if (features is not null)

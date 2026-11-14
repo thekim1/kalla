@@ -128,15 +128,14 @@ p=src/Ume.Rag.AppHost
 dotnet user-secrets --project $p set DevelopmentVolumes:Postgres ume-rag-m1-postgres     # now
 dotnet user-secrets --project $p set FakeGateway:Enabled false                           # now
 dotnet user-secrets --project $p set Gateway:BaseUrl https://<gateway host>              # now
-dotnet user-secrets --project $p set Gateway:MaxResidency Eu                            # now
 dotnet user-secrets --project $p set Gateway:Services:api:Key <rag-api's credential key>      # now
 dotnet user-secrets --project $p set Gateway:Services:admin:Key <rag-admin's credential key>  # now
 dotnet user-secrets --project $p set Gateway:Services:worker:Key <rag-worker's credential key>  # now
 ```
 
 Each service holds its own key, never another's; the worker's never allows `External`, and the pilot runs at `Eu`.
-`Gateway:MaxResidency Eu` caps every model call's ceiling at `Eu` (register M2, identity design §4.7): without it a
-`public` assistant's calls carry the ceiling `External`, and only the credential key's residencies keep them at `Eu`.
+Each key's residencies are its service's ceiling (register M2: `OnPrem` and `Eu`; identity design §4.7): a `public`
+assistant's calls carry the ceiling `Eu`, read from the gateway's context.
 The AppHost forwards every `Gateway:*` value. The
 embedding profile is no secret: you create it in the admin UI after the start (§4.3).
 

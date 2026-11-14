@@ -20,7 +20,6 @@ configMapGenerator:
   # Settings as the apps read them (Section__Key). The overlay merges its own values in; see ../example.
   - name: ume-rag-config
     literals:
-      - Gateway__MaxResidency=Eu
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       - OTEL_TRACES_SAMPLER=parentbased_traceidratio
       - OTEL_TRACES_SAMPLER_ARG=0.1

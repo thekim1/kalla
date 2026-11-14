@@ -61,6 +61,7 @@ public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
             web.UseSetting("Gateway:Key", AdminKey);
             web.ConfigureTestServices(services =>
             {
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(GatewayApi.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => counter ?? (HttpMessageHandler)gateway.Server.CreateHandler());
                 if (time is not null)

@@ -246,6 +246,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
     private Task<WorkerHost> StartWorkerAsync() =>
         WorkerHost.StartAsync(database, s =>
         {
+            s.UseGatewayCredentialCeiling();
             s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());
             s.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());
             s.AddHttpClient(EvalModelClient.CatalogueClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());

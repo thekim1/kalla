@@ -73,6 +73,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
             web.UseSetting("Gateway:Key", AdminKey);
             web.ConfigureTestServices(services =>
             {
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
                 services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
                 if (logs is not null)

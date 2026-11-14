@@ -350,7 +350,7 @@ else
 {
     // A real gateway: each service's credential key of the integration Ume.Rag (identity design §4.7) as
     //   Gateway:Services:<service>:Key   (service api, admin or worker);
-    //   every other Gateway:* value (BaseUrl, MaxResidency, ...) goes to all three.
+    //   every other Gateway:* value (BaseUrl, ...) goes to all three.
     var services = new Dictionary<string, IResourceBuilder<ProjectResource>>(StringComparer.Ordinal)
     {
         ["api"] = api, ["admin"] = adminApi, ["worker"] = worker,

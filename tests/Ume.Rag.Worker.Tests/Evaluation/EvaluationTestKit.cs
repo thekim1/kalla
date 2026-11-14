@@ -98,6 +98,7 @@ internal static class EvalKit
         Action<IServiceCollection>? services = null) =>
         WorkerHost.StartAsync(database, s =>
         {
+            s.UseGatewayCredentialCeiling();
             s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             s.AddHttpClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             services?.Invoke(s);

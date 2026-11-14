@@ -99,7 +99,7 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         web.UseSetting("Rag:Roles", "knowledge,chat");
         web.UseSetting("OpenWebUi:JwtSecret", Secret);
         web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
     });
 
     private static Task<HttpResponseMessage> Ask(HttpClient client, string? jwt)

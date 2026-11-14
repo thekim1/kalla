@@ -13,7 +13,7 @@ public sealed class GatewayOptions
     /// <summary>
     /// This service's credential key of the gateway integration <c>Ume.Rag</c> (<c>Gateway:Key</c>, secret file
     /// <c>Gateway__Key</c>; identity design §4.7, gateway-changes §5.1): one key for every call, at any ceiling up to
-    /// <see cref="Maximum"/>.
+    /// <see cref="GatewayCeiling.Maximum"/>, which its own residencies set.
     /// </summary>
     public string? Key { get; set; }
 
@@ -25,19 +25,11 @@ public sealed class GatewayOptions
     public string? IntegrationApiUrl { get; set; }
 
     /// <summary>
-    /// The worker's fixed maximum (<c>Eu</c>, set with <c>CapGatewayCalls</c>; its credential key is capped there, identity
-    /// §4.7), or null for rag-api and rag-admin, whose maximum is the top of their <see cref="MaxResidency"/> ladder. Set in
-    /// code only: configuration does not bind it.
+    /// The worker's fixed maximum (<c>Eu</c>, set with <c>CapGatewayCalls</c>; its credential key is capped there too,
+    /// identity §4.7), or null for rag-api and rag-admin, whose maximum is their credential key's residencies alone
+    /// (<see cref="GatewayCeiling"/>). Set in code only: configuration does not bind it.
     /// </summary>
     public Residency? ServiceMaximum { get; internal set; }
-
-    /// <summary>
-    /// The highest ceiling this deployment calls models at (<c>Gateway:MaxResidency</c>), or none. Under M2 (no on-prem model
-    /// hardware, every model call EU-hosted; P1 README §1) the pilot sets <c>Eu</c>, so a public assistant, whose level
-    /// asks for <c>External</c>, is checked (V8) and answered at <c>Eu</c> with the <c>Eu</c> key (#237). It only lowers a
-    /// ceiling, never raises one.
-    /// </summary>
-    public Residency? MaxResidency { get; set; }
 
     /// <summary>
     /// The pause before the one retry of a gateway <c>502</c>/<c>504</c> (<c>Gateway:RetryDelay</c>, <see cref="GatewayRetryHandler"/>):
@@ -55,20 +47,11 @@ public sealed class GatewayOptions
     /// <summary>How often each service reads its own <c>GET /v1/ume/context</c> for the gateway's features (identity §4.7).</summary>
     public TimeSpan ContextInterval { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary><paramref name="ceiling"/>, lowered to <see cref="MaxResidency"/> when that is set and lower.</summary>
-    public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
-
-    /// <summary>
-    /// The highest ceiling a call of this service may carry (B-37): the worker's <see cref="ServiceMaximum"/>; for rag-api
-    /// and rag-admin <see cref="MaxResidency"/>, else <c>External</c>.
-    /// </summary>
-    public Residency Maximum => ServiceMaximum ?? MaxResidency ?? Residency.External;
-
     /// <summary>
     /// The key a call at <paramref name="ceiling"/> is sent with, or null when this service may not call there: the
-    /// credential key up to <see cref="Maximum"/>, none without one.
+    /// credential key up to <paramref name="maximum"/> (<see cref="GatewayCeiling.Maximum"/>), none without one.
     /// </summary>
-    public string? KeyFor(Residency ceiling) => !string.IsNullOrEmpty(Key) && ceiling <= Maximum ? Key : null;
+    public string? KeyFor(Residency ceiling, Residency maximum) => !string.IsNullOrEmpty(Key) && ceiling <= maximum ? Key : null;
 }
 
 /// <summary>Header names shared with the gateway (<c>Pipeline/GatewayHeaders.cs</c>, gateway design §2.1).</summary>

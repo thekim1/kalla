@@ -41,6 +41,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         web.UseSetting("Gateway:Key", AdminKey);
         web.ConfigureTestServices(services =>
         {
+            services.UseGatewayCredentialCeiling();
             services.AddHttpClient(GatewayChatClient.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new Recording(gateway.Server.CreateHandler(), _chatBodies));
             services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());

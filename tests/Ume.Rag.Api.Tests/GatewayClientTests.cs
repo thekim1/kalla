@@ -74,7 +74,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task A_call_above_the_services_maximum_is_refused_before_sending_and_logged()
     {
-        // Gateway:MaxResidency Eu (register M2): a public assistant's External call is a configuration gap, not sent.
+        // A credential key that allows Eu at most (register M2): a public assistant's External call is a configuration gap, not sent.
         var logs = new CapturingLoggerProvider();
         var stub = new CountingHandler();
         using var host = Build(stub, logs: logs, key: FakeGatewayFactory.ApiCredentialKey, maxResidency: Residency.Eu);
@@ -93,17 +93,94 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task The_workers_maximum_is_Eu_whatever_the_configuration_says()
     {
-        // CapGatewayCalls(Eu) is the worker's registration; Gateway:ServiceMaximum in configuration is not bound, and
-        // Gateway:MaxResidency, which lowers the worker's evaluation ceilings, does not lower its maximum: an embedding
-        // profile's Eu ceiling stays callable (B-37).
+        // CapGatewayCalls(Eu) is the worker's registration; Gateway:ServiceMaximum in configuration is not bound, and a
+        // credential key that allows every residency does not raise the worker above Eu: an embedding profile's Eu ceiling
+        // stays callable (B-37).
         var stub = new CountingHandler();
-        using var host = Build(stub, key: FakeGatewayFactory.WorkerCredentialKey, maxResidency: Residency.OnPrem, cap: Residency.Eu);
+        using var host = Build(stub, key: FakeGatewayFactory.WorkerCredentialKey, cap: Residency.Eu);
 
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
         using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));
         using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
 
         stub.Calls.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// A host whose every gateway client, the context reader's too, goes to the FakeGateway: the ceiling comes from the
+    /// credential key's residencies as the fake's context lists them (M-17 C9), not from a test seam.
+    /// </summary>
+    private (IHost Host, RecordingHandler Recording) BuildFromContext(string credentialMaxResidency)
+    {
+        // A derived factory is disposed with the class fixture.
+        var gateway = fake.WithWebHostBuilder(web => web.UseSetting("FakeGateway:CredentialKeys:api:MaxResidency", credentialMaxResidency));
+        var recording = new RecordingHandler(gateway.Server.CreateHandler());
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection([
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:RetryDelay", "00:00:00"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
+        ]);
+        builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => recording);
+        builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+        return (builder.Build(), recording);
+    }
+
+    [Fact]
+    public async Task The_ceiling_is_the_credential_keys_residencies_from_the_context_and_no_call_sends_External_above_them()
+    {
+        // Done-when of M-17 C9: a credential key limited to OnPrem and Eu (register M2); no Gateway:MaxResidency exists.
+        var (host, recording) = BuildFromContext("Eu");
+        using var _ = host;
+        var ceiling = host.Services.GetRequiredService<GatewayCeiling>();
+
+        (await ceiling.MaximumAsync(Ct)).ShouldBe(Residency.Eu); // the first use waits for the context read
+        (await ceiling.CapAsync(Residency.External, Ct)).ShouldBe(Residency.Eu); // a public assistant's level, lowered
+        await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
+        using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));
+
+        recording.Calls.ShouldHaveSingleItem().Ceiling.ShouldBe("Eu"); // the External call never left the process
+    }
+
+    [Fact]
+    public async Task A_key_that_allows_every_residency_lets_a_public_call_run_at_External()
+    {
+        var (host, _) = BuildFromContext("External");
+        using var disposeHost = host;
+        (await host.Services.GetRequiredService<GatewayCeiling>().CapAsync(Residency.External, Ct)).ShouldBe(Residency.External);
+    }
+
+    [Fact]
+    public async Task Before_the_first_context_answer_every_ceiling_is_OnPrem()
+    {
+        // No context to read (the reader's client has no gateway behind it): fail closed.
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey)]);
+        var stub = new CountingHandler();
+        builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => stub);
+        builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new UnreachableHandler());
+        using var host = builder.Build();
+        var ceiling = host.Services.GetRequiredService<GatewayCeiling>();
+
+        ceiling.Maximum.ShouldBe(Residency.OnPrem);
+        (await ceiling.CapAsync(Residency.External, Ct)).ShouldBe(Residency.OnPrem);
+        await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu)));
+        using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
+        stub.Calls.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(new string[0], Residency.External)]
+    [InlineData(new[] { "OnPrem" }, Residency.OnPrem)]
+    [InlineData(new[] { "OnPrem", "Eu" }, Residency.Eu)]
+    [InlineData(new[] { "Eu", "Mars" }, Residency.Eu)]
+    [InlineData(new[] { "Mars" }, Residency.OnPrem)]
+    public void The_credential_ceiling_is_the_highest_known_residency_and_an_empty_list_allows_all(string[] residencies, Residency expected) =>
+        GatewayFeatures.HighestOf(residencies).ShouldBe(expected);
+
+    /// <summary>Answers nothing: the gateway is not reachable.</summary>
+    private sealed class UnreachableHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("unreachable");
     }
 
     [Fact]
@@ -380,7 +457,6 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
             new("Gateway:BaseUrl", "http://fake-gateway"),
             new("Gateway:RetryDelay", "00:00:00"),
             new("Gateway:Key", key),
-            new("Gateway:MaxResidency", maxResidency is { } max ? ResidencyCeiling.ToHeader(max) : null),
             new("Gateway:ServiceMaximum", "External"), // ignored: the maximum is set in code only
         ]);
         builder.Logging.ClearProviders().AddProvider(logs ?? new CapturingLoggerProvider());
@@ -390,6 +466,8 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         }
 
         builder.AddGatewayClient(Client, retryFailed).ConfigurePrimaryHttpMessageHandler(() => primary);
+        // The credential key's residencies (M-17 C9): up to maxResidency, all by default.
+        builder.Services.UseGatewayCredentialCeiling(maxResidency ?? Residency.External);
         return builder.Build();
     }
 

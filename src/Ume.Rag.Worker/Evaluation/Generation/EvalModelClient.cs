@@ -44,7 +44,7 @@ public sealed class EvalStopException : Exception
 
 /// <summary>
 /// The evaluation models through the worker's gateway client <see cref="HttpClientName"/> (<c>AddGatewayClient</c> with its
-/// <see cref="ResidencyCeilingHandler"/>), at the collection's ceiling (<see cref="CeilingFor"/>, processing design §13.1)
+/// <see cref="ResidencyCeilingHandler"/>), at the collection's ceiling (<see cref="CeilingForAsync"/>, processing design §13.1)
 /// with the worker's key of that ceiling. <see cref="RequireAtCeilingAsync"/> refuses the job with
 /// <see cref="ModelNotAtCeiling"/> unless the gateway lists every model at that ceiling (<see cref="CatalogueClientName"/>);
 /// a gateway answer of 403 <c>max_residency_not_met</c> is refused the same way, and an answer from above the ceiling is
@@ -56,7 +56,7 @@ public sealed class EvalStopException : Exception
 /// its answered call's usage (tokens and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the caller's
 /// <see cref="UsageSink"/> (engine design §7.7, §10.6); the catalogue read costs nothing and is not recorded.
 /// </summary>
-public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> gateway, TimeProvider clock)
+public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> gateway, GatewayCeiling serviceCeiling, TimeProvider clock)
 {
     public const string HttpClientName = "gateway-eval";
 
@@ -81,19 +81,19 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
 
     /// <summary>
     /// The ceiling of a collection's level (<see cref="ResidencyCeiling.ForLevel"/>), at most <c>Eu</c> because the worker's
-    /// calls are capped there (<c>CapGatewayCalls</c>, identity design §4.7), then lowered by <c>Gateway:MaxResidency</c>.
+    /// calls are capped there (<c>CapGatewayCalls</c>, identity design §4.7), then lowered to its credential key's residencies.
     /// </summary>
-    public Residency CeilingFor(string classification)
+    public ValueTask<Residency> CeilingForAsync(string classification, CancellationToken cancellationToken)
     {
         var level = ResidencyCeiling.ForLevel(classification);
-        return gateway.CurrentValue.Cap(level < Residency.Eu ? level : Residency.Eu);
+        return serviceCeiling.CapAsync(level < Residency.Eu ? level : Residency.Eu, cancellationToken);
     }
 
     /// <summary>Refuses (<see cref="ModelNotAtCeiling"/>) unless <c>GET /v1/models</c> at <paramref name="ceiling"/> lists every model.</summary>
     public async Task RequireAtCeilingAsync(IReadOnlyCollection<string> models, Residency ceiling, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(models);
-        if (gateway.CurrentValue.KeyFor(ceiling) is not { } key)
+        if (gateway.CurrentValue.KeyFor(ceiling, await serviceCeiling.MaximumAsync(cancellationToken)) is not { } key)
         {
             throw new EvalStopException(new JobResult.FatalError(NoKey));
         }
