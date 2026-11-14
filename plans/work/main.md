@@ -92,3 +92,14 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Status (2026-11-14):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
   repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
   M-16 session). The M-16 session continues with the next steps in order and announces each on #667.
+
+### [ ] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
+- **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the
+  admin's `PUT/GET /api/settings/worker`, the Settings page's Processing section, and their tests and fixtures.
+  Per-instance concurrency stays the deployment's `Worker:Concurrency:<class>`.
+- **Paths:** `src/Ume.Rag.Domain/Entities/CollectionEntities.cs`, `src/Ume.Rag.Persistence/**` (model, migration),
+  `src/Ume.Rag.AdminApi/SettingsEndpoints.cs`, `src/admin-ui/src/platform/**`, their tests (crosses streams: a
+  `main-session/` branch).
+- **Done when:** `grep -rn WorkerConcurrency src tests` finds only the dropping migration; the Settings page's
+  Processing section has no concurrency; backend and admin-ui tests green.
+- **Read:** data-model §2.1 (`Settings`), engine §9.1.

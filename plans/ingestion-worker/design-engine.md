@@ -474,7 +474,7 @@ crawl client with its own `SocketsHttpHandler` and the egress guard's `ConnectCa
 
 Data-model §4.2 holds order, leases and attempts. Concurrency defaults below are per instance and are overridden by
 the deployment value `Worker:Concurrency:<class>` (repo-and-deployment §3 settings rule);
-`config."Settings"."WorkerConcurrency"` holds only fleet-wide shares and caps (P2).
+Fleet-wide shares and caps come in P2 with code that reads them; `config."Settings"` has no concurrency member until then (user 2026-11-14, #677).
 
 | Class | Concurrency | Payload (ids and parameters only, ≤ 4 KB) | Runs |
 |---|---|---|---|
