@@ -1,21 +1,33 @@
 import type { NavItem } from '@/router/nav'
-import { PAGE } from '@/utils/labels'
-import { platformEntries } from './resources'
+import { PAGE, PLATFORM } from '@/utils/labels'
 import { SETTINGS_PAGE_SECTIONS } from './settingsPage'
 
+/** The platform pages in the side menu's Platform group (admin design §5.10), before Organisation and the Audit log. */
 export const platformNavItems: NavItem[] = [
   {
-    name: 'platform',
-    label: PAGE.platform.title,
-    icon: 'settings',
-    description: PAGE.platform.description,
-    keywords: ['clients', 'keys', 'settings', 'data protection', 'site profiles', 'models', 'templates', 'member groups', 'sharing'],
-    sections: [
-      ...platformEntries.map((e) => ({ label: e.label, to: e.to, keywords: e.keywords ? [...e.keywords] : undefined })),
-      // Each settings section is found by its name (admin design §5.10).
-      ...SETTINGS_PAGE_SECTIONS.map((s) => ({ label: s.label, to: { name: 'platform-settings', params: { section: s.id } }, keywords: ['settings'] })),
-    ],
-    children: ['platform-clients', 'platform-settings', 'platform-resource'],
+    name: 'platform-clients',
+    label: PAGE.appsAndKeys.title,
+    icon: 'apps',
+    description: PAGE.appsAndKeys.description,
+    keywords: [...(PLATFORM.resources.clients.keywords ?? [])],
+    roles: ['rag-platform-admin'],
+  },
+  {
+    name: 'platform-models',
+    label: PAGE.models.title,
+    icon: 'hub',
+    description: PAGE.models.description,
+    keywords: ['gateway models', 'embedding profiles', 'canary', 'context window', 'model limits'],
+    roles: ['rag-platform-admin'],
+  },
+  {
+    name: 'platform-settings',
+    label: PAGE.settings.title,
+    icon: 'tune',
+    description: PAGE.settings.description,
+    keywords: ['configuration', 'site profiles', 'data protection', 'retention', 'prompts'],
+    // Each section is found by its name.
+    sections: SETTINGS_PAGE_SECTIONS.map((s) => ({ label: s.label, to: { name: 'platform-settings', params: { section: s.id } } })),
     roles: ['rag-platform-admin'],
   },
 ]

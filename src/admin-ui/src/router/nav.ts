@@ -42,7 +42,7 @@ export const FEEDBACK_ROLES: Role[] = ['rag-platform-admin', 'rag-department-adm
 
 /**
  * Grouped by the job people come to do (admin design §5.2), filtered by role: Home and Map; Knowledge bases and
- * Assistants; Feedback; then Organisation, the platform objects and the Audit log.
+ * Assistants; Feedback; then the platform pages (Apps and keys, Models, Settings), Organisation and the Audit log (§5.10).
  */
 export const navGroups: NavGroup[] = [
   {
@@ -115,6 +115,7 @@ export const navGroups: NavGroup[] = [
     id: 'platform',
     label: NAV_GROUP.platform,
     items: [
+      ...platformNavItems,
       {
         name: 'organisation',
         label: PAGE.organisation.title,
@@ -123,7 +124,6 @@ export const navGroups: NavGroup[] = [
         keywords: [...NAV_KEYWORDS.organisation],
         roles: ALL_ROLES,
       },
-      ...platformNavItems,
       {
         name: 'audit',
         label: PAGE.audit.title,

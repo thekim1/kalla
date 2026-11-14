@@ -90,10 +90,10 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    `0.5.0`'s images restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*). The read-back URL is the gateway admin's address as `rag-admin` reaches it: `adminapi` isn't on
    the `llm` network, so use its published address (`https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443>`); without it
    there is no read-back.
-6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Platform → Gateway models* shows the gateway's
+6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models; the
    embedding canary passes under *Embedding profiles* on the same page.
-7. **Open WebUI:** in Ume.Rag's admin, *Platform → Apps and keys → Add app*, type *Open WebUI*, with *Create a key now* on
+7. **Open WebUI:** in Ume.Rag's admin, *Apps and keys → Add app*, type *Open WebUI*, with *Create a key now* on
    (tick the assistants it offers on the way, or later).
    The last step shows the two lines below with one copy button; paste them into the stack's variables and update it
    (it recreates `rag-api` and `rag-openwebui`, whose settings changed):
@@ -154,7 +154,7 @@ on they are recorded per model call.
 | `rag-bootstrap` exits non-zero | its log; `the gateway's CA is missing` means the gateway's `bootstrap` didn't run first (keep the stack name) |
 | Ume.Rag's services log `gateway_key_missing` or the gateway answers `401` | the three `UME_RAG_*_GATEWAY_KEY` variables and `rag-bootstrap`'s checklist; update the stack (`0.5.0`'s images: restart the service) |
 | The gateway answers `403` to Ume.Rag | the credential key's address list (the `llm` subnet) and its integration role *Credential* |
-| *Platform → Gateway models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
+| *Models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |
 | `rag-openwebui` restarts | its log: the wrapper's two files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
 | Open WebUI lists no models | `UME_RAG_OPENWEBUI_API_KEY`, the client's kind `open-webui`, and that its assistants are published |

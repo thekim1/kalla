@@ -65,6 +65,10 @@ export interface Department {
   isActive: boolean
   syncedAt: IsoDateTime
   teams: Team[]
+  /** The gateway's member groups of the department (identity §2.1). */
+  memberGroups?: string[]
+  /** How many of its knowledge bases are shared at each level, and with how many departments (admin design §3.2). */
+  sharing?: { department: number; selected: number; municipality: number; sharedWithDepartments: number }
 }
 
 export interface OrgSyncResult {

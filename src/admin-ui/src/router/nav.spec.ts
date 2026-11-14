@@ -36,13 +36,36 @@ describe('search', () => {
     expect(filterEntries(entries, 'personal data').map((e) => e.label)).toEqual([PLATFORM.settingsSections.pii, PAGE.collections.title])
   })
 
-  it('lists only pages without a query', () => {
-    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'map', 'collections', 'assistants', 'feedback', 'costs', 'organisation', 'platform', 'audit'])
+  it('finds the platform pages and the Organisation page\'s member groups and sharing by their words', () => {
+    expect(filterEntries(entries, 'api keys').map((e) => e.id)).toEqual(['platform-clients'])
+    expect(filterEntries(entries, 'embedding profiles').map((e) => e.id)).toContain('platform-models')
+    for (const query of ['member groups', 'sharing', 'municipality']) expect(filterEntries(entries, query).map((e) => e.id)).toContain('organisation')
   })
 
-  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback and Costs, then Organisation, Platform and Audit log (admin design §5.2)', () => {
+  it('opens the old addresses of the Platform objects pages where their content went', async () => {
+    setActivePinia(createPinia())
+    const router = createAppRouter(createMemoryHistory())
+    const auth = useAuthStore()
+    auth.user = { name: 'P', email: 'p@example.se', roles: ['rag-platform-admin'] } as never
+    auth.status = 'authenticated'
+    for (const [from, to] of [
+      ['/plattform', '/plattform/settings'], ['/plattform/keys', '/plattform/clients?tab=keys'], ['/plattform/site-profiles', '/plattform/settings/site-profiles'],
+      ['/plattform/data-protection', '/plattform/settings/data-protection'], ['/plattform/organisation', '/organisation'],
+    ]) {
+      await router.push(from!)
+      expect(router.currentRoute.value.fullPath).toBe(to)
+    }
+  })
+
+  it('lists only pages without a query', () => {
+    expect(filterEntries(entries, '').map((e) => e.id)).toEqual([
+      'overview', 'map', 'collections', 'assistants', 'feedback', 'costs', 'platform-clients', 'platform-models', 'platform-settings', 'organisation', 'audit',
+    ])
+  })
+
+  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback and Costs, then the platform pages, Organisation and Audit log (admin design §5.2, §5.10)', () => {
     expect(navGroups.map((g) => g.items.map((i) => i.label))).toEqual([
-      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback', 'Costs'], ['Organisation', 'Platform objects', 'Audit log'],
+      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback', 'Costs'], ['Apps and keys', 'Models', 'Settings', 'Organisation', 'Audit log'],
     ])
     expect(filterEntries(entries, 'responsible').map((e) => e.id)).toEqual(['map'])
   })

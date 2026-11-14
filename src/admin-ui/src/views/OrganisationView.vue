@@ -12,11 +12,14 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatRelative } from '@/utils/format'
-import { COMMON, ORGANISATION, PAGE } from '@/utils/labels'
+import { COMMON, ORGANISATION, PAGE, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import { gatewayLink } from '@/platform/resources'
 
-// The organisation mirror (admin design §4.10): departments in the user's scope with their teams. Platform admins can
-// sync now and see when the sync last ran (P0 checklist #11: "synced departments visible").
+// The organisation mirror (admin design §4.10): departments in the user's scope with their teams, the gateway's member
+// groups and how their knowledge bases are shared (admin design §5.10: what the generic Organisation page showed). Platform
+// admins can sync now, see when the sync last ran (P0 checklist #11) and open the gateway's Organisation page, where the
+// member groups are edited (admin design §2.3).
 const auth = useAuthStore()
 const ui = useUiStore()
 const departments = useLoadable<Department[]>([])
@@ -28,9 +31,17 @@ const columns: Column[] = [
   { key: 'name', label: ORGANISATION.name },
   { key: 'code', label: ORGANISATION.code },
   { key: 'teams', label: ORGANISATION.teams },
+  { key: 'memberGroups', label: PLATFORM.organisation.memberGroups },
+  { key: 'sharing', label: PLATFORM.columns.sharing },
   { key: 'status', label: ORGANISATION.status },
   { key: 'syncedAt', label: ORGANISATION.syncedAt },
 ]
+
+/** The gateway's Organisation page, from the sync's admin URL when it is an http(s) address. */
+const gatewayHref = computed(() => {
+  const url = status.value?.adminUrl
+  return url && /^https?:\/\//i.test(url) ? gatewayLink(url, { path: '/organisation', label: PLATFORM.organisation.gatewayLink }) : null
+})
 
 const failingSince = computed(() =>
   status.value && status.value.consecutiveFailures >= 3 ? formatDateTime(status.value.lastSuccessAt ?? status.value.lastRunAt) : null,
@@ -60,6 +71,9 @@ onMounted(load)
 
 <template>
   <PageHeader :title="PAGE.organisation.title" :description="ORGANISATION.lead">
+    <UiButton v-if="gatewayHref" :href="gatewayHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page">
+      {{ PLATFORM.organisation.gatewayLink }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
+    </UiButton>
     <template v-if="auth.isPlatformAdmin && status?.enabled">
       <span v-if="status.lastSuccessAt" class="text-small text-fg-3">{{ ORGANISATION.lastRun(formatRelative(status.lastSuccessAt)) }}</span>
       <UiButton icon="sync" :loading="syncing" @click="syncNow">{{ ORGANISATION.syncNow }}</UiButton>
@@ -74,6 +88,16 @@ onMounted(load)
       <template #cell-teams="{ row }">
         <span v-if="row.teams.length">{{ row.teams.map((t: Department['teams'][number]) => t.name).join(', ') }}</span>
         <span v-else class="text-fg-3">{{ ORGANISATION.noTeams }}</span>
+      </template>
+      <template #cell-memberGroups="{ row }">
+        <span v-if="row.memberGroups?.length" lang="sv">{{ row.memberGroups.join(', ') }}</span>
+        <span v-else class="text-fg-3">{{ PLATFORM.organisation.noMemberGroups }}</span>
+      </template>
+      <template #cell-sharing="{ row }">
+        <template v-if="row.sharing">
+          <span class="block">{{ PLATFORM.organisation.summary(row.sharing.department, row.sharing.selected, row.sharing.municipality) }}</span>
+          <span v-if="row.sharing.sharedWithDepartments" class="block text-small text-fg-3">{{ PLATFORM.organisation.sharedWith }}: {{ row.sharing.sharedWithDepartments }}</span>
+        </template>
       </template>
       <template #cell-status="{ row }"><UiBadge :tone="row.isActive ? 'ok' : 'neutral'" :label="row.isActive ? COMMON.active : COMMON.inactive" /></template>
       <template #cell-syncedAt="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.syncedAt) }}</span></template>

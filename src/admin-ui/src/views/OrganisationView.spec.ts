@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, department } from '@/test/fixtures'
+import { PLATFORM } from '@/utils/labels'
 import OrganisationView from './OrganisationView.vue'
 
 describe('Organisation: synced departments (P0 checklist #11)', () => {
@@ -47,5 +48,53 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     await flushPromises()
 
     expect(sync).toHaveBeenCalledOnce()
+  })
+
+  it('shows each department\'s member groups and how its knowledge bases are shared (admin design §5.10)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser()
+    auth.status = 'authenticated'
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([
+      department({ name: 'Kommunledningskontoret', memberGroups: ['Kommunstyrelsen', 'KLK-alla'], sharing: { department: 2, selected: 1, municipality: 3, sharedWithDepartments: 4 } }),
+      department({ name: 'Fritid', memberGroups: [] }),
+    ])
+    const wrapper = mount(OrganisationView)
+    await flushPromises()
+    const [first, second] = wrapper.findAll('tbody tr')
+    expect(first!.text()).toContain('Kommunstyrelsen, KLK-alla')
+    expect(first!.text()).toContain(PLATFORM.organisation.summary(2, 1, 3))
+    expect(first!.text()).toContain(`${PLATFORM.organisation.sharedWith}: 4`)
+    expect(second!.text()).toContain(PLATFORM.organisation.noMemberGroups)
+    // A viewer gets no link to the gateway's administration.
+    expect(wrapper.find('[data-test=gateway-page]').exists()).toBe(false)
+  })
+
+  it('links a platform admin to the gateway\'s Organisation page in a new tab when the sync knows an http(s) admin address', async () => {
+    const status = (adminUrl: string | null) => ({
+      enabled: true, lastRunAt: null, lastSuccessAt: null, consecutiveFailures: 0, lastError: null, lastResult: null, gateway: null, degraded: null, adminUrl,
+    })
+    for (const [adminUrl, href] of [
+      ['https://gateway-admin.example.invalid/', 'https://gateway-admin.example.invalid/organisation'], ['javascript:alert(1)', null], [null, null],
+    ] as const) {
+      setActivePinia(createPinia())
+      const auth = useAuthStore()
+      auth.user = bffUser({ roles: ['rag-platform-admin'] })
+      auth.status = 'authenticated'
+      vi.spyOn(api.organisation, 'departments').mockResolvedValue([department()])
+      vi.spyOn(api.organisation, 'syncStatus').mockResolvedValue(status(adminUrl))
+      const wrapper = mount(OrganisationView)
+      await flushPromises()
+      const link = wrapper.find('[data-test=gateway-page]')
+      if (href) {
+        expect(link.attributes('href')).toBe(href)
+        expect(link.attributes('target')).toBe('_blank')
+        expect(link.attributes('rel')).toContain('noopener')
+        expect(link.text()).toContain(PLATFORM.organisation.gatewayLink)
+      } else {
+        expect(link.exists()).toBe(false)
+      }
+      wrapper.unmount()
+    }
   })
 })

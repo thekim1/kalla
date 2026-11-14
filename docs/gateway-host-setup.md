@@ -387,7 +387,7 @@ docker compose --env-file deploy/.env exec -u postgres postgres psql -U postgres
 | The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` | `succeeded`, `Added` = the number of URLs (a few minutes; first parses are slower) |
 | Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` | at least one chunk per page, `1024` |
 | Per-page outcome | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` | `added` for each page |
-| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded, "CanarySimilarity" FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync); the similarity is empty until a platform admin runs **Check embedding canary** (admin UI, Platform → Gateway models), then at least `0.999` |
+| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded, "CanarySimilarity" FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync); the similarity is empty until a platform admin runs **Check embedding canary** (admin UI, *Models*), then at least `0.999` |
 
 On the gateway side, its admin UI shows the embedding calls under the worker's key with their cost (a few hundredths of
 a cent for a handful of pages).

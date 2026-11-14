@@ -269,8 +269,8 @@ Every .NET service also answers `/health/live` and `/version`.
 
 ### 6. Before the first use of the admin UI
 
-A platform admin signs in to the admin UI and creates the **`admin-console` client** under *Platform objects →
-Clients*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off
+A platform admin signs in to the admin UI and creates the **`admin-console` client** under *Apps and
+keys*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off
 (identity design §4.1). The assistant test panel writes the cost of each test turn under that client, so test use shows
 apart from real use on the *Costs* pages. Create it before anyone uses the test panel: without it the panel still
 answers, but its cost is not recorded, and rag-admin's log warns "Test panel usage of assistant … not written (… calls):
