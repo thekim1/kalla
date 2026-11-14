@@ -676,6 +676,13 @@ export const PLATFORM = {
   lead: 'What the platform team sets up for the whole platform. The fields come from the API’s schemas.',
   /** Field labels of the generic forms; a field missing here is named from its property name. */
   fields: {
+    // Settings.Identity.RoleGroups (M-17 C10): one list per role.
+    platformAdmin: 'Platform administrators',
+    departmentAdmin: 'Department administrators',
+    pipelineEditor: 'Pipeline editors',
+    reviewer: 'Reviewers',
+    editor: 'Editors',
+    viewer: 'Read access',
     oAuthClientId: 'OAuth client ID',
     classificationCeiling: 'Highest information class',
     storesHistory: 'Stores chat history',
@@ -718,6 +725,13 @@ export const PLATFORM = {
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
+    platformAdmin:
+      'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id. A role in the sign-in token counts too, and the deployment’s break-glass group for platform administrators always applies.',
+    departmentAdmin: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
+    pipelineEditor: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
+    reviewer: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
+    editor: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
+    viewer: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
     requestsPerMinute:
       'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. Open WebUI users always get the per-user limit.',
     dimensions: 'The size of each vector. It must match what the model returns.',
@@ -769,6 +783,7 @@ export const PLATFORM = {
     chat: 'Chat',
     pii: 'Personal data',
     worker: 'Processing',
+    identity: 'Role groups',
   },
   columns: {
     name: 'Name',
@@ -1863,6 +1878,7 @@ export const SETTINGS_PAGE = {
     'deletion-guard': 'When a crawl that would remove many documents waits for a person to decide.',
     evaluation: 'The models and limits of test questions and their grading.',
     network: 'The ports and addresses the crawler may reach.',
+    identity: 'Which sign-in groups give which role. A change applies at each user’s next sign-in.',
   } as Record<string, string>,
 } as const
 

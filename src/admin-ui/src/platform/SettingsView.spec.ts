@@ -151,6 +151,31 @@ describe('Settings page (admin design §5.10)', () => {
     wrapper.unmount()
   })
 
+  it('edits the role groups as one list per role and sends them back as lists (M-17 C10)', async () => {
+    const identity = { platformAdmin: [], departmentAdmin: [], pipelineEditor: [], reviewer: ['rag-reviewers'], editor: [], viewer: [], version: '3' }
+    const list = { type: 'array', items: { type: 'string' } }
+    const schema = { properties: { platformAdmin: list, departmentAdmin: list, pipelineEditor: list, reviewer: list, editor: list, viewer: list } }
+    const doc = { paths: { '/api/settings/identity': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
+    // The save answers with the next version.
+    const fetch = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve(json(url === '/openapi/v1.json' ? doc : init?.method === 'PUT' ? { ...identity, version: '4' } : identity)))
+    vi.stubGlobal('fetch', fetch)
+    document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+    const wrapper = mountPage('identity')
+    await flushPromises()
+    expect(wrapper.get('#settings-section-title').text()).toBe(PLATFORM.settingsSections.identity)
+    expect(wrapper.text()).toContain(PLATFORM.fields.reviewer)
+    expect((wrapper.get('#settings-identity-reviewer').element as HTMLTextAreaElement).value).toBe('rag-reviewers')
+    await wrapper.get('#settings-identity-viewer').setValue('rag-viewers\n8f0b7a6e-1c2d-4e5f-9a8b-7c6d5e4f3a2b')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect(JSON.parse(String(put[1]!.body))).toMatchObject({
+      reviewer: ['rag-reviewers'], viewer: ['rag-viewers', '8f0b7a6e-1c2d-4e5f-9a8b-7c6d5e4f3a2b'], version: '3',
+    })
+    wrapper.unmount()
+  })
+
   it('shows site profiles and data protection as sections with their lists, and the prompt texts as a section', async () => {
     const profiles = [{ id: 'sp1', host: 'www.umea.se', presetId: 'sitevision', appliedVersion: 2, appliedAt: '2026-11-01T12:00:00Z' }]
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/api/site-profiles' ? profiles : url.startsWith('/api/settings/chat/prompts') ? { sections: [] } : []))))

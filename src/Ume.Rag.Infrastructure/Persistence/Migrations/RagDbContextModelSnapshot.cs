@@ -3116,6 +3116,10 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("IdentityRoleGroups")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
                     b.Property<decimal>("NerMinScore")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)");

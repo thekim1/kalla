@@ -216,11 +216,9 @@ services:
       Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-teamCodes}
       Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-groups}
       Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-email}
+      # The break-glass for the first platform admin (Decisions "Role groups as a setting"); every other role group is
+      # Settings.Identity.RoleGroups in the admin UI (Settings, Role groups), merged with this at each sign-in.
       Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
-      Oidc__RoleGroups__rag-department-admin: ${UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
-      Oidc__RoleGroups__rag-pipeline-editor: ${UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR:-}
-      Oidc__RoleGroups__rag-reviewer: ${UME_RAG_OIDC_GROUPS_REVIEWER:-}
-      Oidc__RoleGroups__rag-viewer: ${UME_RAG_OIDC_GROUPS_VIEWER:-}
       Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       BlobStore__Root: /data/blobs/rag

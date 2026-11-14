@@ -47,6 +47,12 @@ public sealed class PlatformSettings
     /// <summary>Personal-data flag rules (<c>jsonb</c>, processing design §9).</summary>
     public string PiiFlagRules { get; set; } = "{}";
 
+    /// <summary>
+    /// <c>Settings.Identity.RoleGroups</c> (<c>jsonb</c>, role name → IdP group names; Decisions "Role groups as a setting",
+    /// M-17 C10): read at each sign-in and merged with the break-glass <c>Oidc:RoleGroups</c>.
+    /// </summary>
+    public string IdentityRoleGroups { get; set; } = "{}";
+
     public string[] PiiOwnDomains { get; set; } = [];
     public decimal NerMinScore { get; set; } = 0.80m;
     public string? EvaluationModel { get; set; }
