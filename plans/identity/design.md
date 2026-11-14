@@ -409,7 +409,9 @@ Rules:
 | `ToolPolicy varchar(10)` | P2: client layer of the tool policy, `none`/`read` (P3 `confirm`); defaults `read` for `open-webui`, `own-client`, `teams`, `widget`, `none` for `integration`, `entra-app`, `mcp-client`, `internal` (tools design §5.1) | new (tools design §13) |
 
 Database checks stay as designed: `StoresHistory ⇒ ceiling ≠ sensitive`, `mcp-client ⇒ ceiling ≠ sensitive`.
-Pilot rows (seeded by the migration service in dev, created by a platform admin in production):
+Pilot rows. The platform's own clients are seeded by the migration service in every deployment, insert-if-absent and
+marked managed by the deployment (Decisions "Deploy configuration"; #712): `admin-console`, the deployment's Open WebUI
+client while the `openwebui` profile is on (§5.2), and `rag-internal` once P2 uses it. A platform admin creates the others:
 
 | Client | Kind | Ceiling | StoresHistory |
 |---|---|---|---|
