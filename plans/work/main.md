@@ -93,7 +93,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Read:** the proposal; Decisions above; docs/portainer.md; deploy/portainer/.
 - **Status (2026-11-14):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
   repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
-  M-16 session). The M-16 session continues with the next steps in order and announces each on #667.
+  M-16 session), C4 (#684; the upgrade note for hand-made Open WebUI clients is in `docs/upgrade-guide.md`'s
+  *Unreleased*). The M-16 session continues with the next steps in order and announces each on #667.
 
 ### [ ] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
 - **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the

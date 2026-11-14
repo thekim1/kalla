@@ -12,6 +12,22 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **Open WebUI's client is set up by the deployment (M-17 C4, #684).** rag-migrate creates the client *Open WebUI*
+  (*Managed by the deployment*) from a key the deployment generates, and rag-api trusts Open WebUI's users **only**
+  for that client. An Open WebUI client made by hand stays in the registry but is no longer trusted, so until the
+  assistants' audiences move, Open WebUI users see no models. **Apply:**
+  1. Before the update, note which assistants the hand-made client offers (*Apps and keys* → its drawer, or each
+     assistant's *Who can use it*), and its information class, history and feedback days.
+  2. Portainer: paste the new stack file and remove `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID`
+     from the variables; Compose: re-run `init-deployment.sh` with your options, without `--openwebui-api-key-file`
+     and `--openwebui-rag-client-id` (both are unknown options now). Update the stack.
+  3. In *Apps and keys*, open *Open WebUI* (managed): set the class, history and feedback days to the old client's
+     (it starts as `internal`, keeps history, 90 days), and tick the same assistants. Save.
+  4. Disable the hand-made client and revoke its key.
+  **Check:** a test user signs in to Open WebUI and sees the assistants; chat answers no `401 user_jwt_invalid`
+  (what the hand-made client's requests get now). A new deployment key later: delete `.openwebui-rag-api-key` in the secrets volume
+  (Compose: `secrets/.openwebui-rag-api-key`) and update the stack; rag-migrate revokes the old one.
+
 ## 0.5.1
 
 - **Rolling update: yes** from 0.5.0: no migration, no configuration change for Compose or Kubernetes.
