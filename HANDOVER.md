@@ -24,37 +24,27 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here: a plan to move env files into settings and automatic setup (user, 2026-11-13)
+## Start here: M-17, the deploy-configuration steps (session 35, 2026-11-14)
 
-**The goal of the next session is a plan, not code:** push as much of the deployment's environment variables as
-possible into run-time settings (`Settings.<Section>.<Key>`, the admin UI) or automatic setup, so a deploy needs only
-what a process can't start without. Write it as a plan document (in `plans/proposals/` or as queue items, the user's
-call), with each variable's destination, the decisions it needs, and an order. Ask the user before building anything.
+The plan the last handover asked for is **written and decided**: [`plans/proposals/deploy-configuration.md`](plans/proposals/deploy-configuration.md)
+(D1–D10 as recommended; Decisions "Deploy configuration", "Residency per level", "Role groups as a setting"; the
+gateway's part is thekim1/llmgateway #87–#90). The work is `plans/work/main.md` **M-17**, steps C0–C13, one PR each.
 
-**Starting material, measured in session 33:**
-- **The surface today:** the Ume.Rag part of the Portainer stack reads **48** `UME_RAG_*` variables
-  (`deploy/portainer/compose.rag.template.yaml`, listed with comments in `deploy/portainer/stack.env.example`); Compose
-  reads 41 (`deploy/compose.prod.yaml`, `compose.ingestion.yaml`), written by `deploy/init-deployment.sh` (723 lines).
-  Secret files come from `rag-bootstrap` (Portainer, `deploy/portainer/bootstrap.sh`) or `init-deployment.sh`.
-- **Binding rules to plan within:** Decisions "Settings rule" (deployment knobs `Section:Key`, run-time values in the
-  database); Decisions "Gateway keys" (each setting has one owner: departments, teams, models and a key's settings are
-  the gateway's; which key an object runs on, prompts, retrieval are Ume.Rag's); the services read secrets from files,
-  never from environment variables.
-- **A first sort, to check, not decided:**
-  - *Stays deploy-time:* host names and public URLs, ports and binds, the OIDC authority, database and certificates,
-    profiles, image pins, resource limits.
-  - *Could become settings:* the embedding model (already "seeded once", then edited in the UI: the variable could
-    go), the OIDC group-to-role mapping (`UME_RAG_OIDC_GROUPS_*`; the first platform admin is the chicken-and-egg),
-    `UME_RAG_GATEWAY_MAX_RESIDENCY`, `UME_RAG_CRAWL_ALLOW`, the Open WebUI feedback import's URL and interval, the
-    ClamAV mode, the telemetry sampler; `UME_RAG_GATEWAY_INTEGRATION_API_URL` might come from the gateway's context
-    (`admin_url`): check in the gateway's code.
-  - *Could be set up automatically:* the three gateway credential keys (a provisioning step against the gateway's
-    admin API, which needs a gateway change: #3 of the deploy-ease list), Open WebUI's client and key (rag-admin creates
-    them when the `openwebui` profile is on), the feedback service account's key (a one-shot job), the OIDC clients
-    (Keycloak realm import, `deploy/keycloak/`), the embedding model picked from the gateway's `/v1/models`.
-- **The deploy-ease list** (session 33, user chose 1 and 2, both built in #659): 3 automatic gateway integration
-  set-up (gateway change), 4 an optional TLS proxy profile in the stack, 5 each release boot-tests and pins the
-  Portainer stack. They belong in the same plan.
+- **C0 is built, waiting for a merge:** #674 (the release boots the Portainer stack with `deploy/tests/portainer-boot.sh`;
+  `build-stack.sh --check` in deploy-checks; `build-stack.sh --images` and the pin pull request after a release). Its
+  done-when is met: release dry run 43536989470 green, a broken stack fails locally. Not yet exercised: the pin pull
+  request (first run at the next tag release; it needs the repository setting *Allow GitHub Actions to create and
+  approve pull requests*).
+- **#678 goes first:** `opentelemetry-api` 1.45.2 in the parser's lock. Without it `parser.yml`'s `pip-audit` is red
+  (CVE-2026-126360) and no release or dry run reaches the build. #674's branch carries the same commit by a merge.
+- **C1 is built on the branch `a/m17-c1-public-url-default`** (on top of #674, no pull request yet): rag-api's public
+  URL defaults to `https://<UME_RAG_API_HOST>`, the checklist no longer demands the platform-admin group, the boot test
+  checks both. Open its pull request once #674 is merged (rebase on `main` first). Compose is unchanged on purpose:
+  `init-deployment.sh` always writes the URL.
+- **Then C2 and C3** (no decision, no gateway change), C4–C6, C8–C10, C13; C7, C11 and C12 wait on the gateway's
+  releases. A step that changes rag-bootstrap's checklist updates the expected items in `portainer-boot.sh`.
+- **The session that wrote this could not merge pull requests or push to `main`** (its permission settings): the
+  merges above, M-17's tick for C0 and the roadmap line are left for the user or the next session.
 
 ## State
 
@@ -67,18 +57,27 @@ call), with each variable's destination, the decisions it needs, and an order. A
 - **Now (roadmap):** the **test chatbot** on DoIT's uploaded documents for a small test group, on the gateway and Ume.Rag
   deployed by hand by the user with Portainer (T0–T6, M-15); then the umea.se pilot. Open question for the user and the
   data protection officer: does the test group's use need the DPIA (G1) first?
-- Every code item is done except **A-41** (#654: the read-back on the platform's Gateway view, texts on a
-  `main-session/` branch).
+- **M-16** (connect an app in one go, the platform menu, the Settings page) is another session's, on stream b's
+  machine: steps 1–8 are merged (2026-11-14); #667 says what is left of it.
+- A-41 is done (#665).
 - **Stream b** (remote, GitHub only) works fast, answers findings with PRs, announces on #580. B-42–B-46 are merged
   and unticked until their live checks.
 - **Local user secrets** still block the AppHost (handbook *Environment notes*).
 
 ## Next
 
-1. **The plan above** (the session's goal).
-2. GitHub (new stream-b PRs and issues; #580, #513, #550 stay
-   open); A-41.
-3. When the user's VM deploy reports problems: fix the stack (Open WebUI's wrapper, CA bundle and data volume first).
+1. Merge #678, then #674; tick C0 in M-17 and note it in the roadmap.
+2. C1's pull request from `a/m17-c1-public-url-default`, then C2 and C3.
+3. GitHub (new stream-b PRs and issues; #580, #513, #550 stay open).
+4. When the user's VM deploy reports problems: fix the stack (Open WebUI's wrapper, CA bundle and data volume first).
+
+## Session 35 (2026-11-14)
+
+- **M-17 C0** built and proven by a release dry run (#674); **C1** built on its branch.
+- **Parser audit fixed** (#678): the lock's `exclude-newer` moved to 2026-11-07, `opentelemetry-api` 1.45.2.
+- This machine's Docker has no free address pool for the stack's networks: `portainer-boot.sh --compose-file` with fixed
+  subnets (10.210.N.0/24) works. Port 5000 is taken here (a local registry must use another port). The `gh` token has
+  no `read:packages`, so Ume.Rag's released images can't be pulled here: build them into a local registry instead.
 
 ## Session 33 (2026-11-13)
 
