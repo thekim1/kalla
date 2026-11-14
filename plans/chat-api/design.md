@@ -332,7 +332,7 @@ wins with `ENABLE_PERSISTENT_CONFIG=false` (to-verify #134); the line numbers in
 | Setting | Value | Why |
 |---|---|---|
 | `OPENAI_API_BASE_URLS`, `OPENAI_API_KEYS` | our API, the `ume-rag-sk-` connection key | chat plan §6 |
-| `OPENAI_API_CONFIGS` `"0".headers` | `{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}` | feedback mapping, regeneration dedup (`ow/utils/headers.py:138-155`); unsigned, so only meaningful inside the caller's own conversation |
+| `OPENAI_API_CONFIGS` `"0".headers` | `{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}` | feedback mapping, regeneration dedup (`ow/utils/headers.py:138-155`); unsigned, so only meaningful inside the caller's own conversation; rag-api takes only a UUID in its `D` form (Open WebUI's ids are `uuid4`) and ignores anything else (#698) |
 | `ENABLE_FORWARD_USER_INFO_HEADERS=true`, `FORWARD_USER_INFO_HEADER_JWT_SECRET` | set | identity §5.1–§5.2; chat id in `X-OpenWebUI-Chat-Id` (`headers.py:196-198`, name `ow/env.py:1005`) |
 | `ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`, `ENABLE_FOLLOW_UP_GENERATION` | `false` | no task calls at all (§4.2; defaults `True`, `ow/config.py:2353-2357`, mapped to `task.*` keys at `:3243-3245`); chats keep Open WebUI's default title |
 | `ENABLE_RETRIEVAL_QUERY_GENERATION`, `ENABLE_SEARCH_QUERY_GENERATION`, `ENABLE_AUTOCOMPLETE_GENERATION` | `false` | no RAG or search in Open WebUI (`ow/config.py:2360-2391`) |
@@ -1035,9 +1035,12 @@ embedding were paid) is enqueued as a **usage-only** turn: no conversation or me
    (gateway or estimated); the turn's full cost is the sum of its usage records. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
    folding the lock, `Seq` and the inserts into one `NpgsqlBatch` is built only if the R1 performance test shows the
    writer falling behind (#392, stream A A-L6; to-verify #20).
-7. Failure: the batch is retried after 2 s (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split
-   and retried per turn; a turn failing alone three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids
-   logged). While Postgres is down the queue fills, then the enqueue rule applies.
+7. Failure: a transient error (Npgsql's `IsTransient`: connection, serialization, deadlock) retries the batch after 2 s
+   (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split and retried per turn; a turn failing alone
+   three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids logged). A deterministic Postgres error (data
+   or constraint, class 22 or 23) fails the same way again, so it splits the batch at once and drops the turn after one
+   attempt (#698). An answer whose Open WebUI message id is already in the conversation writes no row and no sources
+   (`reason=duplicate`). While Postgres is down the queue fills, then the enqueue rule applies.
 
 ### 12.3 Bucket keys (built when A1 allows stored content, weakness review §4)
 
@@ -1251,7 +1254,7 @@ totals).
 | `rag.chat.prompt.estimate_ratio` | histogram | – |
 | `rag.chat.stream.stalls` | counter | waits ≥ 1 s between gateway events (gateway `StreamGaps.StallThreshold`, `Pipeline/StreamGaps.cs:10-11`) |
 | `rag.chat.writer.queue`, `.queue_bytes` | observable gauge | – |
-| `rag.chat.writer.batch.duration`, `rag.chat.writer.dropped` | histogram, counter | `reason` (`full`, `poison`, `shutdown`) |
+| `rag.chat.writer.batch.duration`, `rag.chat.writer.dropped` | histogram, counter | `reason` (`full`, `poison`, `duplicate`, `shutdown`) |
 | `rag.chat.feedback` | counter | `source` (`api`, `owui-import`), `outcome` |
 | `rag.gateway.request.duration`, `rag.gateway.residency_refusals` (existing names) | histogram, counter | `step` |
 | `rag.gateway.status` | counter | `step`, `status` (`503_retry_after`, `403_max_residency_not_met`, …) |
