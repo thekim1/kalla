@@ -28,13 +28,13 @@ sink" monolith. Design and code live in this repo.
 
 - **M-17** (deploy configuration, decided: [`plans/proposals/deploy-configuration.md`](plans/proposals/deploy-configuration.md),
   `plans/work/main.md` M-17) is built by **the M-16 session on stream b's machine** (GitHub `thekim1`), by the user's
-  choice, one step at a time and announced on #667. **C0–C5 are merged** (#674, #683, #682, #684, #687). This session reviews
+  choice, one step at a time and announced on #667. **C0–C6 and C8 are merged** (#674, #683, #682, #684, #687, #689, #690). This session reviews
   the security-relevant steps and builds none unless the user says so. C7, C11 and C12 wait on thekim1/llmgateway
   #87 (G1), #90 (G5), #89 (G4).
 - **M-18** (remove `Settings.WorkerConcurrency` until P2, #677) is merged (#686). **C5** (the embedding profile created in
-  the admin, #687) is merged; its design deviations are settled on `main` (69987e4f).
+  the admin, #687) is merged; its design deviations are settled on `main` (69987e4f); its review nits in #688. C6's design is updated on `main`. **C8 (#690, TLS proxy) was reviewed after merge:** nginx resolves upstream names only at start, so a release that recreates a service leaves the proxy on a stale address (502) until it restarts; fix suggested on #690 (`resolver 127.0.0.11` + `server … resolve`), not yet taken up. repo-and-deployment still needs a line for the `proxy` profile. Next from the M-16 session: C9, then C10.
 - **Next release (0.6.0):** after the M-17 steps the user wants in it. Before tagging: CHANGELOG *Unreleased* needs
-  M-16 (#668–#679, #681), #670, M-17 C0–C5 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
+  M-16 (#668–#679, #681), #670, M-17 C0–C6, C8 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
   Open WebUI client move (#685); the repository setting *Allow GitHub Actions to create and approve pull requests* must
   be on for C0's pin PR.
 - **The test chatbot (T2–T6) is the user's team's** (user, 2026-11-14): don't plan or prepare it; fix what they report.
