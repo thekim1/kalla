@@ -50,8 +50,6 @@
 #
 # Required variables (besides the gateway's above)
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
-#   UME_RAG_API_PUBLIC_URL    its public URL (https://rag.example.se:8543, or without the port behind a proxy);
-#                             citation links are absolute
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
 #                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
 #                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
@@ -65,9 +63,13 @@
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
 #                             UME_OIDC_AUTHORITY (UME_RAG_OIDC_AUTHORITY to use another); redirect URIs
 #                             https://<UME_RAG_ADMIN_HOST>:<port>/signin-oidc and /signout-callback-oidc
-#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN / _DEPARTMENT_ADMIN / _PIPELINE_EDITOR / _REVIEWER / _VIEWER
-#                             groups that grant a RAG role (';'-separated); empty grants nothing
 # Optional
+#   UME_RAG_API_PUBLIC_URL    rag-api's public URL when it is not https://<UME_RAG_API_HOST> (a port:
+#                             https://rag.example.se:8543); citation links are absolute
+#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN / _DEPARTMENT_ADMIN / _PIPELINE_EDITOR / _REVIEWER / _VIEWER
+#                             groups that grant a RAG role (';'-separated), for an identity provider whose tokens carry
+#                             groups instead of the roles (rag-platform-admin, ...) in the roles claim; empty grants
+#                             nothing
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
 #   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
 #   UME_RAG_GATEWAY_INTEGRATION_API_URL  the gateway's cost and budget read-back in RAG's admin UI: the gateway admin
@@ -363,7 +365,6 @@ services:
       # For the checklist of what is still missing, which rag-bootstrap prints at the end of its log.
       UME_RAG_API_PUBLIC_URL: ${UME_RAG_API_PUBLIC_URL:-}
       UME_RAG_EMBEDDING_MODEL: ${UME_RAG_EMBEDDING_MODEL:-}
-      UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
       UME_RAG_OPENWEBUI_HOST: ${UME_RAG_OPENWEBUI_HOST:-}
       UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}
       UME_RAG_OPENWEBUI_API_KEY: ${UME_RAG_OPENWEBUI_API_KEY:-}
@@ -470,7 +471,8 @@ services:
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
-      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL (https URL)}
+      # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
+      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -550,7 +552,7 @@ services:
       # The organisation the admin UI names in its header and sign-in texts; empty names none (#544).
       Admin__OrganisationName: ${UME_ORGANISATION_NAME-Umeå kommun}
       # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
-      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-}
+      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
@@ -1188,11 +1190,12 @@ configs:
         [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: issue rag-$$svc's credential key in the gateway's admin (integration Ume.Rag) and update the stack; no restart needed"
       done
       example "$$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
-      case "$${UME_RAG_API_PUBLIC_URL:-}" in https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
+      # Optional: unset, rag-api's public URL is https://<UME_RAG_API_HOST>.
+      case "$${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
+        https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
         https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
       example "$${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
       example "$${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
-      example "$${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}" && note "UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: nobody gets the role rag-platform-admin"
       case ",$${COMPOSE_PROFILES:-}," in
         *,openwebui,*)
           example "$${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"
@@ -1206,6 +1209,8 @@ configs:
       else
         echo "rag-bootstrap: every setting it checks is in place"
       fi
+      # Not a setting to check here: who is a platform admin comes from the sign-in token.
+      echo "rag-bootstrap: the first platform admin needs the role rag-platform-admin in the token's roles claim (Keycloak: give the user that realm role). Signed in without it, Ume.Rag's admin says you have no role: then give the role, or name a group of the token's in UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN"
   rag-postgres-init:
     content: |
       -- Bootstrap, run once by the image entrypoint as the bootstrap superuser (mounted as
