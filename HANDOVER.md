@@ -57,7 +57,7 @@ sink" monolith. Design and code live in this repo.
 
 ## Next
 
-0. **Review 2026-11-14 filed as #694** (successor to #513, which is closed): 3 high, 13 medium, two small-fix batches (#695–#712), each checked against the code. #704 (release buildx cache writable by PR jobs) is a decision for main and the user, with #506 and #507; #712's `admin-console` seeding waits on main (identity §4.1). **#691 (C9)** waits on its `EnsureFirstReadAsync` cancellation fix; its design is already on `main` (da1814d0).
+0. **Review #694** (successor to #513): #695 (#713), #699 (#714) merged; #704 done by main (#717, decided 2026-11-15: no shared caches on a tag release now, a separate-user `release` runner before go-live). **Approved, waiting for merge:** #715 (#698), #716 (#701), #691 (C9, fix verified), #693 (C10; its design — identity's group table, admin §5.10, data-model §2.1 — is main's after merge). Next from the M-16 session: #702. #712 item 8 (`admin-console` seeded) is decided (identity §4.1). The gateway answered #87–#90 on #580; the proposal's C7/C11/C12 rows follow it.
 
 1. GitHub: review M-17's PRs as they come (security-relevant parts), answer #667 and #580.
 2. The 0.6.0 release when the user asks (checklist above).

@@ -987,7 +987,7 @@ public sealed record DraftRequest : AdminRequest
 }
 
 /// <summary>One collection link of a draft.</summary>
-public sealed record CollectionLinkRequest
+public sealed record CollectionLinkRequest : AdminRequest
 {
     [Required]
     public Guid CollectionId { get; init; }

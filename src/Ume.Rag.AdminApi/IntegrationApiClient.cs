@@ -20,6 +20,9 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
 {
     public const string HttpClientName = "gateway-integration";
     public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(5);
+
+    /// <summary>One call's limit (#701): a read-back that takes longer is <c>unavailable</c>, the page shows no figures.</summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     private IntegrationApiError? _lastError;

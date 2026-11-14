@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -14,7 +14,8 @@ namespace Ume.Rag.Api.Tests;
 /// #275: <c>temperature</c> is sent only when the assistant sets one (the gateway refuses it for models that deprecate it),
 /// and a refusal the chat maps to 502 leaves one Warning with the gateway's status, code and request id, without body text
 /// or address. B-38 (chat design §8.3): a stream asks for its cost and ends with the comment's, which is never an event; a
-/// JSON answer gives its usage as soon as it answers.
+/// JSON answer gives its usage as soon as it answers. #695: a JSON answer's headers come only after the whole answer, so the
+/// headers timeout bounds a stream only, and a JSON answer gets <c>Chat:MaxAnswerDurationSeconds</c>.
 /// </summary>
 public sealed class GatewayChatClientTests
 {
@@ -175,5 +176,46 @@ public sealed class GatewayChatClientTests
                 Guid.CreateVersion7(), "follow-ups", Ct, usage: usage.Add));
             usage.ShouldBe([new GatewayCallUsage("follow-ups", "ume/chat-eu", 0, 0, 0, 0.000001m)]);
         }
+    }
+
+    /// <summary>A gateway that answers <see cref="Answer"/> as JSON after <paramref name="delay"/>, or never when it is infinite.</summary>
+    private sealed class SlowGateway(TimeSpan delay) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(delay, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Answer, Encoding.UTF8, "application/json") };
+        }
+    }
+
+    [Fact]
+    public async Task A_json_answer_slower_than_the_headers_timeout_is_bounded_by_the_answer_duration_instead()
+    {
+        // #695: 1.5 s is past the 1 s headers timeout; a JSON answer still arrives, a stream that slow is upstream_unavailable.
+        var options = Options.Create(new ChatOptions { GatewayHeadersTimeoutSeconds = 1, MaxAnswerDurationSeconds = 30 });
+        using var gateway = new SlowGateway(TimeSpan.FromMilliseconds(1500));
+        using var loggers = LoggerFactory.Create(_ => { });
+        var client = new GatewayChatClient(new Clients(gateway), options, loggers.CreateLogger<GatewayChatClient>());
+
+        var answer = await client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct);
+        answer.Text.ShouldBe("Svar.");
+
+        var stream = await Should.ThrowAsync<ChatException>(() =>
+            client.OpenStreamAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), Ct));
+        (stream.Status, stream.Code).ShouldBe((503, "upstream_unavailable"));
+    }
+
+    [Fact]
+    public async Task A_json_answer_that_never_comes_ends_at_the_answer_duration_as_upstream_unavailable()
+    {
+        var options = Options.Create(new ChatOptions { GatewayHeadersTimeoutSeconds = 15, MaxAnswerDurationSeconds = 1 });
+        using var gateway = new SlowGateway(Timeout.InfiniteTimeSpan);
+        using var loggers = LoggerFactory.Create(_ => { });
+        var client = new GatewayChatClient(new Clients(gateway), options, loggers.CreateLogger<GatewayChatClient>());
+
+        var refused = await Should.ThrowAsync<ChatException>(() =>
+            client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct)
+                .WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        (refused.Status, refused.Code).ShouldBe((503, "upstream_unavailable"));
     }
 }

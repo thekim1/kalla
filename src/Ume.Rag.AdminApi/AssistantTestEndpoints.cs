@@ -329,7 +329,7 @@ public enum AssistantTestTarget
     Published,
 }
 
-public sealed record TestHistoryMessage
+public sealed record TestHistoryMessage : AdminRequest
 {
     [Required, RegularExpression("^(user|assistant)$")]
     public string Role { get; init; } = "user";
@@ -338,7 +338,7 @@ public sealed record TestHistoryMessage
     public string Text { get; init; } = "";
 }
 
-public sealed record AssistantTestRequest
+public sealed record AssistantTestRequest : AdminRequest
 {
     [Required, StringLength(2000, MinimumLength = 1)]
     public string Question { get; init; } = "";

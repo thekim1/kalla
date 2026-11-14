@@ -191,9 +191,14 @@ public static class ChatEndpoints
         return (issued, null);
     }
 
-    /// <summary>The metadata-only turn for the writer (history mode none, all of P1): no text, the sources with their prompt numbers.</summary>
-    private static string? Header(HttpContext http, string name) => http.Request.Headers[name].ToString() is { Length: > 0 and <= 200 } value ? value : null;
+    /// <summary>
+    /// Open WebUI's message id from its connection header (§4.3), or null: the header is unsigned and its user can set it, so only a
+    /// UUID in its usual form is taken (Open WebUI's ids are <c>uuid4</c>; the column is <c>varchar(100)</c>, #698), as sent.
+    /// </summary>
+    private static string? Header(HttpContext http, string name) =>
+        http.Request.Headers[name].ToString() is { Length: 36 } value && Guid.TryParseExact(value, "D", out _) ? value : null;
 
+    /// <summary>The metadata-only turn for the writer (history mode none, all of P1): no text, the sources with their prompt numbers.</summary>
     private static ChatTurn Turn(HttpContext http, ChatPlan plan, RagPrincipal who, (Guid? Issued, string? External) conversation, IReadOnlyList<PromptSource> cited, int prompt,
         int completion, int latencyMs)
     {

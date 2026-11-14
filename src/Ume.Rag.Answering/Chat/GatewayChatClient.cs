@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -56,22 +56,34 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
 
     /// <summary>
     /// One JSON answer. Once the gateway has answered <c>2xx</c> the call's usage goes to <paramref name="usage"/> (its tokens and
-    /// <c>x-ume-cost-usd</c>; a body that is not JSON gives no tokens), before the body is read for the text: the call was
-    /// charged even when the body then fails.
+    /// <c>x-ume-cost-usd</c>; a body that is not JSON, or one cut off by the time limit, gives no tokens), before the body is read
+    /// for the text: the call was charged even when the body then fails. The headers of a non-streamed answer come only after the
+    /// whole answer is generated, so the call is bounded by <c>Chat:MaxAnswerDurationSeconds</c>, not the headers timeout (#695);
+    /// a caller with a shorter budget (condense, follow-ups) cancels <paramref name="ct"/> itself.
     /// </summary>
     public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, string step, CancellationToken ct, string? reasoningEffort = null, Action<GatewayCallUsage>? usage = null)
     {
-        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, reasoningEffort, ct);
+        var limit = TimeSpan.FromSeconds(options.Value.MaxAnswerDurationSeconds);
+        var started = TimeProvider.System.GetTimestamp();
+        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, reasoningEffort, limit, ct);
+        using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var left = limit - TimeProvider.System.GetElapsedTime(started);
+        total.CancelAfter(left > TimeSpan.Zero ? left : TimeSpan.Zero);
         JsonDocument json;
         try
         {
-            json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(total.Token), cancellationToken: total.Token);
         }
         catch (JsonException)
         {
             usage?.Invoke(GatewayUsageReader.Read(response, default, step, model));
             throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            usage?.Invoke(GatewayUsageReader.Read(response, default, step, model));
+            throw new ChatException(503, "upstream_unavailable", "The model service is unavailable. Try again shortly.");
         }
 
         using (json)
@@ -91,7 +103,8 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     /// </summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
         Guid runId, CancellationToken ct) =>
-        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, AnswerStep, null, ct);
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, AnswerStep, null,
+            TimeSpan.FromSeconds(options.Value.GatewayHeadersTimeoutSeconds), ct);
 
     /// <summary>
     /// The stream's events, read through <see cref="SseReader"/> (the cost comment is taken, never passed on), ending with
@@ -140,7 +153,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     }
 
     private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
-        Guid runId, bool stream, string step, string? reasoningEffort, CancellationToken ct)
+        Guid runId, bool stream, string step, string? reasoningEffort, TimeSpan headersLimit, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/chat/completions", UriKind.Relative))
@@ -164,7 +177,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         request.Headers.Add("x-ume-step", step);
         request.Headers.Add("x-ume-run-id", runId.ToString());
         using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        headers.CancelAfter(TimeSpan.FromSeconds(options.Value.GatewayHeadersTimeoutSeconds));
+        headers.CancelAfter(headersLimit);
         HttpResponseMessage response;
         try
         {
