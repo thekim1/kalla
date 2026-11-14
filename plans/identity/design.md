@@ -696,7 +696,8 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   feedback routes and feedback creation (prefix match).
 - Open WebUI settings required for user trust: `ENABLE_LOGIN_FORM=false` and `ENABLE_SIGNUP=false` (only OIDC
   login; `backend/open_webui/config.py:1692-1694`), `ENABLE_PASSWORD_AUTH=false` (the form setting only hides the
-  form and does not block API password sign-in; on only while the service account's key is minted),
+  form and does not block API password sign-in; always off, since the deployment's setup job mints the service
+  account's key without it, chat design §14.2),
   `DEFAULT_USER_ROLE=user` (with the default `pending` and no person as admin, no OIDC account could chat), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
   `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2570`),
   `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/login/callback` (`:2629`; the `oidc` provider registers only
