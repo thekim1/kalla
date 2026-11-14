@@ -57,6 +57,8 @@ sink" monolith. Design and code live in this repo.
 
 ## Next
 
+0. **Review 2026-11-14 filed as #694** (successor to #513, which is closed): 3 high, 13 medium, two small-fix batches (#695–#712), each checked against the code. #704 (release buildx cache writable by PR jobs) is a decision for main and the user, with #506 and #507; #712's `admin-console` seeding waits on main (identity §4.1). **#691 (C9)** waits on its `EnsureFirstReadAsync` cancellation fix; its design is already on `main` (da1814d0).
+
 1. GitHub: review M-17's PRs as they come (security-relevant parts), answer #667 and #580.
 2. The 0.6.0 release when the user asks (checklist above).
 3. Fix what the user's team reports from the VM.
