@@ -93,7 +93,7 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
         Strings(mode["enum"]).ShouldBe(["RevokeImmediately", "Grace24Hours"]);
         Strings(Resolve(document, Body(document, "post", "/api/keys/{id}/reveal")["properties"]!["purpose"])["enum"]).ShouldBe(["Reveal", "Copy"]);
 
-        // A client's coded strings carry their allowed values (admin design §5.9; ClientEndpoints.AddClientSchemas), on create and update.
+        // A client's coded strings carry their allowed values (admin design §5.9; ClientEndpoints.AddCodedValueSchemas), on create and update.
         foreach (var (method, path) in new[] { ("post", "/api/clients"), ("put", "/api/clients/{id}") })
         {
             var client = Body(document, method, path)["properties"]!;
@@ -102,6 +102,11 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
             Strings(Resolve(document, client["toolPolicy"])["enum"]).ShouldBe(["none", "read"], $"{method} {path}");
             Resolve(document, client["name"])["enum"].ShouldBeNull($"{method} {path}");
         }
+
+        // A new site profile's level is a select too (admin design §5.8; M-16 step 8).
+        var siteProfile = Body(document, "post", "/api/site-profiles")["properties"]!;
+        Strings(Resolve(document, siteProfile["level"])["enum"]).ShouldBe(Classification.All);
+        Resolve(document, siteProfile["host"])["enum"].ShouldBeNull();
 
         // The first key on create only (nullable: a oneOf of null and the request's $ref).
         var firstKeyNode = Body(document, "post", "/api/clients")["properties"]!["firstKey"].ShouldNotBeNull();

@@ -231,6 +231,12 @@ public sealed record SiteProfileJob(Guid JobId, Guid? SiteProfileId);
 
 public sealed record SiteProfileCreateRequest : AdminRequest, IValidatableObject
 {
+    /// <summary>The coded members' allowed values by JSON name: what <see cref="Validate"/> accepts and the OpenAPI <c>enum</c>s.</summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> AllowedValues { get; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+    {
+        ["level"] = Classification.All,
+    };
+
     [Required, StringLength(253), RegularExpression(@"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$")]
     public string Host { get; init; } = "";
 

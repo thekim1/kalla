@@ -122,16 +122,18 @@ public static class ClientEndpoints
     }
 
     /// <summary>
-    /// Gives <see cref="ClientRequest"/>'s coded members their allowed values as <c>enum</c> in the OpenAPI document (admin design
-    /// §5.9): the generator turns no DataAnnotation into <c>enum</c>, and the lists stay those <see cref="ClientRequest.Validate"/> checks.
+    /// Gives the coded string members of the generic forms' requests their allowed values as <c>enum</c> in the OpenAPI document,
+    /// so the form shows a select (admin design §5.8, §5.9): <see cref="ClientRequest"/>'s and
+    /// <see cref="SiteProfileCreateRequest"/>'s level. The generator turns no DataAnnotation into <c>enum</c>, and the lists stay
+    /// those the requests' <c>Validate</c> checks.
     /// </summary>
-    public static OpenApiOptions AddClientSchemas(this OpenApiOptions options)
+    public static OpenApiOptions AddCodedValueSchemas(this OpenApiOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         return options.AddSchemaTransformer((schema, context, _) =>
         {
-            if (context.JsonPropertyInfo is { } property && property.DeclaringType.IsAssignableTo(typeof(ClientRequest))
-                && ClientRequest.AllowedValues.TryGetValue(property.Name, out var values))
+            if (context.JsonPropertyInfo is { } property && AllowedValuesOf(property.DeclaringType) is { } allowed
+                && allowed.TryGetValue(property.Name, out var values))
             {
                 schema.Enum = [.. values.Select(v => (JsonNode)JsonValue.Create(v)!)];
             }
@@ -139,6 +141,11 @@ public static class ClientEndpoints
             return Task.CompletedTask;
         });
     }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>>? AllowedValuesOf(Type type) =>
+        type.IsAssignableTo(typeof(ClientRequest)) ? ClientRequest.AllowedValues
+        : type == typeof(SiteProfileCreateRequest) ? SiteProfileCreateRequest.AllowedValues
+        : null;
 
     /// <summary>
     /// Makes <paramref name="assistantIds"/> the assistants with a <c>client</c> audience row for <paramref name="client"/>
