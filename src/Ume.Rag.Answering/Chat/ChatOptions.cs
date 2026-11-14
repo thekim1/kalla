@@ -1,8 +1,9 @@
 namespace Ume.Rag.Answering.Chat;
 
 /// <summary>
-/// Chat deployment knobs (chat design §8.3, §9.4, §4.1 step 4): <c>Chat:GatewayHeadersTimeoutSeconds</c> (15),
-/// <c>Chat:StreamIdleTimeoutSeconds</c> (60), <c>Chat:MaxAnswerDurationSeconds</c> (240), <c>Chat:MessagesPerMinutePerUser</c>
+/// Chat deployment knobs (chat design §8.3, §9.4, §4.1 step 4): <c>Chat:GatewayHeadersTimeoutSeconds</c> (15; a stream's
+/// headers only), <c>Chat:StreamIdleTimeoutSeconds</c> (60), <c>Chat:MaxAnswerDurationSeconds</c> (240; a stream's whole read,
+/// and a JSON answer's whole call, since its headers come only after the answer, #695), <c>Chat:MessagesPerMinutePerUser</c>
 /// (20) and <c>Chat:AllowedLinkHosts</c> (<c>umea.se</c>, <c>*.umea.se</c>). The last two move to <c>Settings.Chat</c> with
 /// part c of item 15. <c>Chat:CondenseTimeout</c> (1,200 ms) and <c>Chat:LongQuestionCondenseTimeout</c> (3 s) bound the condense calls,
 /// <c>Chat:FollowUpTimeout</c> (2 s; 0 = off) the follow-up call (§9.8).
