@@ -376,7 +376,7 @@ jobs:
         # scan's profile, mode and confs, and a re-run keeps it.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
-          for k in api admin worker owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
+          for k in api admin worker owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
           init() {
             bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
               --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
@@ -390,7 +390,7 @@ jobs:
             sha256sum "$s"/.pepper "$s"/.openwebui-jwt-secret "$s"/postgres/*_password "$s"/api/Security__* \
               "$s"/worker/Security__CrawlKeyPepper "$s"/.render-ws-path "$s"/worker/Render__Endpoint "$s"/renderer.env \
               "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
-              "$s"/openwebui/webui_secret_key "$d"/deploy/certs/data-protection.pfx
+              "$s"/openwebui/webui_secret_key "$s"/.openwebui-rag-api-key "$d"/deploy/certs/data-protection.pfx
           }
           init --render > "$d/init.log"; generated > "$d/first"
           init --render > "$d/init.log"; generated > "$d/second"
@@ -406,7 +406,12 @@ jobs:
           init --render > "$d/init.log"
           [ ! -e "$s/worker/Gateway__Keys__Eu" ]
           grep -q 'deleted the per-level key files worker/Gateway__Keys__Eu' "$d/init.log"
-          grep -qx "OPENAI_API_KEYS='owui-key-placeholder'" "$s/openwebui.env"
+          # Open WebUI's key for rag-api (M-17 C4): generated once (kept above on a re-run), in Open WebUI's environment and
+          # in rag-migrate's secret file OpenWebUi__ApiKey, which registers it as the deployment's own client.
+          key="$(cat "$s/.openwebui-rag-api-key")"
+          grep -qxE 'ume-rag-sk-[A-Za-z0-9]{43}' <<< "$key"
+          grep -qx "OPENAI_API_KEYS='$key'" "$s/openwebui.env"
+          [ "$(cat "$s/migrations/OpenWebUi__ApiKey")" = "$key" ]
           grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration' \
             "$d/deploy/.env"
           if out="$(init --gateway-credential-key-file parser="$d/keys/api" 2>&1)"; then

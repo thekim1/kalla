@@ -204,7 +204,7 @@
     {
       "code": "client_managed_by_deployment",
       "status": 409,
-      "message": "The deployment manages this client's key; deploy a new one to replace it."
+      "message": "The deployment manages this client\u0027s key; deploy a new one to replace it."
     },
     {
       "code": "key_revoked",
