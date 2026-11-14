@@ -511,8 +511,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    `https://<host>/oauth/oidc/login/callback`). Once the stack runs, create Open WebUI's client in Ume.Rag's admin UI
    (kind `open-webui`), set its key and id as `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID`, and update
    the stack. The feedback import's key is minted as the file's header describes (the steps of
-   `deploy/openwebui-feedback-key.sh`, by hand) and set as `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, with
-   `UME_RAG_OPENWEBUI_BASE_URL=http://rag-openwebui:8080`. As with Compose, Open WebUI keeps its own copy of each chat
+   `deploy/openwebui-feedback-key.sh`, by hand) and set as `UME_RAG_OPENWEBUI_ADMIN_API_KEY`; `rag-bootstrap` points
+   rag-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
 
 ## Reverse proxy and PKI

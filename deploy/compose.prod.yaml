@@ -157,9 +157,8 @@ services:
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}
       # The feedback importer and pruning (chat design §14.2, §13.3): Open WebUI through its reverse proxy, which works
       # whether it runs on this host or its own VM; empty = no import. Its key is the secret file OpenWebUi__AdminApiKey
-      # (deploy/openwebui-feedback-key.sh).
+      # (deploy/openwebui-feedback-key.sh). It runs every 15 minutes (the code's default; M-17 D6).
       OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
-      OpenWebUi__FeedbackImportInterval: ${UME_RAG_OPENWEBUI_FEEDBACK_IMPORT_INTERVAL:-00:15:00}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}

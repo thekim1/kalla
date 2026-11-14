@@ -95,6 +95,18 @@ case ",${COMPOSE_PROFILES:-}," in
   *,render,*) printf 'ws://rag-renderer:3000/%s' "$(tr -d '\r\n' < "$S/.render-ws-path")" > "$S/worker/Render__Endpoint" ;;
   *) rm -f "$S/worker/Render__Endpoint" ;;
 esac
+# The malware scan follows the clamav profile (M-17 C3): on while rag-clamav runs; off without it, so files are stored
+# unscanned and marked so (#535) instead of waiting for a scanner that never starts.
+case ",${COMPOSE_PROFILES:-}," in
+  *,clamav,*) printf on > "$S/worker/ClamAv__Mode" ;;
+  *) printf off > "$S/worker/ClamAv__Mode" ;;
+esac
+# Open WebUI's address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui while the openwebui
+# profile is on. The import also needs UME_RAG_OPENWEBUI_ADMIN_API_KEY (below).
+case ",${COMPOSE_PROFILES:-}," in
+  *,openwebui,*) printf 'http://rag-openwebui:8080' > "$S/api/OpenWebUi__BaseUrl" ;;
+  *) rm -f "$S/api/OpenWebUi__BaseUrl" ;;
+esac
 # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
 if [ ! -f "$S/keys/rag-blob-internal" ]; then
   openssl rand -base64 32 > "$S/keys/rag-blob-internal"
@@ -160,10 +172,6 @@ case "${UME_RAG_API_PUBLIC_URL:-}" in https://*example.se*|https://*CHANGE*) not
 example "${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
 example "${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}" && note "UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: nobody gets the role rag-platform-admin"
-case ",${COMPOSE_PROFILES:-}," in
-  *,clamav,*) ;;
-  *) [ "${UME_RAG_CLAMAV_MODE:-on}" = off ] || note "COMPOSE_PROFILES lacks clamav while UME_RAG_CLAMAV_MODE is on: uploads wait with clamav.unavailable" ;;
-esac
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"

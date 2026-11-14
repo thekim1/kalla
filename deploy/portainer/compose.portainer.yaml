@@ -58,8 +58,8 @@
 #                             one the stack starts but that service's model calls are refused. To add or rotate one,
 #                             change it and update the stack: the services pick it up within seconds, no restart.
 # Recommended
-#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan, which the worker expects by default: without it files
-#                             wait with clamav.unavailable, unless UME_RAG_CLAMAV_MODE=off
+#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
+#                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
 #   UME_RAG_EMBEDDING_MODEL   the gateway model id of the embedding model (seeded once as the platform profile), with
 #                             UME_RAG_EMBEDDING_DIMENSIONS (1024), UME_RAG_EMBEDDING_REQUEST_DIMENSIONS (true)
 #   UME_RAG_OIDC_CLIENT_SECRET  RAG admin's own OIDC client (UME_RAG_OIDC_CLIENT_ID, ume-rag-admin) at the gateway's
@@ -87,12 +87,10 @@
 #     Feedback import (optional): Open WebUI's first user is the service account feedback-import@localhost, its password
 #                             in <stack>_rag-secrets at openwebui/admin-password. With UME_RAG_OPENWEBUI_PASSWORD_AUTH=true
 #                             for a moment, sign in as it (POST /api/v1/auths/signin), mint its key (POST
-#                             /api/v1/auths/api_key), set it as UME_RAG_OPENWEBUI_ADMIN_API_KEY, set
-#                             UME_RAG_OPENWEBUI_BASE_URL=http://rag-openwebui:8080 and password auth back to false,
-#                             update the stack (docs/production-setup.md, "Open WebUI"; deploy/openwebui-feedback-key.sh
+#                             /api/v1/auths/api_key), set it as UME_RAG_OPENWEBUI_ADMIN_API_KEY and password auth back
+#                             to false, update the stack (rag-api reaches Open WebUI in the stack by itself;
+#                             docs/production-setup.md, "Open WebUI"; deploy/openwebui-feedback-key.sh
 #                             is the same for Compose)
-#   UME_RAG_CLAMAV_MODE (on)  off: no malware scan, together with clamav left out of COMPOSE_PROFILES; files are stored
-#                             unscanned and marked so in the admin UI (docs/production-setup.md, "Malware scan")
 #   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
@@ -366,7 +364,6 @@ services:
       UME_RAG_API_PUBLIC_URL: ${UME_RAG_API_PUBLIC_URL:-}
       UME_RAG_EMBEDDING_MODEL: ${UME_RAG_EMBEDDING_MODEL:-}
       UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
-      UME_RAG_CLAMAV_MODE: ${UME_RAG_CLAMAV_MODE:-on}
       UME_RAG_OPENWEBUI_HOST: ${UME_RAG_OPENWEBUI_HOST:-}
       UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}
       UME_RAG_OPENWEBUI_API_KEY: ${UME_RAG_OPENWEBUI_API_KEY:-}
@@ -482,10 +479,9 @@ services:
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
       # Open WebUI (profile openwebui): its client in the registry, and the feedback import from it (identity §5.2,
-      # chat §13.3); an empty base URL = no import. The key is the secret file OpenWebUi__AdminApiKey (rag-bootstrap).
+      # chat §13.3), every 15 minutes. rag-bootstrap writes the secret files OpenWebUi__BaseUrl (the stack's
+      # rag-openwebui, while the profile is on) and OpenWebUi__AdminApiKey; without both there is no import.
       OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
-      OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
-      OpenWebUi__FeedbackImportInterval: ${UME_RAG_OPENWEBUI_FEEDBACK_IMPORT_INTERVAL:-00:15:00}
     volumes:
       - {<<: *rag-certs-mount, volume: {subpath: api}}
       - {<<: *rag-secrets-mount, volume: {subpath: api}}
@@ -595,8 +591,10 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
       Parser__BaseUrl: https://rag-parser:8000
-      # on needs rag-clamav (the clamav profile); off stores files without a malware scan.
-      ClamAv__Mode: ${UME_RAG_CLAMAV_MODE:-on}
+      # ClamAv__Mode is a secret file from rag-bootstrap: on with the clamav profile (rag-clamav runs), else off, which
+      # stores files without a malware scan, marked so (#535). The worker reads it at start; the profiles here make a
+      # change of them recreate the worker after rag-bootstrap has written the new mode.
+      UME_RAG_PROFILES: ${COMPOSE_PROFILES:-}
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
@@ -660,7 +658,7 @@ services:
     # Internal network only: no egress at all (parser design §11).
     networks: [rag-parser]
 
-  # The malware scan. Add clamav to COMPOSE_PROFILES; leave it out only with UME_RAG_CLAMAV_MODE=off.
+  # The malware scan. Add clamav to COMPOSE_PROFILES; without it the worker stores files unscanned, marked so.
   rag-clamav:
     <<: *hardened
     profiles: [clamav]
@@ -1118,6 +1116,18 @@ configs:
         *,render,*) printf 'ws://rag-renderer:3000/%s' "$$(tr -d '\r\n' < "$$S/.render-ws-path")" > "$$S/worker/Render__Endpoint" ;;
         *) rm -f "$$S/worker/Render__Endpoint" ;;
       esac
+      # The malware scan follows the clamav profile (M-17 C3): on while rag-clamav runs; off without it, so files are stored
+      # unscanned and marked so (#535) instead of waiting for a scanner that never starts.
+      case ",$${COMPOSE_PROFILES:-}," in
+        *,clamav,*) printf on > "$$S/worker/ClamAv__Mode" ;;
+        *) printf off > "$$S/worker/ClamAv__Mode" ;;
+      esac
+      # Open WebUI's address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui while the openwebui
+      # profile is on. The import also needs UME_RAG_OPENWEBUI_ADMIN_API_KEY (below).
+      case ",$${COMPOSE_PROFILES:-}," in
+        *,openwebui,*) printf 'http://rag-openwebui:8080' > "$$S/api/OpenWebUi__BaseUrl" ;;
+        *) rm -f "$$S/api/OpenWebUi__BaseUrl" ;;
+      esac
       # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
       if [ ! -f "$$S/keys/rag-blob-internal" ]; then
         openssl rand -base64 32 > "$$S/keys/rag-blob-internal"
@@ -1183,10 +1193,6 @@ configs:
       example "$${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
       example "$${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
       example "$${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}" && note "UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: nobody gets the role rag-platform-admin"
-      case ",$${COMPOSE_PROFILES:-}," in
-        *,clamav,*) ;;
-        *) [ "$${UME_RAG_CLAMAV_MODE:-on}" = off ] || note "COMPOSE_PROFILES lacks clamav while UME_RAG_CLAMAV_MODE is on: uploads wait with clamav.unavailable" ;;
-      esac
       case ",$${COMPOSE_PROFILES:-}," in
         *,openwebui,*)
           example "$${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"

@@ -78,7 +78,6 @@ if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail 
 env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
 env_is "$base" rag-api OpenWebUi__BaseUrl ""
-env_is "$base" rag-api OpenWebUi__FeedbackImportInterval 00:15:00
 env_is "$base" rag-api Gateway__MaxResidency ""
 env_is "$base" rag-admin Gateway__MaxResidency ""
 # The Integration API read-back (#580): empty, so off, unless UME_RAG_GATEWAY_INTEGRATION_API_URL is set.
