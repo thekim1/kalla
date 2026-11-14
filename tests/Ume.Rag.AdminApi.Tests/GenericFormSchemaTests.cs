@@ -23,7 +23,7 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
         ("post", "/api/clients"), ("put", "/api/clients/{id}"),
         ("post", "/api/keys"), ("put", "/api/keys/{id}"), ("post", "/api/keys/{id}/rotate"), ("post", "/api/keys/{id}/reveal"),
         ("put", "/api/settings/network"), ("put", "/api/settings/retention"), ("put", "/api/settings/deletion-guard"), ("put", "/api/settings/crawl"),
-        ("put", "/api/settings/evaluation"), ("put", "/api/settings/retrieval"), ("put", "/api/settings/chat"), ("put", "/api/settings/pii"),
+        ("put", "/api/settings/evaluation"), ("put", "/api/settings/retrieval"), ("put", "/api/settings/chat"), ("put", "/api/settings/pii"), ("put", "/api/settings/identity"),
         ("put", "/api/settings/worker"),
         ("put", "/api/data-protection/{level}"),
         ("post", "/api/site-profiles"), ("put", "/api/site-profiles/{id}"), ("post", "/api/site-profiles/{id}/rollback"),

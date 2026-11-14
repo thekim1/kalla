@@ -78,6 +78,8 @@ public static class SettingsEndpoints
                 return PlatformModelRules.EnsureAsync(db, models,
                     [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct);
             });
+        // Decisions "Role groups as a setting" (M-17 C10): which IdP groups grant which role, read at each sign-in.
+        Section(settings, "identity", IdentitySettings.Of, (IdentitySettingsRequest r, PlatformSettings s) => s.IdentityRoleGroups = r.ToJson());
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
             s.PiiFlagRules = r.FlagRules.ToJsonString();
@@ -415,4 +417,124 @@ public sealed record WorkerSettingsRequest : SettingsRequest
 
     [Required]
     public JsonObject DefaultSchedules { get; init; } = [];
+}
+
+/// <summary>
+/// <c>Settings.Identity.RoleGroups</c> (Decisions "Role groups as a setting", M-17 C10): per role the IdP groups that grant it
+/// at sign-in. The deployment's <c>Oidc:RoleGroups:rag-platform-admin</c> stays as the break-glass and is merged in, never
+/// replaced (<see cref="RoleGroupMap"/>); a role in the token's role claim still counts.
+/// </summary>
+public sealed record IdentitySettings(IReadOnlyList<string> PlatformAdmin, IReadOnlyList<string> DepartmentAdmin, IReadOnlyList<string> PipelineEditor,
+    IReadOnlyList<string> Reviewer, IReadOnlyList<string> Editor, IReadOnlyList<string> Viewer, string Version)
+{
+    public static IdentitySettings Of(PlatformSettings s)
+    {
+        var map = RoleGroupMap.Parse(s.IdentityRoleGroups);
+        IReadOnlyList<string> Of(string role) => map.TryGetValue(role, out var groups) ? groups : [];
+        return new(Of(RagRoles.PlatformAdmin), Of(RagRoles.DepartmentAdmin), Of(RagRoles.PipelineEditor), Of(RagRoles.Reviewer), Of(RagRoles.Editor),
+            Of(RagRoles.Viewer), SettingsEndpoints.Version(s));
+    }
+}
+
+public sealed record IdentitySettingsRequest : SettingsRequest, IValidatableObject
+{
+    [MaxLength(50)]
+    public IReadOnlyList<string> PlatformAdmin { get; init; } = [];
+
+    [MaxLength(50)]
+    public IReadOnlyList<string> DepartmentAdmin { get; init; } = [];
+
+    [MaxLength(50)]
+    public IReadOnlyList<string> PipelineEditor { get; init; } = [];
+
+    [MaxLength(50)]
+    public IReadOnlyList<string> Reviewer { get; init; } = [];
+
+    [MaxLength(50)]
+    public IReadOnlyList<string> Editor { get; init; } = [];
+
+    [MaxLength(50)]
+    public IReadOnlyList<string> Viewer { get; init; } = [];
+
+    private IEnumerable<(string Field, string Role, IReadOnlyList<string> Groups)> Roles() =>
+    [
+        (nameof(PlatformAdmin), RagRoles.PlatformAdmin, PlatformAdmin), (nameof(DepartmentAdmin), RagRoles.DepartmentAdmin, DepartmentAdmin),
+        (nameof(PipelineEditor), RagRoles.PipelineEditor, PipelineEditor), (nameof(Reviewer), RagRoles.Reviewer, Reviewer),
+        (nameof(Editor), RagRoles.Editor, Editor), (nameof(Viewer), RagRoles.Viewer, Viewer),
+    ];
+
+    /// <summary>The stored map: each role's trimmed, distinct groups; roles without groups left out.</summary>
+    public string ToJson()
+    {
+        var map = new JsonObject();
+        foreach (var (_, role, groups) in Roles())
+        {
+            var clean = groups.Select(g => g.Trim()).Where(g => g.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (clean.Count > 0)
+            {
+                map[role] = new JsonArray([.. clean.Select(g => (JsonNode?)g)]);
+            }
+        }
+
+        return map.ToJsonString();
+    }
+
+    /// <summary>The deployment's rule (#413): a role group is a <c>rag-</c> name or an Entra object id.</summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        foreach (var (field, _, groups) in Roles())
+        {
+            foreach (var group in groups.Select(g => g.Trim()).Where(g => g.Length > 0))
+            {
+                if (group.Length > 200 || !OidcOptionsValidator.IsRoleGroupName(group))
+                {
+                    yield return new ValidationResult(
+                        $"'{group}' is not a role group: it must start with '{OidcOptionsValidator.RoleGroupPrefix}' or be an Entra object id, so that a gateway group of the same name grants no role.",
+                        [field]);
+                }
+            }
+        }
+    }
+}
+
+/// <summary>Role name → groups, from <c>Settings.Identity.RoleGroups</c> and the deployment's <c>Oidc:RoleGroups</c>.</summary>
+public static class RoleGroupMap
+{
+    /// <summary>The stored setting; anything that is not a role-to-groups object reads as empty.</summary>
+    public static Dictionary<string, string[]> Parse(string? json)
+    {
+        var map = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(json) || JsonNode.Parse(json) is not JsonObject root)
+        {
+            return map;
+        }
+
+        foreach (var (role, node) in root)
+        {
+            if (node is JsonArray groups)
+            {
+                map[role] = [.. groups.Select(g => g?.GetValue<string>()).Where(g => !string.IsNullOrWhiteSpace(g)).Select(g => g!.Trim())];
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// The setting merged with the deployment's <c>Oidc:RoleGroups</c> (its <c>;</c>-separated values): a group in either grants
+    /// the role, so the break-glass works whatever the setting says.
+    /// </summary>
+    public static Dictionary<string, string[]> Merge(IReadOnlyDictionary<string, string> deployment, IReadOnlyDictionary<string, string[]> setting)
+    {
+        ArgumentNullException.ThrowIfNull(deployment);
+        ArgumentNullException.ThrowIfNull(setting);
+        var merged = setting.ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal);
+        foreach (var (role, groups) in deployment)
+        {
+            var split = groups.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            merged[role] = [.. (merged.TryGetValue(role, out var existing) ? existing : []).Concat(split).Distinct(StringComparer.OrdinalIgnoreCase)];
+        }
+
+        return merged;
+    }
 }

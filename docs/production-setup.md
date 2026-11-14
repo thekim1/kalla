@@ -201,10 +201,11 @@ Give the admin's client the two redirect URIs the script prints (code + PKCE):
 `https://<owui host>/oauth/oidc/login/callback`. The client secrets go to `--oidc-client-secret-file` and
 `--openwebui-oidc-client-secret-file`, never into the repository.
 
-**Roles from groups, as the gateway does** (#468). RAG reads the same claims as the gateway and maps groups to its roles
-by configuration, as the gateway's `UME_OIDC_GROUPS_*` do: `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`, `_DEPARTMENT_ADMIN`,
-`_PIPELINE_EDITOR`, `_REVIEWER` and `_VIEWER` in `deploy/.env` (each `;`-separated, a `rag-` name or an Entra object id,
-#413). The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
+**Roles from groups** (#468; Decisions "Role groups as a setting"). A role in the token's `roles` claim counts as it is.
+For an identity provider whose tokens carry groups instead, a platform admin maps groups to roles in RAG's admin
+(*Settings → Role groups*: one list per role, each group a `rag-` name or an Entra object id, #413); it applies at each
+user's next sign-in. The only deployment value is the break-glass for the first platform admin,
+`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` in `deploy/.env` (`;`-separated), merged with the setting and never replaced. The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
 (`UME_RAG_OIDC_ROLE_CLAIM`, `_GROUP_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`), the gateway's defaults too. Users
 keep one account and one set of groups in the shared Keycloak for both products. Whether gateway groups may also grant
 RAG roles is open in #468.

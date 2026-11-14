@@ -8,7 +8,7 @@ import type { ModelField } from './modelFields'
  */
 
 /** The sections of `config."Settings"`. */
-export const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker'] as const
+export const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker', 'identity'] as const
 export type SettingsSectionName = (typeof SETTINGS_SECTIONS)[number]
 
 /**
@@ -80,6 +80,8 @@ export const SETTINGS_PAGE_SECTIONS: readonly SettingsPageSection[] = [
   { id: 'deletion-guard', kind: 'settings', group: 'protection', label: S['deletion-guard'] },
   { id: 'evaluation', kind: 'settings', group: 'quality', label: S.evaluation },
   { id: 'network', kind: 'settings', group: 'platform', label: S.network },
+  // Decisions "Role groups as a setting" (M-17 C10): which sign-in groups grant which role, applied at the next sign-in.
+  { id: 'identity', kind: 'settings', group: 'platform', label: S.identity },
 ]
 
 /** The section list, grouped, in order. */

@@ -556,14 +556,11 @@ UME_RAG_CERTS_DIR=$certs
 UME_RAG_SECRETS_DIR=$secrets
 UME_RAG_OIDC_AUTHORITY=$oidc_authority
 UME_RAG_OIDC_CLIENT_ID=$oidc_client
-# Groups that grant a RAG role (';'-separated; each a rag- name or an Entra object id, #413). The same identity provider
-# and the same group names can serve the gateway too (#468). Claim names default to roles, groups, departmentCodes and
-# teamCodes (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM, _TEAM_CLAIM), as the gateway's UME_OIDC_* do.
+# The break-glass group(s) for the first platform admin (';'-separated; a rag- name or an Entra object id, #413), for an
+# identity provider whose tokens carry groups instead of the role; every other role's groups are set in RAG's admin
+# (Settings, Role groups; M-17 C10). Claim names default to roles, groups, departmentCodes and teamCodes
+# (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM, _TEAM_CLAIM), as the gateway's UME_OIDC_* do.
 # UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=
-# UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN=
-# UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR=
-# UME_RAG_OIDC_GROUPS_REVIEWER=
-# UME_RAG_OIDC_GROUPS_VIEWER=
 # With Entra ID directly (P2): UME_RAG_OIDC_TENANT_ID=<tenant id>
 UME_RAG_GATEWAY_URL=$gateway_url
 # The gateway's cost and budget read-back in the admin UI: the base URL of the gateway's Admin API, which serves

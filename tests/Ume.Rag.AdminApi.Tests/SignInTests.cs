@@ -1,8 +1,10 @@
 extern alias fakegateway;
 
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.TestKit;
 using FakeCatalog = fakegateway::Ume.Rag.FakeGateway.FakeCatalog;
@@ -210,5 +212,47 @@ public sealed class BffTests(AdminDatabaseFixture database)
         var stranger = new ClaimsPrincipal(new ClaimsIdentity([new Claim("tid", "other")], "oidc"));
         await using var db2 = TestPostgres.Context(admin);
         (await AdminAuthentication.ValidateSignInAsync(stranger, new OidcOptions { TenantId = "mine" }, db2, Ct)).ShouldBe(TenantCheck.WrongTenant);
+    }
+
+    [Fact]
+    public async Task A_role_group_a_platform_admin_saves_applies_at_the_next_sign_in_and_the_break_glass_still_counts()
+    {
+        // Decisions "Role groups as a setting" (M-17 C10): Settings.Identity.RoleGroups, read at each sign-in, merged with the
+        // deployment's Oidc:RoleGroups:rag-platform-admin.
+        await using var factory = database.HeaderFactory();
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var current = await platform.GetFromJsonAsync<JsonElement>("/api/settings/identity", Ct);
+        var version = current.GetProperty("version").GetString();
+        try
+        {
+            using (var refused = await platform.PutAsJsonAsync("/api/settings/identity", new { reviewer = new[] { "Byggnadsnämnden" }, version }, Ct))
+            {
+                refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest); // not a rag- name or an Entra object id (#413)
+                (await refused.Content.ReadAsStringAsync(Ct)).ShouldContain("Byggnadsnämnden");
+            }
+
+            using (var saved = await platform.PutAsJsonAsync("/api/settings/identity",
+                new { reviewer = new[] { "rag-reviewers", " rag-reviewers " }, viewer = new[] { "8f0b7a6e-1c2d-4e5f-9a8b-7c6d5e4f3a2b" }, version }, Ct))
+            {
+                saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
+                var body = await saved.Content.ReadFromJsonAsync<JsonElement>(Ct);
+                body.GetProperty("reviewer").EnumerateArray().Select(g => g.GetString()).ShouldBe(["rag-reviewers"]); // trimmed, distinct
+                version = body.GetProperty("version").GetString();
+            }
+
+            var options = new OidcOptions { RoleGroups = { [RagRoles.PlatformAdmin] = "rag-break-glass" } };
+            var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "s-2"), new Claim("groups", """["RAG-Reviewers","rag-break-glass"]""")], "oidc"));
+            await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
+            {
+                (await AdminAuthentication.ValidateSignInAsync(user, options, db, Ct)).ShouldBeNull();
+            }
+
+            user.FindAll(AdminClaims.Roles).Select(c => c.Value).ShouldBe([RagRoles.Reviewer, RagRoles.PlatformAdmin], ignoreOrder: true);
+        }
+        finally
+        {
+            using var restored = await platform.PutAsJsonAsync("/api/settings/identity", new { version }, Ct);
+            restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+        }
     }
 }

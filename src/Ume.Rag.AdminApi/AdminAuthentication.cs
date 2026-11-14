@@ -21,7 +21,7 @@ public static class AdminAuthentication
     /// Normalises identity-provider claims to the names the API authorises on ("roles", "departmentCodes", "teamCodes"):
     /// expands JSON-array claims, copies differently named claims, and derives roles from group membership. Copied.
     /// </summary>
-    public static void ApplyClaimMapping(ClaimsPrincipal? principal, OidcOptions options)
+    public static void ApplyClaimMapping(ClaimsPrincipal? principal, OidcOptions options, IReadOnlyDictionary<string, string[]>? settingRoleGroups = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (principal?.Identity is not ClaimsIdentity identity)
@@ -45,10 +45,10 @@ public static class AdminAuthentication
         CopyClaims(identity, options.DepartmentClaim, AdminClaims.DepartmentCodes);
         CopyClaims(identity, options.TeamClaim, AdminClaims.TeamCodes);
         var groups = identity.FindAll(options.GroupClaim).Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var (role, mapped) in options.RoleGroups)
+        // Settings.Identity.RoleGroups merged with the deployment's Oidc:RoleGroups, the break-glass (M-17 C10).
+        foreach (var (role, mapped) in RoleGroupMap.Merge(options.RoleGroups, settingRoleGroups ?? new Dictionary<string, string[]>()))
         {
-            if (!identity.HasClaim(AdminClaims.Roles, role) &&
-                mapped.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Any(groups.Contains))
+            if (!identity.HasClaim(AdminClaims.Roles, role) && mapped.Any(groups.Contains))
             {
                 identity.AddClaim(new Claim(AdminClaims.Roles, role));
             }
@@ -85,7 +85,9 @@ public static class AdminAuthentication
             return refusal;
         }
 
-        ApplyClaimMapping(principal, options);
+        // Read at each sign-in, so a changed mapping applies to the next sign-in without a restart (M-17 C10).
+        var setting = await db.Settings.AsNoTracking().Select(s => s.IdentityRoleGroups).FirstOrDefaultAsync(cancellationToken);
+        ApplyClaimMapping(principal, options, RoleGroupMap.Parse(setting));
         var departments = await db.Departments.AsNoTracking()
             .Where(d => d.IsActive && d.MemberGroups.Length > 0)
             .Select(d => new DepartmentGroups(d.CostCenterCode, d.IsActive, d.MemberGroups))

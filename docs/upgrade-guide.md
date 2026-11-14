@@ -52,6 +52,12 @@ exception, with its own steps.
   keys the residencies `OnPrem` and `Eu` only while register M2 holds (the worker's already are); a key that allows every
   residency would otherwise let a public assistant answer at `External`. Then remove the variable. **Check:** each
   service logs *the credential key's ceiling: Eu* at start.
+- **Role groups are a setting (M-17 C10).** Migration `IdentityRoleGroups` adds `config."Settings"."IdentityRoleGroups"`;
+  *Settings → Role groups* in RAG's admin maps sign-in groups to roles, read at each sign-in.
+  `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` and `_VIEWER` are gone;
+  `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays as the break-glass and is merged with the setting. **Apply:** if you set
+  any of the four, enter the same groups on that page right after the update and remove the variables; until then, a
+  user who had a role only through one of those groups doesn't have it. With the shared Keycloak the roles come in the token and nothing changes.
 - **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
