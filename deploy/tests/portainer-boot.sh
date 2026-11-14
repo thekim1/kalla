@@ -9,6 +9,7 @@
 #     gateway credential keys and Open WebUI's client
 #   - rag-api: /health/ready = 200 (TLS verified against rag-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key
+#   - rag-api's public URL, which no variable sets, is https://<UME_RAG_API_HOST> for citation links and for rag-admin
 #   - rag-admin: / = 200 with the admin UI's index.html
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
@@ -40,7 +41,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stack=""; version=""; example="$here/../portainer/stack.env.example"; offset=10000; project=ume-rag-portainer-boot
 wait_timeout=900; keep=0; files=()
-usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version="$2"; shift 2;;
@@ -72,11 +73,9 @@ UME_GATEWAY_HOST=llm.boot.test
 UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
 UME_ADMIN_HOST=llm-admin.boot.test
 UME_RAG_API_HOST=rag.boot.test
-UME_RAG_API_PUBLIC_URL=https://rag.boot.test
 UME_RAG_ADMIN_HOST=rag-admin.boot.test
 UME_RAG_EMBEDDING_MODEL=boot-test-embedding
 UME_RAG_OIDC_CLIENT_SECRET=boot-test-admin-client-secret
-UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=rag-platform-admins
 UME_RAG_OPENWEBUI_HOST=chat.boot.test
 UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=boot-test-openwebui-client-secret
 UME_GATEWAY_PORT=$gateway_port
@@ -180,6 +179,13 @@ ok "rag-api /version = $reported"
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/v1/models")"
 [ "$status" = 401 ] || fail "rag-api /v1/models answered $status without a key, expected 401"
 ok "rag-api /v1/models = 401 without a key"
+
+env_of() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(dc ps -q "$1")"; }
+env_of rag-api | grep -qx 'Knowledge__PublicBaseUrl=https://rag.boot.test' \
+  || fail "rag-api's Knowledge__PublicBaseUrl is not https://rag.boot.test with UME_RAG_API_PUBLIC_URL unset"
+env_of rag-admin | grep -qx 'Admin__ApiPublicUrl=https://rag.boot.test' \
+  || fail "rag-admin's Admin__ApiPublicUrl is not https://rag.boot.test with UME_RAG_API_PUBLIC_URL unset"
+ok "rag-api's public URL defaults to https://rag.boot.test (citation links; rag-admin's How to connect)"
 
 echo "== rag-admin"
 status="$(https -o "$work/admin-index.html" -w '%{http_code}' "https://localhost:$admin_port/")"

@@ -155,11 +155,12 @@ for svc in api admin worker; do
   [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: issue rag-$svc's credential key in the gateway's admin (integration Ume.Rag) and update the stack; no restart needed"
 done
 example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
-case "${UME_RAG_API_PUBLIC_URL:-}" in https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
+# Optional: unset, rag-api's public URL is https://<UME_RAG_API_HOST>.
+case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
+  https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
 example "${UME_RAG_EMBEDDING_MODEL:-}" && note "UME_RAG_EMBEDDING_MODEL: the gateway's embedding model id (seeded once as the platform's profile)"
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
-example "${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}" && note "UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN: nobody gets the role rag-platform-admin"
 case ",${COMPOSE_PROFILES:-}," in
   *,clamav,*) ;;
   *) [ "${UME_RAG_CLAMAV_MODE:-on}" = off ] || note "COMPOSE_PROFILES lacks clamav while UME_RAG_CLAMAV_MODE is on: uploads wait with clamav.unavailable" ;;
@@ -177,3 +178,5 @@ if [ -n "$todo" ]; then
 else
   echo "rag-bootstrap: every setting it checks is in place"
 fi
+# Not a setting to check here: who is a platform admin comes from the sign-in token.
+echo "rag-bootstrap: the first platform admin needs the role rag-platform-admin in the token's roles claim (Keycloak: give the user that realm role). Signed in without it, Ume.Rag's admin says you have no role: then give the role, or name a group of the token's in UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN"

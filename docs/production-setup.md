@@ -498,8 +498,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
 3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
-   Ume.Rag's (`UME_RAG_API_HOST`, `UME_RAG_API_PUBLIC_URL`, the three `UME_RAG_*_GATEWAY_KEY`, `UME_RAG_EMBEDDING_MODEL`,
-   `UME_RAG_OIDC_CLIENT_SECRET` and the group variables), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
+   Ume.Rag's (`UME_RAG_API_HOST`, the three `UME_RAG_*_GATEWAY_KEY`, `UME_RAG_EMBEDDING_MODEL` and
+   `UME_RAG_OIDC_CLIENT_SECRET`), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
    `render` for JavaScript pages). The credential keys come from the gateway once it runs: start the stack, issue the
    keys in the gateway's admin (*Gateway credential keys* above), set them, and update the stack.
 4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI

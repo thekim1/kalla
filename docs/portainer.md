@@ -47,12 +47,10 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    UME_ADMIN_PUBLIC_URL=https://llm-admin.example.se      # optional: links from Ume.Rag's admin to the gateway's
    UME_OIDC_CLIENT_SECRET=...                             # if ume-admin is a confidential client
    # Ume.Rag
-   UME_RAG_API_HOST=rag.example.se
-   UME_RAG_API_PUBLIC_URL=https://rag.example.se
+   UME_RAG_API_HOST=rag.example.se                        # its public URL is https://<this>; UME_RAG_API_PUBLIC_URL for a port
    UME_RAG_ADMIN_HOST=rag-admin.example.se
    UME_RAG_EMBEDDING_MODEL=<the gateway's embedding model id>
    UME_RAG_OIDC_CLIENT_SECRET=...
-   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=<group that grants rag-platform-admin>
    COMPOSE_PROFILES=clamav,openwebui
    # Open WebUI
    UME_RAG_OPENWEBUI_HOST=chat.example.se
@@ -61,7 +59,10 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    ```
 
    Leave the gateway keys of Ume.Rag empty for now. The other optional variables (ports, binds, groups, the gateway's
-   settings) are in the file's header.
+   settings) are in the file's header. **The first platform admin** is whoever's sign-in token carries the role
+   `rag-platform-admin` in its `roles` claim (Keycloak: that realm role, directly or through a group,
+   [`deploy/keycloak/README.md`](../deploy/keycloak/README.md)). Only an identity provider whose tokens carry groups
+   instead needs `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `rag-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the services start. Ume.Rag's
    services log that they have no gateway credential key: expected until step 5. **The end of `rag-bootstrap`'s log
