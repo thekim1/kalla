@@ -48,9 +48,10 @@ mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer"
 cd "$here"
 cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml compose.openwebui.yaml \
   compose.rolling.yaml init-deployment.sh rolling-update.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh \
-  escrow-keys.sh openwebui-feedback-key.sh "$dest/"
-# redis/ is P2, proxy/ and otel/ come with their items: copied once they exist.
-for dir in postgres pgbackrest redis proxy otel host kubernetes; do
+  escrow-keys.sh "$dest/"
+# redis/ is P2, proxy/ and otel/ come with their items: copied once they exist. openwebui/ holds compose.openwebui.yaml's
+# feedback-key-setup.py (M-17 C6).
+for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
 # init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.

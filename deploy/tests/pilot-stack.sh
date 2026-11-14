@@ -10,8 +10,10 @@
 #     container has the pilot caps and the 24 GB limits of §6.2, the parser runs 2 slots x 2 threads and postgres the
 #     24 GB memory settings; deploy/host/install.sh --host-memory 24 writes the slice's MemoryMax=11G;
 #   - compose.openwebui.yaml: the §6.2 row for open-webui, API keys only for the feedback routes, the admin's chat
-#     access and export off, password sign-in off unless UME_RAG_OPENWEBUI_PASSWORD_AUTH=true, OIDC users as role user;
-#   - init-deployment.sh --openwebui-host writes the feedback service account once (a re-run keeps its password).
+#     access and export off, password sign-in always off, OIDC users as role user; open-webui-setup (the feedback key,
+#     M-17 C6) as Open WebUI's user, read-only, without capabilities, writing only secrets/openwebui-feedback;
+#   - init-deployment.sh --openwebui-host writes the feedback service account once (a re-run keeps its password), and
+#     secrets/openwebui-feedback exists for rag-api's mount.
 #
 #   deploy/tests/pilot-stack.sh
 #
@@ -124,7 +126,12 @@ env_is "$owui" open-webui ENABLE_PASSWORD_AUTH false
 env_is "$owui" open-webui DEFAULT_USER_ROLE user
 env_is "$owui" open-webui ENABLE_PERSISTENT_CONFIG false
 env_is "$owui" open-webui DEFAULT_MODEL_METADATA '{"capabilities":{"builtin_tools":false}}'
-env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" open-webui ENABLE_PASSWORD_AUTH true
+env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" open-webui ENABLE_PASSWORD_AUTH false
+setup_ok="$(jq -r '.services["open-webui-setup"] | [.user, (.read_only | tostring), (.cap_drop | join(",")),
+  ([.volumes[] | select(.read_only != true) | .target] | sort | join(","))] | join(" ")' <<< "$owui")"
+if [ "$setup_ok" = "1000:1000 true ALL /data,/run/feedback" ]; then
+  ok "open-webui-setup: uid 1000, read-only, no capabilities, writes only /data and /run/feedback"
+else fail "open-webui-setup: expected '1000:1000 true ALL /data,/run/feedback', got '$setup_ok'"; fi
 
 # --- init-deployment.sh: the feedback service account ---------------------------------------------------------------
 # The 24 GB profile copies the ClamAV image's confs from ../images/clamav, as in the repository.
@@ -147,6 +154,8 @@ if grep -qx "WEBUI_ADMIN_EMAIL='feedback-import@localhost'" "$i/first" &&
 else fail "init-deployment.sh: no feedback service account in secrets/openwebui.env"; fi
 if diff -q "$i/first" "$i/second" >/dev/null; then ok "init-deployment.sh: a re-run keeps the service account"
 else fail "init-deployment.sh: a re-run changed the service account"; fi
+if [ -d "$i/deploy/secrets/openwebui-feedback" ]; then ok "init-deployment.sh: secrets/openwebui-feedback exists for rag-api's mount"
+else fail "init-deployment.sh: no secrets/openwebui-feedback"; fi
 if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
   ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
 else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi

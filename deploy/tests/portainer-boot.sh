@@ -14,7 +14,9 @@
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
 #   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
-#   - Open WebUI: /health = 200 on its published port
+#   - Open WebUI: /health = 200 on its published port; password sign-in refused; rag-openwebui-setup completed and the
+#     feedback key it minted (M-17 C6) answers the feedback list (200), is refused elsewhere (403), and is the file rag-api
+#     reads
 #
 #   deploy/tests/portainer-boot.sh STACK.yaml [options]
 #
@@ -142,6 +144,9 @@ while read -r name state exit_code restarts; do
   case "$name" in
     *-bootstrap-1|*-migrations-1|*-rag-migrate-1)
       [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code), expected to have completed";;
+    *-rag-openwebui-setup-1)
+      # One-shot that waits for Open WebUI itself; checked below.
+      [ "$state" = running ] || [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code)";;
     *)
       [ "$state" = running ] || fail "$name is $state (exit $exit_code), expected running"
       [ "$restarts" = 0 ] || fail "$name restarted $restarts times";;
@@ -219,6 +224,27 @@ owui() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0
 wait_for "$wait_timeout" owui || fail "Open WebUI's /health did not answer 200 within ${wait_timeout}s"
 ok "Open WebUI /health = 200 on 127.0.0.1:$openwebui_port"
 [ "$(docker inspect -f '{{.RestartCount}}' "$(dc ps -q rag-openwebui)")" = 0 ] || fail "rag-openwebui restarted while starting"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' \
+  -d '{"email":"feedback-import@localhost","password":"x"}' "http://127.0.0.1:$openwebui_port/api/v1/auths/signin")"
+[ "$code" = 403 ] || fail "Open WebUI's password sign-in answered $code, expected 403 (off)"
+ok "Open WebUI's password sign-in is off (403)"
+
+echo "== the feedback key (rag-openwebui-setup, M-17 C6)"
+setup="$(dc ps -a -q rag-openwebui-setup)"
+[ -n "$setup" ] || fail "the stack has no rag-openwebui-setup"
+setup_done() { [ "$(docker inspect -f '{{.State.Status}}' "$setup")" = exited ]; }
+wait_for "$wait_timeout" setup_done || fail "rag-openwebui-setup did not complete within ${wait_timeout}s"
+setup_exit="$(docker inspect -f '{{.State.ExitCode}}' "$setup")"
+dc logs --no-color --no-log-prefix rag-openwebui-setup | sed 's/^/  /'
+[ "$setup_exit" = 0 ] || fail "rag-openwebui-setup exited $setup_exit"
+feedback_key="$(docker run --rm --network none -v "${project}_rag-secrets:/s:ro" --entrypoint cat "$helper" /s/openwebui-feedback/OpenWebUi__AdminApiKey)"
+case "$feedback_key" in sk-*) ;; *) fail "rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey holds no sk- key";; esac
+owui_status() { curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Authorization: Bearer $feedback_key" "http://127.0.0.1:$openwebui_port$1"; }
+[ "$(owui_status /api/v1/evaluations/feedbacks/list)" = 200 ] || fail "the feedback key is refused on the feedback list"
+[ "$(owui_status /api/v1/users/)" = 403 ] || fail "the feedback key is not limited to the feedback routes"
+read_by_api="$(docker cp "$(dc ps -q rag-api):/run/openwebui-feedback/OpenWebUi__AdminApiKey" - 2>/dev/null | tar -xO)"
+[ "$read_by_api" = "$feedback_key" ] || fail "rag-api's /run/openwebui-feedback does not hold the minted key"
+ok "rag-openwebui-setup minted the feedback key: 200 on the feedback list, 403 elsewhere, and rag-api reads it"
 
 echo
 echo "The Portainer stack booted: $(basename "$stack")${version:+, Ume.Rag $version}."

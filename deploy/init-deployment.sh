@@ -49,7 +49,7 @@
 #                           Render__Endpoint); without it those sources wait with render.not_configured. --renew-certs
 #                           keeps what deploy/.env says
 #   --openwebui-host HOST   the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store, and
-#                           the feedback service account (deploy/openwebui-feedback-key.sh)
+#                           the feedback service account (its API key: open-webui-setup in that file)
 #     --openwebui-oidc-client-id ID [open-webui], --openwebui-oidc-client-secret-file FILE,
 #     --openwebui-oidc-provider-url URL [the OIDC authority's /.well-known/openid-configuration],
 #     --openwebui-oidc-provider-name NAME [Umeå kommun]
@@ -473,9 +473,10 @@ OAUTH_CLIENT_SECRET=
 EOF
   fi
   # The feedback service account (chat design §14.2): Open WebUI creates it as its first user, and so its only admin,
-  # when it starts on an empty store. Generated once; openwebui-feedback-key.sh signs in with it to mint its API key.
+  # when it starts on an empty store. Generated once; nobody signs in with the password (password sign-in is off), and
+  # compose.openwebui.yaml's open-webui-setup mints the account's API key.
   if ! grep -q '^WEBUI_ADMIN_EMAIL=' "$secrets/openwebui.env"; then
-    printf '# The feedback service account (deploy/openwebui-feedback-key.sh); never a person.\n' >> "$secrets/openwebui.env"
+    printf '# The feedback service account (open-webui-setup mints its key); never a person.\n' >> "$secrets/openwebui.env"
     set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_EMAIL feedback-import@localhost
     set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_NAME "Feedback import"
     set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_PASSWORD "$(rand)"
@@ -510,6 +511,21 @@ own 1654 "$certs/api" "$certs/admin" "$certs/worker" "$certs/migrations" \
 own 10001 "$certs/parser"
 [ "$clamav_conf" = 0 ] || own 1000 "$secrets/clamav"
 [ -z "$owui_host" ] || own 1000 "$secrets/openwebui" "$owui_data"
+# The Open WebUI feedback key's directory (M-17 C6): always, since rag-api mounts it; written by open-webui-setup
+# (Open WebUI's uid 1000), read by rag-api's group 1654 (setgid keeps the group on the new file). The hand-made key that
+# rag-api read from its own directory before goes.
+mkdir -p "$secrets/openwebui-feedback"
+if [ -e "$secrets/api/OpenWebUi__AdminApiKey" ]; then
+  rm -f "$secrets/api/OpenWebUi__AdminApiKey" 2>/dev/null || sudo -n rm -f "$secrets/api/OpenWebUi__AdminApiKey" 2>/dev/null \
+    || chown_todo+=("rm -f $secrets/api/OpenWebUi__AdminApiKey")
+fi
+if [ "$chown" = 1 ]; then
+  feedback_own=(chown 1000:1654 "$secrets/openwebui-feedback")
+  feedback_mode=(chmod 2750 "$secrets/openwebui-feedback")
+  if [ "$(id -u)" = 0 ]; then "${feedback_own[@]}"; "${feedback_mode[@]}"
+  elif command -v sudo >/dev/null && sudo -n "${feedback_own[@]}" 2>/dev/null && sudo -n "${feedback_mode[@]}" 2>/dev/null; then :
+  else chown_todo+=("${feedback_own[*]}" "${feedback_mode[*]}"); fi
+fi
 chmod 755 "$certs" "$secrets" 2>/dev/null || true
 
 # --- deploy/.env (non-secret settings only) ------------------------------------------
@@ -687,7 +703,7 @@ Open WebUI; without it, these files only render."
 Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/login/callback (identity design
 §5.3) on its OIDC client '$owui_client'.$owui_todo
 Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
-and, as root, $here/openwebui-feedback-key.sh (the feedback service account's API key for rag-api)."
+(its open-webui-setup mints the feedback service account's API key for rag-api; nothing to do by hand)."
 fi
 
 cat <<EOF

@@ -143,5 +143,6 @@ The runbook's *Restore drill*, with these test-host specifics:
 ## Open WebUI
 
 Optional, as production-setup.md, *Open WebUI*: the 24 GB host may run it beside the stack (repo-and-deployment §6.2).
-Once it runs, `sudo deploy/openwebui-feedback-key.sh` gives rag-api the feedback service account's key and checks that
-the key reaches only the feedback routes and that password sign-in is refused again afterwards (to-verify #49).
+Once it runs, its one-shot `open-webui-setup` gives rag-api the feedback service account's key and checks that the key
+reads the feedback list; `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env logs open-webui-setup`
+says *minted* or *kept*. That the key reaches only the feedback routes and password sign-in is refused is to-verify #49.

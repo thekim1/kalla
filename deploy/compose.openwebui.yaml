@@ -7,7 +7,7 @@
 #       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret
 #   (Open WebUI's key for rag-api is generated there; rag-migrate registers it as the deployment's own client.)
 #   docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
-#   sudo deploy/openwebui-feedback-key.sh     # the feedback service account's API key for rag-api's importer
+#   (open-webui-setup then mints the feedback service account's API key for rag-api's importer, M-17 C6.)
 #
 # Sign-in (chat design §4.3, identity design §5.3): P1 the Keycloak shared with the gateway, client open-webui in realm
 # ume (the OIDC provider URL defaults to the admin's authority + /.well-known/openid-configuration); P2 Entra, the
@@ -23,6 +23,9 @@ name: ume-rag-openwebui
 services:
   open-webui:
     # v0.12.5, built 2026-10-29 (go-live pin review A-4, 2026-11-07: v0.13.0 is under 7 days old). The index digest.
+    # The pin also binds open-webui-setup (below), which forges an Open WebUI session token from its internals (the user and auth
+    # tables, session_stamp, utils/auth.py's claims; M-17 C6): before the digest moves, deploy/tests/portainer-boot.sh must
+    # pass with the new image (it checks the minted feedback key).
     image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
     read_only: true
     cap_drop: [ALL]
@@ -93,10 +96,10 @@ services:
       USER_PERMISSIONS_FEATURES_API_KEYS: "false"
       # Sign-in only over OIDC through its own client (identity design §5.3): P1 Keycloak, P2 Entra (header above).
       # The feedback service account is the store's first user, so its only admin (WEBUI_ADMIN_EMAIL and
-      # WEBUI_ADMIN_PASSWORD in the env file, created on the first start of an empty store). Password sign-in is off
-      # except while deploy/openwebui-feedback-key.sh mints its API key (UME_RAG_OPENWEBUI_PASSWORD_AUTH=true).
+      # WEBUI_ADMIN_PASSWORD in the env file, created on the first start of an empty store). Password sign-in is off:
+      # open-webui-setup mints its API key without it.
       ENABLE_LOGIN_FORM: "false"
-      ENABLE_PASSWORD_AUTH: ${UME_RAG_OPENWEBUI_PASSWORD_AUTH:-false}
+      ENABLE_PASSWORD_AUTH: "false"
       # No person becomes admin, so nobody could approve a pending account: every OIDC sign-in is a user (who may sign
       # in is identity design §16 question 5).
       DEFAULT_USER_ROLE: user
@@ -114,6 +117,33 @@ services:
       # Its own SQLite store, on the host's encrypted disk (§12 #8): never ragdb.
       - ${UME_RAG_OPENWEBUI_DATA_DIR:?Set UME_RAG_OPENWEBUI_DATA_DIR in deploy/.env}:/data
       - ${UME_RAG_SECRETS_DIR}/openwebui:/run/owui-secrets:ro
+    networks: [openwebui]
+
+  open-webui-setup:
+    # One-shot (M-17 C6): the feedback service account's API key for rag-api's import, minted with a short session token
+    # signed with Open WebUI's secret key, since password sign-in is off (openwebui/feedback-key-setup.py). Open WebUI's
+    # image as Open WebUI's user; it reads the account from the store and writes only secrets/openwebui-feedback, which
+    # rag-api reads (no restart). A key that still works is kept; a new one: delete the file and run `up` again.
+    image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    user: "1000:1000"
+    restart: "no"
+    entrypoint: [python3, -I, /config/feedback-key-setup.py]
+    environment:
+      OWUI_URL: http://open-webui:8080
+      # The service account init-deployment.sh names in the env file.
+      WEBUI_ADMIN_EMAIL: feedback-import@localhost
+    volumes:
+      # The store's WAL needs its directory writable even for a read-only connection.
+      - ${UME_RAG_OPENWEBUI_DATA_DIR:?Set UME_RAG_OPENWEBUI_DATA_DIR in deploy/.env}:/data
+      - ${UME_RAG_SECRETS_DIR}/openwebui:/run/owui-secrets:ro
+      - ${UME_RAG_SECRETS_DIR}/openwebui-feedback:/run/feedback
+      - ./openwebui/feedback-key-setup.py:/config/feedback-key-setup.py:ro
+    depends_on:
+      open-webui: {condition: service_started}
     networks: [openwebui]
 
 networks:

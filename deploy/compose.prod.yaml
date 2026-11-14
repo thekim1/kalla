@@ -137,6 +137,9 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/api.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
       Rag__Roles: knowledge,chat,mcp
+      # The Open WebUI feedback key, minted by compose.openwebui.yaml's open-webui-setup into a directory of its own
+      # (M-17 C6); init-deployment.sh creates it, empty until Open WebUI runs.
+      Security__ExtraSecretsDirectory: /run/openwebui-feedback
       # The rag-blobs volume's rag/ container (repo-and-deployment §6.3), as in rag-admin and rag-worker.
       BlobStore__Root: /data/blobs/rag
       # Its gateway credential key is the secret file Gateway__Key (init-deployment.sh --gateway-credential-key-file).
@@ -149,8 +152,8 @@ services:
       # WebUI too (relative links would resolve against Open WebUI's origin). init-deployment.sh writes it.
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}
       # The feedback importer and pruning (chat design §14.2, §13.3): Open WebUI through its reverse proxy, which works
-      # whether it runs on this host or its own VM; empty = no import. Its key is the secret file OpenWebUi__AdminApiKey
-      # (deploy/openwebui-feedback-key.sh). It runs every 15 minutes (the code's default; M-17 D6).
+      # whether it runs on this host or its own VM; empty = no import. Its key is OpenWebUi__AdminApiKey in
+      # secrets/openwebui-feedback, minted by open-webui-setup. It runs every 15 minutes (the code's default; M-17 D6).
       OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
@@ -161,6 +164,7 @@ services:
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
       - ${UME_RAG_SECRETS_DIR}/api:/run/app-secrets:ro
+      - ${UME_RAG_SECRETS_DIR}/openwebui-feedback:/run/openwebui-feedback:ro
       - ${UME_RAG_CERTS_DIR}/api:/run/certs:ro
       - ${UME_RAG_SECRETS_DIR}/keys/rag-blob-internal:/run/keys/rag-blob-internal:ro
       # Citation downloads only (knowledge design §3.5).
