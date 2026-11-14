@@ -499,4 +499,29 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         (await platform.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("needsEmbeddingProfile").GetBoolean().ShouldBeFalse();
         (await editor.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("needsEmbeddingProfile").GetBoolean().ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task A_longer_context_window_than_a_profile_takes_is_capped_and_concurrent_creates_both_succeed()
+    {
+        // #687 review: the model's window is held to maxInputTokens' range; creates run one at a time.
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        await SyncAsync(platform, 2_000_000);
+
+        using var capped = await platform.PostAsJsonAsync("/api/embedding-profiles",
+            new { name = "long-" + Guid.NewGuid().ToString("N"), gatewayModel = "fake-eu-embed" }, Ct);
+        capped.StatusCode.ShouldBe(HttpStatusCode.Created, await capped.Content.ReadAsStringAsync(Ct));
+        (await capped.Content.ReadFromJsonAsync<EmbeddingProfileDto>(Ct))!.MaxInputTokens.ShouldBe(EmbeddingProfileEndpoints.MaxInputTokensLimit);
+
+        var creates = Enumerable.Range(0, 2).Select(_ => platform.PostAsJsonAsync("/api/embedding-profiles",
+            new { name = "both-" + Guid.NewGuid().ToString("N"), gatewayModel = "fake-eu-embed", maxInputTokens = 8191 }, Ct)).ToList();
+        foreach (var response in await Task.WhenAll(creates))
+        {
+            using (response)
+            {
+                response.StatusCode.ShouldBe(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+            }
+        }
+    }
 }
