@@ -4,25 +4,68 @@
 #
 #   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
 #   deploy/portainer/build-stack.sh v0.10.1        # ... of that gateway release
+#   deploy/portainer/build-stack.sh current        # ... of the gateway release the committed file was built from
 #   deploy/portainer/build-stack.sh ../llmgateway/deploy/compose.portainer.yaml   # or a local file
 #
+# Options, before the gateway:
+#   --check          write nothing: build from `current` and fail with the difference when the committed
+#                    compose.portainer.yaml is not what the template gives (verify.yml's deploy-checks)
+#   --images FILE    first pin the template's RAG_*_IMAGE defaults to FILE's lines (a release's images.env:
+#                    API_IMAGE=registry/repo:tag@sha256:..., one per image), then build; release.yml's pull request
+#                    after a release
+#
 # A gateway release's asset pins the gateway's images by digest; its repository file does not (they are then required
-# variables), so build from a release unless testing an unreleased gateway change.
+# variables), so build from a release unless testing an unreleased gateway change. A named release is downloaded with
+# curl (the gateway's repository is public); only the latest one is looked up with gh.
 #
 # Each "@SECTION name" block of the template goes into the same top-level section of the gateway's file (header: after
 # its comment, x: after its x- anchors), and "@INCLUDE path" lines (relative to deploy/) are inlined, indented, with $
 # escaped as $$, as the gateway's build-portainer-stack.sh does. Run again after a gateway or RAG change.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
+template="$here/compose.rag.template.yaml"
+committed="$here/compose.portainer.yaml"
+check=0; images=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) check=1; shift ;;
+    --images) images="${2:?--images needs a file}"; shift 2 ;;
+    -*) echo "unknown option: $1" >&2; exit 1 ;;
+    *) break ;;
+  esac
+done
 gateway="${1:-}"
-tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+[ "$check" = 0 ] || gateway=current
+tmp="$(mktemp)"; out_tmp="$(mktemp)"; trap 'rm -f "$tmp" "$out_tmp"' EXIT
+
+if [ -n "$images" ]; then
+  [ "$check" = 0 ] || { echo "--check writes nothing: it cannot be combined with --images" >&2; exit 1; }
+  # A reference pinned by digest; the character set also keeps it safe in the sed replacement below.
+  while IFS='=' read -r var ref; do
+    [ -n "$var" ] || continue
+    printf '%s' "$ref" | grep -Eq '^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$' || { echo "$var in $images is not pinned by digest: $ref" >&2; exit 1; }
+    grep -q "\${RAG_${var}:-" "$template" || { echo "the template has no \${RAG_${var}:-...}" >&2; exit 1; }
+    sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" "$template"
+  done < "$images"
+  echo "Pinned the template's images to $images"
+fi
+
 if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
-  tag="${gateway:-$(gh release view -R thekim1/llmgateway --json tagName --jq .tagName)}"
-  gh release download "$tag" -R thekim1/llmgateway -p compose.portainer.yaml -O "$tmp" --clobber
+  case "$gateway" in
+    "") tag="$(gh release view -R thekim1/llmgateway --json tagName --jq .tagName)" ;;
+    current)
+      tag="$(grep -m1 -oE 'llmgateway/gateway:[0-9][0-9A-Za-z.-]*' "$committed" | cut -d: -f2)"
+      [ -n "$tag" ] || { echo "$committed names no gateway release (llmgateway/gateway:X.Y.Z)" >&2; exit 1; }
+      tag="v$tag" ;;
+    *) tag="$gateway" ;;
+  esac
+  curl -fsSL -o "$tmp" "https://github.com/thekim1/llmgateway/releases/download/$tag/compose.portainer.yaml" \
+    || { echo "could not download compose.portainer.yaml of the gateway's release $tag" >&2; exit 1; }
   echo "The gateway's stack from its release $tag"
   gateway="$tmp"
 fi
-python3 - "$gateway" "$here/compose.rag.template.yaml" "$here/.." "$here/compose.portainer.yaml" <<'EOF'
+out="$committed"; [ "$check" = 0 ] || out="$out_tmp"
+python3 - "$gateway" "$template" "$here/.." "$out" <<'EOF'
 import re, sys
 gateway_path, template_path, deploy_dir, out_path = sys.argv[1:]
 gw = open(gateway_path, encoding="utf-8").read().replace("\r\n", "\n").split("\n")
@@ -73,4 +116,14 @@ for index, lines in sorted(inserts, key=lambda p: p[0], reverse=True):
     out[index:index] = lines
 open(out_path, "w", encoding="utf-8", newline="\n").write("\n".join(out).rstrip("\n") + "\n")
 EOF
-echo "Wrote deploy/portainer/compose.portainer.yaml"
+if [ "$check" = 1 ]; then
+  if ! diff -u "$committed" "$out" > "$tmp.diff"; then
+    head -60 "$tmp.diff"; rm -f "$tmp.diff"
+    echo "deploy/portainer/compose.portainer.yaml is not what the template gives: run deploy/portainer/build-stack.sh current" >&2
+    exit 1
+  fi
+  rm -f "$tmp.diff"
+  echo "deploy/portainer/compose.portainer.yaml is current"
+else
+  echo "Wrote deploy/portainer/compose.portainer.yaml"
+fi
