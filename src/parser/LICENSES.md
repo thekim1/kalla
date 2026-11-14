@@ -125,7 +125,7 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 | odfdo | 3.27.2 | Apache-2.0 | `LICENSE`, `NOTICE.txt` | runtime |
 | opencv-python-headless | 4.14.0.94 | Apache Software License | `LICENSE-3RD-PARTY.txt`, `LICENSE.txt` | runtime |
 | openpyxl | 3.1.5 | MIT License | `LICENCE.rst` | runtime |
-| opentelemetry-api | 1.45.1 | Apache-2.0 | `LICENSE` | runtime |
+| opentelemetry-api | 1.45.2 | Apache-2.0 | `LICENSE` | runtime |
 | packageurl-python | 0.17.6 | MIT License | - | test |
 | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | `LICENSE`, `LICENSE.APACHE`, `LICENSE.BSD` | runtime |
 | pandas | 3.1.0 | BSD-3-Clause | `LICENSE`, `LICENSES/BOTTLENECK_LICENCE`, `LICENSES/DATEUTIL_LICENSE`, `LICENSES/HAVEN_LICENSE`, `LICENSES/HAVEN_MIT`, `LICENSES/KLIB_LICENSE`, `LICENSES/MUSL_LICENSE`, `LICENSES/NUMPY_LICENSE`, `LICENSES/PACKAGING_LICENSE`, `LICENSES/PSF_LICENSE`, `LICENSES/PYPERCLIP_LICENSE`, `LICENSES/PYUPGRADE_LICENSE`, `LICENSES/SAS7BDAT_LICENSE`, `LICENSES/STATSBASE_JL_LICENSE`, `LICENSES/ULTRAJSON_LICENSE`, `LICENSES/XSIMD_LICENSE`, `subprojects/fast_float-8.2.10/LICENSE-APACHE`, `subprojects/fast_float-8.2.10/LICENSE-BOOST`, `subprojects/fast_float-8.2.10/LICENSE-MIT` | runtime |
