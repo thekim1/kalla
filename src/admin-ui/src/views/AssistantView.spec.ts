@@ -42,7 +42,7 @@ function mocks() {
     collectionSummary(),
     collectionSummary({ id: 'c2', slug: 'annan', name: 'Annan förvaltning', departmentId: 'd2', departmentName: 'Annan', shared: false }),
   ] })
-  vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 1, lastUsedAt: null }])
+  vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, isManagedByDeployment: false, activeKeys: 1, lastUsedAt: null }])
 }
 
 describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
@@ -213,9 +213,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
   describe('"Open in <client>" (§5.4 step 13, #363 point 2)', () => {
     const portalClients: ClientSummary[] = [
-      { id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 1, lastUsedAt: null, portalUrl: 'https://chat.example.invalid' },
-      { id: 'k2', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, activeKeys: 1, lastUsedAt: null, portalUrl: 'https://webb.example.invalid' },
-      { id: 'k3', name: 'Integration utan UI', kind: 'integration', classificationCeiling: 'public', isEnabled: true, activeKeys: 1, lastUsedAt: null, portalUrl: null },
+      { id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, isManagedByDeployment: false, activeKeys: 1, lastUsedAt: null, portalUrl: 'https://chat.example.invalid' },
+      { id: 'k2', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, isManagedByDeployment: false, activeKeys: 1, lastUsedAt: null, portalUrl: 'https://webb.example.invalid' },
+      { id: 'k3', name: 'Integration utan UI', kind: 'integration', classificationCeiling: 'public', isEnabled: true, isManagedByDeployment: false, activeKeys: 1, lastUsedAt: null, portalUrl: null },
     ]
 
     async function mountWith(overrides: Partial<Assistant>) {

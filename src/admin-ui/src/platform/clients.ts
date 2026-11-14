@@ -6,8 +6,12 @@ import type { Tone } from '@/utils/labels'
  * defaults a new client of that kind starts from.
  */
 
-/** In the order of the kind step; the rest show "Later" (P2). */
-export const AVAILABLE_KINDS: readonly ClientKind[] = ['open-webui', 'integration', 'internal']
+/**
+ * In the order of the kind step. Open WebUI is set up by the deployment (identity design §5.2, M-17 C4) and shows so; the
+ * rest show "Later" (P2).
+ */
+export const AVAILABLE_KINDS: readonly ClientKind[] = ['integration', 'internal']
+export const DEPLOYMENT_KINDS: readonly ClientKind[] = ['open-webui']
 export const LATER_KINDS: readonly ClientKind[] = ['widget', 'own-client', 'teams', 'mcp-client', 'entra-app']
 
 export type ClientField = 'name' | 'classificationCeiling' | 'storesHistory' | 'clientRetentionDays' | 'oAuthClientId' | 'portalUrl' | 'isEnabled'
@@ -95,11 +99,6 @@ export function clientRequest(kind: string, form: ClientForm, base: Client | nul
     allowedOrigins: base?.allowedOrigins ?? [],
     ...(base ? { toolPolicy: base.toolPolicy, version: base.version } : {}),
   }
-}
-
-/** The two Open WebUI lines of the deployment's stack env (deploy/portainer/stack.env.example), copied together. */
-export function stackLines(secret: string, clientId: string): string {
-  return `UME_RAG_OPENWEBUI_API_KEY=${secret}\nUME_RAG_OPENWEBUI_CLIENT_ID=${clientId}`
 }
 
 const LEVEL_RANK: Record<Level, number> = { public: 0, internal: 1, sensitive: 2 }

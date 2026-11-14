@@ -418,13 +418,12 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         var snapshot = Snapshot();
         snapshot = snapshot with
         {
-            Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi } : c.Value),
+            Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi, IsManagedByDeployment = true } : c.Value),
         };
         await using var owui = db.ApiHost(snapshot).WithWebHostBuilder(web =>
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
-            // An Open WebUI client chats as its user (identity §5.2): the instance is configured and each request has the JWT.
-            web.UseSetting("OpenWebUi:ClientId", db.IntegrationClient.ToString());
+            // An Open WebUI client chats as its user (identity §5.2): the deployment's own client, and each request has the JWT.
             web.UseSetting("OpenWebUi:JwtSecret", "open-webui-jwt-secret-for-tests-0123456789");
             web.ConfigureTestServices(services =>
                 services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));

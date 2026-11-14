@@ -5,15 +5,14 @@ using Microsoft.IdentityModel.Tokens;
 namespace Ume.Rag.Api;
 
 /// <summary>
-/// <c>OpenWebUi:ClientId</c> (the registry client of the Open WebUI instance; empty = not configured, #95),
 /// <c>OpenWebUi:JwtSecret</c> (Open WebUI's <c>FORWARD_USER_INFO_HEADER_JWT_SECRET</c>, ≥ 32 bytes) and
-/// <c>OpenWebUi:MaxLifetimeSeconds</c> (600), identity design §5.2.
+/// <c>OpenWebUi:MaxLifetimeSeconds</c> (600), identity design §5.2. The Open WebUI instance is the deployment's own client
+/// (<c>Clients.IsManagedByDeployment</c>, M-17 C4), not a setting.
 /// </summary>
 public sealed class OpenWebUiOptions
 {
     public const string SectionName = "OpenWebUi";
 
-    public string? ClientId { get; set; }
     public string? JwtSecret { get; set; }
     public int MaxLifetimeSeconds { get; set; } = 600;
 
@@ -25,9 +24,6 @@ public sealed class OpenWebUiOptions
 
     /// <summary>The import's schedule (§14.2: every 15 minutes).</summary>
     public TimeSpan FeedbackImportInterval { get; set; } = TimeSpan.FromMinutes(15);
-
-    /// <summary>The configured client, or null when <c>ClientId</c> is empty or not a GUID.</summary>
-    public Guid? Client => Guid.TryParse(ClientId, out var id) ? id : null;
 }
 
 /// <summary>An Open WebUI user from a valid <c>X-OpenWebUI-User-Jwt</c>.</summary>

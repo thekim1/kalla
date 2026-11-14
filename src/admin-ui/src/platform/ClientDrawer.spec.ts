@@ -10,7 +10,7 @@ const L = PLATFORM_CLIENTS
 
 const client: Client = {
   id: '0199-client', name: 'Integration webb', kind: 'integration', oAuthClientId: 'webb-app', classificationCeiling: 'public', storesHistory: false,
-  clientRetentionDays: null, allowedOrigins: [], toolPolicy: 'read', portalUrl: null, isEnabled: true, updatedAt: '2026-11-13T10:00:00Z', updatedBy: 'anna@umea.se',
+  clientRetentionDays: null, allowedOrigins: [], toolPolicy: 'read', portalUrl: null, isEnabled: true, isManagedByDeployment: false, updatedAt: '2026-11-13T10:00:00Z', updatedBy: 'anna@umea.se',
   version: '7', assistants: [{ id: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', published: true, slug: 'bygglov', classification: 'internal' }],
 }
 const key: ApiKey = {
@@ -119,6 +119,21 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     const scoped = wrapper.get('[data-test=scope-assistants]')
     expect(scoped.findAll('input[type=checkbox]')).toHaveLength(1)
     expect(scoped.text()).toContain('Bygglovsassistenten')
+    wrapper.unmount()
+  })
+
+  it('shows the deployment\'s own Open WebUI app as managed, with no New key and no key actions (identity design §5.2)', async () => {
+    vi.spyOn(api.clients, 'get').mockResolvedValue({ ...client, kind: 'open-webui', isManagedByDeployment: true })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.get('[data-test=managed]').text()).toBe(L.managed)
+    expect(wrapper.get('[data-test=managed-note]').text()).toBe(L.managedNote)
+    expect(wrapper.find('[data-test=new-key]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=rotate-k1]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=revoke-k1]').exists()).toBe(false)
+    // How to connect says the deployment does it; the assistants it offers are still chosen here.
+    expect(wrapper.get('[data-test=connect-open-webui]').text()).toBe(L.connect.openWebUi)
+    expect(wrapper.find('[data-test=client-assistants]').exists()).toBe(true)
     wrapper.unmount()
   })
 

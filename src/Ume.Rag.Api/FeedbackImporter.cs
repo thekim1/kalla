@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Access;
 
 namespace Ume.Rag.Api;
@@ -46,10 +47,14 @@ public sealed partial class FeedbackImporter(
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
         var o = options.CurrentValue;
-        if (o.BaseUrl is null || string.IsNullOrEmpty(o.AdminApiKey) || o.Client is not { } clientId)
+        // The deployment's own Open WebUI client (identity design §5.2): its feedback is the one imported.
+        var managed = snapshots.Current.Clients.Values.FirstOrDefault(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment);
+        if (o.BaseUrl is null || string.IsNullOrEmpty(o.AdminApiKey) || managed is null)
         {
             return false;
         }
+
+        var clientId = managed.Id;
 
         // One runner across instances: a transaction-scoped lock on its own connection, held for the run (pooler-safe, no
         // session state); the work runs on a second connection.

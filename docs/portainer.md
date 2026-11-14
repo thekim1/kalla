@@ -94,15 +94,9 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models; the
    embedding canary passes under *Embedding profiles* on the same page.
-7. **Open WebUI:** in Ume.Rag's admin, *Apps and keys → Add app*, type *Open WebUI*, with *Create a key now* on
-   (tick the assistants it offers on the way, or later).
-   The last step shows the two lines below with one copy button; paste them into the stack's variables and update it
-   (it recreates `rag-api` and `rag-openwebui`, whose settings changed):
-
-   ```text
-   UME_RAG_OPENWEBUI_API_KEY=<the client's key>
-   UME_RAG_OPENWEBUI_CLIENT_ID=<the client's id>
-   ```
+7. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
+   the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
+   there to choose the assistants it offers (an assistant's *Who can use it* works too).
 
    Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag) is
    optional: the file's header has the steps (password sign-in on for a moment, mint the service account's key, set
@@ -159,4 +153,4 @@ on they are recorded per model call.
 | *Models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |
 | `rag-openwebui` restarts | its log: the wrapper's two files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
-| Open WebUI lists no models | `UME_RAG_OPENWEBUI_API_KEY`, the client's kind `open-webui`, and that its assistants are published |
+| Open WebUI lists no models | *Apps and keys*: the Open WebUI app managed by the deployment offers assistants, and they are published; `rag-migrate`'s log names the client |

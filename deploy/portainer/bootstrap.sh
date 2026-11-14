@@ -103,9 +103,16 @@ case ",${COMPOSE_PROFILES:-}," in
 esac
 # Open WebUI's address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui while the openwebui
 # profile is on. The import also needs UME_RAG_OPENWEBUI_ADMIN_API_KEY (below).
+# Open WebUI's key for rag-api (M-17 C4, identity design §5.2): generated once; Open WebUI's start-up wrapper exports it
+# as OPENAI_API_KEYS, and rag-migrate registers it as the deployment's own Open WebUI client while the profile is on. A
+# new key: delete .openwebui-rag-api-key in the volume and update the stack (rag-migrate revokes the old one).
+[ -f "$S/.openwebui-rag-api-key" ] || printf 'ume-rag-sk-%s' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$S/.openwebui-rag-api-key"
+cp "$S/.openwebui-rag-api-key" "$S/openwebui/rag-api-key"
 case ",${COMPOSE_PROFILES:-}," in
-  *,openwebui,*) printf 'http://rag-openwebui:8080' > "$S/api/OpenWebUi__BaseUrl" ;;
-  *) rm -f "$S/api/OpenWebUi__BaseUrl" ;;
+  *,openwebui,*)
+    printf 'http://rag-openwebui:8080' > "$S/api/OpenWebUi__BaseUrl"
+    cp "$S/.openwebui-rag-api-key" "$S/migrations/OpenWebUi__ApiKey" ;;
+  *) rm -f "$S/api/OpenWebUi__BaseUrl" "$S/migrations/OpenWebUi__ApiKey" ;;
 esac
 # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
 if [ ! -f "$S/keys/rag-blob-internal" ]; then
@@ -176,10 +183,7 @@ example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: s
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"
-    example "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: users can't sign in to Open WebUI"
-    if [ -z "${UME_RAG_OPENWEBUI_API_KEY:-}" ] || [ -z "${UME_RAG_OPENWEBUI_CLIENT_ID:-}" ]; then
-      note "UME_RAG_OPENWEBUI_API_KEY and UME_RAG_OPENWEBUI_CLIENT_ID: create Open WebUI's client in Ume.Rag's admin (Platform > Clients, kind open-webui)"
-    fi ;;
+    example "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: users can't sign in to Open WebUI" ;;
 esac
 if [ -n "$todo" ]; then
   echo "rag-bootstrap: still to do (docs/portainer.md):$todo"

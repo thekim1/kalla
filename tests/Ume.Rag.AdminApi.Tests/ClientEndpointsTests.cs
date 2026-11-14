@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -359,5 +359,66 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
         // Platform admins only: the address is for the person who connects an app.
         using var departmentAdmin = await AdminDatabaseFixture.UserAsync(set, RagRoles.DepartmentAdmin);
         (await departmentAdmin.GetAsync("/api/clients/connection", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task The_deployments_own_client_shows_as_managed_and_its_keys_and_kind_are_not_changed_here()
+    {
+        // Identity §5.2, M-17 C4: rag-migrate keeps the deployment's Open WebUI client and its one key. Its settings can be
+        // edited; its kind, and making, rotating or revoking its keys, are refused with client_managed_by_deployment.
+        var code = "M" + Random.Shared.Next(100_000, 999_999);
+        Guid clientId, keyId;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            // At most one managed client per kind in a database: this test reuses one, or makes it.
+            var managed = await db.Clients.SingleOrDefaultAsync(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment, Ct);
+            if (managed is null)
+            {
+                managed = new Client
+                {
+                    Name = "Open WebUI " + code, Kind = ClientKinds.OpenWebUi, ClassificationCeiling = Classification.Internal, StoresHistory = true,
+                    ClientRetentionDays = 90, IsManagedByDeployment = true, UpdatedAt = DateTimeOffset.UtcNow,
+                };
+                db.Clients.Add(managed);
+            }
+
+            var key = new ApiKey
+            {
+                ClientId = managed.Id, Name = "deployment " + code, Prefix = "ume-rag-sk-" + code[..4], KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Keys.Add(key);
+            await db.SaveChangesAsync(Ct);
+            (clientId, keyId) = (managed.Id, key.Id);
+        }
+
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var row = (await admin.GetFromJsonAsync<JsonElement[]>("/api/clients", Ct))!.Single(r => r.GetProperty("id").GetGuid() == clientId);
+        row.GetProperty("isManagedByDeployment").GetBoolean().ShouldBeTrue();
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+        client.GetProperty("isManagedByDeployment").GetBoolean().ShouldBeTrue();
+
+        async Task Refused(HttpResponseMessage response)
+        {
+            var body = await Ok(response, HttpStatusCode.Conflict);
+            body.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ClientManagedByDeployment.Code);
+        }
+
+        await Refused(await admin.PostAsJsonAsync("/api/keys", new { clientId, name = "Another" }, Ct));
+        await Refused(await admin.PostAsJsonAsync($"/api/keys/{keyId}/rotate", new { mode = "RevokeImmediately" }, Ct));
+        await Refused(await admin.PostAsync($"/api/keys/{keyId}/revoke", null, Ct));
+
+        // Its settings are the admin's; its kind is the deployment's.
+        var renamed = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", new
+        {
+            name = "Chat " + code, kind = ClientKinds.OpenWebUi, classificationCeiling = Classification.Internal, storesHistory = true, clientRetentionDays = 30,
+            version = client.GetProperty("version").GetString(),
+        }, Ct));
+        renamed.GetProperty("name").GetString().ShouldBe("Chat " + code);
+        var kind = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", new
+        {
+            name = "Chat " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, version = renamed.GetProperty("version").GetString(),
+        }, Ct), HttpStatusCode.BadRequest);
+        kind.GetProperty("errorCodes").GetProperty("kind")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ClientManagedByDeployment.Code);
     }
 }

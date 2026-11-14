@@ -4,8 +4,8 @@
 # its data-handling profile). On the 24 GB pilot host or its own VM (§6.2: not co-hosted on a 16 GB host).
 #
 #   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume ... \
-#       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
-#       --openwebui-api-key-file open-webui.key --openwebui-rag-client-id <client id>
+#       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret
+#   (Open WebUI's key for rag-api is generated there; rag-migrate registers it as the deployment's own client.)
 #   docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
 #   sudo deploy/openwebui-feedback-key.sh     # the feedback service account's API key for rag-api's importer
 #

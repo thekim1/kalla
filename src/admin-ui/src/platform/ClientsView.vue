@@ -124,7 +124,10 @@ onMounted(() => {
   <div v-if="tab === 'apps'" id="clients-panel-apps" role="tabpanel" aria-labelledby="clients-tab-apps">
     <AsyncState :loading="clients.loading.value" :error="clients.error.value" :empty="clients.data.value.length === 0" :empty-text="L.empty" @retry="load">
       <DataTable :columns="columns" :rows="clients.data.value" :row-key="(c) => c.id" :caption="PLATFORM.resources.clients.label" clickable @row-click="open">
-        <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
+        <template #cell-name="{ row }">
+          <span class="font-medium">{{ row.name }}</span>
+          <UiBadge v-if="row.isManagedByDeployment" :label="L.managed" :dot="false" class="ml-2" />
+        </template>
         <template #cell-kind="{ row }">{{ L.kinds[row.kind]?.title ?? row.kind }}</template>
         <template #cell-ceiling="{ row }">{{ LEVEL_LABEL[row.classificationCeiling as ClientSummary['classificationCeiling']] }}</template>
         <template #cell-enabled="{ row }">{{ row.isEnabled ? COMMON.yes : COMMON.no }}</template>

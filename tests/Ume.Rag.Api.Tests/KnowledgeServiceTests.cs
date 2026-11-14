@@ -217,7 +217,8 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         var clients = new[]
         {
             new ClientEntry(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive, false, true),
-            new ClientEntry(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal, true, true),
+            // The deployment's own Open WebUI client (identity §5.2): the one whose users rag-api trusts.
+            new ClientEntry(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal, true, true, IsManagedByDeployment: true),
             new ClientEntry(IntegrationClient, "Integration", ClientKinds.Integration, Classification.Internal, false, true),
         }.ToDictionary(c => c.Id);
         var collections = new[]

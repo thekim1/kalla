@@ -382,7 +382,7 @@ jobs:
               --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
               --gateway-credential-key-file api="$d/keys/api" --gateway-credential-key-file admin="$d/keys/admin" \
               --gateway-credential-key-file worker="$d/keys/worker" --openwebui-host chat.example.se \
-              --openwebui-api-key-file "$d/keys/owui-key" --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
+              --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
               --proxy-address 10.1.2.3 --backup-target local --allow-file-keys --no-chown --yes "$@"
           }
           generated() {

@@ -19,8 +19,11 @@ public sealed record ResourceRef(ResourceKind Kind, Guid Id)
     public static ResourceRef Collection(Guid id) => new(ResourceKind.Collection, id);
 }
 
-/// <summary>A client of the registry (<c>config."Clients"</c>, identity design §4.1) as the snapshot holds it.</summary>
-public sealed record ClientEntry(Guid Id, string Name, string Kind, string Ceiling, bool StoresHistory, bool IsEnabled);
+/// <summary>
+/// A client of the registry (<c>config."Clients"</c>, identity design §4.1) as the snapshot holds it;
+/// <see cref="IsManagedByDeployment"/>: the deployment's own client (§5.2), the only <c>open-webui</c> client whose users are trusted.
+/// </summary>
+public sealed record ClientEntry(Guid Id, string Name, string Kind, string Ceiling, bool StoresHistory, bool IsEnabled, bool IsManagedByDeployment = false);
 
 /// <summary>
 /// The key a principal authenticated with: id, client, kind (<c>sk</c>/<c>pk</c>), team, scopes and

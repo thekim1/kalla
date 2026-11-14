@@ -932,6 +932,8 @@ export interface ClientSummary {
   isEnabled: boolean
   /** The client's own UI (admin design §5.4 step 13). */
   portalUrl?: string | null
+  /** The deployment's own client (identity design §5.2): made by rag-migrate, its key the deployment's. */
+  isManagedByDeployment: boolean
   /** Its keys that work now (admin design §5.9). */
   activeKeys: number
   /** The latest use of any of its keys; null before the app's first call (admin design §5.9.1). */
@@ -970,6 +972,8 @@ export interface Client {
   toolPolicy: string
   portalUrl: string | null
   isEnabled: boolean
+  /** The deployment's own client (identity design §5.2): its key is the deployment's, not changed here. */
+  isManagedByDeployment: boolean
   updatedAt: IsoDateTime
   updatedBy: string | null
   version: string

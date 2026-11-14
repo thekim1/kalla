@@ -75,7 +75,7 @@ Nothing in the repository changes. You set values in one of two places:
 | The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/ume/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
 | The shared Keycloak for Open WebUI | stream B's `open-webui` resource (J9) | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
-| Open WebUI's client in rag-api | created by the AppHost seed (with J9) | create it in the admin API (Scalar): kind `open-webui`, its ceiling, `AllowedIpRanges` = the Open WebUI host (identity design §5.3); then `--openwebui-api-key-file open-webui.key --openwebui-rag-client-id <its id>` |
+| Open WebUI's client in rag-api | created by the AppHost seed (with J9) | nothing: `init-deployment.sh` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
 
 Keep the key and secret files outside the repository (for example in `~/rag-p1a-secrets/`, mode 0600) and delete them
 once `init-deployment.sh` has copied them. Re-run `init-deployment.sh` with all the options of the first run plus the
@@ -188,11 +188,11 @@ database across restarts (the volume at `/var/lib/postgresql/data`, the cluster 
 wins. A dev volume created before #172 never held the database (it lived in an anonymous volume), so the first start
 after #172 begins with an empty database: run the seed (§4.4) again.
 
-**Open WebUI on the AppHost** (#251): with `Seed:Enabled=false` the `open-webui` container starts only for a configured
-client. Create the Open WebUI client (`POST /api/clients`, kind `open-webui`) and its key (`POST /api/keys`), then put
-the client's id in `OpenWebUi:ClientId` and the whole `ume-rag-sk-…` key in `Parameters:openwebui-api-key` (user
-secrets only) and restart the AppHost. Publish an assistant with that client in its audience; it then appears as a
-model in Open WebUI. `dotnet run --project src/Ume.Rag.AppHost` runs the Debug build even with `-c Release`, so build
+**Open WebUI on the AppHost** (#251): with `Seed:Enabled=false` the `open-webui` container starts only when the user
+secrets hold its key: put a whole `ume-rag-sk-` key of your choice (the prefix and 43 letters or digits) in
+`Parameters:openwebui-api-key` and restart the AppHost. `rag-migrate` registers it as the deployment's own Open WebUI
+client (identity design §5.2, M-17 C4); no client is made by hand. Publish an assistant with that client in its
+audience; it then appears as a model in Open WebUI. `dotnet run --project src/Ume.Rag.AppHost` runs the Debug build even with `-c Release`, so build
 Debug first.
 
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)

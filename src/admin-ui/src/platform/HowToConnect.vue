@@ -4,13 +4,13 @@ import type { ClientAssistant } from '@/api/types'
 import { PLATFORM_CLIENTS } from '@/utils/labels'
 import CopyValue from './CopyValue.vue'
 import SecretOnce from './SecretOnce.vue'
-import { apiAddress, curlExample, stackLines } from './clients'
+import { apiAddress, curlExample } from './clients'
 
 // "How to connect" (admin design §5.9.1): what the app's owner needs, from what was just made or from the open app. An
-// integration or internal app gets the API address, the key, the model names and one call to try; Open WebUI the two
-// stack lines. `secret` is the key when it is on screen (just made, or shown through Show key in the drawer, which shows
-// it beside the keys itself); without it the block says where to find one. The app's id is under Details: only the stack
-// lines need it.
+// integration or internal app gets the API address, the key, the model names and one call to try; Open WebUI, which the
+// deployment connects by itself (identity design §5.2), a sentence. `secret` is the key when it is on screen (just made,
+// or shown through Show key in the drawer, which shows it beside the keys itself); without it the block says where to
+// find one. The app's id is under Details, for support.
 const props = defineProps<{ kind: string; clientId: string; apiBaseUrl: string | null; secret: string | null; assistants: ClientAssistant[]; created?: boolean }>()
 
 const L = PLATFORM_CLIENTS.connect
@@ -21,15 +21,8 @@ const model = computed(() => (props.assistants.find((a) => a.published) ?? props
 
 <template>
   <div class="grid gap-5" data-test="how-to-connect">
-    <template v-if="openWebUi">
-      <SecretOnce v-if="secret && created" :secret="secret" />
-      <p v-else-if="!secret" class="text-fg-2" data-test="connect-no-key">{{ created ? L.noKey : L.showKey }}</p>
-      <div v-if="secret" class="grid gap-2" data-test="stack-lines">
-        <h4 class="font-medium">{{ L.stackLines }}</h4>
-        <CopyValue :value="stackLines(secret, clientId)" :copy-label="L.copyLines" block />
-        <p class="text-small text-fg-2">{{ L.stackSentence }}</p>
-      </div>
-    </template>
+    <!-- Open WebUI is connected by the deployment (identity design §5.2, M-17 C4): nothing to copy. -->
+    <p v-if="openWebUi" class="text-fg-2" data-test="connect-open-webui">{{ L.openWebUi }}</p>
     <template v-else>
       <div class="grid gap-1" data-test="connect-address">
         <h4 class="font-medium">{{ L.address }}</h4>

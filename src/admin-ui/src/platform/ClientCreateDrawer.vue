@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { api } from '@/api'
-import type { AssistantSummary, Client, ClientCreated, Department } from '@/api/types'
+import type { AssistantSummary, Client, ClientCreated, ClientKind, Department } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -13,7 +13,7 @@ import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import AssistantPicker from './AssistantPicker.vue'
 import ClientFields from './ClientFields.vue'
 import HowToConnect from './HowToConnect.vue'
-import { assistantAllowed, AVAILABLE_KINDS, clientRequest, fieldsFor, LATER_KINDS, newClientForm, RetentionDaysError, type ClientForm } from './clients'
+import { assistantAllowed, AVAILABLE_KINDS, clientRequest, DEPLOYMENT_KINDS, fieldsFor, LATER_KINDS, newClientForm, RetentionDaysError, type ClientForm } from './clients'
 
 // Add app (admin design §5.9, §5.9.1): the kind, that kind's fields, the assistants it offers and a first key, all made in
 // one transaction. The result is "How to connect". `assistantId` ticks one assistant (opened from its Who can use it tab).
@@ -23,7 +23,8 @@ const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'create
 const L = PLATFORM_CLIENTS
 const STEPS = [L.steps.kind, L.steps.fields, L.steps.assistants, L.steps.firstKey]
 const LAST = STEPS.length
-const KINDS = [...AVAILABLE_KINDS, ...LATER_KINDS]
+const KINDS = [...AVAILABLE_KINDS, ...DEPLOYMENT_KINDS, ...LATER_KINDS]
+const unavailable = (k: ClientKind) => !AVAILABLE_KINDS.includes(k)
 const step = ref(1)
 const kind = ref('')
 const form = ref<ClientForm>(newClientForm(''))
@@ -37,7 +38,7 @@ const keyName = ref('')
 const saving = ref(false)
 const result = ref<ClientCreated | null>(null)
 const errors = useFormErrors({
-  kind: 'client-new-kind-open-webui',
+  kind: 'client-new-kind-integration',
   name: 'client-new-name',
   classificationCeiling: 'client-new-classificationCeiling',
   storesHistory: 'client-new-storesHistory',
@@ -145,14 +146,14 @@ async function create(): Promise<void> {
         <legend class="sr-only">{{ L.steps.kind }}</legend>
         <label
           v-for="k in KINDS" :key="k" class="flex gap-3 rounded-card border border-border p-3"
-          :class="LATER_KINDS.includes(k) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'"
+          :class="unavailable(k) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'"
         >
           <input
-            :id="`client-new-kind-${k}`" type="radio" name="client-kind" :value="k" class="mt-1" :checked="kind === k" :disabled="LATER_KINDS.includes(k)"
+            :id="`client-new-kind-${k}`" type="radio" name="client-kind" :value="k" class="mt-1" :checked="kind === k" :disabled="unavailable(k)"
             @change="chooseKind(k)"
           />
           <span class="grid gap-0.5">
-            <span class="flex items-center gap-2 font-medium">{{ L.kinds[k]?.title ?? k }}<UiBadge v-if="LATER_KINDS.includes(k)" :label="L.later" :dot="false" /></span>
+            <span class="flex items-center gap-2 font-medium">{{ L.kinds[k]?.title ?? k }}<UiBadge v-if="unavailable(k)" :label="DEPLOYMENT_KINDS.includes(k) ? L.byDeployment : L.later" :dot="false" /></span>
             <span class="text-small text-fg-2">{{ L.kinds[k]?.description }}</span>
           </span>
         </label>

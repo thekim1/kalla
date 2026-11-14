@@ -39,7 +39,7 @@ public static class ClientEndpoints
                 var uses = admin.Db.KeyLastUse;
                 // The Active branch of ApiKey.GetStatus: not revoked, enabled, not expired, not in a rotation's grace period.
                 return await admin.Db.Clients.AsNoTracking().OrderBy(c => c.Name)
-                    .Select(c => new ClientSummary(c.Id, c.Name, c.Kind, c.ClassificationCeiling, c.IsEnabled, c.PortalUrl,
+                    .Select(c => new ClientSummary(c.Id, c.Name, c.Kind, c.ClassificationCeiling, c.IsEnabled, c.PortalUrl, c.IsManagedByDeployment,
                         keys.Count(k => k.ClientId == c.Id && (k.RevokedAt == null || k.RevokedAt > now) && k.IsEnabled && (k.ExpiresAt == null || k.ExpiresAt > now)
                             && k.GraceUntil == null),
                         uses.Where(u => keys.Any(k => k.Id == u.KeyId && k.ClientId == c.Id)).Max(u => (DateTimeOffset?)u.LastUsedAt)))
@@ -88,6 +88,12 @@ public static class ClientEndpoints
             {
                 var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 admin.ExpectVersion(client, request.Version);
+                // The deployment's own client stays what the deployment made it (identity design §5.2): its kind is fixed.
+                if (client.IsManagedByDeployment && request.Kind != client.Kind)
+                {
+                    throw AdminFaults.Field("kind", AdminErrorCodes.ClientManagedByDeployment);
+                }
+
                 var before = ClientAudit.Of(client);
                 request.ApplyTo(client, admin);
                 return new AdminChange<Client>(client, "update", AuditEntityTypes.Client, client.Id, before, ClientAudit.Of(client))
@@ -214,8 +220,8 @@ public static class ClientEndpoints
 /// <see cref="ActiveKeys"/> counts the client's keys whose status is <c>active</c> now (a rotation's grace period not included);
 /// <see cref="LastUsedAt"/> is the latest use of any of its keys, null before the first call.
 /// </summary>
-public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl, int ActiveKeys,
-    DateTimeOffset? LastUsedAt);
+public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl, bool IsManagedByDeployment,
+    int ActiveKeys, DateTimeOffset? LastUsedAt);
 
 /// <summary>rag-api's public address for the "How to connect" block (<c>Admin:ApiPublicUrl</c>); null when the deployment names none.</summary>
 public sealed record ClientConnectionDto(string? ApiBaseUrl);
@@ -223,11 +229,11 @@ public sealed record ClientConnectionDto(string? ApiBaseUrl);
 /// <summary>A client; <see cref="Assistants"/> are those with a <c>client</c> audience row for it (the drawer's "Used by").</summary>
 public sealed record ClientDto(
     Guid Id, string Name, string Kind, string? OAuthClientId, string ClassificationCeiling, bool StoresHistory, int? ClientRetentionDays,
-    IReadOnlyList<string> AllowedOrigins, string ToolPolicy, string? PortalUrl, bool IsEnabled, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version,
-    IReadOnlyList<ClientAssistantDto> Assistants)
+    IReadOnlyList<string> AllowedOrigins, string ToolPolicy, string? PortalUrl, bool IsEnabled, bool IsManagedByDeployment, DateTimeOffset UpdatedAt,
+    string? UpdatedBy, string Version, IReadOnlyList<ClientAssistantDto> Assistants)
 {
     public static ClientDto Of(Client c, IReadOnlyList<ClientAssistantDto> assistants) => new(c.Id, c.Name, c.Kind, c.OAuthClientId, c.ClassificationCeiling,
-        c.StoresHistory, c.ClientRetentionDays, c.AllowedOrigins, c.ToolPolicy, c.PortalUrl, c.IsEnabled, c.UpdatedAt, c.UpdatedBy,
+        c.StoresHistory, c.ClientRetentionDays, c.AllowedOrigins, c.ToolPolicy, c.PortalUrl, c.IsEnabled, c.IsManagedByDeployment, c.UpdatedAt, c.UpdatedBy,
         c.Version.ToString(CultureInfo.InvariantCulture), assistants);
 }
 
