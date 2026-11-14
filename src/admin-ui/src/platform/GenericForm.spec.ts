@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { GatewayModel } from '@/api/types'
-import { MODEL_AVAILABILITY, PLATFORM } from '@/utils/labels'
+import { LEVEL_LABEL, MODEL_AVAILABILITY, PLATFORM } from '@/utils/labels'
 import GenericForm from './GenericForm.vue'
 import type { FieldSpec } from './schema'
 
@@ -122,6 +122,22 @@ describe('GenericForm', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(JSON.parse(fetch.mock.calls[2]![1].body)).toEqual({ expiresAt: null })
+  })
+
+  it('shows an information class by its name in a select, and sends its value (M-16 step 8)', async () => {
+    document.cookie = 'RAG-XSRF-TOKEN=t'
+    const fetch = vi.fn().mockResolvedValue(json({ id: 'sp1' }))
+    vi.stubGlobal('fetch', fetch)
+    const level: FieldSpec = { name: 'level', label: 'Level', kind: 'select', options: ['public', 'internal', 'sensitive'], required: true, nullable: false }
+    const wrapper = mount(GenericForm, { props: { formId: 'f', fields: [level], initial: {}, method: 'post', url: '/api/site-profiles', submitLabel: 'Create' } })
+    const select = wrapper.get('#f-level')
+    expect([...(select.element as HTMLSelectElement).options].map((o) => [o.value, o.text])).toEqual([
+      ['public', LEVEL_LABEL.public], ['internal', LEVEL_LABEL.internal], ['sensitive', LEVEL_LABEL.sensitive],
+    ])
+    await select.setValue('internal')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ level: 'internal' })
   })
 
   it('sends an emptied model property as null', async () => {

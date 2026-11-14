@@ -70,10 +70,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Mind:** the open deploy-configuration proposal (#662, on its branch): its C4 makes Open WebUI's client deployment-managed (the wizard's Open WebUI block goes then), its C1
   gives `UME_RAG_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
 - **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.
-- **Status (2026-11-14):** steps 1–3 merged (#668, #669, #671), with rag-api recording a key's last use (#670, identity
-  §6.2, which nothing wrote before); steps 4 and 6 merged (#672, #673; 6 before 5, so the menu had a page for site
-  profiles and data protection); step 5 merged (#675); step 7 for Chat, Search and Processing's schedules in the PR
-  that says so. Personal data's flag rules (nested per type) and step 8 are open.
+- **Status (2026-11-14):** steps 1–8 built: #668, #669, #671, #672, #673 (step 6, before 5), #675, #676 (step 7 for Chat,
+  Search and Processing's schedules) and step 8 in the PR that says so, with #670 (rag-api records a key's last use, which
+  nothing wrote before). Left: Personal data's flag rules as a table (step 7); Open WebUI's block and *Managed by the
+  deployment* once M-17's C4 lands; `Settings.Identity.RoleGroups` as a Settings section once C10 lands; #677 (Processing's
+  concurrency is not read).
 
 ### [ ] M-17 Deploy configuration: settings, automatic setup and the gateway (user, 2026-11-13; #662)
 - **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their

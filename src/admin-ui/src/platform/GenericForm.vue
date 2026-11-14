@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { isApiError, request } from '@/api/client'
-import type { GatewayModel } from '@/api/types'
+import type { GatewayModel, Level } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -9,7 +9,7 @@ import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiSwitch from '@/components/ui/UiSwitch.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
-import { COMMON, PLATFORM } from '@/utils/labels'
+import { COMMON, LEVEL_LABEL, PLATFORM } from '@/utils/labels'
 import { PLATFORM_RULE_MESSAGES } from '@/utils/messages'
 import { isObject, memberOf, modelHint, modelOptions } from './modelFields'
 import { fromInput, InputError, toInput, type FieldSpec } from './schema'
@@ -53,6 +53,11 @@ function hint(field: FieldSpec): string | undefined {
   const extra = field.kind === 'list' ? PLATFORM.form.listHint : field.kind === 'json' ? PLATFORM.form.jsonHint : undefined
   const picked = field.kind === 'json' && membersOf(field.name).length > 0 ? PLATFORM.form.membersAbove : undefined
   return [field.help, extra, picked].filter(Boolean).join(' ') || undefined
+}
+
+/** A select option's text: an information class by its name in the UI (admin design §5.7), anything else as it is. */
+function optionLabel(value: string): string {
+  return LEVEL_LABEL[value as Level] ?? value
 }
 
 /** A platform rule's own text when the refusal names a constraint that has one (`limits_from_gateway`, admin design §4.10). */
@@ -122,7 +127,7 @@ async function save(): Promise<void> {
       </div>
       <SelectField
         v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
-        :options="[...(field.required ? [] : [{ value: '', label: PLATFORM.form.none }]), ...(field.options ?? []).map((o) => ({ value: o, label: o }))]"
+        :options="[...(field.required ? [] : [{ value: '', label: PLATFORM.form.none }]), ...(field.options ?? []).map((o) => ({ value: o, label: optionLabel(o) }))]"
         :hint="field.help" :error="form.errors[field.name]"
       />
       <SelectField
