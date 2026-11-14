@@ -77,7 +77,7 @@ public sealed record EmbeddingProfileCreateRequest : AdminRequest, IValidatableO
     [Range(1, 4000)]
     public int? Dimensions { get; init; }
 
-    [Range(1, 1_000_000)]
+    [Range(1, EmbeddingProfileEndpoints.MaxInputTokensLimit)]
     public int? MaxInputTokens { get; init; }
 
     /// <summary><c>OnPrem</c>, <c>Eu</c> or <c>External</c>, at most the platform ceiling (<c>Eu</c> until M2).</summary>
@@ -193,6 +193,9 @@ public sealed class EmbeddingProfileTester(GatewayApi gateway, IOptions<GatewayO
 /// </summary>
 public static class EmbeddingProfileEndpoints
 {
+    /// <summary>The highest <c>maxInputTokens</c> a profile takes.</summary>
+    public const int MaxInputTokensLimit = 1_000_000;
+
     public static RouteGroupBuilder MapEmbeddingProfiles(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -268,7 +271,10 @@ public static class EmbeddingProfileEndpoints
         }
 
         var ceiling = request.MaxResidency is null ? residencies.Max() : EmbeddingProfileRules.Residency(request.MaxResidency);
-        var maxInputTokens = request.MaxInputTokens ?? model.ContextWindow ?? throw AdminFaults.Field("maxInputTokens", AdminErrorCodes.InvalidValue);
+        // The model's context window, held to the request's own range (#687 review): the mirror's CHECK keeps it above 0, and a
+        // longer window than a profile takes is capped.
+        var maxInputTokens = request.MaxInputTokens ?? (model.ContextWindow is { } window ? Math.Min(window, MaxInputTokensLimit) : (int?)null)
+            ?? throw AdminFaults.Field("maxInputTokens", AdminErrorCodes.InvalidValue);
         var name = string.IsNullOrWhiteSpace(request.Name) ? model.Name[..Math.Min(model.Name.Length, 100)] : request.Name.Trim();
 
         var (test, vector) = await tester.TestAsync(model.Name, request.RequestDimensions ? request.Dimensions : null, request.RequestDimensions, ceiling,
