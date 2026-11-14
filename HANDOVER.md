@@ -31,10 +31,10 @@ sink" monolith. Design and code live in this repo.
   choice, one step at a time and announced on #667. **C0–C4 are merged** (#674, #683, #682, #684). This session reviews
   the security-relevant steps and builds none unless the user says so. C7, C11 and C12 wait on thekim1/llmgateway
   #87 (G1), #90 (G5), #89 (G4).
-- **M-18** (remove `Settings.WorkerConcurrency` until P2, #677, decided by the user 2026-11-14): queued, no builder yet;
-  ask the user.
+- **M-18** (remove `Settings.WorkerConcurrency` until P2, #677) is merged (#686). C5 (the embedding profile created in
+  the admin) is on the M-16 session's branch `main-session/m17-c5-embedding-profile`.
 - **Next release (0.6.0):** after the M-17 steps the user wants in it. Before tagging: CHANGELOG *Unreleased* needs
-  M-16 (#668–#679, #681), #670 and M-17 C0–C4 (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
+  M-16 (#668–#679, #681), #670, M-17 C0–C4 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
   Open WebUI client move (#685); the repository setting *Allow GitHub Actions to create and approve pull requests* must
   be on for C0's pin PR.
 - **The test chatbot (T2–T6) is the user's team's** (user, 2026-11-14): don't plan or prepare it; fix what they report.
@@ -58,9 +58,8 @@ sink" monolith. Design and code live in this repo.
 ## Next
 
 1. GitHub: review M-17's PRs as they come (security-relevant parts), answer #667 and #580.
-2. M-18 if the user assigns it here.
-3. The 0.6.0 release when the user asks (checklist above).
-4. Fix what the user's team reports from the VM.
+2. The 0.6.0 release when the user asks (checklist above).
+3. Fix what the user's team reports from the VM.
 
 ## Session 34 (2026-11-13 to 14)
 
