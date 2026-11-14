@@ -1753,6 +1753,37 @@ export const EMBEDDING_PROFILES = {
 } as const
 
 /** The Settings page's Prompt texts panel (admin design §4.5; chat design §7.3; Decisions "Chat prompt texts configurable"). */
+/** The Settings page (admin design §5.10): every platform setting, a section at a time, grouped by what it affects. */
+export const SETTINGS_PAGE = {
+  title: 'Settings',
+  lead: 'How the platform answers, fetches and keeps content. Each section is saved on its own.',
+  sections: 'Sections',
+  section: 'Section',
+  saved: (section: string) => `${section} saved`,
+  groups: {
+    answers: 'Chat and answers',
+    content: 'Content',
+    protection: 'Data protection',
+    quality: 'Quality',
+    platform: 'Platform',
+  },
+  /** One line under each section's title. */
+  descriptions: {
+    chat: 'The model that condenses follow-up questions, the longest answer any assistant may give, and the other chat settings.',
+    'prompt-texts': 'The texts sent to the AI model around each assistant’s own instructions.',
+    retrieval: 'How knowledge bases are searched and the results ranked, unless an assistant or knowledge base says otherwise.',
+    crawl: 'How hard each website may be fetched, and the other fetching settings.',
+    'site-profiles': 'How a website’s pages are read: content, noise and identity.',
+    worker: 'How much processing runs at once, schedules and the preview budget.',
+    pii: 'What counts as personal data in documents, and how sure the detection must be.',
+    'data-protection': 'Chat history, retention and encryption for each information class.',
+    retention: 'How long runs, reports and other records are kept.',
+    'deletion-guard': 'When a crawl that would remove many documents waits for a person to decide.',
+    evaluation: 'The models and limits of test questions and their grading.',
+    network: 'The ports and addresses the crawler may reach.',
+  } as Record<string, string>,
+} as const
+
 export const PROMPT_TEXTS = {
   title: 'Prompt texts',
   lead: 'The texts the platform sends to the AI model around each assistant’s own instructions. Locked lines keep citations, links and the defences against instructions in the sources working, so they cannot be changed.',

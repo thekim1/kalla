@@ -71,7 +71,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   gives `UME_RAG_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
 - **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.
 - **Status (2026-11-14):** steps 1–3 merged (#668, #669, #671), with rag-api recording a key's last use (#670, identity
-  §6.2, which nothing wrote before); step 4 in the PR that adds this line. Steps 5–8 are open.
+  §6.2, which nothing wrote before); step 4 merged (#672); step 6 (the Settings page with today's forms) in the PR that
+  says so. Steps 5, 7 and 8 are open; step 6 goes before step 5 so the menu has a page for site profiles and data protection.
 
 ### [ ] M-17 Deploy configuration: settings, automatic setup and the gateway (user, 2026-11-13; #662)
 - **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their

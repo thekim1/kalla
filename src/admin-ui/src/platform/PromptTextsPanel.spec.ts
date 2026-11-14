@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { PROMPT_TEXTS as P } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
-import PlatformResourceView from './PlatformResourceView.vue'
+import PromptTextsPanel from './PromptTextsPanel.vue'
 import { resetOpenApiCache } from './schema'
 
 const IDENTITY = 'Du är {assistant}, en assistent för Umeå kommun.'
@@ -41,7 +41,7 @@ async function open(put: () => Response = () => json({ value: {}, version: '4' }
     return Promise.resolve(json([]))
   })
   vi.stubGlobal('fetch', fetch)
-  const wrapper = mount(PlatformResourceView, { props: { resource: 'settings' }, attachTo: document.body })
+  const wrapper = mount(PromptTextsPanel, { attachTo: document.body })
   await flushPromises()
   return { wrapper, fetch }
 }
