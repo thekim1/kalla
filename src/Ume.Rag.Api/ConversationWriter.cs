@@ -247,7 +247,13 @@ public sealed partial class ConversationWriter : BackgroundService
             }
             catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException && !ct.IsCancellationRequested)
             {
-                LogFailed(_logger, turns.Count, attempt, ex.GetType().Name);
+                LogFailed(_logger, turns.Count, attempt, ex is PostgresException pg ? pg.SqlState : ex.GetType().Name);
+                if (ex is PostgresException { IsTransient: false })
+                {
+                    // #698: a data or constraint error (class 22, 23, …) fails the same way again: split the batch at once, no delay.
+                    return false;
+                }
+
                 if (attempt < 3)
                 {
                     await Task.Delay(RetryInterval, ct);
@@ -378,16 +384,26 @@ public sealed partial class ConversationWriter : BackgroundService
                     "Outcome", "CreatedAt", "ExternalMessageId", "CostUsd")
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
                 ON CONFLICT ("ConversationId", "ExternalMessageId") WHERE "ExternalMessageId" IS NOT NULL DO NOTHING
+                RETURNING "Id"
                 """;
-            await ExecuteAsync(connection, transaction, message, ct, Guid.CreateVersion7(), conversationId, turn.Classification, seq + 1, "user", expires,
+            await ScalarOrNullAsync(connection, transaction, message, ct, Guid.CreateVersion7(), conversationId, turn.Classification, seq + 1, "user", expires,
                 DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false,
                 turn.Outcome, turn.At, Db(turn.UserExternalId), DBNull.Value);
             // The assistant message keeps the turn's id (chatcmpl-<N>), so /v1/feedback finds it (§3.5); its cost is the answer call's.
             var answerId = turn.MessageId;
-            await ExecuteAsync(connection, transaction, message, ct, answerId, conversationId, turn.Classification, seq + 2, "assistant", expires,
+            var written = await ScalarOrNullAsync(connection, transaction, message, ct, answerId, conversationId, turn.Classification, seq + 2, "assistant", expires,
                 Db(turn.AssistantVersionId), Db(turn.GatewayModel), Db(turn.Residency), Db(turn.InputTokens), Db(turn.OutputTokens), Db(turn.LatencyMs),
                 Db(turn.TimeToFirstTokenMs), Db(turn.Coverage), Db(turn.Degraded), Db(turn.Language), turn.CondenseUsed, turn.Outcome, turn.At,
                 Db(turn.AnswerExternalId), Db(turn.AnswerCostUsd));
+            if (written is null)
+            {
+                // #698: Open WebUI's (unsigned) message id is already in this conversation, so no row was written for the answer and its
+                // sources have no row to point to; the turn is a duplicate, its usage above still counted.
+                _dropped.Add(1, new KeyValuePair<string, object?>("reason", "duplicate"));
+                LogDropped(_logger, turn.IssuedId?.ToString("N") ?? "open-webui chat", "duplicate");
+                continue;
+            }
+
             foreach (var source in turn.Sources)
             {
                 await ExecuteAsync(connection, transaction, """
@@ -488,6 +504,14 @@ public sealed partial class ConversationWriter : BackgroundService
     {
         await using var command = Command(connection, transaction, sql, values);
         return (T)(await command.ExecuteScalarAsync(ct))!;
+    }
+
+    /// <summary>The first column of the statement's first row, or null when it returned none (an insert that did nothing).</summary>
+    private static async Task<object?> ScalarOrNullAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, CancellationToken ct,
+        params object[] values)
+    {
+        await using var command = Command(connection, transaction, sql, values);
+        return await command.ExecuteScalarAsync(ct);
     }
 
     /// <summary>The upsert's row, or null when its <c>WHERE</c> refused the update (another owner's conversation).</summary>

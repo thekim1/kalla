@@ -436,8 +436,10 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         }));
         var chatId = "owui-chat-" + Guid.CreateVersion7().ToString("N");
         owuiClient.DefaultRequestHeaders.Add("X-OpenWebUI-Chat-Id", chatId);
-        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", "owui-answer-1");
-        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", "owui-question-1");
+        // Open WebUI's message ids are uuid4 (#698: nothing else is taken from these unsigned headers).
+        var (answerId, questionId) = (Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", answerId);
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", questionId);
         var owuiEvents = await StreamAsync(owuiClient, "Behöver jag bygglov för en altan högre än 1,2 meter?");
         var source = owuiEvents.Where(e => e.TryGetProperty("event", out _)).ShouldHaveSingleItem().GetProperty("event");
         source.GetProperty("type").GetString().ShouldBe("source");
@@ -459,8 +461,24 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
             """, connection) { Parameters = { new() { Value = chatId } } };
         await using var reader = await stored.ExecuteReaderAsync(Ct);
         (await reader.ReadAsync(Ct)).ShouldBeTrue();
-        (reader.GetString(0), reader.GetString(1), reader.GetString(2)).ShouldBe(("owui:u-1", "owui-user", "user:owui-question-1,assistant:owui-answer-1"));
+        (reader.GetString(0), reader.GetString(1), reader.GetString(2)).ShouldBe(("owui:u-1", "owui-user", $"user:{questionId},assistant:{answerId}"));
         (await reader.ReadAsync(Ct)).ShouldBeFalse();
+        await reader.DisposeAsync();
+
+        // #698: an id that is not a UUID (here longer than the varchar(100) column) is dropped, and the turn is still written.
+        owuiClient.DefaultRequestHeaders.Remove("X-Rag-Owui-Message-Id");
+        owuiClient.DefaultRequestHeaders.Remove("X-Rag-Owui-User-Message-Id");
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", new string('a', 150));
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", "not-a-uuid");
+        await StreamAsync(owuiClient, "Behöver jag bygglov för en altan?");
+        await owui.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var unmapped = new Npgsql.NpgsqlCommand("""
+            SELECT count(*) FILTER (WHERE m."ExternalMessageId" IS NULL), count(*)
+            FROM chat."Conversations" c JOIN chat."Messages" m ON m."ConversationId" = c."Id" WHERE c."ExternalChatId" = $1
+            """, connection) { Parameters = { new() { Value = chatId } } };
+        await using var counts = await unmapped.ExecuteReaderAsync(Ct);
+        (await counts.ReadAsync(Ct)).ShouldBeTrue();
+        (counts.GetInt64(0), counts.GetInt64(1)).ShouldBe((2L, 4L));
     }
 
     [Fact]
