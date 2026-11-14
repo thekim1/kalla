@@ -440,6 +440,9 @@ x-rag-secrets: &rag-secrets-mount
     # openwebui/ca.pem (the public CAs, RAG's and the gateway's, from rag-bootstrap).
     <<: *hardened
     profiles: [openwebui]
+    # The pin also binds rag-openwebui-setup, which forges an Open WebUI session token from its internals (the user and auth
+    # tables, session_stamp, utils/auth.py's claims; M-17 C6): before the digest moves, deploy/tests/portainer-boot.sh must
+    # pass with the new image (it checks the minted feedback key).
     image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
     user: "1000:1000"
     restart: unless-stopped

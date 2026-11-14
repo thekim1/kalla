@@ -66,6 +66,46 @@ public sealed class DeploymentSecretsReloadTests : IDisposable
     }
 
     [Fact]
+    public async Task The_extra_directory_yields_only_the_feedback_key_and_cannot_override_other_configuration()
+    {
+        // #689 review: another uid owns the directory, so a file there must not rewrite rag-api's own settings.
+        var extra = Directory.CreateTempSubdirectory("ume-rag-feedback-");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Join(_secrets.FullName, "Gateway__Key"), "own-key", TestContext.Current.CancellationToken);
+            foreach (var (name, value) in new[]
+            {
+                ("Gateway__Key", "planted-key"), ("Gateway__BaseUrl", "https://elsewhere.invalid"), ("ConnectionStrings__ragdb", "Host=elsewhere"),
+                ("OpenWebUi__AdminApiKey", "sk-minted"),
+            })
+            {
+                await File.WriteAllTextAsync(Path.Join(extra.FullName, name), value, TestContext.Current.CancellationToken);
+            }
+
+            var builder = Host.CreateApplicationBuilder();
+            builder.Configuration["Security:SecretsDirectory"] = _secrets.FullName;
+            builder.Configuration["Security:ExtraSecretsDirectory"] = extra.FullName;
+            builder.AddDeploymentSecrets();
+            using var host = builder.Build();
+            var configuration = host.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+            configuration["OpenWebUi:AdminApiKey"].ShouldBe("sk-minted");
+            configuration["Gateway:Key"].ShouldBe("own-key");
+            configuration["Gateway:BaseUrl"].ShouldNotBe("https://elsewhere.invalid");
+            configuration["ConnectionStrings:ragdb"].ShouldNotBe("Host=elsewhere");
+
+            // A file added there after the start is ignored too.
+            await File.WriteAllTextAsync(Path.Join(extra.FullName, "Oidc__Authority"), "https://idp.invalid", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Join(extra.FullName, "OpenWebUi__AdminApiKey"), "sk-rotated", TestContext.Current.CancellationToken);
+            await Until(() => configuration["OpenWebUi:AdminApiKey"] == "sk-rotated");
+            configuration["Oidc:Authority"].ShouldNotBe("https://idp.invalid");
+        }
+        finally
+        {
+            extra.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void A_missing_extra_directory_is_no_error()
     {
         var builder = Host.CreateApplicationBuilder();
