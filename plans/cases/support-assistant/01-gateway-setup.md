@@ -75,7 +75,8 @@ gateway ("Every model call goes through the gateway", `AGENTS.md`).
 ## 3. Residency ceiling
 
 Ume.Rag sends `x-ume-max-residency` on every model call, derived from the level of the data in the call (identity
-§4.7), capped by the deployment knob `Gateway:MaxResidency` (`src/Ume.Rag.Answering/Chat/ChatService.cs:65`). An
+§4.7), capped by the service's credential key's residencies from the gateway's context (M-17 C9): give `rag-api`'s and
+`rag-admin`'s keys `OnPrem` and `Eu`. An
 `internal` assistant therefore calls at most `Eu`. The gateway refuses with `403 max_residency_not_met` when no
 target within the ceiling exists, and answers `503 no_eligible_provider` when in-ceiling targets are drained; Ume.Rag
 retries only with the same ceiling (Decisions "Gateway release 1 …"; gateway ADR 018 in

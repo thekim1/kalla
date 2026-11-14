@@ -39,7 +39,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// </summary>
 public sealed partial class GatewayModelSync(
     IServiceScopeFactory scopes, GatewayApi gateway, IOptions<OrgSyncOptions> options,
-    IOptionsMonitor<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
+    IOptionsMonitor<GatewayOptions> gatewayOptions, GatewayCeiling serviceCeiling, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
 {
     /// <summary>The audit actor of a run and of a recorded canary.</summary>
     public const string SystemActor = "system:gateway-sync";
@@ -105,7 +105,7 @@ public sealed partial class GatewayModelSync(
     {
         try
         {
-            var answer = await gateway.GetModelListAsync(gatewayOptions.CurrentValue.Maximum, _etag, cancellationToken);
+            var answer = await gateway.GetModelListAsync(await serviceCeiling.MaximumAsync(cancellationToken), _etag, cancellationToken);
             if (answer.Models is not { } models)
             {
                 // 304: the list is as at the last run, which was written.

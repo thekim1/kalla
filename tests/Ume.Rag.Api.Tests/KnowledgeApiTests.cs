@@ -96,6 +96,7 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
         var sent = new System.Collections.Concurrent.ConcurrentQueue<string?>();
         await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
         {
+            services.UseGatewayCredentialCeiling();
             services.AddHttpClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new OnBehalfOfRecorder(db.Gateway.Server.CreateHandler(), sent));
             services.AddHttpClient(Ume.Rag.Infrastructure.Gateway.GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler());

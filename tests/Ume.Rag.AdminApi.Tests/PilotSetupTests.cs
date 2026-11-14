@@ -107,7 +107,7 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
             web.UseSetting("BlobStore:Root", Path.Combine(_root, "blobs"));
             web.UseSetting("KeyProvider:Directory", keys);
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
         });
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin, code);
         var startVersion = await ConfigVersionAsync();

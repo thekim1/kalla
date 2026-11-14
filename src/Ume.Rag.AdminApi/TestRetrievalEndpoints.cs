@@ -140,7 +140,7 @@ public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFacto
     }
 }
 
-public sealed record TestRetrievalRequest
+public sealed record TestRetrievalRequest : AdminRequest
 {
     [Required, StringLength(1000, MinimumLength = 1)]
     public string Question { get; init; } = "";

@@ -56,7 +56,7 @@ pilot department uses its assistant in Open WebUI. The steps, in order; a step s
 | 4 | Test host: deploy from the release bundle, restore drill, R1 performance test, a week of nightly evaluation (A-L5–A-L7) | test host, backup target, key-escrow location, runner (R1) | user, IT security | open |
 | 5 | Checks on the crawled collection: `lastmod` result, freshness and HNSW recall, personal-data dry run (A-L8, A-L9) | steps 2, 4 | stream a | open |
 | 6 | Live feedback import, banner and public-records route | G1 | user + data protection officer | open |
-| 7 | Before go-live: the 7-day package rule applies again; GitHub Actions pinned by SHA with automated bumps (A-20, A-27); LibreOffice placement with the parser sandbox question (Decisions "Legacy Office and RTF uploads") | – | streams, main | postponed on purpose (2026-11-08) |
+| 7 | Before go-live: the 7-day package rule applies again; GitHub Actions pinned by SHA with automated bumps (A-20, A-27); `release.yml` and `entra.yml` on a runner of their own under a separate user (#704, Decisions "CI on the self-hosted runner"); LibreOffice placement with the parser sandbox question (Decisions "Legacy Office and RTF uploads") | – | streams, main | postponed on purpose (2026-11-08) |
 | 8 | The gate graded by department reviewers; the pilot goes live (M-4) | steps 1–7 | user + main | open |
 
 **Owners and dates** (umea.se pilot). The phase-start rule (`postponed-decisions.md`) asks for a named person and a date on every
@@ -84,7 +84,6 @@ The inputs of the critical path are in its table. The other open calls:
 | What | Who | Blocks |
 |---|---|---|
 | N1 product name; W1 relation to `chat.umea.se` | user, product owner | go-live |
-| CI runners: the runners `ume-rag` and `ume-rag2` share one Docker daemon. **A:** one runner per Docker host; **B:** `release.yml` on GitHub-hosted runners. Re-measure after the #648 change first | user | nothing; record the choice in Decisions "CI on the self-hosted runner" |
 | Upload gaps U1–U7: suggested picture descriptions (U1, needs a decision entry) and rerank on (U4) first | user | nothing in P1b |
 | Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (`work/main.md` M-11) | user | P2 |
 | Product calls: #333 finding 1 (`exactScanMaxChunks`, after the recall check on the test host); [`proposals/architecture-plans.md`](proposals/architecture-plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |

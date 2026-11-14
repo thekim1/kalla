@@ -47,7 +47,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
     {
         web.UseSetting("Rag:Roles", "knowledge,chat");
         web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
     });
 
     private static HttpClient Client(WebApplicationFactory<Program> api, string key)
@@ -245,7 +245,8 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
     [Fact]
     public async Task Under_a_max_residency_a_public_assistant_answers_at_the_cap()
     {
-        // A public assistant's level asks for External; Gateway:MaxResidency Eu caps it (M2, #237). Without the cap the one
+        // A public assistant's level asks for External; a credential key that allows Eu at most caps it (M2, #237; M-17 C9).
+        // Without the cap the one
         // credential key calls at External, the top of the api's ladder (identity design §4.7).
         var snapshot = Snapshot();
         snapshot = snapshot with
@@ -258,13 +259,9 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         WebApplicationFactory<Program> Public(string? maxResidency) => db.ApiHost(snapshot).WithWebHostBuilder(web =>
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
-            if (maxResidency is not null)
-            {
-                web.UseSetting("Gateway:MaxResidency", maxResidency);
-            }
-
+            var ceiling = maxResidency is null ? Ume.Rag.Domain.Residency.External : Enum.Parse<Ume.Rag.Domain.Residency>(maxResidency);
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling(ceiling).AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
 
         await using (var capped = Public("Eu"))
@@ -344,7 +341,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
         using var scoped = Client(api, await ScopedKeyAsync(db.DeptACollection));
         using var unscoped = Client(api, db.IntegrationKey);
@@ -426,7 +423,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
             // An Open WebUI client chats as its user (identity §5.2): the deployment's own client, and each request has the JWT.
             web.UseSetting("OpenWebUi:JwtSecret", "open-webui-jwt-secret-for-tests-0123456789");
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
         using var owuiClient = Client(owui, db.IntegrationKey);
         var now = DateTimeOffset.UtcNow;
@@ -436,8 +433,10 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         }));
         var chatId = "owui-chat-" + Guid.CreateVersion7().ToString("N");
         owuiClient.DefaultRequestHeaders.Add("X-OpenWebUI-Chat-Id", chatId);
-        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", "owui-answer-1");
-        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", "owui-question-1");
+        // Open WebUI's message ids are uuid4 (#698: nothing else is taken from these unsigned headers).
+        var (answerId, questionId) = (Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", answerId);
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", questionId);
         var owuiEvents = await StreamAsync(owuiClient, "Behöver jag bygglov för en altan högre än 1,2 meter?");
         var source = owuiEvents.Where(e => e.TryGetProperty("event", out _)).ShouldHaveSingleItem().GetProperty("event");
         source.GetProperty("type").GetString().ShouldBe("source");
@@ -459,8 +458,24 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
             """, connection) { Parameters = { new() { Value = chatId } } };
         await using var reader = await stored.ExecuteReaderAsync(Ct);
         (await reader.ReadAsync(Ct)).ShouldBeTrue();
-        (reader.GetString(0), reader.GetString(1), reader.GetString(2)).ShouldBe(("owui:u-1", "owui-user", "user:owui-question-1,assistant:owui-answer-1"));
+        (reader.GetString(0), reader.GetString(1), reader.GetString(2)).ShouldBe(("owui:u-1", "owui-user", $"user:{questionId},assistant:{answerId}"));
         (await reader.ReadAsync(Ct)).ShouldBeFalse();
+        await reader.DisposeAsync();
+
+        // #698: an id that is not a UUID (here longer than the varchar(100) column) is dropped, and the turn is still written.
+        owuiClient.DefaultRequestHeaders.Remove("X-Rag-Owui-Message-Id");
+        owuiClient.DefaultRequestHeaders.Remove("X-Rag-Owui-User-Message-Id");
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", new string('a', 150));
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", "not-a-uuid");
+        await StreamAsync(owuiClient, "Behöver jag bygglov för en altan?");
+        await owui.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var unmapped = new Npgsql.NpgsqlCommand("""
+            SELECT count(*) FILTER (WHERE m."ExternalMessageId" IS NULL), count(*)
+            FROM chat."Conversations" c JOIN chat."Messages" m ON m."ConversationId" = c."Id" WHERE c."ExternalChatId" = $1
+            """, connection) { Parameters = { new() { Value = chatId } } };
+        await using var counts = await unmapped.ExecuteReaderAsync(Ct);
+        (await counts.ReadAsync(Ct)).ShouldBeTrue();
+        (counts.GetInt64(0), counts.GetInt64(1)).ShouldBe((2L, 4L));
     }
 
     [Fact]
@@ -493,7 +508,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
         using var client = Client(api, db.IntegrationKey);
 
@@ -577,7 +592,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
     }
 

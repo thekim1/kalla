@@ -43,14 +43,22 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:AssignedKeys:0:Budgets:0:Spent", "1000");
     });
 
-    private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway, bool configured = true) => database.HeaderFactory().WithWebHostBuilder(web =>
+    private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway, bool configured = true, HttpMessageHandler? integration = null) =>
+        database.HeaderFactory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
+            web.UseSetting("Gateway:Key", AdminKey);
+            web.UseSetting("Gateway:IntegrationApiUrl", configured ? "http://fake-gateway/" : "");
+            web.ConfigureTestServices(services => services.AddHttpClient(IntegrationApiClient.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new Counting(integration ?? gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _integrationCalls))));
+        });
+
+    /// <summary>An Integration API that answers every call with 503.</summary>
+    private sealed class Unavailable : HttpMessageHandler
     {
-        web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-        web.UseSetting("Gateway:Key", AdminKey);
-        web.UseSetting("Gateway:IntegrationApiUrl", configured ? "http://fake-gateway/" : "");
-        web.ConfigureTestServices(services => services.AddHttpClient(IntegrationApiClient.HttpClientName)
-            .ConfigurePrimaryHttpMessageHandler(() => new Counting(gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _integrationCalls))));
-    });
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+    }
 
     private sealed class Counting(HttpMessageHandler inner, Action counted) : DelegatingHandler(inner)
     {
@@ -166,5 +174,24 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         // #642: the organisation sync's status carries the same state, for the platform's Gateway view (no key checks).
         var sync = (await platform.GetFromJsonAsync<JsonElement>("/api/organisation/sync", Ct)).GetProperty("integration");
         (sync.GetProperty("configured").GetBoolean(), sync.GetProperty("lastError").GetProperty("reason").GetString()).ShouldBe((true, "scope_missing"));
+    }
+
+    [Fact]
+    public async Task A_refused_read_back_is_sent_once_and_answers_null_with_its_reason()
+    {
+        // #701: the standard resilience handler is off this client, so a 503 is not retried (3 attempts spent the API's budget).
+        var code = await SeedAsync();
+        await using var gateway = Gateway();
+        using var unavailable = new Unavailable();
+        await using var factory = Admin(gateway, integration: unavailable);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+
+        (await admin.GetStringAsync($"/api/gateway/keys/{Chatbot}/budget", Ct)).ShouldBe("null");
+
+        _integrationCalls.ShouldBe(1);
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var error = (await platform.GetFromJsonAsync<JsonElement>("/api/gateway/status", Ct)).GetProperty("integration").GetProperty("lastError");
+        (error.GetProperty("reason").GetString(), error.GetProperty("status").GetInt32()).ShouldBe(("failed", 503));
+        factory.Services.GetRequiredService<IHttpClientFactory>().CreateClient(IntegrationApiClient.HttpClientName).Timeout.ShouldBe(IntegrationApiClient.Timeout);
     }
 }

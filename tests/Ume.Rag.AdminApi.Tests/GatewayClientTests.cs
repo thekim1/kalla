@@ -49,8 +49,8 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
     });
 
     /// <summary>
-    /// The admin API with its credential key (none when <paramref name="key"/> is false) and <c>Gateway:MaxResidency</c>
-    /// <paramref name="maxResidency"/>, syncing from <paramref name="gateway"/>.
+    /// The admin API with its credential key (none when <paramref name="key"/> is false), whose residencies reach up to
+    /// <paramref name="maxResidency"/> (all by default; M-17 C9), syncing from <paramref name="gateway"/>.
     /// </summary>
     public WebApplicationFactory<Program> AdminApi(WebApplicationFactory<FakeGatewayProgram> gateway, Residency? maxResidency = null, bool key = true) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
@@ -66,14 +66,10 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
                 web.UseSetting("Gateway:Key", AdminKey);
             }
 
-            if (maxResidency is { } max)
-            {
-                web.UseSetting("Gateway:MaxResidency", ResidencyCeiling.ToHeader(max));
-            }
-
             web.ConfigureTestServices(services =>
             {
                 services.AddHeaderAuthentication();
+                services.UseGatewayCredentialCeiling(maxResidency ?? Residency.External);
                 services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             });
         });
@@ -381,7 +377,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     {
         await using var gateway = database.Gateway();
         await using var eu = database.AdminApi(gateway, Residency.Eu);
-        await using var admin = eu.WithWebHostBuilder(web => web.UseSetting("Gateway:MaxResidency", "Eu"));
+        await using var admin = eu.WithWebHostBuilder(web => web.ConfigureTestServices(services => services.UseGatewayCredentialCeiling(Residency.Eu)));
         await SyncedAsync(admin);
         await using var scope = admin.Services.CreateAsyncScope();
         var check = scope.ServiceProvider.GetRequiredService<GatewayModelCheck>();
@@ -481,7 +477,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
 
         var counter = new CountingHandler { InnerHandler = gateway.Server.CreateHandler() };
         await using var admin = database.AdminApi(gateway, Residency.Eu).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => counter)));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => counter)));
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
         var checkedAt = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
@@ -521,7 +517,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
         var before = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == database.ProfileId, Ct);
         var audits = await db.AuditLog.CountAsync(a => a.Action == "check-canary", Ct);
-        // This instance's maximum is OnPrem (Gateway:MaxResidency), below the profile's Eu ceiling.
+        // This instance's maximum is OnPrem (its credential key's residencies), below the profile's Eu ceiling.
         await using var admin = database.AdminApi(gateway, Residency.OnPrem);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
 
@@ -574,7 +570,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     {
         await using var gateway = database.Gateway();
         await using var admin = database.AdminApi(gateway, Residency.Eu).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() =>
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() =>
                 new MalformedAtOnPrem { InnerHandler = gateway.Server.CreateHandler() })));
         await SyncedAsync(admin);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);

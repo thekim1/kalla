@@ -46,6 +46,12 @@ exception, with its own steps.
 - **Optional TLS proxy in the Portainer stack (M-17 C8).** `proxy` in `COMPOSE_PROFILES` starts `rag-proxy`, nginx
   with your certificate (`UME_RAG_PROXY_CERTS_DIR`) in front of the five host names ([portainer.md](portainer.md#tls-proxy)).
   Nothing changes without the profile.
+- **The residency ceiling comes from the gateway (M-17 C9).** Each service's ceiling is its credential key's allowed
+  residencies in the gateway's context; `UME_RAG_GATEWAY_MAX_RESIDENCY` (`Gateway__MaxResidency`, Kubernetes
+  `ume-rag-config`) is gone. **Apply before the update:** in the gateway's admin, give rag-api's and rag-admin's credential
+  keys the residencies `OnPrem` and `Eu` only while register M2 holds (the worker's already are); a key that allows every
+  residency would otherwise let a public assistant answer at `External`. Then remove the variable. **Check:** each
+  service logs *the credential key's ceiling: Eu* at start.
 - **Role groups are a setting (M-17 C10).** Migration `IdentityRoleGroups` adds `config."Settings"."IdentityRoleGroups"`;
   *Settings → Role groups* in RAG's admin maps sign-in groups to roles, read at each sign-in.
   `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` and `_VIEWER` are gone;

@@ -155,6 +155,8 @@ public static class InfrastructureExtensions
             Client(builder, GatewayContextReader.HttpClientName);
             builder.Services.AddSingleton<GatewayContextReader>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayContextReader>());
+            // The credential key's residencies are the service's ceiling (M-17 C9).
+            builder.Services.AddSingleton<GatewayCeiling>();
         }
 
         var client = Client(builder, name);
@@ -174,7 +176,7 @@ public static class InfrastructureExtensions
 
     /// <summary>
     /// Caps every gateway call of this service at <paramref name="maximum"/> (<see cref="GatewayOptions.ServiceMaximum"/>):
-    /// a call above it is refused before sending, whatever <c>Gateway:MaxResidency</c> says. The worker calls it with
+    /// a call above it is refused before sending, whatever its credential key's residencies allow. The worker calls it with
     /// <c>Eu</c> (identity design §4.7).
     /// </summary>
     public static IHostApplicationBuilder CapGatewayCalls(this IHostApplicationBuilder builder, Residency maximum)

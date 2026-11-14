@@ -223,6 +223,7 @@ internal static class EngineKit
             services.AddSingleton<IDnsResolver>(site.Resolver());
             services.AddSingleton<IEgressPolicySource>(new FixedEgressPolicy(site.Port, site.SecurePort));
             services.AddSingleton<ICrawlPolicySource>(new FastCrawlPolicy());
+            services.UseGatewayCredentialCeiling();
             var client = services.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             if (gate is not null)
             {

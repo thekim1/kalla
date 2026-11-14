@@ -47,7 +47,7 @@ public sealed partial class ChatApiTests
         {
             web.UseSetting("Gateway:RequireDelegationEcho", requireEcho ? "true" : "false");
             web.ConfigureTestServices(services =>
-                services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
         });
         (await host.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
         host.Services.GetRequiredService<GatewayFeatures>().ActAsKey.ShouldBeTrue();

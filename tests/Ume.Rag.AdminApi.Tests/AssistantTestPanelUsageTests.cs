@@ -40,6 +40,7 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         {
             foreach (var name in new[] { GatewayChatClient.HttpClientName, GatewayQueryEmbedder.HttpClientName, Ume.Rag.Retrieval.ChatModelReranker.HttpClientName })
             {
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             }
         });

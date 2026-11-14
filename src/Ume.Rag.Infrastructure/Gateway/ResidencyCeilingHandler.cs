@@ -9,7 +9,8 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// <summary>
 /// On every gateway <see cref="HttpClient"/> (chat design §8.1, identity design §4.7, engine design §7.7): refuses,
 /// before anything is sent, a request without exactly one valid <c>x-ume-max-residency</c>, one whose ceiling is above
-/// the service's maximum (<see cref="GatewayOptions.Maximum"/>: the worker's is <c>Eu</c>; logged), or one whose key is
+/// the service's maximum (<see cref="GatewayCeiling"/>: its credential key's residencies, the worker's at most <c>Eu</c>;
+/// logged), or one whose key is
 /// not this service's, and adds the service's credential key when the caller set none (<see cref="GatewayOptions.KeyFor"/>). On a successful answer it checks
 /// <c>x-ume-residency</c> against the ceiling before the caller reads a byte: a missing header or a residency above the
 /// ceiling disposes the response (which cancels a stream at the gateway), raises event 5003 and throws. <c>GET /v1/models</c>
@@ -19,7 +20,8 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// <see cref="GatewayFeatures.ActAsKey"/>), checks the echo (event 5011) and turns a refusal of the key into
 /// <see cref="GatewayKeyRefusedException"/> (identity §4.7, gateway-changes §5.2, §5.7).
 /// </summary>
-public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> options, ILoggerFactory loggers, GatewayFeatures features) : DelegatingHandler
+public sealed partial class ResidencyCeilingHandler(
+    IOptionsMonitor<GatewayOptions> options, ILoggerFactory loggers, GatewayFeatures features, GatewayCeiling serviceCeiling) : DelegatingHandler
 {
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
     private readonly ILogger _log = loggers.CreateLogger<ResidencyCeilingHandler>();
@@ -31,18 +33,19 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
         if (IsContext(request) && !request.Headers.Contains(GatewayHeaders.MaxResidency))
         {
             // The context (gateway-changes §5.5) is about the key, not a model: authenticated, no ceiling, no residency.
-            AddCredentialKey(request, gateway.Key ?? throw new GatewayKeyMissingException(gateway.Maximum));
+            AddCredentialKey(request, gateway.Key ?? throw new GatewayKeyMissingException(serviceCeiling.Maximum));
             request.Headers.Remove(GatewayHeaders.OnBehalfOf); // never acted: the context is the credential key's own (§5.2)
             return await base.SendAsync(request, cancellationToken);
         }
 
         var ceiling = Ceiling(request);
-        var key = gateway.KeyFor(ceiling);
+        var maximum = await serviceCeiling.MaximumAsync(cancellationToken);
+        var key = gateway.KeyFor(ceiling, maximum);
         if (key is null)
         {
             if (!string.IsNullOrEmpty(gateway.Key))
             {
-                LogAboveMaximum(_log, ResidencyCeiling.ToHeader(ceiling), ResidencyCeiling.ToHeader(gateway.Maximum), request.RequestUri?.AbsolutePath ?? "");
+                LogAboveMaximum(_log, ResidencyCeiling.ToHeader(ceiling), ResidencyCeiling.ToHeader(maximum), request.RequestUri?.AbsolutePath ?? "");
             }
 
             throw new GatewayKeyMissingException(ceiling);
@@ -158,7 +161,7 @@ public sealed partial class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptio
     private static partial void LogActingInvalid(ILogger logger, string path, Guid gatewayKeyId);
 
     [LoggerMessage(LogLevel.Warning,
-        "Gateway call at {Ceiling} to {Path} refused before sending: above this service's maximum {Maximum} (Gateway:MaxResidency, identity design §4.7)")]
+        "Gateway call at {Ceiling} to {Path} refused before sending: above this service's maximum {Maximum} (its credential key's residencies in the gateway's context, identity design §4.7)")]
     private static partial void LogAboveMaximum(ILogger logger, string ceiling, string maximum, string path);
 
     /// <summary>Adds the service's key, or refuses a request that carries another key.</summary>
@@ -209,7 +212,8 @@ public class GatewayCallRefusedException(string message) : InvalidOperationExcep
 
 /// <summary>
 /// This service may not call at the ceiling (a configuration gap, not a programming error): above its maximum, e.g. a
-/// public assistant at <c>External</c> while <c>Gateway:MaxResidency</c> is <c>Eu</c>, or with no key at all (#237).
+/// public assistant at <c>External</c> while the credential key allows <c>Eu</c> at most, before the first context answer
+/// (<c>OnPrem</c>), or with no key at all (#237, M-17 C9).
 /// </summary>
 public sealed class GatewayKeyMissingException(Residency ceiling)
     : GatewayCallRefusedException($"This service holds no gateway key for the ceiling {ResidencyCeiling.ToHeader(ceiling)}.")

@@ -68,7 +68,8 @@
 #                             identity provider whose tokens carry groups instead of the role rag-platform-admin in the
 #                             roles claim; the other roles' groups are set in RAG's admin (Settings, Role groups)
 #   UME_RAG_ADMIN_HOST (UME_RAG_API_HOST), UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
-#   UME_RAG_GATEWAY_MAX_RESIDENCY (Eu), UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch)
+#   UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
+#                             residencies in the gateway (register M2: OnPrem and Eu)
 #   UME_RAG_GATEWAY_INTEGRATION_API_URL  the gateway's cost and budget read-back in RAG's admin UI: the gateway admin
 #                             API's URL as rag-admin reaches it, https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443> (adminapi
 #                             is not on llm); UME_RAG_ADMIN_GATEWAY_KEY needs the scope usage.read. Unset: no read-back
@@ -468,7 +469,6 @@ services:
       Rag__Roles: knowledge,chat,mcp
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
-      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
       # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
@@ -536,7 +536,6 @@ services:
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
-      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-Eu}
       # The gateway admin API's Integration API (/integration/v1), the cost and budget read-back (#580); empty: none.
       Gateway__IntegrationApiUrl: ${UME_RAG_GATEWAY_INTEGRATION_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
@@ -1762,11 +1761,18 @@ configs:
           # keep-alive connection.
           map $$http_upgrade $$ume_connection { default upgrade; '' ''; }
 
-          upstream ume_gateway { server gateway:8443; keepalive 32; }
-          upstream ume_admin { server adminapi:8443; }
-          upstream ume_rag_api { server rag-api:8443; keepalive 32; }
-          upstream ume_rag_admin { server rag-admin:8443; }
-      #owui    upstream ume_rag_openwebui { server rag-openwebui:8080; }
+          # Docker's embedded DNS, asked again every 10 s: a stack update recreates a service with a new address on its network
+          # while this proxy keeps running, and a name resolved only at start would then answer 502 until a restart. With
+          # "resolve" (nginx 1.27.3 and later) each upstream follows its service's current address, and a service that isn't up
+          # yet (rag-openwebui, which depends_on can't name across profiles) doesn't stop nginx from starting.
+          resolver 127.0.0.11 valid=10s ipv6=off;
+          resolver_timeout 5s;
+
+          upstream ume_gateway { zone ume_gateway 64k; server gateway:8443 resolve; keepalive 32; }
+          upstream ume_admin { zone ume_admin 64k; server adminapi:8443 resolve; }
+          upstream ume_rag_api { zone ume_rag_api 64k; server rag-api:8443 resolve; keepalive 32; }
+          upstream ume_rag_admin { zone ume_rag_admin 64k; server rag-admin:8443 resolve; }
+      #owui    upstream ume_rag_openwebui { zone ume_rag_openwebui 64k; server rag-openwebui:8080 resolve; }
 
           # A name this proxy doesn't serve gets no answer.
           server {

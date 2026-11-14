@@ -130,6 +130,7 @@ public sealed partial class ChatApiTests
             {
                 foreach (var name in new[] { GatewayChatClient.HttpClientName, GatewayQueryEmbedder.HttpClientName, ChatModelReranker.HttpClientName })
                 {
+                    services.UseGatewayCredentialCeiling();
                     services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new CostGateway(calls, failStep) { InnerHandler = gateway.Server.CreateHandler() });
                 }
             });

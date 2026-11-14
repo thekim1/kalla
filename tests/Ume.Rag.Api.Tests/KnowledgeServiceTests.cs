@@ -199,6 +199,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         web.ConfigureTestServices(services =>
         {
             services.AddSingleton<IPolicySnapshotSource>(new FixedSnapshot(snapshot ?? Snapshot(), confirmed));
+            services.UseGatewayCredentialCeiling();
             services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Gateway.Server.CreateHandler());
         });
     });
@@ -275,6 +276,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
             new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
         ]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway ?? db.Gateway.Server.CreateHandler());
+        builder.Services.UseGatewayCredentialCeiling();
         // Made by the container, so disposing the host closes its connections (the api role has a connection limit).
         builder.Services.AddSingleton(_ => RetrievalDataSource.Create(db.Connection(RagDatabase.Api)));
         var host = builder.Build();
@@ -300,7 +302,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var clients = host.Services.GetRequiredService<IHttpClientFactory>();
         return new ChatService(new KnowledgeFixture.FixedSnapshot(snapshot, true), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
             knowledge, new GatewayChatClient(clients, options, NullLogger<GatewayChatClient>.Instance), options,
-            Options.Create(new GatewayOptions()), TimeProvider.System, NullLogger<ChatService>.Instance);
+            host.Services.GetRequiredService<GatewayCeiling>(), TimeProvider.System, NullLogger<ChatService>.Instance);
     }
 
     private static RetrievalRequest Search(params Guid[] collections) =>
@@ -414,6 +416,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
             new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey),
         ]);
         builder.AddGatewayClient(ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+        builder.Services.UseGatewayCredentialCeiling();
         var host = builder.Build();
         var clients = host.Services.GetRequiredService<IHttpClientFactory>();
         var log = new ListLogger();
@@ -792,6 +795,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey)]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName, retryFailed: false).ConfigurePrimaryHttpMessageHandler(() => handler);
+        builder.Services.UseGatewayCredentialCeiling();
         var host = builder.Build();
         return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
             NullLogger<GatewayQueryEmbedder>.Instance), host);

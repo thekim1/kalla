@@ -121,13 +121,26 @@ jobs:
           # Before this step had a cleanup the container was called "registry": remove it only if it runs our image.
           if [ "$(docker inspect -f '{{.Config.Image}}' registry 2>/dev/null)" = "$DRY_RUN_REGISTRY_IMAGE" ]; then docker rm -f registry; fi
           docker run -d --name ume-rag-dryrun-registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
+      - name: A tag release reads no shared cache
+        # Pull-request jobs run as the same user on these runners and could rewrite the caches in its home (#704,
+        # Decisions "CI on the self-hosted runner"). A tag release therefore restores NuGet and npm packages into empty
+        # directories of its own, and its image builds read no build cache (cache-from below). A dry run keeps the
+        # caches. Before go-live releases move to a runner of their own under a separate user.
+        if: github.event_name == 'push'
+        run: |
+          {
+            echo "NUGET_PACKAGES=$RUNNER_TEMP/nuget-packages"
+            echo "NUGET_HTTP_CACHE_PATH=$RUNNER_TEMP/nuget-http-cache"
+            echo "npm_config_cache=$RUNNER_TEMP/npm-cache"
+          } >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          # No npm cache for a tag release (#704, above).
+          cache: ${{ github.event_name == 'push' && '' || 'npm' }}
           cache-dependency-path: src/admin-ui/package-lock.json
       - uses: docker/setup-buildx-action@v4
         with:
@@ -138,6 +151,7 @@ jobs:
         # digests, push every layer again. One local cache per image, kept in the runner user's home (both runners share
         # it; releases don't run in parallel), read by each build and replaced after it (mode=max keeps the build
         # stages' layers too), so an unchanged Dockerfile and context rebuild in seconds and push only the new layers.
+        # A tag release only writes it (#704): pull-request jobs share the runner user's home, so a release never reads it.
         run: echo "BUILD_CACHE=$HOME/.cache/ume-rag-release-buildx" >> "$GITHUB_ENV"
       - name: Install Syft
         run: |
@@ -205,7 +219,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/postgres:${{ steps.version.outputs.version }}
           push: true
           provenance: false
-          cache-from: type=local,src=${{ env.BUILD_CACHE }}/postgres
+          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/postgres', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/postgres-new,mode=max
       - name: Build and push ume-rag/clamav
         id: clamav
@@ -218,7 +233,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/clamav:${{ steps.version.outputs.version }}
           push: true
           provenance: false
-          cache-from: type=local,src=${{ env.BUILD_CACHE }}/clamav
+          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/clamav', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/clamav-new,mode=max
       - name: Build and push ume-rag/renderer
         id: renderer
@@ -231,7 +247,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/renderer:${{ steps.version.outputs.version }}
           push: true
           provenance: false
-          cache-from: type=local,src=${{ env.BUILD_CACHE }}/renderer
+          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/renderer', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/renderer-new,mode=max
       - name: Build and push ume-rag/parser
         id: parser
@@ -244,7 +261,8 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/parser:${{ steps.version.outputs.version }}
           push: true
           provenance: false
-          cache-from: type=local,src=${{ env.BUILD_CACHE }}/parser
+          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/parser', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/parser-new,mode=max
       - name: Rotate the build cache
         # A local cache only grows when written over itself: keep each image's new cache and drop the old one.

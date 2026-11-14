@@ -72,7 +72,7 @@ public sealed class SmokeEvaluationTests(SmokeFixture smoke) : IClassFixture<Smo
         web.UseSetting("Retrieval:AttemptTimeout", "00:00:10");
         web.UseSetting("Retrieval:TotalTimeout", "00:00:20");
         web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
     });
 
     private static HttpClient Client(WebApplicationFactory<Program> api, string key)

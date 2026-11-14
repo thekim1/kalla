@@ -194,7 +194,7 @@ public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeG
 
     /// <summary>A worker for the evaluator's services (the <c>eval</c> class); the scheduler does not tick during the test.</summary>
     private Task<WorkerHost> StartWorkerAsync() =>
-        WorkerHost.StartAsync(database, s => s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()),
+        WorkerHost.StartAsync(database, s => s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()).Services.UseGatewayCredentialCeiling(),
             new Dictionary<string, string?>
             {
                 ["Gateway:BaseUrl"] = "http://fake-gateway",

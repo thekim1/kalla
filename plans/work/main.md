@@ -82,7 +82,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Do:** the steps C0–C13 of [`../proposals/deploy-configuration.md`](../proposals/deploy-configuration.md) §5 in their
   order, one PR per step, each step's paths, done-when and stream as listed there. Decided: Decisions "Deploy
   configuration", "Residency per level", "Role groups as a setting". C0–C6, C8–C10 and C13 need nothing more; C7 waits
-  on llmgateway#87 (G1), C11 on #90 (G5), C12 on #89 (G4), each released and pinned.
+  on llmgateway#87 (G1, accepted with changes: create-only, its own volume), C11 on #90's replacement (the context's
+  `integration_api_url`; G5 itself declined), C12 on #89 (G4, accepted), each released and pinned; the gateway's order
+  is #89, #90's discovery part, #87, #88 (#580, 2026-11-14).
 - **Mind:** M-16 (another session) builds the Apps and Settings pages: C4 removes the wizard's Open WebUI type and makes
   its client "Managed by the deployment"; C5's create form goes on the Models page and C10's role groups on the
   Settings page (§5.10). Main updates identity §4.7 (C9), §5.2 (C4) and repo-and-deployment §6 before the step that
@@ -97,9 +99,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   *Unreleased*), C5 (the PR that says so: `POST /api/embedding-profiles`, *Create profile* on *Models*, the Home card;
   the seed and its five variables gone; review nits #688), C6 (the PR that says so: the one-shot `rag-openwebui-setup`
   mints the feedback key with a session token signed with Open WebUI's secret, as the spike on #667 found;
-  `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `_PASSWORD_AUTH` and `openwebui-feedback-key.sh` gone; #689), C8 (the PR that
-  says so: profile `proxy`, `rag-proxy` nginx with the operator's certificate from `UME_RAG_PROXY_CERTS_DIR`, a host
-  directory by the user's choice). The M-16 session continues with the next steps in order and announces each on #667.
+  `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `_PASSWORD_AUTH` and `openwebui-feedback-key.sh` gone; #689), C8 (#690: profile
+  `proxy`, `rag-proxy` nginx with the operator's certificate from `UME_RAG_PROXY_CERTS_DIR`, a host directory by the
+  user's choice), C9 (the PR that says so: each service's ceiling is its credential key's residencies from the context,
+  `OnPrem` before the first one; `Gateway:MaxResidency` gone). The M-16 session continues with the next steps in order and announces each on #667.
 
 ### [x] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
 - **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the

@@ -45,7 +45,7 @@ public static class AssistantTestEndpoints
 
 /// <summary>Runs the panel: builds the snapshot view per call and the chat pipeline over it.</summary>
 public sealed partial class AdminTestPanel(
-    PolicySnapshotStore snapshots, AdminRetrieval retrieval, GatewayChatClient gateway, IOptions<ChatOptions> chatOptions, IOptions<GatewayOptions> gatewayOptions,
+    PolicySnapshotStore snapshots, AdminRetrieval retrieval, GatewayChatClient gateway, IOptions<ChatOptions> chatOptions, GatewayCeiling serviceCeiling,
     NpgsqlDataSource dataSource, TimeProvider time, ILoggerFactory loggers, IMeterFactory meters) : IDisposable
 {
     /// <summary>The candidate text shown per hit (§4.9).</summary>
@@ -87,7 +87,7 @@ public sealed partial class AdminTestPanel(
         var policy = new PanelPolicy(id);
         var knowledge = new KnowledgeService(source, policy, retrieval.Engine, retrieval.Hydrator, retrieval.Embedder, _counter, dataSource, new NoDownloadLinks(),
             loggers.CreateLogger<KnowledgeService>());
-        var chat = new ChatService(source, policy, knowledge, gateway, chatOptions, gatewayOptions, time, loggers.CreateLogger<ChatService>());
+        var chat = new ChatService(source, policy, knowledge, gateway, chatOptions, serviceCeiling, time, loggers.CreateLogger<ChatService>());
         var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null);
 
         var started = Stopwatch.GetTimestamp();
@@ -329,7 +329,7 @@ public enum AssistantTestTarget
     Published,
 }
 
-public sealed record TestHistoryMessage
+public sealed record TestHistoryMessage : AdminRequest
 {
     [Required, RegularExpression("^(user|assistant)$")]
     public string Role { get; init; } = "user";
@@ -338,7 +338,7 @@ public sealed record TestHistoryMessage
     public string Text { get; init; } = "";
 }
 
-public sealed record AssistantTestRequest
+public sealed record AssistantTestRequest : AdminRequest
 {
     [Required, StringLength(2000, MinimumLength = 1)]
     public string Question { get; init; } = "";

@@ -202,6 +202,7 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
             var recorder = new GatewayCallRecorder();
             await using var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs, s =>
             {
+                s.UseGatewayCredentialCeiling();
                 s.AddHttpClient(EmbeddingClient.HttpClientName).AddHttpMessageHandler(recorder.Handler);
                 s.AddHttpClient(ChatModelReranker.HttpClientName).AddHttpMessageHandler(recorder.Handler);
             });
@@ -280,6 +281,7 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
         {
             foreach (var client in new[] { EmbeddingClient.HttpClientName, EvalModelClient.HttpClientName, EvalModelClient.CatalogueClientName })
             {
+                s.UseGatewayCredentialCeiling();
                 s.AddHttpClient(client).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler()).AddHttpMessageHandler(recorder.Handler);
             }
 

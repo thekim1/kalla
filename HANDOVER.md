@@ -28,13 +28,13 @@ sink" monolith. Design and code live in this repo.
 
 - **M-17** (deploy configuration, decided: [`plans/proposals/deploy-configuration.md`](plans/proposals/deploy-configuration.md),
   `plans/work/main.md` M-17) is built by **the M-16 session on stream b's machine** (GitHub `thekim1`), by the user's
-  choice, one step at a time and announced on #667. **C0–C5 are merged** (#674, #683, #682, #684, #687). This session reviews
+  choice, one step at a time and announced on #667. **C0–C6 and C8 are merged** (#674, #683, #682, #684, #687, #689, #690). This session reviews
   the security-relevant steps and builds none unless the user says so. C7, C11 and C12 wait on thekim1/llmgateway
   #87 (G1), #90 (G5), #89 (G4).
 - **M-18** (remove `Settings.WorkerConcurrency` until P2, #677) is merged (#686). **C5** (the embedding profile created in
-  the admin, #687) is merged; its design deviations are settled on `main` (69987e4f).
+  the admin, #687) is merged; its design deviations are settled on `main` (69987e4f); its review nits in #688. C6's design is updated on `main`. **C8 (#690, TLS proxy) was reviewed after merge;** its stale-upstream bug (names resolved only at nginx start) is fixed in #692 (Docker's resolver + `server … resolve`, proved locally against the pinned image; the boot test now recreates rag-api behind a placeholder). Still open from that review: the trusted-proxy address changes when rag-proxy is recreated (docs), no HSTS on Open WebUI's block. repo-and-deployment still needs a line for the `proxy` profile. Next from the M-16 session: C9, then C10.
 - **Next release (0.6.0):** after the M-17 steps the user wants in it. Before tagging: CHANGELOG *Unreleased* needs
-  M-16 (#668–#679, #681), #670, M-17 C0–C5 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
+  M-16 (#668–#679, #681), #670, M-17 C0–C6, C8 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
   Open WebUI client move (#685); the repository setting *Allow GitHub Actions to create and approve pull requests* must
   be on for C0's pin PR.
 - **The test chatbot (T2–T6) is the user's team's** (user, 2026-11-14): don't plan or prepare it; fix what they report.
@@ -56,6 +56,8 @@ sink" monolith. Design and code live in this repo.
   stack*).
 
 ## Next
+
+0. **Review #694** (successor to #513): #695 (#713), #699 (#714) merged; #704 done by main (#717, decided 2026-11-15: no shared caches on a tag release now, a separate-user `release` runner before go-live). **Approved, waiting for merge:** #715 (#698), #716 (#701), #691 (C9, fix verified), #693 (C10; its design — identity's group table, admin §5.10, data-model §2.1 — is main's after merge). Next from the M-16 session: #702. #712 item 8 (`admin-console` seeded) is decided (identity §4.1). The gateway answered #87–#90 on #580; the proposal's C7/C11/C12 rows follow it.
 
 1. GitHub: review M-17's PRs as they come (security-relevant parts), answer #667 and #580.
 2. The 0.6.0 release when the user asks (checklist above).

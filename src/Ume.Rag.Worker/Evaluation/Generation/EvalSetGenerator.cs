@@ -22,7 +22,7 @@ namespace Ume.Rag.Worker.Evaluation.Generation;
 /// first retires stale questions: an expected document is deleted, or the source document's content changed and the judge
 /// no longer rates the question answerable from that document's best-matching chunk (only changed documents are
 /// re-checked). Both kinds generate only what is missing, so a retried job adds nothing to a full layer. Every model call
-/// runs at the collection's ceiling (<see cref="EvalModelClient.CeilingFor"/>); a model the gateway does not serve there
+/// runs at the collection's ceiling (<see cref="EvalModelClient.CeilingForAsync"/>); a model the gateway does not serve there
 /// refuses the job with <see cref="EvalModelClient.ModelNotAtCeiling"/>. Result <see cref="EvalSetResult"/>. Every model call
 /// (<c>eval-generate</c>, <c>eval-judge</c>, the near-duplicate embeddings <c>eval-dedup</c>) carries the job's id as
 /// <c>x-ume-run-id</c>, runs as the collection's gateway key and is counted under the collection; the round's commit adds them
@@ -101,7 +101,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         }
 
         var judgeModel = settings.JudgeModel ?? model;
-        var ceiling = models.CeilingFor(collection.Classification);
+        var ceiling = await models.CeilingForAsync(collection.Classification, cancellationToken);
         await models.RequireAtCeilingAsync([model, judgeModel], ceiling, cancellationToken);
         if (await profiles.GetAsync(collection.EmbeddingProfileId, cancellationToken) is not { } profile)
         {

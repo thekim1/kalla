@@ -1,5 +1,7 @@
 extern alias fakegateway;
 
+using Ume.Rag.TestKit;
+
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -505,7 +507,7 @@ internal static class TestGatewayKeys
 
     /// <summary>Points the worker's own context read (identity §4.7) at <paramref name="fake"/>.</summary>
     public static void ReadContextFrom(IServiceCollection services, WebApplicationFactory<fakegateway::Program> fake) =>
-        services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => fake.Server.CreateHandler());
+        services.UseGatewayCredentialCeiling().AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => fake.Server.CreateHandler());
 
     /// <summary>
     /// Reads the worker's context once and checks that it acts as keys, so its first job already does (the read at start runs in
