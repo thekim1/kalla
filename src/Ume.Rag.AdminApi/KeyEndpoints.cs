@@ -315,7 +315,7 @@ public sealed record KeyCreateRequest : KeyFields
 
 public sealed record KeyUpdateRequest : KeyFields;
 
-public sealed record KeyScopesRequest
+public sealed record KeyScopesRequest : AdminRequest
 {
     [MaxLength(100)]
     public IReadOnlyList<Guid> AssistantIds { get; init; } = [];
