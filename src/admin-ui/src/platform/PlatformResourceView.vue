@@ -16,19 +16,18 @@ import { formatDateTime } from '@/utils/format'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import CopyValue from './CopyValue.vue'
-import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import EmbeddingProfilesPanel from './EmbeddingProfilesPanel.vue'
 import GatewayContextPanel from './GatewayContextPanel.vue'
-import PromptTextsPanel from './PromptTextsPanel.vue'
 import SecretOnce from './SecretOnce.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
 import { gatewayAdminUrl, gatewayLink, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
-// A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions.
-const props = defineProps<{ resource: string }>()
+// A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions. `embedded`:
+// a section of the Settings page (admin design §5.10), which has the page title; the description and buttons stay.
+const props = defineProps<{ resource: string; embedded?: boolean }>()
 const ui = useUiStore()
 const resource = computed(() => resourceById(props.resource))
 const rows = useLoadable<Row[]>([])
@@ -60,14 +59,6 @@ const details = computed(() => (selected.value && resource.value?.details ? reso
 const showDetails = computed(() => details.value.length > 0 && (!editable(selected.value!) || openForm.value?.operation === resource.value!.update))
 const drawerTitle = computed(() => openForm.value?.title ?? (selected.value && resource.value ? rowTitle(selected.value) : resource.value?.label ?? ''))
 const gatewayHref = computed(() => (adminUrl.value && resource.value?.gatewayPage ? gatewayLink(adminUrl.value, resource.value.gatewayPage) : null))
-// A row's edit or a create can have a form of its own; an action's form is always the generic one.
-const ownForm = computed(() => {
-  const r = resource.value
-  const form = openForm.value
-  if (!r?.form || !form) return undefined
-  if (form.operation === r.update && selected.value) return r.form(selected.value)
-  return form.operation === r.create ? r.form(null) : undefined
-})
 // Every generic drawer shows the row's id with a copy button (admin design §5.8).
 const rowId = computed(() => (typeof selected.value?.id === 'string' ? selected.value.id : null))
 
@@ -95,7 +86,7 @@ function cell(value: unknown): string {
   return String(value)
 }
 
-// Settings sections share one entry with a placeholder; the document has one path per section.
+// A path with a placeholder, or (for a path the document lists per row) the row's own.
 function schemaOf(doc: OpenApiDocument, operation: Operation, url: string) {
   return requestSchema(doc, operation.method, operation.path) ?? requestSchema(doc, operation.method, url)
 }
@@ -186,7 +177,10 @@ watch(() => props.resource, () => {
 
 <template>
   <template v-if="resource">
-    <PageHeader :title="resource.label" :description="resource.description">
+    <div v-if="embedded && resource.create" class="mb-4 flex justify-end">
+      <UiButton variant="primary" icon="add" data-test="create" @click="create">{{ PLATFORM.form.create }}</UiButton>
+    </div>
+    <PageHeader v-else-if="!embedded" :title="resource.label" :description="resource.description">
       <UiButton
         v-if="gatewayHref && resource.gatewayPage" :href="gatewayHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page"
       >
@@ -198,7 +192,6 @@ watch(() => props.resource, () => {
       <GatewayContextPanel v-if="panel === 'gateway-context'" class="mb-6" />
       <EmbeddingProfilesPanel v-else-if="panel === 'embedding-profiles'" class="mb-6" />
       <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
-      <PromptTextsPanel v-else-if="panel === 'prompt-texts'" class="mb-6" />
     </template>
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
@@ -239,12 +232,8 @@ watch(() => props.resource, () => {
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">
           <UiButton v-for="action in resource.actions" :key="action.id" :data-test="`action-${action.id}`" @click="runAction(action)">{{ action.label }}</UiButton>
         </div>
-        <CrawlSettingsForm
-          v-if="openForm && ownForm === 'crawl-settings'" :key="formKey" :initial="openForm.initial" :url="openForm.url" :submit-label="openForm.submitLabel"
-          @saved="saved" @cancel="drawerOpen = false"
-        />
         <GenericForm
-          v-else-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"
+          v-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"
           :method="openForm.operation.method" :url="openForm.url" :submit-label="openForm.submitLabel" :models="openForm.models" @saved="saved" @cancel="drawerOpen = false"
         />
       </template>

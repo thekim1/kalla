@@ -71,9 +71,7 @@ export interface PlatformResource {
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
   /** Panels shown above the list, in order. */
-  panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary' | 'prompt-texts')[]
-  /** A form of its own instead of the generic one, for a row's edit or (`null`) a create. */
-  form?: (row: Row | null) => 'crawl-settings' | undefined
+  panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary')[]
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
   modelFields?: (row: Row) => readonly ModelField[] | undefined
 }
@@ -140,39 +138,9 @@ function sharingOf(row: Row): SharingSummary {
   return (row.sharing as SharingSummary | undefined) ?? { department: 0, selected: 0, municipality: 0, sharedWithDepartments: 0 }
 }
 
-const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker'] as const
-
-/** The settings sections' model fields, as V32 checks them (`rerankModel` is a chat model; `gatewayRerankModel` a rerank model). */
-const SETTINGS_MODEL_FIELDS: Partial<Record<(typeof SETTINGS_SECTIONS)[number], readonly ModelField[]>> = {
-  evaluation: [
-    { name: 'evaluationModel', modelKind: 'chat' },
-    { name: 'evaluationJudgeModel', modelKind: 'chat' },
-  ],
-  // The platform answer ceiling (Decisions "Answer length from the model", admin design §4.5): a number of its own above the JSON.
-  chat: [{ name: 'condenseModel', modelKind: 'chat', in: 'value' }, { name: 'maxAnswerTokens', kind: 'number', in: 'value' }],
-  retrieval: [
-    { name: 'rerankModel', modelKind: 'chat', in: 'value' },
-    { name: 'gatewayRerankModel', modelKind: 'rerank', in: 'value' },
-  ],
-}
-
 const L = PLATFORM.resources
 
 export const platformResources: PlatformResource[] = [
-  {
-    id: 'settings',
-    ...L.settings,
-    icon: 'tune',
-    key: 'section',
-    columns: [{ key: 'label', label: PLATFORM.columns.section }],
-    update: { method: 'put', path: '/api/settings/{section}' },
-    load: (row) => http.get<Row>(`/api/settings/${String(row.section)}`),
-    // The crawl section's host politeness is a table with a drawer per host, not JSON (admin design §5.8).
-    form: (row) => (row?.section === 'crawl' ? 'crawl-settings' : undefined),
-    modelFields: (row) => SETTINGS_MODEL_FIELDS[row.section as (typeof SETTINGS_SECTIONS)[number]],
-    // The platform's prompt texts (chat design §7.3): the whole frame in order, saved into the chat section's prompts.
-    panels: ['prompt-texts'],
-  },
   {
     id: 'data-protection',
     ...L.dataProtection,
@@ -283,19 +251,21 @@ export const platformResources: PlatformResource[] = [
   },
 ]
 
-/** Apps and keys have a page of their own (admin design §5.9, §5.9.1; the generic Keys page went) and keep their place first. */
+/**
+ * The Platform objects page's entries and their search sections: Apps and keys and Settings are pages of their own
+ * (admin design §5.9, §5.10); site profiles and data protection are sections of Settings, so they are not listed here.
+ */
+const IN_SETTINGS = new Set(['site-profiles', 'data-protection'])
+
 export const platformEntries: PlatformEntry[] = [
   { id: 'clients', ...L.clients, icon: 'apps', to: { name: 'platform-clients' } },
-  ...platformResources.map((r) => ({
+  { id: 'settings', ...L.settings, icon: 'tune', to: { name: 'platform-settings' } },
+  ...platformResources.filter((r) => !IN_SETTINGS.has(r.id)).map((r) => ({
     id: r.id, label: r.label, description: r.description, keywords: r.keywords, icon: r.icon, to: { name: 'platform-resource', params: { resource: r.id } },
   })),
 ]
 
-/** Settings have no list endpoint: one row per section of `config."Settings"` (admin design §4.8). */
 export async function rowsOf(resource: PlatformResource): Promise<Row[]> {
-  if (resource.id === 'settings') {
-    return SETTINGS_SECTIONS.map((section) => ({ section, label: PLATFORM.settingsSections[section] }))
-  }
   return listRows(resource)
 }
 

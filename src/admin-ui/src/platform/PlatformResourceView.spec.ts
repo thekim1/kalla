@@ -134,49 +134,6 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
     expect(filterEntries(searchEntries(navGroups), 'api keys').map((e) => e.label)).toContain(PLATFORM.resources.clients.label)
   })
 
-  it('edits the crawl section with the host politeness table instead of its JSON (admin design §5.8)', async () => {
-    setActivePinia(createPinia())
-    const crawl = { version: '3', value: { allowedPorts: [8443], hostOverrides: { 'www.umea.se': { preset: 'fast' } } } }
-    const doc = { paths: { '/api/settings/{section}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { value: { type: 'object' } } } } } } } } } }
-    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? doc : crawl))))
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'settings' }, attachTo: document.body })
-    await flushPromises()
-
-    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes(PLATFORM.settingsSections.crawl))!
-    await row.trigger('click')
-    await flushPromises()
-    expect(document.body.querySelector('[data-test=crawl-settings]')).not.toBeNull()
-    expect(document.body.querySelector('[data-test=host-politeness]')!.textContent).toContain('www.umea.se')
-    expect(document.body.querySelector('#platform-settings-value')).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('gives the evaluation section\'s model fields a picker over the mirror at the platform ceiling (#466)', async () => {
-    setActivePinia(createPinia())
-    const evaluation = { evaluationModel: 'gpt-oss', evaluationJudgeModel: null, evaluationMaxQuestions: 100, version: '2' }
-    const models = [
-      { name: 'gpt-oss', kind: 'model', modelKind: 'chat', residencies: ['onprem'], available: true },
-      { name: 'rerank-1', kind: 'model', modelKind: 'rerank', residencies: ['onprem'], available: true },
-    ]
-    const nullableString = { type: ['null', 'string'], maxLength: 200 }
-    const schema = { properties: { evaluationModel: nullableString, evaluationJudgeModel: nullableString, evaluationMaxQuestions: { type: 'integer' } } }
-    const doc = { paths: { '/api/settings/evaluation': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
-    const fetch = vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? doc : url === '/api/gateway/models' ? models : evaluation)))
-    vi.stubGlobal('fetch', fetch)
-    const wrapper = mount(PlatformResourceView, { props: { resource: 'settings' }, attachTo: document.body })
-    await flushPromises()
-
-    await wrapper.findAll('tbody tr').find((r) => r.text().includes(PLATFORM.settingsSections.evaluation))!.trigger('click')
-    await flushPromises()
-    expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/gateway/models')
-    const judge = document.body.querySelector<HTMLSelectElement>('select#platform-settings-evaluationJudgeModel')!
-    expect([...judge.options].map((o) => o.value)).toEqual(['', 'gpt-oss'])
-    expect(judge.value).toBe('')
-    expect(document.body.querySelector<HTMLSelectElement>('select#platform-settings-evaluationModel')!.value).toBe('gpt-oss')
-    expect(document.body.querySelector('input#platform-settings-evaluationMaxQuestions')).not.toBeNull()
-    wrapper.unmount()
-  })
-
   it('is found in search by English words', () => {
     const entries = searchEntries(navGroups)
     for (const query of ['member groups', 'sharing', 'municipality']) {

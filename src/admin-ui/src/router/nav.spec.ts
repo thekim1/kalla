@@ -5,6 +5,7 @@ import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
 import { createAppRouter, routes } from '.'
 import { ALL_ROLES, filterEntries, mobileTabs, navGroups, searchEntries } from './nav'
+import { PAGE, PLATFORM } from '@/utils/labels'
 
 describe('menu structure (copied checks)', () => {
   const items = navGroups.flatMap((g) => g.items)
@@ -31,7 +32,8 @@ describe('search', () => {
   it('finds pages by words people use that are not in the label', () => {
     expect(filterEntries(entries, 'cost centre').map((e) => e.id)).toEqual(['organisation'])
     expect(filterEntries(entries, 'permissions').map((e) => e.id)).toEqual(['overview'])
-    expect(filterEntries(entries, 'personal data').map((e) => e.id)).toEqual(['collections'])
+    // The knowledge bases (personal data in documents) and the Personal data settings section.
+    expect(filterEntries(entries, 'personal data').map((e) => e.label)).toEqual([PLATFORM.settingsSections.pii, PAGE.collections.title])
   })
 
   it('lists only pages without a query', () => {
