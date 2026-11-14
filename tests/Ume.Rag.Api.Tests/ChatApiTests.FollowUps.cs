@@ -107,7 +107,7 @@ public sealed partial class ChatApiTests
     /// </summary>
     private WebApplicationFactory<Program> FollowUpHost(ConcurrentQueue<GatewayCall> calls, FakeTimeProvider time, CapturingLoggerProvider logs,
         FollowUpFault fault = FollowUpFault.None, string? output = null, TaskCompletionSource? started = null, Func<PolicySnapshot, PolicySnapshot>? change = null,
-        params (string Key, string Value)[] settings)
+        Ume.Rag.Domain.Residency ceiling = Ume.Rag.Domain.Residency.External, params (string Key, string Value)[] settings)
     {
         var snapshot = Snapshot() with { ChatSettings = """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" };
         snapshot = change?.Invoke(snapshot) ?? snapshot;
@@ -123,6 +123,7 @@ public sealed partial class ChatApiTests
             web.ConfigureLogging(l => l.AddProvider(logs));
             web.ConfigureTestServices(services =>
             {
+                services.UseGatewayCredentialCeiling(ceiling);
                 services.AddHttpClient(GatewayChatClient.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => new FollowUpGateway(calls, fault, time, output, signal) { InnerHandler = db.Gateway.Server.CreateHandler() });
                 services.AddSingleton(sp => ActivatorUtilities.CreateInstance<ChatService>(sp, (TimeProvider)time));
@@ -378,6 +379,7 @@ public sealed partial class ChatApiTests
         using var logs = new CapturingLoggerProvider();
         Func<PolicySnapshot, PolicySnapshot>? change = null;
         (string Key, string Value)[] settings = [];
+        var ceiling = Ume.Rag.Domain.Residency.External;
         if (kind == "timeout-zero")
         {
             settings = [("Chat:FollowUpTimeout", "00:00:00")];
@@ -386,10 +388,10 @@ public sealed partial class ChatApiTests
         {
             // An OnPrem turn: the deployment's ceiling is OnPrem and the assistant's model runs there (no condense model until M2).
             change = s => WithAssistant(s, a => a with { Published = a.Published! with { GatewayModel = "ume/chat-onprem" } });
-            settings = [("Gateway:MaxResidency", "OnPrem")];
+            ceiling = Ume.Rag.Domain.Residency.OnPrem; // the credential key allows OnPrem only (M-17 C9)
         }
 
-        await using var api = FollowUpHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, change: change, settings: settings);
+        await using var api = FollowUpHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, change: change, ceiling: ceiling, settings: settings);
         using var listener = FollowUpCounter(api, outcomes, tokens);
         using var client = Client(api, db.IntegrationKey);
 

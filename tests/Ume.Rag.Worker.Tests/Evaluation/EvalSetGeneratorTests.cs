@@ -427,7 +427,8 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
     [InlineData(Classification.Internal, null, "Eu")]
     [InlineData(Classification.Sensitive, null, "OnPrem")]
     [InlineData(Classification.Sensitive, "Eu", "OnPrem")]
-    [InlineData(Classification.Internal, "OnPrem", "OnPrem")]
+    // No (internal, OnPrem) row since M-17 C9: a credential key that allows OnPrem only bounds the worker's every call, the
+    // set's Eu embeddings too, so that run is refused (GatewayKeyMissingException) rather than lowered.
     public async Task Generation_and_judging_run_at_the_collections_ceiling_with_the_key_of_that_ceiling(string classification, string? maxResidency,
         string ceiling)
     {

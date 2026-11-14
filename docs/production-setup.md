@@ -295,8 +295,9 @@ never holds another service's key. A gateway admin issues the three keys in the 
      credential key's residencies as an upper bound on every key the service acts as (gateway-changes §5.3), so the cap
      also holds for the keys that assistants and knowledge bases run on. The worker's key: `OnPrem` and `Eu` (it never
      sends `External`). rag-api's and rag-admin's: up to the highest level assistants may use, which is `OnPrem` and
-     `Eu` while `UME_RAG_GATEWAY_MAX_RESIDENCY` is `Eu` (register M2), and all three once External routes exist and
-     that setting is emptied.
+     `Eu` under register M2, and all three once External routes exist. **These residencies are Ume.Rag's ceiling**: each
+     service reads its key's residencies from the gateway's context and no call carries a higher ceiling (identity design
+     §4.7, M-17 C9), so changing them in the gateway's admin is the one place to change it.
    - **PII policy `Off` or `Allow`**, never `Redact` or `Block`: every service embeds (the worker documents, rag-api
      queries, rag-admin the canary check), and a redacting key would silently change text with personal identity
      numbers in it.

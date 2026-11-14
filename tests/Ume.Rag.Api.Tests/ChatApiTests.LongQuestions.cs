@@ -106,6 +106,7 @@ public sealed partial class ChatApiTests
             web.ConfigureLogging(l => l.AddProvider(logs));
             web.ConfigureTestServices(services =>
             {
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(GatewayChatClient.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => new LongGateway(calls, fault, time) { InnerHandler = upstream.Server.CreateHandler() });
                 services.AddHttpClient(GatewayQueryEmbedder.HttpClientName)

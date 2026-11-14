@@ -22,7 +22,7 @@ namespace Ume.Rag.Answering.Chat;
 /// <paramref name="meters"/> (the admin test panel) the condense and follow-up calls are not counted.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
-    IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger, IMeterFactory? meters = null)
+    IOptions<ChatOptions> options, GatewayCeiling serviceCeiling, TimeProvider time, ILogger<ChatService> logger, IMeterFactory? meters = null)
 {
     /// <summary>The <c>kind</c> of <c>rag.chat.condense</c> (§17).</summary>
     private const string FollowUpKind = "follow-up";
@@ -91,7 +91,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         using var acting = GatewayCallScope.Begin(Acting(assistant));
 
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
-        var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
+        // Lowered to the credential key's residencies (M2 keeps them at Eu; Decisions "Residency per level", M-17 C9).
+        var ceiling = await serviceCeiling.CapAsync(Ceiling(who, assistant, snapshot), ct);
         var messageId = Guid.CreateVersion7();
         // §6.3 (Decisions "Answer length from the model"): the overrides, else the model's limits from the mirror.
         var platform = resolved.Platform;

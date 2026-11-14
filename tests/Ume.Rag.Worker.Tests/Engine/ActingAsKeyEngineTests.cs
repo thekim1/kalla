@@ -145,6 +145,7 @@ public sealed class ActingAsKeyEngineTests(RagDatabaseFixture database, FakeGate
     {
         var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, logs: logs, settings: settings, services: s =>
         {
+            s.UseGatewayCredentialCeiling();
             s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => fake.Server.CreateHandler());
             TestGatewayKeys.ReadContextFrom(s, fake);
         });

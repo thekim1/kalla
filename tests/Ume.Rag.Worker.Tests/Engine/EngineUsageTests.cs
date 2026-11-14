@@ -1,5 +1,6 @@
 extern alias fakegateway;
 
+using Ume.Rag.TestKit;
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
@@ -124,7 +125,7 @@ public sealed class EngineUsageTests(RagDatabaseFixture database, FakeGatewayFac
         var recorder = new GatewayCallRecorder();
         await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs,
             services: s => s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => fake.Server.CreateHandler())
-                .AddHttpMessageHandler(recorder.Handler));
+                .AddHttpMessageHandler(recorder.Handler).Services.UseGatewayCredentialCeiling());
         using var metrics = new MeasurementRecorder(worker.Services.GetRequiredService<IMeterFactory>(), "rag.embed.tokens", "rag.ingestion.cost");
         try
         {

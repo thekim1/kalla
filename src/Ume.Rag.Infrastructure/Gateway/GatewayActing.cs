@@ -1,7 +1,9 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Ume.Rag.Domain;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -44,8 +46,9 @@ public static class GatewayCallScope
 }
 
 /// <summary>
-/// The gateway's <c>features</c> as this service last read them from its own <c>GET /v1/ume/context</c> (identity §4.7,
-/// gateway-changes §5.2), held in memory. Empty until the first answer, so no call acts as a key before then.
+/// The gateway's <c>features</c> and this service's credential key's residency ceiling as this service last read them from
+/// its own <c>GET /v1/ume/context</c> (identity §4.7, gateway-changes §5.2), held in memory. Empty and unknown until the
+/// first answer, so no call acts as a key and every call's ceiling is <c>OnPrem</c> before then (<see cref="GatewayCeiling"/>).
 /// </summary>
 public sealed class GatewayFeatures
 {
@@ -53,13 +56,40 @@ public sealed class GatewayFeatures
     public const string RunMetadataFeature = "run-metadata";
 
     private volatile HashSet<string> _features = new(StringComparer.Ordinal);
+    private volatile StrongBox<Residency>? _credentialMaximum;
 
     public IReadOnlySet<string> Current => _features;
 
     /// <summary>Calls for an object with a gateway key send <c>x-ume-on-behalf-of</c> (phase 2).</summary>
     public bool ActAsKey => _features.Contains(ActAsKeyFeature);
 
+    /// <summary>
+    /// The highest residency the credential key allows (the context's <c>key.allowed_residencies</c>; Decisions "Residency per
+    /// level", M-17 C9), or null until the first context answer.
+    /// </summary>
+    public Residency? CredentialMaximum => _credentialMaximum?.Value;
+
     public void Update(IEnumerable<string> features) => _features = new HashSet<string>(features, StringComparer.Ordinal);
+
+    /// <summary>The credential key's ceiling from its <c>allowed_residencies</c> (<see cref="HighestOf"/>).</summary>
+    public void UpdateCredentialResidencies(IReadOnlyList<string> allowedResidencies) =>
+        _credentialMaximum = new StrongBox<Residency>(HighestOf(allowedResidencies));
+
+    /// <summary>
+    /// The highest of <paramref name="residencies"/>: an empty list allows every residency (<c>External</c>, the gateway's
+    /// rule), and a list with no value this service knows allows none it can use (<c>OnPrem</c>, fail closed).
+    /// </summary>
+    public static Residency HighestOf(IReadOnlyList<string> residencies)
+    {
+        ArgumentNullException.ThrowIfNull(residencies);
+        if (residencies.Count == 0)
+        {
+            return Residency.External;
+        }
+
+        var known = residencies.Select(r => ResidencyCeiling.TryParse(r, out var residency) ? residency : (Residency?)null).Where(r => r is not null).ToList();
+        return known.Count == 0 ? Residency.OnPrem : known.Max()!.Value;
+    }
 }
 
 /// <summary>
@@ -77,7 +107,9 @@ public sealed partial class GatewayContextReader(
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
+    private readonly SemaphoreSlim _reading = new(1, 1);
     private string? _etag;
+    private long _lastFirstReadAt = long.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -100,8 +132,68 @@ public sealed partial class GatewayContextReader(
         }
     }
 
+    /// <summary>
+    /// Waits for the first context answer when none has come yet (<see cref="GatewayCeiling"/>, so a call right after the
+    /// start does not run at <c>OnPrem</c>): one read for all waiting callers, bounded by <paramref name="wait"/>, and at most
+    /// once per <see cref="KeyWait"/> while the gateway does not answer.
+    /// </summary>
+    public async Task EnsureFirstReadAsync(TimeSpan wait, CancellationToken cancellationToken)
+    {
+        if (features.CredentialMaximum is not null)
+        {
+            return;
+        }
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(wait);
+        try
+        {
+            await _reading.WaitAsync(bounded.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            var now = time.GetTimestamp();
+            if (features.CredentialMaximum is null &&
+                (_lastFirstReadAt == long.MinValue || time.GetElapsedTime(_lastFirstReadAt, now) >= KeyWait))
+            {
+                _lastFirstReadAt = now;
+                try
+                {
+                    await ReadCoreAsync(bounded.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // The wait ran out (a gateway that hangs, #691 review): the caller goes on at OnPrem, never with a bare
+                    // TaskCanceledException.
+                }
+            }
+        }
+        finally
+        {
+            _reading.Release();
+        }
+    }
+
     /// <summary>One read; never throws except on shutdown. Returns whether the features are current.</summary>
     public async Task<bool> ReadAsync(CancellationToken cancellationToken)
+    {
+        await _reading.WaitAsync(cancellationToken);
+        try
+        {
+            return await ReadCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _reading.Release();
+        }
+    }
+
+    private async Task<bool> ReadCoreAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -120,8 +212,16 @@ public sealed partial class GatewayContextReader(
             response.EnsureSuccessStatusCode();
             var context = await response.Content.ReadFromJsonAsync<ContextFeatures>(Json, cancellationToken);
             features.Update(context?.Gateway?.Features ?? []);
+            // The credential key's residencies bound every call's ceiling (Decisions "Residency per level", M-17 C9); an
+            // answer without them keeps the ceiling as it was (unknown: OnPrem).
+            if (context?.Key?.AllowedResidencies is { } residencies)
+            {
+                features.UpdateCredentialResidencies(residencies);
+            }
+
             _etag = response.Headers.ETag?.ToString();
-            LogRead(logger, string.Join(", ", features.Current.Order(StringComparer.Ordinal)));
+            LogRead(logger, string.Join(", ", features.Current.Order(StringComparer.Ordinal)),
+                features.CredentialMaximum is { } maximum ? ResidencyCeiling.ToHeader(maximum) : "unknown");
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -131,12 +231,14 @@ public sealed partial class GatewayContextReader(
         }
     }
 
-    private sealed record ContextFeatures(ContextGatewayPart? Gateway);
+    private sealed record ContextFeatures(ContextGatewayPart? Gateway, ContextKeyPart? Key);
+
+    private sealed record ContextKeyPart(IReadOnlyList<string>? AllowedResidencies);
 
     private sealed record ContextGatewayPart(IReadOnlyList<string>? Features);
 
-    [LoggerMessage(LogLevel.Information, "Gateway features: {Features}")]
-    private static partial void LogRead(ILogger logger, string features);
+    [LoggerMessage(LogLevel.Information, "Gateway features: {Features}; the credential key's ceiling: {Ceiling}")]
+    private static partial void LogRead(ILogger logger, string features, string ceiling);
 
     [LoggerMessage(LogLevel.Warning, "Reading the gateway context failed ({Error}, HTTP {Status}); the last features are kept")]
     private static partial void LogFailed(ILogger logger, string error, int? status);

@@ -159,11 +159,6 @@ internal sealed class EvalRig : IAsyncDisposable
             settings["Gateway:Key"] = FakeGatewayFactory.WorkerCredentialKey;
         }
 
-        if (maxResidency is not null)
-        {
-            settings["Gateway:MaxResidency"] = maxResidency;
-        }
-
         builder.Configuration.AddInMemoryCollection(settings);
         var logs = new CapturingLoggerProvider();
         builder.Logging.ClearProviders().AddProvider(logs);
@@ -174,6 +169,8 @@ internal sealed class EvalRig : IAsyncDisposable
         builder.Services.AddSingleton<IGatewayModelPrices, PostgresGatewayModelPrices>();
         builder.CapGatewayCalls(Residency.Eu); // as AddRagWorker does: the worker's maximum (identity design §4.7)
         builder.AddGatewayClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
+        // The credential key's residencies (M-17 C9): up to maxResidency, all by default.
+        builder.Services.UseGatewayCredentialCeiling(maxResidency is null ? Residency.External : Enum.Parse<Ume.Rag.Domain.Residency>(maxResidency));
         builder.Services.AddSingleton<EmbeddingClient>();
         builder.AddRagEvalSets();
         builder.Services.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());

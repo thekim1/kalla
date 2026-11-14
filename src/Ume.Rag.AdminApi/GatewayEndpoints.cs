@@ -13,9 +13,9 @@ namespace Ume.Rag.AdminApi;
 /// V8 (admin design §4.6, identity §4.7, gateway-changes §13.4): a model is servable at a ceiling when the mirror knows it
 /// with a residency within the ceiling, and the gateway's <c>/v1/models</c> called with that level's key and ceiling lists
 /// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-ume-on-behalf-of</c>.
-/// The ceiling is capped by <c>Gateway:MaxResidency</c> first, as chat caps it (#237).
+/// The ceiling is lowered to rag-admin's credential key's residencies first, as chat lowers it (#237, M-17 C9).
 /// </summary>
-public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOptions<GatewayOptions> options, GatewayFeatures features)
+public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, GatewayCeiling serviceCeiling, GatewayFeatures features)
 {
     /// <summary>The gateway acts as keys (feature <c>act-as-key</c> in this service's context, gateway phase 2; B-43).</summary>
     public bool ActsAsKeys => features.ActAsKey;
@@ -29,7 +29,7 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
     public async Task EnsureServableAsync(string model, Residency ceiling, CancellationToken cancellationToken, Guid? gatewayKeyId = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(model);
-        ceiling = options.Value.Cap(ceiling);
+        ceiling = await serviceCeiling.CapAsync(ceiling, cancellationToken);
         var parameters = new Dictionary<string, string> { ["model"] = model, ["ceiling"] = ResidencyCeiling.ToHeader(ceiling) };
         var row = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == model, cancellationToken);
         if (row is null || !row.Residencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= ceiling))
@@ -58,7 +58,7 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
             return [];
         }
 
-        ceiling = options.Value.Cap(ceiling);
+        ceiling = await serviceCeiling.CapAsync(ceiling, cancellationToken);
         IReadOnlySet<string> listed;
         try
         {
@@ -108,10 +108,11 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
 
 /// <summary>
 /// Which mirror models the platform's key may use (#447, admin design §4.5): the gateway's <c>/v1/models</c> at a ceiling
-/// (capped by <c>Gateway:MaxResidency</c>), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
+/// (lowered to rag-admin's credential key's residencies), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
 /// for the level, unreachable, refused); a failure is not cached, so the next picker load asks again.
 /// </summary>
-public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, TimeProvider time, GatewayFeatures features)
+public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, GatewayCeiling serviceCeiling, TimeProvider time,
+    GatewayFeatures features)
 {
     public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(5);
 
@@ -129,7 +130,7 @@ public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<Gatewa
             return null; // no gateway configured here: availability unknown
         }
 
-        ceiling = options.Value.Cap(ceiling);
+        ceiling = await serviceCeiling.CapAsync(ceiling, cancellationToken);
         var now = time.GetUtcNow();
         if (_cache.TryGetValue((ceiling, asKey), out var cached) && now - cached.At < CacheFor)
         {
@@ -409,7 +410,7 @@ public static class GatewayEndpoints
     /// level is reported as <c>error</c> with <see cref="GatewayModelSync.ErrorText"/>, so the page always answers.
     /// </summary>
     private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, OrganisationSync organisation,
-        IOptions<GatewayOptions> options, GatewayFeatures features, IntegrationApiClient integration, CancellationToken ct)
+        IOptions<GatewayOptions> options, GatewayFeatures features, GatewayCeiling serviceCeiling, IntegrationApiClient integration, CancellationToken ct)
     {
         var profiles = await db.EmbeddingProfiles.AsNoTracking().Where(p => p.State == EmbeddingProfileStates.Active)
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.Name).ToListAsync(ct);
@@ -422,10 +423,11 @@ public static class GatewayEndpoints
         var model = profiles.FirstOrDefault()?.GatewayModel;
         var dimensions = profiles.FirstOrDefault() is { RequestDimensions: true } first ? first.Dimensions : (int?)null;
         var levels = new List<GatewayLevelStatus>();
+        var maximum = configured ? await serviceCeiling.MaximumAsync(ct) : Residency.OnPrem;
         foreach (var level in Enum.GetValues<Residency>())
         {
             var name = ResidencyCeiling.ToHeader(level);
-            if (!configured || model is null || options.Value.KeyFor(level) is null)
+            if (!configured || model is null || options.Value.KeyFor(level, maximum) is null)
             {
                 levels.Add(new GatewayLevelStatus(name, "not_configured", null, null, null, null));
                 continue;
@@ -456,7 +458,7 @@ public static class GatewayEndpoints
         }
 
         var context = organisation.Status;
-        var acted = configured && features.ActAsKey ? await ActedAsync(db, gateway, options.Value, ct) : null;
+        var acted = configured && features.ActAsKey ? await ActedAsync(db, gateway, await serviceCeiling.MaximumAsync(ct), ct) : null;
         return new GatewayStatus(configured, model, levels, sync.Status, canaries, context.Gateway, context, acted)
         {
             Integration = new IntegrationReadback(integration.Configured, integration.LastError),
@@ -464,7 +466,7 @@ public static class GatewayEndpoints
     }
 
     /// <summary>The acted check of the status (B-43): <c>/v1/models</c> as the first usable mirrored key, at the service's maximum.</summary>
-    private static async Task<GatewayActedStatus> ActedAsync(RagDbContext db, GatewayApi gateway, GatewayOptions options, CancellationToken ct)
+    private static async Task<GatewayActedStatus> ActedAsync(RagDbContext db, GatewayApi gateway, Residency maximum, CancellationToken ct)
     {
         var key = await db.GatewayKeys.AsNoTracking().Where(k => k.Status == "Active" && k.OwnerActive && k.Usable).OrderBy(k => k.Name).FirstOrDefaultAsync(ct);
         if (key is null)
@@ -474,7 +476,7 @@ public static class GatewayEndpoints
 
         try
         {
-            await gateway.ListModelsAsync(options.Maximum, ct, key.Id);
+            await gateway.ListModelsAsync(maximum, ct, key.Id);
             return new GatewayActedStatus(key.Id, key.Name, "ok", null);
         }
         catch (GatewayDelegationEchoException)

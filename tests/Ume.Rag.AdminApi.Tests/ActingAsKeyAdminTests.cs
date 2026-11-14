@@ -56,6 +56,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
         {
             foreach (var name in new[] { GatewayChatClient.HttpClientName, GatewayQueryEmbedder.HttpClientName, GatewayContextReader.HttpClientName })
             {
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new Sent(gateway.Server.CreateHandler(), _sent));
             }
         });

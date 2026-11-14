@@ -94,7 +94,8 @@ to the services and verifies them against their internal CAs, so nothing else ne
    has every field):
    - *Access → Integrations*: create the integration `Ume.Rag` with its owner team.
    - Three **credential keys** in it, one per service: `Ume.Rag api`, `Ume.Rag admin` (scopes `organisation.read` and
-     `usage.read`) and `Ume.Rag worker` (residencies `OnPrem` and `Eu` only). `RequireMaxResidency` on, PII policy
+     `usage.read`) and `Ume.Rag worker`, each with the residencies `OnPrem` and `Eu` only (register M2: every model call
+     EU-hosted). These residencies are Ume.Rag's ceiling: no call carries a higher one. `RequireMaxResidency` on, PII policy
      `Off` or `Allow`. **Address list:** the services reach the gateway over the stack's internal network `llm`, whose
      subnet Docker chose (Portainer: *Networks → <stack>_llm*, or `docker network inspect <stack>_llm`); allow that
      subnet, or leave the list empty.

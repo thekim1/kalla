@@ -1,5 +1,7 @@
 extern alias fakegateway;
 
+using Ume.Rag.TestKit;
+
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
@@ -72,6 +74,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         builder.Services.AddSingleton<TimeProvider>(new FakeTimeProvider(ProcessingHarness.Now));
         builder.Services.AddOptions<Jobs.WorkerOptions>().BindConfiguration(Jobs.WorkerOptions.SectionName);
         builder.AddRagProcessing();
+        builder.Services.UseGatewayCredentialCeiling();
         builder.Services.AddHttpClient(EmbeddingClient.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => primary ?? gateway.Server.CreateHandler())
             .AddHttpMessageHandler(() => new RecordingHandler(recorder));

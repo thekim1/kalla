@@ -63,6 +63,7 @@ public sealed class OrgSyncFixture : RagDatabase, IAsyncLifetime
             web.ConfigureTestServices(services =>
             {
                 services.AddHeaderAuthentication();
+                services.UseGatewayCredentialCeiling();
                 services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             });
         });

@@ -411,7 +411,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         }
 
         web.ConfigureTestServices(services =>
-            services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
+            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
     });
 
     private static KeyStore OtherPepperKeyStore(WebApplicationFactory<api::Program> api) =>

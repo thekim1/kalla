@@ -144,8 +144,7 @@ services:
       BlobStore__Root: /data/blobs/rag
       # Its gateway credential key is the secret file Gateway__Key (init-deployment.sh --gateway-credential-key-file).
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
-      # Caps every model call's ceiling (identity design §4.7): Eu under register M2; empty once External routes exist.
-      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
+      # Every model call's ceiling is capped by this key's residencies in the gateway (identity design §4.7, M-17 C9).
       # Open WebUI's users are trusted for the deployment's own Open WebUI client, which rag-migrate registers from the key
       # init-deployment.sh generated; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
       # The origin staff browsers reach rag-api at (J9, #210): citation links are absolute, so they resolve from Open
@@ -225,7 +224,6 @@ services:
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
-      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
       # The gateway Admin API's base URL for its Integration API (/integration/v1): the cost and budget read-back with
       # this service's credential key, which needs the scope usage.read (#580). Empty: no read-back.
       Gateway__IntegrationApiUrl: ${UME_RAG_GATEWAY_INTEGRATION_API_URL:-}
