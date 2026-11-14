@@ -6,9 +6,11 @@ name: Release
 #      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav,
 #      renderer and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET
 #      services, Syft for the other four);
-#   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults to those digests, and
-#      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test;
-#   4. a GitHub release is created with the bundle, the SBOMs and SHA256SUMS.
+#   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults and the Portainer stack to those digests;
+#      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test, and deploy/tests/portainer-boot.sh
+#      boots the Portainer stack (the gateway from the release it pins, the profiles clamav and openwebui);
+#   4. a GitHub release is created with the bundle, the Portainer stack, the SBOMs and SHA256SUMS, and a pull request
+#      pins deploy/portainer/ to the release's images (not for a pre-release).
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
 # nothing reaches ghcr.io and no release or tag is created.
 on:
@@ -286,6 +288,12 @@ jobs:
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
             --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker --render
+      - name: Boot the Portainer stack
+        # The release's compose.portainer.yaml asset, started as Portainer starts it: the stack file and variables
+        # only, the gateway's images from the release it pins, Ume.Rag's from this run, with clamav and openwebui
+        # (deploy-configuration plan, step C0). After the smoke test, which has removed its own stack by now.
+        run: |
+          bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: release
@@ -305,6 +313,7 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - name: GitHub CLI
@@ -353,3 +362,24 @@ jobs:
           prerelease=""; case "$version" in *-*) prerelease="--prerelease";; esac
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "Ume Rag $version" --notes-file notes.md $prerelease \
             release/dist/*
+      - name: Open the pull request that pins the Portainer stack to this release
+        # deploy/portainer/ on main then names this release's images, as the release's compose.portainer.yaml asset
+        # does (build-stack.sh --images; the gateway release stays the one the committed file names). Never fails the
+        # release: the asset is published either way, and the same command works by hand. Checks do not start on a pull
+        # request opened with the workflow's token: close and reopen it to run them. Needs the repository setting
+        # "Allow GitHub Actions to create and approve pull requests".
+        if: ${{ !contains(github.ref_name, '-') }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"; branch="a/pin-portainer-$version"
+          git fetch --depth 1 origin main
+          git switch -c "$branch" FETCH_HEAD
+          sh deploy/portainer/build-stack.sh --images release/images.env current
+          if git diff --quiet -- deploy/portainer; then echo "deploy/portainer/ already names $version"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Portainer stack pinned to Ume.Rag $version's images" -- deploy/portainer
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Portainer stack pinned to Ume.Rag $version's images" \
+            --body "Opened by the release of \`$GITHUB_REF_NAME\`: \`deploy/portainer/build-stack.sh --images images.env current\`, so the template and \`compose.portainer.yaml\` name the release's images, as the release's \`compose.portainer.yaml\` asset does. Close and reopen this pull request to start its checks."

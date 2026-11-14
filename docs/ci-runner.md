@@ -18,7 +18,9 @@ the browser ("The server cannot be reached") although the same commit passed alo
 
 - **Before a release, run a release dry run** and fix what it finds:
   `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 30 minutes). It is the only run of the
-  bundle's smoke test (`deploy/tests/release-smoke.sh`), and it never reaches the publish job.
+  bundle's smoke test (`deploy/tests/release-smoke.sh`) and of the Portainer stack's boot test
+  (`deploy/tests/portainer-boot.sh`: the release's `compose.portainer.yaml` with the gateway's pinned release, `clamav`
+  and `openwebui`), and it never reaches the publish job.
 - **The runner has no sudo, no .NET 8 and no `gh`.** A workflow that needs a tool downloads a pinned, checksummed copy
   (as `release.yml` does for Syft and `gh`) or rolls forward (`DOTNET_ROLL_FORWARD: Major` for the net8-only SBOM tool).
 - **Reading a failed smoke test:** `gh run view <id> --log-failed` is long; grep `ok:|error:` for the script's own

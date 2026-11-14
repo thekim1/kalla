@@ -312,9 +312,10 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
 
 **Changes that need a second step.**
 
-- **A PR that changes `deploy/postgres/*.sql`** must also regenerate `deploy/portainer/compose.portainer.yaml`
-  (`deploy/portainer/build-stack.sh <gateway compose file>`), or the Portainer stack lacks the change (#566 caught
-  B-30's grants missing).
+- **A PR that changes `deploy/postgres/*.sql`, `deploy/portainer/bootstrap.sh` or the Portainer template** must also
+  regenerate `deploy/portainer/compose.portainer.yaml` (`sh deploy/portainer/build-stack.sh current`: the gateway
+  release the file already names), or the Portainer stack lacks the change (#566 caught B-30's grants missing).
+  `verify.yml`'s deploy-checks fail on a stale file (`build-stack.sh --check`).
 - **xunit v3 test output** (`TestOutputHelper.WriteLine`) shows only in a report: `--report-xunit-trx --results-directory
   DIR`, then the TRX's `<Message>` elements.
 - **Two open PRs with an EF migration each:** the second to merge regenerates its own. Keep a copy of the migration's

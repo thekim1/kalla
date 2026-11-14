@@ -326,6 +326,11 @@ jobs:
           kustomize "$RUNNER_TEMP/k8s/example" > "$RUNNER_TEMP/k8s.yaml"
           for kind in NetworkPolicy Deployment StatefulSet Job; do printf '%s ' "$kind"; grep -c "^kind: $kind$" "$RUNNER_TEMP/k8s.yaml"; done
           grep -q 'name: rag-renderer' "$RUNNER_TEMP/k8s.yaml"
+      - name: The Portainer stack is what its template gives
+        # deploy/portainer/compose.portainer.yaml is generated (build-stack.sh): a change to the template, to
+        # bootstrap.sh or to a file it includes that was not followed by a rebuild fails here, not at a deploy. Built
+        # from the gateway release the committed file names (a download from the gateway's public repository).
+        run: sh deploy/portainer/build-stack.sh --check
       - name: Release bundle pins every image
         # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
         # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
