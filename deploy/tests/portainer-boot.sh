@@ -156,7 +156,7 @@ log="$(dc logs --no-color --no-log-prefix rag-bootstrap)"
 grep -q '^rag-bootstrap: certificates and secrets ready$' <<< "$log" || fail "rag-bootstrap did not finish its secrets"
 checklist="$(sed -n '/^rag-bootstrap: still to do/,$p' <<< "$log")"
 [ -n "$checklist" ] || fail "rag-bootstrap printed no checklist, though this test sets no gateway credential key"
-sed 's/^/  /' <<< "$checklist"
+awk '{print "  " $0}' <<< "$checklist"
 items="$(grep -c '^  - ' <<< "$checklist" || true)"
 for var in UME_RAG_API_GATEWAY_KEY UME_RAG_ADMIN_GATEWAY_KEY UME_RAG_WORKER_GATEWAY_KEY UME_RAG_OPENWEBUI_API_KEY; do
   grep -q "^  - $var" <<< "$checklist" || fail "the checklist does not name $var"
