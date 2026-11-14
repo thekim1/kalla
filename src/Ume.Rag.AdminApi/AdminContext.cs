@@ -287,12 +287,20 @@ public sealed class AdminValidationFilter : IEndpointFilter
                 var i = 0;
                 foreach (var child in children)
                 {
-                    Validate(child, $"{prefix}{JsonNamingPolicy.CamelCase.ConvertName(property.Name)}[{i++}].", errors);
+                    var path = $"{prefix}{JsonNamingPolicy.CamelCase.ConvertName(property.Name)}[{i++}].";
+                    if (child is not null) // a null entry is the endpoint's to skip or refuse (CollectionLinks skips it)
+                    {
+                        Validate(child, path, errors);
+                    }
                 }
             }
         }
     }
 }
 
-/// <summary>Base of admin request bodies: DataAnnotations and <see cref="IValidatableObject"/> rules, checked by <see cref="AdminValidationFilter"/>.</summary>
+/// <summary>
+/// Base of admin request bodies: DataAnnotations and <see cref="IValidatableObject"/> rules, checked by <see cref="AdminValidationFilter"/>.
+/// Every admin type with validation attributes derives from it, nested ones included, or its attributes are never checked (#699;
+/// <c>AdminRequestValidationTests</c> enforces it).
+/// </summary>
 public abstract record AdminRequest;
