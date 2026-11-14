@@ -35,7 +35,6 @@ internal static class IngestionConfigModel
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.TrustedProxies).HasColumnType("text[]");
             e.Property(x => x.RetentionLastRunError).HasMaxLength(500);
-            e.Property(x => x.WorkerConcurrency).HasColumnType("jsonb");
             e.Property(x => x.DegradedFailureRatio).HasPrecision(5, 4);
             e.Property(x => x.PreviewMaxUsd).HasPrecision(10, 4);
             e.Property(x => x.DefaultSchedules).HasColumnType("jsonb");

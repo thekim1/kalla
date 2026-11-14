@@ -32,9 +32,6 @@ public sealed class PlatformSettings
     public DateTimeOffset? RetentionLastRunAt { get; set; }
     public string? RetentionLastRunError { get; set; }
 
-    /// <summary>Fleet-wide worker shares and caps (<c>jsonb</c>); per-instance concurrency is configuration.</summary>
-    public string WorkerConcurrency { get; set; } = "{}";
-
     /// <summary>A run is <c>degraded</c> above this failure ratio (engine design §10.3).</summary>
     public decimal DegradedFailureRatio { get; set; } = 0.05m;
 

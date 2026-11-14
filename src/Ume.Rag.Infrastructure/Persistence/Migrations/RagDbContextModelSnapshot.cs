@@ -3166,10 +3166,6 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<string>("WorkerConcurrency")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
                     b.HasKey("Id");
 
                     b.ToTable("Settings", "config", t =>
