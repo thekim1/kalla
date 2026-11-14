@@ -162,7 +162,15 @@ public sealed partial class GatewayContextReader(
                 (_lastFirstReadAt == long.MinValue || time.GetElapsedTime(_lastFirstReadAt, now) >= KeyWait))
             {
                 _lastFirstReadAt = now;
-                await ReadCoreAsync(bounded.Token);
+                try
+                {
+                    await ReadCoreAsync(bounded.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // The wait ran out (a gateway that hangs, #691 review): the caller goes on at OnPrem, never with a bare
+                    // TaskCanceledException.
+                }
             }
         }
         finally

@@ -13,7 +13,7 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// </summary>
 public sealed class GatewayCeiling(GatewayFeatures features, GatewayContextReader reader, IOptionsMonitor<GatewayOptions> options)
 {
-    /// <summary>How long a call waits for the first context answer.</summary>
+    /// <summary>How long a call waits for the first context answer (<c>Gateway:FirstContextWait</c>, default 10 s).</summary>
     public static readonly TimeSpan FirstReadWait = TimeSpan.FromSeconds(10);
 
     /// <summary>The maximum as known now: <c>OnPrem</c> until the first context answer.</summary>
@@ -32,7 +32,7 @@ public sealed class GatewayCeiling(GatewayFeatures features, GatewayContextReade
         var gateway = options.CurrentValue;
         if (features.CredentialMaximum is null && !string.IsNullOrEmpty(gateway.Key) && !string.IsNullOrWhiteSpace(gateway.BaseUrl))
         {
-            await reader.EnsureFirstReadAsync(FirstReadWait, cancellationToken);
+            await reader.EnsureFirstReadAsync(gateway.FirstContextWait ?? FirstReadWait, cancellationToken);
         }
 
         return Maximum;

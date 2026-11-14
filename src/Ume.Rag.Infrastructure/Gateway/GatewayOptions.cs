@@ -44,6 +44,12 @@ public sealed class GatewayOptions
     /// </summary>
     public bool RequireDelegationEcho { get; set; } = true;
 
+    /// <summary>
+    /// How long a model call waits for the first context answer before it goes on at <c>OnPrem</c> (<c>Gateway:FirstContextWait</c>;
+    /// null: <see cref="GatewayCeiling.FirstReadWait"/>, 10 s).
+    /// </summary>
+    public TimeSpan? FirstContextWait { get; set; }
+
     /// <summary>How often each service reads its own <c>GET /v1/ume/context</c> for the gateway's features (identity §4.7).</summary>
     public TimeSpan ContextInterval { get; set; } = TimeSpan.FromMinutes(5);
 

@@ -167,6 +167,39 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         stub.Calls.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task A_context_read_that_hangs_ends_with_the_wait_and_the_call_goes_on_at_OnPrem_without_a_bare_cancellation()
+    {
+        // #691 review: a black-holed gateway (the connect hangs) must not throw TaskCanceledException into the caller.
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection([
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey), new("Gateway:FirstContextWait", "00:00:00.200"),
+        ]);
+        var stub = new CountingHandler();
+        builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => stub);
+        builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new HangingHandler());
+        using var host = builder.Build();
+        var ceiling = host.Services.GetRequiredService<GatewayCeiling>();
+
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        (await ceiling.CapAsync(Residency.External, Ct)).ShouldBe(Residency.OnPrem);
+        waited.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+        // The clean refusal above the ceiling, not a TaskCanceledException; and an OnPrem call goes.
+        await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu)));
+        using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
+        stub.Calls.ShouldBe(1);
+    }
+
+    /// <summary>Never answers until the request is cancelled: a gateway behind a firewall that drops packets.</summary>
+    private sealed class HangingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
+
     [Theory]
     [InlineData(new string[0], Residency.External)]
     [InlineData(new[] { "OnPrem" }, Residency.OnPrem)]
