@@ -48,6 +48,7 @@ public static class KeyEndpoints
                 {
                     var client = await admin.Db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Id == request.ClientId, attempt)
                         ?? throw AdminFaults.Field("clientId", AdminErrorCodes.InvalidValue);
+                    RefuseManaged(client);
                     var (key, department) = await AddSecretKeyAsync(admin, client, request.Name, request.TeamId, request, generated, protection, attempt);
                     return new AdminChange<KeyDto>(KeyDto.Of(key, client.Name, admin.Now), "create", AuditEntityTypes.Key, key.Id, null, KeyAudit.Of(key))
                     {
@@ -79,6 +80,7 @@ public static class KeyEndpoints
                 var (replacement, old) = await admin.WriteAsync(async attempt =>
                 {
                     var old = await FindAsync(admin, id, attempt, tracked: true);
+                    RefuseManaged(old.Client!);
                     if (!old.IsUsable(admin.Now) || old.RotatedToKeyId is not null)
                     {
                         throw AdminFaults.Of(AdminErrorCodes.KeyNotRotatable);
@@ -116,6 +118,7 @@ public static class KeyEndpoints
                 await DtoAsync(admin, await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
+                    RefuseManaged(key.Client!);
                     var before = KeyAudit.Of(key);
                     KeyRotation.Revoke(key, admin.Now);
                     return new AdminChange<ApiKey>(key, "revoke", AuditEntityTypes.Key, key.Id, before, KeyAudit.Of(key))
@@ -126,6 +129,18 @@ public static class KeyEndpoints
             .RequireAuthorization(AdminPolicies.Manage).WithName("RevokeKey").WithSummary("Revoke a key now");
 
         return api;
+    }
+
+    /// <summary>
+    /// The deployment's own client (identity design §5.2, M-17 C4): rag-migrate keeps its one key, the deployment's, so a key of it
+    /// is never made, rotated or revoked here.
+    /// </summary>
+    private static void RefuseManaged(Client client)
+    {
+        if (client.IsManagedByDeployment)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.ClientManagedByDeployment);
+        }
     }
 
     /// <summary>Every key for a platform admin; else the keys of teams in the caller's departments (gateway <c>KeyTeams</c>).</summary>

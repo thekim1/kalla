@@ -150,8 +150,8 @@ services:
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       # Caps every model call's ceiling (identity design §4.7): Eu under register M2; empty once External routes exist.
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
-      # Open WebUI's client in the registry; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
-      OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
+      # Open WebUI's users are trusted for the deployment's own Open WebUI client, which rag-migrate registers from the key
+      # init-deployment.sh generated; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
       # The origin staff browsers reach rag-api at (J9, #210): citation links are absolute, so they resolve from Open
       # WebUI too (relative links would resolve against Open WebUI's origin). init-deployment.sh writes it.
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}

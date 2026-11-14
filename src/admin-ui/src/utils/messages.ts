@@ -47,6 +47,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   slug_taken: 'The short name {slug} is already in use. Try {suggestion}.',
   upload_batch_committed: 'The batch has already been saved with other files.',
   key_not_rotatable: 'Only an active key that has not already been replaced can be rotated.',
+  client_managed_by_deployment: 'The deployment manages this app’s key. To replace it, deploy a new one.',
   key_revoked: 'The key is revoked.',
   key_secret_unavailable: 'The key’s secret cannot be shown. Rotate the key to get one that can be shown.',
   key_scope_invalid: 'A key can only be limited to assistants and knowledge bases in the team’s department.',

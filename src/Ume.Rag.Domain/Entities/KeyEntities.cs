@@ -42,6 +42,14 @@ public sealed class Client
 
     public string? PortalUrl { get; set; }
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// The deployment's own client (identity design §5.2, M-17 C4): <c>rag-migrate</c> creates it and keeps its one key, the
+    /// one the deployment generated; the admin edits its settings but not its keys. Only the managed <c>open-webui</c> client's
+    /// users are trusted from their JWT. At most one per kind (<c>IX_Clients_Managed</c>).
+    /// </summary>
+    public bool IsManagedByDeployment { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 

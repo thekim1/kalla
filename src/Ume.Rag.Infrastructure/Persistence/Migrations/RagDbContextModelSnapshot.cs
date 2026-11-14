@@ -864,6 +864,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsManagedByDeployment")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -906,6 +909,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Clients_Managed")
+                        .HasFilter("\"IsManagedByDeployment\"");
 
                     b.HasIndex("OAuthClientId")
                         .IsUnique();

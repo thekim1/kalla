@@ -136,6 +136,9 @@ public static class AdminErrorCodes
     /// <summary>Only active keys that have not been rotated can be rotated.</summary>
     public static AdminErrorCode KeyNotRotatable { get; } = new("key_not_rotatable", 409, "Only an active key that has not been rotated can be rotated.");
 
+    /// <summary>The deployment's own client (identity design §5.2): its key is the deployment's, not the admin's (M-17 C4).</summary>
+    public static AdminErrorCode ClientManagedByDeployment { get; } = new("client_managed_by_deployment", 409, "The deployment manages this client's key; deploy a new one to replace it.");
+
     public static AdminErrorCode KeyRevoked { get; } = new("key_revoked", 409, "The key is revoked.");
 
     /// <summary>The key has no stored secret (created outside the admin, e.g. by a seed); rotate it to get one that can be shown.</summary>
@@ -295,7 +298,7 @@ public static class AdminErrorCodes
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive, ReasonTooShort, DeletionSuperseded, PiiNotFlagged,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
-            SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
+            SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, ClientManagedByDeployment, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,

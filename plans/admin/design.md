@@ -1437,9 +1437,9 @@ Client, audience rows, key and their audit rows are one transaction.
 | Kind | Shown |
 |---|---|
 | `integration`, `internal` | the API address (`<apiBaseUrl>/v1`), the key (once), the model names (the slugs of the assistants picked in step 3, as `GET /v1/models` lists them), and one `curl` call of `POST /v1/chat/completions` with the first model, copied as a block |
-| `open-webui` | the two stack lines of §5.9, until Open WebUI's client is set up by the deployment (the deploy-configuration proposal of #662, its C4, if agreed); then the kind leaves the wizard and its client shows "Managed by the deployment" with no Rotate |
+| `open-webui` | a sentence: the deployment connects Open WebUI by itself (identity design §5.2, M-17 C4). The kind is not offered in Add app ("Set up by the deployment"); the deployment's own client is marked "Managed by the deployment" in the list and the drawer, which hide New key, Rotate, Show key and Revoke for it (the API refuses them with `client_managed_by_deployment`); its settings and assistants are edited as any app's |
 
-The client id is under "Details", not in the main path: only the Open WebUI stack line needs it. Without
+The client id is under "Details", not in the main path. Without
 `apiBaseUrl` the address row says "Ask the platform team for rag-api's address".
 
 **An app's drawer** gains **How to connect** (the same block, the key shown through *Show key*) and replaces *Used by*

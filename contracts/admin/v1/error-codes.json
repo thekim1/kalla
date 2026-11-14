@@ -202,6 +202,11 @@
       "message": "Only an active key that has not been rotated can be rotated."
     },
     {
+      "code": "client_managed_by_deployment",
+      "status": 409,
+      "message": "The deployment manages this client\u0027s key; deploy a new one to replace it."
+    },
+    {
       "code": "key_revoked",
       "status": 409,
       "message": "The key is revoked."

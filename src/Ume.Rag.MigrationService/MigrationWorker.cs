@@ -46,6 +46,14 @@ public sealed partial class MigrationWorker(
             await SettingsSeeder.SeedAsync(db,
                 configuration.GetSection(SettingsSeedOptions.SectionName).Get<SettingsSeedOptions>() ?? new SettingsSeedOptions(),
                 TimeProvider.System, logger, stoppingToken);
+            // The deployment's own Open WebUI client, from the key the deployment generated (identity design §5.2, M-17 C4).
+            if (configuration["OpenWebUi:ApiKey"] is { Length: > 0 } openWebUiKey)
+            {
+                var hasher = KeyHasherFactory.Create(new SecurityOptions { KeyPepper = configuration["Security:KeyPepper"] ?? "" });
+                LogOpenWebUiClient(logger, await OpenWebUiClientSeeder.SeedAsync(db, hasher, openWebUiKey.Trim(), configuration["OpenWebUi:PortalUrl"],
+                    TimeProvider.System, stoppingToken));
+            }
+
             if (configuration.GetValue("Seed:Enabled", false))
             {
                 await DevSeeder.SeedAsync(db, TimeProvider.System, stoppingToken);
@@ -74,6 +82,9 @@ public sealed partial class MigrationWorker(
             lifetime.StopApplication();
         }
     }
+
+    [LoggerMessage(LogLevel.Information, "The deployment's Open WebUI client: {Outcome}")]
+    private static partial void LogOpenWebUiClient(ILogger logger, OpenWebUiClientSeeder.Outcome outcome);
 
     [LoggerMessage(LogLevel.Information, "Database schema is at migration {Migration}")]
     private static partial void LogMigrated(ILogger logger, string? migration);

@@ -121,11 +121,12 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
             .Replace("{{OLD}}", now.AddDays(-200).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
         using var openWebUi = new FakeOpenWebUi(page);
         var assistant = new AssistantEntry(assistantId, "kompost", "Kompostguiden", "internal", "none", "active", department, null, null, []);
-        var snapshot = PolicySnapshot.Empty with { Version = 1, Assistants = new Dictionary<Guid, AssistantEntry> { [assistantId] = assistant } };
-        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions
+        // The deployment's own Open WebUI client is the one whose feedback is imported (identity §5.2, M-17 C4).
+        var snapshot = PolicySnapshot.Empty with
         {
-            ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test",
-        });
+            Version = 1, Assistants = new Dictionary<Guid, AssistantEntry> { [assistantId] = assistant }, Clients = ManagedOpenWebUi(clientId),
+        };
+        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions { BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
         using var meters = new Meters();
         var importer = new FeedbackImporter(new Clients(openWebUi), api, new Snapshot(snapshot), options, TimeProvider.System, meters,
             NullLogger<FeedbackImporter>.Instance);
@@ -176,11 +177,12 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
         var clientId = Guid.CreateVersion7();
         await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
         using var openWebUi = new FlakyOpenWebUi();
-        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions { ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
+        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions { BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
         using var meters = new Meters();
         var logs = new CapturingLoggerProvider();
         using var loggers = new LoggerFactory([logs]);
-        var importer = new FeedbackImporter(new Clients(openWebUi), api, new Snapshot(PolicySnapshot.Empty with { Version = 1 }), options, TimeProvider.System, meters,
+        var importer = new FeedbackImporter(new Clients(openWebUi), api, new Snapshot(PolicySnapshot.Empty with { Version = 1, Clients = ManagedOpenWebUi(clientId) }), options,
+            TimeProvider.System, meters,
             loggers.CreateLogger<FeedbackImporter>());
 
         async Task<(int FailedRuns, string Outcome)> StateAsync()
@@ -209,4 +211,7 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
         (await StateAsync()).ShouldBe((0, "ok"));
         Alerts().ShouldBe(1);
     }
+
+    private static Dictionary<Guid, ClientEntry> ManagedOpenWebUi(Guid id) =>
+        new() { [id] = new ClientEntry(id, "Open WebUI", ClientKinds.OpenWebUi, "internal", true, true, IsManagedByDeployment: true) };
 }

@@ -355,6 +355,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         (client.Name, client.Kind, client.ClassificationCeiling, client.StoresHistory).ShouldBe(
             (DevSeeder.DevClientName, ClientKinds.OpenWebUi, Classification.Internal, false));
         client.PortalUrl.ShouldBe("http://localhost:7410"); // the assistant page's "Open in" link (admin design §5.4 step 13)
+        client.IsManagedByDeployment.ShouldBeTrue(); // the development deployment's own Open WebUI client (identity §5.2)
         var key = client.Keys.ShouldHaveSingleItem();
         hasher.Verify(Domain.Services.KeyHasher.SecretPrefix + devKey, key.KeyHash).ShouldBeTrue();
         key.Prefix.ShouldBe("ume-rag-sk-DDDD");

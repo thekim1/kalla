@@ -70,52 +70,13 @@ public static class DevSeeder
     /// <summary>
     /// The client <see cref="DevClientName"/> (<c>open-webui</c>, ceiling <c>internal</c>, no history) with the key
     /// <c>ume-rag-sk-</c> + <paramref name="devKey"/> (the AppHost's <c>dev-key</c> parameter, 43 base62 characters), hashed
-    /// with the deployment's pepper as every key (identity §6.1). <paramref name="portalUrl"/> (<c>Seed:DevClientPortalUrl</c>, the
-    /// AppHost's Open WebUI) is the client's <c>PortalUrl</c>, the assistant page's "Open in" link (admin design §5.4 step 13).
-    /// Insert-if-absent: an existing client is left as it is, and the key is added only when no key of the client has its hash.
+    /// with the deployment's pepper as every key (identity §6.1): the development deployment's own Open WebUI client, made and
+    /// kept by <see cref="OpenWebUiClientSeeder"/> as a deployment's is (identity §5.2). <paramref name="portalUrl"/>
+    /// (<c>Seed:DevClientPortalUrl</c>, the AppHost's Open WebUI) is the client's <c>PortalUrl</c>, the assistant page's "Open
+    /// in" link (admin design §5.4 step 13), set when the client is made.
     /// </summary>
-    public static async Task SeedDevClientAsync(
-        RagDbContext db, KeyHasher hasher, string devKey, string? portalUrl, TimeProvider clock, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        ArgumentNullException.ThrowIfNull(hasher);
-        ArgumentNullException.ThrowIfNull(clock);
-        var key = KeyHasher.SecretPrefix + devKey;
-        if (!KeyHasher.LooksLikeKey(key))
-        {
-            throw new InvalidOperationException("Seed:DevKey must be 43 base62 characters (the AppHost's dev-key parameter).");
-        }
-
-        var now = clock.GetUtcNow();
-        if (!await db.Clients.AnyAsync(c => c.Id == DevClientId, cancellationToken))
-        {
-            db.Clients.Add(new Client
-            {
-                Id = DevClientId,
-                Name = DevClientName,
-                Kind = ClientKinds.OpenWebUi,
-                ClassificationCeiling = Classification.Internal,
-                PortalUrl = portalUrl is { Length: > 0 } ? portalUrl : null,
-                UpdatedAt = now,
-                UpdatedBy = EmbeddingProfileSeeder.Actor,
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        var hash = hasher.Hash(key);
-        if (!await db.Keys.AnyAsync(k => k.ClientId == DevClientId && k.KeyHash == hash, cancellationToken))
-        {
-            db.Keys.Add(new ApiKey
-            {
-                ClientId = DevClientId,
-                Name = "dev",
-                Description = "Development key from the AppHost's dev-key parameter",
-                Prefix = key[..15],
-                KeyHash = hash,
-                CreatedAt = now,
-                CreatedBy = EmbeddingProfileSeeder.Actor,
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-    }
+    public static Task SeedDevClientAsync(
+        RagDbContext db, KeyHasher hasher, string devKey, string? portalUrl, TimeProvider clock, CancellationToken cancellationToken) =>
+        OpenWebUiClientSeeder.SeedAsync(db, hasher, KeyHasher.SecretPrefix + devKey, portalUrl, clock, cancellationToken, DevClientId, DevClientName,
+            storesHistory: false);
 }

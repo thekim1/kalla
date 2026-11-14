@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
-import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
+import { COMMON, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientCreateDrawer from './ClientCreateDrawer.vue'
 
 const L = PLATFORM_CLIENTS
@@ -29,7 +29,7 @@ const switchOf = (wrapper: VueWrapper, id: string) => wrapper.get(`#${id}`)
 
 const client: Client = {
   id: '0199-client', name: 'Pilot', kind: 'open-webui', oAuthClientId: null, classificationCeiling: 'internal', storesHistory: true, clientRetentionDays: 90,
-  allowedOrigins: [], toolPolicy: 'none', portalUrl: null, isEnabled: true, updatedAt: '2026-11-13T10:00:00Z', updatedBy: null, version: '1', assistants: [],
+  allowedOrigins: [], toolPolicy: 'none', portalUrl: null, isEnabled: true, isManagedByDeployment: false, updatedAt: '2026-11-13T10:00:00Z', updatedBy: null, version: '1', assistants: [],
 }
 const key = { id: 'k1', name: 'Pilot key', prefix: 'ume-rag-sk-ab', status: 'active' } as ApiKey
 const assistant = (id: string, name: string, classification: AssistantSummary['classification'], published = true): AssistantSummary => ({
@@ -45,18 +45,21 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     vi.spyOn(api.clients, 'connection').mockResolvedValue({ apiBaseUrl: 'https://rag.example.se' })
   })
 
-  it('offers Open WebUI, integration and internal, and shows the later kinds disabled', async () => {
+  it('offers integration and internal; Open WebUI is set up by the deployment, and the later kinds are disabled', async () => {
     const wrapper = await open()
     expect(wrapper.get('[data-test=step]').text()).toBe(L.step(1, 4, L.steps.kind))
-    for (const kind of ['open-webui', 'integration', 'internal']) {
+    for (const kind of ['integration', 'internal']) {
       expect((wrapper.get(`#client-new-kind-${kind}`).element as HTMLInputElement).disabled).toBe(false)
     }
+    // Identity design §5.2 (M-17 C4): the deployment makes its own Open WebUI client.
+    const openWebUi = wrapper.get('#client-new-kind-open-webui')
+    expect((openWebUi.element as HTMLInputElement).disabled).toBe(true)
+    expect(openWebUi.element.closest('label')!.textContent).toContain(L.byDeployment)
     for (const kind of ['widget', 'own-client', 'teams', 'mcp-client', 'entra-app']) {
       const radio = wrapper.get(`#client-new-kind-${kind}`)
       expect((radio.element as HTMLInputElement).disabled).toBe(true)
       expect(radio.element.closest('label')!.textContent).toContain(L.later)
     }
-    expect(wrapper.text()).toContain(L.kinds['open-webui']!.description)
 
     // Next without a kind stays on the step.
     await submit(wrapper)
@@ -66,21 +69,13 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
 
   it('shows only the fields of the chosen kind, with that kind\'s defaults', async () => {
     const wrapper = await open()
-    await pick(wrapper, 'open-webui')
-    expect((wrapper.get('#client-new-classificationCeiling').element as HTMLSelectElement).value).toBe('internal')
-    expect(switchOf(wrapper, 'client-new-storesHistory').attributes('aria-checked')).toBe('true')
-    expect((wrapper.get('#client-new-clientRetentionDays').element as HTMLInputElement).value).toBe('90')
-    expect(wrapper.find('#client-new-portalUrl').exists()).toBe(true)
-    expect(wrapper.find('#client-new-oAuthClientId').exists()).toBe(false)
-    expect(switchOf(wrapper, 'client-new-isEnabled').attributes('aria-checked')).toBe('true')
-
-    await wrapper.get('[data-test=back]').trigger('click')
     await pick(wrapper, 'internal')
     expect((wrapper.get('#client-new-classificationCeiling').element as HTMLSelectElement).value).toBe('sensitive')
     expect(wrapper.find('#client-new-storesHistory').exists()).toBe(false)
     expect(wrapper.find('#client-new-clientRetentionDays').exists()).toBe(false)
     expect(wrapper.find('#client-new-portalUrl').exists()).toBe(false)
     expect(wrapper.text()).toContain(L.hints.oAuthClientId)
+    expect(switchOf(wrapper, 'client-new-isEnabled').attributes('aria-checked')).toBe('true')
 
     await wrapper.get('[data-test=back]').trigger('click')
     await pick(wrapper, 'integration')
@@ -93,7 +88,9 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
 
   it('turns chat history off and disables it, with the reason, at sensitive', async () => {
     const wrapper = await open()
-    await pick(wrapper, 'open-webui')
+    await pick(wrapper, 'integration')
+    await switchOf(wrapper, 'client-new-storesHistory').trigger('click')
+    expect(switchOf(wrapper, 'client-new-storesHistory').attributes('aria-checked')).toBe('true')
     await wrapper.get('#client-new-classificationCeiling').setValue('sensitive')
     const history = switchOf(wrapper, 'client-new-storesHistory')
     expect(history.attributes('disabled')).toBeDefined()
@@ -102,12 +99,12 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     wrapper.unmount()
   })
 
-  it('creates the client with its first key, then shows the secret, the id and the Open WebUI stack lines once', async () => {
-    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client, key: { key, secret: 'ume-rag-sk-secret' } })
+  it('creates the client with its first key, then shows the secret once with how to connect and the id under Details', async () => {
+    const made = { ...client, kind: 'integration', classificationCeiling: 'public' as const, storesHistory: false, clientRetentionDays: null }
+    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: made, key: { key, secret: 'ume-rag-sk-secret' } })
     const wrapper = await open()
-    await pick(wrapper, 'open-webui')
+    await pick(wrapper, 'integration')
     await wrapper.get('#client-new-name').setValue('Pilot')
-    await wrapper.get('#client-new-portalUrl').setValue('https://chat.example.invalid')
     await submit(wrapper)
     expect(wrapper.get('[data-test=step]').text()).toBe(L.step(3, 4, L.steps.assistants))
     await submit(wrapper)
@@ -116,23 +113,18 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     await submit(wrapper)
 
     expect(create).toHaveBeenCalledWith({
-      name: 'Pilot', kind: 'open-webui', classificationCeiling: 'internal', storesHistory: true, clientRetentionDays: 90, oAuthClientId: null,
-      portalUrl: 'https://chat.example.invalid', isEnabled: true, allowedOrigins: [], firstKey: { name: 'Pilot key' }, assistantIds: [],
+      name: 'Pilot', kind: 'integration', classificationCeiling: 'public', storesHistory: false, clientRetentionDays: null, oAuthClientId: null,
+      portalUrl: null, isEnabled: true, allowedOrigins: [], firstKey: { name: 'Pilot key' }, assistantIds: [],
     })
-    expect(wrapper.emitted('created')?.[0]).toEqual([client])
+    expect(wrapper.emitted('created')?.[0]).toEqual([made])
     const result = wrapper.get('[data-test=client-created]')
     expect(result.get('[data-test=secret]').text()).toContain('ume-rag-sk-secret')
     expect(result.get('[data-test=client-id]').text()).toContain('0199-client')
-    const lines = result.get('[data-test=stack-lines]')
-    expect(lines.get('[data-test=copy-value]').text()).toBe('UME_RAG_OPENWEBUI_API_KEY=ume-rag-sk-secret\nUME_RAG_OPENWEBUI_CLIENT_ID=0199-client')
-    expect(lines.findAll('[data-test=copy]')).toHaveLength(1)
-    expect(lines.text()).toContain(L.connect.stackSentence)
-    // Open WebUI gets the stack lines, not an address or a call to try.
-    expect(result.find('[data-test=connect-example]').exists()).toBe(false)
+    expect(result.find('[data-test=connect-example]').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('creates a client without a key when the first key is turned off, and shows no stack lines', async () => {
+  it('creates a client without a key when the first key is turned off', async () => {
     const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: { ...client, kind: 'internal', classificationCeiling: 'sensitive' }, key: null })
     const wrapper = await open()
     await pick(wrapper, 'internal')
@@ -144,20 +136,15 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
 
     expect(create.mock.calls[0]![0]).toMatchObject({ kind: 'internal', classificationCeiling: 'sensitive', storesHistory: false, clientRetentionDays: null, firstKey: null })
     expect(wrapper.find('[data-test=secret]').exists()).toBe(false)
-    expect(wrapper.find('[data-test=stack-lines]').exists()).toBe(false)
     expect(wrapper.text()).toContain(L.connect.noKey)
     wrapper.unmount()
   })
 
-  it('checks the name and the feedback days before the key step', async () => {
+  it('checks the name before the next step', async () => {
     const wrapper = await open()
-    await pick(wrapper, 'open-webui')
+    await pick(wrapper, 'integration')
     await submit(wrapper)
     expect(wrapper.text()).toContain(L.nameRequired)
-    await wrapper.get('#client-new-name').setValue('Pilot')
-    await wrapper.get('#client-new-clientRetentionDays').setValue('ninety')
-    await submit(wrapper)
-    expect(wrapper.text()).toContain(PLATFORM.form.invalidNumber)
     expect(wrapper.get('[data-test=step]').text()).toBe(L.step(2, 4, L.steps.fields))
     wrapper.unmount()
   })

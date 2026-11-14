@@ -51,7 +51,7 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
             http.Request.Headers[OpenWebUiUserJwt.Header] = token;
         }
 
-        return OpenWebUiUserJwt.ValidateAsync(http.Request, new OpenWebUiOptions { ClientId = Guid.NewGuid().ToString(), JwtSecret = secret }, Now)
+        return OpenWebUiUserJwt.ValidateAsync(http.Request, new OpenWebUiOptions { JwtSecret = secret }, Now)
             .GetAwaiter().GetResult();
     }
 
@@ -83,10 +83,20 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", iat = Now.ToUnixTimeSeconds(), exp = long.MaxValue })).Refusal.ShouldBe("user_jwt_invalid");
     }
 
-    private WebApplicationFactory<Program> Host(string? clientId) => db.ApiHost().WithWebHostBuilder(web =>
+    /// <summary>rag-api with the fixture's Open WebUI client the deployment's own (<paramref name="managed"/>) or one made by hand.</summary>
+    private WebApplicationFactory<Program> Host(bool managed)
+    {
+        var snapshot = db.Snapshot();
+        snapshot = snapshot with
+        {
+            Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.OwuiClient ? c.Value with { IsManagedByDeployment = managed } : c.Value),
+        };
+        return HostOf(snapshot);
+    }
+
+    private WebApplicationFactory<Program> HostOf(Ume.Rag.Domain.Access.PolicySnapshot snapshot) => db.ApiHost(snapshot).WithWebHostBuilder(web =>
     {
         web.UseSetting("Rag:Roles", "knowledge,chat");
-        web.UseSetting("OpenWebUi:ClientId", clientId ?? "");
         web.UseSetting("OpenWebUi:JwtSecret", Secret);
         web.ConfigureTestServices(services =>
             services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
@@ -112,7 +122,7 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
     [Fact]
     public async Task An_open_webui_client_chats_as_its_user_and_lists_models_at_client_level()
     {
-        await using var api = Host(db.OwuiClient.ToString());
+        await using var api = Host(managed: true);
         using var client = api.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", db.OwuiKey);
         var now = DateTimeOffset.UtcNow;
@@ -142,9 +152,10 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
     }
 
     [Fact]
-    public async Task Without_a_configured_instance_no_open_webui_user_is_trusted()
+    public async Task An_open_webui_client_the_deployment_did_not_make_is_never_trusted_with_its_users()
     {
-        await using var api = Host(null); // OpenWebUi:ClientId empty (#95): not configured
+        // Identity §5.2 (M-17 C4): only the deployment's own Open WebUI client; one made by hand in the admin, or none (#95), is not.
+        await using var api = Host(managed: false);
         using var client = api.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", db.OwuiKey);
         using var response = await Ask(client, Jwt(Claims(iat: DateTimeOffset.UtcNow)));

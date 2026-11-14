@@ -210,7 +210,10 @@ async function revoke(): Promise<void> {
     <template v-if="client">
       <DetailSection :title="L.facts.title" data-test="client-facts">
         <DetailRow :label="PLATFORM.form.id"><CopyValue :value="client.id" /></DetailRow>
-        <DetailRow :label="L.facts.kind">{{ L.kinds[client.kind]?.title ?? client.kind }}</DetailRow>
+        <DetailRow :label="L.facts.kind">
+          {{ L.kinds[client.kind]?.title ?? client.kind }}
+          <UiBadge v-if="client.isManagedByDeployment" :label="L.managed" :dot="false" class="ml-2" data-test="managed" />
+        </DetailRow>
         <DetailRow :label="L.facts.updated">{{ formatDateTime(client.updatedAt) }}</DetailRow>
       </DetailSection>
 
@@ -233,9 +236,10 @@ async function revoke(): Promise<void> {
       </section>
 
       <section class="mb-8 grid gap-3" aria-labelledby="client-keys-title" data-test="client-keys">
+        <p v-if="client.isManagedByDeployment" class="text-small text-fg-2" data-test="managed-note">{{ L.managedNote }}</p>
         <div class="flex items-center justify-between gap-4">
           <h3 id="client-keys-title" class="text-caption text-fg-3">{{ L.keys.title }}</h3>
-          <UiButton v-if="!keyEdit" size="sm" icon="add" data-test="new-key" @click="editKey(null)">{{ L.keys.newKey }}</UiButton>
+          <UiButton v-if="!keyEdit && !client.isManagedByDeployment" size="sm" icon="add" data-test="new-key" @click="editKey(null)">{{ L.keys.newKey }}</UiButton>
         </div>
         <SecretOnce v-if="secret" :secret="secret" />
         <InlineError v-if="keyError" :message="problemMessage(keyError)" />
@@ -260,7 +264,8 @@ async function revoke(): Promise<void> {
             <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
           </template>
           <template #cell-actions="{ row }">
-            <span v-if="row.status !== 'revoked'" class="flex flex-wrap justify-end gap-1">
+            <!-- The deployment's key is replaced by deploying a new one (identity design §5.2): no actions here. -->
+            <span v-if="row.status !== 'revoked' && !client.isManagedByDeployment" class="flex flex-wrap justify-end gap-1">
               <UiButton v-if="row.status === 'active' && !row.rotatedToKeyId" size="sm" :data-test="`rotate-${row.id}`" @click.stop="startRotate(row)">
                 {{ PLATFORM.actions.rotate }}
               </UiButton>

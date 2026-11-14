@@ -16,7 +16,7 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
   it('lists each app with its kind, information class, state, active keys and last use, and opens its drawer', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.clients, 'list').mockResolvedValue([
-      { id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, activeKeys: 2, lastUsedAt: null },
+      { id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, isManagedByDeployment: false, activeKeys: 2, lastUsedAt: null },
     ])
     const get = vi.spyOn(api.clients, 'get').mockResolvedValue({ id: 'c1', name: 'Open WebUI', kind: 'open-webui', assistants: [] } as unknown as Client)
     vi.spyOn(api.keys, 'list').mockResolvedValue([])

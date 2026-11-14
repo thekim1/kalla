@@ -203,7 +203,7 @@ public sealed partial class ChatApiTests
         {
             snapshot = snapshot with
             {
-                Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi } : c.Value),
+                Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi, IsManagedByDeployment = true } : c.Value),
             };
         }
 
@@ -218,7 +218,6 @@ public sealed partial class ChatApiTests
             web.UseSetting("Gateway:RetryDelay", "00:00:00");
             if (openWebUi)
             {
-                web.UseSetting("OpenWebUi:ClientId", db.IntegrationClient.ToString());
                 web.UseSetting("OpenWebUi:JwtSecret", "open-webui-jwt-secret-for-tests-0123456789");
             }
 

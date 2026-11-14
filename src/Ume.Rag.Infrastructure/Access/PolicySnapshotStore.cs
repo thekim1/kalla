@@ -61,10 +61,10 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         var clients = new Dictionary<Guid, ClientEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "Id", "Name", "Kind", "ClassificationCeiling", "StoresHistory", "IsEnabled" FROM config."Clients"
+            SELECT "Id", "Name", "Kind", "ClassificationCeiling", "StoresHistory", "IsEnabled", "IsManagedByDeployment" FROM config."Clients"
             """, r =>
         {
-            var entry = new ClientEntry(r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetBoolean(4), r.GetBoolean(5));
+            var entry = new ClientEntry(r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetBoolean(4), r.GetBoolean(5), r.GetBoolean(6));
             if (Levels.Rank(entry.Ceiling) is null)
             {
                 LogUnparsable(logger, "Clients", entry.Id);

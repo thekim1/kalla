@@ -450,32 +450,37 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
 }
 
 // Open WebUI against rag-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
-// the seeded dev client "Open WebUI (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key), or, when OpenWebUi:ClientId is
-// set, with that client (one made through the admin API, e.g. the pilot stack run with Seed:Enabled=false, #236) and its
-// key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, the whole ume-rag-sk- key).
+// the development deployment's own Open WebUI client (identity §5.2, M-17 C4): with Seed:Enabled the seeded "Open WebUI
+// (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key); without it (e.g. the pilot stack run with Seed:Enabled=false,
+// #236) the key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, a whole
+// ume-rag-sk- key), which rag-migrate registers as that client (OpenWebUi__ApiKey). rag-api trusts the managed client's users.
 // It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
 // over OIDC through deploy/compose.openwebui.yaml (item 18). Same pin as the Compose file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
 const string OpenWebUiTag = "v0.12.5";
 const string OpenWebUiDigest = "03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded";
-const string DevOpenWebUiClientId = "01929b6e-0000-7000-8000-0000000c11e7"; // DevSeeder.DevClientId
-var openWebUiClientId = e2e ? null : builder.Configuration["OpenWebUi:ClientId"];
-if (openWebUiClientId is { Length: > 0 } && !Guid.TryParse(openWebUiClientId, out _))
-{
-    throw new InvalidOperationException("OpenWebUi:ClientId: the id of an open-webui client (POST /api/clients), a uuid.");
-}
-
-if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWebUi:Enabled", true)
-    && (openWebUiClientId is { Length: > 0 } || builder.Configuration.GetValue("Seed:Enabled", true)))
+var seeded = builder.Configuration.GetValue("Seed:Enabled", true);
+// Without the seed, Open WebUI runs only when the user secrets hold its key (never in the browser tests).
+var configuredOpenWebUiKey = !seeded && !e2e && builder.Configuration["Parameters:openwebui-api-key"] is { Length: > 0 };
+if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWebUi:Enabled", true) && (seeded || configuredOpenWebUiKey))
 {
     var openWebUiJwtSecret = Secret("openwebui-jwt-secret", 48);
     var openWebUiSecretKey = Secret("openwebui-secret-key", 48);
-    // A configured client wins over the seeded one; its key is never generated, only read from the user secrets.
-    var openWebUiApiKey = openWebUiClientId is { Length: > 0 }
-        ? ReferenceExpression.Create($"{builder.AddParameter("openwebui-api-key", secret: true)}")
-        : ReferenceExpression.Create($"ume-rag-sk-{devKey}");
-    api.WithEnvironment("OpenWebUi__ClientId", openWebUiClientId is { Length: > 0 } ? openWebUiClientId : DevOpenWebUiClientId)
-        .WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
+    // Seeded: the dev key (rag-migrate's Seed:DevKey). Otherwise the key is never generated, only read from the user secrets,
+    // and rag-migrate registers it as the deployment's client.
+    ReferenceExpression openWebUiApiKey;
+    if (seeded)
+    {
+        openWebUiApiKey = ReferenceExpression.Create($"ume-rag-sk-{devKey}");
+    }
+    else
+    {
+        var configuredKey = builder.AddParameter("openwebui-api-key", secret: true);
+        migrations.WithEnvironment("OpenWebUi__ApiKey", configuredKey);
+        openWebUiApiKey = ReferenceExpression.Create($"{configuredKey}");
+    }
+
+    api.WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
     var openWebUi = builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
         .WithHttpEndpoint(port: 7410, targetPort: 8080, name: "http")
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
@@ -525,11 +530,8 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("ENABLE_LOGIN_FORM", "true")
         .WaitFor(api);
 
-    // The seeded dev client links the assistant page to this Open WebUI (its PortalUrl, admin design §5.4 step 13).
-    if (openWebUiClientId is not { Length: > 0 })
-    {
-        migrations.WithEnvironment("Seed__DevClientPortalUrl", openWebUi.GetEndpoint("http"));
-    }
+    // The client links the assistant page to this Open WebUI (its PortalUrl, admin design §5.4 step 13), set when made.
+    migrations.WithEnvironment(seeded ? "Seed__DevClientPortalUrl" : "OpenWebUi__PortalUrl", openWebUi.GetEndpoint("http"));
 
     // The feedback importer and pruning (chat design §13.3, §14.2) run when the user secret Parameters:openwebui-admin-api-key
     // holds the API key of Open WebUI's admin (the first local account, minted in Settings › Account).
