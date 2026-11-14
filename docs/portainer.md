@@ -101,9 +101,11 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
    there to choose the assistants it offers (an assistant's *Who can use it* works too).
 
-   Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag) is
-   optional: the file's header has the steps (password sign-in on for a moment, mint the service account's key, set
-   `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, password sign-in off). rag-api finds Open WebUI in the stack by itself.
+   Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag) needs
+   nothing either: the one-shot `rag-openwebui-setup` mints the feedback service account's key once Open WebUI runs
+   (password sign-in stays off) and keeps it while it works, and rag-api finds Open WebUI in the stack by itself. Its log
+   says *minted* or *kept*. A new key: delete `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and update the
+   stack.
 8. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
    `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
    database restored without them is unusable. The stack has no WAL archiving: use `pg_dump` or volume snapshots.

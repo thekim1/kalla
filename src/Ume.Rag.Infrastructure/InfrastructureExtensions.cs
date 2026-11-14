@@ -25,6 +25,9 @@ public static class InfrastructureExtensions
     /// Secret files (<c>Security:SecretsDirectory</c>, one file per key) as configuration, as in the gateway. Reloaded on
     /// change, so a key written by a deployment's bootstrap (a Portainer stack update) applies without a restart where the
     /// code reads it through <c>IOptionsMonitor</c>: the gateway credential key and the Open WebUI feedback key.
+    /// <c>Security:ExtraSecretsDirectory</c> is a second such directory that another job writes, so that job never sees
+    /// this service's own secrets: rag-api's Open WebUI feedback key from <c>rag-openwebui-setup</c> (M-17 C6). It is
+    /// optional, and its keys win over the first directory's.
     /// </summary>
     public static IHostApplicationBuilder AddDeploymentSecrets(this IHostApplicationBuilder builder)
     {
@@ -33,6 +36,12 @@ public static class InfrastructureExtensions
         if (!string.IsNullOrWhiteSpace(directory))
         {
             builder.Configuration.AddKeyPerFile(directory, optional: false, reloadOnChange: true);
+        }
+
+        var extra = builder.Configuration["Security:ExtraSecretsDirectory"];
+        if (!string.IsNullOrWhiteSpace(extra))
+        {
+            builder.Configuration.AddKeyPerFile(extra, optional: true, reloadOnChange: true);
         }
 
         return builder;

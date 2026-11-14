@@ -508,8 +508,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    (`UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`; redirect URI
    `https://<host>/oauth/oidc/login/callback`). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it
    and `rag-migrate` registers it as the deployment's own Open WebUI client (*Apps and keys*, marked *Managed by the
-   deployment*; identity design §5.2). The feedback import's key is minted as the file's header describes (the steps of
-   `deploy/openwebui-feedback-key.sh`, by hand) and set as `UME_RAG_OPENWEBUI_ADMIN_API_KEY`; `rag-bootstrap` points
+   deployment*; identity design §5.2). The feedback import's key is minted by the one-shot `rag-openwebui-setup` (as
+   *The feedback service account* below says for Compose); `rag-bootstrap` points
    rag-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
 6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Ume.Rag's admin
@@ -572,21 +572,17 @@ and deletes feedback past retention with the API key of an Open WebUI admin acco
 `init-deployment.sh --openwebui-host` writes its credentials once into `secrets/openwebui.env` (`WEBUI_ADMIN_EMAIL`
 `feedback-import@localhost`, a generated `WEBUI_ADMIN_PASSWORD`), and Open WebUI creates it as its first user, so as
 its only admin, when it starts on an empty store. Everyone signing in through OIDC gets the role `user`
-(`DEFAULT_USER_ROLE`), so no person becomes admin. Password sign-in is off (`ENABLE_PASSWORD_AUTH`), so once Open
-WebUI runs, mint the key with the script (it needs `curl` and `jq`):
-
-```bash
-sudo deploy/openwebui-feedback-key.sh
-docker compose --env-file deploy/.env restart rag-api
-```
-
-It recreates Open WebUI with password sign-in on (`UME_RAG_OPENWEBUI_PASSWORD_AUTH=true`), signs in as the account,
-mints its key, checks that the key reads the feedback list and is refused on any other route (only
-`API_KEYS_ALLOWED_ENDPOINTS` is open to API keys), writes it to `secrets/api/OpenWebUi__AdminApiKey`, and always
-recreates Open WebUI with password sign-in off again and checks that a sign-in is refused. A re-run rotates the key.
-If the store had users before the account was created (Open WebUI started before this release's `init-deployment.sh`),
-the script stops because the account is not admin: create it as an existing admin with `POST /api/v1/auths/add`
-(name, the email and password from `secrets/openwebui.env`, role `admin`), then run the script. The importer's own
+(`DEFAULT_USER_ROLE`), so no person becomes admin. Password sign-in is always off (`ENABLE_PASSWORD_AUTH`), and nobody
+signs in as the account: `compose.openwebui.yaml`'s one-shot `open-webui-setup` mints its key when Open WebUI starts
+(M-17 C6, `deploy/openwebui/feedback-key-setup.py`). It runs Open WebUI's own image as Open WebUI's user, reads the
+account's id from Open WebUI's store, signs a 5-minute session token with Open WebUI's `WEBUI_SECRET_KEY`, mints the key
+with it, checks that the key reads the feedback list (only `API_KEYS_ALLOWED_ENDPOINTS` is open to API keys) and writes
+it to `secrets/openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api reads without a restart
+(`Security__ExtraSecretsDirectory`). A key that still works is kept on the next `up`; a new key: delete that file and
+run `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d` again. If the store had users before
+the account was created (Open WebUI started before `init-deployment.sh` wrote it), the job stops because the account
+is not admin: create it as an existing admin with `POST /api/v1/auths/add` (name, the email and password from
+`secrets/openwebui.env`, role `admin`), then run `up` again. The importer's own
 settings in `compose.prod.yaml` are added with the importer (P1b item 17, after stream B's L6).
 
 It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, issued in the admin

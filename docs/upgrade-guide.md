@@ -33,6 +33,16 @@ exception, with its own steps.
   profile stays as it is. **Apply:** remove those variables from the stack or `deploy/.env`; Kubernetes: take the new
   base and drop the `ume-rag-migrations-config` entry from your overlay. A new deployment: a platform admin creates the
   profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 6).
+- **The Open WebUI feedback key is minted by the stack (M-17 C6).** A one-shot job (Portainer: `rag-openwebui-setup`;
+  Compose: `open-webui-setup` in `compose.openwebui.yaml`) mints the feedback service account's key after Open WebUI
+  starts, with password sign-in off, into `openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api now reads
+  (`Security__ExtraSecretsDirectory`). `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH` and
+  `deploy/openwebui-feedback-key.sh` are gone; `rag-bootstrap` and `init-deployment.sh` delete the old
+  `api/OpenWebUi__AdminApiKey`. **Apply:** Portainer: paste the new stack file, remove the two variables, update the
+  stack. Compose: re-run `init-deployment.sh` with your options (it creates `secrets/openwebui-feedback`), update the
+  main stack, then `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. Until the job has
+  minted the new key (a minute after Open WebUI starts), the import has none and skips its run. **Check:** the job's log says *minted*, and rag-api's next feedback import
+  runs (within 15 minutes).
 - **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.

@@ -18,7 +18,7 @@ F=/conf
 : "${UME_RAG_API_HOST:?Set UME_RAG_API_HOST (public hostname of rag-api)}"
 ADMIN_HOST="${UME_RAG_ADMIN_HOST:-$UME_RAG_API_HOST}"
 for d in postgres api admin worker parser migrations; do mkdir -p "$C/$d"; done
-for d in postgres api admin worker migrations keys renderer openwebui; do mkdir -p "$S/$d"; done
+for d in postgres api admin worker migrations keys renderer openwebui openwebui-feedback; do mkdir -p "$S/$d"; done
 rand() { openssl rand -hex 32; }
 quiet() { "$@" >/dev/null 2>&1; }
 
@@ -102,7 +102,7 @@ case ",${COMPOSE_PROFILES:-}," in
   *) printf off > "$S/worker/ClamAv__Mode" ;;
 esac
 # Open WebUI's address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui while the openwebui
-# profile is on. The import also needs UME_RAG_OPENWEBUI_ADMIN_API_KEY (below).
+# profile is on. The import also needs the feedback key, which rag-openwebui-setup mints (openwebui-feedback, below).
 # Open WebUI's key for rag-api (M-17 C4, identity design §5.2): generated once; Open WebUI's start-up wrapper exports it
 # as OPENAI_API_KEYS, and rag-migrate registers it as the deployment's own Open WebUI client while the profile is on. A
 # new key: delete .openwebui-rag-api-key in the volume and update the stack (rag-migrate revokes the old one).
@@ -134,8 +134,12 @@ for svc in api admin worker; do
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
-# The feedback service account's Open WebUI key, for rag-api's feedback import (chat design §13.3); empty = none.
-put api OpenWebUi__AdminApiKey "${UME_RAG_OPENWEBUI_ADMIN_API_KEY:-}"
+# The feedback service account's Open WebUI key (chat design §13.3) is minted by rag-openwebui-setup into
+# openwebui-feedback (M-17 C6); the hand-made key of UME_RAG_OPENWEBUI_ADMIN_API_KEY that rag-api read before goes.
+if [ -e "$S/api/OpenWebUi__AdminApiKey" ]; then
+  rm -f "$S/api/OpenWebUi__AdminApiKey"
+  echo "rag-bootstrap: deleted api/OpenWebUi__AdminApiKey; rag-openwebui-setup mints the feedback key now"
+fi
 # The Data API key of the admin's former org sync: the admin syncs with its credential key now.
 if [ -e "$S/admin/OrgSync__DataApiKey" ]; then
   rm -f "$S/admin/OrgSync__DataApiKey"
@@ -160,6 +164,9 @@ chown -R 10001:10001 "$C/parser"
 chown -R 10002:10002 "$S/renderer"
 chown -R 1000:1000 "$S/openwebui" /openwebui-data
 chmod 0700 "$S/openwebui"
+# Written by rag-openwebui-setup (Open WebUI's uid 1000), read by rag-api (group 1654; setgid keeps the group).
+chown 1000:1654 "$S/openwebui-feedback"
+chmod 2750 "$S/openwebui-feedback"
 chown -R 1654:1654 "$C/api" "$C/admin" "$C/worker" "$C/migrations" "$S/api" "$S/admin" "$S/worker" "$S/migrations" "$S/keys"
 chmod 755 "$C" "$S"
 echo "rag-bootstrap: certificates and secrets ready"

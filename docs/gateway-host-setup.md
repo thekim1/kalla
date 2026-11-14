@@ -413,8 +413,8 @@ When stream B's chat API, admin set-up endpoints and Keycloak realm additions ar
 2. Re-run `init-deployment.sh` with `--proxy`, `--upstream-host`, `--oidc-client-secret-file`, and the Open WebUI
    options (`--openwebui-host chat.<domain>`, its OIDC client secret, the api key and client id created in the admin).
    Route the host names through the reverse proxy that already serves the gateway (the script prints the routes).
-3. Start Open WebUI (`docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait`) and mint
-   the feedback key (`sudo deploy/openwebui-feedback-key.sh`): [`docs/test-host.md`](test-host.md), "Open WebUI".
+3. Start Open WebUI (`docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait`); its
+   `open-webui-setup` mints the feedback key: [`docs/test-host.md`](test-host.md), "Open WebUI".
 4. A chat model on the gateway with an `Eu` provider (every chat model on the interim gateway is EU-hosted).
 
 The run book for that step comes with the chat API.

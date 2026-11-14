@@ -19,7 +19,10 @@ public sealed class OpenWebUiOptions
     /// <summary>Open WebUI's address for the feedback import and pruning (chat design §14.2); unset: no import.</summary>
     public Uri? BaseUrl { get; set; }
 
-    /// <summary>The feedback service account's API key (<c>OpenWebUi__AdminApiKey</c>, written by <c>deploy/openwebui-feedback-key.sh</c>).</summary>
+    /// <summary>
+    /// The feedback service account's API key (<c>OpenWebUi__AdminApiKey</c>), minted by the deployment's
+    /// <c>rag-openwebui-setup</c> job into <c>Security:ExtraSecretsDirectory</c> (<c>deploy/openwebui/feedback-key-setup.py</c>).
+    /// </summary>
     public string? AdminApiKey { get; set; }
 
     /// <summary>The import's schedule (§14.2: every 15 minutes).</summary>

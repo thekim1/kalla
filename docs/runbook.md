@@ -670,7 +670,7 @@ chosen one and drops the others.
 2. *A temporary, logged admin-access window.* `ENABLE_ADMIN_CHAT_ACCESS=true` on the Open WebUI service, recreate it,
    an admin signs in and uses *Admin > Users > Chats*, then the flag goes back and the container is recreated again.
    While it is on, **every** Open WebUI admin can read **every** chat. In the pilot stack the only admin is the
-   feedback service account (production-setup.md, *Open WebUI*): it cannot sign in, and its key reaches only the
+   feedback service account (production-setup.md, *Open WebUI*): nobody signs in as it, and its key reaches only the
    feedback routes. So the window needs a person with the admin role for its duration, which W2 prefers to avoid, and
    how the window is logged is not settled. Not tested.
 3. *Another route G1 names.* The chat design lists a read-only query as the third option, but direct SQL against Open
@@ -782,6 +782,7 @@ badge (the gateway still refuses the calls).
   `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, and restart that service
   ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway
   `401` answers in one service's log mean its key expired, was revoked or the rotation's grace period ended first.
-- **The feedback service account's Open WebUI key** (`secrets/api/OpenWebUi__AdminApiKey`): `sudo
-  deploy/openwebui-feedback-key.sh` mints a new one (the old one stops working at once), then `dc restart rag-api`.
-  Its password stays in `secrets/openwebui.env` and is usable only while the script runs.
+- **The feedback service account's Open WebUI key** (`secrets/openwebui-feedback/OpenWebUi__AdminApiKey`; Portainer:
+  `rag-secrets/openwebui-feedback/`): delete the file and run Open WebUI's `up` again (Portainer: update the stack);
+  `open-webui-setup` mints a new one, the old one stops working at once, and rag-api reads the new one without a restart.
+  Its password stays in `secrets/openwebui.env` and is never used: password sign-in is off.
