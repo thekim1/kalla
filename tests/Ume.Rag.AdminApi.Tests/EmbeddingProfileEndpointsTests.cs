@@ -381,4 +381,122 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         using var save = await platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile), Ct);
         save.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
     }
+
+    /// <summary>The mirror synced from <see cref="Gateway"/>, and <c>fake-eu-embed</c>'s context window set by hand (the FakeGateway sends none).</summary>
+    private async Task SyncAsync(HttpClient platform, int contextWindow)
+    {
+        using (var sync = await platform.PostAsync("/api/gateway/sync", null, Ct))
+        {
+            sync.StatusCode.ShouldBe(HttpStatusCode.OK, await sync.Content.ReadAsStringAsync(Ct));
+        }
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = {contextWindow} WHERE "Name" = 'fake-eu-embed'""", Ct);
+    }
+
+    [Fact]
+    public async Task A_new_profile_takes_its_ceiling_and_input_limit_from_the_model_measures_its_size_and_records_the_canary()
+    {
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        await SyncAsync(platform, 8191);
+        var name = "new-" + Guid.NewGuid().ToString("N");
+
+        using var response = await platform.PostAsJsonAsync("/api/embedding-profiles", new { name, gatewayModel = "fake-eu-embed" }, Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        var created = (await response.Content.ReadFromJsonAsync<EmbeddingProfileDto>(Ct))!;
+        response.Headers.Location!.ToString().ShouldBe($"/api/embedding-profiles/{created.Id}");
+        created.Name.ShouldBe(name);
+        created.GatewayModel.ShouldBe("fake-eu-embed");
+        created.Dimensions.ShouldBe(1024); // measured: the FakeGateway's size when no dimensions are sent
+        created.RequestDimensions.ShouldBeFalse();
+        created.MaxInputTokens.ShouldBe(8191); // the model's context window
+        created.MaxResidency.ShouldBe("Eu"); // the model's only residency
+        created.IsDefault.ShouldBeFalse(); // the fixture's profile is the default
+        created.InUse.ShouldBeFalse();
+        created.CanaryRecorded.ShouldBeTrue();
+        created.CanaryCheckedAt.ShouldBeNull();
+        (await CanaryAsync(created.Id)).Dims.ShouldBe(1024);
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var audit = await db.AuditLog.Where(a => a.EntityId == created.Id.ToString() && a.Action == "create").ToListAsync(Ct);
+        audit.ShouldHaveSingleItem().EntityType.ShouldBe("embedding-profile");
+
+        // The same name again: already_exists.
+        using var again = await platform.PostAsJsonAsync("/api/embedding-profiles", new { name, gatewayModel = "fake-eu-embed" }, Ct);
+        again.StatusCode.ShouldBe(HttpStatusCode.Conflict, await again.Content.ReadAsStringAsync(Ct));
+        (await again.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe("already_exists");
+    }
+
+    [Fact]
+    public async Task A_new_profile_that_requests_dimensions_has_that_size_and_its_given_values()
+    {
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        await SyncAsync(platform, 8191);
+
+        using var missing = await platform.PostAsJsonAsync("/api/embedding-profiles",
+            new { name = "x-" + Guid.NewGuid().ToString("N"), gatewayModel = "fake-eu-embed", requestDimensions = true }, Ct);
+        missing.StatusCode.ShouldBe(HttpStatusCode.BadRequest); // requestDimensions needs the size
+
+        var name = "short-" + Guid.NewGuid().ToString("N");
+        using var response = await platform.PostAsJsonAsync("/api/embedding-profiles",
+            new { name, gatewayModel = "fake-eu-embed", requestDimensions = true, dimensions = 768, maxInputTokens = 4000 }, Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        var created = (await response.Content.ReadFromJsonAsync<EmbeddingProfileDto>(Ct))!;
+        created.Dimensions.ShouldBe(768);
+        created.RequestDimensions.ShouldBeTrue();
+        created.MaxInputTokens.ShouldBe(4000);
+        (await CanaryAsync(created.Id)).Dims.ShouldBe(768);
+    }
+
+    [Fact]
+    public async Task A_new_profile_needs_an_embedding_model_of_the_mirror_and_a_passing_test_embedding()
+    {
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        await SyncAsync(platform, 8191);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var chat = await db.GatewayModels.AsNoTracking().Where(m => m.ModelKind == GatewayModelModelKinds.Chat).Select(m => m.Name).FirstAsync(Ct);
+
+        foreach (var model in new[] { chat, "no-such-embed" })
+        {
+            using var refused = await platform.PostAsJsonAsync("/api/embedding-profiles", new { gatewayModel = model, maxInputTokens = 512 }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, model);
+            var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            problem.GetProperty("errorCodes").GetProperty("gatewayModel")[0].GetProperty("code").GetString().ShouldBe("settings_model_residency");
+        }
+
+        // The admin's key may not use the model: the test fails and nothing is stored.
+        var name = "denied-" + Guid.NewGuid().ToString("N");
+        using var denied = await platform.PostAsJsonAsync("/api/embedding-profiles",
+            new { name, gatewayModel = "fake-denied-embed", maxInputTokens = 512, maxResidency = "OnPrem" }, Ct);
+        denied.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity, await denied.Content.ReadAsStringAsync(Ct));
+        var deniedProblem = await denied.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        deniedProblem.GetProperty("code").GetString().ShouldBe("profile_test_failed");
+        deniedProblem.GetProperty("test").GetProperty("error").GetString().ShouldBe("model_not_allowed");
+        (await db.EmbeddingProfiles.AnyAsync(p => p.Name == name, Ct)).ShouldBeFalse();
+
+        // Only a platform admin creates profiles.
+        using var editor = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Editor);
+        using var forbidden = await editor.PostAsJsonAsync("/api/embedding-profiles", new { gatewayModel = "fake-eu-embed" }, Ct);
+        forbidden.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task The_overview_asks_a_platform_admin_for_the_profile_only_while_there_is_no_default()
+    {
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        using var editor = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Editor);
+
+        // The fixture's profile is the default.
+        (await platform.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("needsEmbeddingProfile").GetBoolean().ShouldBeFalse();
+        (await editor.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("needsEmbeddingProfile").GetBoolean().ShouldBeFalse();
+    }
 }

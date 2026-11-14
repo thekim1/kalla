@@ -86,13 +86,6 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
-      # The platform embedding profile (Decisions "Pilot embedding model, U-b"): seeded once, insert-if-absent, when
-      # GatewayModel is set (stream B's EmbeddingProfileSeeder, #123); RequestDimensions sends OpenAI's dimensions (#142).
-      EmbeddingProfile__GatewayModel: ${UME_RAG_EMBEDDING_MODEL:-}
-      EmbeddingProfile__Dimensions: ${UME_RAG_EMBEDDING_DIMENSIONS:-1024}
-      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-true}
-      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8191}
-      EmbeddingProfile__MaxResidency: ${UME_RAG_EMBEDDING_MAX_RESIDENCY:-Eu}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
       - ${UME_RAG_SECRETS_DIR}/migrations:/run/app-secrets:ro

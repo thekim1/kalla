@@ -57,6 +57,46 @@ public sealed record EmbeddingProfileUpdateRequest : AdminRequest, IValidatableO
         EmbeddingProfileRules.ResidencyProblem(MaxResidency) is { } problem ? [new ValidationResult(problem, [nameof(MaxResidency)])] : [];
 }
 
+/// <summary>
+/// A new profile (Decisions "Deploy configuration"; proposal deploy-configuration §2): <see cref="GatewayModel"/> is one of the
+/// mirror's embedding models. Each member left out comes from the model: <see cref="MaxResidency"/> the highest residency it
+/// runs at within the platform ceiling, <see cref="MaxInputTokens"/> its context window, <see cref="Dimensions"/> the length of
+/// the vector the test embedding returns (required with <see cref="RequestDimensions"/>, the size the model is asked for), and
+/// <see cref="Name"/> the model's name.
+/// </summary>
+public sealed record EmbeddingProfileCreateRequest : AdminRequest, IValidatableObject
+{
+    [StringLength(100, MinimumLength = 1)]
+    public string? Name { get; init; }
+
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string GatewayModel { get; init; } = "";
+
+    public bool RequestDimensions { get; init; }
+
+    [Range(1, 4000)]
+    public int? Dimensions { get; init; }
+
+    [Range(1, 1_000_000)]
+    public int? MaxInputTokens { get; init; }
+
+    /// <summary><c>OnPrem</c>, <c>Eu</c> or <c>External</c>, at most the platform ceiling (<c>Eu</c> until M2).</summary>
+    public string? MaxResidency { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (RequestDimensions && Dimensions is null)
+        {
+            yield return new ValidationResult("Required when requestDimensions is true: the size the model is asked for.", [nameof(Dimensions)]);
+        }
+
+        if (MaxResidency is not null && EmbeddingProfileRules.ResidencyProblem(MaxResidency) is { } problem)
+        {
+            yield return new ValidationResult(problem, [nameof(MaxResidency)]);
+        }
+    }
+}
+
 /// <summary>A test with values not saved yet; each member left out takes the stored value.</summary>
 public sealed record EmbeddingProfileTestRequest : AdminRequest, IValidatableObject
 {
@@ -88,11 +128,15 @@ internal static class EmbeddingProfileRules
 
 /// <summary>
 /// One embedding of a profile's canary text with given values, at the given ceiling with the admin's key of that level
-/// (processing design §11). Nothing is stored here; a save stores the returned vector as the new canary.
+/// (processing design §11). Nothing is stored here; a save stores the returned vector as the new canary. Without
+/// <c>dimensions</c> (a new profile whose model is not asked for a size) the vector's length is the measured size.
 /// </summary>
 public sealed class EmbeddingProfileTester(GatewayApi gateway, IOptions<GatewayOptions> options)
 {
-    public async Task<(EmbeddingProfileTestResult Result, float[]? Vector)> TestAsync(string model, int dimensions, bool requestDimensions, Residency ceiling,
+    /// <summary>The sizes a profile's partial HNSW index takes (<c>content.rag_ensure_profile_index</c>).</summary>
+    public const int MaxDimensions = 4000;
+
+    public async Task<(EmbeddingProfileTestResult Result, float[]? Vector)> TestAsync(string model, int? dimensions, bool requestDimensions, Residency ceiling,
         string canaryText, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(options.Value.BaseUrl))
@@ -121,10 +165,16 @@ public sealed class EmbeddingProfileTester(GatewayApi gateway, IOptions<GatewayO
 
         var vector = answer.Vectors[0];
         var residencyText = ResidencyCeiling.ToHeader(answer.Residency);
-        if (vector.Length != dimensions)
+        if (dimensions is { } expected && vector.Length != expected)
         {
             return (new EmbeddingProfileTestResult(false, vector.Length, residencyText, "bad_vector",
-                $"{vector.Length} dimensions came back, the profile has {dimensions}"), null);
+                $"{vector.Length} dimensions came back, the profile has {expected}"), null);
+        }
+
+        if (vector.Length is < 1 or > MaxDimensions)
+        {
+            return (new EmbeddingProfileTestResult(false, vector.Length, residencyText, "bad_vector",
+                $"{vector.Length} dimensions came back; a profile takes 1 to {MaxDimensions}"), null);
         }
 
         if (vector.Any(f => !float.IsFinite(f)) || vector.All(f => f == 0))
@@ -137,8 +187,9 @@ public sealed class EmbeddingProfileTester(GatewayApi gateway, IOptions<GatewayO
 }
 
 /// <summary>
-/// Embedding profiles (admin design §4.5; Decisions "Editable embedding profiles before use"): readable by platform admins,
-/// editable while no chunk set uses the profile, and then only its residency ceiling. Every save runs the canary test first.
+/// Embedding profiles (admin design §4.5; Decisions "Editable embedding profiles before use", "Deploy configuration"): created
+/// by a platform admin from the gateway's embedding models, readable by platform admins, editable while no chunk set uses the
+/// profile, and then only its residency ceiling. Every create and save runs the canary test first.
 /// </summary>
 public static class EmbeddingProfileEndpoints
 {
@@ -156,6 +207,10 @@ public static class EmbeddingProfileEndpoints
             })
             .RequireAuthorization(AdminPolicies.Admin).WithName("ListEmbeddingProfiles")
             .WithSummary("Every embedding profile, with whether a chunk set uses it and its canary state");
+
+        profiles.MapPost("", CreateAsync)
+            .RequireAuthorization(AdminPolicies.Admin).WithName("CreateEmbeddingProfile")
+            .WithSummary("Create a profile from one of the gateway's embedding models; the test embedding measures its size and becomes its canary");
 
         profiles.MapGet("/{id:guid}", (Guid id, RagDbContext db, CancellationToken ct) => GetAsync(db, id, ct))
             .RequireAuthorization(AdminPolicies.Admin).WithName("GetEmbeddingProfile").WithSummary("One embedding profile");
@@ -184,6 +239,70 @@ public static class EmbeddingProfileEndpoints
         var profile = await db.EmbeddingProfiles.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
         var inUse = await db.ChunkSets.AnyAsync(c => c.EmbeddingProfileId == id, ct);
         return EmbeddingProfileDto.Of(profile, inUse, (await RecordedAsync(db, ct)).Contains(id));
+    }
+
+    /// <summary>
+    /// The create (Decisions "Deploy configuration"): the model must be one of the mirror's embedding models served within the
+    /// platform ceiling (<c>settings_model_residency</c>); the missing values come from the model (see
+    /// <see cref="EmbeddingProfileCreateRequest"/>); the test embedding must pass (<c>profile_test_failed</c> with its outcome),
+    /// and its vector is the profile's canary and, unless the model is asked for a size, its measured size. The first profile
+    /// becomes the default, which new collections use. A taken name is <c>already_exists</c>. The worker creates the profile's
+    /// partial HNSW index before its first chunk (data-model §3.2).
+    /// </summary>
+    private static async Task<IResult> CreateAsync(EmbeddingProfileCreateRequest request, AdminContext admin, EmbeddingProfileTester tester,
+        CancellationToken ct)
+    {
+        var db = admin.Db;
+        var model = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == request.GatewayModel, ct);
+        var residencies = model is { ModelKind: GatewayModelModelKinds.Embedding }
+            ? model.Residencies.Select(r => ResidencyCeiling.TryParse(r, out var residency) ? residency : (Residency?)null)
+                .Where(r => r <= PlatformModelRules.Ceiling).Select(r => r!.Value).ToList()
+            : [];
+        if (model is null || residencies.Count == 0)
+        {
+            throw AdminFaults.Field("gatewayModel", AdminErrorCodes.SettingsModelResidency, new Dictionary<string, string>
+            {
+                ["model"] = request.GatewayModel, ["setting"] = "the embedding profile", ["kind"] = GatewayModelModelKinds.Embedding,
+                ["ceiling"] = ResidencyCeiling.ToHeader(PlatformModelRules.Ceiling),
+            });
+        }
+
+        var ceiling = request.MaxResidency is null ? residencies.Max() : EmbeddingProfileRules.Residency(request.MaxResidency);
+        var maxInputTokens = request.MaxInputTokens ?? model.ContextWindow ?? throw AdminFaults.Field("maxInputTokens", AdminErrorCodes.InvalidValue);
+        var name = string.IsNullOrWhiteSpace(request.Name) ? model.Name[..Math.Min(model.Name.Length, 100)] : request.Name.Trim();
+
+        var (test, vector) = await tester.TestAsync(model.Name, request.RequestDimensions ? request.Dimensions : null, request.RequestDimensions, ceiling,
+            EmbeddingCanaryText.Default, ct);
+        if (!test.Ok)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.ProfileTestFailed, new Dictionary<string, string> { ["error"] = test.Error ?? "error" },
+                new Dictionary<string, object?> { ["test"] = test });
+        }
+
+        var created = await admin.WriteAsync(async attempt =>
+        {
+            var profile = new EmbeddingProfile
+            {
+                Name = name,
+                GatewayModel = model.Name,
+                Dimensions = vector!.Length,
+                RequestDimensions = request.RequestDimensions,
+                MaxInputTokens = maxInputTokens,
+                MaxResidency = ceiling,
+                CanaryText = EmbeddingCanaryText.Default,
+                IsDefault = !await db.EmbeddingProfiles.AnyAsync(p => p.IsDefault, attempt),
+                UpdatedAt = admin.Now,
+                UpdatedBy = admin.Actor,
+            };
+            db.EmbeddingProfiles.Add(profile);
+            await db.SaveChangesAsync(attempt);
+            var text = GatewayModelSync.VectorText(vector);
+            await db.Database.ExecuteSqlAsync($"""UPDATE config."EmbeddingProfiles" SET "CanaryEmbedding" = {text}::vector WHERE "Id" = {profile.Id}""", attempt);
+            return new AdminChange<Guid>(profile.Id, "create", AuditEntityTypes.EmbeddingProfile, profile.Id, null,
+                new { After = Audit(profile), profile.Name, profile.IsDefault, Residency = test.Residency });
+        }, ct);
+
+        return Results.Created($"/api/embedding-profiles/{created}", await GetAsync(db, created, ct));
     }
 
     /// <summary>

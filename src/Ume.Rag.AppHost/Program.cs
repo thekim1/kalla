@@ -25,7 +25,7 @@ const string FixtureSiteDigest = "884e0b7f42f303641b0f4e78755aea647521dca0b89ca3
 
 var builder = DistributedApplication.CreateBuilder(args);
 // E2E:Enabled=true (scripts/Start-E2E.ps1 only): the browser tests' stack. It adds their fixture website and ignores the
-// user secrets that point at real systems (the pilot embedding profile, a configured Open WebUI client), so a local run
+// user secrets that point at real systems (a configured Open WebUI client), so a local run
 // starts from the same state as CI.
 var e2e = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("E2E:Enabled");
 builder.AddDockerComposeEnvironment("compose").WithDashboard(false);
@@ -206,16 +206,6 @@ var migrations = builder.AddProject<Projects.Ume_Rag_MigrationService>("migratio
 if (builder.ExecutionContext.IsRunMode)
 {
     migrations.WithEnvironment("Seed__DevKey", devKey);
-}
-
-// EmbeddingProfile:* (AppHost configuration or user secrets) seeds the platform profile in the migrator (P1a item 13,
-// #142): e.g. GatewayModel=text-embedding-3-large, Dimensions=1024, RequestDimensions=true, MaxResidency=Eu.
-foreach (var (key, value) in e2e ? [] : builder.Configuration.GetSection("EmbeddingProfile").AsEnumerable(makePathsRelative: true))
-{
-    if (value is not null)
-    {
-        migrations.WithEnvironment("EmbeddingProfile__" + key.Replace(":", "__", StringComparison.Ordinal), value);
-    }
 }
 
 if (fakeGateway is not null)

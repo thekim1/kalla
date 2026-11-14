@@ -27,6 +27,16 @@ exception, with its own steps.
   **Check:** a test user signs in to Open WebUI and sees the assistants; chat answers no `401 user_jwt_invalid`
   (what the hand-made client's requests get now). A new deployment key later: delete `.openwebui-rag-api-key` in the secrets volume
   (Compose: `secrets/.openwebui-rag-api-key`) and update the stack; rag-migrate revokes the old one.
+- **The embedding profile is created in the admin UI (M-17 C5).** rag-migrate no longer seeds it, and
+  `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS` and `_MAX_RESIDENCY` (Compose,
+  Portainer) and `EmbeddingProfile__*` with the `ume-rag-migrations-config` map (Kubernetes) are gone. An existing
+  profile stays as it is. **Apply:** remove those variables from the stack or `deploy/.env`; Kubernetes: take the new
+  base and drop the `ume-rag-migrations-config` entry from your overlay. A new deployment: a platform admin creates the
+  profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 6).
+- **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
+  read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
+  (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
+  rag-api and rag-worker name their columns and are not affected.
 
 ## 0.5.1
 

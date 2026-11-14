@@ -42,11 +42,12 @@ milestone on a developer machine), and the decisions in [`plans/decisions.md`](.
 | rag-worker, rag-parser, rag-clamav | running below `rag-ingestion.slice` (CPU and memory capped) |
 | Host firewall `UME-RAG-*` | egress per RAG network; RAG containers reach only the gateway, Keycloak, DNS, the ClamAV mirror and public web sites |
 | Backups | pgBackRest to the agreed target, a first full backup |
-| Embedding profile `pilot-embedding` | `text-embedding-3-large`, 1024 dimensions, ceiling `Eu` (once the gates in §2 are open) |
+| Embedding profile `text-embedding-3-large` | 1024 dimensions, ceiling `Eu`, created by a platform admin in the admin UI (§8.5) |
 | A URL-list source with a few umea.se pages | synced into live chunks with 1024-dimension vectors |
 
-Not part of this guide: Open WebUI and answers (milestone 2, §12), signing in to the admin UI (needs RAG's Keycloak
-clients, stream B's realm additions), a public URL for rag-api (only needed for Open WebUI).
+Not part of this guide: Open WebUI and answers (milestone 2, §12), setting up RAG's Keycloak clients (production-setup,
+*Sign-in*: one platform admin must sign in to the admin UI once, to create the embedding profile in §8.5), a public URL
+for rag-api (only needed for Open WebUI).
 
 ## 2. Gates: what must be merged first
 
@@ -60,7 +61,6 @@ gh issue view 142 --repo thekim1/ume-rag-platform --json state,title --jq '"#142
 
 | Gate | Needed for | Without it |
 |---|---|---|
-| #123 merged (gateway client, `EmbeddingProfile:*` seeder, canary) | the `pilot-embedding` profile is seeded at start | §9 refuses: "no active embedding profile pilot-embedding" |
 | #142 closed (the profile's `RequestDimensions`, `dimensions` sent on every embedding call) | the model returns 1024 values, not its native 3072 | embedding fails the profile's dimension check; nothing goes live |
 | #119 (real-gateway mode, organisation sync): merged | the admin's model catalogue sync and the canary record | nothing to wait for |
 | #127 merged (knowledge service) | a retrieval query in §10 | check the chunks with SQL only |
@@ -261,23 +261,7 @@ Notes:
 - The script prints the next steps and the Keycloak redirect URIs. Save its output (it contains no secrets) for the
   report.
 
-Then the embedding profile, which the script doesn't write yet. Append to `deploy/.env` (and again after any re-run
-of `init-deployment.sh`, which rewrites the file and keeps the old one as `deploy/.env.bak`):
-
-```bash
-sudo tee -a deploy/.env >/dev/null <<'EOF'
-# Pilot embedding profile (Decisions "Pilot embedding model, U-b"); read by rag-migrate.
-UME_RAG_EMBEDDING_MODEL=text-embedding-3-large
-UME_RAG_EMBEDDING_DIMENSIONS=1024
-UME_RAG_EMBEDDING_REQUEST_DIMENSIONS=true
-UME_RAG_EMBEDDING_MAX_INPUT_TOKENS=8191
-UME_RAG_EMBEDDING_MAX_RESIDENCY=Eu
-EOF
-docker compose --env-file deploy/.env config --quiet && echo "compose config ok"
-```
-
-Expected: `compose config ok`. The migrator seeds the profile once (insert-if-absent): a later change of these lines
-does not change an existing profile; a different model or dimension count needs a new profile (phase 3).
+The embedding profile is not in `deploy/.env`: a platform admin creates it in the admin UI once the stack runs (§8.5).
 
 Check the secrets are not readable by others and the inputs can go:
 
@@ -327,7 +311,7 @@ sudo curl -sS --cacert deploy/certs/ca.pem https://localhost:9543/health/ready; 
 docker compose --env-file deploy/.env logs rag-migrate | grep -i -E 'embedding profile|error' | tail -5
 ```
 
-Expected: both `Healthy`. Once gate #123 is open, the migrator's log mentions the `pilot-embedding` profile.
+Expected: both `Healthy`.
 
 **8.3 RAG's containers reach the gateway**
 
@@ -349,6 +333,14 @@ sudo deploy/escrow-keys.sh /media/<escrow>          # then: sudo deploy/escrow-k
 Also keep `deploy/secrets/.pepper` and `deploy/certs/data-protection.pfx` apart from the database backups, and move
 `deploy/certs/ca.key` off the host (`docs/production-setup.md`, step 5).
 
+**8.5 Create the embedding profile (HUMAN: a platform admin signs in to the admin UI)**
+
+In the admin UI (`https://localhost:9543` or its public name), *Models* first shows the synced models. Then *Embedding
+profiles → Create profile*: model `text-embedding-3-large`, *Request dimensions* on, dimensions `1024` (Decisions
+"Pilot embedding model, U-b"); the ceiling (`Eu`) and the input limit come from the model. The save runs one test
+embedding and stores it as the profile's canary; a refusal names what to fix on the gateway (the admin key must allow
+the model at `Eu`). The profile is named after the model and is the default.
+
 ## 9. Seed a URL-list source (after gates #123 and #142)
 
 The admin's set-up endpoints don't exist yet, so a small script writes the department, collection and source directly,
@@ -357,7 +349,7 @@ socket (`deploy/postgres/pg_hba.conf`: `local all postgres peer`; TCP is refused
 Postgres container as its `postgres` user. No password is involved:
 
 ```bash
-python3 -I scripts/dev/seed_url_list.py --docker ume-rag-postgres-1 --socket --profile pilot-embedding \
+python3 -I scripts/dev/seed_url_list.py --docker ume-rag-postgres-1 --socket --profile text-embedding-3-large \
   'https://www.umea.se/<page 1>' 'https://www.umea.se/<page 2>' 'https://www.umea.se/<page 3>'
 ```
 
@@ -365,12 +357,12 @@ The script needs Python 3.11+ on the host (standard library only).
 
 Pick three to five public pages, for example a price list, an opening-hours page and a contact page. Expected output:
 lines for the department (`Pilot (dev seed)`), the collection (`pilot-public`, public and published), the profile
-(`pilot-embedding`), the pipeline (`url-list`), the source (`created, N URLs`) and a `sync_job` id (the run id). Write
+(`text-embedding-3-large`), the pipeline (`url-list`), the source (`created, N URLs`) and a `sync_job` id (the run id). Write
 down the source id and the sync job id.
 
 | Message | Meaning |
 |---|---|
-| `no active embedding profile pilot-embedding` | gate #123 isn't merged, the image predates it, or §7's `.env` lines are missing: check `docker compose logs rag-migrate` |
+| `no active embedding profile text-embedding-3-large` | §8.5 isn't done, or the profile has another name: *Models → Embedding profiles* in the admin UI |
 | `no published platform pipeline url-list` | the migrator hasn't finished: `docker compose ps rag-migrate` |
 | `pg_hba.conf rejects connection … user "postgres"` | `--socket` is missing |
 
@@ -387,7 +379,7 @@ docker compose --env-file deploy/.env exec -u postgres postgres psql -U postgres
 | The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` | `succeeded`, `Added` = the number of URLs (a few minutes; first parses are slower) |
 | Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` | at least one chunk per page, `1024` |
 | Per-page outcome | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` | `added` for each page |
-| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded, "CanarySimilarity" FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync); the similarity is empty until a platform admin runs **Check embedding canary** (admin UI, *Models*), then at least `0.999` |
+| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded, "CanarySimilarity" FROM config."EmbeddingProfiles";` | `text-embedding-3-large`, `text-embedding-3-large`, `1024`, `t` (recorded when the profile was created); the similarity is empty until a platform admin runs **Check embedding canary** (admin UI, *Models*), then at least `0.999` |
 
 On the gateway side, its admin UI shows the embedding calls under the worker's key with their cost (a few hundredths of
 a cent for a handful of pages).
@@ -436,9 +428,9 @@ The run book for that step comes with the chat API.
 | `rag-clamav` unhealthy for > 15 min | no signature download (proxy, firewall) | `docker compose logs rag-clamav`; `--freshclam-proxy` in §7 |
 | §8.3 times out | the firewall blocks the gateway (an old firewall script without the `INPUT` exception, or the gateway's name resolves to an address not in the rules) | `sudo iptables -S UME-RAG-INPUT`, `sudo iptables -S UME-RAG-EGRESS \| grep 172.30.3.0`; re-run `sudo systemctl start rag-firewall.service`; compare with §4.5 |
 | Runs fail with `embed.input_rejected` | the gateway refused a batch (`context_length_exceeded`) | a gateway older than v0.9.0 checks the whole batch: §3, upgrade it or clear the deployment's `ContextWindow`; on v0.9.0 or later, report it (a chunk is far below the window) |
-| Runs fail at the embed step on dimensions, or **Check embedding canary** reports the wrong number of dimensions | 3072 values came back: `RequestDimensions` isn't set or gate #142 isn't in the image | §7's `.env` lines, rebuild after #142 |
+| Runs fail at the embed step on dimensions, or **Check embedding canary** reports the wrong number of dimensions | 3072 values came back: the profile doesn't request dimensions | edit the profile in the admin UI (*Request dimensions* on, 1024) while nothing is embedded with it |
 | 403 from the gateway in the worker or admin log (`model_not_allowed`, `max_residency_not_met`) | the key doesn't allow the model or `Eu`, or the model's deployment isn't `Eu` | §4.4, for the admin and worker keys both |
-| The profile is still wrong after you changed `deploy/.env` (`RequestDimensions`, ceiling, model, dimensions) | the migrator seeds the profile once; for an existing one it only logs "exists with another model, dimension count or ceiling" | before anything is embedded, set `RequestDimensions` or `MaxResidency` on the row in `ragdb` as the `postgres` user in `rag-postgres` (`UPDATE config."EmbeddingProfiles" SET "RequestDimensions" = true WHERE "Name" = 'pilot-embedding';`; its config trigger reloads the services). A different model or dimension count: start again with an empty volume |
+| The profile has the wrong model, size or ceiling | it was created with other values | edit it in the admin UI (*Models → Embedding profiles*) while nothing is embedded with it; afterwards only the ceiling changes, and a different model or size needs an empty volume |
 | Pages end `skipped` with `robots.*` | robots.txt disallows the path | pick other pages |
 | Everything else | | collect the output below and report |
 

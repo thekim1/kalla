@@ -110,10 +110,9 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 
 | | Status |
 |---|---|
-| Stream B's gateway client, `EmbeddingProfile:*` seeder and canary recording (`GET /api/gateway/status`) | now (#123) |
+| Stream B's gateway client and canary recording (`GET /api/gateway/status`); the embedding profile created in the admin UI (M-17 C5) | now (#123) |
 | The AppHost's real-gateway mode: `Gateway:Services:<service>:Key` per service, `OrgSync:IntervalMinutes` passed to the admin API | now (#119, B-37) |
 | `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | now (#159: column, seeder, admin calls, query embedding; #162: the worker's embed, canary and evaluation calls) |
-| The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
 | `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
 | An API key for `/v1/retrieve`: `POST /api/keys` in the admin API (#185), or the dev seed's `--api-key` offline (§4.4) | now |
 | On the gateway: the integration *Ume.Rag* with one credential key per service, each allowing `OnPrem` and `Eu` only; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; the scope `organisation.read` on the admin's key for the organisation and model syncs | now (the gateway session) |
@@ -133,20 +132,13 @@ dotnet user-secrets --project $p set Gateway:MaxResidency Eu                    
 dotnet user-secrets --project $p set Gateway:Services:api:Key <rag-api's credential key>      # now
 dotnet user-secrets --project $p set Gateway:Services:admin:Key <rag-admin's credential key>  # now
 dotnet user-secrets --project $p set Gateway:Services:worker:Key <rag-worker's credential key>  # now
-dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # now
-dotnet user-secrets --project $p set EmbeddingProfile:Dimensions 1024                    # now
-dotnet user-secrets --project $p set EmbeddingProfile:RequestDimensions true             # now
-dotnet user-secrets --project $p set EmbeddingProfile:MaxInputTokens 8191                # now
-dotnet user-secrets --project $p set EmbeddingProfile:MaxResidency Eu                    # now
 ```
 
 Each service holds its own key, never another's; the worker's never allows `External`, and the pilot runs at `Eu`.
 `Gateway:MaxResidency Eu` caps every model call's ceiling at `Eu` (register M2, identity design §4.7): without it a
 `public` assistant's calls carry the ceiling `External`, and only the credential key's residencies keep them at `Eu`.
 The AppHost forwards every `Gateway:*` value. The
-migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfile:Name`) and never changes it once it
-exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
-profile differs from `EmbeddingProfile:*`).
+embedding profile is no secret: you create it in the admin UI after the start (§4.3).
 
 The admin's organisation and model syncs read the gateway itself (`GET /v1/ume/context`, `GET /v1/models`) with
 `Gateway:Services:admin:Key`; there is no Data API key. Without the scope `organisation.read` on that key the
@@ -162,6 +154,11 @@ fails with `model_not_found`; #440):
 ```powershell
 .\scripts\Start-Dev.ps1 -Empty
 ```
+
+Then create the pilot profile in the admin UI, signed in as a dev Keycloak platform admin: *Models → Embedding
+profiles → Create profile*, name `pilot-embedding`, model `text-embedding-3-large` (the mirror lists it once the model
+sync has run), *Request dimensions* on, dimensions `1024`. The ceiling (`Eu`) and the input limit come from the model,
+and the save's test embedding is stored as the canary. It is the only profile, so it is the default.
 
 In the Aspire dashboard (`https://localhost:17470`), check that `migrations` completed and that no `fake-gateway`
 resource runs. Copy the `ragdb` connection string from the `postgres` resource (Host `localhost`, the mapped port,
@@ -308,9 +305,7 @@ left it:
 ```bash
 p=src/Ume.Rag.AppHost
 for k in DevelopmentVolumes:Postgres FakeGateway:Enabled Gateway:BaseUrl \
-         Gateway:Services:api:Key Gateway:Services:admin:Key Gateway:Services:worker:Key \
-         EmbeddingProfile:GatewayModel EmbeddingProfile:Dimensions EmbeddingProfile:RequestDimensions \
-         EmbeddingProfile:MaxInputTokens EmbeddingProfile:MaxResidency; do
+         Gateway:Services:api:Key Gateway:Services:admin:Key Gateway:Services:worker:Key; do
   dotnet user-secrets --project $p remove $k
 done
 ```

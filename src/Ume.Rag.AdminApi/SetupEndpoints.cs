@@ -34,10 +34,13 @@ public static class SetupEndpoints
                 var collections = await CollectionEndpoints.Scoped(admin).AsNoTracking().OrderByDescending(c => c.UpdatedAt).ThenBy(c => c.Id).Take(OverviewCollections)
                     .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt, c.DepartmentId)).ToListAsync(ct);
                 var setups = await ComputeAsync(admin, collections, ct);
-                return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)]);
+                // The platform's first-run step (Decisions "Deploy configuration"): no knowledge base can be created before it.
+                var needsProfile = admin.IsPlatformAdmin
+                    && !await admin.Db.EmbeddingProfiles.AsNoTracking().AnyAsync(p => p.IsDefault && p.State == EmbeddingProfileStates.Active, ct);
+                return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)], needsProfile);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Overview").WithName("GetOverview")
-            .WithSummary("The start page: whether the caller has collections, and the setup checklists not done yet");
+            .WithSummary("The start page: whether the caller has collections, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created");
 
         return api;
     }
@@ -115,5 +118,9 @@ public sealed record CollectionSetup(
     Guid CollectionId, string Name, int Sources, bool FirstSyncDone, bool SyncRunning, int TestQuestions, bool Evaluated, bool Evaluating, bool Published,
     Guid? AssistantId, bool AssistantPublished, bool Available, bool Done);
 
-/// <summary>The start page: whether any collection is in scope (the empty state, §5.4 step 1), and the checklists not done.</summary>
-public sealed record Overview(bool HasCollections, IReadOnlyList<CollectionSetup> Setup);
+/// <summary>
+/// The start page: whether any collection is in scope (the empty state, §5.4 step 1), the checklists not done, and
+/// <see cref="NeedsEmbeddingProfile"/>: the caller is a platform admin and there is no active default embedding profile yet,
+/// which a new collection needs (<c>no_embedding_profile</c>).
+/// </summary>
+public sealed record Overview(bool HasCollections, IReadOnlyList<CollectionSetup> Setup, bool NeedsEmbeddingProfile);

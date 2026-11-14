@@ -14,7 +14,8 @@ import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP } from '@/ut
 
 // Översikt (admin design §5.4 step 1, §5.5.1): the empty state with Skapa kunskapsbank, Kom igång for each collection
 // whose checklist is not done (`GET /api/overview`), and the signed-in user's roles and departments with where each
-// came from (identity design §1.5, P0 checklist #9). The attention items join `GET /api/overview` later.
+// came from (identity design §1.5, P0 checklist #9). A platform admin first sees the platform's own first-run step, the
+// embedding profile, until it exists (Decisions "Deploy configuration"). The attention items join `GET /api/overview` later.
 const auth = useAuthStore()
 const router = useRouter()
 const overview = useLoadable<Overview | null>(null)
@@ -36,6 +37,10 @@ const departments = computed(() =>
 <template>
   <PageHeader :title="name ? OVERVIEW.welcome(name) : PAGE.overview.title" :description="OVERVIEW.lead" />
   <template v-if="overview.data.value">
+    <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">
+      <p class="mb-4">{{ OVERVIEW.profileText }}</p>
+      <UiButton variant="primary" icon="add" data-test="create-profile" @click="router.push({ name: 'platform-models' })">{{ OVERVIEW.profileAction }}</UiButton>
+    </UiCard>
     <UiCard v-if="!overview.data.value.hasCollections" :title="SETUP.title" class="mb-6" data-test="empty">
       <p class="mb-4">{{ SETUP.empty }}</p>
       <UiButton v-if="canCreate" variant="primary" icon="add" data-test="create" @click="router.push({ name: 'collections' })">{{ SETUP.create }}</UiButton>

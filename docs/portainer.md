@@ -49,7 +49,6 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    # Ume.Rag
    UME_RAG_API_HOST=rag.example.se                        # its public URL is https://<this>; UME_RAG_API_PUBLIC_URL for a port
    UME_RAG_ADMIN_HOST=rag-admin.example.se
-   UME_RAG_EMBEDDING_MODEL=<the gateway's embedding model id>
    UME_RAG_OIDC_CLIENT_SECRET=...
    COMPOSE_PROFILES=clamav,openwebui
    # Open WebUI
@@ -92,8 +91,12 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
    the `llm` network, so use its published address (`https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443>`); without it
    there is no read-back.
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
-   version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models; the
-   embedding canary passes under *Embedding profiles* on the same page.
+   version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
+   Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
+   profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
+   embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
+   `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
+   must allow the model. The first profile is the default, which new knowledge bases use.
 7. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
    the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
    there to choose the assistants it offers (an assistant's *Who can use it* works too).

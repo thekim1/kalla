@@ -70,7 +70,7 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
      A release bundle already pins the base and components. The packages may be private: give the namespace an
      `imagePullSecret` for ghcr.io, or mirror them.
    - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl` (and the same address as rag-admin's `Admin__ApiPublicUrl`),
-     `Oidc__Authority`, `EmbeddingProfile__GatewayModel` and the role
+     `Oidc__Authority` and the role
      groups (`Oidc__RoleGroups__rag-platform-admin`, ...), as in [production setup](production-setup.md), *Sign-in*.
    - Optionally `Gateway__IntegrationApiUrl` in `ume-rag-admin-config`, the gateway Admin API's base URL for the cost
      and budget read-back (production setup, *Cost and budget read-back*); without it, no read-back.

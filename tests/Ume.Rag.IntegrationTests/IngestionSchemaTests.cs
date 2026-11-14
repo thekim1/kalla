@@ -363,37 +363,6 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
-    public async Task The_platform_profile_is_seeded_from_deployment_settings_once_and_never_changed()
-    {
-        // P1a item 13: EmbeddingProfile:* names the pilot's EU route (U-b); the admin API records its canary embedding.
-        await using var db = TestPostgres.Context(database.Connection(Migrator));
-        var name = "pilot-" + Guid.NewGuid().ToString("N");
-        var options = new EmbeddingProfileSeedOptions
-        {
-            Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu,
-        };
-        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
-        await EmbeddingProfileSeeder.SeedAsync(db, new EmbeddingProfileSeedOptions(), TimeProvider.System, logger, Ct); // no model: nothing
-        (await db.EmbeddingProfiles.AnyAsync(p => p.Name == "pilot-embedding", Ct)).ShouldBeFalse();
-
-        await EmbeddingProfileSeeder.SeedAsync(db, options, TimeProvider.System, logger, Ct);
-        options.GatewayModel = "another-model";
-        await EmbeddingProfileSeeder.SeedAsync(db, options, TimeProvider.System, logger, Ct);
-
-        var profile = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Name == name, Ct);
-        profile.GatewayModel.ShouldBe("eu-embed-1024");
-        profile.RequestDimensions.ShouldBeTrue(); // #142: the default, as the deployment knobs since #546
-        profile.MaxInputTokens.ShouldBe(8191); // Decisions "Pilot embedding model, U-b"
-        profile.MaxResidency.ShouldBe(Residency.Eu);
-        profile.CanaryText.ShouldBe(EmbeddingCanaryText.Default);
-        (await Sql.ScalarAsync<string>(database.Connection(null), $"""
-            SELECT indexdef FROM pg_indexes WHERE indexname = 'IX_Chunks_Embedding_{profile.Id:N}'
-            """)).ShouldContain("halfvec(1024)");
-        await Should.ThrowAsync<InvalidOperationException>(() => EmbeddingProfileSeeder.SeedAsync(db,
-            new EmbeddingProfileSeedOptions { GatewayModel = "x", Dimensions = 4001 }, TimeProvider.System, logger, Ct));
-    }
-
-    [Fact]
     public async Task Sources_stamp_their_creation_and_runs_start_their_counters_at_zero()
     {
         // #110: the scheduler counts a never-run source's first schedule from CreatedAt; writers may leave the counters out.

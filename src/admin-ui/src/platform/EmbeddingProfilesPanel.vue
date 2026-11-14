@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api } from '@/api'
-import { http } from '@/api/client'
+import { http, isApiError } from '@/api/client'
 import type { GatewayModel } from '@/api/types'
 import DataTable from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
@@ -18,8 +18,10 @@ import { withModelFields } from './modelFields'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec } from './schema'
 
 // Embedding profiles on Platform → Gateway models (admin design §4.5, §5.8; Decisions "Editable embedding profiles before
-// use"): the generic form of PUT /api/embedding-profiles/{id}, with Test on the values as entered. Every field may change
-// until content is indexed with the profile; then the server allows only the ceiling, and the form says so.
+// use", "Deploy configuration"): Create profile is the generic form of POST /api/embedding-profiles over the mirror's
+// embedding models (the server's test embedding measures the size; a failed test is shown in plain words). Edit is the
+// generic form of PUT /api/embedding-profiles/{id}, with Test on the values as entered. Every field may change until content
+// is indexed with the profile; then the server allows only the ceiling, and the form says so.
 
 export interface EmbeddingProfile {
   id: string
@@ -44,6 +46,7 @@ interface TestResult {
 }
 
 const UPDATE_PATH = '/api/embedding-profiles/{id}'
+const CREATE_PATH = '/api/embedding-profiles'
 /** A profile in use changes only its ceiling (admin design §4.5): the other fields are shown read-only (#565). */
 const FIXED_WHEN_IN_USE = ['gatewayModel', 'dimensions', 'requestDimensions', 'maxInputTokens'] as const
 /** The ceilings a profile may have: at most the platform ceiling Eu (until M2). */
@@ -54,6 +57,8 @@ const rows = ref<EmbeddingProfile[]>([])
 const loadError = ref<unknown>(null)
 const loaded = ref(false)
 const selected = ref<EmbeddingProfile | null>(null)
+/** The drawer holds the create form (no profile selected) or the edit form. */
+const creating = ref(false)
 const drawerOpen = ref(false)
 const fields = ref<FieldSpec[]>([])
 const models = ref<GatewayModel[]>([])
@@ -83,15 +88,21 @@ async function load(): Promise<void> {
   }
 }
 
-/** The ceiling as a choice of the allowed levels; the model as a picker over the mirror's embedding models. */
-function profileFields(all: FieldSpec[]): FieldSpec[] {
-  return withModelFields(all, [{ name: 'gatewayModel', modelKind: 'embedding' }]).map((f) =>
-    f.name === 'maxResidency' ? { ...f, kind: 'select' as const, options: CEILINGS, required: true } : f,
-  )
+/**
+ * The ceiling as a choice of the allowed levels; the model as a picker over the mirror's embedding models. In the create
+ * form the model is required, and the fields the server fills from the model may stay empty (their hints say so).
+ */
+function profileFields(all: FieldSpec[], create: boolean): FieldSpec[] {
+  return withModelFields(all, [{ name: 'gatewayModel', modelKind: 'embedding' }]).map((f) => {
+    const field = f.name === 'maxResidency' ? { ...f, kind: 'select' as const, options: CEILINGS, required: !create } : f
+    if (!create) return field
+    return { ...field, required: f.name === 'gatewayModel', help: E.createHints[f.name] ?? field.help }
+  })
 }
 
-async function edit(row: EmbeddingProfile): Promise<void> {
+async function openForm(row: EmbeddingProfile | null): Promise<void> {
   selected.value = row
+  creating.value = row === null
   drawerOpen.value = true
   openError.value = null
   testResult.value = null
@@ -99,11 +110,31 @@ async function edit(row: EmbeddingProfile): Promise<void> {
   fields.value = []
   try {
     const [doc, mirror] = await Promise.all([loadOpenApi(), api.gateway.models()])
-    fields.value = profileFields(fieldsOf(doc, requestSchema(doc, 'put', UPDATE_PATH)))
+    fields.value = row ? profileFields(fieldsOf(doc, requestSchema(doc, 'put', UPDATE_PATH)), false)
+      : profileFields(fieldsOf(doc, requestSchema(doc, 'post', CREATE_PATH)), true)
     models.value = mirror
     formKey.value++
   } catch (e) {
     openError.value = e
+  }
+}
+
+const edit = (row: EmbeddingProfile) => openForm(row)
+const create = () => openForm(null)
+
+/** A create whose test embedding failed: the outcome in plain words, as Test says it in the edit form. */
+function createFailed(error: unknown, body: Record<string, unknown>): void {
+  testResult.value = null
+  if (!isApiError(error) || error.problem?.code !== 'profile_test_failed') return
+  const test = error.problem.test as TestResult | undefined
+  if (!test) return
+  testResult.value = {
+    ok: false,
+    text: embeddingTestMessage(test, {
+      gatewayModel: String(body.gatewayModel ?? ''),
+      dimensions: Number(body.dimensions ?? test.dimensions ?? 0),
+      maxResidency: String(body.maxResidency ?? test.residency ?? ''),
+    }),
   }
 }
 
@@ -136,7 +167,7 @@ async function test(collect: () => Record<string, unknown> | null): Promise<void
 
 function saved(): void {
   drawerOpen.value = false
-  ui.notify(E.saved)
+  ui.notify(creating.value ? E.created : E.saved)
   void load()
 }
 
@@ -146,6 +177,9 @@ onMounted(load)
 <template>
   <UiCard :title="E.title" heading-id="embedding-profiles-title" data-test="embedding-profiles">
     <p class="mb-4 text-fg-2">{{ E.lead }}</p>
+    <div class="mb-4">
+      <UiButton :variant="rows.length === 0 ? 'primary' : 'secondary'" icon="add" data-test="profile-create" @click="create">{{ E.create }}</UiButton>
+    </div>
     <InlineError v-if="loadError" :message="problemMessage(loadError)" class="mb-4" />
     <p v-if="!loaded">{{ COMMON.loading }}</p>
     <p v-else-if="rows.length === 0 && !loadError" data-test="profiles-empty">{{ E.none }}</p>
@@ -163,10 +197,21 @@ onMounted(load)
       </template>
     </DataTable>
 
-    <UiDrawer v-model:open="drawerOpen" :title="selected ? E.editTitle(selected.name) : E.title" wide>
+    <UiDrawer v-model:open="drawerOpen" :title="selected ? E.editTitle(selected.name) : E.createTitle" wide>
       <InlineError v-if="openError" :message="problemMessage(openError)" class="mb-4" />
       <p v-if="selected?.inUse" class="mb-4 rounded-card bg-sunken p-3" data-test="profile-in-use">{{ E.inUseNote }}</p>
       <p v-if="!openError && fields.length === 0">{{ COMMON.loading }}</p>
+      <template v-else-if="creating && fields.length > 0">
+        <p class="mb-4 text-fg-2">{{ E.createLead }}</p>
+        <GenericForm
+          :key="formKey" form-id="embedding-profile-create" :fields="fields" :initial="{ requestDimensions: false }" method="post" :url="CREATE_PATH"
+          :submit-label="E.create" :models="models" @saved="saved" @failed="createFailed" @cancel="drawerOpen = false"
+        >
+          <template #extra>
+            <p v-if="testResult" role="status" class="text-danger" data-test="profile-create-result">{{ testResult.text }}</p>
+          </template>
+        </GenericForm>
+      </template>
       <GenericForm
         v-else-if="selected && fields.length > 0" :key="formKey" form-id="embedding-profile" :fields="fields" :initial="{ ...selected }"
         method="put" :url="`/api/embedding-profiles/${encodeURIComponent(selected.id)}`" :submit-label="PLATFORM.form.save" :models="models"
