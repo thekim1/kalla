@@ -22,6 +22,9 @@ public static class InfrastructureExtensions
     public const string DatabaseResourceName = "ragdb";
     public const string DataProtectionApplicationName = "Ume.Rag";
 
+    /// <summary>The file names <c>Security:ExtraSecretsDirectory</c> may hold (M-17 C6).</summary>
+    public static IReadOnlyList<string> ExtraSecretKeys { get; } = ["OpenWebUi__AdminApiKey"];
+
     /// <summary>
     /// Secret files (<c>Security:SecretsDirectory</c>, one file per key) as configuration, as in the gateway. Reloaded on
     /// change, so a key written by a deployment's bootstrap (a Portainer stack update) applies without a restart where the
@@ -31,9 +34,6 @@ public static class InfrastructureExtensions
     /// optional, and it yields only <see cref="ExtraSecretKeys"/>: another uid owns it, so any other file there (a
     /// <c>Gateway__BaseUrl</c>, say) is ignored rather than overriding this service's configuration (#689 review).
     /// </summary>
-    /// <summary>The file names <c>Security:ExtraSecretsDirectory</c> may hold (M-17 C6).</summary>
-    public static IReadOnlyList<string> ExtraSecretKeys { get; } = ["OpenWebUi__AdminApiKey"];
-
     public static IHostApplicationBuilder AddDeploymentSecrets(this IHostApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
