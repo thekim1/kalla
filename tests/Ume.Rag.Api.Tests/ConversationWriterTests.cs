@@ -81,6 +81,59 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
             """)).ShouldBe(3);
     }
 
+    private static TurnSource Source(int rank) => new(rank, Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), (short)rank, null, null, true);
+
+    [Fact]
+    public async Task A_reused_open_webui_answer_id_writes_no_second_answer_and_no_orphan_sources()
+    {
+        // #698: the header is unsigned, so a user can send the same MESSAGE_ID twice; the answer insert does nothing, and its
+        // sources must not be inserted against a row that isn't there (a foreign-key error that poisoned the batch).
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var chat = "chat-" + Guid.CreateVersion7().ToString("N");
+        var answer = Guid.NewGuid().ToString();
+        var first = Turn(null, chat, assistant, client, "owui:u-1") with { UserExternalId = Guid.NewGuid().ToString(), AnswerExternalId = answer, Sources = [Source(1)] };
+        var reused = Turn(null, chat, assistant, client, "owui:u-1") with { UserExternalId = Guid.NewGuid().ToString(), AnswerExternalId = answer, Sources = [Source(1), Source(2)] };
+
+        await writer.WriteAsync([first], Ct);
+        await writer.WriteAsync([reused], Ct);
+
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{reused.MessageId}'""")).ShouldBe(0);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."MessageSources" WHERE "MessageId" = '{first.MessageId}'""")).ShouldBe(1);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."MessageSources" WHERE "MessageId" = '{reused.MessageId}'""")).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_turn_that_fails_on_its_data_is_dropped_at_once_without_holding_up_the_batch()
+    {
+        // #698: a data error (here 22001, a value too long for its column) fails the same way on every attempt, so the batch is
+        // split at once and the bad turn dropped, without the 2 s retry delays; the good turn of the batch is written.
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var good = Turn(Guid.CreateVersion7(), null, assistant, client, "user-G");
+        var bad = Turn(null, "chat-" + Guid.CreateVersion7().ToString("N"), assistant, client, "owui:u-1") with { AnswerExternalId = new string('a', 101) };
+        await writer.StartAsync(Ct);
+        try
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            await writer.EnqueueAsync(bad);
+            await writer.EnqueueAsync(good);
+            await writer.FlushAsync(Ct);
+            started.Elapsed.ShouldBeLessThan(ConversationWriter.RetryInterval);
+        }
+        finally
+        {
+            await writer.StopAsync(CancellationToken.None);
+        }
+
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{good.MessageId}'""")).ShouldBe(1);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{bad.MessageId}'""")).ShouldBe(0);
+    }
+
     private static async Task<long> CountAsync(NpgsqlDataSource data, string sql)
     {
         await using var command = data.CreateCommand(sql);

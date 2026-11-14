@@ -11,6 +11,8 @@
   "Api.ConversationWriter.UpsertOpenWebUiConversationSql": ["Id uuid", "?column? boolean"],
   "Api.ConversationWriter.WriteAsync#1": ["?column? integer"],
   "Api.ConversationWriter.WriteAsync#2": ["coalesce integer"],
+  "Api.ConversationWriter.WriteAsync#3": ["Id uuid"],
+  "Api.ConversationWriter.WriteAsync#4": ["Id uuid"],
   "Api.FeedbackEndpoints.MapFeedback#1": ["ConversationId uuid", "Classification character varying", "CreatedAt timestamp with time zone", "AssistantId uuid", "HistoryMode character varying"],
   "Api.FeedbackEndpoints.MapFeedback#2": ["Rating smallint"],
   "Api.FeedbackImporter.ImportAsync#1": ["WatermarkUpdatedAt bigint"],
