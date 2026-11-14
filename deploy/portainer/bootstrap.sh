@@ -152,6 +152,39 @@ cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
 cp /config/postgresql.conf "$F/postgres/postgresql.conf"
 cp /config/app-roles.sql "$F/migrations/app-roles.sql"
+# The TLS proxy's nginx.conf (profile proxy, M-17 C8): the template with the stack's host names. A host without a name
+# of its own (the gateway's admin on the gateway's name, rag-admin on rag-api's) gets no block, nor Open WebUI without
+# its profile; the checklist at the end says so.
+proxy_todo=""
+mkdir -p "$F/proxy"
+case ",${COMPOSE_PROFILES:-}," in
+  *,proxy,*)
+    hostname_ok() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'; }
+    gw="${UME_GATEWAY_HOST:-}"; gw_admin="${UME_ADMIN_HOST:-}"; rag_admin="${UME_RAG_ADMIN_HOST:-}"
+    owui_host="${UME_RAG_OPENWEBUI_HOST:-}"
+    hostname_ok "$gw" || proxy_todo="$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"
+    hostname_ok "$UME_RAG_API_HOST" || proxy_todo="$proxy_todo|UME_RAG_API_HOST is not a host name"
+    enable="-e /^#gwadmin/d"
+    if hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="-e s/^#gwadmin//"
+    else proxy_todo="$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
+    if hostname_ok "$rag_admin" && [ "$rag_admin" != "$UME_RAG_API_HOST" ]; then enable="$enable -e s/^#ragadmin//"
+    else enable="$enable -e /^#ragadmin/d"
+      proxy_todo="$proxy_todo|UME_RAG_ADMIN_HOST: the proxy serves Ume.Rag's admin only on a host name of its own"; fi
+    case ",${COMPOSE_PROFILES:-}," in
+      *,openwebui,*)
+        if hostname_ok "$owui_host"; then enable="$enable -e s/^#owui//"
+        else enable="$enable -e /^#owui/d"; proxy_todo="$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
+      *) enable="$enable -e /^#owui/d" ;;
+    esac
+    # shellcheck disable=SC2086 # $enable is a list of sed expressions
+    sed $enable -e "s/@GATEWAY_HOST@/$gw/g" -e "s/@ADMIN_HOST@/$gw_admin/g" -e "s/@API_HOST@/$UME_RAG_API_HOST/g" \
+      -e "s/@RAG_ADMIN_HOST@/$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$owui_host/g" /config/nginx-proxy.conf.template > "$F/proxy/nginx.conf"
+    # The internal CAs it verifies the upstreams against (public certificates only; ume-certs also holds private keys).
+    cp "$C/ca.pem" "$F/proxy/rag-ca.pem"
+    cp /gateway-certs/ca.pem "$F/proxy/gateway-ca.pem"
+    echo "rag-bootstrap: wrote the TLS proxy's nginx.conf" ;;
+  *) rm -f "$F/proxy/nginx.conf" "$F/proxy/rag-ca.pem" "$F/proxy/gateway-ca.pem" ;;
+esac
 chmod -R a+rX "$F"
 
 # --- Blob container (issue #41): rag/ and the worker's spool, owned by the services' uid ----------------------------
@@ -186,6 +219,10 @@ case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
+# The TLS proxy's host names (collected while its nginx.conf was written, above).
+old_ifs="$IFS"; IFS='|'
+for item in $proxy_todo; do [ -z "$item" ] || note "$item"; done
+IFS="$old_ifs"
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"

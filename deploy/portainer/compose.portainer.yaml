@@ -91,6 +91,14 @@
 #   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
+#   COMPOSE_PROFILES=proxy    rag-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
+#                             gateway (UME_GATEWAY_HOST), its admin (UME_ADMIN_HOST), rag-api (UME_RAG_API_HOST),
+#                             rag-admin (UME_RAG_ADMIN_HOST) and Open WebUI (UME_RAG_OPENWEBUI_HOST), each a name of its
+#                             own, on UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT (0.0.0.0:443). UME_RAG_PROXY_CERTS_DIR
+#                             (/etc/ume-rag/proxy-certs) is a host directory with tls.crt (full chain) and tls.key for
+#                             every name (SAN or wildcard), readable by uid 101; renewing it: replace both files and
+#                             restart rag-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
+#                             variables) and list the proxy as a trusted proxy in both admins (docs/portainer.md)
 # Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
 # without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
 # with pg_dump or volume snapshots.
@@ -351,6 +359,9 @@ services:
     environment:
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:?Set UME_RAG_API_HOST}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-}
+      # The TLS proxy's host names (profile proxy).
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
@@ -366,6 +377,7 @@ services:
       - {source: rag-postgres-hba, target: /config/pg_hba.conf}
       - {source: rag-postgres-conf, target: /config/postgresql.conf}
       - {source: rag-app-roles, target: /config/app-roles.sql}
+      - {source: rag-proxy-conf-template, target: /config/nginx-proxy.conf.template}
     volumes:
       - rag-certs:/certs
       - rag-secrets:/secrets
@@ -777,6 +789,37 @@ services:
       rag-bootstrap: {condition: service_completed_successfully}
       rag-api: {condition: service_started}
     networks: [rag-edge]
+
+  rag-proxy:
+    # Profile proxy (M-17 C8, Decisions "Deploy configuration" D9): TLS for the five host names with the operator's
+    # certificate, re-encrypting to the services and verifying them against the internal CAs. rag-bootstrap writes its
+    # nginx.conf (deploy/proxy/nginx.portainer.conf.template) and the two CA certificates into rag-config/proxy.
+    <<: *hardened
+    profiles: [proxy]
+    # nginx 1.31.6, as the browser tests' fixture site (src/Ume.Rag.AppHost); the index digest.
+    image: ${RAG_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
+    user: "101:101"
+    restart: unless-stopped
+    command: [nginx, -c, /etc/nginx/ume/nginx.conf, -g, "daemon off;"]
+    cpus: 0.5
+    mem_limit: 128m
+    pids_limit: 128
+    ports: ["${UME_RAG_PROXY_BIND:-0.0.0.0}:${UME_RAG_PROXY_PORT:-443}:8443"]
+    volumes:
+      - {type: volume, source: rag-config, target: /etc/nginx/ume, read_only: true, volume: {subpath: proxy}}
+      # The operator's certificate: a host directory, not created when missing (the container then does not start).
+      - type: bind
+        source: ${UME_RAG_PROXY_CERTS_DIR:-/etc/ume-rag/proxy-certs}
+        target: /run/proxy-certs
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      rag-bootstrap: {condition: service_completed_successfully}
+      gateway: {condition: service_started}
+      adminapi: {condition: service_started}
+      rag-api: {condition: service_started}
+      rag-admin: {condition: service_started}
+    networks: [edge, rag-edge]
 
   rag-openwebui-setup:
     # One-shot, profile openwebui (M-17 C6): the feedback service account's API key for rag-api's import, minted with a
@@ -1190,6 +1233,39 @@ configs:
       cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
       cp /config/postgresql.conf "$$F/postgres/postgresql.conf"
       cp /config/app-roles.sql "$$F/migrations/app-roles.sql"
+      # The TLS proxy's nginx.conf (profile proxy, M-17 C8): the template with the stack's host names. A host without a name
+      # of its own (the gateway's admin on the gateway's name, rag-admin on rag-api's) gets no block, nor Open WebUI without
+      # its profile; the checklist at the end says so.
+      proxy_todo=""
+      mkdir -p "$$F/proxy"
+      case ",$${COMPOSE_PROFILES:-}," in
+        *,proxy,*)
+          hostname_ok() { printf '%s' "$$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$$'; }
+          gw="$${UME_GATEWAY_HOST:-}"; gw_admin="$${UME_ADMIN_HOST:-}"; rag_admin="$${UME_RAG_ADMIN_HOST:-}"
+          owui_host="$${UME_RAG_OPENWEBUI_HOST:-}"
+          hostname_ok "$$gw" || proxy_todo="$$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"
+          hostname_ok "$$UME_RAG_API_HOST" || proxy_todo="$$proxy_todo|UME_RAG_API_HOST is not a host name"
+          enable="-e /^#gwadmin/d"
+          if hostname_ok "$$gw_admin" && [ "$$gw_admin" != "$$gw" ]; then enable="-e s/^#gwadmin//"
+          else proxy_todo="$$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
+          if hostname_ok "$$rag_admin" && [ "$$rag_admin" != "$$UME_RAG_API_HOST" ]; then enable="$$enable -e s/^#ragadmin//"
+          else enable="$$enable -e /^#ragadmin/d"
+            proxy_todo="$$proxy_todo|UME_RAG_ADMIN_HOST: the proxy serves Ume.Rag's admin only on a host name of its own"; fi
+          case ",$${COMPOSE_PROFILES:-}," in
+            *,openwebui,*)
+              if hostname_ok "$$owui_host"; then enable="$$enable -e s/^#owui//"
+              else enable="$$enable -e /^#owui/d"; proxy_todo="$$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
+            *) enable="$$enable -e /^#owui/d" ;;
+          esac
+          # shellcheck disable=SC2086 # $$enable is a list of sed expressions
+          sed $$enable -e "s/@GATEWAY_HOST@/$$gw/g" -e "s/@ADMIN_HOST@/$$gw_admin/g" -e "s/@API_HOST@/$$UME_RAG_API_HOST/g" \
+            -e "s/@RAG_ADMIN_HOST@/$$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$$owui_host/g" /config/nginx-proxy.conf.template > "$$F/proxy/nginx.conf"
+          # The internal CAs it verifies the upstreams against (public certificates only; ume-certs also holds private keys).
+          cp "$$C/ca.pem" "$$F/proxy/rag-ca.pem"
+          cp /gateway-certs/ca.pem "$$F/proxy/gateway-ca.pem"
+          echo "rag-bootstrap: wrote the TLS proxy's nginx.conf" ;;
+        *) rm -f "$$F/proxy/nginx.conf" "$$F/proxy/rag-ca.pem" "$$F/proxy/gateway-ca.pem" ;;
+      esac
       chmod -R a+rX "$$F"
 
       # --- Blob container (issue #41): rag/ and the worker's spool, owned by the services' uid ----------------------------
@@ -1224,6 +1300,10 @@ configs:
         https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
         https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
       example "$${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
+      # The TLS proxy's host names (collected while its nginx.conf was written, above).
+      old_ifs="$$IFS"; IFS='|'
+      for item in $$proxy_todo; do [ -z "$$item" ] || note "$$item"; done
+      IFS="$$old_ifs"
       case ",$${COMPOSE_PROFILES:-}," in
         *,openwebui,*)
           example "$${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"
@@ -1653,6 +1733,177 @@ configs:
 
       if __name__ == "__main__":
           main()
+  rag-proxy-conf-template:
+    content: |
+      # The Portainer stack's TLS proxy (profile proxy; M-17 C8, Decisions "Deploy configuration" D9): nginx in front of the
+      # gateway, its admin, rag-api, rag-admin and Open WebUI, with the operator's certificate. rag-bootstrap fills in the
+      # @placeholders@ from the stack's host names and writes rag-config/proxy/nginx.conf; it drops the blocks marked
+      # #gwadmin, #ragadmin or #owui when that host has no name of its own (or the openwebui profile is off). Routes and body
+      # sizes as the gateway's and Ume.Rag's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
+      # is re-encrypted and verified against its internal CA.
+      worker_processes auto;
+      pid /tmp/nginx.pid;
+      error_log /dev/stderr warn;
+
+      events {
+          worker_connections 1024;
+      }
+
+      http {
+          access_log /dev/stdout;
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path /tmp/proxy_temp;
+          fastcgi_temp_path /tmp/fastcgi_temp;
+          uwsgi_temp_path /tmp/uwsgi_temp;
+          scgi_temp_path /tmp/scgi_temp;
+          server_tokens off;
+
+          # One certificate for every name (a SAN or wildcard certificate): UME_RAG_PROXY_CERTS_DIR/tls.crt and tls.key.
+          ssl_certificate /run/proxy-certs/tls.crt;
+          ssl_certificate_key /run/proxy-certs/tls.key;
+          ssl_protocols TLSv1.2 TLSv1.3;
+
+          # WebSocket upgrade (the gateway's live audio, Open WebUI's live connection); other requests keep the pooled
+          # keep-alive connection.
+          map $$http_upgrade $$ume_connection { default upgrade; '' ''; }
+
+          upstream ume_gateway { server gateway:8443; keepalive 32; }
+          upstream ume_admin { server adminapi:8443; }
+          upstream ume_rag_api { server rag-api:8443; keepalive 32; }
+          upstream ume_rag_admin { server rag-admin:8443; }
+      #owui    upstream ume_rag_openwebui { server rag-openwebui:8080; }
+
+          # A name this proxy doesn't serve gets no answer.
+          server {
+              listen 8443 ssl default_server;
+              http2 on;
+              return 444;
+          }
+
+          # The gateway (its deploy/proxy/nginx.conf.example).
+          server {
+              listen 8443 ssl;
+              http2 on;
+              server_name @GATEWAY_HOST@;
+              client_max_body_size 52m;          # image edits (gateway default 50 MB), audio uploads (26 MB), documents
+              location / {
+                  proxy_pass https://ume_gateway;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $$http_upgrade;
+                  proxy_set_header Connection $$ume_connection;
+                  proxy_set_header Host $$host;
+                  # List this proxy under the gateway admin's Settings > Trusted proxies, or the gateway ignores the header.
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_buffering off;           # stream tokens as they arrive (SSE)
+                  proxy_request_buffering off;   # uploads straight through: no recordings in proxy temp files
+                  proxy_read_timeout 600s;
+                  proxy_send_timeout 600s;
+                  proxy_connect_timeout 5s;
+                  proxy_ssl_verify on;
+                  proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+                  proxy_ssl_name gateway;
+                  proxy_ssl_server_name on;
+              }
+          }
+
+          # The gateway's admin UI and API.
+      #gwadmin    server {
+      #gwadmin        listen 8443 ssl;
+      #gwadmin        http2 on;
+      #gwadmin        server_name @ADMIN_HOST@;
+      #gwadmin        location / {
+      #gwadmin            proxy_pass https://ume_admin;
+      #gwadmin            proxy_http_version 1.1;
+      #gwadmin            proxy_set_header Host $$host;
+      #gwadmin            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #gwadmin            proxy_connect_timeout 5s;
+      #gwadmin            proxy_ssl_verify on;
+      #gwadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+      #gwadmin            proxy_ssl_name adminapi;
+      #gwadmin            proxy_ssl_server_name on;
+      #gwadmin        }
+      #gwadmin    }
+
+          # rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
+          server {
+              listen 8443 ssl;
+              http2 on;
+              server_name @API_HOST@;
+              client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
+              location / {
+                  proxy_pass https://ume_rag_api;
+                  proxy_http_version 1.1;
+                  proxy_set_header Connection '';
+                  proxy_set_header Host $$host;
+                  # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_buffering off;           # stream answer tokens as they arrive (SSE)
+                  proxy_read_timeout 600s;
+                  proxy_send_timeout 600s;
+                  proxy_connect_timeout 5s;
+                  proxy_ssl_verify on;
+                  proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+                  proxy_ssl_name rag-api;
+                  proxy_ssl_server_name on;
+              }
+          }
+
+          # rag-admin: the admin UI and its API (BFF).
+      #ragadmin    server {
+      #ragadmin        listen 8443 ssl;
+      #ragadmin        http2 on;
+      #ragadmin        server_name @RAG_ADMIN_HOST@;
+      #ragadmin        client_max_body_size 1m;
+      #ragadmin        location / {
+      #ragadmin            proxy_pass https://ume_rag_admin;
+      #ragadmin            proxy_http_version 1.1;
+      #ragadmin            proxy_set_header Host $$host;
+      #ragadmin            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #ragadmin            proxy_connect_timeout 5s;
+      #ragadmin            proxy_ssl_verify on;
+      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragadmin            proxy_ssl_name rag-admin;
+      #ragadmin            proxy_ssl_server_name on;
+      #ragadmin        }
+      #ragadmin        # Uploads (admin design §2.2): one file per request, up to 60 MB, passed straight through.
+      #ragadmin        location ~ ^/api/upload-batches/[0-9a-fA-F-]+/files/[0-9]+$$ {
+      #ragadmin            client_max_body_size 60m;
+      #ragadmin            proxy_request_buffering off;
+      #ragadmin            proxy_pass https://ume_rag_admin;
+      #ragadmin            proxy_http_version 1.1;
+      #ragadmin            proxy_set_header Host $$host;
+      #ragadmin            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #ragadmin            proxy_read_timeout 300s;
+      #ragadmin            proxy_send_timeout 300s;
+      #ragadmin            proxy_connect_timeout 5s;
+      #ragadmin            proxy_ssl_verify on;
+      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragadmin            proxy_ssl_name rag-admin;
+      #ragadmin            proxy_ssl_server_name on;
+      #ragadmin        }
+      #ragadmin    }
+
+          # Open WebUI (profile openwebui): plain HTTP inside the stack; this proxy terminates TLS.
+      #owui    server {
+      #owui        listen 8443 ssl;
+      #owui        http2 on;
+      #owui        server_name @OPENWEBUI_HOST@;
+      #owui        client_max_body_size 2m;       # the whole conversation goes to rag-api (2 MB); file uploads are off
+      #owui        location / {
+      #owui            proxy_pass http://ume_rag_openwebui;
+      #owui            proxy_http_version 1.1;
+      #owui            proxy_set_header Upgrade $$http_upgrade;
+      #owui            proxy_set_header Connection $$ume_connection;
+      #owui            proxy_set_header Host $$host;
+      #owui            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #owui            proxy_set_header X-Forwarded-Proto https;
+      #owui            proxy_buffering off;       # stream answers
+      #owui            proxy_read_timeout 600s;
+      #owui            proxy_send_timeout 600s;
+      #owui            proxy_connect_timeout 5s;
+      #owui        }
+      #owui    }
+      }
 
 networks:
   edge: {driver: bridge}

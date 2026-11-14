@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boot test of the Portainer stack (release.yml; the deploy-configuration plan's step C0): starts a
 # compose.portainer.yaml, the gateway and Ume.Rag as one stack, the way Portainer does (the stack file, variables, no
-# scripts and no host files), with the profiles clamav and openwebui, then checks:
+# scripts and no host files but the proxy's certificate), with the profiles clamav, openwebui and proxy, then checks:
 #
 #   - `up --wait`: every service with a health check healthy, both bootstraps and both migrations completed
 #   - no container restarted or exited with an error; every image is pinned by digest (*_IMAGE variables are unset)
@@ -14,6 +14,7 @@
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
 #   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
+#   - the TLS proxy (M-17 C8): each of the five host names answers through rag-proxy with the test's certificate
 #   - Open WebUI: /health = 200 on its published port; password sign-in refused; rag-openwebui-setup completed and the
 #     feedback key it minted (M-17 C6) answers the feedback list (200), is refused elsewhere (403), and is the file rag-api
 #     reads
@@ -68,8 +69,19 @@ while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|
 work="$(mktemp -d)"
 gateway_port=$((8443 + offset)); gateway_admin_port=$((9443 + offset)); gateway_data_port=$((10443 + offset))
 api_port=$((8543 + offset)); admin_port=$((9543 + offset)); openwebui_port=$((3000 + offset))
+proxy_port=$((11443 + offset))
+# The operator's certificate for the proxy: one self-signed certificate for the five names, readable by nginx (uid 101).
+mkdir -p "$work/proxy-certs"
+docker run --rm --network none -v "$work/proxy-certs:/c" --entrypoint sh \
+  docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029 -c \
+  'openssl req -x509 -newkey rsa:2048 -nodes -keyout /c/tls.key -out /c/tls.crt -days 2 -subj /CN=boot.test \
+     -addext "subjectAltName=DNS:llm.boot.test,DNS:llm-admin.boot.test,DNS:rag.boot.test,DNS:rag-admin.boot.test,DNS:chat.boot.test" \
+     >/dev/null 2>&1 && chmod 644 /c/tls.key /c/tls.crt'
 cat > "$work/test.env" <<EOF
-COMPOSE_PROFILES=clamav,openwebui
+COMPOSE_PROFILES=clamav,openwebui,proxy
+UME_RAG_PROXY_CERTS_DIR=$work/proxy-certs
+UME_RAG_PROXY_PORT=$proxy_port
+UME_RAG_PROXY_BIND=127.0.0.1
 UME_OIDC_AUTHORITY=https://keycloak.boot.test/realms/ume
 UME_GATEWAY_HOST=llm.boot.test
 UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
@@ -126,7 +138,7 @@ unpinned="$(dc config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"
 [ -z "$unpinned" ] || fail "images not pinned by digest: $unpinned"
 dc config --images | sort -u | sed 's/^/  /'
 
-echo "== up --wait (profiles clamav, openwebui)"
+echo "== up --wait (profiles clamav, openwebui, proxy)"
 start=$SECONDS
 dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not start and become healthy within ${wait_timeout}s"
 ok "every service with a health check healthy ($((SECONDS - start)) s)"
@@ -137,7 +149,7 @@ echo "== containers"
 expected="$(dc config --services | sort | tr '\n' ' ' | sed 's/ $//')"
 running="$(dc ps -a --format '{{.Service}}' | sort | tr '\n' ' ' | sed 's/ $//')"
 [ "$running" = "$expected" ] || fail "the stack's containers are '$running', expected '$expected'"
-for svc in gateway adminapi rag-api rag-admin rag-worker rag-parser rag-clamav rag-openwebui; do
+for svc in gateway adminapi rag-api rag-admin rag-worker rag-parser rag-clamav rag-openwebui rag-proxy; do
   case " $running " in *" $svc "*) ;; *) fail "the stack has no $svc";; esac
 done
 while read -r name state exit_code restarts; do
@@ -218,6 +230,22 @@ ok "rag-clamav runs (the clamav profile) and rag-worker's ClamAv__Mode is on"
 [ "$(secret_of rag-api OpenWebUi__BaseUrl)" = http://rag-openwebui:8080 ] \
   || fail "rag-api's secret file OpenWebUi__BaseUrl is not http://rag-openwebui:8080 with the openwebui profile"
 ok "rag-api's OpenWebUi__BaseUrl is the stack's rag-openwebui (the openwebui profile)"
+
+echo "== the TLS proxy (profile proxy, M-17 C8)"
+# through HOST PATH: the HTTP status of https://HOST:<proxy port>PATH through rag-proxy, verified with the test's certificate.
+through() { curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --cacert "$work/proxy-certs/tls.crt" \
+  --resolve "$1:$proxy_port:127.0.0.1" "https://$1:$proxy_port$2"; }
+reached() { case "$(through "$1" "$2")" in 2??|3??) return 0;; *) return 1;; esac; }
+while read -r host path what; do
+  wait_for 60 reached "$host" "$path" || fail "rag-proxy: https://$host$path answered $(through "$host" "$path") ($what)"
+done <<'CHECKS'
+llm.boot.test /health/ready the gateway
+llm-admin.boot.test / the gateway's admin
+rag.boot.test /health/ready rag-api
+rag-admin.boot.test / rag-admin
+chat.boot.test /health Open WebUI
+CHECKS
+ok "rag-proxy answers each of the five host names with the operator's certificate (verified upstream TLS)"
 
 echo "== Open WebUI"
 owui() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$openwebui_port/health")" = 200 ]; }

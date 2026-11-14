@@ -503,7 +503,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
 4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI
    (3000) serves plain HTTP on loopback. Put a reverse proxy with real certificates in front of the public names
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
-   variables to match.
+   variables to match. Or add `proxy` to `COMPOSE_PROFILES`: the stack's own nginx with your certificate in front of
+   all five host names ([portainer.md](portainer.md#tls-proxy)).
 5. **Open WebUI** (profile `openwebui`): set `UME_RAG_OPENWEBUI_HOST` and its OIDC client
    (`UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`; redirect URI
    `https://<host>/oauth/oidc/login/callback`). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it

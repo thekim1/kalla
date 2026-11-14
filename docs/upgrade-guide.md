@@ -43,6 +43,9 @@ exception, with its own steps.
   main stack, then `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. Until the job has
   minted the new key (a minute after Open WebUI starts), the import has none and skips its run. **Check:** the job's log says *minted*, and rag-api's next feedback import
   runs (within 15 minutes).
+- **Optional TLS proxy in the Portainer stack (M-17 C8).** `proxy` in `COMPOSE_PROFILES` starts `rag-proxy`, nginx
+  with your certificate (`UME_RAG_PROXY_CERTS_DIR`) in front of the five host names ([portainer.md](portainer.md#tls-proxy)).
+  Nothing changes without the profile.
 - **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
