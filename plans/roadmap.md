@@ -24,16 +24,18 @@ Decided by the user, 2026-11-13 (Decisions "Test chatbot before the umea.se pilo
 documents**, uploaded, for a **small test group** in Open WebUI, on `v0.5.0` and the gateway, **both deployed by hand by
 the user**. It shows how well uploaded documents answer real questions before the umea.se pilot. Case plan:
 [`cases/support-assistant/`](cases/support-assistant/README.md) (`07-rollout.md` §0b and §1).
+**The user's team sets up and runs the test chatbot themselves** (user, 2026-11-14): the agents don't plan or prepare
+T2–T6; they fix what the team reports and answer questions.
 
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
 | T0 | Gateway on v0.10.1 with the integration *Ume.Rag* and three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
 | T1 | Ume.Rag `v0.5.0` deployed from the release bundle (`docs/production-setup.md`; `init-deployment.sh`, Keycloak realm, Open WebUI, ClamAV on), checked with the production-setup's read-backs | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
 | T2 | The test group's accounts (Keycloak or the gateway's sign-in) and their Open WebUI access; DoIT's admin in the admin UI | T1 | user | open |
-| T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user + DoIT; main session helps | open |
-| T4 | Assistant `support`: the instructions of `04-assistant.md` §3, the knowledge base's key (V39), general knowledge `fallback`, a not-found text with the real escalation links; checked in the test panel with about twenty anonymised or invented tickets | T3 | main session + DoIT | open |
-| T5 | The test group uses it in Open WebUI; feedback import on | T2, T4 | test group | open |
-| T6 | Findings back: answer quality per ticket, misses and their documents, upload gaps (U1–U7) seen on real files, the condense model, the live checks of the gateway integration (B-42–B-46, A-34, A-35) | T5 | main session | open |
+| T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user | open |
+| T4 | Assistant `support`: the instructions of `04-assistant.md` §3, the knowledge base's key (V39), general knowledge `fallback`, a not-found text with the real escalation links; checked in the test panel with about twenty anonymised or invented tickets | T3 | user | open |
+| T5 | The test group uses it in Open WebUI; feedback import on | T2, T4 | user | open |
+| T6 | Findings back: answer quality per ticket, misses and their documents, upload gaps (U1–U7) seen on real files, the condense model, the live checks of the gateway integration (B-42–B-46, A-34, A-35) | T5 | user | open |
 
 **Open question (user, with the data protection officer):** whether the test group's use needs the DPIA (G1), or part of
 it, before T5: the documents are internal, Open WebUI keeps its own copy of each chat (W2), and real tickets wait for G1
@@ -64,8 +66,6 @@ table says "user".
 ## Meanwhile: work that needs no input
 
 Each becomes a queue item when the main session picks it up.
-- **Test chatbot support:** a checklist for T1's manual deploy from the production setup's read-backs, and the
-  knowledge base and assistant settings of T3–T4 ready to enter (`work/main.md` M-15).
 - **Grading dry run:** `scripts/grading/` end to end on a small synthetic set, so step 3 starts on working tools.
 - **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
   documents what the gaps cost before deciding them.

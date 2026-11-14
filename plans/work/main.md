@@ -32,7 +32,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   read it by path); (5)–(6) in #656 (the citation check follows a moved section's "Moved to" line). The later ones are in
   the handbook's *Lessons* (stable IDs) and *Plan files*.
 
-### [ ] M-15 The test chatbot (user, 2026-11-13; roadmap *Now*, T0–T6)
+### [x] M-15 The test chatbot (user, 2026-11-13; roadmap *Now*, T0–T6)
+- **Withdrawn (user, 2026-11-14):** the user's team sets up the test chatbot themselves; the agents only fix what they
+  report. The text below is kept for reference.
 - **Do:** support the user's manual deploy (T0–T2: a checklist from `docs/production-setup.md`'s read-backs, and answers
   when something fails); with DoIT, set up the knowledge base and the assistant (T3–T4, the case plan's settings) and
   check them in the test panel; collect the findings (T6) into the case plan, the upload gaps and the stream queues.
