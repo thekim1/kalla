@@ -324,13 +324,14 @@ public static class AdminErrorCodes
     /// A test sign-in could not start (identity design §19); <c>{reason}</c> is the step: <c>authority_invalid</c>,
     /// <c>authority_unreachable</c>, <c>tls</c>, <c>redirected</c>, <c>not_discovery</c>, <c>issuer_mismatch</c>,
     /// <c>insecure_endpoint</c>, <c>par_required</c>, <c>keys_unavailable</c>, <c>stored_secret_unreadable</c>, <c>secret_required</c>
-    /// or <c>deployment_secret_without_authority</c>.
+    /// or <c>deployment_secret_without_authority</c>; Open WebUI's test also <c>provider_url_invalid</c>.
     /// </summary>
     public static AdminErrorCode SetupTestRefused { get; } = new("setup_test_refused", 400, "The test sign-in could not start ({reason}).");
 
     /// <summary>
     /// Saving needs the session's latest test, passed, by a platform admin, with exactly the submitted values; <c>{reason}</c> is
-    /// <c>unknown_test</c>, <c>not_latest</c>, <c>not_passed</c>, <c>not_platform_admin</c> or <c>values_changed</c>.
+    /// <c>unknown_test</c>, <c>not_latest</c>, <c>not_passed</c>, <c>not_platform_admin</c> or <c>values_changed</c>. Saving Open WebUI's
+    /// values also needs the session's latest rag-admin test passed by a platform admin: else <c>admin_test_required</c>.
     /// </summary>
     public static AdminErrorCode SetupTestRequired { get; } = new("setup_test_required", 409,
         "Saving needs a passed test sign-in by a platform admin with exactly these values ({reason}).");

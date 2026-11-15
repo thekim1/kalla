@@ -3137,6 +3137,17 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)");
 
+                    b.Property<string>("OpenWebUiOidc")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("OpenWebUiOidcClientSecretSetAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OpenWebUiOidcEncryptedClientSecret")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("PiiFlagRules")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -3578,7 +3589,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SetupTests", "config", t =>
                         {
-                            t.HasCheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('rag-admin')");
+                            t.HasCheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('rag-admin', 'open-webui')");
                         });
                 });
 

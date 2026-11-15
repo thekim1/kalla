@@ -459,8 +459,13 @@ jobs:
           grep -qxE 'ume-rag-sk-[A-Za-z0-9]{43}' <<< "$key"
           grep -qx "OPENAI_API_KEYS='$key'" "$s/openwebui.env"
           [ "$(cat "$s/migrations/OpenWebUi__ApiKey")" = "$key" ]
-          grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration' \
-            "$d/deploy/.env"
+          # Open WebUI's sign-in settings are rag-api's and rag-admin's deployment values (identity design §19): its client
+          # secret in their secret files, not in Open WebUI's env file; without --openwebui-oidc-provider-url the provider
+          # is no deployment value (rag-admin's authority's discovery document is the code's default).
+          [ "$(cat "$s/api/OpenWebUi__Oidc__ClientSecret")" = "$(tr -d '\r\n' < "$d/keys/owui-secret")" ]
+          [ "$(cat "$s/admin/OpenWebUi__Oidc__ClientSecret")" = "$(tr -d '\r\n' < "$d/keys/owui-secret")" ]
+          if grep -q '^OAUTH_' "$s/openwebui.env"; then echo "openwebui.env still holds OAuth settings"; exit 1; fi
+          grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=' "$d/deploy/.env"
           if out="$(init --gateway-credential-key-file parser="$d/keys/api" 2>&1)"; then
             echo "a credential key for parser was accepted"; exit 1
           fi

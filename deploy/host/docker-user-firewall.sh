@@ -25,7 +25,7 @@
 #   mirror     database.clamav.net:443, or only freshclam's proxy (UME_RAG_FRESHCLAM_PROXY); DNS
 #   backup     the S3 endpoint (UME_RAG_BACKUP_ENDPOINT) and DNS; none with a mounted share
 #   openwebui  with UME_RAG_OPENWEBUI_HOST set: rag-api's public URL (UME_RAG_API_PUBLIC_URL, through the proxy), the
-#              OIDC provider (UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL), DNS; else none
+#              OIDC provider (UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL, else UME_RAG_OIDC_AUTHORITY), DNS; else none
 # DNS: the upstream resolvers Docker's embedded DNS forwards to from the container (the non-loopback nameservers of
 # /etc/resolv.conf, or of /run/systemd/resolve/resolv.conf behind systemd-resolved); --dns IP replaces them.
 #
@@ -148,7 +148,10 @@ proxy="$(env_value UME_RAG_FRESHCLAM_PROXY)"
 if [ -n "$proxy" ]; then add mirror "$proxy"; else add mirror database.clamav.net; fi
 add backup "$(env_value UME_RAG_BACKUP_ENDPOINT)"
 if [ -n "$(env_value UME_RAG_OPENWEBUI_HOST)" ]; then
-  add openwebui "$(env_value UME_RAG_API_PUBLIC_URL)"; add openwebui "$(env_value UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL)"
+  # Its provider: the deployment's, else the default, rag-admin's authority (identity design §19). A provider set only in the
+  # setup wizard on another host needs --allow openwebui=HOST.
+  owui_provider="$(env_value UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL)"
+  add openwebui "$(env_value UME_RAG_API_PUBLIC_URL)"; add openwebui "${owui_provider:-$(env_value UME_RAG_OIDC_AUTHORITY)}"
 fi
 for spec in ${extra[@]+"${extra[@]}"}; do add "${spec%%=*}" "${spec#*=}"; done
 

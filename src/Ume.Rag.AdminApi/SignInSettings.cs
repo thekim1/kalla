@@ -12,13 +12,13 @@ namespace Ume.Rag.AdminApi;
 public static class SignInValueSources
 {
     /// <summary>The deployment's <c>Oidc:*</c> in the raw configuration.</summary>
-    public const string Deployment = "deployment";
+    public const string Deployment = SignInSources.Deployment;
 
     /// <summary><c>Settings.Identity.Oidc.*</c>, set in the setup wizard.</summary>
-    public const string Wizard = "wizard";
+    public const string Wizard = SignInSources.Wizard;
 
     /// <summary>The code's default (<see cref="OidcOptions"/>).</summary>
-    public const string Default = "default";
+    public const string Default = SignInSources.Default;
 }
 
 /// <summary>
@@ -278,12 +278,18 @@ public sealed class SignInSettings(RagDbContext db, IConfiguration configuration
     private static string? Deployed(IConfigurationSection oidc, string key) => oidc[key] is { } value && !string.IsNullOrWhiteSpace(value) ? value : null;
 }
 
-/// <summary><c>GET /api/settings/sign-in</c>: each value with its source, and of the client secret only whether it is set and when.</summary>
+/// <summary>
+/// <c>GET /api/settings/sign-in</c>: each value with its source, and of the client secret only whether it is set and when;
+/// <see cref="OpenWebUi"/> is Open WebUI's block there (in setup's state it is a member of its own, so it is left out here).
+/// </summary>
 public sealed record SignInSettingsDto(
     SignInValue<string?> Authority, SignInValue<string> ClientId, SignInSecretStatus ClientSecret, SignInValue<string> RoleClaim,
     SignInValue<string> DepartmentClaim, SignInValue<string> TeamClaim, SignInValue<string> GroupClaim, SignInValue<IReadOnlyList<string>> ExtraScopes,
     SignInValue<string?> TenantId, SignInValue<bool> RefuseGuests, string Version)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OpenWebUiSettingsDto? OpenWebUi { get; init; }
+
     public static SignInSettingsDto Of(EffectiveSignIn e)
     {
         ArgumentNullException.ThrowIfNull(e);

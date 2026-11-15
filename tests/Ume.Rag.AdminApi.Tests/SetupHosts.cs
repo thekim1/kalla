@@ -71,7 +71,7 @@ internal static class SetupHosts
 
     /// <summary>
     /// Puts setup back to a known state: never completed (a first run) or completed and closed, no opening, no sessions or tests, no
-    /// re-open consumed, and no wizard values. A missing settings row is created as rag-migrate's seeder creates it (its actor, the
+    /// re-open consumed, and no wizard values (rag-admin's or Open WebUI's). A missing settings row is created as rag-migrate's seeder creates it (its actor, the
     /// defaults, no <c>SetupCompletedAt</c>), then marked completed when asked.
     /// </summary>
     public static async Task ResetAsync(string connection, bool completed)
@@ -86,7 +86,10 @@ internal static class SetupHosts
             .SetProperty(x => x.SetupReopenConsumed, (string?)null)
             .SetProperty(x => x.IdentityOidc, "{}")
             .SetProperty(x => x.IdentityOidcEncryptedClientSecret, (string?)null)
-            .SetProperty(x => x.IdentityOidcClientSecretSetAt, (DateTimeOffset?)null), Ct);
+            .SetProperty(x => x.IdentityOidcClientSecretSetAt, (DateTimeOffset?)null)
+            .SetProperty(x => x.OpenWebUiOidc, "{}")
+            .SetProperty(x => x.OpenWebUiOidcEncryptedClientSecret, (string?)null)
+            .SetProperty(x => x.OpenWebUiOidcClientSecretSetAt, (DateTimeOffset?)null), Ct);
         if (!await db.Settings.AnyAsync(Ct))
         {
             db.Settings.Add(new PlatformSettings { PiiOwnDomains = ["umea.se"], UpdatedAt = now, UpdatedBy = "system:seed", SetupCompletedAt = completed ? now : null });

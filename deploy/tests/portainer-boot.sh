@@ -20,7 +20,9 @@
 #   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
 #   - the TLS proxy (M-17 C8): each of the five host names answers through rag-proxy with the test's certificate,
 #     and it still reaches rag-api after rag-api is recreated on another address (its resolver)
-#   - Open WebUI: /health = 200 on its published port; password sign-in refused; rag-openwebui-setup completed and the
+#   - Open WebUI: /health = 200 on its published port, not restarted; password sign-in refused; its OIDC sign-in from
+#     rag-api's internal route (401 without a key; the start wrapper's log line, the provider in /api/config);
+#     rag-openwebui-setup completed and the
 #     feedback key it minted (M-17 C6) answers the feedback list (200), is refused elsewhere (403), and is the file rag-api
 #     reads
 #
@@ -49,7 +51,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stack=""; version=""; example="$here/../portainer/stack.env.example"; offset=10000; project=ume-rag-portainer-boot
 wait_timeout=900; keep=0; files=()
-usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version="$2"; shift 2;;
@@ -309,6 +311,18 @@ code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Conten
   -d '{"email":"feedback-import@localhost","password":"x"}' "http://127.0.0.1:$openwebui_port/api/v1/auths/signin")"
 [ "$code" = 403 ] || fail "Open WebUI's password sign-in answered $code, expected 403 (off)"
 ok "Open WebUI's password sign-in is off (403)"
+# Its sign-in settings (identity design §19): this test's UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET is a deployment value of
+# rag-api, with the provider derived from rag-admin's authority, so the start wrapper starts Open WebUI with OIDC sign-in.
+# Nothing of the route's answer is printed.
+status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/internal/openwebui/sign-in")"
+[ "$status" = 401 ] || fail "rag-api's Open WebUI sign-in route answered $status without a key, expected 401"
+configured="$(https -H "Authorization: Bearer $owui_key" "https://localhost:$api_port/internal/openwebui/sign-in" | jq -r '.configured')"
+[ "$configured" = true ] || fail "rag-api's Open WebUI sign-in route says configured=$configured with the deployment's client secret"
+dc logs --no-color --no-log-prefix rag-openwebui | grep -q '^rag-openwebui: starting with OIDC sign-in from rag-api' \
+  || fail "rag-openwebui's start wrapper did not start Open WebUI with rag-api's sign-in settings"
+provider="$(curl -sS --max-time 10 "http://127.0.0.1:$openwebui_port/api/config" | jq -r '.oauth.providers.oidc // empty')"
+[ "$provider" = "Umeå kommun" ] || fail "Open WebUI offers no OIDC sign-in named 'Umeå kommun' (got '$provider')"
+ok "rag-api serves Open WebUI's sign-in settings to its own client only (401 without a key); Open WebUI offers OIDC sign-in"
 
 echo "== the feedback key (rag-openwebui-setup, M-17 C6)"
 setup="$(dc ps -a -q rag-openwebui-setup)"

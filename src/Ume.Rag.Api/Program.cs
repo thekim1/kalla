@@ -110,6 +110,11 @@ if (chat)
     builder.Services.AddHttpClient(FeedbackImporter.HttpClientName);
     builder.Services.AddSingleton<FeedbackImporter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedbackImporter>());
+    // Open WebUI's sign-in settings for its start wrapper (identity design §19): the shared key ring, read-only (rag-admin makes the keys),
+    // to unprotect the wizard's stored secret.
+    builder.AddRagDataProtection(readOnly: true);
+    builder.Services.AddSingleton<Ume.Rag.Infrastructure.Security.SettingsSecretProtector>();
+    builder.Services.AddScoped<Ume.Rag.Infrastructure.Security.OpenWebUiSignInReader>();
 }
 
 var app = builder.Build();
@@ -118,11 +123,16 @@ if (knowledge)
 {
     // Before anything reads the client address (key allow-lists, the auth-failure throttle, events, the downloads limiter);
     // only the client API, so health probes are untouched. The trusted proxies come with the access snapshot.
-    app.UseWhen(http => http.Request.Path.StartsWithSegments("/v1", StringComparison.OrdinalIgnoreCase),
+    app.UseWhen(http => http.Request.Path.StartsWithSegments("/v1", StringComparison.OrdinalIgnoreCase)
+                        || http.Request.Path.StartsWithSegments("/internal", StringComparison.OrdinalIgnoreCase),
         branch => branch.UseMiddleware<ClientAddressMiddleware>());
 }
 
-app.UseUmeSecurityHeaders(o => o.NoStorePrefixes.Add("/v1"));
+app.UseUmeSecurityHeaders(o =>
+{
+    o.NoStorePrefixes.Add("/v1");
+    o.NoStorePrefixes.Add("/internal");
+});
 app.UseProblemDetailsForEmptyErrors("The request could not be completed");
 app.MapDefaultEndpoints();
 if (knowledge)
@@ -134,6 +144,7 @@ if (knowledge)
         app.MapChat();
         app.MapConversations();
         app.MapFeedback();
+        app.MapOpenWebUiSignIn();
     }
 
     if (publishReference)

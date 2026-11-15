@@ -154,6 +154,13 @@ services:
       # whether it runs on this host or its own VM; empty = no import. Its key is OpenWebUi__AdminApiKey in
       # secrets/openwebui-feedback, minted by open-webui-setup. It runs every 15 minutes (the code's default; M-17 D6).
       OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
+      # Open WebUI's sign-in settings, which rag-api serves to its start wrapper (identity design §19): these deployment
+      # values when set (empty is unset; the client secret is the secret file OpenWebUi__Oidc__ClientSecret), else the
+      # setup wizard's. The provider defaults to rag-admin's authority, so rag-api gets that authority too.
+      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-}
+      OpenWebUi__Oidc__ProviderUrl: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:-}
+      OpenWebUi__Oidc__ClientId: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:-}
+      OpenWebUi__Oidc__ProviderName: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_RAG_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -222,6 +229,14 @@ services:
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in secrets/admin.
       Setup__Reopen: ${UME_RAG_SETUP_REOPEN:-}
+      # Open WebUI (compose.openwebui.yaml): whether this deployment runs it and its address (the setup wizard's Open WebUI
+      # step and the redirect URI it names), and its sign-in settings as rag-api has them; a deployment value locks the
+      # wizard's field (the client secret is the secret file OpenWebUi__Oidc__ClientSecret).
+      OpenWebUi__Enabled: ${UME_RAG_OPENWEBUI_BASE_URL:+true}
+      OpenWebUi__PublicUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
+      OpenWebUi__Oidc__ProviderUrl: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:-}
+      OpenWebUi__Oidc__ClientId: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:-}
+      OpenWebUi__Oidc__ProviderName: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}

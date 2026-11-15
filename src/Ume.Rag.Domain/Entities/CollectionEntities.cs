@@ -64,6 +64,18 @@ public sealed class PlatformSettings
 
     public DateTimeOffset? IdentityOidcClientSecretSetAt { get; set; }
 
+    /// <summary>
+    /// <c>Settings.OpenWebUi.Oidc</c> (<c>jsonb</c>, identity design §19): Open WebUI's sign-in values set in the setup wizard (provider
+    /// address, client id, provider name); a value the deployment's <c>OpenWebUi:Oidc:*</c> sets wins. The client secret is apart, in
+    /// <see cref="OpenWebUiOidcEncryptedClientSecret"/>.
+    /// </summary>
+    public string OpenWebUiOidc { get; set; } = "{}";
+
+    /// <summary>Open WebUI's client secret from the wizard, protected under its own purpose (identity design §19); rag-api unprotects it for Open WebUI only.</summary>
+    public string? OpenWebUiOidcEncryptedClientSecret { get; set; }
+
+    public DateTimeOffset? OpenWebUiOidcClientSecretSetAt { get; set; }
+
     /// <summary>When setup was last completed (identity design §19, "Setup state"); null while setup has never been completed.</summary>
     public DateTimeOffset? SetupCompletedAt { get; set; }
 

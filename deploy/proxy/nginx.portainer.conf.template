@@ -100,6 +100,8 @@ http {
 #ragapi        http2 on;
 #ragapi        server_name @API_HOST@;
 #ragapi        client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
+#ragapi        # rag-api's internal routes (Open WebUI's sign-in settings) are for the stack's own network only.
+#ragapi        location /internal/ { return 404; }
 #ragapi        location / {
 #ragapi            proxy_pass https://ume_rag_api;
 #ragapi            proxy_http_version 1.1;

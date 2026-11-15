@@ -7,6 +7,8 @@
 #   - every key both have renders to the same value (the security settings among them: API_KEYS_ALLOWED_ENDPOINTS,
 #     ENABLE_PASSWORD_AUTH, ENABLE_SIGNUP, USER_PERMISSIONS_*, ENABLE_ADMIN_EXPORT, ...), apart from the keys listed
 #     below whose value is the deployment's;
+#   - neither passes OIDC settings to Open WebUI, and both start it through deploy/openwebui/start-with-sign-in.py,
+#     which takes them from rag-api (identity design §19);
 #   - the feedback service account the stack names is the one init-deployment.sh writes into Compose's env file;
 #   - each listed key still is what its list says, so the lists don't go stale.
 #
@@ -21,21 +23,26 @@ for tool in docker jq; do command -v "$tool" >/dev/null || { echo "error: $tool 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 # Only in the Portainer stack. Compose's open-webui reaches rag-api through the reverse proxy's public certificate, so
-# it needs no CA bundle; it takes the feedback service account and the OIDC client secret from its env file (written by
-# init-deployment.sh), where the stack has no file and sets them here.
-only_portainer=(SSL_CERT_FILE REQUESTS_CA_BUNDLE WEBUI_ADMIN_EMAIL WEBUI_ADMIN_NAME OAUTH_CLIENT_SECRET)
+# it needs no CA bundle; it takes the feedback service account from its env file (written by init-deployment.sh), where
+# the stack has no file and sets it here.
+only_portainer=(SSL_CERT_FILE REQUESTS_CA_BUNDLE WEBUI_ADMIN_EMAIL WEBUI_ADMIN_NAME)
 # Only in Compose's file.
 only_compose=()
-# In both, with the deployment's value: Compose calls rag-api at its public URL, the stack inside the stack.
-own_value=(OPENAI_API_BASE_URLS)
+# In both, with the deployment's value: Compose calls rag-api at its public URL, the stack inside the stack (the API
+# connection and the start wrapper's sign-in settings route).
+own_value=(OPENAI_API_BASE_URLS UME_RAG_SIGN_IN_URL)
+# The OIDC settings come from the start wrapper (rag-api's sign-in settings, identity design §19), never from either file.
+from_wrapper=(ENABLE_OAUTH_SIGNUP OAUTH_CLIENT_ID OAUTH_CLIENT_SECRET OAUTH_CODE_CHALLENGE_METHOD OPENID_PROVIDER_URL OAUTH_PROVIDER_NAME)
 
 # The same placeholder settings for both (verify.yml's "Production Compose files are valid"); the stack's other
 # required variables come from stack.env.example, and the variables set here win over it.
+# The OIDC variables are set so that a file still passing them to Open WebUI would show.
 export UME_RAG_SECRETS_DIR="$work/secrets" UME_RAG_API_PUBLIC_URL=https://rag-api.example.se
 export UME_RAG_OPENWEBUI_HOST=chat.example.se UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui
 export UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration
+export UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=parity-client-secret UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME=Parity
 export UME_RAG_OPENWEBUI_DATA_DIR=/openwebui-data
-unset UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET OPENWEBUI_IMAGE
+unset OPENWEBUI_IMAGE
 mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
 
 docker compose -f "$d/compose.openwebui.yaml" config --format json \
@@ -73,6 +80,20 @@ while read -r kind key; do
   esac
 done < "$work/findings"
 [ -s "$work/findings" ] || ok "open-webui and rag-openwebui: the same $shared keys with the same values, apart from ${#only_portainer[@]} stack-only keys and ${#own_value[@]} with the deployment's value"
+
+# The OIDC settings: neither file sets them for Open WebUI, and both start it through the wrapper.
+for key in "${from_wrapper[@]}"; do
+  for file in compose portainer; do
+    if jq -e --arg k "$key" 'has($k)' "$work/$file.json" >/dev/null; then fail "$key is set in $file's Open WebUI environment; the start wrapper sets it"; fi
+  done
+done
+docker compose -f "$d/compose.openwebui.yaml" config --format json | jq -c '.services["open-webui"].entrypoint' > "$work/compose.entry"
+docker compose -f "$d/portainer/compose.portainer.yaml" --env-file "$d/portainer/stack.env.example" --profile openwebui config --format json \
+  | jq -c '.services["rag-openwebui"].entrypoint' > "$work/portainer.entry"
+for file in compose portainer; do
+  grep -q '"/config/start-with-sign-in.py"' "$work/$file.entry" || fail "$file's Open WebUI does not start through start-with-sign-in.py: $(cat "$work/$file.entry")"
+done
+ok "neither file passes OIDC settings to Open WebUI (${#from_wrapper[@]} keys); both start it through start-with-sign-in.py"
 
 # The feedback service account: rag-openwebui names it here; init-deployment.sh writes it into Compose's env file.
 for key in WEBUI_ADMIN_EMAIL WEBUI_ADMIN_NAME; do

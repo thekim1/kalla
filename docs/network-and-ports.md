@@ -176,7 +176,7 @@ machine).
 | | | nothing (all rejected) | – | a mounted share is written through the file system | with a share or `local` | `--backup-target DIR` |
 | | | DNS | 53 | | with an `s3://` target | |
 | `openwebui` (172.30.17.0/24) | open-webui | rag-api's public URL, `UME_RAG_API_PUBLIC_URL` | its port (443 behind the proxy), HTTPS | Open WebUI's one model connection (`OPENAI_API_BASE_URLS`) | with Open WebUI | `--api-host`, `--proxy` |
-| | | the OIDC provider, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | its port (443), HTTPS | Open WebUI's back channel: discovery, token, JWKS | with Open WebUI | `--openwebui-oidc-provider-url` (default: the authority's discovery document) |
+| | | the OIDC provider, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL`, else `UME_RAG_OIDC_AUTHORITY` | its port (443), HTTPS | Open WebUI's back channel: discovery, token, JWKS | with Open WebUI | `--openwebui-oidc-provider-url` (default: the authority's discovery document); a provider set only in the setup wizard: `--allow openwebui=HOST` |
 | | | DNS | 53 | | with Open WebUI | |
 | `edge` (172.30.1.0/24) | rag-api, rag-admin | nothing | – | carries the published ports only | – | – |
 | `data` (172.30.2.0/24), `ingestion` (172.30.4.0/24), `parser` (172.30.5.0/24), `render` (172.30.18.0/24) | see §4 | nothing (Docker `internal: true`, and rejected) | – | – | – | – |
@@ -412,8 +412,9 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | Renderer 3000 and its secret path | fixed port; the path generated once (`secrets/.render-ws-path`) | `images/renderer/launch-server.json` (`port`), `secrets/renderer.env` (`UME_RAG_RENDER_WS_PATH`), `secrets/worker/Render__Endpoint` | rag-renderer, rag-worker |
 | Gateway URL | `--gateway-url` | `UME_RAG_GATEWAY_URL` | `Gateway__BaseUrl` (api, admin, worker), the firewall (`llm`, `crawl`) |
 | Gateway Admin API (cost and budget read-back) | the gateway's `UME_INTEGRATION_API_URL` (its context's `integration_api_url`); `docker-user-firewall.sh --allow llm=HOST:PORT` | none in Ume.Rag | rag-admin's Integration API client, the firewall (`llm`, by `--allow`) |
-| OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin), the firewall (`llm`), Open WebUI's default provider URL |
-| Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | `OPENID_PROVIDER_URL`, the firewall (`openwebui`) |
+| OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin; api for Open WebUI's default provider URL), the firewall (`llm`, and `openwebui` without a provider URL) |
+| Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` (empty: the setup wizard's, else the default) | `OpenWebUi__Oidc__ProviderUrl` (api, admin), which rag-api serves to Open WebUI's start wrapper as `OPENID_PROVIDER_URL`; the firewall (`openwebui`) |
+| Open WebUI's sign-in internal route | fixed | none | rag-api's `/internal/openwebui/sign-in` (the managed Open WebUI client's key only); Open WebUI's `UME_RAG_SIGN_IN_URL` (Portainer `https://rag-api:8443/...`, Compose rag-api's public URL) |
 | rag-api's public URL | `--api-host`, `--api-port`, `--proxy` | `UME_RAG_API_PUBLIC_URL` | `Knowledge__PublicBaseUrl`, rag-admin's `Admin__ApiPublicUrl` (the address in *How to connect*), Open WebUI's `OPENAI_API_BASE_URLS`, the firewall (`openwebui`) |
 | Open WebUI host | `--openwebui-host` | `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OPENWEBUI_BASE_URL` | `OpenWebUi__BaseUrl` and the firewall (`llm`), both from `..._BASE_URL`, so a hand edit moves both (#453) |
 | Reverse proxy sources | `--proxy-address` | `UME_RAG_PROXY_SOURCES` | the firewall: the published ports accept only these |

@@ -1,11 +1,14 @@
 namespace Ume.Rag.Domain.Entities;
 
-/// <summary>What a setup test signs in to (identity design §19): rag-admin's own client now; Open WebUI's joins in its step.</summary>
+/// <summary>What a setup test checks (identity design §19): rag-admin's own client, or Open WebUI's.</summary>
 public static class SetupTargets
 {
     public const string RagAdmin = "rag-admin";
 
-    public static IReadOnlyList<string> All { get; } = [RagAdmin];
+    /// <summary>Open WebUI's client: a back-channel test (its discovery document and its credentials at the token endpoint); nobody signs in.</summary>
+    public const string OpenWebUi = "open-webui";
+
+    public static IReadOnlyList<string> All { get; } = [RagAdmin, OpenWebUi];
 }
 
 /// <summary>

@@ -9,6 +9,7 @@ using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
 using Ume.Rag.Infrastructure.Persistence;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Retrieval;
 
@@ -80,9 +81,18 @@ public static class SettingsEndpoints
             });
         // Decisions "Role groups as a setting" (M-17 C10): which IdP groups grant which role, read at each sign-in.
         Section(settings, "identity", IdentitySettings.Of, (IdentitySettingsRequest r, PlatformSettings s) => s.IdentityRoleGroups = r.ToJson());
-        // Identity design §19: rag-admin's sign-in values with their sources. Read-only here: they change only in setup mode.
-        settings.MapGet("/sign-in", async (SignInSettings signIn, CancellationToken ct) => SignInSettingsDto.Of(await signIn.ReadAsync(ct)))
+        // Identity design §19: rag-admin's and Open WebUI's sign-in values with their sources. Read-only here: they change only in setup
+        // mode, Open WebUI's provider name excepted (the openwebui section below).
+        settings.MapGet("/sign-in", async (SignInSettings signIn, OpenWebUiSignInSettings openWebUi, CancellationToken ct) =>
+                SignInSettingsDto.Of(await signIn.ReadAsync(ct)) with { OpenWebUi = await openWebUi.ShowAsync(ct) })
             .RequireAuthorization(AdminPolicies.Admin).WithName("GetSignInSettings").WithSummary("Platform settings: sign-in values and where each comes from");
+        // Open WebUI's sign-in button label, the one sign-in value an admin session may change (identity design §19); a deployment value wins and locks it.
+        var configuration = ((IEndpointRouteBuilder)api).ServiceProvider.GetRequiredService<IConfiguration>();
+        Section(settings, "openwebui", OpenWebUiSettings.Of, (OpenWebUiSettingsRequest r, PlatformSettings s) =>
+                s.OpenWebUiOidc = (OpenWebUiOidcValues.Parse(s.OpenWebUiOidc) with { ProviderName = r.ProviderName }).Normalized().ToJson(),
+            (r, _, _, _) => r.ProviderName is not null && OpenWebUiSignIn.Deploys(configuration, OpenWebUiSignIn.ProviderNameKey)
+                ? throw AdminFaults.Field("providerName", AdminErrorCodes.InvalidValue)
+                : Task.CompletedTask);
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
             s.PiiFlagRules = r.FlagRules.ToJsonString();
@@ -496,6 +506,30 @@ public sealed record IdentitySettingsRequest : SettingsRequest, IValidatableObje
                         [field]);
                 }
             }
+        }
+    }
+}
+
+/// <summary>
+/// The <c>openwebui</c> section: Open WebUI's sign-in button label as the wizard's setting stores it (null: the deployment's or the
+/// default applies; <c>GET /api/settings/sign-in</c> shows the effective one and its source).
+/// </summary>
+public sealed record OpenWebUiSettings(string? ProviderName, string Version)
+{
+    public static OpenWebUiSettings Of(PlatformSettings s) => new(OpenWebUiOidcValues.Parse(s.OpenWebUiOidc).ProviderName, SettingsEndpoints.Version(s));
+}
+
+/// <summary>Sets <c>Settings.OpenWebUi.Oidc.ProviderName</c>; null or blank clears it. Refused while the deployment sets the name. Open WebUI follows within a minute (it restarts).</summary>
+public sealed record OpenWebUiSettingsRequest : SettingsRequest, IValidatableObject
+{
+    [MaxLength(100)]
+    public string? ProviderName { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (ProviderName?.Any(char.IsControl) == true)
+        {
+            yield return new ValidationResult("The value may not hold control characters.", [nameof(ProviderName)]);
         }
     }
 }

@@ -166,10 +166,10 @@ added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the 
 | `--clamav on\|off` | `on`; a re-run without it keeps the value in `deploy/.env` | the malware scan: `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and, with `on`, the profile `clamav` in `COMPOSE_PROFILES`, so `rag-clamav` runs. `off` runs no `rag-clamav`, writes no ClamAV confs (even with `--host-memory 24` or `--freshclam-proxy`) and says so at the end: files are stored without a malware scan (*Malware scan*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--render` | – | runs `rag-renderer` for sources with fetch mode `browser`: `COMPOSE_PROFILES=render` in `deploy/.env` and the worker's `secrets/worker/Render__Endpoint`. Without it neither, and those sources wait with `render.not_configured` (*Renderer*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--openwebui-host HOST` | `chat.DOMAIN` with `--domain` and another `--openwebui-*` option, else – | the optional Open WebUI stack (below); the options below need it |
-| `--openwebui-oidc-client-id ID` | `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`) |
-| `--openwebui-oidc-client-secret-file FILE` | – | that client's secret: `OAUTH_CLIENT_SECRET` in `secrets/openwebui.env` |
-| `--openwebui-oidc-provider-url URL` | the OIDC authority + `/.well-known/openid-configuration` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` |
-| `--openwebui-oidc-provider-name NAME` | `Umeå kommun` | the label of Open WebUI's sign-in button |
+| `--openwebui-oidc-client-id ID` | the setup wizard's, else `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`): `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, a deployment value of rag-api and rag-admin |
+| `--openwebui-oidc-client-secret-file FILE` | the setup wizard's | that client's secret: `secrets/api/OpenWebUi__Oidc__ClientSecret` and `secrets/admin/OpenWebUi__Oidc__ClientSecret` (rag-api serves it to Open WebUI's start wrapper) |
+| `--openwebui-oidc-provider-url URL` | the setup wizard's, else rag-admin's authority + `/.well-known/openid-configuration` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` |
+| `--openwebui-oidc-provider-name NAME` | the setup wizard's, else `Umeå kommun` | the label of Open WebUI's sign-in button (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME`) |
 | `--openwebui-data-dir DIR` | `deploy/openwebui-data` | Open WebUI's own store |
 | `--role all` | `all` | multi-host roles come with P2 |
 | `--proxy` | – | a reverse proxy terminates public TLS: two distinct host names, listeners on `0.0.0.0` |
@@ -516,10 +516,10 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
    variables to match. Or add `proxy` to `COMPOSE_PROFILES`: the stack's own nginx with your certificate in front of
    all five host names ([portainer.md](portainer.md#tls-proxy)).
-5. **Open WebUI** (profile `openwebui`): its host is `chat.<domain>` (`UME_RAG_OPENWEBUI_HOST` for another); set its
-   OIDC client
-   (`UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`; redirect URI
-   `https://<host>/oauth/oidc/login/callback`). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it
+5. **Open WebUI** (profile `openwebui`): its host is `chat.<domain>` (`UME_RAG_OPENWEBUI_HOST` for another); its
+   OIDC client (redirect URI `https://<host>/oauth/oidc/login/callback`) is `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID` and
+   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, or, from the release with the setup wizard's Open WebUI step, the wizard's
+   (*Open WebUI's sign-in settings* below). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it
    and `rag-migrate` registers it as the deployment's own Open WebUI client (*Apps and keys*, marked *Managed by the
    deployment*; identity design §5.2). The feedback import's key is minted by the one-shot `rag-openwebui-setup` (as
    *The feedback service account* below says for Compose); `rag-bootstrap` points
@@ -605,3 +605,16 @@ OIDC client (`open-webui` on the shared Keycloak in the pilot; Entra's `ume-rag-
 address (loopback unless `--proxy`), so the reverse proxy terminates TLS. Its settings come from the Compose file on
 every start; an admin's edit in Open WebUI lasts until the next restart. Its fixed input warning (`WEBUI_BANNERS`) still
 shows a close button: a closed banner returns on the next reload.
+
+**Open WebUI's sign-in settings** (identity design §19) are not Open WebUI's own: rag-api holds them. Its start wrapper
+(`deploy/openwebui/start-with-sign-in.py`, the container's entrypoint) asks rag-api's internal route
+`/internal/openwebui/sign-in` with Open WebUI's key (only the deployment's own Open WebUI client may), waits up to a
+minute for rag-api at start, starts Open WebUI with the provider URL, client id, client secret and button label it
+answers, and asks again every minute: when an answer differs it stops Open WebUI and exits, and `restart:
+unless-stopped` starts it with the new values (users then sign in again). Each value comes from the deployment
+(`--openwebui-oidc-*` above: `deploy/.env` and the secret files of rag-api and rag-admin) when set, else from rag-admin's
+setup wizard, else the default (client `open-webui`, rag-admin's authority's discovery document, *Umeå kommun*). With
+no provider at all, or a stored secret rag-api can't read, it starts Open WebUI without OIDC sign-in, so nobody can sign
+in (its log says so). A provider the wizard sets on another host than the authority needs `--allow openwebui=HOST` for
+the host firewall (`deploy/host/docker-user-firewall.sh`). The button's label is also a setting in RAG's admin
+(*Settings*, `PUT /api/settings/openwebui`) unless the deployment sets it.

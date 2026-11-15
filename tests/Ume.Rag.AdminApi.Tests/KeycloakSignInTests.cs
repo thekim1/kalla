@@ -41,7 +41,7 @@ public sealed class KeycloakFixture : IAsyncLifetime
             .WithEnvironment("UME_RAG_OIDC_CLIENT_SECRET", OidcClientSecret)
             .WithEnvironment("UME_RAG_DEV_USER_PASSWORD", UserPassword)
             .WithEnvironment("UME_RAG_API_CLIENT_SECRET", ApiClientSecret)
-            .WithEnvironment("UME_RAG_OWUI_CLIENT_SECRET", TestSecrets.RandomHex())
+            .WithEnvironment("UME_RAG_OWUI_CLIENT_SECRET", OwuiClientSecret)
             .WithResourceMapping(new FileInfo(realm), "/opt/keycloak/data/import/")
             .WithPortBinding(Port, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(
@@ -54,6 +54,9 @@ public sealed class KeycloakFixture : IAsyncLifetime
     public string OidcClientSecret { get; } = TestSecrets.RandomHex();
     public string UserPassword { get; } = TestSecrets.RandomHex(16);
     public string ApiClientSecret { get; } = TestSecrets.RandomHex();
+
+    /// <summary>The secret of the realm's Open WebUI client <c>open-webui-dev</c> (the setup wizard's Open WebUI test, M-20 S5).</summary>
+    public string OwuiClientSecret { get; } = TestSecrets.RandomHex();
 
     /// <summary>The realm's issuer as the test process reaches it.</summary>
     public string Authority => $"http://{_keycloak.Hostname}:{_keycloak.GetMappedPublicPort(Port)}/realms/ume";
