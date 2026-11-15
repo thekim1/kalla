@@ -1173,6 +1173,10 @@ export interface AuditSummary {
   action: string
   entityType: string
   entityId: string | null
+  /** The object's current name, else the name in the entry's snapshot (a deleted object), else null (admin design §9.1). */
+  entityName: string | null
+  /** Whether the object still exists, for the types the list looks up; null for the others. */
+  entityExists: boolean | null
   service: string | null
   departmentId: string | null
   classification: string | null
@@ -1180,8 +1184,8 @@ export interface AuditSummary {
   reason: string | null
 }
 
-/** `GET /api/audit/{id}`: the entry with its before/after snapshot as JSON text. */
-export interface AuditDetail extends AuditSummary {
+/** `GET /api/audit/{id}`: the entry with its before/after snapshot as JSON text (without the list's object name). */
+export interface AuditDetail extends Omit<AuditSummary, 'entityName' | 'entityExists'> {
   recordedAt: IsoDateTime
   actorRoles: string | null
   actorDepartments: string | null

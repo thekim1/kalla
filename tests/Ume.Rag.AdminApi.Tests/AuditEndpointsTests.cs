@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.TestKit;
@@ -10,7 +12,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <summary>
 /// Granskningslogg (admin design §9.1, P1b item 9): platform admins see every entry, department admins their departments'
 /// entries; the filters and the keyset (newest first); the detail with the snapshot JSON as text; editors and viewers are
-/// refused.
+/// refused; each listed entry names its object (current name, else the snapshot's, else none).
 /// </summary>
 [Collection(AdminDatabaseGroup3.Name)]
 public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
@@ -88,5 +90,98 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
         var second = await platform.GetFromJsonAsync<JsonElement>($"{basePath}&limit=3&after={next}", Ct);
         Ids(second).ShouldBe([seed.Older]);
         second.GetProperty("next").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Entries_name_their_object_by_its_current_name_else_by_the_snapshot()
+    {
+        var code = "N" + Random.Shared.Next(100_000, 999_999);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var profile = await db.EmbeddingProfiles.AsNoTracking().Select(p => new { p.Id, p.Name }).FirstOrDefaultAsync(Ct);
+        if (profile is null)
+        {
+            var created = new EmbeddingProfile
+            {
+                Name = "audit-" + code, GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
+                CanaryText = EmbeddingCanaryText.Default, IsDefault = true, UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.EmbeddingProfiles.Add(created);
+            profile = new { created.Id, created.Name };
+        }
+
+        var collection = new Collection
+        {
+            Slug = "audit-" + code.ToLowerInvariant(), Name = "Bygglov " + code, Classification = Classification.Internal, EmbeddingProfileId = profile.Id,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var second = new Collection
+        {
+            Slug = "audit2-" + code.ToLowerInvariant(), Name = "Avfall " + code, Classification = Classification.Internal, EmbeddingProfileId = profile.Id,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var pipeline = new Pipeline { Name = "audit-" + code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        var source = new Source
+        {
+            CollectionId = collection.Id, Type = SourceTypes.UrlList, Name = "Sidor " + code, Classification = Classification.Internal, PipelineId = pipeline.Id,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var assistant = new Assistant
+        {
+            Slug = "audit-" + code.ToLowerInvariant(), Name = "Hjälpen " + code, Classification = Classification.Internal, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var client = new Client { Name = "Webb " + code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Public, UpdatedAt = DateTimeOffset.UtcNow };
+        var model = "audit/" + code.ToLowerInvariant();
+        db.GatewayModels.Add(new GatewayModel { Name = model, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+        db.AddRange(collection, second, pipeline, source, assistant, client);
+        await db.SaveChangesAsync(Ct);
+
+        var action = "names-" + code.ToLowerInvariant();
+        var at = DateTimeOffset.UtcNow;
+        var deleted = Guid.CreateVersion7();
+        var missingRun = Guid.CreateVersion7();
+        AuditLogEntry Entry(string type, string? id, string? details) => new()
+        {
+            Timestamp = at, RecordedAt = at, Actor = "o-" + code, Action = action, EntityType = type, EntityId = id, Details = details, Service = "rag-admin",
+        };
+        // Oldest first, so the list (newest first) is the reverse of this order.
+        var entries = new[]
+        {
+            Entry("collection", collection.Id.ToString(), """{"before":{"name":"Gammalt namn"},"after":{"name":"Gammalt namn"}}"""),
+            Entry("collection", second.Id.ToString(), null),
+            Entry("collection", collection.Id.ToString(), null),
+            Entry("source", source.Id.ToString(), null),
+            Entry("assistant", assistant.Id.ToString(), null),
+            Entry("client", client.Id.ToString(), null),
+            Entry("gateway-model", model, null),
+            Entry("embedding-profile", profile.Id.ToString(), null),
+            Entry("collection", deleted.ToString(), """{"before":{"name":"Borttagen"},"after":null}"""),
+            Entry("run", missingRun.ToString(), """{"before":null,"after":{"jobId":"j"}}"""),
+            Entry("settings", "chat", """{"before":{"value":{}},"after":{"value":{}}}"""),
+            Entry("organisation", null, null),
+        };
+        db.AuditLog.AddRange(entries);
+        await db.SaveChangesAsync(Ct);
+
+        await using var factory = database.HeaderFactory();
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var items = (await platform.GetFromJsonAsync<JsonElement>($"/api/audit?action={action}", Ct)).GetProperty("items").EnumerateArray()
+            .Select(i => (Name: i.GetProperty("entityName").GetString(), Exists: i.GetProperty("entityExists").ValueKind == JsonValueKind.Null ? (bool?)null : i.GetProperty("entityExists").GetBoolean()))
+            .Reverse().ToList();
+
+        items.ShouldBe(
+        [
+            ("Bygglov " + code, true), // the current name wins over the snapshot's
+            ("Avfall " + code, true),
+            ("Bygglov " + code, true),
+            ("Sidor " + code, true),
+            ("Hjälpen " + code, true),
+            ("Webb " + code, true),
+            (model, true),
+            (profile.Name, true),
+            ("Borttagen", false), // deleted: the snapshot's name
+            (null, false), // a run has no name
+            (null, null), // a settings section is not looked up and its snapshot has no name
+            (null, null),
+        ]);
     }
 }
