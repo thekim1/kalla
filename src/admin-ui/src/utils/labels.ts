@@ -198,6 +198,33 @@ export const OVERVIEW = {
   profileTitle: 'Set up the platform',
   profileText: 'Create the embedding profile first: it is the model that indexes the content, and no knowledge base can be created without it.',
   profileAction: 'Create the embedding profile',
+  live: 'Live',
+  liveMeta: 'Last 7 days',
+  liveEmpty: 'No questions in the last 7 days',
+  liveVersion: (n: number) => `Version ${n}`,
+  questions: 'Questions',
+  notFound: 'Not found',
+  thumbsUp: 'Thumbs up',
+  thumbsDown: 'Thumbs down',
+  cost: 'Cost',
+  health: 'Health',
+  runs: 'Runs in the last 24 hours',
+  noRuns: 'No runs in the last 24 hours.',
+  runsSucceeded: (n: number) => `${n} done`,
+  runsDegraded: (n: number) => `${n} with remarks`,
+  runsFailed: (n: number) => `${n} failed`,
+  runsRunning: (n: number) => `${n} running`,
+  queue: 'Queue',
+  queueWaiting: (n: number) => (n === 1 ? '1 job waiting' : `${n} jobs waiting`),
+  queueOldest: (age: string) => `oldest queued: ${age}`,
+  organisationSync: 'Organisation sync',
+  modelSync: 'Model sync',
+  lastSuccess: (when: string) => `Last success: ${when}`,
+  noSuccess: 'No successful sync yet',
+  failures: (n: number) => (n === 1 ? '1 failure in a row' : `${n} failures in a row`),
+  hide: 'Hide',
+  hideFor: (name: string) => `Hide Get started: ${name}`,
+  showHidden: (n: number) => `Show ${n} hidden`,
 } as const
 
 export const ORGANISATION = {
@@ -1611,6 +1638,8 @@ export const SETUP = {
   empty: 'You have no knowledge bases yet. Start by creating one.',
   create: 'Create knowledge base',
   allDone: 'All knowledge bases are done and available.',
+  summary: (name: string, done: number, total: number) => `${name}: ${done} of ${total} steps done`,
+  fold: 'Fold',
 } as const
 
 /** The audit log (admin design §9.1). */

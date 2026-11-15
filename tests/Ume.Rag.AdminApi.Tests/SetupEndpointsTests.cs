@@ -3,18 +3,22 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Gateway;
+using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
 
 /// <summary>
-/// The setup checklist "Kom igång" (admin design §5.4, §5.5.2) computed from state, and the overview listing the
-/// collections whose checklist is not done (§5.5.1).
+/// The setup checklist "Kom igång" (admin design §5.4, §5.5.2) computed from state, and Home (§5.5.1, "P1's Home"): the
+/// collections whose checklist is not done, the published assistants' last 7 days (Live) and the runs, queue and syncs (Health).
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
 public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
@@ -33,22 +37,12 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         var code = "K" + Random.Shared.Next(100_000, 999_999);
         await using var db = TestPostgres.Context(database.Connection(null));
         var department = new Department { Id = Guid.CreateVersion7(), Name = "Kom igång " + code, CostCenterCode = code, SyncedAt = DateTimeOffset.UtcNow };
-        var profile = await db.EmbeddingProfiles.Select(p => (Guid?)p.Id).FirstOrDefaultAsync(Ct);
-        if (profile is null)
-        {
-            var created = new EmbeddingProfile
-            {
-                Name = "setup-" + code, GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
-                CanaryText = EmbeddingCanaryText.Default, IsDefault = true, UpdatedAt = DateTimeOffset.UtcNow,
-            };
-            db.EmbeddingProfiles.Add(created);
-            profile = created.Id;
-        }
+        var profile = await ProfileAsync(db, code);
 
         Collection Make(string name, DateTimeOffset? published = null) => new()
         {
             Slug = $"setup-{name}-{code.ToLowerInvariant()}", Name = $"{name} {code}", DepartmentId = department.Id, Classification = Classification.Internal,
-            EmbeddingProfileId = profile.Value, PublishedAt = published, UpdatedAt = DateTimeOffset.UtcNow,
+            EmbeddingProfileId = profile, PublishedAt = published, UpdatedAt = DateTimeOffset.UtcNow,
         };
         var fresh = Make("Ny");
         var halfway = Make("Halvvägs");
@@ -127,6 +121,211 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         foreign.PublishedVersionId = foreignVersion.Id;
         await db.SaveChangesAsync(Ct);
         return new Seed(code, fresh.Id, halfway.Id, ready.Id, live.Id, running.Id);
+    }
+
+    /// <summary>The shared database's first embedding profile, or a new default one (saved with the caller's next save).</summary>
+    private static async Task<Guid> ProfileAsync(RagDbContext db, string code)
+    {
+        if (await db.EmbeddingProfiles.Select(p => (Guid?)p.Id).FirstOrDefaultAsync(Ct) is { } existing)
+        {
+            return existing;
+        }
+
+        var created = new EmbeddingProfile
+        {
+            Name = "setup-" + code, GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
+            CanaryText = EmbeddingCanaryText.Default, IsDefault = true, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.EmbeddingProfiles.Add(created);
+        return created.Id;
+    }
+
+    private sealed record LiveSeed(
+        string Code, string OtherCode, Guid Busy, Guid Quiet, Guid Other, Guid Department, DateTimeOffset OldestQueued);
+
+    /// <summary>
+    /// Two departments. In the first: <c>Quiet</c> (published version 2; 5 questions over two clients within the 7 days,
+    /// one not found, a thumb each way, 1.75 USD of which 0.25 estimated, and a day just outside the window), <c>Busy</c>
+    /// (10 questions today), a draft-only and an archived published assistant (with totals of their own), and a collection
+    /// whose source has runs of every state within 24 hours and one older; two queued jobs, a running and a finished one.
+    /// In the other: a published assistant, a failed run and a queued job.
+    /// </summary>
+    private async Task<LiveSeed> SeedLiveAsync()
+    {
+        var code = "L" + Random.Shared.Next(100_000, 999_999);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var now = DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm")).DateTime);
+        var department = new Department { Id = Guid.CreateVersion7(), Name = "Hem " + code, CostCenterCode = code, SyncedAt = now };
+        var elsewhere = new Department { Id = Guid.CreateVersion7(), Name = "Hem annan " + code, CostCenterCode = "Y" + code, SyncedAt = now };
+        var profile = await ProfileAsync(db, code);
+        Collection Base(Department owner, string name) => new()
+        {
+            Slug = $"home-{name}-{code.ToLowerInvariant()}", Name = $"{name} {code}", DepartmentId = owner.Id, Classification = Classification.Internal,
+            EmbeddingProfileId = profile, UpdatedAt = now,
+        };
+        var own = Base(department, "egen");
+        var theirs = Base(elsewhere, "annan");
+        var pipeline = new Pipeline { Name = "home-" + code, TemplateId = "url-list", UpdatedAt = now };
+        Source SourceOf(Collection collection) => new()
+        {
+            CollectionId = collection.Id, Type = SourceTypes.UrlList, Name = "Sidor", Classification = Classification.Internal, PipelineId = pipeline.Id, UpdatedAt = now,
+        };
+        var source = SourceOf(own);
+        var otherSource = SourceOf(theirs);
+        Assistant Make(Department owner, string name, string state = AssistantStates.Active) => new()
+        {
+            Slug = $"home-{name.ToLowerInvariant()}-{code.ToLowerInvariant()}", Name = $"{name} {code}", DepartmentId = owner.Id, Classification = Classification.Internal,
+            State = state, UpdatedAt = now,
+        };
+        var quiet = Make(department, "Quiet");
+        var busy = Make(department, "Busy");
+        var draftOnly = Make(department, "Draft");
+        var archived = Make(department, "Archived", AssistantStates.Archived);
+        var other = Make(elsewhere, "Other");
+        var web = new Client { Name = "Open WebUI " + code, Kind = ClientKinds.OpenWebUi, ClassificationCeiling = Classification.Internal, UpdatedAt = now };
+        var console = new Client { Name = "Console " + code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Internal, UpdatedAt = now };
+        db.AddRange(department, elsewhere, own, theirs, pipeline, source, otherSource, quiet, busy, draftOnly, archived, other, web, console);
+
+        Run RunOf(Source of, string state, double hoursAgo) => new()
+        {
+            SourceId = of.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "schedule", State = state, StartedAt = now.AddHours(-hoursAgo),
+        };
+        db.AddRange(
+            RunOf(source, RunStates.Succeeded, 1), RunOf(source, RunStates.Degraded, 2), RunOf(source, RunStates.AwaitingDeletionConfirmation, 3),
+            RunOf(source, RunStates.Failed, 4), RunOf(source, RunStates.Running, 0), RunOf(source, RunStates.Cancelled, 1),
+            RunOf(source, RunStates.Failed, 25), // before the 24 hours
+            RunOf(otherSource, RunStates.Failed, 1));
+
+        Job JobOf(Department owner, string state, double hoursAgo) => new()
+        {
+            Class = JobClasses.Sync, DepartmentId = owner.Id, Classification = Classification.Internal, Payload = "{}", EnqueuedAt = now.AddHours(-hoursAgo),
+            AvailableAt = now.AddHours(-hoursAgo), State = state,
+        };
+        var oldest = JobOf(department, JobStates.Queued, 2);
+        db.AddRange(oldest, JobOf(department, JobStates.Queued, 0.1), JobOf(department, JobStates.Running, 5), JobOf(department, JobStates.Succeeded, 6),
+            JobOf(elsewhere, JobStates.Queued, 7));
+
+        AssistantDailyTotal Totals(Assistant a, Client c, int daysAgo, int messages, int notFound = 0, int up = 0, int down = 0) => new()
+        {
+            Day = today.AddDays(-daysAgo), AssistantId = a.Id, ClientId = c.Id, DepartmentId = a.DepartmentId, Classification = Classification.Internal,
+            Conversations = 1, Messages = messages, NotFound = notFound, ThumbsUp = up, ThumbsDown = down,
+        };
+        AssistantDailyUsage Usage(Assistant a, Client c, int daysAgo, decimal cost, decimal estimated = 0m) => new()
+        {
+            Day = today.AddDays(-daysAgo), AssistantId = a.Id, ClientId = c.Id, DepartmentId = a.DepartmentId, Classification = Classification.Internal,
+            Step = "chat-answer", Calls = 1, InputTokens = 10, OutputTokens = 5, CostUsd = cost, EstimatedCostUsd = estimated, EstimatedCalls = estimated > 0 ? 1 : 0,
+        };
+        db.AddRange(
+            Totals(quiet, web, 0, 3, notFound: 1, up: 1), Totals(quiet, console, 6, 2, down: 1), Totals(quiet, web, 7, 100, notFound: 50),
+            Totals(busy, web, 0, 10), Totals(draftOnly, web, 0, 40), Totals(archived, web, 0, 30), Totals(other, web, 0, 20));
+        db.AddRange(
+            Usage(quiet, web, 0, 0.5m, 0.25m), Usage(quiet, console, 6, 1m), Usage(quiet, web, 7, 50m), Usage(busy, web, 0, 0.1m), Usage(other, web, 0, 9m));
+        await db.SaveChangesAsync(Ct);
+
+        AssistantVersion Version(Assistant a, int number) => new()
+        {
+            AssistantId = a.Id, Number = number, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(own.Id)],
+            PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
+        };
+        var quietV1 = Version(quiet, 1);
+        quietV1.State = AssistantVersionStates.Superseded;
+        var quietV2 = Version(quiet, 2);
+        var busyV1 = Version(busy, 1);
+        var archivedV1 = Version(archived, 1);
+        var otherV1 = Version(other, 1);
+        var draft = Version(draftOnly, 1);
+        draft.State = AssistantVersionStates.Draft;
+        db.AddRange(quietV1, quietV2, busyV1, archivedV1, otherV1, draft);
+        await db.SaveChangesAsync(Ct);
+        quiet.PublishedVersionId = quietV2.Id;
+        busy.PublishedVersionId = busyV1.Id;
+        archived.PublishedVersionId = archivedV1.Id;
+        other.PublishedVersionId = otherV1.Id;
+        draftOnly.DraftVersionId = draft.Id;
+        await db.SaveChangesAsync(Ct);
+        return new LiveSeed(code, elsewhere.CostCenterCode, busy.Id, quiet.Id, other.Id, department.Id, oldest.EnqueuedAt);
+    }
+
+    private static (Guid Id, int Version, int Questions, int NotFound, int Up, int Down, decimal Cost) LiveRow(JsonElement l) =>
+        (l.GetProperty("assistantId").GetGuid(), l.GetProperty("publishedVersion").GetInt32(), l.GetProperty("questions").GetInt32(), l.GetProperty("notFound").GetInt32(),
+            l.GetProperty("thumbsUp").GetInt32(), l.GetProperty("thumbsDown").GetInt32(), l.GetProperty("costUsd").GetDecimal());
+
+    [Fact]
+    public async Task Live_sums_the_last_7_days_of_the_caller_s_published_active_assistants_most_questions_first()
+    {
+        var seed = await SeedLiveAsync();
+        await using var factory = database.HeaderFactory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+        using var otherAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OtherCode);
+
+        var live = (await viewer.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("live");
+        // The draft-only and the archived assistant are left out, as is the day before the 7 days; every client counts.
+        live.EnumerateArray().Select(LiveRow).ShouldBe(
+        [
+            (seed.Busy, 1, 10, 0, 0, 0, 0.1m),
+            (seed.Quiet, 2, 5, 1, 1, 1, 1.75m),
+        ]);
+        (live[0].GetProperty("name").GetString(), live[0].GetProperty("departmentId").GetGuid()).ShouldBe(($"Busy {seed.Code}", seed.Department));
+
+        // Another department's admin sees only their own assistant.
+        (await otherAdmin.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("live").EnumerateArray().Select(LiveRow)
+            .ShouldBe([(seed.Other, 1, 20, 0, 0, 0, 9m)]);
+    }
+
+    [Fact]
+    public async Task Health_counts_the_department_s_runs_of_24_hours_by_outcome_and_its_queued_jobs()
+    {
+        var seed = await SeedLiveAsync();
+        await using var factory = database.HeaderFactory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+
+        var health = (await viewer.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("health");
+        // Only the caller's department; the cancelled run and the one 25 hours ago don't count, the held one is with remarks.
+        var department = health.GetProperty("departments").EnumerateArray().ShouldHaveSingleItem();
+        (department.GetProperty("departmentId").GetGuid(), department.GetProperty("departmentName").GetString()).ShouldBe((seed.Department, $"Hem {seed.Code}"));
+        var runs = department.GetProperty("runs");
+        (runs.GetProperty("succeeded").GetInt32(), runs.GetProperty("degraded").GetInt32(), runs.GetProperty("failed").GetInt32(), runs.GetProperty("running").GetInt32())
+            .ShouldBe((1, 2, 1, 1));
+        // The two queued jobs of the department; neither the running and finished ones nor the other department's.
+        var queue = health.GetProperty("queue");
+        queue.GetProperty("waiting").GetInt32().ShouldBe(2);
+        queue.GetProperty("oldestQueuedAt").GetDateTimeOffset().ShouldBe(seed.OldestQueued, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public async Task Health_shows_each_gateway_sync_s_last_success_and_failures()
+    {
+        var seed = await SeedLiveAsync();
+        await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Gateway:BaseUrl", "http://refusing-gateway/");
+            web.UseSetting("Gateway:Key", "refused-key");
+            web.ConfigureTestServices(services =>
+            {
+                services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new RefusingGateway());
+                services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new RefusingGateway());
+            });
+        });
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+
+        (await factory.Services.GetRequiredService<OrganisationSync>().RunAsync(null, Ct)).ShouldBeNull();
+
+        var health = (await viewer.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("health");
+        var organisation = health.GetProperty("organisationSync");
+        (organisation.GetProperty("lastSuccessAt").ValueKind, organisation.GetProperty("consecutiveFailures").GetInt32()).ShouldBe((JsonValueKind.Null, 1));
+        var models = health.GetProperty("modelSync");
+        (models.GetProperty("lastSuccessAt").ValueKind, models.GetProperty("consecutiveFailures").GetInt32()).ShouldBe((JsonValueKind.Null, 0));
+    }
+
+    /// <summary>A gateway that refuses every call with <c>401 invalid_api_key</c>.</summary>
+    private sealed class RefusingGateway : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("""{"error":{"code":"invalid_api_key","message":"Invalid API key."}}""", Encoding.UTF8, "application/json"),
+            });
     }
 
     [Fact]

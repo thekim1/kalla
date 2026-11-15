@@ -1169,12 +1169,52 @@ export interface CollectionSetup {
   done: boolean
 }
 
-/** `GET /api/overview`: whether any collection is in scope, and the checklists not done yet. */
+/** A published assistant's last 7 days on Home (admin design §5.5.1): summed over the days and every client. */
+export interface LiveAssistant {
+  assistantId: string
+  name: string
+  departmentId: string
+  /** The published version's number. */
+  publishedVersion: number
+  questions: number
+  notFound: number
+  thumbsUp: number
+  thumbsDown: number
+  /** The gateway's cost plus the estimate (§8.6). */
+  costUsd: number
+}
+
+/** Runs by outcome: done, with remarks (degraded or held for deletion confirmation), failed, running. */
+export interface RunCounts {
+  succeeded: number
+  degraded: number
+  failed: number
+  running: number
+}
+
+/** A gateway sync's last success and its failed runs in a row since. */
+export interface SyncHealth {
+  lastSuccessAt: string | null
+  consecutiveFailures: number
+}
+
+/** Health on Home: the runs of the last 24 hours per department, the job queue, and the organisation and model syncs. */
+export interface OverviewHealth {
+  departments: { departmentId: string; departmentName: string; runs: RunCounts }[]
+  queue: { waiting: number; oldestQueuedAt: string | null }
+  organisationSync: SyncHealth
+  modelSync: SyncHealth
+}
+
+/** `GET /api/overview`: Home (admin design §5.5.1): Live, Health, whether any collection is in scope, and the checklists not done yet. */
 export interface Overview {
   hasCollections: boolean
   setup: CollectionSetup[]
   /** A platform admin, and no active default embedding profile yet (the platform's first-run step). */
   needsEmbeddingProfile: boolean
+  /** The caller's published, active assistants, most questions first. */
+  live: LiveAssistant[]
+  health: OverviewHealth
 }
 
 /** `GET /api/audit`: an entry of the audit log (admin design §9.1). */

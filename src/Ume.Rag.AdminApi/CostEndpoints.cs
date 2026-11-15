@@ -126,7 +126,8 @@ public static class CostEndpoints
         return api;
     }
 
-    private static DateOnly Today(AdminContext admin) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now, Stockholm).DateTime);
+    /// <summary>Today as a Europe/Stockholm day, the usage tables' <c>Day</c>.</summary>
+    internal static DateOnly Today(AdminContext admin) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now, Stockholm).DateTime);
 
     /// <summary>
     /// <c>AssistantDailyUsage</c> summed per period, assistant, department, step and client within <paramref name="departments"/>
