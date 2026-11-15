@@ -172,10 +172,10 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     const slug = (await page.getByText(/^Model name in Open WebUI: /).textContent())!.replace('Model name in Open WebUI: ', '').trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'rag-api lists the assistant', 60_000)
 
-    // 14 Share the knowledge base with the whole municipality (admin design §5.5.2, item 36).
+    // 14 Share the knowledge base with the whole organisation (admin design §5.5.2, item 36; renamed in #544).
     await ready(page, collectionPage)
     await act.press(page.getByRole('tab', { name: 'Sharing' }))
-    await act.check(page.getByRole('radio', { name: 'Whole municipality' }))
+    await act.check(page.getByRole('radio', { name: /^Whole organisation/ }))
     await act.press(page.getByRole('button', { name: 'Save sharing' }))
     await expect(page.getByText('The sharing has been saved.')).toBeVisible()
 
@@ -200,7 +200,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(otherPicker).toBeHidden()
     const link = other.getByRole('listitem').filter({ hasText: collection })
     await expect(link.getByText('(Kommunledningskontoret, shared)')).toBeVisible()
-    await otherAct.fill(link.getByRole('combobox', { name: `Topics of ${collection}` }), 'isytor')
+    await otherAct.fill(link.getByRole('combobox', { name: /^Limit to topics/ }), 'isytor')
     await otherAct.press(link.getByRole('button', { name: 'Add topic' }))
     await expect(link.getByText('isytor', { exact: true })).toBeVisible()
     await otherAct.press(other.getByRole('button', { name: 'Save draft' }))
