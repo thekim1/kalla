@@ -72,10 +72,17 @@ public sealed record SearchTimings(double KeywordMs, double EmbeddingMs, double 
 
 public sealed class RetrievalEngineOptions
 {
-    /// <summary><c>Retrieval:MaxConcurrentSearches</c> per instance (knowledge design §6.6): ⌊(pool − 3) ÷ 2⌋ = 4.</summary>
+    /// <summary>
+    /// <c>Retrieval:MaxConcurrentSearches</c> per instance (knowledge design §6.6): ⌊(pool − 3) ÷ 2⌋ = 4. It bounds the
+    /// connections the engine's statements hold: a search runs at most two at once (K and V), so the engine has
+    /// 2 × this many statement slots (<see cref="StatementSlots"/>), each held only while its statement runs (#764).
+    /// </summary>
     public int MaxConcurrentSearches { get; set; } = 4;
 
-    /// <summary>How long a search waits for a slot before <c>search_unavailable</c> (§6.6).</summary>
+    /// <summary>The statements (K, V and the reranker's text read) the engine runs at once: 2 × <see cref="MaxConcurrentSearches"/>.</summary>
+    public int StatementSlots => MaxConcurrentSearches * 2;
+
+    /// <summary>How long a statement waits for a slot before <c>search_unavailable</c> (§6.6).</summary>
     public TimeSpan SlotWait { get; set; } = TimeSpan.FromMilliseconds(200);
 
     /// <summary>
@@ -100,6 +107,12 @@ public sealed class RetrievalEngineOptions
 /// §6.4) once the vector is there; RRF fusion (§6.5) with the score-adjuster seam; dedup by <c>(DocumentId, TextHash)</c>
 /// and identity group (§8); the optional reranker (§6.7); the per-document cap and <c>top_k</c>; coverage (§7).
 /// Reads no config and knows no principals: everything comes in through <see cref="SearchScope"/>.
+/// <para>
+/// A slot is one statement's connection (<see cref="RetrievalEngineOptions.StatementSlots"/>), held while the statement
+/// runs and no longer: a search waiting for its query embedding or its rerank call holds none, so the gateway's latency
+/// does not limit how many searches an instance serves (#764). The connections stay bounded as before, at two per
+/// <c>MaxConcurrentSearches</c>.
+/// </para>
 /// </summary>
 public sealed class RetrievalEngine : IDisposable
 {
@@ -136,7 +149,7 @@ public sealed class RetrievalEngine : IDisposable
         _adjuster = adjuster;
         _decompounder = decompounder ?? SwedishDecompounder.Default;
         _metrics = metrics;
-        _slots = new SemaphoreSlim(_options.MaxConcurrentSearches, _options.MaxConcurrentSearches);
+        _slots = new SemaphoreSlim(_options.StatementSlots, _options.StatementSlots);
         _time = time ?? TimeProvider.System;
     }
 
@@ -144,7 +157,7 @@ public sealed class RetrievalEngine : IDisposable
 
     /// <summary>
     /// Runs the search. Throws <see cref="ArgumentException"/> for an invalid request,
-    /// <see cref="SearchUnavailableException"/> when no slot frees within the wait or a statement times out, and
+    /// <see cref="SearchUnavailableException"/> when a statement gets no slot within the wait or times out, and
     /// <see cref="QueryEmbeddingUnavailableException"/> when the embedding fails and the mode or request does not allow
     /// degrading.
     /// </summary>
@@ -169,6 +182,15 @@ public sealed class RetrievalEngine : IDisposable
             return new SearchResult(normalized, [], coverage, null, null, new SearchTimings(0, 0, 0, 0, total.Elapsed.TotalMilliseconds));
         }
 
+        return await RunAsync(request, scope, normalized, total, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs one statement in a slot (§6.6): waits at most <see cref="RetrievalEngineOptions.SlotWait"/> for one, else
+    /// <see cref="SearchUnavailableException"/>; the slot is free again when the statement has answered.
+    /// </summary>
+    private async Task<T> InSlotAsync<T>(Func<Task<T>> statement, CancellationToken cancellationToken)
+    {
         if (!await _slots.WaitAsync(_options.SlotWait, cancellationToken))
         {
             _metrics?.SearchUnavailable("slots");
@@ -177,7 +199,7 @@ public sealed class RetrievalEngine : IDisposable
 
         try
         {
-            return await RunAsync(request, scope, normalized, total, cancellationToken);
+            return await statement();
         }
         finally
         {
@@ -202,7 +224,7 @@ public sealed class RetrievalEngine : IDisposable
                 {
                     var stop = await _sizes.StopLexemesAsync(scope, linked.Token);
                     var keywordScope = stop.Count == 0 ? scope : scope with { KeywordStopLexemes = stop };
-                    return await _index.KeywordAsync(keywordScope, searchText, request.Filters, ranking.Candidates, linked.Token);
+                    return await InSlotAsync(() => _index.KeywordAsync(keywordScope, searchText, request.Filters, ranking.Candidates, linked.Token), linked.Token);
                 },
                 ms => keywordTime = ms);
         }
@@ -244,7 +266,7 @@ public sealed class RetrievalEngine : IDisposable
 
                     vectorSearch = plan.Search;
                     var started = Stopwatch.StartNew();
-                    vectorCandidates = await _index.VectorAsync(scope, v, request.Filters, ranking.Candidates, plan.Search, linked.Token);
+                    vectorCandidates = await InSlotAsync(() => _index.VectorAsync(scope, v, request.Filters, ranking.Candidates, plan.Search, linked.Token), linked.Token);
                     vectorTime = started.Elapsed.TotalMilliseconds;
                 }
             }
@@ -329,7 +351,7 @@ public sealed class RetrievalEngine : IDisposable
         {
             IReadOnlyDictionary<Guid, string> texts = _texts is null
                 ? new Dictionary<Guid, string>()
-                : await _texts.TextsAsync(scope, [.. top.Select(f => f.Candidate.ChunkId)], timeout.Token);
+                : await InSlotAsync(() => _texts.TextsAsync(scope, [.. top.Select(f => f.Candidate.ChunkId)], timeout.Token), timeout.Token);
             var passages = top.Where(f => texts.ContainsKey(f.Candidate.ChunkId))
                 .Select(f => new RerankPassage(f.Candidate.ChunkId, texts[f.Candidate.ChunkId]))
                 .ToList();
