@@ -104,8 +104,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   values, reload by fingerprint, start without an authority, a failed callback no longer a 500) merged. S3 merged: the deploy side (#763: `Setup__Secret`,
   `UME_RAG_SETUP_REOPEN`, the AppHost's `Setup:Try`) and the backend (#767: setup state, code, session, the test sign-in,
   complete, re-open, events 6008–6012; an independent security review's findings fixed before the merge, proposal §10).
-  **In work:** S4 (the wizard's pages, without the Open WebUI step) and S5 (Open WebUI: storage, the second test
-  target, rag-api's internal route, the start wrapper), in parallel; the Open WebUI step of the UI follows both. Left
-  then: S6, S7, S8. Stream b
+  S4 merged (#769: the wizard's pages; run end to end in a browser against the local Keycloak; #770 fixed a
+  race in `complete` that made a test flaky). **In work:** S5 (Open WebUI: storage, the second test target, rag-api's
+  internal route, the start wrapper). Then: the Open WebUI step of the UI and the Home reminder for a secret's expiry,
+  S6, S7, S8. Stream b
   was told on #759.
 

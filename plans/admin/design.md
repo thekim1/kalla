@@ -1593,8 +1593,10 @@ A section's form is built in two steps:
 
 1. **Setup code.** One field; where to find the code (the rag-admin container's output, with the command per deploy
    form). A wrong code and the attempt limit have their own messages.
-2. **Addresses.** The public host names the deployment gave (read-only), each with *Test* (does it answer through the
-   proxy), and the redirect URIs to register at the provider, each with a copy button.
+2. **Addresses.** The redirect URIs to register at the provider (sign-in and sign-out callback, as rag-admin builds
+   them for the address the wizard is opened at), each with a copy button, and what rag-admin's own configuration says
+   of the deployment (the gateway's address, the public API address, the break-glass platform-admin groups). rag-admin
+   has no list of the other host names, so there is no per-host test here.
 3. **Sign-in.** Provider address, client id, client secret, an optional expiry date of the secret; *Advanced* holds
    the token-shape values with a preset for Keycloak and for Entra ID. A value set by the deployment is locked with
    *Set by the deployment*. **Test sign-in** opens the provider in a new window; the result shows who signed in, the
@@ -1602,11 +1604,17 @@ A section's form is built in two steps:
    was read. A failed step says which (address, discovery, secret, a refused claim check).
 4. **Open WebUI** (only when the deployment runs it): the same fields and test for its client; **Skip for now** is
    allowed.
-5. **Summary.** Everything the deployment set, read-only with its source: ports, profiles, the crawler's private
-   ranges, the gateway's address. **Finish** is enabled when step 3's test passed for a platform admin, and leads to
-   sign-in and the *Get started* checklist (§5.5.1).
+5. **Summary.** The values to save with their sources (set by the deployment, set here, default), where the secret
+   comes from, the same deployment facts as step 2, and the tested person. **Finish** is enabled when step 3's test
+   passed for a platform admin and no value changed since, and leads to "Sign-in is set up" with a **Sign in** button
+   (no automatic navigation), then the *Get started* checklist (§5.5.1).
 
-Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps.
+The sign-in page offers **Set up sign-in** while setup is open (and no *Sign in* while sign-in isn't configured), and
+says to restart rag-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
+in M-20 S4 (#769); the Open WebUI step follows S5.
+
+Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps (not built
+yet: M-20, after S5).
 
 ## 6. Pipelines
 
