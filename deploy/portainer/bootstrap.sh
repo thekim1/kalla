@@ -231,7 +231,7 @@ case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
 # Certificates (#705): rag-postgres and rag-parser read theirs only at start, and a stack update recreates neither when
-# its configuration is unchanged (rag-api, rag-admin and rag-worker reload theirs). Each certificate that expires within
+# its configuration is unchanged (Kestrel watches rag-api's, rag-admin's and rag-worker's files). Each certificate that expires within
 # 60 days is named on every run; the service certificates are re-issued below 30 days, the CA never.
 restart=""
 for svc in $reissued; do case "$svc" in postgres|parser) restart="$restart rag-$svc" ;; esac; done

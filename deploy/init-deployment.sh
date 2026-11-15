@@ -690,8 +690,9 @@ Certificates: a new internal CA and every certificate it issued. The services re
 stack (docker compose --env-file deploy/.env up -d --force-recreate)."
 elif [ "$renew" = 1 ]; then
   renew_note="
-Certificates: re-issued. postgres and rag-parser read theirs only at start (rag-api, rag-admin and rag-worker reload
-theirs): docker compose --env-file deploy/.env restart postgres rag-parser"
+Certificates: re-issued. postgres and rag-parser read theirs only at start: docker compose --env-file deploy/.env
+restart postgres rag-parser (Kestrel watches rag-api's, rag-admin's and rag-worker's; restart them too if a client still
+sees the old certificate)"
 fi
 owui_note=""
 if [ -n "$owui_host" ]; then

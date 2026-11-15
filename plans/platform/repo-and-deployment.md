@@ -85,9 +85,9 @@ deploy/
   redis/                             redis.conf, users.acl.example (P2, first multi-host deployment)
   proxy/nginx.conf.example           reverse proxy (one slot; two slots each from P2)
   otel/                              collector-siem.example.yaml (security category), dashboards/*.json
-  host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5)
+  host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5), cert-expiry.sh + rag-cert-expiry.service/.timer (internal certificates within 60 days, #705)
   kubernetes/                        later (§10)
-  tests/                             compose-rolling-e2e.sh, verify-data.sh, spa-smoke.mjs (copy + adapt)
+  tests/                             compose-rolling-e2e.sh, verify-data.sh, spa-smoke.mjs (copy + adapt); openwebui-parity.sh (#707)
 dev/keycloak/ume-realm.json          realm `ume` with the gateway's claims + rag-* roles
 docs/                                local-development, production-setup, runbook, upgrade-guide, zero-downtime-updates,
                                      kubernetes, security-and-compliance, security-events, architecture, adr
