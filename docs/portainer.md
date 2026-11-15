@@ -1,7 +1,7 @@
-# Deploying and upgrading with Portainer (0.5.x)
+# Deploying and upgrading with Portainer (0.6.x)
 
-How to run Ume.Rag with the LLM gateway `v0.10.2` as one Portainer stack: a first deploy on a new VM, and the
-upgrade of an existing stack from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
+How to run Ume.Rag with the LLM gateway `v0.10.2` as one Portainer stack: a first deploy on a new VM, the upgrade of
+a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
 [*Portainer and other hosts without shell access*](runbook.md#portainer-and-other-hosts-without-shell-access), and
@@ -13,9 +13,9 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 
 ## Which file
 
-Use the **`compose.portainer.yaml` asset of the `v0.5.1` release** (or later), or the same file in the repository at
-`deploy/portainer/compose.portainer.yaml`. It pins the gateway's images (`v0.10.2`) and Ume.Rag's (`0.5.1`) by digest,
-so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+Use the **`compose.portainer.yaml` asset of the `v0.6.0` release** (or later), or the same file in the repository at
+`deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
+(`v0.10.2`) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
 no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
 
 ## What you need
@@ -152,6 +152,61 @@ read the CA only at start.
 
 Then the knowledge bases and assistants: each gets one of its department's assigned keys (V39); a published assistant
 must have one once the gateway acts as keys.
+
+## Upgrade from 0.5.x to 0.6.0
+
+**Not a rolling update:** migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads, so stop
+rag-admin first. Plan a short window (the services restart once). The gateway moves to `v0.10.2` (rolling, no
+migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md#060).
+
+**Before the update**
+
+1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 8.
+2. **In the gateway's admin**, give `rag-api`'s and `rag-admin`'s credential keys the residencies **`OnPrem` and `Eu`
+   only** (the worker's already are). From 0.6.0 each service's ceiling is its key's residencies; a key that allows
+   every residency would let a public assistant answer at `External`.
+3. **If Open WebUI is on and its client was made by hand** (the 0.5.0 stack): in Ume.Rag's admin, *Apps and keys*,
+   open that client and note its assistants, information class, history and feedback days. After the update Open WebUI
+   uses a client the deployment makes, and the hand-made one is no longer trusted.
+4. If you set any of `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` or `_VIEWER`, note their
+   groups (with the shared Keycloak the roles come in the token and there is nothing to note).
+5. Optional: set the organisation's name in the gateway's admin console (branding); Ume.Rag's header and sign-in page
+   show it from now on.
+
+**The update**
+
+6. **Stop** `rag-admin` (*Containers*, select, *Stop*).
+7. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
+   - **add** `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1` (the cost and budget read-back);
+   - **keep** `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY`. Don't add
+     `UME_INTEGRATION_MANIFEST` from `stack.env.example`: it would create three new keys beside yours (the 0.5.0 keys
+     are named `Ume.Rag api` etc., not `rag-api`). The upgrade guide says when to move to it;
+   - **remove** those that are no longer read (a leftover is ignored, so this is tidying): `UME_RAG_OPENWEBUI_API_KEY`,
+     `UME_RAG_OPENWEBUI_CLIENT_ID`, `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH`,
+     `UME_RAG_OPENWEBUI_BASE_URL`, `UME_RAG_CLAMAV_MODE`, `UME_RAG_EMBEDDING_MODEL` and the other
+     `UME_RAG_EMBEDDING_*`, `UME_RAG_GATEWAY_MAX_RESIDENCY`, `UME_RAG_GATEWAY_INTEGRATION_API_URL`,
+     `UME_ORGANISATION_NAME` and the four group variables of step 4 (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays).
+8. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `migrations`; `rag-bootstrap`;
+   `rag-migrate` (migrations `ClientManagedByDeployment`, `RemoveWorkerConcurrency`, `IdentityRoleGroups`,
+   `ChunkSetsEmbeddingProfileIndex`, `ClientsManagedPerName`; it creates the managed clients *Open WebUI* (while its
+   profile is on) and
+   `admin-console`); then the services. With Open WebUI on, `rag-openwebui-setup` mints the feedback key a minute after
+   Open WebUI starts.
+
+**After the update**
+
+9. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing, and should name no gateway key.
+10. **Open WebUI's client** (step 3): in *Apps and keys*, open *Open WebUI* (*Managed by the deployment*), set the class,
+    history and feedback days to the old client's and tick the same assistants; save. Then disable the hand-made client
+    and revoke its key.
+11. If you noted groups in step 4, enter them under *Settings → Role groups*.
+12. **Check:**
+    - each of `rag-api`, `rag-admin` and `rag-worker` logs *the credential key's ceiling: Eu* at start;
+    - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
+    - a test user signs in to Open WebUI, sees the assistants and gets an answer;
+    - `rag-openwebui-setup`'s log says *minted*;
+    - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
+    - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
 
 ## Upgrade from 0.2.0–0.4.0
 
