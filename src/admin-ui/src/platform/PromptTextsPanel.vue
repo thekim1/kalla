@@ -14,7 +14,8 @@ import { problemMessage } from '@/utils/problem'
 // The Settings page's Prompt texts panel (admin design §4.5; chat design §7.3; Decisions "Chat prompt texts configurable"):
 // every prompt the platform sends, in order, from GET /api/settings/chat/prompts. Editable texts start from their saved value
 // or default and have Reset to default; locked lines are read-only. A save writes only the texts that differ from their
-// default into Settings.Chat.prompts (V38 on the server), keeping the chat section's other members.
+// default into Settings.Chat.prompts (V38 on the server), keeping the chat section's other members. The save sends the chat
+// section and its version as loaded, so a concurrent change answers 409 instead of being overwritten.
 
 interface PromptTextLine {
   member: string | null
@@ -33,6 +34,7 @@ interface PromptTextSection {
 const ui = useUiStore()
 const sections = ref<PromptTextSection[]>([])
 const values = ref<Record<string, string>>({})
+const chat = ref<{ value: Record<string, unknown>; version: string } | null>(null)
 const loadError = ref<unknown>(null)
 const saveError = ref<unknown>(null)
 const saving = ref(false)
@@ -45,6 +47,8 @@ const defaults = computed(() =>
 async function load(): Promise<void> {
   loadError.value = null
   try {
+    // The section first: a change landing between the two reads then fails the save with 409 rather than slipping through.
+    chat.value = await http.get<{ value: Record<string, unknown>; version: string }>('/api/settings/chat')
     sections.value = await http.get<PromptTextSection[]>('/api/settings/chat/prompts')
     values.value = Object.fromEntries(sections.value.flatMap((s) => s.lines).filter((l) => l.member).map((l) => [l.member!, l.value ?? l.text]))
   } catch (e) {
@@ -79,12 +83,11 @@ async function save(): Promise<void> {
   saving.value = true
   saveError.value = null
   try {
-    const chat = await http.get<{ value: Record<string, unknown>; version: string }>('/api/settings/chat')
-    const value = { ...chat.value }
+    const value = { ...chat.value!.value }
     const changed = prompts()
     if (Object.keys(changed).length > 0) value.prompts = changed
     else delete value.prompts
-    await http.put('/api/settings/chat', { value, version: chat.version })
+    await http.put('/api/settings/chat', { value, version: chat.value!.version })
     ui.notify(P.saved)
     await load()
   } catch (e) {
