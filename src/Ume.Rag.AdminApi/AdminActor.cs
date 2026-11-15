@@ -41,6 +41,29 @@ public sealed record AdminActor(
             agent.Length == 0 ? null : Printable(agent.Length > MaxUserAgent ? agent[..MaxUserAgent] : agent));
     }
 
+    /// <summary>
+    /// The actor of a setup completion (identity design §19): the person whose test sign-in passed, from the test's stored result,
+    /// on an anonymous request; no admin session exists, so <see cref="SessionId"/> is the setup session's id (event 6010). Only the
+    /// rag-* roles are kept, as a signed-in admin has no others that matter.
+    /// </summary>
+    public static AdminActor ForSetup(HttpContext http, string subject, string? name, IEnumerable<string> roles, IEnumerable<string> departments, string setupSessionId)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(roles);
+        ArgumentNullException.ThrowIfNull(departments);
+        static string Capped(string value, int max) => value.Length > max ? value[..max] : value;
+        var agent = http.Request.Headers.UserAgent.ToString();
+        return new AdminActor(
+            Capped(Printable(subject) ?? "unknown", 200),
+            Printable(name) is { } shown ? Capped(shown, 200) : null,
+            Capped(Printable(string.Join(',', roles.Where(r => r.StartsWith(OidcOptionsValidator.RoleGroupPrefix, StringComparison.Ordinal)).Order(StringComparer.Ordinal)))!, 200),
+            Capped(Printable(string.Join(',', departments.Order(StringComparer.Ordinal)))!, 1000),
+            AddressOf(http),
+            setupSessionId,
+            System.Diagnostics.Activity.Current?.TraceId.ToString() ?? http.TraceIdentifier,
+            agent.Length == 0 ? null : Printable(agent.Length > MaxUserAgent ? agent[..MaxUserAgent] : agent));
+    }
+
     /// <summary>The audit actor of <paramref name="user"/>: <c>oid</c>, else <c>sub</c>, else the name.</summary>
     public static string SubjectOf(ClaimsPrincipal user) =>
         user?.FindFirstValue(AdminClaims.ObjectId) ?? user?.FindFirstValue(AdminClaims.Subject) ?? user?.Identity?.Name ?? "unknown";

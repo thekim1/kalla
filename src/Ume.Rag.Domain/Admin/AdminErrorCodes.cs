@@ -310,6 +310,31 @@ public static class AdminErrorCodes
     /// </summary>
     public static AdminErrorCode SignInNotConfigured { get; } = new("sign_in_not_configured", 409, "Sign-in is not set up yet.");
 
+    /// <summary>A wrong setup code (identity design §19). It never voids the code.</summary>
+    public static AdminErrorCode SetupCodeInvalid { get; } = new("setup_code_invalid", 400, "The setup code is not right.");
+
+    /// <summary>More than 20 code checks in a minute on this instance; answered 429 with <c>Retry-After</c> to the minute's end.</summary>
+    public static AdminErrorCode SetupAttemptsExhausted { get; } = new("setup_attempts_exhausted", 429,
+        "Too many setup code attempts. Wait a minute and try again.");
+
+    /// <summary>A setup route that needs the setup session: none, an expired one, or one of an earlier opening.</summary>
+    public static AdminErrorCode SetupSessionRequired { get; } = new("setup_session_required", 401, "Enter the setup code first.");
+
+    /// <summary>
+    /// A test sign-in could not start (identity design §19); <c>{reason}</c> is the step: <c>authority_invalid</c>,
+    /// <c>authority_unreachable</c>, <c>tls</c>, <c>redirected</c>, <c>not_discovery</c>, <c>issuer_mismatch</c>,
+    /// <c>insecure_endpoint</c>, <c>par_required</c>, <c>keys_unavailable</c>, <c>stored_secret_unreadable</c>, <c>secret_required</c>
+    /// or <c>deployment_secret_without_authority</c>.
+    /// </summary>
+    public static AdminErrorCode SetupTestRefused { get; } = new("setup_test_refused", 400, "The test sign-in could not start ({reason}).");
+
+    /// <summary>
+    /// Saving needs the session's latest test, passed, by a platform admin, with exactly the submitted values; <c>{reason}</c> is
+    /// <c>unknown_test</c>, <c>not_latest</c>, <c>not_passed</c>, <c>not_platform_admin</c> or <c>values_changed</c>.
+    /// </summary>
+    public static AdminErrorCode SetupTestRequired { get; } = new("setup_test_required", 409,
+        "Saving needs a passed test sign-in by a platform admin with exactly these values ({reason}).");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -319,5 +344,6 @@ public static class AdminErrorCodes
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
-            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured];
+            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
+            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired];
 }

@@ -179,4 +179,34 @@ public static partial class SecurityEvents
     [LoggerMessage(6007, LogLevel.Information,
         "Admin {Actor} read {Path}{Query} from {SourceAddress}", EventName = "rag.admin.data.read")]
     public static partial void AdminDataRead(ILogger logger, string actor, string path, string query, string? sourceAddress);
+
+    /// <summary>Setup mode opened (identity design §19): <c>first_run</c> or <c>reopen</c>. Never the setup code.</summary>
+    [LoggerMessage(6008, LogLevel.Warning,
+        "Setup mode opened ({Kind}) until {EndsAt}", EventName = "rag.admin.setup.opened")]
+    public static partial void SetupOpened(ILogger logger, string kind, DateTimeOffset endsAt);
+
+    /// <summary>Wrong setup codes, sampled: at most one event per 10 seconds per instance, <c>Count</c> the wrong codes since the last one.</summary>
+    [LoggerMessage(6009, LogLevel.Warning,
+        "Setup code refused from {SourceAddress}: {Count} wrong codes since the last event", EventName = "rag.admin.setup.code_refused")]
+    public static partial void SetupCodeRefused(ILogger logger, string? sourceAddress, int count);
+
+    /// <summary>A setup session started for a correct setup code.</summary>
+    [LoggerMessage(6010, LogLevel.Warning,
+        "Setup session {SessionId} started from {SourceAddress} until {ExpiresAt}", EventName = "rag.admin.setup.session")]
+    public static partial void SetupSessionStarted(ILogger logger, string sessionId, string? sourceAddress, DateTimeOffset expiresAt);
+
+    /// <summary>
+    /// A setup test sign-in finished: <c>Result</c> <c>passed</c> or <c>failed</c> with its reason, the tested person's subject.
+    /// Callbacks with an unknown test are sampled like 6009, <c>Count</c> the number since the last event (1 otherwise).
+    /// </summary>
+    [LoggerMessage(6011, LogLevel.Warning,
+        "Setup test sign-in {Result} ({Reason}) for {Subject} as platform admin {PlatformAdmin}; setup session {SessionId} from {SourceAddress}, x{Count}",
+        EventName = "rag.admin.setup.test")]
+    public static partial void SetupTestSignIn(ILogger logger, string result, string reason, string? subject, bool platformAdmin, string? sessionId, string? sourceAddress,
+        int count);
+
+    /// <summary>Setup completed: the sign-in values the tested person signed in with are saved and setup is closed.</summary>
+    [LoggerMessage(6012, LogLevel.Warning,
+        "Setup completed by {Actor} in setup session {SessionId} from {SourceAddress}", EventName = "rag.admin.setup.completed")]
+    public static partial void SetupCompleted(ILogger logger, string actor, string? sessionId, string? sourceAddress);
 }

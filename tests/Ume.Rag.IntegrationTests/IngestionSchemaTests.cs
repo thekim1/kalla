@@ -107,7 +107,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         (await Sql.ListAsync(database.Connection(null), """
             SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'config' AND c.relkind = 'r'
-              AND c.relname NOT IN ('KeyLastUse', 'DataProtectionKeys', 'AdminSessions', 'ConfigVersion', 'ConfigOutbox', '__EFMigrationsHistory')
+              AND c.relname NOT IN ('KeyLastUse', 'DataProtectionKeys', 'AdminSessions', 'SetupSessions', 'SetupTests', 'ConfigVersion', 'ConfigOutbox', '__EFMigrationsHistory')
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.oid AND t.tgfoid = 'config.rag_config_changed'::regproc)
             """)).ShouldBeEmpty();
 

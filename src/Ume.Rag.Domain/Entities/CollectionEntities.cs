@@ -67,6 +67,15 @@ public sealed class PlatformSettings
     /// <summary>When setup was last completed (identity design §19, "Setup state"); null while setup has never been completed.</summary>
     public DateTimeOffset? SetupCompletedAt { get; set; }
 
+    /// <summary>The current setup opening's random nonce, the setup code's HMAC input (identity design §19); null while setup is closed.</summary>
+    public string? SetupNonce { get; set; }
+
+    /// <summary>When the opening of <see cref="SetupNonce"/> started; it lasts one hour.</summary>
+    public DateTimeOffset? SetupOpenedAt { get; set; }
+
+    /// <summary>The last <c>Setup:Reopen</c> value consumed, at the opening it started (identity design §19).</summary>
+    public string? SetupReopenConsumed { get; set; }
+
     public string[] PiiOwnDomains { get; set; } = [];
     public decimal NerMinScore { get; set; } = 0.80m;
     public string? EvaluationModel { get; set; }

@@ -460,6 +460,31 @@
       "code": "sign_in_not_configured",
       "status": 409,
       "message": "Sign-in is not set up yet."
+    },
+    {
+      "code": "setup_code_invalid",
+      "status": 400,
+      "message": "The setup code is not right."
+    },
+    {
+      "code": "setup_attempts_exhausted",
+      "status": 429,
+      "message": "Too many setup code attempts. Wait a minute and try again."
+    },
+    {
+      "code": "setup_session_required",
+      "status": 401,
+      "message": "Enter the setup code first."
+    },
+    {
+      "code": "setup_test_refused",
+      "status": 400,
+      "message": "The test sign-in could not start ({reason})."
+    },
+    {
+      "code": "setup_test_required",
+      "status": 409,
+      "message": "Saving needs a passed test sign-in by a platform admin with exactly these values ({reason})."
     }
   ]
 }

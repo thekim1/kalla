@@ -3169,6 +3169,17 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("SetupCompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SetupNonce")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("SetupOpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SetupReopenConsumed")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.PrimitiveCollection<string[]>("TrustedProxies")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -3478,6 +3489,96 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("RunItems", "content", t =>
                         {
                             t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SetupSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OpeningNonce")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("SetupSessions", "config");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SetupTest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("BrowserHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset?>("CallbackAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("MarkerHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<bool?>("Passed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Protected")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<byte[]>("ValuesFingerprint")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarkerHash")
+                        .IsUnique();
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("SetupTests", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('rag-admin')");
                         });
                 });
 
@@ -4088,6 +4189,15 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PipelineId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SetupTest", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.SetupSession", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

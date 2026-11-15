@@ -40,6 +40,8 @@ GRANT SELECT ON config."KeyLastUse" TO ume_rag_admin;
 GRANT SELECT, INSERT, UPDATE ON config."KeyLastUse" TO ume_rag_api;
 -- Admin BFF sessions: only the admin reads and writes them (data-model §2.1).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."AdminSessions" TO ume_rag_admin;
+-- Setup mode (identity design §19): the setup sessions and test sign-ins, only rag-admin; they hold the candidate values.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."SetupSessions", config."SetupTests" TO ume_rag_admin;
 -- Ingestion config (data-model §1.2): the admin manages it; the worker reads all of it; the api reads what retrieval
 -- needs. The api reads only the listed columns of Sources (knowledge design §6.3, §6.5), never Settings jsonb or
 -- schedules, and no pipelines.
