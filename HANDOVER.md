@@ -87,7 +87,7 @@ admin-ui`; the code is in `aspire logs adminapi | grep 'Setup code:'`; the provi
 - **For the user:** *Allow GitHub Actions to create and approve pull requests* is still off (Settings → Actions →
   General), so `release.yml` couldn't open the pin PR (#754 was opened by hand).
 - **Checks before go-live:** the 16 *Before go-live* rows of `plans/to-verify.md` need no input.
-- **Open PR:** #768 (stream a, #764's job claim), not reviewed by this session.
+- **Open PR:** #768 (#764 item 3, by the stream b session): approved by the main session with two small notes; its author merges it. Engine design §9.3 has its deviation.
 
 ## State
 
