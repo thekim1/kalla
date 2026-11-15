@@ -1457,7 +1457,9 @@ authority.
 
 **Stored secrets.** The client secrets are encrypted with Data Protection under a purpose per secret
 (`config."DataProtectionKeys"`, the ring protected by `data-protection.pfx`). rag-api registers Data Protection with
-the same application name and certificate and with key generation off, and reads only Open WebUI's secret.
+the same application name and certificate and with key generation off; its code unprotects only Open WebUI's secret.
+The purposes keep one secret's ciphertext from being read as another's; they are not access control (rag-api's role
+can read the settings row and the service holds the certificate). The worker has no certificate.
 
 **Setup state.** `SetupCompletedAt` in the settings row. Setup is open when it is null, or when `Setup:Reopen` holds
 a value other than the last consumed one; that value is consumed when setup opens. An opening lasts one hour. A start
