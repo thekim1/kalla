@@ -129,6 +129,7 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     await flushPromises()
     expect(wrapper.get('[data-test=managed]').text()).toBe(L.managed)
     expect(wrapper.get('[data-test=managed-note]').text()).toBe(L.managedNote)
+    expect(wrapper.get('#client-edit-name').attributes('disabled')).toBeDefined() // rag-migrate finds it by its name (#712)
     expect(wrapper.find('[data-test=new-key]').exists()).toBe(false)
     expect(wrapper.find('[data-test=rotate-k1]').exists()).toBe(false)
     expect(wrapper.find('[data-test=revoke-k1]').exists()).toBe(false)

@@ -212,7 +212,7 @@ async function revoke(): Promise<void> {
       <section class="mb-8 grid gap-4" aria-labelledby="client-edit-title">
         <h3 id="client-edit-title" class="text-caption text-fg-3">{{ L.settings }}</h3>
         <form id="client-edit" class="grid gap-5" novalidate data-test="client-edit" @submit.prevent="save">
-          <ClientFields v-model="form" :kind="client.kind" id-prefix="client-edit" :errors="errors.errors" />
+          <ClientFields v-model="form" :kind="client.kind" id-prefix="client-edit" :errors="errors.errors" :name-locked="client.isManagedByDeployment" />
           <InlineError v-if="errors.formError.value" :message="errors.formError.value" />
           <div><UiButton variant="primary" type="submit" :loading="saving" data-test="save-client">{{ L.save }}</UiButton></div>
         </form>

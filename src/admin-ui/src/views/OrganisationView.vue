@@ -12,9 +12,9 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatRelative } from '@/utils/format'
+import { gatewayHref } from '@/utils/gateway'
 import { COMMON, ORGANISATION, PAGE, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
-import { gatewayLink } from '@/platform/resources'
 
 // The organisation mirror (admin design §4.10): departments in the user's scope with their teams, the gateway's member
 // groups and how their knowledge bases are shared (admin design §5.10: what the generic Organisation page showed). Platform
@@ -38,10 +38,7 @@ const columns: Column[] = [
 ]
 
 /** The gateway's Organisation page, from the sync's admin URL when it is an http(s) address. */
-const gatewayHref = computed(() => {
-  const url = status.value?.adminUrl
-  return url && /^https?:\/\//i.test(url) ? gatewayLink(url, { path: '/organisation', label: PLATFORM.organisation.gatewayLink }) : null
-})
+const gatewayPageHref = computed(() => gatewayHref(status.value?.adminUrl, '/organisation'))
 
 const failingSince = computed(() =>
   status.value && status.value.consecutiveFailures >= 3 ? formatDateTime(status.value.lastSuccessAt ?? status.value.lastRunAt) : null,
@@ -71,7 +68,7 @@ onMounted(load)
 
 <template>
   <PageHeader :title="PAGE.organisation.title" :description="ORGANISATION.lead">
-    <UiButton v-if="gatewayHref" :href="gatewayHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page">
+    <UiButton v-if="gatewayPageHref" :href="gatewayPageHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page">
       {{ PLATFORM.organisation.gatewayLink }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
     </UiButton>
     <template v-if="auth.isPlatformAdmin && status?.enabled">

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain;
 
 namespace Ume.Rag.FakeGateway;
 
@@ -15,7 +16,6 @@ public static class FakeIntegrationApi
     public const string UsageReadScope = "usage.read";
     public const int MaxDays = 366;
     private static readonly string[] Dimensions = ["key", "model", "step"];
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     public static void MapFakeIntegration(this WebApplication app)
     {
@@ -77,7 +77,7 @@ public static class FakeIntegrationApi
             var byModel = groupBy.Contains("model");
             var byStep = groupBy.Contains("step");
             var items = served.Records
-                .Select(r => (Record: r, Day: DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(r.At, Stockholm).DateTime)))
+                .Select(r => (Record: r, Day: StockholmTime.DayOf(r.At)))
                 .Where(x => x.Day >= from && x.Day <= to && (keyId is null || x.Record.KeyId == keyId) && (runId is null || x.Record.RunId == runId))
                 .GroupBy(x => (Period: granularity == "month" ? new DateOnly(x.Day.Year, x.Day.Month, 1) : x.Day, Key: byKey ? x.Record.KeyId : null,
                     Model: byModel ? x.Record.Model : null, Step: byStep ? x.Record.Step : null))

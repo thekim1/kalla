@@ -1,4 +1,5 @@
 using System.Globalization;
+using Ume.Rag.Domain;
 
 namespace Ume.Rag.Worker.Connectors.Crawl;
 
@@ -9,7 +10,6 @@ namespace Ume.Rag.Worker.Connectors.Crawl;
 /// </summary>
 public sealed class CrawlWindow
 {
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     private CrawlWindow(TimeOnly start, TimeOnly end)
     {
@@ -36,7 +36,7 @@ public sealed class CrawlWindow
         return new CrawlWindow(start, end);
     }
 
-    public bool IsOpen(DateTimeOffset now) => Contains(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Stockholm).DateTime));
+    public bool IsOpen(DateTimeOffset now) => Contains(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, StockholmTime.Zone).DateTime));
 
     /// <summary>The next instant the window opens, or <paramref name="now"/> when it is open.</summary>
     public DateTimeOffset NextOpening(DateTimeOffset now)
@@ -46,18 +46,18 @@ public sealed class CrawlWindow
             return now;
         }
 
-        var local = TimeZoneInfo.ConvertTime(now, Stockholm);
+        var local = TimeZoneInfo.ConvertTime(now, StockholmTime.Zone);
         var day = DateOnly.FromDateTime(local.DateTime);
         for (var offset = 0; offset <= 2; offset++)
         {
             var wall = day.AddDays(offset).ToDateTime(Start);
-            if (Stockholm.IsInvalidTime(wall))
+            if (StockholmTime.Zone.IsInvalidTime(wall))
             {
                 // The start falls in the spring-forward gap: the window opens when the clocks resume.
                 wall = wall.AddHours(1);
             }
 
-            var opening = new DateTimeOffset(wall, Stockholm.GetUtcOffset(wall));
+            var opening = new DateTimeOffset(wall, StockholmTime.Zone.GetUtcOffset(wall));
             if (opening > now)
             {
                 return opening;

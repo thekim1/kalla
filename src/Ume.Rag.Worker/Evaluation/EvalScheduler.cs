@@ -1,13 +1,13 @@
 using Cronos;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors.Persistence;
-using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Evaluation;
@@ -137,7 +137,7 @@ public sealed partial class EvalScheduler(JobDatabase database, IJobQueue queue,
     {
         DateTimeOffset? latest = null;
         var cursor = now - lookBack;
-        while (expression.GetNextOccurrence(cursor, SyncScheduler.Stockholm) is { } next && next <= now)
+        while (expression.GetNextOccurrence(cursor, StockholmTime.Zone) is { } next && next <= now)
         {
             latest = next;
             cursor = next;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Engine;
 
@@ -26,7 +27,6 @@ public sealed partial class MaintenanceService(
     KeywordStatistics? keywords = null) : BackgroundService
 {
     public static readonly TimeOnly RunAt = new(2, 0);
-    public static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     /// <summary>The <c>table</c> tag of <c>rag.retention.deleted</c> for the content step, whose count spans its tables.</summary>
     public const string ContentRetentionMetricTable = "content-step";
@@ -128,16 +128,16 @@ public sealed partial class MaintenanceService(
     /// <summary>The next <paramref name="time"/> in Stockholm after <paramref name="now"/>, with the DST rules of <see cref="NextRunAt(DateTimeOffset)"/>.</summary>
     public static DateTimeOffset NextRunAt(DateTimeOffset now, TimeOnly time)
     {
-        var local = TimeZoneInfo.ConvertTime(now, Stockholm);
+        var local = TimeZoneInfo.ConvertTime(now, StockholmTime.Zone);
         for (var day = 0; day <= 2; day++)
         {
             var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(time);
-            if (Stockholm.IsInvalidTime(candidate))
+            if (StockholmTime.Zone.IsInvalidTime(candidate))
             {
                 candidate = candidate.AddHours(1);
             }
 
-            var at = new DateTimeOffset(candidate, Stockholm.GetUtcOffset(candidate));
+            var at = new DateTimeOffset(candidate, StockholmTime.Zone.GetUtcOffset(candidate));
             if (at > now)
             {
                 return at.ToUniversalTime();

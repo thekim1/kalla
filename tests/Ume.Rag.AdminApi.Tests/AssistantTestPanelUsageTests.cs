@@ -175,11 +175,12 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
-    /// <summary>The <c>admin-console</c> row of identity §4.1 (as the dev seed adds it), inserted once for the group.</summary>
+    /// <summary>The <c>admin-console</c> row of identity §4.1 (as rag-migrate adds it, managed by the deployment), inserted once for the group.</summary>
     private static async Task<Guid> AdminConsoleAsync(Infrastructure.Persistence.RagDbContext db)
     {
-        var id = await db.Clients.AsNoTracking().Where(c => c.Name == AdminTestPanel.ClientName && c.Kind == ClientKinds.Internal).Select(c => (Guid?)c.Id)
-            .FirstOrDefaultAsync(Ct);
+        var id = await db.Clients.AsNoTracking().Where(c => c.Kind == ClientKinds.Internal && c.Name == AdminTestPanel.ClientName && c.IsManagedByDeployment)
+            .Select(c => (Guid?)c.Id)
+            .SingleOrDefaultAsync(Ct);
         if (id is { } known)
         {
             return known;
@@ -187,8 +188,8 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
 
         var row = new Client
         {
-            Name = AdminTestPanel.ClientName, Kind = ClientKinds.Internal, ClassificationCeiling = Classification.Sensitive, UpdatedAt = DateTimeOffset.UtcNow,
-            UpdatedBy = "test",
+            Name = AdminTestPanel.ClientName, Kind = ClientKinds.Internal, ClassificationCeiling = Classification.Sensitive, IsManagedByDeployment = true,
+            UpdatedAt = DateTimeOffset.UtcNow, UpdatedBy = "test",
         };
         db.Clients.Add(row);
         await db.SaveChangesAsync(Ct);

@@ -63,6 +63,7 @@ public static class KeyEndpoints
                 await DtoAsync(admin, await admin.WriteAsync(async attempt =>
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
+                    RefuseManaged(key.Client!);
                     var department = await CheckTeamAsync(admin, key.TeamId, attempt);
                     // Null keeps the (non-empty) scopes; a department admin cannot clear them.
                     await CheckScopesAsync(admin, department, request.Scopes, attempt, required: !admin.IsPlatformAdmin && request.Scopes is not null);
@@ -132,8 +133,8 @@ public static class KeyEndpoints
     }
 
     /// <summary>
-    /// The deployment's own client (identity design §5.2, M-17 C4): rag-migrate keeps its one key, the deployment's, so a key of it
-    /// is never made, rotated or revoked here.
+    /// The deployment's own clients (identity design §4.1, §5.2; M-17 C4, #712): rag-migrate keeps their keys (Open WebUI's one key,
+    /// the deployment's; none on <c>admin-console</c>), so a key of them is never made, changed, rotated or revoked here.
     /// </summary>
     private static void RefuseManaged(Client client)
     {

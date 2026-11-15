@@ -324,21 +324,17 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         ((long)(await count.ExecuteScalarAsync(Ct))!).ShouldBe(0);
     }
 
-    [Fact]
-    public async Task A_save_waits_for_a_worker_inserting_a_chunk_set_and_then_refuses_with_profile_in_use()
+    /// <summary>
+    /// A chunk set insert on <paramref name="worker"/> (the worker role) as the worker makes it
+    /// (<c>content.rag_lock_profile_if_unchanged</c>), left uncommitted: the profile row is held <c>FOR SHARE</c> until the caller
+    /// commits the returned transaction.
+    /// </summary>
+    private async Task<Npgsql.NpgsqlTransaction> BeginWorkerInsertAsync(Npgsql.NpgsqlConnection worker, Guid profileId)
     {
-        // #554 review: the worker holds the profile row FOR SHARE from its guard to its commit; the save's FOR UPDATE waits,
-        // and its in-use check then sees the set.
-        var profile = await ProfileAsync();
-        var seeded = await DocumentAsync(profile.Id);
-        await using var gateway = Gateway();
-        await using var admin = database.AdminApi(gateway, Residency.Eu);
-        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
-
-        await using var worker = new Npgsql.NpgsqlConnection(database.Connection(RagDatabase.Worker));
+        var seeded = await DocumentAsync(profileId);
         await worker.OpenAsync(Ct);
-        await using var transaction = await worker.BeginTransactionAsync(Ct);
-        await using (var insert = new Npgsql.NpgsqlCommand("""
+        var transaction = await worker.BeginTransactionAsync(Ct);
+        await using var insert = new Npgsql.NpgsqlCommand("""
             INSERT INTO content."ChunkSets" ("Id", "DocumentId", "Classification", "CollectionId", "PipelineVersionId", "EmbeddingProfileId",
                                             "ContentHash", "InputHash", "State", "PiiFlagged", "ChunkCount")
             SELECT $1, $2, 'public', $3, $4, $5, $6, $7, 'writing', false, 0
@@ -348,14 +344,26 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
             Parameters =
             {
                 new() { Value = Guid.CreateVersion7() }, new() { Value = seeded.DocumentId }, new() { Value = seeded.CollectionId },
-                new() { Value = seeded.PipelineVersionId }, new() { Value = profile.Id }, new() { Value = RandomNumberGenerator.GetBytes(32) },
+                new() { Value = seeded.PipelineVersionId }, new() { Value = profileId }, new() { Value = RandomNumberGenerator.GetBytes(32) },
                 new() { Value = RandomNumberGenerator.GetBytes(32) },
             },
-        })
-        {
-            (await insert.ExecuteNonQueryAsync(Ct)).ShouldBe(1);
-        }
+        };
+        (await insert.ExecuteNonQueryAsync(Ct)).ShouldBe(1);
+        return transaction;
+    }
 
+    [Fact]
+    public async Task A_save_waits_for_a_worker_inserting_a_chunk_set_and_then_refuses_with_profile_in_use()
+    {
+        // #554 review: the worker holds the profile row FOR SHARE from its guard to its commit; the save's FOR UPDATE waits,
+        // and its in-use check then sees the set.
+        var profile = await ProfileAsync();
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+
+        await using var worker = new Npgsql.NpgsqlConnection(database.Connection(RagDatabase.Worker));
+        await using var transaction = await BeginWorkerInsertAsync(worker, profile.Id);
         var save = platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile, model: "fake-eu-embed"), Ct);
         await Task.Delay(TimeSpan.FromSeconds(2), Ct);
         save.IsCompleted.ShouldBeFalse(); // blocked on the row lock
@@ -366,6 +374,38 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe("profile_in_use");
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == profile.Id, Ct)).GatewayModel.ShouldBe("bge-m3");
+    }
+
+    [Fact]
+    public async Task A_ceiling_save_of_a_profile_that_comes_into_use_meanwhile_is_concurrent_change_and_the_next_save_compares_the_canary()
+    {
+        // #712: the save read the profile as unused, so its test was not compared with the recorded canary; the worker's first set
+        // commits while the save waits for the row lock. The save is refused, and the retry compares (this canary is another text's).
+        var profile = await ProfileAsync();
+        await using var gateway = Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        var (_, canary) = await CanaryAsync(profile.Id);
+
+        await using var worker = new Npgsql.NpgsqlConnection(database.Connection(RagDatabase.Worker));
+        await using var transaction = await BeginWorkerInsertAsync(worker, profile.Id);
+        var save = platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile, maxResidency: "OnPrem"), Ct);
+        await Task.Delay(TimeSpan.FromSeconds(2), Ct);
+        save.IsCompleted.ShouldBeFalse(); // blocked on the row lock
+        await transaction.CommitAsync(Ct);
+
+        using var response = await save;
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync(Ct));
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe("concurrent_change");
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == profile.Id, Ct)).MaxResidency.ShouldBe(Residency.Eu);
+        }
+
+        (await CanaryAsync(profile.Id)).Text.ShouldBe(canary);
+        using var retry = await platform.PutAsJsonAsync($"/api/embedding-profiles/{profile.Id}", Body(profile, maxResidency: "OnPrem"), Ct);
+        retry.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity, await retry.Content.ReadAsStringAsync(Ct));
+        (await retry.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("params").GetProperty("error").GetString().ShouldBe("canary_mismatch");
     }
 
     [Fact]

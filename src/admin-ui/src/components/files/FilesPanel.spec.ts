@@ -117,6 +117,36 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     wrapper.unmount()
   })
 
+  it('lists a large upload as counts and its first 50 rows, failed and skipped files first (#712)', async () => {
+    signIn()
+    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary())
+    vi.spyOn(api.sources, 'files').mockResolvedValue(page([]))
+    vi.spyOn(api.sources, 'uploadBatch').mockResolvedValue({ batchId: 'b1', maxFiles: 100, maxBytes: 10_000 })
+    vi.spyOn(api.uploads, 'put').mockImplementation(async (_batch, n) => {
+      if (n === 65) throw new ApiError(500, 'PUT', { code: 'internal' })
+      return { n, uploadId: 'x', operation: 'add', fileName: 'x', bytes: 1, sha256: '' }
+    })
+    const wrapper = mount(FilesPanel, { props: { source, canEdit: true } })
+    await flushPromises()
+
+    const files = Array.from({ length: 69 }, (_, i) => new File(['x'], `f${String(i + 1).padStart(2, '0')}.pdf`))
+    await pick(wrapper, 'file-input', [...files, new File(['x'], 'z.exe')])
+    const rows = () => wrapper.findAll('[data-test=pending] li:not([data-test=pending-more])')
+    expect(wrapper.get('[data-test=pending-summary]').text()).toContain('69 files ready')
+    expect(rows()).toHaveLength(50)
+    expect(rows()[0]!.text()).toContain('z.exe') // the skipped file before the waiting ones
+    expect(wrapper.get('[data-test=pending-more]').text()).toBe(FILES.moreFiles(20))
+
+    await wrapper.get('[data-test=upload]').trigger('click')
+    await flushPromises()
+    expect(rows()[0]!.text()).toContain('f65.pdf')
+    expect(rows()[0]!.text()).toContain('Failed')
+    expect(rows()[1]!.text()).toContain('z.exe')
+    expect(wrapper.get('[data-test=sent-count]').text()).toBe(FILES.sentCount(68, 69))
+    expect(wrapper.get('[data-test=pending-more]').text()).toBe(FILES.moreFiles(20))
+    wrapper.unmount()
+  })
+
   it('offers a folder picker that keeps each file\'s relative path', async () => {
     signIn()
     vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary())

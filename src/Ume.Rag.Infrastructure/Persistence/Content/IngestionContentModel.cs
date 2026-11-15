@@ -224,6 +224,8 @@ internal static class IngestionContentModel
             // The orphan sweep (engine design §14).
             e.HasIndex(x => new { x.State, x.CreatedAt }, "IX_ChunkSets_Writing").HasFilter("\"State\" = 'writing'");
             e.HasIndex(x => x.SupersededAt);
+            // The admin's "profile in use" checks (#712), one of them under the config version lock.
+            e.HasIndex(x => x.EmbeddingProfileId);
             e.HasOne<Document>().WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
         });
 

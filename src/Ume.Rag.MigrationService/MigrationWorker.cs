@@ -10,7 +10,9 @@ namespace Ume.Rag.MigrationService;
 /// Applies EF Core migrations (expand/contract, backwards compatible), then <c>app-roles.sql</c>
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
 /// roles) and the run-item partition maintenance, in Development the HNSW defaults on the database
-/// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>) and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
+/// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>), the
+/// test panel's client (<see cref="AdminConsoleClientSeeder"/>), the deployment's Open WebUI client (<see cref="OpenWebUiClientSeeder"/>) when
+/// <c>OpenWebUi:ApiKey</c> is set, and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
 /// client when <c>Seed:DevKey</c> is set), and exits
 /// (data-model §10; the platform's embedding profile is created by a platform admin in the admin UI, Decisions "Deploy
 /// configuration", as the gateway's MigrationWorker). The services wait for this to complete, so they never run against
@@ -43,6 +45,8 @@ public sealed partial class MigrationWorker(
             await SettingsSeeder.SeedAsync(db,
                 configuration.GetSection(SettingsSeedOptions.SectionName).Get<SettingsSeedOptions>() ?? new SettingsSeedOptions(),
                 TimeProvider.System, logger, stoppingToken);
+            // The admin test panel's client, in every deployment (identity design §4.1, #712).
+            LogAdminConsoleClient(logger, await AdminConsoleClientSeeder.SeedAsync(db, TimeProvider.System, stoppingToken));
             // The deployment's own Open WebUI client, from the key the deployment generated (identity design §5.2, M-17 C4).
             if (configuration["OpenWebUi:ApiKey"] is { Length: > 0 } openWebUiKey)
             {
@@ -79,6 +83,9 @@ public sealed partial class MigrationWorker(
             lifetime.StopApplication();
         }
     }
+
+    [LoggerMessage(LogLevel.Information, "The admin test panel's client admin-console: {Outcome}")]
+    private static partial void LogAdminConsoleClient(ILogger logger, AdminConsoleClientSeeder.Outcome outcome);
 
     [LoggerMessage(LogLevel.Information, "The deployment's Open WebUI client: {Outcome}")]
     private static partial void LogOpenWebUiClient(ILogger logger, OpenWebUiClientSeeder.Outcome outcome);

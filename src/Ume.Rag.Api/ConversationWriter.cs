@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using System.Threading.Channels;
 using Npgsql;
 using Ume.Rag.Answering.Chat;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure.Gateway;
@@ -101,8 +102,6 @@ public sealed partial class ConversationWriter : BackgroundService
     public static readonly TimeSpan BatchWindow = TimeSpan.FromMilliseconds(250);
     public static readonly TimeSpan EnqueueTimeout = TimeSpan.FromSeconds(2);
     public static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
-
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     private readonly Channel<ChatTurn> _channel = Channel.CreateBounded<ChatTurn>(new BoundedChannelOptions(Capacity)
     {
@@ -348,7 +347,7 @@ public sealed partial class ConversationWriter : BackgroundService
             {
                 if (turn.Unavailable || turn.Error)
                 {
-                    var refusedKey = new TotalsKey(Day(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
+                    var refusedKey = new TotalsKey(StockholmTime.DayOf(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
                     if (!totals.TryGetValue(refusedKey, out var refusedDay))
                     {
                         totals[refusedKey] = refusedDay = new Totals { DepartmentId = turn.DepartmentId };
@@ -413,7 +412,7 @@ public sealed partial class ConversationWriter : BackgroundService
                     Db(source.PageEnd), source.Used);
             }
 
-            var key = new TotalsKey(Day(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
+            var key = new TotalsKey(StockholmTime.DayOf(turn.At), turn.AssistantId, turn.ClientId, turn.Classification);
             if (!totals.TryGetValue(key, out var day))
             {
                 totals[key] = day = new Totals { DepartmentId = turn.DepartmentId };
@@ -470,7 +469,7 @@ public sealed partial class ConversationWriter : BackgroundService
     /// <summary>Adds the usage records of <paramref name="turn"/> to the batch's sums per (day, assistant, client, level, step).</summary>
     private static void AddUsage(SortedDictionary<UsageKey, UsageSums> usage, ChatTurn turn)
     {
-        var day = Day(turn.At);
+        var day = StockholmTime.DayOf(turn.At);
         foreach (var record in turn.Usage)
         {
             var key = new UsageKey(day, turn.AssistantId, turn.ClientId, turn.Classification, record.Step);
@@ -488,9 +487,6 @@ public sealed partial class ConversationWriter : BackgroundService
             sums.EstimatedCostUsd += record.EstimatedCostUsd;
         }
     }
-
-    /// <summary>The Europe/Stockholm day of <paramref name="at"/> (data-model §2.3).</summary>
-    private static DateOnly Day(DateTimeOffset at) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime);
 
     private static object Db(object? value) => value ?? DBNull.Value;
 

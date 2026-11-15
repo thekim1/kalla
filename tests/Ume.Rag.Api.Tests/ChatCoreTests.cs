@@ -34,6 +34,24 @@ public sealed class ChatCoreTests
     }
 
     [Fact]
+    public void The_parsed_request_outlives_its_disposed_document()
+    {
+        // #712: rag-api disposes the body's JsonDocument right after parsing, so nothing parsed may point into it.
+        ParsedChat parsed;
+        using (var document = JsonDocument.Parse("""
+            {"model":"bygg","stream":true,"ume":{"related_documents":2,"follow_ups":1},
+             "messages":[{"role":"user","content":"Hej"},{"role":"assistant","content":"Hej!"},{"role":"user","content":"Behöver jag bygglov?"}]}
+            """))
+        {
+            parsed = ChatRequestParser.Parse(document.RootElement);
+        }
+
+        (parsed.Model, parsed.Question, parsed.PromptQuestion, parsed.Stream).ShouldBe(("bygg", "Behöver jag bygglov?", "Behöver jag bygglov?", true));
+        parsed.History.Select(h => (h.Role, h.Text)).ShouldBe([("user", "Hej"), ("assistant", "Hej!")]);
+        parsed.Ume.ShouldBe(new UmeRequest(2, 1));
+    }
+
+    [Fact]
     public void A_fixed_list_of_requests_is_refused_with_its_code()
     {
         var user = new object[] { new { role = "user", content = "fråga" } };

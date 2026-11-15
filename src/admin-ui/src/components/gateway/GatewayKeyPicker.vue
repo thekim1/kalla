@@ -4,6 +4,7 @@ import { api } from '@/api'
 import type { GatewayKey, GatewayKeyList } from '@/api/types'
 import SelectField from '@/components/ui/SelectField.vue'
 import { formatDateTime, formatNumber } from '@/utils/format'
+import { gatewayHref } from '@/utils/gateway'
 import { GATEWAY_KEY } from '@/utils/labels'
 
 // The gateway key picker (admin design §4.5, §5.5.2, §5.5.4; B-36): the department's assigned keys from the mirror. A key
@@ -45,7 +46,7 @@ const options = computed(() => [
   })),
 ])
 // The gateway's admin UI has a Keys page and no address per key (v0.10.0 router): the link opens it.
-const link = computed(() => (list.value?.adminUrl && chosen.value ? `${list.value.adminUrl.replace(/\/$/, '')}/keys` : null))
+const link = computed(() => (chosen.value ? gatewayHref(list.value?.adminUrl, '/keys') : null))
 const all = (values: string[]) => (values.length ? values.join(', ') : GATEWAY_KEY.all)
 const limit = (n: number | null) => (n === null ? GATEWAY_KEY.unlimited : formatNumber(n))
 </script>

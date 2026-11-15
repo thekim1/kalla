@@ -82,6 +82,16 @@ exception, with its own steps.
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
   rag-api and rag-worker name their columns and are not affected.
+- **The `admin-console` client is set up by the deployment (#712).** rag-migrate creates the test panel's client
+  `admin-console` (type `internal`, *Managed by the deployment*) in every deployment; one made by hand becomes the managed
+  one, its settings kept and any key of it revoked. Its keys can no longer be made or changed in the admin. Migration
+  `ClientsManagedPerName` makes the managed clients unique per type and name instead of per type, and rag-migrate finds
+  them by both, so the name of a client managed by the deployment (*Open WebUI*, `admin-console`) can no longer be
+  changed in the admin. **Apply:**
+  nothing. **Check:** *Apps and keys* shows `admin-console` as managed; rag-migrate's log says "The admin test panel's
+  client admin-console: Created" (or `Adopted`, then `Unchanged`).
+- **Migration `ChunkSetsEmbeddingProfileIndex` (#712)** adds an index on `content."ChunkSets"."EmbeddingProfileId"`
+  for the admin's embedding-profile *in use* checks. Nothing else changes; the old services run against it.
 - **The Portainer stack pins the gateway's `v0.10.2`, and the gateway creates Ume.Rag's credential keys (M-17 C7).**
   The gateway's own upgrade notes for 0.10.2 apply (rolling update, no migration; a new volume
   `<stack>_integration-secrets`; a read grant on `Branding.OrganisationName`). The gateway's `migrations` now applies

@@ -11,7 +11,8 @@ namespace Ume.Rag.IntegrationTests;
 /// <summary>
 /// The deployment's own Open WebUI client (identity design §5.2; M-17 C4): rag-migrate makes it from the key the deployment
 /// generated, keeps exactly that key active on it, writes nothing when nothing changed, and takes over an Open WebUI client
-/// that already holds the key. Its own database: there is at most one managed Open WebUI client per database.
+/// that already holds the key; under another name it replaces the managed one. Its own database: the managed rows are unique per
+/// kind and name.
 /// </summary>
 public sealed class OpenWebUiClientSeederTests(RagDatabaseFixture database) : IClassFixture<RagDatabaseFixture>
 {
@@ -66,9 +67,21 @@ public sealed class OpenWebUiClientSeederTests(RagDatabaseFixture database) : IC
         await db.SaveChangesAsync(Ct);
         await Should.ThrowAsync<InvalidOperationException>(() => OpenWebUiClientSeeder.SeedAsync(db, Hasher, Key('C'), null, TimeProvider.System, Ct));
 
-        // At most one managed client per kind, in the database too.
+        // The deployment has one Open WebUI client, found by kind and name (#712): seeding under another name (the development
+        // setup) makes a new managed one, and the old one stops being managed, its keys revoked.
         db.ChangeTracker.Clear();
-        db.Clients.Add(new Client { Name = "Second", Kind = ClientKinds.OpenWebUi, ClassificationCeiling = Classification.Internal, IsManagedByDeployment = true });
+        (await OpenWebUiClientSeeder.SeedAsync(db, Hasher, Key('D'), null, TimeProvider.System, Ct, name: DevSeeder.DevClientName))
+            .ShouldBe(OpenWebUiClientSeeder.Outcome.Created);
+        var old = await db.Clients.AsNoTracking().Include(c => c.Keys).SingleAsync(c => c.Id == client.Id, Ct);
+        old.IsManagedByDeployment.ShouldBeFalse();
+        old.Keys.ShouldAllBe(k => k.RevokedAt != null);
+        (await db.Clients.AsNoTracking().SingleAsync(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment, Ct)).Name.ShouldBe(DevSeeder.DevClientName);
+        (await OpenWebUiClientSeeder.SeedAsync(db, Hasher, Key('D'), null, TimeProvider.System, Ct, name: DevSeeder.DevClientName))
+            .ShouldBe(OpenWebUiClientSeeder.Outcome.Unchanged);
+
+        // At most one managed client per kind and name, in the database too.
+        db.ChangeTracker.Clear();
+        db.Clients.Add(new Client { Name = DevSeeder.DevClientName, Kind = ClientKinds.OpenWebUi, ClassificationCeiling = Classification.Internal, IsManagedByDeployment = true });
         await Should.ThrowAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
     }
 }

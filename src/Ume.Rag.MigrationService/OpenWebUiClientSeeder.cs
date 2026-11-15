@@ -11,14 +11,17 @@ namespace Ume.Rag.MigrationService;
 /// The deployment's own Open WebUI client (identity design §5.2; M-17 C4, Decisions "Deploy configuration"): the deployment
 /// generates an <c>ume-rag-sk-</c> key (<c>rag-bootstrap</c> in the Portainer stack, <c>init-deployment.sh</c> with Compose,
 /// the AppHost's dev key) and gives it to Open WebUI and, as <c>OpenWebUi:ApiKey</c>, to rag-migrate. This makes sure, on every
-/// run, that the one <c>open-webui</c> client marked <see cref="Client.IsManagedByDeployment"/> exists and that exactly that key
-/// is active on it; any other key of it is revoked (a new key from the deployment is its rotation). A run that changes
-/// nothing writes nothing, so it does not move the config version.
+/// run, that the <c>open-webui</c> client marked <see cref="Client.IsManagedByDeployment"/> under its name exists (found by kind and
+/// name, #712; the name is not editable) and that exactly that key is active on it; any other key of it is revoked (a new key from
+/// the deployment is its rotation). The deployment has one Open WebUI client: a managed one under another name (a development
+/// database made with the other setup) stops being managed and its keys are revoked. A run that changes nothing writes nothing,
+/// so it does not move the config version.
 /// </summary>
 /// <remarks>
 /// A new client starts as Open WebUI's do in the admin (admin design §5.9): <c>internal</c>, keeping chat history, feedback
 /// kept 90 days; a platform admin then edits it like any other, except its keys. When the key is already on an
-/// <c>open-webui</c> client made earlier (a development database from before C4), that client becomes the managed one.
+/// <c>open-webui</c> client made earlier (a development database from before C4), that client becomes the managed one, under the
+/// deployment's name.
 /// </remarks>
 public static class OpenWebUiClientSeeder
 {
@@ -46,7 +49,7 @@ public static class OpenWebUiClientSeeder
         }
 
         var hash = hasher.Hash(key);
-        if (await IsCurrentAsync(db, hash, cancellationToken))
+        if (await IsCurrentAsync(db, hash, name, cancellationToken))
         {
             return Outcome.Unchanged;
         }
@@ -55,7 +58,7 @@ public static class OpenWebUiClientSeeder
         {
             var now = clock.GetUtcNow();
             var outcome = Outcome.KeyReplaced;
-            var client = await db.Clients.SingleOrDefaultAsync(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment, ct);
+            var client = await db.Clients.SingleOrDefaultAsync(c => c.Kind == ClientKinds.OpenWebUi && c.Name == name && c.IsManagedByDeployment, ct);
             var holder = await db.Keys.Include(k => k.Client).SingleOrDefaultAsync(k => k.KeyHash == hash, ct);
             if (holder is not null && holder.ClientId != client?.Id)
             {
@@ -66,6 +69,7 @@ public static class OpenWebUiClientSeeder
                 }
 
                 client = holder.Client;
+                client.Name = name;
                 client.IsManagedByDeployment = true;
                 client.UpdatedAt = now;
                 client.UpdatedBy = SettingsSeeder.Actor;
@@ -105,16 +109,28 @@ public static class OpenWebUiClientSeeder
                 other.RevokedAt = now;
             }
 
+            var clientId = client.Id;
+            foreach (var stale in await db.Clients.Where(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment && c.Id != clientId).ToListAsync(ct))
+            {
+                stale.IsManagedByDeployment = false;
+                stale.UpdatedAt = now;
+                stale.UpdatedBy = SettingsSeeder.Actor;
+                foreach (var key in await db.Keys.Where(k => k.ClientId == stale.Id && (k.RevokedAt == null || k.RevokedAt > now)).ToListAsync(ct))
+                {
+                    key.RevokedAt = now;
+                }
+            }
+
             await db.SaveChangesAsync(ct);
             return outcome;
         }, cancellationToken);
     }
 
-    /// <summary>The managed client exists, its key is this one and works, and no other key of it does.</summary>
-    private static async Task<bool> IsCurrentAsync(RagDbContext db, string hash, CancellationToken ct)
+    /// <summary>The managed client of this name is the only managed Open WebUI client, its key is this one and works, and no other key of it does.</summary>
+    private static async Task<bool> IsCurrentAsync(RagDbContext db, string hash, string name, CancellationToken ct)
     {
-        var client = await db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment, ct);
-        if (client is null)
+        var managed = await db.Clients.AsNoTracking().Where(c => c.Kind == ClientKinds.OpenWebUi && c.IsManagedByDeployment).ToListAsync(ct);
+        if (managed is not [var client] || client.Name != name)
         {
             return false;
         }

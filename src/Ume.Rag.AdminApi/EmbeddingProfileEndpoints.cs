@@ -316,7 +316,8 @@ public static class EmbeddingProfileEndpoints
     /// values (<c>profile_test_failed</c> with its outcome), then in one write under the profile's row lock: the fields, the new
     /// canary (its last check cleared), and, when the model, size or <c>RequestDimensions</c> changed, the profile's cached
     /// embeddings removed and its index rebuilt at the new size (<c>content.rag_reset_profile</c>). A used profile keeps its canary,
-    /// and its test must match it, so a new ceiling cannot reach a provider that serves another model.
+    /// and its test must match it, so a new ceiling cannot reach a provider that serves another model; a profile that came into use
+    /// during the save is <c>concurrent_change</c>.
     /// </summary>
     private static async Task<EmbeddingProfileDto> UpdateAsync(Guid id, EmbeddingProfileUpdateRequest request, AdminContext admin,
         EmbeddingProfileTester tester, CancellationToken ct)
@@ -356,6 +357,13 @@ public static class EmbeddingProfileEndpoints
             if (usedNow && FixedFieldsChange(profile, request))
             {
                 throw AdminFaults.Of(AdminErrorCodes.ProfileInUse, new Dictionary<string, string> { ["profile"] = profile.Name });
+            }
+
+            // The profile's first chunk set came after the read above (#712): the test was not compared with the recorded canary,
+            // so the save is not made; the next one sees the profile in use and compares.
+            if (usedNow && !inUse)
+            {
+                throw AdminFaults.Of(AdminErrorCodes.ConcurrentChange);
             }
 
             var before = Audit(profile);

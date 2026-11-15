@@ -30,7 +30,6 @@ public sealed partial class FeedbackImporter(
     public static readonly TimeSpan Overlap = TimeSpan.FromHours(1);
     public static readonly TimeSpan RetryWindow = TimeSpan.FromHours(24);
 
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
     private readonly Counter<long> _imported = meters.Create("Ume.Rag.Api").CreateCounter<long>("rag.chat.feedback.import");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -227,28 +226,8 @@ public sealed partial class FeedbackImporter(
             await upsert.ExecuteNonQueryAsync(ct);
         }
 
-        var up = (item.Rating == 1 ? 1 : 0) - (previous == 1 ? 1 : 0);
-        var down = (item.Rating == -1 ? 1 : 0) - (previous == -1 ? 1 : 0);
-        if (up != 0 || down != 0)
-        {
-            await using var totals = new NpgsqlCommand("""
-                INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
-                    "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
-                    "AgentLimitHits")
-                VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 0, 0, 0, 0, 0, GREATEST($6, 0), GREATEST($7, 0), 0, 0, 0)
-                ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
-                    "ThumbsUp" = GREATEST(t."ThumbsUp" + $6, 0), "ThumbsDown" = GREATEST(t."ThumbsDown" + $7, 0)
-                """, connection, transaction)
-            {
-                Parameters =
-                {
-                    new() { Value = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime) }, new() { Value = assistant.Id }, new() { Value = clientId },
-                    new() { Value = level }, new() { Value = assistant.DepartmentId }, new() { Value = up }, new() { Value = down },
-                },
-            };
-            await totals.ExecuteNonQueryAsync(ct);
-        }
-
+        await FeedbackEndpoints.AddRatingToTotalsAsync(connection, transaction, at, assistant.Id, clientId, level, assistant.DepartmentId, previous, item.Rating.Value,
+            ct);
         await transaction.CommitAsync(ct);
         return "imported";
     }

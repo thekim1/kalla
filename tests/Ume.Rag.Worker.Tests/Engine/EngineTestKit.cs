@@ -357,8 +357,7 @@ internal static class EngineKit
     }
 
     /// <summary>Today in Europe/Stockholm, the day a usage row is written under.</summary>
-    public static DateOnly StockholmToday() =>
-        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Worker.Jobs.MaintenanceService.Stockholm).DateTime);
+    public static DateOnly StockholmToday() => StockholmTime.Today(TimeProvider.System);
 
     private static async Task<string> JobsTextAsync(RagDatabaseFixture database, Guid runId)
     {

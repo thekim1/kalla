@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Cronos;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
@@ -34,7 +35,6 @@ public sealed partial class SyncScheduler(
     TimeProvider time,
     ILogger<SyncScheduler> logger) : BackgroundService
 {
-    public static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     private const long LockKey = 0x5241_4731_0002;
 
@@ -123,13 +123,13 @@ public sealed partial class SyncScheduler(
             return null;
         }
 
-        if (expression.GetNextOccurrence(source.LastScheduledFor ?? source.CreatedAt, Stockholm) is not { } next)
+        if (expression.GetNextOccurrence(source.LastScheduledFor ?? source.CreatedAt, StockholmTime.Zone) is not { } next)
         {
             return null;
         }
 
         // Missed occurrences collapse into the latest one that has passed.
-        while (expression.GetNextOccurrence(next, Stockholm) is { } later && later + Jitter(source.SourceId, values.ScheduleJitterMinutes) <= now)
+        while (expression.GetNextOccurrence(next, StockholmTime.Zone) is { } later && later + Jitter(source.SourceId, values.ScheduleJitterMinutes) <= now)
         {
             next = later;
         }

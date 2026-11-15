@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 
 namespace Ume.Rag.AdminApi;
@@ -35,7 +36,6 @@ public static class CostEndpoints
         "estimated_cost_usd", "estimated_calls",
     ];
 
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
     private static readonly CultureInfo Swedish = CultureInfo.GetCultureInfo("sv-SE");
 
     public static RouteGroupBuilder MapCosts(this RouteGroupBuilder api)
@@ -127,7 +127,7 @@ public static class CostEndpoints
     }
 
     /// <summary>Today as a Europe/Stockholm day, the usage tables' <c>Day</c>.</summary>
-    internal static DateOnly Today(AdminContext admin) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now, Stockholm).DateTime);
+    internal static DateOnly Today(AdminContext admin) => StockholmTime.DayOf(admin.Now);
 
     /// <summary>
     /// <c>AssistantDailyUsage</c> summed per period, assistant, department, step and client within <paramref name="departments"/>

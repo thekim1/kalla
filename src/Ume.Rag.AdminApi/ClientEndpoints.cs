@@ -100,10 +100,16 @@ public static class ClientEndpoints
                 {
                     var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                     admin.ExpectVersion(client, request.Version);
-                    // The deployment's own client stays what the deployment made it (identity design §5.2): its kind is fixed.
+                    // The deployment's own client stays what the deployment made it (identity design §4.1, §5.2): its kind and its name,
+                    // by which rag-migrate finds it (#712), are fixed.
                     if (client.IsManagedByDeployment && request.Kind != client.Kind)
                     {
                         throw AdminFaults.Field("kind", AdminErrorCodes.ClientManagedByDeployment);
+                    }
+
+                    if (client.IsManagedByDeployment && request.Name.Trim() != client.Name)
+                    {
+                        throw AdminFaults.Field("name", AdminErrorCodes.ClientManagedByDeployment);
                     }
 
                     var before = ClientAudit.Of(client);

@@ -467,7 +467,7 @@ public static class AssistantEndpoints
         var collections = await admin.Db.Collections.AsNoTracking().Where(c => collectionIds.Contains(c.Id) && c.DeletedAt == null)
             .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
         var ids = rows.Select(r => r.Id).ToList();
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now, RetentionService.Stockholm).DateTime);
+        var today = StockholmTime.DayOf(admin.Now);
         var firstDay = today.AddDays(-6);
         var questions = await admin.Db.AssistantDailyTotals.AsNoTracking().Where(t => ids.Contains(t.AssistantId) && t.Day >= firstDay && t.Day <= today)
             .GroupBy(t => t.AssistantId).Select(g => new { g.Key, Messages = g.Sum(t => t.Messages) })

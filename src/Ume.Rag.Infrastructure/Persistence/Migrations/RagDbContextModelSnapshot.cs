@@ -826,6 +826,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EmbeddingProfileId");
+
                     b.HasIndex("SupersededAt");
 
                     b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "ParseRuleKey" }, "IX_ChunkSets_Key")
@@ -910,13 +912,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Kind")
+                    b.HasIndex("OAuthClientId")
+                        .IsUnique();
+
+                    b.HasIndex("Kind", "Name")
                         .IsUnique()
                         .HasDatabaseName("IX_Clients_Managed")
                         .HasFilter("\"IsManagedByDeployment\"");
-
-                    b.HasIndex("OAuthClientId")
-                        .IsUnique();
 
                     b.ToTable("Clients", "config", t =>
                         {

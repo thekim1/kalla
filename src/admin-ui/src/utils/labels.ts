@@ -622,6 +622,9 @@ export const FILES = {
   reading: 'Reading the folder…',
   ready: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} ready`,
   skippedCount: (n: number) => `${n} skipped`,
+  sentCount: (sent: number, total: number) => `${formatNumber(sent)} of ${formatNumber(total)} sent`,
+  /** Under the pending list, for the files it does not show (failed, sending and skipped files come first). */
+  moreFiles: (n: number) => `and ${formatNumber(n)} more`,
   clearSkipped: 'Clear skipped',
   skipReasons: {
     type: 'This file type cannot be uploaded.',
@@ -1044,7 +1047,7 @@ export const PLATFORM_CLIENTS = {
   /** A kind the deployment sets up itself (identity design §5.2, M-17 C4): not added here. */
   byDeployment: 'Set up by the deployment',
   managed: 'Managed by the deployment',
-  managedNote: 'The deployment made this app and keeps its key. Its settings and the assistants it offers are edited here; its key changes only with a new deployment.',
+  managedNote: 'The deployment made this app and keeps its keys. Its settings and the assistants it offers are edited here; its keys change only with a new deployment.',
   steps: { kind: 'Type', fields: 'Settings', assistants: 'What it may use', firstKey: 'First key' },
   step: (n: number, total: number, title: string) => `Step ${n} of ${total}: ${title}`,
   next: 'Next',
@@ -1063,6 +1066,7 @@ export const PLATFORM_CLIENTS = {
   },
   hints: {
     classificationCeiling: 'The highest information class the app may receive.',
+    managedName: 'The deployment finds this app by its name, so it cannot be changed.',
     clientRetentionDays: 'How long the feedback copied from Open WebUI is kept.',
     oAuthClientId: 'The azp of the app’s tokens.',
     portalUrl: 'Where users open the app; the assistant page links to it.',
