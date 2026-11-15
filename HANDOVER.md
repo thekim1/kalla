@@ -33,8 +33,7 @@ sink" monolith. Design and code live in this repo.
   #87 (G1), #90 (G5), #89 (G4).
 - **M-18** (remove `Settings.WorkerConcurrency` until P2, #677) is merged (#686). **C5** (the embedding profile created in
   the admin, #687) is merged; its design deviations are settled on `main` (69987e4f); its review nits in #688. C6's design is updated on `main`. **C8 (#690, TLS proxy) was reviewed after merge;** its stale-upstream bug (names resolved only at nginx start) is fixed in #692 (Docker's resolver + `server … resolve`, proved locally against the pinned image; the boot test now recreates rag-api behind a placeholder). Still open from that review: the trusted-proxy address changes when rag-proxy is recreated (docs), no HSTS on Open WebUI's block. repo-and-deployment still needs a line for the `proxy` profile. Next from the M-16 session: C9, then C10.
-- **Next release (0.6.0):** after the M-17 steps the user wants in it. Before tagging: CHANGELOG *Unreleased* needs
-  M-16 (#668–#679, #681), #670, M-17 C0–C6, C8 and M-18 (#686) (it lists only #663 now); `docs/upgrade-guide.md` *Unreleased* has the
+- **Next release (0.6.0):** after the M-17 steps the user wants in it. Before tagging: CHANGELOG *Unreleased* is current through #717 (#718; add what merges after); `docs/upgrade-guide.md` *Unreleased* has the
   Open WebUI client move (#685); the repository setting *Allow GitHub Actions to create and approve pull requests* must
   be on for C0's pin PR.
 - **The test chatbot (T2–T6) is the user's team's** (user, 2026-11-14): don't plan or prepare it; fix what they report.
