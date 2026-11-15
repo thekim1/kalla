@@ -290,7 +290,7 @@ public static class AdminErrorCodes
         "The AI gateway key {key} reaches {model}, the knowledge base's embedding model, only at {modelResidencies}, which the key does not allow (it allows {keyResidencies}).");
 
     /// <summary>V39: the object has no key. A warning until the gateway acts as keys (feature <c>act-as-key</c>), then publish refuses it.</summary>
-    public static AdminErrorCode GatewayKeyRequired { get; } = new("gateway_key_required", 409, "No AI gateway key is chosen: the calls are charged to the platform's owner team.");
+    public static AdminErrorCode GatewayKeyRequired { get; } = new("gateway_key_required", 409, "No AI gateway key is chosen: the assistant can't be published without one, and until then its calls are charged to the platform's owner team.");
 
     /// <summary>V39, a warning only: the key has a system prompt.</summary>
     public static AdminErrorCode GatewayKeySystemPrompt { get; } = new("gateway_key_system_prompt", 409, "The AI gateway key {key} adds its team's system prompt to every call, which changes the assistant's prompts.");

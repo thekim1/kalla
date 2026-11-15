@@ -145,7 +145,13 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(answer.getByText('Answered', { exact: true })).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Cited', { exact: true }).first()).toBeVisible()
 
-    // 11 Publish the assistant.
+    // 11 Publish the assistant. It runs on its department's AI gateway key: while the gateway acts as keys, publish needs one
+    // that reaches its models (V39); the E2E stack's FakeGateway has "Digitalisering – pilot" for that (AppHost).
+    await act.press(page.getByRole('button', { name: 'Edit details' }))
+    const details = page.getByRole('dialog', { name: 'Edit assistant' })
+    await act.select(details.getByRole('combobox', { name: 'AI gateway key' }), { label: 'Digitalisering – pilot' })
+    await act.press(details.getByRole('button', { name: 'Save', exact: true }))
+    await expect(details).toBeHidden()
     await act.press(page.getByRole('button', { name: 'Publish', exact: true }))
     await expect(page.getByText('Published: version 1')).toBeVisible()
 

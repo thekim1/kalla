@@ -59,7 +59,7 @@ describe('problemLines for the gateway key (B-36, B-43, #720)', () => {
       ],
     })
     expect(problemLines(error)).toEqual([
-      'No AI gateway key is chosen, so the calls are charged to the platform’s owner team.',
+      'No AI gateway key is chosen. Choose one under Edit details: the assistant can’t be published without one, and until then its calls are charged to the platform’s owner team.',
       'The AI gateway key Kontaktcenter – chatbot does not allow every model this uses. (ume/chat-standard)',
       'The AI gateway key Kontaktcenter – chatbot reaches bge-m3, the knowledge base’s embedding model, only at OnPrem, which the key does not allow (it allows Eu). (bge-m3)',
       'The AI gateway key Kontaktcenter – chatbot reaches ume/chat-onprem only at OnPrem, which the key does not allow (it allows Eu, External). (ume/chat-onprem)',
