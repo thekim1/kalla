@@ -72,19 +72,20 @@ public sealed class AdminOptions
 }
 
 /// <summary>
-/// Bound from the <c>Oidc</c> configuration section (the gateway's, adapted; identity design §1.4). Defaults match the
-/// bundled Keycloak realm; other identity providers remap claims or map groups to roles.
+/// The <c>Oidc</c> configuration section (the gateway's, adapted; identity design §1.4). Defaults match the bundled Keycloak
+/// realm; other identity providers remap claims or map groups to roles. Bound and validated at start, but only
+/// <see cref="RoleGroups"/> is read from the bound options: every other value is an effective sign-in value (identity design
+/// §19, <see cref="SignInSettings"/>), from the deployment, else the setup wizard, else these defaults, and the sign-in checks
+/// take an instance built from them (<see cref="SignInSnapshot.ToOidcOptions"/>). rag-admin starts without an authority.
 /// </summary>
 public sealed class OidcOptions
 {
     public const string SectionName = "Oidc";
 
-    /// <summary>The identity provider's issuer URL.</summary>
-    [Required]
+    /// <summary>The identity provider's issuer URL; when the deployment sets it, an absolute https URL (<see cref="OidcAuthorityValidator"/>).</summary>
     public string? Authority { get; set; }
 
-    /// <summary>Ume.Rag's own registration (identity design §1.6), never the gateway's <c>ume-admin</c>.</summary>
-    [Required]
+    /// <summary>Ume.Rag's own registration (identity design §1.6), never the gateway's <c>ume-admin</c>. An empty value is unset (§19).</summary>
     public string ClientId { get; set; } = "ume-rag-admin";
 
     public string? ClientSecret { get; set; }
@@ -144,5 +145,28 @@ public sealed class OidcOptionsValidator : IValidateOptions<OidcOptions>
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+}
+
+/// <summary>
+/// A deployment's <c>Oidc:Authority</c>, when set, is an absolute https URL (http in Development only, as the handler's
+/// <c>RequireHttpsMetadata</c>), so a wrong value still stops rag-admin at start instead of leaving sign-in unconfigured.
+/// </summary>
+public sealed class OidcAuthorityValidator(IHostEnvironment environment) : IValidateOptions<OidcOptions>
+{
+    public ValidateOptionsResult Validate(string? name, OidcOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (string.IsNullOrWhiteSpace(options.Authority))
+        {
+            return ValidateOptionsResult.Success;
+        }
+
+        var http = environment.IsDevelopment();
+        return Uri.TryCreate(options.Authority, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || (http && uri.Scheme == Uri.UriSchemeHttp))
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(http
+                ? "Oidc:Authority must be an absolute http or https URL."
+                : "Oidc:Authority must be an absolute https URL.");
     }
 }

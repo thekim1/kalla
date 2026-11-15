@@ -94,6 +94,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   test_answer_failed: 'The model could not answer the test question ({reason}). Try again.',
   test_assistant_unavailable: '{reason}',
   test_budget_exceeded: '{reason}',
+  sign_in_not_configured: 'Sign-in is not set up yet. Contact the platform team.',
   search_unavailable: 'The search could not run right now. Try again in a moment.',
 }
 
