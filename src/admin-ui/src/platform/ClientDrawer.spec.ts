@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
 import { assistantSummary } from '@/test/fixtures'
-import { PLATFORM_CLIENTS } from '@/utils/labels'
+import { COMMON, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientDrawer from './ClientDrawer.vue'
 
 const L = PLATFORM_CLIENTS
@@ -35,6 +35,7 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     ])
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [assistant('a1', 'Bygglovsassistenten', 'public'), assistant('a2', 'Personal', 'internal')], total: 2 })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    vi.spyOn(api.collections, 'list').mockResolvedValue({ items: [], total: 0 })
     vi.spyOn(api.clients, 'connection').mockResolvedValue({ apiBaseUrl: 'https://rag.example.se' })
   })
 
@@ -158,6 +159,29 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     expect(wrapper.find('[data-test=key-form]').exists()).toBe(true)
     // A new key asks for its name; the rest is collapsed.
     expect((wrapper.get('[data-test=key-restrictions]').element as HTMLDetailsElement).open).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reads every page of the reference data once, however many keys are opened', async () => {
+    vi.spyOn(api.clients, 'get').mockResolvedValue(client)
+    // 201 assistants: the last is on a second page and can still be offered.
+    const many = Array.from({ length: 201 }, (_, i) => assistant(i === 200 ? 'a1' : `x${i}`, i === 200 ? 'Bygglovsassistenten' : `Assistent ${i}`, 'public'))
+    const list = vi.spyOn(api.assistants, 'list').mockImplementation(async ({ page = 1, pageSize = 200 } = {}) => ({
+      items: many.slice((page - 1) * pageSize, page * pageSize), total: many.length,
+    }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(list.mock.calls.map(([q]) => q)).toEqual([{ page: 1, pageSize: 200 }, { page: 2, pageSize: 200 }])
+    expect(wrapper.find('[data-test=client-assistants] [data-test=assistant-a1]').exists()).toBe(true)
+
+    await wrapper.get('[data-test=new-key]').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === COMMON.cancel)!.trigger('click')
+    await wrapper.get('[data-test=client-keys] tbody tr').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test=scope-assistants]').text()).toContain('Bygglovsassistenten')
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(api.collections.list).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 })

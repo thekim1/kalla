@@ -168,7 +168,7 @@ export const api = {
       http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
   },
   assistants: {
-    list: (query: { q?: string; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),
+    list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),
     get: (id: string) => http.get<Assistant>(`/api/assistants/${id}`),
     create: (body: AssistantCreate) => http.post<Assistant>('/api/assistants', body),
     draft: (id: string) => http.get<AssistantDraft>(`/api/assistants/${id}/draft`),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { ApiKey, AssistantSummary, Client, Department, KeyCreated, KeyRotationMode } from '@/api/types'
+import type { ApiKey, Client, KeyCreated, KeyRotationMode } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -16,6 +16,7 @@ import { formatDate, formatDateTime, formatRelative } from '@/utils/format'
 import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import AssistantPicker from './AssistantPicker.vue'
+import { useClientChoices } from './clientChoices'
 import ClientFields from './ClientFields.vue'
 import CopyValue from './CopyValue.vue'
 import HowToConnect from './HowToConnect.vue'
@@ -38,10 +39,8 @@ const loading = ref(false)
 const loadError = ref<unknown>(null)
 const form = ref<ClientForm>(newClientForm(''))
 const saving = ref(false)
-/** The picker's rows, the ticked ones and the address of "How to connect". */
-const assistants = ref<AssistantSummary[]>([])
-const departments = ref<Department[]>([])
-const apiBaseUrl = ref<string | null>(null)
+/** The pickers' rows (this one's and the key form's), the address of "How to connect" and the ticked assistants. */
+const { assistants, departments, collections, apiBaseUrl, load: loadChoices } = useClientChoices({ collections: true })
 const assistantIds = ref<string[]>([])
 const savingAssistants = ref(false)
 const assistantErrors = useFormErrors({ assistantIds: 'client-edit-assistantIds' })
@@ -91,15 +90,6 @@ async function load(id: string): Promise<void> {
   } finally {
     loading.value = false
   }
-}
-
-/** A failed read leaves the list or the address empty, not the drawer broken. */
-async function loadChoices(): Promise<void> {
-  ;[assistants.value, departments.value, apiBaseUrl.value] = await Promise.all([
-    api.assistants.list({ pageSize: 200 }).then((p) => p.items).catch(() => []),
-    api.organisation.departments().catch(() => []),
-    api.clients.connection().then((c) => c.apiBaseUrl).catch(() => null),
-  ])
 }
 
 /** Active assistants, and any the app offers already (an archived one can still be unticked). */
@@ -246,7 +236,7 @@ async function revoke(): Promise<void> {
         <div v-if="keyEdit" class="grid gap-3">
           <h4 class="font-medium">{{ keyEdit.key ? L.keys.editTitle(keyEdit.key.name) : L.keys.newTitle }}</h4>
           <KeyForm :key="keyFormKey" form-id="client-key" :api-key="keyEdit.key" :client-id="client.id"
-            :audience-ids="client.assistants.map((a) => a.id)" @saved="keySaved" @cancel="keyEdit = null"
+            :audience-ids="client.assistants.map((a) => a.id)" :assistants="assistants" :departments="departments" :collections="collections" @saved="keySaved" @cancel="keyEdit = null"
           />
         </div>
         <DataTable

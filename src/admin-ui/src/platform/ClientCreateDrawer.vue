@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { AssistantSummary, Client, ClientCreated, ClientKind, Department } from '@/api/types'
+import type { Client, ClientCreated, ClientKind } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -11,6 +11,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import AssistantPicker from './AssistantPicker.vue'
+import { useClientChoices } from './clientChoices'
 import ClientFields from './ClientFields.vue'
 import HowToConnect from './HowToConnect.vue'
 import { assistantAllowed, AVAILABLE_KINDS, clientRequest, DEPLOYMENT_KINDS, fieldsFor, LATER_KINDS, newClientForm, RetentionDaysError, type ClientForm } from './clients'
@@ -29,10 +30,9 @@ const step = ref(1)
 const kind = ref('')
 const form = ref<ClientForm>(newClientForm(''))
 const assistantIds = ref<string[]>([])
-const assistants = ref<AssistantSummary[]>([])
-const departments = ref<Department[]>([])
-const apiBaseUrl = ref<string | null>(null)
-const loadingChoices = ref(false)
+/** The picker's rows and the address of "How to connect"; a failed read leaves the step empty, not the drawer broken. */
+const { assistants: allAssistants, departments, apiBaseUrl, loading: loadingChoices, load: loadChoices } = useClientChoices()
+const assistants = computed(() => allAssistants.value.filter((a) => a.state === 'active'))
 const createKey = ref(true)
 const keyName = ref('')
 const saving = ref(false)
@@ -65,17 +65,6 @@ watch(() => props.open, (open) => {
   errors.clear()
   void loadChoices()
 })
-
-/** The picker's rows and the address of "How to connect"; a failed read leaves the step empty, not the drawer broken. */
-async function loadChoices(): Promise<void> {
-  loadingChoices.value = true
-  ;[assistants.value, departments.value, apiBaseUrl.value] = await Promise.all([
-    api.assistants.list({ pageSize: 200 }).then((p) => p.items.filter((a) => a.state === 'active')).catch(() => []),
-    api.organisation.departments().catch(() => []),
-    api.clients.connection().then((c) => c.apiBaseUrl).catch(() => null),
-  ])
-  loadingChoices.value = false
-}
 
 function chooseKind(value: string): void {
   if (value === kind.value) return
