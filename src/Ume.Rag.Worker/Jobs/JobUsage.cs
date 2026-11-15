@@ -23,13 +23,13 @@ public sealed record UsageOwner(Guid CollectionId, string Classification, Guid D
 public sealed record UsageSink(JobUsage Usage, UsageOwner Owner)
 {
     /// <summary>Adds <paramref name="call"/>, answered by the gateway, to the attempt's usage (<see cref="JobUsage.RecordAsync"/>).</summary>
-    public Task RecordAsync(GatewayCallUsage call, CancellationToken cancellationToken) => Usage.RecordAsync(Owner, call, embedding: false, cancellationToken);
+    public Task RecordAsync(GatewayCallUsage call) => Usage.RecordAsync(Owner, call, embedding: false);
 
     /// <summary>
     /// Adds the embedding call <paramref name="call"/>, answered by the gateway, to the attempt's usage; its input tokens also count
     /// in <c>rag.embed.tokens</c> (<see cref="JobUsage.RecordAsync"/>).
     /// </summary>
-    public Task RecordEmbeddingAsync(GatewayCallUsage call, CancellationToken cancellationToken) => Usage.RecordAsync(Owner, call, embedding: true, cancellationToken);
+    public Task RecordEmbeddingAsync(GatewayCallUsage call) => Usage.RecordAsync(Owner, call, embedding: true);
 }
 
 /// <summary>A model's prices as the mirror holds them (<c>config."GatewayModels"</c>, data-model §2.1), for the estimate of a call without a gateway cost.</summary>
@@ -39,23 +39,52 @@ public interface IGatewayModelPrices
     Task<ModelPrices?> GetAsync(string model, CancellationToken cancellationToken);
 }
 
-/// <summary><see cref="IGatewayModelPrices"/> over <c>config."GatewayModels"</c> (read grant, data-model §1.2), one short read per estimated call.</summary>
-public sealed class PostgresGatewayModelPrices(JobDatabase database) : IGatewayModelPrices
+/// <summary>
+/// <see cref="IGatewayModelPrices"/> over <c>config."GatewayModels"</c> (read grant, data-model §1.2): one read of every
+/// model's prices serves the estimates for <see cref="CacheFor"/>, so an estimated call takes no pool connection of its own,
+/// as rag-api prices from its config snapshot (<see cref="Domain.Access.PolicySnapshot.ModelPrices"/>). A mirror sync
+/// shows in the estimates within that time.
+/// </summary>
+public sealed class PostgresGatewayModelPrices(JobDatabase database, TimeProvider time) : IGatewayModelPrices
 {
+    /// <summary>How long one read of the prices is used.</summary>
+    public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(1);
+
     private const string PricesSql = """
-        SELECT "InputPerMillionUsd", "CachedInputPerMillionUsd", "OutputPerMillionUsd" FROM config."GatewayModels" WHERE "Name" = $1
+        SELECT "Name", "InputPerMillionUsd", "CachedInputPerMillionUsd", "OutputPerMillionUsd" FROM config."GatewayModels"
         """;
+
+    private Snapshot? _snapshot;
 
     public async Task<ModelPrices?> GetAsync(string model, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
-        await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(PricesSql, connection) { Parameters = { Db.P(model) } };
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? new ModelPrices(Db.Nullable<decimal>(reader, 0), Db.Nullable<decimal>(reader, 1), Db.Nullable<decimal>(reader, 2))
-            : null;
+        var snapshot = Volatile.Read(ref _snapshot);
+        if (snapshot is null || time.GetUtcNow() >= snapshot.Until)
+        {
+            // Concurrent misses may each read; the last one read is kept.
+            snapshot = new Snapshot(await ReadAsync(cancellationToken), time.GetUtcNow() + CacheFor);
+            Volatile.Write(ref _snapshot, snapshot);
+        }
+
+        return snapshot.Prices.GetValueOrDefault(model);
     }
+
+    private async Task<Dictionary<string, ModelPrices>> ReadAsync(CancellationToken cancellationToken)
+    {
+        var prices = new Dictionary<string, ModelPrices>(StringComparer.Ordinal);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(PricesSql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            prices[reader.GetString(0)] = new ModelPrices(Db.Nullable<decimal>(reader, 1), Db.Nullable<decimal>(reader, 2), Db.Nullable<decimal>(reader, 3));
+        }
+
+        return prices;
+    }
+
+    private sealed record Snapshot(Dictionary<string, ModelPrices> Prices, DateTimeOffset Until);
 }
 
 /// <summary>
@@ -125,13 +154,15 @@ public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time, Acti
     /// <summary>
     /// Adds a call the gateway answered: <see cref="UsageRecord.From"/> with the mirror's prices of its model when it carries
     /// no cost, on today's Europe/Stockholm date. The metrics count it here, once, whatever becomes of the attempt
-    /// (<paramref name="embedding"/>: an embedding call, whose input tokens count in <c>rag.embed.tokens</c>).
+    /// (<paramref name="embedding"/>: an embedding call, whose input tokens count in <c>rag.embed.tokens</c>). It takes no
+    /// cancellation: the gateway has charged the call, so a cancelled job still records it (the price read is bounded by the
+    /// pool's and the command's timeouts).
     /// </summary>
-    public async Task RecordAsync(UsageOwner owner, GatewayCallUsage call, bool embedding, CancellationToken cancellationToken)
+    public async Task RecordAsync(UsageOwner owner, GatewayCallUsage call, bool embedding)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(call);
-        var record = UsageRecord.From(call, call.CostUsd is null ? await prices.GetAsync(call.Model, cancellationToken) : null);
+        var record = UsageRecord.From(call, call.CostUsd is null ? await prices.GetAsync(call.Model, CancellationToken.None) : null);
         var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), MaintenanceService.Stockholm).DateTime);
         lock (_lock)
         {

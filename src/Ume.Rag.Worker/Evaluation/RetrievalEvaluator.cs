@@ -163,7 +163,7 @@ public sealed class EvaluationSession : IDisposable
         var result = await engine.SearchAsync(Request(question, variant, settings, runId, usage), cancellationToken);
         if (result.RerankUsage is { } rerank)
         {
-            await usage.RecordAsync(rerank, cancellationToken);
+            await usage.RecordAsync(rerank);
         }
 
         return result;

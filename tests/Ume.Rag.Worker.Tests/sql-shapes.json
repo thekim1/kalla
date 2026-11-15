@@ -119,7 +119,7 @@
   "Evaluation.Generation.EvalSetStore.SameTextSql": ["TextHash bytea", "DocumentId uuid"],
   "Evaluation.Generation.EvalSetStore.SetSql": ["Id uuid"],
   "Evaluation.Generation.EvalSetStore.SettingsSql": ["EvaluationModel character varying", "EvaluationJudgeModel character varying", "EvaluationMaxQuestions integer"],
-  "Jobs.PostgresGatewayModelPrices.PricesSql": ["InputPerMillionUsd numeric", "CachedInputPerMillionUsd numeric", "OutputPerMillionUsd numeric"],
+  "Jobs.PostgresGatewayModelPrices.PricesSql": ["Name character varying", "InputPerMillionUsd numeric", "CachedInputPerMillionUsd numeric", "OutputPerMillionUsd numeric"],
   "Preview.PreviewConfig.BaseSql": ["Result text"],
   "Preview.PreviewConfig.CollectionSql": ["Id uuid", "Classification character varying", "EmbeddingProfileId uuid", "DepartmentId uuid", "GatewayKeyId uuid"],
   "Preview.PreviewConfig.VersionSql": ["Definition text"],

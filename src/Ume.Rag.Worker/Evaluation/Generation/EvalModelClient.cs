@@ -150,7 +150,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         // The gateway charged the call whatever its body: without a readable one it counts 0 tokens (engine design §10.6).
         await usage.RecordAsync(document is null
             ? new GatewayCallUsage(step, model, default(GatewayTokens), GatewayUsageReader.CostHeader(response))
-            : GatewayUsageReader.Read(response, document.RootElement, step, model), cancellationToken);
+            : GatewayUsageReader.Read(response, document.RootElement, step, model));
         ChatResponse? body;
         using (document)
         {

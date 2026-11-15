@@ -91,12 +91,11 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
             }
             catch (JsonException)
             {
-                await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, tokens: null), cancellationToken);
+                await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, tokens: null));
                 throw new StageFatalException(RunItemOutcome.Failed, "embed.bad_vector");
             }
 
-            await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, body?.Usage is { } usage ? GatewayUsageReader.UsageTokens(usage) : null),
-                cancellationToken);
+            await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, body?.Usage is { } usage ? GatewayUsageReader.UsageTokens(usage) : null));
             return Check(body, inputs.Count, profile.Dimensions);
         }
     }
