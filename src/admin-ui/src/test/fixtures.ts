@@ -1,5 +1,5 @@
 import type {
-  AssistantSummary, BffUser, Collection, CollectionSummary, CollectionUser, Department, OidcWizardValues, SetupState, SetupTest, SignInSettings,
+  AssistantSummary, BffUser, Collection, CollectionSummary, CollectionUser, Department, OidcWizardValues, OpenWebUiSignIn, OpenWebUiTest, OpenWebUiWizardValues, SetupOpenWebUiState, SetupState, SetupTest, SignInSettings,
 } from '@/api/types'
 
 /** A signed-in user of `/bff/user`; override what the test cares about. */
@@ -108,6 +108,37 @@ export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   }
 }
 
+/** Open WebUI's sign-in values of a first run with the sign-in provider https://idp.example.org/realms/ume: all defaults. */
+export function openWebUiSignIn(overrides: Partial<OpenWebUiSignIn> = {}): OpenWebUiSignIn {
+  return {
+    providerUrl: { value: 'https://idp.example.org/realms/ume/.well-known/openid-configuration', source: 'default' },
+    clientId: { value: 'open-webui', source: 'default' },
+    providerName: { value: 'Umeå kommun', source: 'default' },
+    clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false },
+    configured: true,
+    ...overrides,
+  }
+}
+
+/** Open WebUI's values with nothing set; override what the check typed. */
+export function openWebUiValues(overrides: Partial<OpenWebUiWizardValues> = {}): OpenWebUiWizardValues {
+  return { providerUrl: null, clientId: null, providerName: null, clientSecretExpiresOn: null, ...overrides }
+}
+
+/** A passed Open WebUI check whose client the provider accepted, with a typed secret and nothing else typed. */
+export function openWebUiTest(overrides: Partial<OpenWebUiTest> = {}): OpenWebUiTest {
+  return {
+    testId: 'w1', target: 'open-webui', status: 'passed', reason: null, startedAt: '2026-11-15T10:05:00Z', values: openWebUiValues(), clientSecret: 'typed',
+    result: { discovery: 'ok', clientAccepted: true, clientReason: null },
+    ...overrides,
+  }
+}
+
+/** Open WebUI's block of `GET /bff/setup/state`: by default the deployment does not run it. */
+export function openWebUiState(overrides: Partial<SetupOpenWebUiState> = {}): SetupOpenWebUiState {
+  return { enabled: false, signIn: openWebUiSignIn(), redirectUri: 'https://chat.example.org/oauth/oidc/login/callback', latestTest: null, ...overrides }
+}
+
 /** `GET /bff/setup/state` of a first run: the window ends in 50 minutes, the session in 25. */
 export function setupState(overrides: Partial<SetupState> = {}, now: number = Date.now()): SetupState {
   return {
@@ -118,6 +149,7 @@ export function setupState(overrides: Partial<SetupState> = {}, now: number = Da
     redirectUris: { signIn: 'https://rag-admin.example.org/signin-oidc', signOutCallback: 'https://rag-admin.example.org/signout-callback-oidc' },
     deployment: { gatewayBaseUrl: 'https://gateway.example.org', apiPublicUrl: null, platformAdminGroups: [] },
     latestTest: null,
+    openWebUi: openWebUiState(),
     ...overrides,
   }
 }

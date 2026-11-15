@@ -74,7 +74,7 @@ public static class SetupModeEndpoints
             var latestOpenWebUi = await LatestTestAsync(db, current, SetupTargets.OpenWebUi, ct);
             string[] platformAdminGroups = deployment.Value.RoleGroups.TryGetValue(RagRoles.PlatformAdmin, out var groups)
                 ? groups.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
-            var shown = await openWebUi.ShowAsync(ct);
+            var shown = await openWebUi.ShowAsync(await openWebUiTests.SessionAuthorityAsync(current, ct), ct);
             return new SetupStateDto(
                 status.Kind, status.EndsAt!.Value, current.ExpiresAt, SignInSettingsDto.Of(await signIn.ReadAsync(ct)),
                 new SetupRedirectUris(SetupTestSignIn.RedirectUri(http, options.CallbackPath), SetupTestSignIn.RedirectUri(http, options.SignedOutCallbackPath)),
@@ -182,7 +182,7 @@ public static class SetupModeEndpoints
         var result = JsonSerializer.Deserialize<OpenWebUiTestResult>(test!.Result!, SetupTestSignIn.Json)!;
         var verified = result.ClientAccepted == true;
         SecurityEvents.SetupOpenWebUiSaved(SecurityEvents.CreateLogger(loggers), actor.Subject, actor.SessionId, actor.SourceAddress, verified);
-        return new SetupOpenWebUiSavedDto(await settings.ShowAsync(ct), verified);
+        return new SetupOpenWebUiSavedDto(await settings.ShowAsync(await tests.SessionAuthorityAsync(current, ct), ct), verified);
     }
 
     /// <summary>The session's latest rag-admin test and its person (null while it has none or it did not finish).</summary>

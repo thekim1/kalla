@@ -7,11 +7,13 @@ import {
   ERROR_MESSAGES,
   JOB_MESSAGES,
   JOB_MESSAGE_PREFIXES,
+  OPENWEBUI_CHECK_MESSAGES,
   SETUP_COMPLETE_MESSAGES,
   SETUP_TEST_MESSAGES,
   embeddingTestMessage,
   formatMessage,
   jobMessage,
+  openWebUiCheckMessage,
   setupCompleteMessage,
   setupTestMessage,
 } from './messages'
@@ -158,6 +160,16 @@ describe('setup wizard messages (identity design §19)', () => {
 
   it('has a text for every reason a completion is refused, and no others', () => {
     expect(Object.keys(SETUP_COMPLETE_MESSAGES).sort()).toEqual([...SETUP_COMPLETE_REASONS].sort())
+  })
+
+  it('covers Open WebUI\'s check reasons, and words only known reasons its own way', () => {
+    for (const reason of ['provider_url_invalid', 'client_refused', 'client_unverified']) expect(SETUP_TEST_REASONS).toContain(reason)
+    expect(SETUP_COMPLETE_REASONS).toContain('admin_test_required')
+    const known: string[] = [...SETUP_TEST_REASONS, ...SETUP_COMPLETE_REASONS]
+    for (const reason of Object.keys(OPENWEBUI_CHECK_MESSAGES)) expect(known).toContain(reason)
+    expect(openWebUiCheckMessage('not_discovery')).toBe(OPENWEBUI_CHECK_MESSAGES.not_discovery)
+    expect(openWebUiCheckMessage('client_refused')).toBe(SETUP_TEST_MESSAGES.client_refused)
+    expect(openWebUiCheckMessage('admin_test_required')).toBe(SETUP_COMPLETE_MESSAGES.admin_test_required)
   })
 
   it('names an unknown reason in a generic text', () => {

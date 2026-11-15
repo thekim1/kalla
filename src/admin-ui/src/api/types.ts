@@ -169,6 +169,77 @@ export interface SetupState {
   redirectUris: { signIn: string; signOutCallback: string }
   deployment: { gatewayBaseUrl: string | null; apiPublicUrl: string | null; platformAdminGroups: string[] }
   latestTest: SetupTest | null
+  openWebUi: SetupOpenWebUiState
+}
+
+/** Which client a setup test or a client secret belongs to (`SetupTargets`). */
+export type SetupTarget = 'rag-admin' | 'open-webui'
+
+/** Open WebUI's sign-in values, each with its source (`OpenWebUiSignInDto`); `providerUrl`'s default is null while no authority is known. */
+export interface OpenWebUiSignIn {
+  providerUrl: SignInValue<string | null>
+  clientId: SignInValue<string | null>
+  providerName: SignInValue<string | null>
+  clientSecret: SignInSecretStatus
+  configured: boolean
+}
+
+/** Open WebUI's values as `POST test` and `POST complete` take them for `target: "open-webui"` (`OpenWebUiOidcValues`). */
+export interface OpenWebUiWizardValues {
+  providerUrl: string | null
+  clientId: string | null
+  providerName: string | null
+  /** `yyyy-mm-dd`. */
+  clientSecretExpiresOn: string | null
+}
+
+/**
+ * What an Open WebUI check found (`OpenWebUiTestResult`): the discovery document (`ok`; a failed one refuses the check instead), and
+ * whether the token endpoint accepted the client (true), refused it (false) or could not tell (null, with `clientReason`).
+ */
+export interface OpenWebUiTestResult {
+  discovery: string
+  clientAccepted: boolean | null
+  clientReason: string | null
+}
+
+/** An Open WebUI check (`OpenWebUiTestDto`), answered at once: it has no browser leg, so it is never pending. */
+export interface OpenWebUiTest {
+  testId: string
+  target: string
+  status: 'passed' | 'failed'
+  reason: string | null
+  startedAt: IsoDateTime
+  values: OpenWebUiWizardValues | null
+  clientSecret: SetupSecretSource | null
+  result: OpenWebUiTestResult | null
+}
+
+/** Open WebUI in `GET /bff/setup/state` (`SetupOpenWebUiState`): `redirectUri` is null while rag-admin has no `OpenWebUi:PublicUrl`. */
+export interface SetupOpenWebUiState {
+  enabled: boolean
+  signIn: OpenWebUiSignIn
+  redirectUri: string | null
+  latestTest: OpenWebUiTest | null
+}
+
+/** `POST /bff/setup/test` for Open WebUI: only its own members (a member of the other target is a 400). */
+export interface OpenWebUiTestRequest extends OpenWebUiWizardValues {
+  target: 'open-webui'
+  clientSecret: string | null
+}
+
+/** `POST /bff/setup/complete` for Open WebUI: the checked values exactly, without the secret. It does not close setup. */
+export interface OpenWebUiCompleteRequest extends OpenWebUiWizardValues {
+  target: 'open-webui'
+  testId: string
+}
+
+/** The answer of `POST /bff/setup/complete` for Open WebUI (`SetupOpenWebUiSavedDto`). */
+export interface OpenWebUiSaved {
+  openWebUi: { enabled: boolean; signIn: OpenWebUiSignIn; redirectUri: string | null }
+  /** Whether the check confirmed the client's credentials; false: a wrong secret shows only when a user signs in. */
+  clientVerified: boolean
 }
 
 /** `POST /bff/setup/test`: the provider address the wizard opens. */
@@ -1345,6 +1416,15 @@ export interface Overview {
   /** The caller's published, active assistants, most questions first. */
   live: LiveAssistant[]
   health: OverviewHealth
+  /** A platform admin's reminder (admin design §5.11): the wizard-stored client secrets that expire within 30 days, expired ones included. */
+  secretExpiry: SecretExpiry[]
+}
+
+/** A client secret stored by the setup wizard that expires soon or has expired (`SecretExpiry`). */
+export interface SecretExpiry {
+  which: SetupTarget
+  /** `yyyy-mm-dd`. */
+  expiresOn: string
 }
 
 /** `GET /api/audit`: an entry of the audit log (admin design §9.1). */

@@ -41,10 +41,11 @@ public sealed record OpenWebUiTestDto(
 /// <c>KeycloakSignInTests</c>), only <c>invalid_grant</c> confirms the client, and any other answer passes it unverified
 /// (<see cref="SetupTestReasons.ClientUnverified"/>, or the transport's reason). The secret rules are rag-admin's: the stored secret
 /// goes only to the provider address and client id in force, a deployment secret only to the deployment's provider. No browser leg,
-/// so no test cookie; the test row is claimed at once and no callback can take it.
+/// so no test cookie; the test row is claimed at once and no callback can take it. Inside the session the default provider address
+/// also follows the session's latest passed rag-admin test while rag-admin's authority is not saved yet (<see cref="SessionAuthorityAsync"/>).
 /// </summary>
 public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configuration, IHostEnvironment environment, TimeProvider time, SetupProviderClient provider,
-    SettingsSecretProtector secrets, OpenWebUiSignInReader live, ILoggerFactory loggers)
+    SettingsSecretProtector secrets, OpenWebUiSignInReader live, SetupTestSignIn adminTests, ILoggerFactory loggers)
 {
     private bool RequireHttps => !environment.IsDevelopment();
 
@@ -60,10 +61,11 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
         var values = request.ToOpenWebUiValues().Normalized();
         var row = await db.Settings.AsNoTracking().Select(s => new { s.OpenWebUiOidcEncryptedClientSecret, s.IdentityOidc }).SingleOrDefaultAsync(ct);
         var typed = request.ClientSecret;
+        var sessionAuthority = await SessionAuthorityAsync(session, ct);
         var effective = OpenWebUiSignIn.Resolve(configuration, values, OpenWebUiSignIn.AuthorityOf(row?.IdentityOidc),
             () => typed is null ? secrets.Unprotect(StoredSecret.OpenWebUiOidcClientSecret, row?.OpenWebUiOidcEncryptedClientSecret)
                 : string.IsNullOrWhiteSpace(typed) ? StoredSecretValue.NotSet : StoredSecretValue.Readable(typed),
-            null);
+            null, sessionAuthority);
         if (effective.ClientSecret.Unreadable)
         {
             throw SetupTestSignIn.Refused(SetupTestReasons.StoredSecretUnreadable);
@@ -79,7 +81,7 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
             : typed is null ? effective.ClientSecret.Value is null ? SetupSecretSources.None : SetupSecretSources.Stored
             : string.IsNullOrWhiteSpace(typed) ? SetupSecretSources.Removed : SetupSecretSources.Typed;
         var clientId = effective.ClientId.Value!;
-        if (await SecretRefusalAsync(secretSource, effective, providerUrl, clientId, ct) is { } secretRefusal)
+        if (await SecretRefusalAsync(secretSource, effective, providerUrl, clientId, sessionAuthority, ct) is { } secretRefusal)
         {
             throw SetupTestSignIn.Refused(secretRefusal);
         }
@@ -117,6 +119,19 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
         SecurityEvents.SetupTestSignIn(SecurityEvents.CreateLogger(loggers), SetupTargets.OpenWebUi, test.Passed == true ? "passed" : "failed",
             test.Reason ?? clientReason ?? SetupTestReasons.Passed, null, false, SetupSessions.EventId(session), AdminActor.AddressOf(http), 1);
         return OpenWebUiTestDto.Of(test, payload);
+    }
+
+    /// <summary>
+    /// The authority of <paramref name="session"/>'s latest passed rag-admin test (the effective one it ran with), or null while it has
+    /// none or the key ring cannot read it. Open WebUI's default provider address follows it while rag-admin's effective authority is
+    /// unset, the first run before Finish (<see cref="OpenWebUiSignIn.Resolve"/>); a later failed test leaves it at the passed one.
+    /// </summary>
+    public async Task<string?> SessionAuthorityAsync(SetupSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var passed = await db.SetupTests.AsNoTracking().Where(t => t.SessionId == session.Id && t.Target == SetupTargets.RagAdmin && t.Passed == true)
+            .OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id).FirstOrDefaultAsync(ct);
+        return passed is null ? null : adminTests.PayloadOf(passed)?.Authority;
     }
 
     /// <summary>The protected part of <paramref name="test"/>, or null when the key ring cannot read it.</summary>
@@ -181,7 +196,8 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
     /// client id in force, a deployment secret only to the deployment's provider (its <c>OpenWebUi:Oidc:ProviderUrl</c>, or the default
     /// derived from its own <c>Oidc:Authority</c>). Checked before anything is fetched.
     /// </summary>
-    private async Task<string?> SecretRefusalAsync(string secretSource, EffectiveOpenWebUiSignIn candidate, string providerUrl, string clientId, CancellationToken ct)
+    private async Task<string?> SecretRefusalAsync(string secretSource, EffectiveOpenWebUiSignIn candidate, string providerUrl, string clientId, string? sessionAuthority,
+        CancellationToken ct)
     {
         if (secretSource == SetupSecretSources.Deployment)
         {
@@ -190,7 +206,8 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
 
         if (secretSource == SetupSecretSources.Stored)
         {
-            var current = await live.ReadAsync(ct);
+            // The values in force as this session resolves them, so a stored secret meets the same default provider address as the candidate.
+            var current = await live.ReadAsync(sessionAuthority, ct);
             return SetupTestSignIn.Same(current.ProviderUrl.Value, providerUrl) && SetupTestSignIn.Same(current.ClientId.Value, clientId)
                 ? null : SetupTestReasons.SecretRequired;
         }

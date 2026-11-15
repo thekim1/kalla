@@ -127,9 +127,11 @@ public static class OpenWebUiSignIn
     /// <summary>
     /// The precedence rule on its own. <paramref name="wizardAdminAuthority"/> is rag-admin's authority from the wizard
     /// (<see cref="AuthorityOf"/>). <paramref name="storedSecret"/> is asked only when the deployment sets no client secret.
+    /// <paramref name="sessionAuthority"/>, only inside a setup session: the authority of the session's latest passed rag-admin test,
+    /// which the default provider address derives from while rag-admin's effective authority is unset (before Finish saves it).
     /// </summary>
     public static EffectiveOpenWebUiSignIn Resolve(IConfiguration configuration, OpenWebUiOidcValues wizard, string? wizardAdminAuthority,
-        Func<StoredSecretValue> storedSecret, DateTimeOffset? secretSetAt)
+        Func<StoredSecretValue> storedSecret, DateTimeOffset? secretSetAt, string? sessionAuthority = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(wizard);
@@ -143,7 +145,7 @@ public static class OpenWebUiSignIn
             : new(fallback, SignInSources.Default);
 
         var deployedAuthority = Blank(configuration[AdminAuthorityKey]);
-        var adminAuthority = deployedAuthority ?? Blank(wizardAdminAuthority);
+        var adminAuthority = deployedAuthority ?? Blank(wizardAdminAuthority) ?? Blank(sessionAuthority);
         var providerUrl = Text(ProviderUrlKey, stored.ProviderUrl, adminAuthority is null ? null : DiscoveryAddress(adminAuthority));
         var fromDeployment = providerUrl.Source == SignInSources.Deployment || (providerUrl.Source == SignInSources.Default && deployedAuthority is not null);
         return new EffectiveOpenWebUiSignIn(providerUrl, Text(ClientIdKey, stored.ClientId, DefaultClientId),
@@ -253,12 +255,16 @@ public static class OpenWebUiSignIn
 /// <summary>Reads Open WebUI's effective sign-in values: one read of the settings row, configuration at each call (a reloaded secret file applies).</summary>
 public sealed class OpenWebUiSignInReader(RagDbContext db, IConfiguration configuration, SettingsSecretProtector secrets)
 {
-    public async Task<EffectiveOpenWebUiSignIn> ReadAsync(CancellationToken ct)
+    public Task<EffectiveOpenWebUiSignIn> ReadAsync(CancellationToken ct) => ReadAsync(null, ct);
+
+    /// <summary>As <see cref="ReadAsync(CancellationToken)"/>, inside a setup session with its <paramref name="sessionAuthority"/> (<see cref="OpenWebUiSignIn.Resolve"/>).</summary>
+    public async Task<EffectiveOpenWebUiSignIn> ReadAsync(string? sessionAuthority, CancellationToken ct)
     {
         var row = await db.Settings.AsNoTracking()
             .Select(s => new { s.OpenWebUiOidc, s.OpenWebUiOidcEncryptedClientSecret, s.OpenWebUiOidcClientSecretSetAt, s.IdentityOidc })
             .SingleOrDefaultAsync(ct);
         return OpenWebUiSignIn.Resolve(configuration, OpenWebUiOidcValues.Parse(row?.OpenWebUiOidc), OpenWebUiSignIn.AuthorityOf(row?.IdentityOidc),
-            () => secrets.Unprotect(StoredSecret.OpenWebUiOidcClientSecret, row?.OpenWebUiOidcEncryptedClientSecret), row?.OpenWebUiOidcClientSecretSetAt);
+            () => secrets.Unprotect(StoredSecret.OpenWebUiOidcClientSecret, row?.OpenWebUiOidcEncryptedClientSecret), row?.OpenWebUiOidcClientSecretSetAt,
+            sessionAuthority);
     }
 }

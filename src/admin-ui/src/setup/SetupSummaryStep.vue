@@ -6,10 +6,11 @@ import InlineError from '@/components/ui/InlineError.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { COMMON, SETUP_WIZARD } from '@/utils/labels'
-import { isLocked, REFUSE_GUESTS_DEFAULT, secretOf, type SetupForm, type TextFieldName } from './setupValues'
+import SetupOpenWebUiSummary from './SetupOpenWebUiSummary.vue'
+import { isLocked, REFUSE_GUESTS_DEFAULT, secretOf, type OpenWebUiOutcome, type SetupForm, type TextFieldName } from './setupValues'
 
 // Step "Summary and finish" (admin design §5.11): the values that are saved, each with its source, the tested person, and
-// what the deployment set. Finish needs a passed test by a platform admin that still stands for the form (`canFinish`).
+// what the deployment set; Open WebUI's values when the deployment runs it. Finish needs a passed test by a platform admin that still stands for the form (`canFinish`).
 const props = defineProps<{
   state: SetupState
   form: SetupForm
@@ -19,6 +20,8 @@ const props = defineProps<{
   finishable: boolean
   finishing: boolean
   error: string | null
+  /** What happened to Open WebUI's values in this session; null when the deployment does not run Open WebUI. */
+  openWebUiOutcome: OpenWebUiOutcome | null
 }>()
 defineEmits<{ (e: 'finish'): void }>()
 
@@ -92,6 +95,7 @@ const person = computed(() => props.test?.result ?? null)
         <DetailRow v-if="values.clientSecretExpiresOn" :label="S.expiresOn">{{ values.clientSecretExpiresOn }}</DetailRow>
       </dl>
     </section>
+    <SetupOpenWebUiSummary v-if="openWebUiOutcome && state.openWebUi.enabled" :open-web-ui="state.openWebUi" :outcome="openWebUiOutcome" />
     <section aria-labelledby="setup-deployment-summary">
       <h3 id="setup-deployment-summary" class="text-heading">{{ A.deploymentTitle }}</h3>
       <dl class="mt-2">

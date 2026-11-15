@@ -1,8 +1,12 @@
-import type { OidcWizardValues, SetupCompleteRequest, SetupTest, SetupValuesRequest, SignInSettings } from '@/api/types'
+import type {
+  OidcWizardValues, OpenWebUiCompleteRequest, OpenWebUiSignIn, OpenWebUiTest, OpenWebUiTestRequest, OpenWebUiWizardValues, SetupCompleteRequest, SetupTest,
+  SetupValuesRequest, SignInSecretStatus, SignInSettings, SignInValueSource,
+} from '@/api/types'
 
 /**
- * The setup wizard's values (admin design §5.11 step 3, identity design §19): the form, what it sends, and when a test still
- * counts. Only what is typed in the wizard is sent: a field left empty (the default) or set by the deployment is sent as null.
+ * The setup wizard's values (admin design §5.11 steps 3 and 4, identity design §19): the forms of rag-admin's sign-in and of Open
+ * WebUI's, what they send, and when a test still counts. Only what is typed in the wizard is sent: a field left empty (the default)
+ * or set by the deployment is sent as null.
  */
 
 /**
@@ -29,6 +33,9 @@ export const SETUP_TEST_REASONS = [
   'nonce_mismatch',
   'secret_required',
   'deployment_secret_without_authority',
+  'provider_url_invalid',
+  'client_refused',
+  'client_unverified',
   'browser_mismatch',
   'session_expired',
   'unknown_test',
@@ -36,8 +43,11 @@ export const SETUP_TEST_REASONS = [
   'guest_refused',
 ] as const
 
-/** The reasons of `setup_test_required` from `POST /bff/setup/complete` (SetupModeEndpoints.cs). */
-export const SETUP_COMPLETE_REASONS = ['unknown_test', 'not_latest', 'not_passed', 'not_platform_admin', 'values_changed'] as const
+/**
+ * The reasons of `setup_test_required` from `POST /bff/setup/complete` (SetupModeEndpoints.cs): rag-admin's, and Open WebUI's, which
+ * adds `admin_test_required` (no passed test sign-in by a platform admin in this session).
+ */
+export const SETUP_COMPLETE_REASONS = ['unknown_test', 'not_latest', 'not_passed', 'not_platform_admin', 'values_changed', 'admin_test_required'] as const
 
 /** `Oidc:RefuseGuests`'s default (identity design §1.4): refusing guests is sent as null. */
 export const REFUSE_GUESTS_DEFAULT = true
@@ -47,8 +57,20 @@ export type TextFieldName = (typeof TEXT_FIELDS)[number]
 /** The values a deployment can set (and so lock). */
 export type SignInField = TextFieldName | 'extraScopes' | 'refuseGuests' | 'clientSecret'
 
-/** The wizard's form. The secret is typed only; it is never prefilled and lives nowhere but here. */
-export interface SetupForm {
+/**
+ * A client secret's part of a form, rag-admin's and Open WebUI's alike: the secret is typed only; it is never prefilled and lives
+ * nowhere but here.
+ */
+export interface SecretFields {
+  /** `yyyy-mm-dd`, or empty. */
+  clientSecretExpiresOn: string
+  clientSecret: string
+  /** Test without a secret (a public client); saving removes the stored one. */
+  removeSecret: boolean
+}
+
+/** The wizard's form of rag-admin's sign-in. */
+export interface SetupForm extends SecretFields {
   authority: string
   clientId: string
   roleClaim: string
@@ -59,17 +81,13 @@ export interface SetupForm {
   /** Separated by spaces (or commas). */
   extraScopes: string
   refuseGuests: boolean
-  /** `yyyy-mm-dd`, or empty. */
-  clientSecretExpiresOn: string
-  clientSecret: string
-  /** Test without a secret (a public client); finishing removes the stored one. */
-  removeSecret: boolean
 }
 
 export type ProviderPreset = 'keycloak' | 'entra'
 
-export function isLocked(signIn: SignInSettings, field: SignInField): boolean {
-  return signIn[field].source === 'deployment'
+/** Whether the deployment sets `field` of `values` (rag-admin's or Open WebUI's sign-in values), so the wizard shows it locked. */
+export function isLocked<K extends string>(values: Record<K, { source: SignInValueSource }>, field: K): boolean {
+  return values[field].source === 'deployment'
 }
 
 /**
@@ -147,16 +165,28 @@ export function valuesOf(form: SetupForm, signIn: SignInSettings): OidcWizardVal
     extraScopes: isLocked(signIn, 'extraScopes') ? null : scopesOf(form.extraScopes),
     tenantId: text('tenantId'),
     refuseGuests: isLocked(signIn, 'refuseGuests') || form.refuseGuests === REFUSE_GUESTS_DEFAULT ? null : form.refuseGuests,
-    // The expiry date belongs to a secret kept by the wizard; a deployment's secret has none here.
-    clientSecretExpiresOn: isLocked(signIn, 'clientSecret') || form.removeSecret ? null : clean(form.clientSecretExpiresOn),
+    clientSecretExpiresOn: expiryOf(form, signIn.clientSecret),
   }
 }
 
-/** The secret as `POST test` takes it: null keeps the stored one, "" tests without one, a value tests with that value. */
+/**
+ * A secret as `POST test` takes it, for either target: null keeps the stored one (or uses the deployment's), "" tests without one,
+ * a value tests with that value.
+ */
+export function typedSecretOf(fields: SecretFields, secret: SignInSecretStatus): string | null {
+  if (secret.source === 'deployment') return null
+  if (fields.removeSecret) return ''
+  return fields.clientSecret.trim() ? fields.clientSecret : null
+}
+
+/** The expiry date sent with a secret: it belongs to a secret kept by the wizard, so a deployment's secret, or none, has none. */
+function expiryOf(fields: SecretFields, secret: SignInSecretStatus): string | null {
+  return secret.source === 'deployment' || fields.removeSecret ? null : clean(fields.clientSecretExpiresOn)
+}
+
+/** rag-admin's secret as `POST test` takes it (`typedSecretOf`). */
 export function secretOf(form: SetupForm, signIn: SignInSettings): string | null {
-  if (isLocked(signIn, 'clientSecret')) return null
-  if (form.removeSecret) return ''
-  return form.clientSecret.trim() ? form.clientSecret : null
+  return typedSecretOf(form, signIn.clientSecret)
 }
 
 export function testRequestOf(form: SetupForm, signIn: SignInSettings): SetupValuesRequest {
@@ -201,4 +231,86 @@ export function isStale(test: SetupTest | null, form: SetupForm, signIn: SignInS
 /** Finish is offered for a passed test by a platform admin that still stands for the form. */
 export function canFinish(test: SetupTest | null, stale: boolean): test is SetupTest & { values: OidcWizardValues } {
   return !!test && test.status === 'passed' && test.result?.isPlatformAdmin === true && !!test.values && !stale
+}
+
+// ---------- Open WebUI (admin design §5.11 step 4, identity design §19 "Open WebUI") ----------
+
+export const OPENWEBUI_TEXT_FIELDS = ['providerUrl', 'clientId', 'providerName'] as const
+export type OpenWebUiTextField = (typeof OPENWEBUI_TEXT_FIELDS)[number]
+
+/** The wizard's form of Open WebUI's sign-in. */
+export interface OpenWebUiForm extends SecretFields {
+  /** The discovery document's address; empty follows the sign-in provider. */
+  providerUrl: string
+  clientId: string
+  providerName: string
+}
+
+/** As `newForm`, for Open WebUI: a deployment's value locked, the wizard's own or the checked one filled in, a default left empty. */
+export function newOpenWebUiForm(signIn: OpenWebUiSignIn, tested: OpenWebUiTest | null = null): OpenWebUiForm {
+  const values = tested?.values ?? null
+  const text = (field: OpenWebUiTextField): string => {
+    if (isLocked(signIn, field)) return signIn[field].value ?? ''
+    if (values) return values[field] ?? ''
+    return signIn[field].source === 'wizard' ? (signIn[field].value ?? '') : ''
+  }
+  return {
+    providerUrl: text('providerUrl'),
+    clientId: text('clientId'),
+    providerName: text('providerName'),
+    clientSecretExpiresOn: values ? (values.clientSecretExpiresOn ?? '') : (signIn.clientSecret.expiresOn ?? ''),
+    clientSecret: '',
+    removeSecret: tested?.clientSecret === 'removed',
+  }
+}
+
+/** What happened to Open WebUI's values in this session: saved, skipped, set by the deployment (nothing to save), or none of them. */
+export type OpenWebUiOutcome = 'saved' | 'skipped' | 'deployment' | 'none'
+
+/** Whether the deployment sets every one of Open WebUI's values: the step then has nothing to save. */
+export function openWebUiAllLocked(signIn: OpenWebUiSignIn): boolean {
+  return OPENWEBUI_TEXT_FIELDS.every((field) => isLocked(signIn, field)) && isLocked(signIn, 'clientSecret')
+}
+
+/** The values the Open WebUI form sends, without the secret (`OpenWebUiOidcValues`). */
+export function openWebUiValuesOf(form: OpenWebUiForm, signIn: OpenWebUiSignIn): OpenWebUiWizardValues {
+  const text = (field: OpenWebUiTextField) => (isLocked(signIn, field) ? null : clean(form[field]))
+  return {
+    providerUrl: text('providerUrl'),
+    clientId: text('clientId'),
+    providerName: text('providerName'),
+    clientSecretExpiresOn: expiryOf(form, signIn.clientSecret),
+  }
+}
+
+/** `POST test` for Open WebUI: the target and its own members only (a member of the other target is a 400). */
+export function openWebUiTestRequestOf(form: OpenWebUiForm, signIn: OpenWebUiSignIn): OpenWebUiTestRequest {
+  return { target: 'open-webui', ...openWebUiValuesOf(form, signIn), clientSecret: typedSecretOf(form, signIn.clientSecret) }
+}
+
+/** As the API's `OpenWebUiOidcValues.Normalized()`: trimmed, empty as null. */
+export function normalizedOpenWebUi(values: OpenWebUiWizardValues): OpenWebUiWizardValues {
+  return {
+    providerUrl: clean(values.providerUrl),
+    clientId: clean(values.clientId),
+    providerName: clean(values.providerName),
+    clientSecretExpiresOn: clean(values.clientSecretExpiresOn),
+  }
+}
+
+/** `POST complete` for Open WebUI: the checked values exactly, as the check answered them, and the check's id. */
+export function openWebUiCompleteRequestOf(test: OpenWebUiTest & { values: OpenWebUiWizardValues }): OpenWebUiCompleteRequest {
+  return { target: 'open-webui', ...normalizedOpenWebUi(test.values), testId: test.testId }
+}
+
+/** As `isStale`, for Open WebUI's check (which is never pending). */
+export function isOpenWebUiStale(test: OpenWebUiTest | null, form: OpenWebUiForm, signIn: OpenWebUiSignIn, secretEdited: boolean): boolean {
+  if (!test) return false
+  const now = normalizedOpenWebUi(openWebUiValuesOf(form, signIn))
+  return !test.values || secretEdited || JSON.stringify(now) !== JSON.stringify(normalizedOpenWebUi(test.values))
+}
+
+/** Save is offered for a check that found the discovery document, was not refused, and still stands for the form. */
+export function canSaveOpenWebUi(test: OpenWebUiTest | null, stale: boolean): test is OpenWebUiTest & { values: OpenWebUiWizardValues } {
+  return !!test && test.status === 'passed' && test.result?.discovery === 'ok' && test.result.clientAccepted !== false && !!test.values && !stale
 }

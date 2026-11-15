@@ -430,6 +430,65 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
     }
 
     [Fact]
+    public async Task In_the_session_the_default_provider_address_follows_the_latest_passed_rag_admin_test_while_rag_admin_has_no_authority()
+    {
+        using var provider = new FakeProvider();
+        await using var host = Host(provider);
+        using var session = await SessionAsync(host, Admin);
+
+        // Before a passed rag-admin test: no default, and a check without a provider address is refused.
+        var before = (await StateAsync(session)).GetProperty("signIn");
+        before.GetProperty("providerUrl").GetProperty("value").ValueKind.ShouldBe(JsonValueKind.Null);
+        before.GetProperty("configured").GetBoolean().ShouldBeFalse();
+        (await RefusalAsync(session, Values(providerUrl: null))).ShouldBe(SetupTestReasons.ProviderUrlInvalid);
+
+        await AdminTestAsync(session, provider, RagRoles.PlatformAdmin);
+        // A later rag-admin test that fails (the provider sends no code) leaves the default at the passed one.
+        using (var started = await PostAsync(session, "/bff/setup/test", new { authority = FakeProvider.Authority, clientSecret = AdminSecret }))
+        {
+            var query = HttpUtility.ParseQueryString(new Uri(JsonDocument.Parse(await started.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("authorizeUrl").GetString()!).Query);
+            using var failed = await session.PostAsync("/signin-oidc", new FormUrlEncodedContent(new Dictionary<string, string> { ["state"] = query["state"]! }), Ct);
+            failed.StatusCode.ShouldBe(HttpStatusCode.Redirect);
+        }
+
+        var after = (await StateAsync(session)).GetProperty("signIn");
+        (after.GetProperty("providerUrl").GetProperty("value").GetString(), after.GetProperty("providerUrl").GetProperty("source").GetString())
+            .ShouldBe((ProviderUrl, SignInSources.Default));
+        after.GetProperty("configured").GetBoolean().ShouldBeTrue();
+
+        // A check without a provider address uses the tested authority's discovery document.
+        provider.Overrides[TokenPath] = () => TokenError("invalid_grant");
+        var count = provider.Requested.Count;
+        var test = await TestAsync(session, Values(providerUrl: null));
+        (test.GetProperty("status").GetString(), test.GetProperty("result").GetProperty("clientAccepted").GetBoolean()).ShouldBe(("passed", true));
+        test.GetProperty("values").GetProperty("providerUrl").ValueKind.ShouldBe(JsonValueKind.Null);
+        provider.Requested.Skip(count).Select(u => u.AbsolutePath).ShouldBe(["/realms/ume/.well-known/openid-configuration", "/realms/ume/certs", TokenPath]);
+
+        // Saved as null, so it keeps following the sign-in provider once Finish saves the authority. Saving needs the session's latest
+        // rag-admin test to have passed, so it is passed again first.
+        provider.Overrides.Clear();
+        await AdminTestAsync(session, provider, RagRoles.PlatformAdmin);
+        provider.Overrides[TokenPath] = () => TokenError("invalid_grant");
+        test = await TestAsync(session, Values(providerUrl: null));
+        using (var saved = await PostAsync(session, "/bff/setup/complete", CompleteValues(test.GetProperty("testId").GetGuid(), providerUrl: null)))
+        {
+            saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
+            var signIn = JsonDocument.Parse(await saved.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("openWebUi").GetProperty("signIn");
+            (signIn.GetProperty("providerUrl").GetProperty("value").GetString(), signIn.GetProperty("providerUrl").GetProperty("source").GetString())
+                .ShouldBe((ProviderUrl, SignInSources.Default));
+        }
+
+        OpenWebUiOidcValues.Parse((await RowAsync(Admin))!.OpenWebUiOidc).ProviderUrl.ShouldBeNull();
+        // The stored secret meets the same resolved address in the session: it is used, not refused as secret_required.
+        (await TestAsync(session, Values(clientSecret: null, providerUrl: null))).GetProperty("clientSecret").GetString().ShouldBe(SetupSecretSources.Stored);
+        provider.LastTokenForm!["client_secret"].ShouldBe(TypedSecret);
+
+        // Outside a setup session nothing changes: rag-admin's authority is still unset there.
+        await using var scope = host.Services.CreateAsyncScope();
+        (await scope.ServiceProvider.GetRequiredService<OpenWebUiSignInReader>().ReadAsync(Ct)).ProviderUrl.Value.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task An_unverified_client_may_be_saved_and_says_so()
     {
         using var provider = new FakeProvider();

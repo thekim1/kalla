@@ -11,6 +11,7 @@ using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Persistence;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.TestKit;
 
@@ -18,7 +19,8 @@ namespace Ume.Rag.AdminApi.Tests;
 
 /// <summary>
 /// The setup checklist "Kom igång" (admin design §5.4, §5.5.2) computed from state, and Home (§5.5.1, "P1's Home"): the
-/// collections whose checklist is not done, the published assistants' last 7 days (Live) and the runs, queue and syncs (Health).
+/// collections whose checklist is not done, the published assistants' last 7 days (Live), the runs, queue and syncs (Health),
+/// and the reminder before a wizard-stored client secret expires (§5.11).
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
 public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
@@ -366,6 +368,79 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         (await stranger.GetAsync($"/api/collections/{seed.Halfway}/setup", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         var other = await stranger.GetFromJsonAsync<JsonElement>("/api/overview", Ct);
         other.GetProperty("setup").EnumerateArray().Select(s => s.GetProperty("collectionId").GetGuid()).ShouldNotContain(seed.Halfway);
+    }
+
+    [Fact]
+    public async Task A_platform_admin_is_reminded_of_wizard_stored_client_secrets_that_expire_within_30_days()
+    {
+        var connection = database.Connection(null);
+        var today = StockholmTime.DayOf(DateTimeOffset.UtcNow);
+        await SetupHosts.ResetAsync(connection, completed: true);
+        // Both secrets from the wizard: the deployment sets none, and it runs Open WebUI.
+        await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Oidc:ClientSecret", "");
+            web.UseSetting(OpenWebUiSignIn.EnabledKey, "true");
+        });
+        var protector = factory.Services.GetRequiredService<SettingsSecretProtector>();
+        try
+        {
+            using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+            using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "1000");
+
+            // The 30th day is within, an expired one is listed too.
+            await StoreSecretsAsync(connection, protector, today.AddDays(SetupEndpoints.SecretExpiryDays), today.AddDays(-3));
+            (await SecretExpiryAsync(admin)).ShouldBe([(SetupTargets.RagAdmin, today.AddDays(30)), (SetupTargets.OpenWebUi, today.AddDays(-3))]);
+            // Only for a platform admin.
+            (await SecretExpiryAsync(departmentAdmin)).ShouldBeEmpty();
+
+            // The 31st day is beyond.
+            await StoreSecretsAsync(connection, protector, today.AddDays(31), today);
+            (await SecretExpiryAsync(admin)).ShouldBe([(SetupTargets.OpenWebUi, today)]);
+
+            // A deployment's secret wins, and its date is not known: the wizard's date no longer counts.
+            await using var deployed = database.HeaderFactory().WithWebHostBuilder(web =>
+            {
+                web.UseSetting(OpenWebUiSignIn.EnabledKey, "true");
+                web.UseSetting("OpenWebUi:Oidc:ClientSecret", "deployment-secret");
+            });
+            using var deployedAdmin = await AdminDatabaseFixture.UserAsync(deployed, RagRoles.PlatformAdmin);
+            await StoreSecretsAsync(connection, protector, today.AddDays(5), today.AddDays(5));
+            (await SecretExpiryAsync(deployedAdmin)).ShouldBeEmpty();
+
+            // Open WebUI's secret counts only while the deployment runs Open WebUI.
+            await using var withoutChat = database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting("Oidc:ClientSecret", ""));
+            using var withoutChatAdmin = await AdminDatabaseFixture.UserAsync(withoutChat, RagRoles.PlatformAdmin);
+            (await SecretExpiryAsync(withoutChatAdmin)).ShouldBe([(SetupTargets.RagAdmin, today.AddDays(5))]);
+        }
+        finally
+        {
+            await SetupHosts.ResetAsync(connection, completed: true);
+        }
+    }
+
+    private static async Task<(string Which, DateOnly ExpiresOn)[]> SecretExpiryAsync(HttpClient client) =>
+    [
+        .. (await client.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("secretExpiry").EnumerateArray()
+            .Select(e => (e.GetProperty("which").GetString()!, DateOnly.Parse(e.GetProperty("expiresOn").GetString()!, System.Globalization.CultureInfo.InvariantCulture))),
+    ];
+
+    /// <summary>Stores a wizard client secret for rag-admin and for Open WebUI with the given expiry dates, as setup's <c>complete</c> stores them.</summary>
+    private static async Task StoreSecretsAsync(string connection, SettingsSecretProtector protector, DateOnly adminExpires, DateOnly chatExpires)
+    {
+        var identity = new OidcWizardValues { ClientSecretExpiresOn = adminExpires }.ToJson();
+        var chat = new OpenWebUiOidcValues { ClientSecretExpiresOn = chatExpires }.ToJson();
+        var adminSecret = protector.Protect(StoredSecret.IdentityOidcClientSecret, "wizard-admin-secret");
+        var chatSecret = protector.Protect(StoredSecret.OpenWebUiOidcClientSecret, "wizard-chat-secret");
+        var setAt = DateTimeOffset.UtcNow;
+        await using var db = TestPostgres.Context(connection);
+        await db.Settings.ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.IdentityOidc, identity)
+            .SetProperty(x => x.IdentityOidcEncryptedClientSecret, adminSecret)
+            .SetProperty(x => x.IdentityOidcClientSecretSetAt, setAt)
+            .SetProperty(x => x.OpenWebUiOidc, chat)
+            .SetProperty(x => x.OpenWebUiOidcEncryptedClientSecret, chatSecret)
+            .SetProperty(x => x.OpenWebUiOidcClientSecretSetAt, setAt), Ct);
     }
 
     [Fact]
