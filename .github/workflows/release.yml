@@ -322,7 +322,7 @@ jobs:
         # A local cache only grows when written over itself: keep each image's new cache and drop the old one.
         run: |
           for name in postgres clamav renderer parser; do
-            if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "$BUILD_CACHE/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
+            if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "${BUILD_CACHE:?}/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
           done
           du -sh "$BUILD_CACHE"/* 2>/dev/null || true
       - name: Image pins and SBOMs of the other images
