@@ -560,6 +560,18 @@ and `RequireMaxResidency` (the gateway refuses a request without the header). Th
 residencies their assistants may use, which is their ceiling (above); the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
 whole organisation in the context, §2.1) and, from phase 3, `usage.read`.
 
+**Where the keys come from** (M-17 C7, gateway v0.10.2, its ADR 022). In the Portainer stack the gateway's migration
+service provisions the integration and the three keys from the manifest in `UME_INTEGRATION_MANIFEST`
+(`stack.env.example`: all three limited to `OnPrem`+`Eu`), **create-only**: an existing integration or key, found by
+name, is never changed, a difference is only logged. It writes each new key's secret to the stack's own
+`integration-secrets` volume (owner 1654, mode 700, files 600; never `ume-certs`, which holds the CA key), and
+`rag-bootstrap`, which mounts that volume read-only with no network, copies each to its service's `Gateway__Key`. A set
+`UME_RAG_*_GATEWAY_KEY` wins over the file (keys made by hand, or a gateway elsewhere). Rotation is in the gateway's
+admin (with a grace period), then deleting the key's file and updating the stack: a missing file is written again from
+the key's stored secret (audited as a reveal). Compose and Kubernetes take the keys from files as before
+(`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/ume-rag.json`
+is Ume.Rag's to change (thekim1/llmgateway#95: rag-api and rag-admin limited to `OnPrem`+`Eu` too).
+
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
 assistant or a knowledge base that has a `GatewayKeyId` also sends `x-ume-on-behalf-of: <that key id>` (cost-attribution
 §4.1 says which object a call belongs to); a call without an object, or for an object without a key, sends none and

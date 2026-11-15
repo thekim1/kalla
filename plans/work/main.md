@@ -104,8 +104,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   `proxy`, `rag-proxy` nginx with the operator's certificate from `UME_RAG_PROXY_CERTS_DIR`, a host directory by the
   user's choice; upstream re-resolution #692), C9 (#691: each service's ceiling is its credential key's residencies from
   the context, `OnPrem` before the first one; `Gateway:MaxResidency` gone), C10 (#693: `Settings.Identity.RoleGroups`,
-  *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass). Left: C7, C11 and
-  C12 (unblocked by the gateway's v0.10.2, 2026-11-14) and C13. The M-16 session continues with the next steps in order and announces each on #667.
+  *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass), C7 (#727, gateway
+  v0.10.2: the gateway's migrations create the three credential keys from `UME_INTEGRATION_MANIFEST`, rag-bootstrap
+  copies them; preset hand-off thekim1/llmgateway#95), C12 (#731: `organisation_name` from the context). In review: C11
+  (#740, replaces #732: `integration_api_url` from the context, key sent only over `https`). Left: C13. The M-16 session
+  continues and announces each step on #667.
 
 ### [x] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
 - **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the

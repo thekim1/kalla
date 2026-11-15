@@ -77,7 +77,7 @@ Each becomes a queue item when the main session picks it up.
   stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
-  only what a process can't start without; C0–C6 need no input; C7/C11/C12 are unblocked since the gateway's v0.10.2 (2026-11-14) has #87, #89 and #90's replacement.
+  only what a process can't start without; C0–C10 and C12 merged (C7 and C12 on the gateway's v0.10.2); C11 in review (#740); C13 left.
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 

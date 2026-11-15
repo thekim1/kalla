@@ -470,7 +470,8 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
 
 ### 5.6 Integration API (phase 3)
 
-`/integration/v1` on the gateway's **Admin API** (its own base URL, `Gateway:IntegrationApiUrl`), authenticated with
+`/integration/v1` on the gateway's **Admin API** (its address in the gateway context's `gateway.integration_api_url`,
+v0.10.2, M-17 C11), authenticated with
 `Authorization: Bearer` and a credential key of an active integration that carries the scope `usage.read`: `401` for
 any other key or none, `403` without the scope (gateway v0.10.0,
 `src/Ume.LlmGateway.AdminApi/Integrations/IntegrationApiEndpoints.cs`, `IntegrationApiService.cs`). Only

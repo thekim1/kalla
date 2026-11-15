@@ -291,8 +291,9 @@ Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cr
 `Admin:RequestsPerMinute` (120), `Admin:MaxSessionHours` (12), `Admin:AuditSourceAddress` (`Full`) (identity design §1.4),
 `Admin:Retention` (above); `OrgSync:*` for the organisation, `GatewayKeys` and `GatewayModels` sync (interval 5 min, P2
 `OrgSync:MaxAgeHours` 24 with the Graph member-group lookup (identity design §2.1); no key of its own: the admin's
-credential key with `organisation.read`, admin design §4.10); `Gateway:IntegrationApiUrl` (the gateway Admin API's base URL for `/integration/v1`, gateway phase 3; unset: no
-cost or budget read-back).
+credential key with `organisation.read`, admin design §4.10); no setting for the cost and budget read-back: its address is the gateway context's `gateway.integration_api_url`
+(feature `integration-api-url`, gateway v0.10.2; the gateway's own `UME_INTEGRATION_API_URL`; M-17 C11), and rag-admin
+sends its credential key there only over `https` (or `http` while `Gateway:BaseUrl` is `http`); none: no read-back.
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
 `UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:MaxHostRate` (50 req/s) and `Crawl:MaxHostConnections` (16), the ceilings of a host's politeness profile (connectors design §6.6); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); `ClamAv:Mode` (`on` default, `off`: no malware scan, §5.5) with `ClamAv:Host` and `ClamAv:Port`; the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL with its secret path, a secret; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (4; also the most a host's `renderPerHost` may be), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (500 ms), `Render:AssetCacheMb` (128), `Render:Viewport` (1280×2000), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
@@ -771,12 +772,32 @@ cannot starve chat's query embeddings. A separate query-embedding route/replica 
 Ownership: 999 (postgres; P2 redis), 1654 (.NET services, the upload copy), 10001 (parser), 10002 (renderer), 1000
 (clamav, Open WebUI).
 
+**The Portainer stack** (M-17, `deploy/portainer/`; operators' guide `docs/portainer.md`): the gateway and Ume.Rag as
+one stack, configured only through variables, for hosts where `init-deployment.sh` can't run.
+- **Built, not hand-edited:** `build-stack.sh` joins the gateway release's own `compose.portainer.yaml` (unchanged,
+  images pinned by digest) with `compose.rag.template.yaml` and inlines `bootstrap.sh` as `rag-bootstrap`'s script;
+  `build-stack.sh --check` (deploy-checks) fails when the committed `compose.portainer.yaml` differs. `release.yml`
+  pins the template to the release's images and publishes the file as a release asset; its boot test
+  (`deploy/tests/portainer-boot.sh`) starts it as Portainer does. `stack.env.example` is the variables file.
+- **`rag-bootstrap`** (one-shot, `network_mode: none`) is the counterpart of `init-deployment.sh`: RAG's CA and
+  certificates, the Data Protection certificate, passwords, peppers and keys in the `rag-certs`/`rag-secrets` volumes,
+  never overwritten (re-run test `deploy/tests/portainer-rerun.sh`, #697); the gateway credential keys from the
+  gateway's manifest (identity §4.7, M-17 C7); and a checklist at the end of its log of what is still missing,
+  including certificates within 60 days of expiry and services to restart after a re-issue (#705).
+- **Profiles:** the gateway's `data` (its Data API); `clamav` (the malware scan; without it `ClamAv__Mode` is `off`),
+  `render` (the renderer), `openwebui` (Open WebUI with `rag-openwebui-setup`, which mints the feedback key, M-17 C6)
+  and `proxy` (`rag-proxy`, nginx with the operator's certificate in front of the five host names, re-resolving its
+  upstreams, M-17 C8, #692).
+- **Networks:** rag-admin joins the gateway's `edge` network to reach `adminapi` for the Integration API (C7, C11).
+- Open WebUI's settings are checked equal to `compose.openwebui.yaml`'s by `deploy/tests/openwebui-parity.sh` (#707).
+
 ### 7.2 `build-release-bundle.sh`
 
 Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE
 POSTGRES_IMAGE` (`ume-rag/postgres`), `RENDERER_IMAGE`, each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
 script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (compose files, scripts,
-`postgres/`, `pgbackrest/`, `redis/`, `proxy/`, `otel/`, `host/`). No Portainer stack in P0/P1 (§12.9).
+`postgres/`, `pgbackrest/`, `redis/`, `proxy/`, `otel/`, `host/`). The Portainer stack is a release asset of its own
+(§7.1).
 
 ### 7.3 Updates (single slot in the pilot, rolling from P2)
 
@@ -1068,7 +1089,7 @@ decided form of the simplification pass (2026-10-30).
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend; with many backends this can be GBs inside a 3 GB Postgres limit | **Closed** (simplification pass §3, postponed H1): no dictionary in Postgres; decompounding in .NET (data-model §3.1) |
 | 7 | P0 Entra registrations | Identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | P0 = package 1 (RAG's own registrations) built (checklist #17); submitting it moved to P2 (Decisions table "P1 pilot sign-in") |
 | 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), no pruning sidecar; ceiling `internal`; v0.12.5 by digest (§4.1), uid 1000 with `DATA_DIR=/data` on a host directory, secrets from an `env_file`, plain HTTP on loopback behind the proxy, its own `openwebui` network (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
-| 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
+| 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | **Built** (M-17, from 0.5.0): `deploy/portainer/`, §7.1 |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Actions pinned by SHA with automated bumps: postponed until before go-live (Decisions "CI/CD", postponed S1; A-20, A-27). `attest-build-provenance` on images: open in postponed S1, decided with the gateway team |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 (for `internal` blobs; chat content keys only once A1 allows stored content, weakness review §4) | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, chat master keys only in api/admin, the blob master key in worker/admin and read-only in api (§6.3), long-lived keys escrowed (§7.4), no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
 | 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.5 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |

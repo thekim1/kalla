@@ -1848,7 +1848,8 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
 - **CSV**: `;` as `ReportEndpoints.cs:152-158`, English headers `period;department;kind;object;step;client;calls;`
   `input_tokens;cached_input_tokens;output_tokens;cost_usd;estimated_cost_usd;estimated_calls` (client empty for
   knowledge bases). Reads and exports are not audited: they hold no content.
-- **Beside the gateway** (cost-attribution §6 B7): from gateway phase 3, with `Gateway:IntegrationApiUrl` set, the
+- **Beside the gateway** (cost-attribution §6 B7): from gateway phase 3, while the gateway's context names its Integration API (`gateway.integration_api_url`, M-17
+  C11; sent to only over `https`), the
   assistant's and knowledge base's *Cost* cards show the gateway's figures for the object's key next to these:
   `GET /api/gateway/keys/{id}/usage` `?from=&to=&granularity=day|month` (Read, the key's department in scope) reads
   `/integration/v1/usage?groupBy=step&keyId=` with `rag-admin`'s credential key (`usage.read`; gateway-changes §5.6)
