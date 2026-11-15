@@ -17,8 +17,7 @@
 #   data, ingestion, parser, render
 #              none (internal networks; dropped here as well). render holds the renderer's Chromium, which runs
 #              untrusted page scripts, and its bridge gateway answers at the IP level: the INPUT rule rejects it there
-#   llm        the gateway (UME_RAG_GATEWAY_URL; the admin's organisation and model syncs call it too), the gateway's
-#              Admin API when set (UME_RAG_GATEWAY_INTEGRATION_API_URL: the admin's cost and budget read-back), the
+#   llm        the gateway (UME_RAG_GATEWAY_URL; the admin's organisation and model syncs call it too), the
 #              OIDC authority (UME_RAG_OIDC_AUTHORITY), Open WebUI as rag-api calls it (UME_RAG_OPENWEBUI_BASE_URL: the
 #              feedback import), the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
 #   crawl      the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
@@ -34,7 +33,8 @@
 #   --env-file FILE        [deploy/.env] the values above
 #   --dry-run              print the rules instead of applying them (no root needed)
 #   --subnet NAME=CIDR     another subnet for a network (they must match the Compose files; CI checks the defaults)
-#   --allow NAME=HOST[:PORT]  one more destination for a network (port 443 when omitted)
+#   --allow NAME=HOST[:PORT]  one more destination for a network (port 443 when omitted), e.g. llm=<gateway admin
+#                             host>:9443 for the admin's cost and budget read-back (the gateway names that address)
 #   --dns IP               a resolver (repeat the option)
 #   --remove               remove the chains and jumps
 #   --print-subnets        print "NAME CIDR" per network and exit
@@ -140,7 +140,7 @@ add() { # add NETWORK URL-OR-HOST[:PORT] — nothing when the value is empty
   allows[$1]+="$(endpoint "$2" 443)"$'\n'
 }
 gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_RAG_OTEL_ENDPOINT)"
-add llm "$gateway"; add llm "$(env_value UME_RAG_GATEWAY_INTEGRATION_API_URL)"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"
+add llm "$gateway"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"
 add llm "$(env_value UME_RAG_OPENWEBUI_BASE_URL)"
 add llm "$otel"
 add crawl "$gateway"; add crawl "$otel"

@@ -112,8 +112,8 @@ the key) before comparing with the gateway's export, which is per key.
 
 ### The gateway's figures beside Ume.Rag's
 
-When rag-admin has `Gateway:IntegrationApiUrl` (environment `Gateway__IntegrationApiUrl`, the gateway Admin API's base
-URL) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
+When rag-admin's gateway context names the Integration API (`integration_api_url`, the gateway's
+`UME_INTEGRATION_API_URL`) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
 key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=step&keyId=…`) for the same period:
 
 - a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-ume-step`;
@@ -569,7 +569,7 @@ the allow-lists are host names, resolved when it runs.
 | Network | May reach |
 |---|---|
 | `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
-| `llm` (api, admin) | the gateway, the gateway's Admin API (with `UME_RAG_GATEWAY_INTEGRATION_API_URL`), the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
+| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
 | `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
 | `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused with `--clamav off` |
 | `backup` (postgres) | the S3 endpoint, DNS; nothing with a mounted share |
@@ -711,7 +711,7 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 | A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, restart that service |
 | rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no client `admin-console` of type `internal`, so test-panel cost is not recorded (the panel still answers) | A platform admin creates it under *Apps and keys*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off (production-setup.md, *Before the first use of the admin UI*). Turns made before it are not recovered |
 
-**The read-back's reasons.** With `UME_RAG_GATEWAY_INTEGRATION_API_URL` set, rag-admin reads the gateway's cost and
+**The read-back's reasons.** When the gateway names its Integration API (`integration_api_url`), rag-admin reads the gateway's cost and
 budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
 `GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
 `at` when the last read gave nothing; rag-admin also logs "The gateway's Integration API refused or failed (HTTP …,
@@ -720,7 +720,7 @@ badge (the gateway still refuses the calls).
 
 | `configured` / `reason` | Meaning | Fix |
 |---|---|---|
-| `configured: false` | `UME_RAG_GATEWAY_INTEGRATION_API_URL` is unset or empty (Kubernetes: `Gateway__IntegrationApiUrl`) | Set it as production-setup.md says, if the read-back is wanted |
+| `configured: false` | The gateway's context names no Integration API (`integration_api_url` null: the gateway's `UME_INTEGRATION_API_URL` is unset, or the gateway is older than v0.10.2), or rag-admin has not read its context yet | The gateway admin sets `UME_INTEGRATION_API_URL` as production-setup.md says, if the read-back is wanted; rag-admin picks it up within 5 minutes |
 | `scope_missing` (403) | rag-admin's credential key lacks the scope `usage.read` | The gateway admin adds `usage.read` to that key; the next read picks it up (only answers are cached), no restart needed |
 | `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
 | `unauthorized` (401) | rag-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |

@@ -19,7 +19,11 @@ public static class FakeContext
 
     private static readonly Residency[] Ladder = [Residency.OnPrem, Residency.Eu, Residency.External];
 
-    public static JsonObject Build(FakeKey key, FakeGatewayOptions options, DateTimeOffset now)
+    /// <summary>
+    /// The context for <paramref name="key"/>; <c>integration_api_url</c> is <see cref="FakeGatewayInfo.IntegrationApiUrl"/>, or
+    /// <paramref name="ownIntegrationApiUrl"/> (this fake's own <c>/integration/v1</c>) when that is not set.
+    /// </summary>
+    public static JsonObject Build(FakeKey key, FakeGatewayOptions options, DateTimeOffset now, string? ownIntegrationApiUrl = null)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(options);
@@ -48,7 +52,7 @@ public static class FakeContext
             {
                 ["version"] = options.Gateway.Version,
                 ["admin_url"] = string.IsNullOrEmpty(options.Gateway.AdminUrl) ? null : options.Gateway.AdminUrl,
-                ["integration_api_url"] = null,
+                ["integration_api_url"] = (options.Gateway.IntegrationApiUrl ?? ownIntegrationApiUrl) is { Length: > 0 } integrationApi ? integrationApi : null,
                 ["organisation_name"] = string.IsNullOrEmpty(options.Gateway.OrganisationName) ? null : options.Gateway.OrganisationName,
                 ["features"] = Strings(options.Gateway.Features),
             },

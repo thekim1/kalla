@@ -173,7 +173,7 @@ describe('Gateway models: the Integration API read-back (#654, admin design §4.
   const sync = (integration: unknown) => (url: string) =>
     url === '/api/organisation/sync' ? json({ gateway: { version: '0.10.1', adminUrl: null, features: [] }, degraded: null, integration }) : undefined
 
-  it('says the read-back is off when Gateway:IntegrationApiUrl is not set', async () => {
+  it('says the read-back is off when the gateway names no Integration API address', async () => {
     const { wrapper } = mountModels(sync({ configured: false, lastError: null }))
     await flushPromises()
     const row = wrapper.get('[data-test="gateway-readback"]')

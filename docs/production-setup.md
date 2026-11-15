@@ -343,24 +343,25 @@ shows Ume.Rag's figures only.
    naming above), next to `organisation.read`. Only rag-admin's key gets it. The key's status, expiry and address list
    apply on the Admin API as on the gateway, so the list must hold the address the Admin API sees rag-admin's requests
    from.
-2. **The address.** Set `UME_RAG_GATEWAY_INTEGRATION_API_URL` in `deploy/.env` to the Admin API's base URL, without
-   `/integration/v1`, for example `UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.intern.umea.se` (the gateway's
-   Compose stack publishes the Admin API on 9443; behind its proxy, usually its own host name on 443). It is not a
-   secret. rag-admin gets it as `Gateway__IntegrationApiUrl`; while it is unset or empty there is no read-back.
-   `init-deployment.sh` has no option for it and writes the line commented out, so carry it over after a re-run.
-3. **The firewall.** The host firewall adds the URL's host and port to the `llm` network's allow-list
-   (`deploy/host/docker-user-firewall.sh`, *Host firewall* in the runbook). Outside the host, the network firewall
-   must let the RAG host reach `<gateway admin host>:<port>` over HTTPS ([Network and ports](network-and-ports.md)).
-   rag-admin must trust the Admin API's certificate: its CA in `--ca-file` if it is not the gateway's own.
-4. **Apply:** `sudo systemctl start rag-firewall.service`, then `docker compose --env-file deploy/.env up -d --wait`
-   (rag-admin is recreated with the setting).
+2. **The address.** The gateway names it: rag-admin reads the Integration API's address from its gateway context
+   (`integration_api_url`, gateway v0.10.2), which is the gateway's `UME_INTEGRATION_API_URL` (`Gateway:IntegrationApiUrl`)
+   ending in `/integration/v1`, as rag-admin reaches it: for example `https://llm-admin.intern.umea.se/integration/v1`
+   (the gateway's Compose stack publishes the Admin API on 9443; behind its proxy, usually its own host name on 443).
+   The gateway admin sets it; Ume.Rag has no setting of its own, and while the gateway names none there is no read-back.
+3. **The firewall.** Add the address's host and port to the `llm` network's allow-list:
+   `docker-user-firewall.sh --allow llm=<gateway admin host>:<port>`, in a drop-in for `rag-firewall.service`
+   (`sudo systemctl edit rag-firewall.service`: clear `ExecStart=` and repeat it with the option; *Host firewall* in the
+   runbook). Outside the host, the network firewall must let the RAG host reach
+   `<gateway admin host>:<port>` over HTTPS ([Network and ports](network-and-ports.md)). rag-admin must trust the Admin
+   API's certificate: its CA in `--ca-file` if it is not the gateway's own.
+4. **Apply:** restart the firewall with the new allow-list (`sudo systemctl start rag-firewall.service`). rag-admin picks
+   the address up at its next context read (within 5 minutes), without a restart.
 
 **Check:** the *Gateway* page's status, `GET /api/gateway/status`, has `integration.configured: true` and no
 `integration.lastError` after an assistant's or knowledge base's *Cost* card has been opened; a reason there is in the
-runbook (*Gateway keys, budgets and the read-back*). Kubernetes: `Gateway__IntegrationApiUrl` in your overlay's
-`ume-rag-admin-config` (commented in `deploy/kubernetes/example`), and the Admin API's port in your egress rules.
-Portainer: the variable `UME_RAG_GATEWAY_INTEGRATION_API_URL`, for example `https://<UME_ADMIN_HOST>:9443` (the
-gateway's `adminapi` is not on the `llm` network, so rag-admin reaches it through its published port).
+runbook (*Gateway keys, budgets and the read-back*). Kubernetes: the Admin API's port in your egress rules. Portainer:
+the gateway's `UME_INTEGRATION_API_URL` names an address rag-admin reaches (the gateway's `adminapi` is not on the `llm`
+network).
 
 ## Backup target
 

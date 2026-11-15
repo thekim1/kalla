@@ -563,10 +563,6 @@ UME_RAG_OIDC_CLIENT_ID=$oidc_client
 # UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=
 # With Entra ID directly (P2): UME_RAG_OIDC_TENANT_ID=<tenant id>
 UME_RAG_GATEWAY_URL=$gateway_url
-# The gateway's cost and budget read-back in the admin UI: the base URL of the gateway's Admin API, which serves
-# /integration/v1 (rag-admin's Gateway:IntegrationApiUrl; its credential key needs the scope usage.read, and the host
-# firewall then allows this host on llm). Unset: no read-back. A re-run rewrites this file: carry the line over.
-# UME_RAG_GATEWAY_INTEGRATION_API_URL=https://<gateway admin host>
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
 UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
 # Listeners default to loopback (0.0.0.0 with --proxy: the host firewall admits only UME_RAG_PROXY_SOURCES to them).

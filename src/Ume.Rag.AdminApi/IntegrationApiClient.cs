@@ -10,13 +10,14 @@ namespace Ume.Rag.AdminApi;
 
 /// <summary>
 /// The gateway's Integration API (gateway phase 3; gateway-changes §5.6; admin design §4.5, §8.6; B-45): an assigned key's
-/// usage per period and step and its budgets, read with rag-admin's credential key (<c>usage.read</c>) from
-/// <c>Gateway:IntegrationApiUrl</c>. Each answer is cached 5 minutes per key and query (the gateway allows 60 requests a
-/// minute per key). Unset, nothing is asked and the answers are null; a refusal (<c>401</c>, <c>403</c> without the scope,
-/// <c>429</c>) or a failure is null too, with its reason in <see cref="LastError"/> for the <i>Gateway</i> page.
+/// usage per period and step and its budgets, read with rag-admin's credential key (<c>usage.read</c>) from the address
+/// the gateway's context names (<see cref="GatewayFeatures.IntegrationApiUrl"/>, ending in <c>/integration/v1</c>; M-17
+/// C11). Each answer is cached 5 minutes per key and query (the gateway allows 60 requests a minute per key). Without an
+/// address nothing is asked and the answers are null; a refusal (<c>401</c>, <c>403</c> without the scope, <c>429</c>) or a
+/// failure is null too, with its reason in <see cref="LastError"/> for the <i>Gateway</i> page.
 /// </summary>
-public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> options, IMemoryCache cache, TimeProvider time,
-    ILogger<IntegrationApiClient> logger)
+public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> options, GatewayFeatures features, IMemoryCache cache,
+    TimeProvider time, ILogger<IntegrationApiClient> logger)
 {
     public const string HttpClientName = "gateway-integration";
     public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(5);
@@ -27,8 +28,18 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
 
     private IntegrationApiError? _lastError;
 
-    /// <summary>Whether <c>Gateway:IntegrationApiUrl</c> is set.</summary>
-    public bool Configured => Uri.TryCreate(options.CurrentValue.IntegrationApiUrl, UriKind.Absolute, out _);
+    /// <summary>Whether the gateway's context names the Integration API's address (an absolute URL).</summary>
+    public bool Configured => Usable(features.IntegrationApiUrl, options.CurrentValue.BaseUrl);
+
+    /// <summary>
+    /// An address rag-admin sends its credential key to: absolute and <c>https</c>, or <c>http</c> only while the gateway's own
+    /// <c>Gateway:BaseUrl</c> is <c>http</c> too (development and tests, where the key already travels so). The address comes
+    /// from another system's context, so an <c>http</c> typo there must not put the key on the network in clear text.
+    /// </summary>
+    public static bool Usable([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? address, string? gatewayBaseUrl) =>
+        Uri.TryCreate(address, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps
+            || (uri.Scheme == Uri.UriSchemeHttp && Uri.TryCreate(gatewayBaseUrl, UriKind.Absolute, out var gateway) && gateway.Scheme == Uri.UriSchemeHttp));
 
     /// <summary>The last refusal or failure (null after a success or before any call), shown on the <i>Gateway</i> page.</summary>
     public IntegrationApiError? LastError => Volatile.Read(ref _lastError);
@@ -36,26 +47,28 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
     /// <summary><paramref name="keyId"/>'s usage per period and step (<c>groupBy=step</c>), or null.</summary>
     public Task<IntegrationUsage?> UsageAsync(Guid keyId, DateOnly from, DateOnly to, string granularity, CancellationToken ct) =>
         GetAsync<IntegrationUsage>(FormattableString.Invariant(
-            $"integration/v1/usage?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}&granularity={granularity}&groupBy=step&keyId={keyId}"), ct);
+            $"usage?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}&granularity={granularity}&groupBy=step&keyId={keyId}"), ct);
 
     /// <summary>The budgets that apply to <paramref name="keyId"/>, or null.</summary>
     public Task<IntegrationBudgets?> BudgetsAsync(Guid keyId, CancellationToken ct) =>
-        GetAsync<IntegrationBudgets>(FormattableString.Invariant($"integration/v1/budgets?keyId={keyId}"), ct);
+        GetAsync<IntegrationBudgets>(FormattableString.Invariant($"budgets?keyId={keyId}"), ct);
 
     private async Task<T?> GetAsync<T>(string path, CancellationToken ct) where T : class
     {
-        if (!Configured)
+        // Read once: a context read may change the address meanwhile.
+        var address = features.IntegrationApiUrl;
+        if (!Usable(address, options.CurrentValue.BaseUrl))
         {
             return null;
         }
 
-        var cacheKey = "integration:" + path;
+        var baseUrl = address.TrimEnd('/') + "/";
+        var cacheKey = "integration:" + baseUrl + path;
         if (cache.TryGetValue(cacheKey, out T? cached))
         {
             return cached;
         }
 
-        var baseUrl = options.CurrentValue.IntegrationApiUrl!.TrimEnd('/') + "/";
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(baseUrl), path));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.CurrentValue.Key);
         try

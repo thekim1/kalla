@@ -18,13 +18,6 @@ public sealed class GatewayOptions
     public string? Key { get; set; }
 
     /// <summary>
-    /// The gateway Admin API's base URL for its Integration API (<c>/integration/v1</c>, gateway phase 3; gateway-changes §5.6;
-    /// repo-and-deployment §3), read by rag-admin only, with its credential key's <c>usage.read</c>. Unset: no cost or budget
-    /// read-back.
-    /// </summary>
-    public string? IntegrationApiUrl { get; set; }
-
-    /// <summary>
     /// The worker's fixed maximum (<c>Eu</c>, set with <c>CapGatewayCalls</c>; its credential key is capped there too,
     /// identity §4.7), or null for rag-api and rag-admin, whose maximum is their credential key's residencies alone
     /// (<see cref="GatewayCeiling"/>). Set in code only: configuration does not bind it.
