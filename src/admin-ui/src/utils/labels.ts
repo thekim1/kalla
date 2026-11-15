@@ -1245,6 +1245,7 @@ export const ASSISTANTS = {
   state: 'State',
   published: 'Published',
   draftOnly: 'Draft only',
+  archived: 'Archived',
   generalKnowledge: 'General knowledge',
   created: (name: string) => `The assistant ${name} has been created.`,
 } as const

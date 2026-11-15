@@ -67,6 +67,23 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(wrapper.text()).not.toContain('Altan')
   })
 
+  it('loads the documents when opened on the Documents tab (a link or a reload)', async () => {
+    signIn(['rag-editor'])
+    route.query = { tab: 'documents' }
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
+    vi.spyOn(api.collections, 'setup').mockResolvedValue(null as never)
+    const list = vi.spyOn(api.documents, 'list').mockResolvedValue({ items: [document({})], next: null })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ collectionId: 'c1' }))
+    expect(wrapper.text()).toContain('Altan')
+    expect(wrapper.text()).not.toContain('No documents yet')
+  })
+
   it('shows the document count, the last fetch with its result and the latest quality on the overview', async () => {
     signIn(['rag-viewer'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
@@ -10,6 +10,15 @@ import { button } from '@/test/helpers'
 import { formatNumber } from '@/utils/format'
 import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
+
+// `?tab=` through a route the tests set; tab changes go to router.replace.
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+const replace = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push: vi.fn(), replace }) }))
+beforeEach(() => {
+  route.query = {}
+  replace.mockReset()
+})
 
 const assistant: Assistant = {
   id: 'a1', slug: 'bygglov', name: 'Bygglovsassistenten', description: null, contactName: null, contactEmail: null, departmentId: 'd1', ownerTeamId: null,
@@ -420,6 +429,23 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(link.text()).toBe('Connect a new app')
     expect(wrapper.findAllComponents(RouterLinkStub).find((l) => l.find('[data-test=connect-app]').exists() || l.attributes('data-test') === 'connect-app')!.props('to'))
       .toEqual({ name: 'platform-clients', query: { connect: 'a1' } })
+  })
+
+  it('opens the tab named in ?tab= and keeps the tab in the address when it changes', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    route.query = { tab: 'versions' }
+    const versions = vi.spyOn(api.assistants, 'versions').mockResolvedValue([])
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    expect(wrapper.find('#assistant-panel-versions').exists()).toBe(true)
+    expect(versions).toHaveBeenCalledTimes(1)
+
+    await button(wrapper, 'Test').trigger('click')
+    expect(replace).toHaveBeenLastCalledWith({ query: { tab: 'test' } })
+    await button(wrapper, 'Draft').trigger('click')
+    expect(replace).toHaveBeenLastCalledWith({ query: {} }) // the first tab leaves no ?tab=
   })
 
   it('restores an earlier version after one confirmation, keeping the draft', async () => {
