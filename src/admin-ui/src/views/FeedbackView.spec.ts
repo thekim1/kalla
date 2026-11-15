@@ -43,7 +43,7 @@ describe('Feedback (admin design §8.1)', () => {
 
     const totals = wrapper.get('[data-test=totals]').text()
     expect(totals).toContain('200')
-    expect(totals).toMatch(/6\s*%/)
+    expect(totals).toMatch(/12 not found \(6\s*%\)/)
     expect(totals).toContain('41 up, 9 down')
     expect(wrapper.get('[data-test=imports]').text()).toContain('2 could not be matched')
     // chat §14.3: the alert after 4 failed runs in a row, on that client only (B-23).
@@ -74,5 +74,22 @@ describe('Feedback (admin design §8.1)', () => {
     const wrapper = mount(FeedbackView)
     await flushPromises()
     expect(wrapper.find('[data-test=mark]').exists()).toBe(false)
+    // No answers: the count, not a dash that reads as "— found nothing".
+    expect(wrapper.get('[data-test=totals]').text()).toContain('0 not found')
+    expect(wrapper.get('[data-test=totals]').text()).not.toContain('—')
+  })
+
+  it('labels every filter above its field, the same layout as Costs', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+
+    const form = wrapper.get('form[role=search]')
+    const fields = form.findAll('input, select')
+    expect(fields).toHaveLength(6)
+    for (const f of fields) expect(form.find(`label[for="${f.attributes('id')}"]`).exists()).toBe(true)
   })
 })

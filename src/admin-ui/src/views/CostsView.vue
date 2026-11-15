@@ -4,9 +4,9 @@ import { useRoute } from 'vue-router'
 import { api } from '@/api'
 import type { CostGranularity, CostReport, CostReportQuery, CostTotals, DepartmentCostRow } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import FilterSelect from '@/components/ui/FilterSelect.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import SelectField from '@/components/ui/SelectField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -106,12 +106,16 @@ onMounted(async () => {
 <template>
   <PageHeader :title="PAGE.costs.title" :description="PAGE.costs.description" />
 
-  <form class="mb-6 flex flex-wrap items-end gap-4" role="search" :aria-label="COSTS.filters" @submit.prevent="load()">
-    <FilterSelect v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" />
-    <FilterSelect v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" />
+  <!-- The same filter layout as Feedback: every label above its field, even columns. -->
+  <form class="mb-6 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-3" role="search" :aria-label="COSTS.filters" @submit.prevent="load()">
+    <SelectField id="costs-department" v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" />
+    <SelectField id="costs-kind" v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" />
     <TextField id="costs-from" v-model="filters.from" type="date" :label="COSTS.from" />
     <TextField id="costs-to" v-model="filters.to" type="date" :label="COSTS.to" />
-    <SegmentedControl v-model="filters.granularity" :label="COSTS.granularity" :options="granularityOptions" />
+    <div class="flex flex-col gap-1.5">
+      <span class="font-medium" aria-hidden="true">{{ COSTS.granularity }}</span>
+      <SegmentedControl v-model="filters.granularity" :label="COSTS.granularity" :options="granularityOptions" />
+    </div>
     <a :href="csvUrl" class="link text-small" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
   </form>
 

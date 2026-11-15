@@ -144,6 +144,10 @@ export interface CollectionSummary extends CollectionBase {
   shared: boolean
   documentCount: number
   topics: string[]
+  /** The latest run of any of its sources (the list's Last fetch, admin design §5.5.2); null before the first and on a shared row. */
+  lastRun: { id: string; sourceId: string; state: string; startedAt: IsoDateTime; finishedAt: IsoDateTime | null } | null
+  /** The latest finished evaluation's recall@10 (the list's Quality); null before the first and on a shared row. */
+  latestEvaluation: { recallAtK: number; finishedAt: IsoDateTime } | null
 }
 
 export type CollectionView = 'mine' | 'shared' | 'all'
@@ -820,6 +824,15 @@ export interface AssistantSummary {
   hasDraft: boolean
   /** The published version's level; null before the first publish. */
   generalKnowledge: GeneralKnowledge | null
+  /** The knowledge bases of the published version, else the draft's (admin design §5.5.4). */
+  collections: { id: string; name: string }[]
+  /** The answer model of the same version. */
+  model: string | null
+  /** The published version's number and date; null before the first publish. */
+  publishedVersion: number | null
+  publishedAt: IsoDateTime | null
+  /** Questions of the last 7 Europe/Stockholm days, today included. */
+  questions7d: number
 }
 
 /** An assistant's reranker (`QuerySteps.retrieval.rerank`, B-16); absent is off. */
@@ -1156,12 +1169,52 @@ export interface CollectionSetup {
   done: boolean
 }
 
-/** `GET /api/overview`: whether any collection is in scope, and the checklists not done yet. */
+/** A published assistant's last 7 days on Home (admin design §5.5.1): summed over the days and every client. */
+export interface LiveAssistant {
+  assistantId: string
+  name: string
+  departmentId: string
+  /** The published version's number. */
+  publishedVersion: number
+  questions: number
+  notFound: number
+  thumbsUp: number
+  thumbsDown: number
+  /** The gateway's cost plus the estimate (§8.6). */
+  costUsd: number
+}
+
+/** Runs by outcome: done, with remarks (degraded or held for deletion confirmation), failed, running. */
+export interface RunCounts {
+  succeeded: number
+  degraded: number
+  failed: number
+  running: number
+}
+
+/** A gateway sync's last success and its failed runs in a row since. */
+export interface SyncHealth {
+  lastSuccessAt: string | null
+  consecutiveFailures: number
+}
+
+/** Health on Home: the runs of the last 24 hours per department, the job queue, and the organisation and model syncs. */
+export interface OverviewHealth {
+  departments: { departmentId: string; departmentName: string; runs: RunCounts }[]
+  queue: { waiting: number; oldestQueuedAt: string | null }
+  organisationSync: SyncHealth
+  modelSync: SyncHealth
+}
+
+/** `GET /api/overview`: Home (admin design §5.5.1): Live, Health, whether any collection is in scope, and the checklists not done yet. */
 export interface Overview {
   hasCollections: boolean
   setup: CollectionSetup[]
   /** A platform admin, and no active default embedding profile yet (the platform's first-run step). */
   needsEmbeddingProfile: boolean
+  /** The caller's published, active assistants, most questions first. */
+  live: LiveAssistant[]
+  health: OverviewHealth
 }
 
 /** `GET /api/audit`: an entry of the audit log (admin design §9.1). */
@@ -1173,6 +1226,10 @@ export interface AuditSummary {
   action: string
   entityType: string
   entityId: string | null
+  /** The object's current name, else the name in the entry's snapshot (a deleted object), else null (admin design §9.1). */
+  entityName: string | null
+  /** Whether the object still exists, for the types the list looks up; null for the others. */
+  entityExists: boolean | null
   service: string | null
   departmentId: string | null
   classification: string | null
@@ -1180,8 +1237,8 @@ export interface AuditSummary {
   reason: string | null
 }
 
-/** `GET /api/audit/{id}`: the entry with its before/after snapshot as JSON text. */
-export interface AuditDetail extends AuditSummary {
+/** `GET /api/audit/{id}`: the entry with its before/after snapshot as JSON text (without the list's object name). */
+export interface AuditDetail extends Omit<AuditSummary, 'entityName' | 'entityExists'> {
   recordedAt: IsoDateTime
   actorRoles: string | null
   actorDepartments: string | null

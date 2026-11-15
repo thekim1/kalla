@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { MapRow } from '@/api/types'
@@ -36,7 +36,7 @@ describe('Map (admin design §5.5.6, as a table)', () => {
       departmentId: id, departmentName: id === 'd1' ? 'Bygg och miljö' : 'Kultur', rows: id === 'd1' ? [own, sharedIn, draftOnly] : [],
     }))
 
-    const wrapper = mount(MapView)
+    const wrapper = mount(MapView, { global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
 
     // All departments in scope by default.
@@ -53,6 +53,10 @@ describe('Map (admin design §5.5.6, as a table)', () => {
     expect(rows[1]).toContain('A. Andersson')
     expect(rows[2]).toContain('Kundtjänst bygg')
     expect(rows[2]).toContain('draft')
+    // A row is a link to its assistant, or to the knowledge base when no assistant uses it (§5.5.2 "Lists open as links").
+    expect(wrapper.findAllComponents(RouterLinkStub).map((l) => l.props('to'))).toEqual([
+      { name: 'collection', params: { id: 'c1' } }, { name: 'assistant', params: { id: 'a1' } }, { name: 'assistant', params: { id: 'a2' } },
+    ])
 
     await wrapper.get('#map-show').setValue('unlinked')
     expect(wrapper.findAll('[data-test=map] tbody tr')).toHaveLength(1)

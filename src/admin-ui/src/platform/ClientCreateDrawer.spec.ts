@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
+import { assistantSummary } from '@/test/fixtures'
 import { COMMON, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientCreateDrawer from './ClientCreateDrawer.vue'
 
@@ -32,9 +33,8 @@ const client: Client = {
   allowedOrigins: [], toolPolicy: 'none', portalUrl: null, isEnabled: true, isManagedByDeployment: false, updatedAt: '2026-11-13T10:00:00Z', updatedBy: null, version: '1', assistants: [],
 }
 const key = { id: 'k1', name: 'Pilot key', prefix: 'ume-rag-sk-ab', status: 'active' } as ApiKey
-const assistant = (id: string, name: string, classification: AssistantSummary['classification'], published = true): AssistantSummary => ({
-  id, slug: name.toLowerCase(), name, departmentId: 'd1', classification, state: 'active', published, hasDraft: false, generalKnowledge: null,
-})
+const assistant = (id: string, name: string, classification: AssistantSummary['classification'], published = true): AssistantSummary =>
+  assistantSummary({ id, slug: name.toLowerCase(), name, classification, published, publishedVersion: published ? 1 : null, publishedAt: published ? '2026-11-01T09:00:00Z' : null })
 const assistants = [assistant('a1', 'Bygglov', 'public'), assistant('a2', 'Personal', 'internal', false), assistant('a3', 'Journal', 'sensitive')]
 const ticked = (wrapper: VueWrapper, id: string) => wrapper.get(`[data-test=assistant-${id}] input`).element as HTMLInputElement
 

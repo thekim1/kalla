@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import type { CollectionSetup } from '@/api/types'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { SETUP } from '@/utils/labels'
 
 // Kom igång (admin design §5.4, §5.5.2): the journey's steps from the source to Open WebUI, each linking to the page
-// that does it, computed from state by the API. The caller hides the card once `done`.
-const props = defineProps<{ setup: CollectionSetup; showName?: boolean }>()
+// that does it, computed from state by the API. The caller hides the card once `done`. `foldable` (Home, §5.5.1): a
+// checklist whose knowledge base is published starts folded to one line ("Name: 5 of 8 steps done") and unfolds on click.
+// The `actions` slot (Home's Hide) shows in both forms.
+const props = defineProps<{ setup: CollectionSetup; showName?: boolean; foldable?: boolean }>()
+const canFold = computed(() => !!props.foldable && props.setup.published)
+const folded = ref(canFold.value)
 
 type State = 'done' | 'active' | 'todo'
 interface Step { key: string; label: string; state: State; to: RouteLocationRaw }
@@ -39,13 +44,36 @@ const steps = computed<Step[]>(() => {
   ]
 })
 
+const doneCount = computed(() => steps.value.filter((s) => s.state === 'done').length)
+
 const ICON: Record<State, string> = { done: 'check_circle', active: 'pending', todo: 'radio_button_unchecked' }
 const STATE_TEXT: Record<State, string> = { done: SETUP.done, active: SETUP.inProgress, todo: SETUP.todo }
 const TONE: Record<State, string> = { done: 'text-ok', active: 'text-accent', todo: 'text-fg-3' }
 </script>
 
 <template>
-  <UiCard :title="showName ? SETUP.titleFor(setup.name) : SETUP.title" data-test="setup">
+  <UiCard v-if="canFold && folded" data-test="setup" data-folded="true">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <button
+        type="button"
+        class="flex min-w-0 items-center gap-2 text-left font-medium underline-offset-2 hover:underline"
+        aria-expanded="false"
+        data-test="unfold"
+        @click="folded = false"
+      >
+        <AppIcon name="chevron_right" :size="20" class="flex-none text-fg-3" />
+        <span class="min-w-0 break-words">{{ SETUP.summary(setup.name, doneCount, steps.length) }}</span>
+      </button>
+      <slot name="actions" />
+    </div>
+  </UiCard>
+  <UiCard v-else :title="showName ? SETUP.titleFor(setup.name) : SETUP.title" data-test="setup">
+    <template v-if="canFold || $slots.actions" #actions>
+      <div class="flex flex-wrap items-center gap-2">
+        <UiButton v-if="canFold" variant="quiet" size="sm" aria-expanded="true" data-test="fold" @click="folded = true">{{ SETUP.fold }}</UiButton>
+        <slot name="actions" />
+      </div>
+    </template>
     <ol class="grid gap-2 sm:grid-cols-2" :aria-label="SETUP.listLabel">
       <li v-for="step in steps" :key="step.key" class="flex items-center gap-2" :data-test="`step-${step.key}`" :data-state="step.state">
         <AppIcon :name="ICON[step.state]" :size="20" :class="TONE[step.state]" />

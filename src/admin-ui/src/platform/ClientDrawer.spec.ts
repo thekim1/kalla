@@ -3,6 +3,7 @@ import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
+import { assistantSummary } from '@/test/fixtures'
 import { PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientDrawer from './ClientDrawer.vue'
 
@@ -23,9 +24,8 @@ function mountDrawer() {
   return mount(ClientDrawer, { props: { open: true, clientId: client.id }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
 }
 
-const assistant = (id: string, name: string, classification: AssistantSummary['classification']): AssistantSummary => ({
-  id, slug: name.toLowerCase(), name, departmentId: 'd1', classification, state: 'active', published: true, hasDraft: false, generalKnowledge: null,
-})
+const assistant = (id: string, name: string, classification: AssistantSummary['classification']): AssistantSummary =>
+  assistantSummary({ id, slug: name.toLowerCase(), name, classification })
 
 describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
   beforeEach(() => {

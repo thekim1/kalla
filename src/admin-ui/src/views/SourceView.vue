@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
@@ -22,6 +21,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
 import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
@@ -29,7 +29,6 @@ import { problemMessage } from '@/utils/problem'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
-const router = useRouter()
 const source = useLoadable<Source | null>(null)
 const runs = useLoadable<RunSummary[]>([])
 const pii = ref<PiiReport | null>(null)
@@ -43,6 +42,20 @@ const piiType = (type: string) => SOURCE_PAGE.piiTypes[type] ?? type
 const piiTypeList = (types: string[]) => types.map(piiType).join(', ')
 const piiCountList = (counts: Record<string, number>) =>
   Object.entries(counts).map(([type, count]) => SOURCE_PAGE.piiCount(piiType(type), formatNumber(count))).join(', ')
+type PiiDocument = PiiReport['documents'][number]
+const piiFlagged = (d: PiiDocument) => d.typesFired.length > 0
+/** The report as a table, flagged documents first (admin design §5.5.3); otherwise in the report's order. */
+const piiRows = computed(() => {
+  const documents = pii.value?.documents ?? []
+  return [...documents.filter(piiFlagged), ...documents.filter((d) => !piiFlagged(d))]
+})
+const piiFlaggedCount = computed(() => piiRows.value.filter(piiFlagged).length)
+const piiColumns: Column[] = [
+  { key: 'document', label: SOURCE_PAGE.piiDocument },
+  { key: 'fired', label: SOURCE_PAGE.piiFlaggedFor },
+  { key: 'counts', label: SOURCE_PAGE.piiCounts },
+  { key: 'state', label: SOURCE_PAGE.state },
+]
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 // The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
 const activeRun = computed(() => runs.data.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
@@ -70,10 +83,6 @@ async function edit(): Promise<void> {
 function saved(updated: Source): void {
   source.data.value = updated
   ui.notify(SOURCE_EDIT.saved)
-}
-
-function stateTone(state: string): 'ok' | 'warn' | 'danger' | 'neutral' {
-  return state === 'succeeded' ? 'ok' : state === 'failed' ? 'danger' : state === 'running' ? 'neutral' : 'warn'
 }
 
 async function loadRuns(append = false): Promise<void> {
@@ -105,9 +114,7 @@ async function syncNow(): Promise<void> {
   }
 }
 
-function openRun(run: RunSummary): void {
-  void router.push({ name: 'run', params: { id: run.id } })
-}
+const runTo = (run: RunSummary) => ({ name: 'run', params: { id: run.id } })
 
 onMounted(load)
 </script>
@@ -148,29 +155,41 @@ onMounted(load)
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
       <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
-        <DataTable :columns="runColumns" :rows="runs.data.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" clickable @row-click="openRun">
+        <DataTable :columns="runColumns" :rows="runs.data.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" :row-to="runTo">
           <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
-          <template #cell-state="{ row }"><UiBadge :tone="stateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
+          <template #cell-state="{ row }"><UiBadge :tone="runStateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
           <template #cell-counts="{ row }">
             <span class="tabular text-small">{{ SOURCE_PAGE.runCounts(formatNumber(row.added), formatNumber(row.updated), formatNumber(row.deleted)) }}<span
               v-if="row.failed" class="text-danger"
-            >, {{ SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</span></span>
+            >, <RouterLink :to="{ name: 'run', params: { id: row.id } }" class="link text-danger" data-test="run-failed" @click.stop>{{
+              SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</RouterLink></span></span>
           </template>
         </DataTable>
         <UiButton v-if="next" class="mt-4" :loading="runs.loading.value" @click="loadRuns(true)">{{ SOURCE_PAGE.more }}</UiButton>
       </AsyncState>
 
-      <h2 class="mb-3 mt-8 text-title-3">{{ SOURCE_PAGE.pii }}</h2>
-      <p v-if="pii && !pii.applies" class="text-fg-2">{{ SOURCE_PAGE.piiNotApplies }}</p>
-      <p v-else-if="pii && pii.documents.length === 0" class="text-fg-2">{{ SOURCE_PAGE.piiNone }}</p>
-      <ul v-else-if="pii" class="grid gap-2" data-test="pii">
-        <li v-for="d in pii.documents" :key="d.documentId" class="flex flex-wrap items-center gap-2">
-          <UiBadge :tone="d.state === 'held' ? 'warn' : 'neutral'" :label="d.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
-          <span>{{ d.title ?? d.displayName ?? d.url }}</span>
-          <span v-if="d.typesFired.length" class="text-small text-warn" data-test="pii-fired">{{ SOURCE_PAGE.piiFired(piiTypeList(d.typesFired)) }}</span>
-          <span v-if="Object.keys(d.counts).length" class="tabular text-small text-fg-2" :aria-label="SOURCE_PAGE.piiCounts" data-test="pii-counts">{{ piiCountList(d.counts) }}</span>
-        </li>
-      </ul>
+      <!-- Folded by default, with the counts in the summary; flagged documents first (admin design §5.5.3). There is no
+           document page to link to, so the names are plain text. -->
+      <details v-if="pii && pii.applies && pii.documents.length" class="mt-8" data-test="pii">
+        <summary class="cursor-pointer"><h2 class="inline text-title-3" data-test="pii-summary">{{ SOURCE_PAGE.piiSummary(piiRows.length, piiFlaggedCount) }}</h2></summary>
+        <DataTable :columns="piiColumns" :rows="piiRows" :row-key="(d) => d.documentId" :caption="SOURCE_PAGE.pii" class="mt-3">
+          <template #cell-document="{ row }"><span data-test="pii-document">{{ row.title ?? row.displayName ?? row.url }}</span></template>
+          <template #cell-fired="{ row }">
+            <span v-if="row.typesFired.length" class="text-small text-warn" data-test="pii-fired">{{ piiTypeList(row.typesFired) }}</span>
+          </template>
+          <template #cell-counts="{ row }">
+            <span v-if="Object.keys(row.counts).length" class="tabular text-small text-fg-2" data-test="pii-counts">{{ piiCountList(row.counts) }}</span>
+          </template>
+          <template #cell-state="{ row }">
+            <UiBadge :tone="row.state === 'held' ? 'warn' : 'neutral'" :label="row.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
+          </template>
+        </DataTable>
+      </details>
+      <template v-else>
+        <h2 class="mb-3 mt-8 text-title-3">{{ SOURCE_PAGE.pii }}</h2>
+        <p v-if="pii && !pii.applies" class="text-fg-2">{{ SOURCE_PAGE.piiNotApplies }}</p>
+        <p v-else-if="pii" class="text-fg-2">{{ SOURCE_PAGE.piiNone }}</p>
+      </template>
 
       <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
       <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />

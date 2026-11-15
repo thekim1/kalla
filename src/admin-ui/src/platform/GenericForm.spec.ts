@@ -153,4 +153,11 @@ describe('GenericForm', () => {
     await flushPromises()
     expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ evaluationModel: null })
   })
+
+  it('keeps a number field short and a text field full width', () => {
+    const number: FieldSpec = { name: 'auditRetentionDays', label: 'auditRetentionDays', kind: 'number', required: false, nullable: true }
+    const wrapper = mount(GenericForm, { props: { formId: 'f', fields: [fields[0]!, number], initial: {}, method: 'put', url: '/api/settings/retention', submitLabel: 'Save' } })
+    expect(wrapper.get('#f-auditRetentionDays').classes()).toContain('max-w-48')
+    expect(wrapper.get('#f-name').classes()).not.toContain('max-w-48')
+  })
 })

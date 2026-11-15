@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -12,6 +12,7 @@ import CollectionsView from './CollectionsView.vue'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+const mountView = () => mount(CollectionsView, { global: { stubs: { RouterLink: RouterLinkStub } } })
 
 describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
   it('lists Ours, Shared with us and All, with owner, sharing, documents and topics', async () => {
@@ -25,7 +26,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
         : [collectionSummary({ name: 'Blanketter', departmentName: 'Bygg och miljö', sharedWith: 'selected', documentCount: 41 })],
     }))
 
-    const wrapper = mount(CollectionsView)
+    const wrapper = mountView()
     await flushPromises()
 
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'mine' }))
@@ -56,7 +57,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
     vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 1, items: [collectionSummary({ name: 'umea.se', documentCount: 1166 })] })
 
-    const wrapper = mount(CollectionsView)
+    const wrapper = mountView()
     await flushPromises()
 
     const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('umea.se'))!
@@ -69,7 +70,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
     vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 0, items: [] })
 
-    const wrapper = mount(CollectionsView)
+    const wrapper = mountView()
     await flushPromises()
     await button(wrapper, 'Shared with us').trigger('click')
     await flushPromises()
@@ -82,7 +83,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     useAuthStore().user = bffUser({ roles: ['rag-editor'] })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
     vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 0, items: [] })
-    const wrapper = mount(CollectionsView)
+    const wrapper = mountView()
     await flushPromises()
     const drawer = wrapper.findComponent(CollectionCreateDrawer)
 
@@ -96,5 +97,48 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
 
     drawer.vm.$emit('created', collection({ id: 'c9' }), 'web', null)
     expect(push).toHaveBeenLastCalledWith({ name: 'collection', params: { id: 'c9' } })
+  })
+
+  it('shows the last fetch linked to its run and the quality, and opens a row as a link (§5.5.2)', async () => {
+    setActivePinia(createPinia())
+    useAuthStore().user = bffUser({ roles: ['rag-viewer'] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    vi.spyOn(api.collections, 'list').mockResolvedValue({
+      total: 3,
+      items: [
+        collectionSummary({
+          id: 'c1', name: 'Blanketter', lastRun: { id: 'r1', sourceId: 's1', state: 'degraded', startedAt: '2026-11-14T08:05:00Z', finishedAt: '2026-11-14T08:20:00Z' },
+          latestEvaluation: { recallAtK: 0.8, finishedAt: '2026-11-12T03:00:00Z' },
+        }),
+        collectionSummary({ id: 'c2', name: 'Ny' }),
+        collectionSummary({ id: 'c9', name: 'umea.se', shared: true }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('th[scope=col]').map((h) => h.text())).toEqual(
+      ['Name', 'Department', 'Information class', 'Sharing', 'Documents', 'Last fetch', 'Quality', 'State'],
+    )
+    const [measured, fresh, shared] = wrapper.findAll('tbody tr')
+    const links = wrapper.findAllComponents(RouterLinkStub)
+    expect(links.find((l) => l.attributes('data-test') === 'last-fetch-c1')!.props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
+    expect(measured!.get('[data-test=last-fetch-c1]').text()).toContain('14 Nov 2026')
+    expect(measured!.get('[data-test=last-fetch-c1]').text()).toContain('Done with remarks')
+    expect(measured!.get('[data-test=quality-c1]').text()).toContain('0,80')
+    expect(measured!.get('[data-test=quality-c1]').text()).toContain('12 Nov 2026')
+    expect(fresh!.text()).toContain('Never')
+    expect(fresh!.text()).toContain('–')
+    expect(shared!.text()).not.toContain('Never')
+
+    expect(links.filter((l) => l.attributes('data-test') === 'row-link').map((l) => l.props('to'))).toEqual([
+      { name: 'collection', params: { id: 'c1' } }, { name: 'collection', params: { id: 'c2' } }, { name: 'collection', params: { id: 'c9' } },
+    ])
+    // The run link navigates by itself; the rest of the row opens the knowledge base.
+    await measured!.get('[data-test=last-fetch-c1]').trigger('click')
+    expect(push).not.toHaveBeenCalledWith({ name: 'collection', params: { id: 'c1' } })
+    await fresh!.findAll('td')[0]!.trigger('click')
+    expect(push).toHaveBeenLastCalledWith({ name: 'collection', params: { id: 'c2' } })
   })
 })

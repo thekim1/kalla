@@ -159,7 +159,7 @@ async function save(): Promise<void> {
       />
       <TextField
         v-else :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.help" :disabled="readOnly.includes(field.name)"
-        :error="form.errors[field.name]" :inputmode="field.kind === 'number' ? 'decimal' : undefined" autocomplete="off"
+        :error="form.errors[field.name]" :inputmode="field.kind === 'number' ? 'decimal' : undefined" :short="field.kind === 'number'" autocomplete="off"
       />
     </template>
     <!-- Extra controls that act on the values as entered (an embedding profile's Test), before the form's own error. -->

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { RunSummary, Source } from '@/api/types'
@@ -34,26 +34,36 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     vi.spyOn(api.sources, 'piiReport').mockResolvedValue({
       applies: true, piiMode: 'hold', collectionClassification: 'public', truncated: false,
       documents: [
+        { documentId: 'e', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { phone: 4 }, rulesFired: 0, typesFired: [] },
         {
           documentId: 'd', title: 'Protokoll', url: null, displayName: null, state: 'held', previousVersionLive: false,
           counts: { personnummer: 1, email: 3, emailExternal: 2 }, rulesFired: 2, typesFired: ['emailExternal', 'personnummer'],
         },
-        { documentId: 'e', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { phone: 4 }, rulesFired: 0, typesFired: [] },
       ],
     })
     const sync = vi.spyOn(api.sources, 'sync').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'sync' })
 
-    const wrapper = mount(SourceView, { props: { id: 's1' } })
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
 
     expect(wrapper.get('[data-test=addresses]').text()).toBe('https://www.umea.se/bygga')
     expect(wrapper.text()).toMatch(/2\s500/)
     expect(wrapper.text()).toContain('Done')
     expect(wrapper.text()).toContain('40 added, 2 changed, 1 removed')
-    expect(wrapper.get('[data-test=pii]').text()).toContain('Kept out of the search')
+    // "3 failed" links to the run's page (admin design §5.5.3).
+    expect(wrapper.get('[data-test=run-failed]').text()).toBe('3 failed')
+    expect(wrapper.getComponent<typeof RouterLinkStub>('[data-test=run-failed]').props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
+    // The personal-data report is a table folded by default, its summary counting the documents and the flagged ones,
+    // flagged documents first.
+    const report = wrapper.get('[data-test=pii]')
+    expect(report.element.tagName).toBe('DETAILS')
+    expect((report.element as HTMLDetailsElement).open).toBe(false)
+    expect(wrapper.get('[data-test=pii-summary]').text()).toBe('Personal data (2 documents, 1 flagged)')
+    expect(report.findAll('[data-test=pii-document]').map((d) => d.text())).toEqual(['Protokoll', 'Kontakt'])
+    expect(report.text()).toContain('Kept out of the search')
     // #217: the stored fired types and the counts, as type names and numbers (never values).
     const fired = wrapper.findAll('[data-test=pii-fired]')
-    expect(fired.map((f) => f.text())).toEqual(['Flagged for: External email addresses, Personal identity numbers'])
+    expect(fired.map((f) => f.text())).toEqual(['External email addresses, Personal identity numbers'])
     expect(wrapper.findAll('[data-test=pii-counts]').map((c) => c.text())).toEqual([
       'Personal identity numbers: 1, Email addresses: 3, External email addresses: 2',
       'Phone numbers: 4',
@@ -64,7 +74,10 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(sync).toHaveBeenCalledWith('s1')
     expect(runs).toHaveBeenCalledTimes(2) // the list reloads with the new run
 
-    await wrapper.findAll('tbody tr')[0]!.find('button').trigger('click')
+    // A run row is a link to the run (§5.5.2 "Lists open as links"); a click elsewhere on the row opens it too.
+    const row = wrapper.findAll('tbody tr')[0]!
+    expect(row.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
+    await row.findAll('td')[0]!.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
@@ -78,7 +91,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
     const collection = vi.spyOn(api.collections, 'get').mockResolvedValue({ id: 'c1', classification: 'internal' } as never)
 
-    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body })
+    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     expect(wrapper.get('[data-test=demoted]').text()).toBe('www.umea.se/bygga/**/arkiv/** ×0,5')
     await wrapper.get('[data-test=edit-source]').trigger('click')

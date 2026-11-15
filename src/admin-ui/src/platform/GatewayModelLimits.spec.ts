@@ -110,8 +110,11 @@ describe('Gateway models: limits the gateway sends (admin design §4.10, #606)',
     const { wrapper } = mountModels(() => undefined)
     await flushPromises()
 
+    // The table has its heading, and a manual row's source reads as plain "Manual", not an instruction.
+    expect(wrapper.get('[data-test=list-title]').text()).toBe('The AI gateway’s models')
     const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('ume/chat-eu'))!
-    expect(row.text()).toContain(PLATFORM.gatewayModels.limitsSources.manual)
+    expect(row.text()).toContain('Manual')
+    expect(row.text()).not.toContain('Set here')
     await row.trigger('click')
     await flushPromises()
 

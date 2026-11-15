@@ -68,7 +68,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(source).toBeHidden()
     await expect(page.locator('#page-title')).toHaveText('Testwebbplatsen')
     const runs = page.getByRole('table', { name: 'Runs' })
-    await act.press(runs.getByRole('row').nth(1).getByRole('button').first())
+    await act.press(runs.getByRole('row').nth(1).getByRole('link').first())
     await expect(page.locator('#page-title')).toHaveText(/Run/)
     await eventually(async () => {
       await ready(page)

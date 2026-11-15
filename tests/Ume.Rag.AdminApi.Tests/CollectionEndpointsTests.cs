@@ -214,4 +214,87 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
         refused.GetProperty("code").GetString().ShouldBe("collection_in_use");
         refused.GetProperty("affected").EnumerateArray().Select(a => a.GetString()).ShouldBe(["Bygglovsassistent", "Interna sidor"]);
     }
+
+    [Fact]
+    public async Task The_list_shows_the_last_fetch_and_the_latest_evaluation_of_own_rows_only()
+    {
+        var (department, code) = await DepartmentAsync();
+        var (otherDepartment, _) = await DepartmentAsync();
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        var measured = (await CreateAsync(admin, department, "Mätt " + code)).GetProperty("id").GetGuid();
+        var fresh = (await CreateAsync(admin, department, "Ny " + code)).GetProperty("id").GetGuid();
+        var now = DateTimeOffset.UtcNow;
+        Guid latestRun, liveSource, sharedId;
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var pipeline = new Pipeline { Name = "p-" + Guid.NewGuid().ToString("N"), TemplateId = "url-list", UpdatedAt = now };
+            db.Pipelines.Add(pipeline);
+            var live = new Source { CollectionId = measured, Type = SourceTypes.UrlList, Name = "Sidor", Classification = Classification.Public, PipelineId = pipeline.Id, UpdatedAt = now };
+            var deleted = new Source
+            {
+                CollectionId = measured, Type = SourceTypes.UrlList, Name = "Borttagen", Classification = Classification.Public, PipelineId = pipeline.Id, UpdatedAt = now, DeletedAt = now,
+            };
+            var profile = await db.EmbeddingProfiles.Where(p => p.IsDefault).Select(p => p.Id).FirstAsync(Ct);
+            var shared = new Collection
+            {
+                Slug = "delad-" + code.ToLowerInvariant(), Name = "Delad " + code, DepartmentId = otherDepartment, Classification = Classification.Public,
+                EmbeddingProfileId = profile, SharedWith = CollectionSharingLevels.Municipality, UpdatedAt = now,
+            };
+            db.AddRange(live, deleted, shared);
+            await db.SaveChangesAsync(Ct);
+            var sharedSource = new Source { CollectionId = shared.Id, Type = SourceTypes.UrlList, Name = "Delad", Classification = Classification.Public, PipelineId = pipeline.Id, UpdatedAt = now };
+            db.Sources.Add(sharedSource);
+            await db.SaveChangesAsync(Ct);
+
+            Run RunOf(Guid source, string state, TimeSpan ago, bool finished = true) => new()
+            {
+                SourceId = source, Classification = Classification.Public, Kind = "sync", Trigger = "schedule", State = state, StartedAt = now - ago,
+                FinishedAt = finished ? now - ago + TimeSpan.FromMinutes(5) : null,
+            };
+            var latest = RunOf(live.Id, RunStates.Degraded, TimeSpan.FromHours(1));
+            db.Runs.AddRange(RunOf(live.Id, RunStates.Succeeded, TimeSpan.FromDays(1)), latest, RunOf(deleted.Id, RunStates.Running, TimeSpan.FromMinutes(1), finished: false),
+                RunOf(sharedSource.Id, RunStates.Succeeded, TimeSpan.FromMinutes(1)));
+
+            var set = new EvaluationSet { CollectionId = measured, Classification = Classification.Public, CreatedAt = now };
+            var sharedSet = new EvaluationSet { CollectionId = shared.Id, Classification = Classification.Public, CreatedAt = now };
+            db.EvaluationSets.AddRange(set, sharedSet);
+            await db.SaveChangesAsync(Ct);
+            EvaluationRun EvalOf(Guid setId, decimal recall, TimeSpan ago, bool finished = true, bool candidate = false, string variant = EvaluationVariants.Hybrid) => new()
+            {
+                SetId = setId, Classification = Classification.Public, Kind = EvaluationRunKinds.OnDemand, StartedAt = now - ago, FinishedAt = finished ? now - ago : null,
+                RecallAtK = recall, Candidate = candidate, Variant = variant,
+            };
+            db.EvaluationRuns.AddRange(
+                EvalOf(set.Id, 0.5m, TimeSpan.FromDays(2)),
+                EvalOf(set.Id, 0.8m, TimeSpan.FromDays(1)),
+                EvalOf(set.Id, 0.9m, TimeSpan.FromHours(3), candidate: true),
+                EvalOf(set.Id, 0.95m, TimeSpan.FromHours(2), variant: EvaluationVariants.Vector),
+                EvalOf(set.Id, 0.99m, TimeSpan.FromHours(1), finished: false),
+                EvalOf(sharedSet.Id, 0.7m, TimeSpan.FromHours(1)));
+            await db.SaveChangesAsync(Ct);
+            (latestRun, liveSource, sharedId) = (latest.Id, live.Id, shared.Id);
+        }
+
+        var items = (await admin.GetFromJsonAsync<JsonElement>($"/api/collections?view=all&q={code}", Ct)).GetProperty("items").EnumerateArray()
+            .ToDictionary(c => c.GetProperty("id").GetGuid());
+        items.Count.ShouldBe(3);
+
+        // The latest run of a source that is not deleted, whatever its state; the latest finished hybrid run of the saved settings.
+        var run = items[measured].GetProperty("lastRun");
+        (run.GetProperty("id").GetGuid(), run.GetProperty("sourceId").GetGuid(), run.GetProperty("state").GetString()).ShouldBe((latestRun, liveSource, RunStates.Degraded));
+        run.GetProperty("startedAt").GetDateTimeOffset().ShouldBe(now - TimeSpan.FromHours(1), TimeSpan.FromMilliseconds(1));
+        run.GetProperty("finishedAt").ValueKind.ShouldBe(JsonValueKind.String);
+        var evaluation = items[measured].GetProperty("latestEvaluation");
+        evaluation.GetProperty("recallAtK").GetDecimal().ShouldBe(0.8m);
+        evaluation.GetProperty("finishedAt").GetDateTimeOffset().ShouldBe(now - TimeSpan.FromDays(1), TimeSpan.FromMilliseconds(1));
+
+        // Before the first fetch and evaluation; and a shared row never shows its sources or evaluation.
+        items[fresh].GetProperty("lastRun").ValueKind.ShouldBe(JsonValueKind.Null);
+        items[fresh].GetProperty("latestEvaluation").ValueKind.ShouldBe(JsonValueKind.Null);
+        items[sharedId].GetProperty("shared").GetBoolean().ShouldBeTrue();
+        items[sharedId].GetProperty("lastRun").ValueKind.ShouldBe(JsonValueKind.Null);
+        items[sharedId].GetProperty("latestEvaluation").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
 }

@@ -193,6 +193,7 @@ watch(() => props.resource, () => {
       <EmbeddingProfilesPanel v-else-if="panel === 'embedding-profiles'" class="mb-6" />
       <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
     </template>
+    <h2 v-if="resource.listTitle" class="mb-3 text-title-3" data-test="list-title">{{ resource.listTitle }}</h2>
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
         :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"

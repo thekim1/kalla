@@ -63,7 +63,7 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     await flushPromises()
     const [first, second] = wrapper.findAll('tbody tr')
     expect(first!.text()).toContain('Kommunstyrelsen, KLK-alla')
-    expect(first!.text()).toContain(PLATFORM.organisation.summary(2, 1, 3))
+    expect(first!.text()).toContain('Own: 2 · Shared with selected departments: 1 · Shared with everyone: 3')
     expect(first!.text()).toContain(`${PLATFORM.organisation.sharedWith}: 4`)
     expect(second!.text()).toContain(PLATFORM.organisation.noMemberGroups)
     // A viewer gets no link to the gateway's administration.

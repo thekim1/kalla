@@ -22,6 +22,10 @@ public static class AuditEntityTypes
     public const string Pipeline = "pipeline";
     public const string Feedback = "feedback";
     public const string EmbeddingProfile = "embedding-profile";
+    public const string GatewayModel = "gateway-model";
+
+    /// <summary>The worker's HNSW reindex entries (<c>CheckHnswIndexHandler</c>) name the embedding profile this way.</summary>
+    public const string EmbeddingProfileIndex = "embeddingprofile";
 }
 
 /// <summary>The <c>Details</c> of an audit entry. Copied.</summary>

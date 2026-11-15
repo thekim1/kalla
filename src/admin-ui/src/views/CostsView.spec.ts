@@ -90,4 +90,15 @@ describe('Costs (admin design §8.6; B-41)', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: 'd1', kind: 'collection', granularity: 'month' }))
     expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
+
+  it('labels every filter above its field, the same layout as Feedback', async () => {
+    vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
+    const wrapper = await mountView('/costs')
+
+    const form = wrapper.get('form[role=search]')
+    const fields = form.findAll('input, select')
+    expect(fields).toHaveLength(4)
+    for (const f of fields) expect(form.find(`label[for="${f.attributes('id')}"]`).exists()).toBe(true)
+  })
 })

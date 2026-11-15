@@ -12,9 +12,10 @@ import UiButton from '@/components/ui/UiButton.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import { formatDate, formatNumber } from '@/utils/format'
 import { ASSISTANTS, LEVEL_LABEL, PAGE } from '@/utils/labels'
 
-// Assistenter (admin design §5.3, §5.4 step 9; #278 slice 3).
+// Assistants (admin design §5.3, §5.4 step 9, §5.5.4 "The assistant list"; #278 slice 3): a row is a link to the assistant.
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
@@ -25,8 +26,12 @@ const canEdit = auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', '
 const columns: Column[] = [
   { key: 'name', label: ASSISTANTS.name },
   { key: 'level', label: ASSISTANTS.level },
-  { key: 'state', label: ASSISTANTS.state },
+  { key: 'collections', label: ASSISTANTS.collections },
+  { key: 'model', label: ASSISTANTS.model },
+  { key: 'published', label: ASSISTANTS.published },
+  { key: 'questions7d', label: ASSISTANTS.questions7d, align: 'right' },
 ]
+const rowTo = (a: AssistantSummary) => ({ name: 'assistant', params: { id: a.id } })
 
 async function load(): Promise<void> {
   // Archived assistants last, marked Archived (admin design §5.5.4 badges); otherwise the API's order.
@@ -51,19 +56,31 @@ onMounted(async () => {
   </PageHeader>
   <AsyncState :loading="assistants.loading.value" :error="assistants.error.value" :empty="assistants.data.value.length === 0" :empty-text="ASSISTANTS.empty" @retry="load">
     <DataTable
-      :columns="columns" :rows="assistants.data.value" :row-key="(a) => a.id" :caption="ASSISTANTS.list" clickable
-      @row-click="(a: AssistantSummary) => router.push({ name: 'assistant', params: { id: a.id } })"
+      :columns="columns" :rows="assistants.data.value" :row-key="(a) => a.id" :caption="ASSISTANTS.list" :row-to="rowTo"
     >
       <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span><span class="block font-mono text-small text-fg-3">{{ row.slug }}</span></template>
       <template #cell-level="{ row }">{{ LEVEL_LABEL[row.classification as AssistantSummary['classification']] }}</template>
-      <template #cell-state="{ row }">
+      <template #cell-collections="{ row }">
+        <span v-if="row.collections.length" :data-test="`collections-${row.id}`">{{ row.collections.map((c: AssistantSummary['collections'][number]) => c.name).join(', ') }}</span>
+        <span v-else class="text-fg-3">{{ ASSISTANTS.noCollections }}</span>
+      </template>
+      <template #cell-model="{ row }">
+        <span v-if="row.model" class="font-mono text-small">{{ row.model }}</span>
+        <span v-else class="text-fg-3">{{ ASSISTANTS.noModel }}</span>
+      </template>
+      <template #cell-published="{ row }">
         <UiBadge v-if="row.state === 'archived'" :label="ASSISTANTS.archived" :data-test="`archived-${row.id}`" />
-        <UiBadge v-else :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? ASSISTANTS.published : ASSISTANTS.draftOnly" />
+        <span v-else-if="row.publishedVersion !== null" :data-test="`published-${row.id}`">
+          <UiBadge tone="ok" :label="ASSISTANTS.publishedVersion(row.publishedVersion)" />
+          <span class="ml-2 tabular text-small text-fg-2">{{ formatDate(row.publishedAt) }}</span>
+        </span>
+        <UiBadge v-else :label="ASSISTANTS.draftOnly" />
         <UiBadge
           v-if="row.generalKnowledge && row.generalKnowledge !== 'off'" :label="ASSISTANTS.generalKnowledge" class="ml-2"
           :data-test="`general-knowledge-${row.id}`"
         />
       </template>
+      <template #cell-questions7d="{ row }"><span class="tabular">{{ formatNumber(row.questions7d) }}</span></template>
     </DataTable>
   </AsyncState>
   <AssistantCreateDrawer v-model:open="creating" :departments="departments" @created="created" />

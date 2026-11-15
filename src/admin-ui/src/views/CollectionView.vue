@@ -59,15 +59,17 @@ const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'top
 const tab = useTabQuery(TABS)
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
-const usedBy = computed(() =>
+/** The assistants that use it, each with its label; the Overview links each to its page (§5.5.2). */
+const users = computed(() =>
   (collection.data.value?.usedBy ?? []).map((u) => {
     // Another department's assistant is named with its department (a shared knowledge base, §3.2).
     const name = u.departmentId === collection.data.value?.departmentId ? u.name : `${u.name}, ${u.departmentName}`
     // An archived one stays listed (it still blocks deletion and can be restored) but says so (#374).
-    if (u.state === 'archived') return `${name} (${COLLECTION.archived})`
-    return u.published ? name : `${name} (${COLLECTION.draftOnly})`
-  }).join(', '),
+    if (u.state === 'archived') return { id: u.id, label: `${name} (${COLLECTION.archived})` }
+    return { id: u.id, label: u.published ? name : `${name} (${COLLECTION.draftOnly})` }
+  }),
 )
+const usedBy = computed(() => users.value.map((u) => u.label).join(', '))
 const lastRun = computed(() =>
   sources.data.value.map((s) => s.lastRun).filter((r) => r !== null).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null,
 )
@@ -223,9 +225,7 @@ function sharingSaved(saved: Collection): void {
   read.data.value = { ...saved }
 }
 
-function openSource(source: SourceSummary): void {
-  void router.push({ name: 'source', params: { id: source.id } })
-}
+const sourceTo = (source: SourceSummary) => ({ name: 'source', params: { id: source.id } })
 
 watch(tab, (t) => {
   if (t === 'documents' && !documents.loaded.value) void loadDocuments()
@@ -293,12 +293,18 @@ onMounted(load)
               <span v-if="collection.data.value.contactName || collection.data.value.contactEmail" data-test="contact">
                 {{ [collection.data.value.contactName, collection.data.value.contactEmail].filter(Boolean).join(', ') }}
               </span>
-              <span v-else class="text-fg-3">{{ COLLECTION.noContact }}</span>
+              <span v-else class="flex flex-wrap items-center gap-3">
+                <span class="text-fg-3">{{ COLLECTION.noContact }}</span>
+                <UiButton v-if="canEdit" size="sm" icon="add" data-test="add-contact" @click="editing = true">{{ COLLECTION.addContact }}</UiButton>
+              </span>
             </DetailRow>
             <DetailRow :label="COLLECTION.usedBy">
-              <span v-if="collection.data.value.usedBy.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
+              <span v-if="users.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
               <span v-else data-test="used-by">
-                {{ usedBy }}
+                <template v-for="(u, i) in users" :key="u.id">
+                  <template v-if="i > 0">, </template>
+                  <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
+                </template>
               </span>
             </DetailRow>
             <!-- The live documents, as on the knowledge base list (#374). -->
@@ -358,7 +364,7 @@ onMounted(load)
         </div>
         <InlineError v-if="addFilesError" :message="problemMessage(addFilesError)" class="mb-4" />
         <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
-          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" clickable @row-click="openSource">
+          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" :row-to="sourceTo">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
             <template #cell-lastRun="{ row }">
