@@ -576,6 +576,36 @@ jobs:
           grep -qx 'UME_RAG_ADMIN_PUBLIC_HOST=admin.kommun.se' "$d/deploy/.env"
           if out="$(init --domain .example.se 2>&1)"; then echo "--domain .example.se was accepted"; exit 1; fi
           grep -q -- '--domain takes a domain name' <<< "$out"
+      - name: init-deployment.sh without sign-in options leaves sign-in to the setup wizard
+        # Setup wizard S6: no --oidc-* option is required or prompted. Without them nothing declares sign-in (no client
+        # secret file, an empty authority and client id) and rag-admin renders without a non-empty Oidc__* value, so the
+        # wizard's fields are free; the closing notes point at the wizard. --oidc-authority and --oidc-refuse-guests are
+        # kept by a later re-run without them.
+        run: |
+          d="$RUNNER_TEMP/wizard"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"; printf 'k\n' > "$d/keys/api"
+          s="$d/deploy/secrets/admin"
+          init() {
+            bash "$d/deploy/init-deployment.sh" --domain example.se --gateway-url https://llm.example.se \
+              --gateway-credential-key-file api="$d/keys/api" --backup-target local --allow-file-keys --no-chown "$@" \
+              < /dev/null > "$d/init.log"
+          }
+          init
+          [ ! -e "$s/Oidc__ClientSecret" ] && [ ! -e "$s/Oidc__RefuseGuests" ]
+          grep -qx 'UME_RAG_OIDC_AUTHORITY=' "$d/deploy/.env"
+          grep -qx 'UME_RAG_OIDC_CLIENT_ID=' "$d/deploy/.env"
+          grep -q 'Set up sign-in in the setup wizard' "$d/init.log"
+          grep -q "logs rag-admin | grep 'Setup code'" "$d/init.log"
+          docker compose --env-file "$d/deploy/.env" config --format json | jq -e '.services["rag-admin"].environment
+            | (has("Oidc__RefuseGuests") | not)
+              and ([to_entries[] | select((.key | startswith("Oidc__")) and (.value // "") != "")] | length == 0)' >/dev/null
+          init --yes --oidc-authority https://keycloak.example.se/realms/ume --oidc-refuse-guests false
+          init --yes
+          grep -qx 'UME_RAG_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume' "$d/deploy/.env"
+          [ "$(cat "$s/Oidc__RefuseGuests")" = false ]
+          docker compose --env-file "$d/deploy/.env" config --format json \
+            | jq -e '.services["rag-admin"].environment.Oidc__Authority == "https://keycloak.example.se/realms/ume"' >/dev/null
+          if out="$(init --yes --oidc-refuse-guests maybe 2>&1)"; then echo "--oidc-refuse-guests maybe was accepted"; exit 1; fi
+          grep -q -- '--oidc-refuse-guests must be true or false' <<< "$out"
       - name: Pilot caps, Open WebUI key restriction and the feedback service account
         # Offline: docker compose config over the base files, the 24 GB overlay and the Open WebUI file (P1b item 17).
         run: bash deploy/tests/pilot-stack.sh

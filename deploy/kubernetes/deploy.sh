@@ -49,3 +49,8 @@ for app in $apps; do
   if "${k[@]}" get deployment "$app" >/dev/null 2>&1; then "${k[@]}" rollout status "deployment/$app" --timeout=15m; fi
 done
 echo "==> Done"
+# Sign-in (identity design §19): while setup is open, rag-admin prints the setup code at start (both pods the same).
+if "${k[@]}" logs deploy/rag-admin 2>/dev/null | grep 'setup mode is open until' >/dev/null; then
+  echo "Setup mode is open: read the setup code with  ${k[*]} logs deploy/rag-admin | grep 'Setup code'"
+  echo "and enter it at https://<admin host>/setup (docs/kubernetes.md, Sign-in)."
+fi

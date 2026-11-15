@@ -116,7 +116,6 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
 
 ```bash
 ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
-  --oidc-client-secret-file admin-client.secret \
   --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
   --gateway-url https://llm.intern.umea.se --ca-file municipal-ca.pem \
   --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
@@ -145,9 +144,10 @@ added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the 
 
 | Option | Default | Effect |
 |---|---|---|
-| `--oidc-authority URL` | prompted | the admin BFF's identity provider (HTTPS): `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0` |
-| `--oidc-client-id ID` | `ume-rag-admin` | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's |
-| `--oidc-client-secret-file FILE` | – | the admin registration's secret: `secrets/admin/Oidc__ClientSecret` |
+| `--oidc-authority URL` | the setup wizard's; a re-run without it keeps `deploy/.env`'s | the admin BFF's identity provider (HTTPS) as a deployment value, locked in the wizard: `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0`. Pass it with the host firewall, which lets rag-admin reach only this provider. Never prompted |
+| `--oidc-client-id ID` | the setup wizard's, else `ume-rag-admin`; a re-run without it keeps `deploy/.env`'s | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's: `UME_RAG_OIDC_CLIENT_ID` |
+| `--oidc-client-secret-file FILE` | the setup wizard's | the admin registration's secret as a deployment value: `secrets/admin/Oidc__ClientSecret` (kept until you delete it). With `--oidc-authority` it declares the sign-in, and the wizard never opens |
+| `--oidc-refuse-guests true\|false` | the setup wizard's, else `true` | refusing guests (Entra ID) as a deployment value: `secrets/admin/Oidc__RefuseGuests` (kept on a re-run without it) |
 | `--domain DOMAIN` | – | the base domain: `--api-host`, `--admin-host` and `--openwebui-host` not given default to `rag.DOMAIN`, `rag-admin.DOMAIN` and `chat.DOMAIN` (the last only when another `--openwebui-*` option asks for Open WebUI), and neither host is prompted for |
 | `--api-host HOST`, `--admin-host HOST` | under `--domain`, else prompted (the host name; the admin defaults to the api's) | public host names, in the listener certificates, `UME_RAG_API_PUBLIC_URL` and `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--api-port N`, `--admin-port N` | 8543, 9543 | host ports of the two listeners |
@@ -167,7 +167,7 @@ added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the 
 | `--render` | – | runs `rag-renderer` for sources with fetch mode `browser`: `COMPOSE_PROFILES=render` in `deploy/.env` and the worker's `secrets/worker/Render__Endpoint`. Without it neither, and those sources wait with `render.not_configured` (*Renderer*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--openwebui-host HOST` | `chat.DOMAIN` with `--domain` and another `--openwebui-*` option, else – | the optional Open WebUI stack (below); the options below need it |
 | `--openwebui-oidc-client-id ID` | the setup wizard's, else `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`): `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, a deployment value of rag-api and rag-admin |
-| `--openwebui-oidc-client-secret-file FILE` | the setup wizard's | that client's secret: `secrets/api/OpenWebUi__Oidc__ClientSecret` and `secrets/admin/OpenWebUi__Oidc__ClientSecret` (rag-api serves it to Open WebUI's start wrapper) |
+| `--openwebui-oidc-client-secret-file FILE` | the setup wizard's (its Open WebUI step) | that client's secret: `secrets/api/OpenWebUi__Oidc__ClientSecret` and `secrets/admin/OpenWebUi__Oidc__ClientSecret` (rag-api serves it to Open WebUI's start wrapper) |
 | `--openwebui-oidc-provider-url URL` | the setup wizard's, else rag-admin's authority + `/.well-known/openid-configuration` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` |
 | `--openwebui-oidc-provider-name NAME` | the setup wizard's, else `Umeå kommun` | the label of Open WebUI's sign-in button (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME`) |
 | `--openwebui-data-dir DIR` | `deploy/openwebui-data` | Open WebUI's own store |
@@ -200,8 +200,29 @@ clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` roles and t
 
 Give the admin's client the two redirect URIs the script prints (code + PKCE):
 `https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`, and Open WebUI's client
-`https://<owui host>/oauth/oidc/login/callback`. The client secrets go to `--oidc-client-secret-file` and
-`--openwebui-oidc-client-secret-file`, never into the repository.
+`https://<owui host>/oauth/oidc/login/callback`.
+
+**The setup wizard** (identity design §19) sets the rest after the first start (*5. Start*):
+
+1. Read the setup code: `docker compose --env-file deploy/.env logs rag-admin | grep 'Setup code'`. It is valid for
+   one hour; while setup was never finished, `dc restart rag-admin` prints a new one. Treat it like a password: whoever
+   holds it chooses the sign-in provider while setup is open.
+2. Open `https://<admin host>[:<admin port>]/setup` at the address users will use (the redirect URIs are built from
+   it), and enter the code.
+3. The wizard shows the redirect URIs, takes the client ID (default `ume-rag-admin`), the client secret and its
+   optional expiry date, with the claim names under *Advanced* (presets for Keycloak and Entra ID). The provider address
+   is locked when `--oidc-authority` gave it. **Test sign-in** opens the provider in a new window; sign in as yourself.
+   *Finish* is offered only when the test passed for a platform admin (the role `rag-platform-admin`, or a group in
+   `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`).
+
+Keep `--oidc-authority`: the host firewall (*4. Host units*) lets rag-admin reach only the provider in
+`UME_RAG_OIDC_AUTHORITY`, so without it the wizard's test can't reach the provider. Open WebUI's provider follows from
+the authority, and the wizard's Open WebUI step takes its client secret (or declare it with
+`--openwebui-oidc-client-secret-file`).
+
+**Declaring sign-in instead:** `--oidc-client-secret-file` (with `--oidc-authority`) declares the sign-in, and the
+wizard never opens. Each `--oidc-*` option and each `UME_RAG_OIDC_*` line you set in `deploy/.env` is a deployment
+value, locked in the wizard; an empty one is unset. Secrets go to files, never into the repository.
 
 **Roles from groups** (#468; Decisions "Role groups as a setting"). A role in the token's `roles` claim counts as it is.
 For an identity provider whose tokens carry groups instead, a platform admin maps groups to roles in RAG's admin
@@ -216,10 +237,12 @@ RAG roles is open in #468.
 Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
 [`infra/entra/README.md`](../infra/entra/README.md). Switching is configuration (`Oidc:*`), not code.
 
-**Opening the setup wizard again** (from the release that has the wizard): set `UME_RAG_SETUP_REOPEN` in `deploy/.env`
-to a new value (for example today's date) and run `docker compose --env-file deploy/.env up -d`. rag-admin opens the
-wizard once and prints a new setup code, valid for one hour, in `docker compose --env-file deploy/.env logs rag-admin`.
-Before restoring a database, empty the variable first, or the restored database opens the wizard again.
+**Opening the setup wizard again** (a client secret about to expire, a new provider, a broken sign-in): set
+`UME_RAG_SETUP_REOPEN` in `deploy/.env` to a new value (for example today's date) and run
+`docker compose --env-file deploy/.env up -d`. rag-admin opens the wizard once and prints a new setup code, valid for
+one hour, in `docker compose --env-file deploy/.env logs rag-admin`; the current sign-in keeps working until you finish.
+`init-deployment.sh` keeps the value on a re-run. Before restoring a database, empty the variable first, or the restored
+database opens the wizard again. The runbook has the lock-out and restore cases (*Sign-in and the setup wizard*).
 
 ### 4. Host units
 
@@ -249,7 +272,8 @@ docker compose --env-file deploy/.env up -d --wait
 docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
 ```
 
-`up --wait` returns when every service is healthy and `rag-migrate` has finished. `stanza-create` is needed once per
+`up --wait` returns when every service is healthy and `rag-migrate` has finished. Then set up sign-in in the setup
+wizard (*3. Sign-in*), unless the options declared it. `stanza-create` is needed once per
 new database or repository and is safe to repeat: WAL archiving fails until the stanza exists (the runbook's
 *Where to look first*), and the backup-status timer reports a non-zero `rag_backup_repo_status` until then. Then
 take the first backup and escrow the keys:
@@ -507,10 +531,11 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    are public.
 3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
    Ume.Rag's (`UME_DOMAIN`, which names rag-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>`,
-   or `UME_RAG_API_HOST` and the other `UME_RAG_*_HOST` instead; the three `UME_RAG_*_GATEWAY_KEY` and
-   `UME_RAG_OIDC_CLIENT_SECRET`), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
-   `render` for JavaScript pages). The credential keys come from the gateway once it runs: start the stack, issue the
-   keys in the gateway's admin (*Gateway credential keys* above), set them, and update the stack.
+   or `UME_RAG_API_HOST` and the other `UME_RAG_*_HOST` instead), and `COMPOSE_PROFILES=clamav` (add `openwebui` for
+   the chat, `render` for JavaScript pages). The credential keys come from the gateway's manifest
+   (`UME_INTEGRATION_MANIFEST`), or are issued by hand and set as the three `UME_RAG_*_GATEWAY_KEY`. No client secret:
+   after the first start, sign-in is set in rag-admin's setup wizard with the setup code from its log
+   ([portainer.md](portainer.md), *First deploy* step 4), unless the stack declares it.
 4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI
    (3000) serves plain HTTP on loopback. Put a reverse proxy with real certificates in front of the public names
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
@@ -518,7 +543,7 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    all five host names ([portainer.md](portainer.md#tls-proxy)).
 5. **Open WebUI** (profile `openwebui`): its host is `chat.<domain>` (`UME_RAG_OPENWEBUI_HOST` for another); its
    OIDC client (redirect URI `https://<host>/oauth/oidc/login/callback`) is `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID` and
-   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, or, from the release with the setup wizard's Open WebUI step, the wizard's
+   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, or the values entered in the setup wizard's Open WebUI step
    (*Open WebUI's sign-in settings* below). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it
    and `rag-migrate` registers it as the deployment's own Open WebUI client (*Apps and keys*, marked *Managed by the
    deployment*; identity design §5.2). The feedback import's key is minted by the one-shot `rag-openwebui-setup` (as
@@ -526,7 +551,7 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    rag-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
 6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Ume.Rag's admin
-   (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 6). Until then no knowledge base
+   (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 8). Until then no knowledge base
    can be created.
 
 ## Reverse proxy and PKI

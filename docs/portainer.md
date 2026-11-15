@@ -25,7 +25,10 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
 - **Registry access:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private. In Portainer, *Registries → Add
   registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
-  (`ume-admin`), Ume.Rag's admin (`ume-rag-admin`) and, for the chat, Open WebUI (`open-webui`).
+  (`ume-admin`), Ume.Rag's admin (`ume-rag-admin`) and, for the chat, Open WebUI (`open-webui`). The clients must exist
+  before you set up sign-in. Their redirect URIs: `https://rag-admin.<domain>/signin-oidc` and
+  `/signout-callback-oidc` for `ume-rag-admin`, `https://chat.<domain>/oauth/oidc/login/callback` for `open-webui` (the
+  setup wizard shows them, ready to copy). Ume.Rag's client secrets are entered in the setup wizard, not in the stack.
 - **Host names** and **real certificates** for the gateway API, the gateway admin, rag-api, Ume.Rag's admin and Open
   WebUI. The services serve certificates from their own internal CAs (Open WebUI plain HTTP), so something in front
   terminates TLS: your own reverse proxy (routes and body sizes:
@@ -83,33 +86,22 @@ read the CA only at start.
 1. **Create the stack.** *Stacks → Add stack*, a name you will keep (the volumes are found by it), *Web editor*: paste
    the file. Pick the `ghcr.io` registry.
 2. **Variables:** *Environment variables → Load variables from .env file* with
-   [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace every value its comments
-   mark CHANGE. The essentials:
+   [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace the five values its
+   comments mark CHANGE. None of them is a secret of Ume.Rag or Open WebUI:
 
    ```text
    # The gateway
    UME_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume
    UME_GATEWAY_HOST=llm.example.se
    UME_GATEWAY_PUBLIC_URL=https://llm.example.se
-   UME_ADMIN_PUBLIC_URL=https://llm-admin.example.se      # optional: links from Ume.Rag's admin to the gateway's
-   UME_OIDC_CLIENT_SECRET=...                             # if ume-admin is a confidential client
+   UME_ADMIN_HOST=llm-admin.example.se
    # Ume.Rag
    UME_DOMAIN=example.se                                  # rag.example.se, rag-admin.example.se, chat.example.se
-   UME_RAG_OIDC_CLIENT_SECRET=...
-   COMPOSE_PROFILES=clamav,openwebui
-   # Open WebUI (optional: see below)
-   UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=...
    ```
 
-   **Open WebUI's sign-in** (identity design §19): `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID` (default `open-webui`),
-   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` (default: rag-admin's authority +
-   `/.well-known/openid-configuration`) and `UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME` (the button, default *Umeå kommun*)
-   are now settings of rag-api and rag-admin: rag-api serves them to Open WebUI's start wrapper, which starts Open WebUI
-   with them and restarts it within a minute when they change. Each one you set is a deployment value that wins. From the
-   release with the setup wizard's Open WebUI step you may leave them empty and set them in rag-admin's setup wizard
-   instead (its fields for the values the stack sets are locked). Without a client secret from either, Open WebUI still
-   starts, but offers no sign-in, so nobody can sign in. Register the redirect URI
-   `https://<chat host>/oauth/oidc/login/callback` on its client either way.
+   Optional, for the gateway: `UME_ADMIN_PUBLIC_URL` (links from Ume.Rag's admin to the gateway's) and
+   `UME_OIDC_CLIENT_SECRET` (only if `ume-admin` is a confidential client). `COMPOSE_PROFILES=clamav,openwebui` is
+   already in the file.
 
    `UME_DOMAIN` gives Ume.Rag's three host names: rag-api `rag.<domain>` (its public URL `https://rag.<domain>`;
    `UME_RAG_API_PUBLIC_URL` for a port), its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another
@@ -120,38 +112,77 @@ read the CA only at start.
    integration `Ume.Rag` and its three credential keys from the manifest, and hands rag-admin the Integration API's
    address (M-17 C7, C11). If the team `ume-rag` doesn't exist in the gateway yet, it is created in the department whose
    cost centre code is the manifest's `departmentCode`: change that to yours (and `departmentName`), or create the team
-   first. The other optional variables (ports, binds, groups, the gateway's
-   settings) are in the file's header. **The first platform admin** is whoever's sign-in token carries the role
-   `rag-platform-admin` in its `roles` claim (Keycloak: that realm role, directly or through a group,
-   [`deploy/keycloak/README.md`](../deploy/keycloak/README.md)). Only an identity provider whose tokens carry groups
-   instead needs `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`.
+   first. The other optional variables (ports, binds, groups, the gateway's settings) are in the file's header.
+
+   Sign-in is not a variable: you set it up in step 4. To set it in the stack instead, see *Declaring sign-in instead*
+   below.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `rag-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
    creates the integration `Ume.Rag` and its keys `rag-api`, `rag-admin` and `rag-worker` from the manifest and writes
    their secrets to the volume `<stack>_integration-secrets`, from which `rag-bootstrap` gives each service its key; the
    services start. **The end of `rag-bootstrap`'s log lists what is still missing** (example values left in, Open
-   WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place.
-4. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
+   WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place. Its last
+   lines point at the setup wizard on every deploy, since `rag-bootstrap` can't see whether setup is done: skip that
+   when you can already sign in.
+4. **Set up sign-in.** rag-admin opens its setup wizard on the first start and prints a setup code.
+   - **Find the code:** *Containers → rag-admin → Logs*, the line
+     `rag-admin: setup mode is open until 2026-11-20 14:05 UTC. Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. The code
+     is valid for one hour. Treat it like a password: whoever holds it chooses the sign-in provider while setup is open.
+     If the hour ends before you finish, restart rag-admin (*Containers*, select, *Restart*): a setup that was never
+     finished opens again with a new code.
+   - **Open** `https://rag-admin.<domain>/setup`, at the public address users will use: the wizard builds the redirect
+     URIs from the address you open it at.
+   - **The wizard's steps:**
+     1. *Setup code*: paste the code.
+     2. *Addresses*: the redirect URI and the post-logout redirect URI. Register both on the `ume-rag-admin` client at
+        the provider now. The page also shows what the stack sets (the gateway's address, rag-api's public address, the
+        platform admin groups).
+     3. *Sign-in*: the provider address is locked (*Set by the deployment*: the stack's `UME_OIDC_AUTHORITY`); the
+        client ID defaults to `ume-rag-admin`; type the client secret and, if you like, the date it expires. *Advanced*
+        holds the claim names, with a preset for Keycloak and for Entra ID (the tenant ID). **Test sign-in** opens the
+        provider in a new window: sign in there as yourself. The result shows who signed in, the roles, groups and
+        departments the token carried, and whether that person is a platform admin.
+     4. *Summary and finish*: the values to save and where each comes from. **Finish**, then **Sign in**.
+   - **Who may finish:** only a test sign-in by a platform admin enables *Finish*: the role `rag-platform-admin` in the
+     token's `roles` claim (Keycloak: that realm role, directly or through a group,
+     [`deploy/keycloak/README.md`](../deploy/keycloak/README.md)), or a group named in
+     `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` (only for an identity provider whose tokens carry groups instead). The wizard
+     says which claim it read.
+
+   After *Finish* setup is closed: the setup API answers 404 and the code is void. The sign-in provider, client and
+   secret change only after a re-open (*Opening the setup wizard again*), never from an admin session.
+5. **Open WebUI's sign-in** (profile `openwebui`): Open WebUI asks rag-api for its sign-in settings when it starts, and
+   restarts by itself within a minute when they change. Its provider defaults to rag-admin's authority's
+   `/.well-known/openid-configuration` and its client to `open-webui`; register its redirect URI
+   `https://chat.<domain>/oauth/oidc/login/callback` on that client (the wizard shows it with a copy button). The
+   wizard's **Open WebUI** step, after the sign-in test, takes the client secret (leave the provider address empty to
+   follow the admin's provider) and **Check** asks the provider whether it accepts the client: *accepted*, *refused*
+   (a wrong client id or secret), or *could not be verified* (then a wrong secret shows when the first user signs in;
+   saving is still allowed). **Save**, or **Skip for now** and open setup again later. Without a secret Open WebUI
+   signs in as a public client (PKCE). Its log says what it started with:
+   `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`. To declare the values instead, set
+   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` (and the other `UME_RAG_OPENWEBUI_OIDC_*` lines) in the stack.
+6. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field): under *Access → Integrations → Ume.Rag*, check the three credential keys (residencies `OnPrem`
    and `Eu`: Ume.Rag's ceiling, register M2), then create the **assigned keys** the assistants and knowledge bases
    will run on, one or more per department, in the integration with role *Assigned*. The manifest never changes a key
    that exists: change one here. **Rotate** a credential key here (with a grace period), then delete its file
    `Ume.Rag/rag-<service>` in `<stack>_integration-secrets` and update the stack; the gateway writes the new secret and
    the service picks it up within seconds.
-5. **Keys issued by hand instead** (no manifest, or the gateway runs elsewhere): create the integration `Ume.Rag` and
+7. **Keys issued by hand instead** (no manifest, or the gateway runs elsewhere): create the integration `Ume.Rag` and
    the three credential keys as production-setup.md says, set `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`
    and `UME_RAG_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and update the stack. The services
    pick them up within seconds. **Address list** of a credential key: the services reach the gateway over the stack's
    internal network `llm`, whose subnet Docker chose (`docker network inspect <stack>_llm`); allow that subnet, or
    leave the list empty.
-6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
+8. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
    embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
    `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
    must allow the model. The first profile is the default, which new knowledge bases use.
-7. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
+9. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
    the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
    there to choose the assistants it offers (an assistant's *Who can use it* works too).
 
@@ -160,12 +191,38 @@ read the CA only at start.
    (password sign-in stays off) and keeps it while it works, and rag-api finds Open WebUI in the stack by itself. Its log
    says *minted* or *kept*. A new key: delete `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and update the
    stack.
-8. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
-   `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
-   database restored without them is unusable. The stack has no WAL archiving: use `pg_dump` or volume snapshots.
+10. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
+    `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
+    database restored without them is unusable, and the client secrets the wizard stored can only be read with the same
+    `data-protection.pfx`. The stack has no WAL archiving: use `pg_dump` or volume snapshots.
 
 Then the knowledge bases and assistants: each gets one of its department's assigned keys (V39); a published assistant
 must have one once the gateway acts as keys.
+
+### Declaring sign-in instead
+
+A value set in the stack is the deployment's: it wins, and the wizard shows it locked (*Set by the deployment*). An
+empty variable counts as unset. With an authority and a client secret in the stack, rag-admin counts setup as done at
+its first start and never opens the wizard; a re-open shows those values locked.
+
+- **rag-admin:** `UME_OIDC_AUTHORITY` (or `UME_RAG_OIDC_AUTHORITY` for another provider than the gateway's) and
+  `UME_RAG_OIDC_CLIENT_SECRET`; optionally `UME_RAG_OIDC_CLIENT_ID` (default `ume-rag-admin`) and the token's shape:
+  `UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`, `_EXTRA_SCOPE`, `_TENANT_ID` (Entra ID)
+  and `_REFUSE_GUESTS` (`true` or `false`). The secret and refusing guests reach rag-admin as files that
+  `rag-bootstrap` writes on every deploy (and removes when the variable is emptied).
+- **Open WebUI:** `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, and only to change the defaults
+  `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` and `UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME`.
+
+The stack's variables are readable by everyone who may edit the stack; the wizard keeps the secrets encrypted in the
+database instead.
+
+## Upgrade to the release with the setup wizard
+
+A stack that has its authority and `UME_RAG_OIDC_CLIENT_SECRET` in its variables keeps working and never sees the
+wizard: paste the new file and update the stack. Open WebUI's variables keep working too; they now feed rag-api and
+rag-admin. If you changed a token-shape variable (`UME_RAG_OIDC_ROLE_CLAIM` and the others), keep it: the stack file no
+longer sets their defaults, so only the variables you set are passed. To move to the wizard, and the secrets out of the
+stack's variables: the [upgrade guide](upgrade-guide.md#unreleased) has the steps.
 
 ## Upgrade from 0.5.x to 0.6.0
 
@@ -175,7 +232,7 @@ migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md
 
 **Before the update**
 
-1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 8.
+1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 10.
 2. **In the gateway's admin**, give `rag-api`'s and `rag-admin`'s credential keys the residencies **`OnPrem` and `Eu`
    only** (the worker's already are). From 0.6.0 each service's ceiling is its key's residencies; a key that allows
    every residency would let a public assistant answer at `External`.
@@ -229,7 +286,7 @@ and rag-admin stop before the migration. Plan a short window. The gateway's own 
 rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgrade-guide.md#050).
 
 1. **Back up** both databases (`pg_dump` from `postgres` and `rag-postgres`) and the three Ume.Rag files of *First
-   deploy* step 8.
+   deploy* step 10.
 2. **Stop** `rag-api` and `rag-admin` (*Containers*, select, *Stop*).
 3. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
    - remove the per-level keys `UME_RAG_*GATEWAY_KEY_<level>` and the Data API's `UME_RAG_ORG_SYNC_KEY` and
@@ -244,10 +301,10 @@ rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgr
    `GatewayModelLimitsSource`, `DailyUsage`, `ObjectGatewayKeys`, `DailyTotalsWithoutCost`, `ContentRetentionStep`) and
    the grants, then `rag-api` and `rag-admin` start on the new
    schema. `rag-bootstrap` deletes the old per-level key files and the Data API key file and logs it.
-5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 4–5; update the stack
+5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 6–7; update the stack
    (`0.5.0`'s images: then restart `rag-api`, `rag-admin` and `rag-worker`). Until then their model calls are refused.
 6. **Revoke** the old per-level keys and the Data API key in the gateway's admin.
-7. **Check** as in *First deploy* step 6, then give each existing assistant and knowledge base one of its department's
+7. **Check** as in *First deploy* step 8, then give each existing assistant and knowledge base one of its department's
    assigned keys (they have none after the upgrade, and a published assistant can't be republished without one).
 8. Optional, once: files uploaded before `UploadScannedAt` have no scan date though they were scanned; set it with
    `UPDATE content."Uploads" SET "ScannedAt" = "UploadedAt" WHERE "ScannedAt" IS NULL AND "State" IN ('clean',
@@ -258,12 +315,30 @@ on they are recorded per model call.
 
 ## Opening the setup wizard again
 
-From the release that has the setup wizard; nothing in today's steps uses it. To change sign-in after setup, set
-`UME_RAG_SETUP_REOPEN` to a new value (for example today's date) and update the stack. rag-admin opens the wizard once
-and prints a new setup code in its log (*Containers → rag-admin → Logs*), valid for one hour. Before restoring a
-database, remove the variable first, or the restored database opens the wizard again. The code is derived from
-`rag-secrets/admin/Setup__Secret`, which `rag-bootstrap` generates once; it needs no backup (a new one only changes
-future codes).
+After setup, the sign-in provider, the client and its secret change only in the wizard, and only after a re-open:
+never from an admin session. Re-open it for a client secret that is about to expire, a new provider or client, or a
+sign-in that broke.
+
+1. Set `UME_RAG_SETUP_REOPEN` to a new value (for example today's date) and update the stack.
+2. rag-admin opens the wizard once, for one hour, and prints a new setup code in its log (*Containers → rag-admin →
+   Logs*). The current sign-in keeps working until you finish.
+3. Open `https://rag-admin.<domain>/setup`, enter the code, change what you need (a stored secret is never shown: type
+   the new one, and its expiry date), test the sign-in and finish.
+
+The value is used once: a restart doesn't open the wizard again, and an abandoned re-open ends after the hour. The next
+re-open needs another new value. Values the stack sets stay locked; to change one, change the variable.
+
+**A client secret that expires:** enter its expiry date in the wizard; Home reminds platform admins from 30 days
+before it. Create the new secret at the provider before
+the old one expires, then re-open and enter it.
+
+**Before restoring a database,** remove `UME_RAG_SETUP_REOPEN` (or keep its value unchanged afterwards): a restored
+database may have consumed an older value, and the wizard would open again for an hour. The client secrets the wizard
+stored need the same `rag-certs/data-protection.pfx` as the database; with another certificate they can't be read
+and sign-in fails until you re-open and type them again.
+
+The code is derived from `rag-secrets/admin/Setup__Secret`, which `rag-bootstrap` generates once; it needs no backup (a
+new one only changes future codes).
 
 ## When something fails
 
@@ -277,3 +352,12 @@ future codes).
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |
 | `rag-openwebui` restarts | its log: the wrapper's two files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
 | Open WebUI lists no models | *Apps and keys*: the Open WebUI app managed by the deployment offers assistants, and they are published; `rag-migrate`'s log names the client |
+| No setup code in rag-admin's log | Setup is done already (sign in; to change sign-in, re-open). Or the stack declares an authority and `UME_RAG_OIDC_CLIENT_SECRET` (the log says *The deployment declares the sign-in*), or a placeholder such as `CHANGE` is left in that variable (`rag-bootstrap`'s checklist names it). Or the log says *the setup secret (Setup__Secret …) is missing*: update the stack, so `rag-bootstrap` writes it, then restart rag-admin. *The settings row is missing*: `rag-migrate` didn't complete (its log) |
+| The wizard says *Too many attempts* | More than 20 codes a minute reached rag-admin. Wait the seconds it says and paste the code again, exactly. If it wasn't you, someone is guessing: security event 6009 has the address ([security-events.md](security-events.md)) |
+| *The setup window has ended* | The hour is over. Setup never finished: restart rag-admin for a new code. After a finished setup: a new `UME_RAG_SETUP_REOPEN` value |
+| The test sign-in fails: the provider can't be reached, or its certificate isn't trusted | rag-admin itself fetches the provider's discovery document: the address (the issuer, `https`), DNS and firewalls from the VM, and that rag-admin trusts the provider's certificate |
+| The provider's own page says the redirect URI is invalid | Register the wizard's redirect URI (step *Addresses*) on the client exactly, with the host name you opened the wizard at |
+| The test sign-in fails at the token (*The provider refused rag-admin’s sign-in request*) | A wrong client secret or client ID, or a public client tested with a secret (leave the field empty) |
+| The test passed, but *Finish* stays off: *not a platform admin* | Give the person the role `rag-platform-admin` at the provider, or name one of their groups in `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` and update the stack; then test again |
+| After setup the sign-in page says sign-in is not set up | No usable authority, or a stored secret that can't be read (a different `data-protection.pfx`): re-open and enter the values again, or declare them in the stack (*Declaring sign-in instead*) and update it |
+| Open WebUI shows no sign-in button | `rag-openwebui`'s log: *rag-api did not answer within 60 s* (rag-api down or unreachable from the wrapper: it asks again every minute and restarts Open WebUI once it answers), or *no sign-in settings yet* (no provider: rag-admin has no authority yet) |

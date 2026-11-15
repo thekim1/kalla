@@ -311,6 +311,11 @@ Proposed alerts (§7.4 rule 5):
 `deploy/restore-pitr.sh` restores ragdb **in place** to a moment you choose. It replaces the current database:
 everything archived before it starts stays restorable, nothing written after its first step is.
 
+**First, the setup wizard's re-open value:** empty `UME_RAG_SETUP_REOPEN` in `deploy/.env` (Kubernetes: the
+`Setup__Reopen` literal; Portainer: the variable). The restored database may have consumed an older value, and rag-admin
+would open the wizard again for an hour. The client secrets the wizard stored need the same `data-protection.pfx`
+(*Sign-in and the setup wizard*).
+
 1. **Choose the time.** Find the last good moment (an incident report, the audit log). Check that it lies inside the
    archived range with `dc exec -T postgres pgbackrest --stanza=ragdb info`. Write it with a UTC offset; without one the
    host's time zone applies. Transactions committed up to and including that time are kept.
@@ -523,7 +528,13 @@ that can read packages.
 | `UME_DOMAIN`, `UME_RAG_API_PUBLIC_URL` | required (or `UME_RAG_API_HOST` instead of the domain): the host names default to `rag.<domain>` (rag-api), `rag-admin.<domain>` and `chat.<domain>` (Open WebUI); `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and `UME_RAG_OPENWEBUI_HOST` override one each. rag-api's public URL is `https://<host>` unless `UME_RAG_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
 | `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says; without one that service's model calls are refused, so deploy once, issue the keys, add them and update the stack |
 | `COMPOSE_PROFILES` | `clamav`: `rag-clamav`, the malware scan; `clamav,render` adds the renderer; `openwebui` the chat. `rag-bootstrap` sets the worker's malware scan from it: on with `clamav`, else off, which stores files without a scan, marked so ([production-setup.md](production-setup.md), *Malware scan*) |
-| `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | RAG admin's own OIDC client `ume-rag-admin` at the gateway's `UME_OIDC_AUTHORITY`, redirect URIs `https://<admin host>:9543/signin-oidc` and `/signout-callback-oidc`; the group variables are optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
+| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: this is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
+
+Sign-in is no variable: after the first start a platform admin sets it in rag-admin's setup wizard
+(`https://<admin host>/setup`, with the setup code from rag-admin's log; *Sign-in and the setup wizard* below). RAG
+admin's client `ume-rag-admin` uses the gateway's `UME_OIDC_AUTHORITY`. A stack may declare sign-in instead with
+`UME_RAG_OIDC_CLIENT_SECRET` (and the other `UME_RAG_OIDC_*`): then the wizard never opens ([portainer.md](portainer.md),
+*Declaring sign-in instead*).
 
 The optional ones (ports, a separate admin host, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image overrides
 `RAG_*_IMAGE`) are listed at the top of the file. The embedding profile is no variable: a platform admin creates it in
@@ -539,8 +550,8 @@ key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are 
 certificates are re-issued when they expire within 30 days or the host names change (its checklist then says which
 services to restart, and names every certificate within 60 days of expiry:
 [portainer.md](portainer.md#internal-certificates)). The secrets that follow a variable (the gateway credential keys,
-the OIDC client secret) are written again on every deploy, and removed when the variable is emptied; they live in the
-stack's environment, so restrict who can view it. The services read them at start: after changing one, restart the
+a declared OIDC client secret) are written again on every deploy, and removed when the variable is emptied; they live in
+the stack's environment, so restrict who can view it. The services read them at start: after changing one, restart the
 service that uses it.
 
 **Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
@@ -569,7 +580,7 @@ the allow-lists are host names, resolved when it runs.
 | Network | May reach |
 |---|---|
 | `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
-| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
+| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: empty, the setup wizard can't reach any provider), the Open WebUI host, the OTLP endpoint, DNS |
 | `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
 | `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused with `--clamav off` |
 | `backup` (postgres) | the S3 endpoint, DNS; nothing with a mounted share |
@@ -728,6 +739,46 @@ badge (the gateway still refuses the calls).
 | `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` takes the URL's host and port when `rag-firewall.service` runs), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the URL in `deploy/.env`, `sudo systemctl start rag-firewall.service`, and `--ca-file` for the Admin API's CA |
 | `failed` | Any other answer (a `5xx`, a `400`) | rag-admin's log has the status; ask the gateway team |
 
+## Sign-in and the setup wizard
+
+rag-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
+first setup: [production-setup.md](production-setup.md), *3. Sign-in*, or [portainer.md](portainer.md), *First deploy*
+step 4). After setup they change only in the wizard after a re-open, never from an admin session. A value the
+deployment sets (`deploy/.env`, the secret files, the Portainer variables, the Kubernetes literals) wins and is locked
+there.
+
+**Re-open:** give `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and
+`dc up -d` (Portainer: update the stack; Kubernetes: `deploy.sh`). rag-admin opens the wizard once, for one hour, and
+prints a new setup code: `dc logs rag-admin | grep 'Setup code'` (Kubernetes: `kubectl logs deploy/rag-admin`, either
+pod). The current sign-in keeps working until a platform admin's test sign-in passes and they finish. A restart doesn't
+open it again; the next re-open needs another new value.
+
+- **Rotating a client secret:** create the new secret at the provider (keep the old one valid), re-open, type the new
+  secret and its expiry date, test and finish, then remove the old one at the provider. Home reminds platform admins from 30 days
+  before the expiry date typed there. A declared secret is rotated where it is declared instead:
+  `init-deployment.sh --oidc-client-secret-file` (Kubernetes: then `create-secrets.sh`), or `UME_RAG_OIDC_CLIENT_SECRET`
+  and update the stack (Portainer); rag-admin follows the file at the next sign-in.
+- **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate rag-admin no longer trusts): re-open
+  and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`
+  and `--oidc-client-secret-file` with a re-run of `init-deployment.sh`; Portainer: the variables) and restart
+  rag-admin: a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
+  stored secret rag-admin can't read.
+- **Restoring a database:** empty the re-open value first (*Restore*, above), or the restored database may open the
+  wizard again for an hour. The secrets the wizard stored are encrypted with Data Protection: they can be read only
+  with the same `data-protection.pfx`. With another certificate sign-in fails until you re-open and type them again.
+- **Setup never finished and the hour ran out:** `dc restart rag-admin` opens it again with a new code.
+
+**Security events** ([security-events.md](security-events.md) has the fields and the alerts):
+
+| Event | Means |
+|---|---|
+| 6008 `rag.admin.setup.opened` | Setup opened at rag-admin's start: `first_run` or `reopen`. Expect one per re-open you asked for |
+| 6009 `rag.admin.setup.code_refused` | Wrong setup codes (sampled, with a count); bursts mean someone is guessing |
+| 6010 `rag.admin.setup.session` | Someone entered the right code and got a setup session |
+| 6011 `rag.admin.setup.test` | A test finished: rag-admin's test sign-in or Open WebUI's client check, passed or the step that failed |
+| 6012 `rag.admin.setup.completed` | Sign-in values saved and setup closed; the audit entry names the tested person |
+| 6013 `rag.admin.setup.openwebui_saved` | Open WebUI's sign-in values saved in setup mode (setup stays open) |
+
 ## Incidents
 
 - **Security events** go to the SIEM under `Ume.Rag.Security`; what each one means and which alerts to set up is in
@@ -788,6 +839,9 @@ badge (the gateway still refuses the calls).
   `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, and restart that service
   ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway
   `401` answers in one service's log mean its key expired, was revoked or the rotation's grace period ended first.
+- **The OIDC client secrets** of rag-admin and Open WebUI: rotated through a re-open of the setup wizard, or where they
+  are declared (*Sign-in and the setup wizard*). `secrets/admin/Setup__Secret` only derives setup codes: it needs no
+  backup or rotation.
 - **The feedback service account's Open WebUI key** (`secrets/openwebui-feedback/OpenWebUi__AdminApiKey`; Portainer:
   `rag-secrets/openwebui-feedback/`): delete the file and run Open WebUI's `up` again (Portainer: update the stack);
   `open-webui-setup` mints a new one, the old one stops working at once, and rag-api reads the new one without a restart.

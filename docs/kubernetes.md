@@ -34,13 +34,16 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    you (the containers read them from Kubernetes secrets, not from disk):
 
    ```bash
-   ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
+   ./deploy/init-deployment.sh --no-chown --yes \
        --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
        --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
        --gateway-credential-key-file worker=rag-worker.key \
-       --oidc-client-secret-file ume-rag-admin.secret --backup-target s3://s3.example.se/ume-rag \
-       --backup-s3-credentials-file s3.cred --allow-file-keys
+       --backup-target s3://s3.example.se/ume-rag --backup-s3-credentials-file s3.cred --allow-file-keys
    ```
+
+   Sign-in is set in the setup wizard after the first deploy (*Sign-in*, below). To declare it instead, add
+   `--oidc-client-secret-file ume-rag-admin.secret` here (and `Oidc__Authority` in the overlay); the `--oidc-*`
+   options are never prompted.
 
    It creates an internal CA, a certificate per service, database passwords, the key pepper, the blob master key, the
    Data Protection certificate, the pgBackRest repository settings and connection strings to the host `postgres` (the
@@ -69,9 +72,11 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    - `images`: the release's images (`ghcr.io/thekim1/ume-rag/<service>`), pinned by digest from the release notes.
      A release bundle already pins the base and components. The packages may be private: give the namespace an
      `imagePullSecret` for ghcr.io, or mirror them.
-   - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl` (and the same address as rag-admin's `Admin__ApiPublicUrl`),
-     `Oidc__Authority` and, only for an identity provider without roles in its tokens, the break-glass
-     `Oidc__RoleGroups__rag-platform-admin`; the other roles' groups are set in RAG's admin (*Settings → Role groups*).
+   - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl` (and the same address as rag-admin's `Admin__ApiPublicUrl`) and,
+     only for an identity provider without roles in its tokens, the break-glass
+     `Oidc__RoleGroups__rag-platform-admin` (a `rag-` group name or an Entra object id); the other roles' groups are set
+     in RAG's admin (*Settings → Role groups*). The other `Oidc__*` literals stay commented out unless you declare
+     sign-in (*Sign-in*, below).
    - The blob volume's `storageClassName` (ReadWriteMany). With ReadWriteOnce, every pod that mounts it (rag-api,
      rag-admin, rag-worker) must run on one node.
    - The Ingress host names and TLS secrets. The pods speak HTTPS, so the controller must connect with TLS: the example
@@ -96,18 +101,45 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    kubectl -n ume-rag exec statefulset/postgres -- pgbackrest --stanza=ragdb stanza-create
    ```
 
-6. **Register** `https://<admin host>/signin-oidc` and `/signout-callback-oidc` on the `ume-rag-admin` client at your
-   identity provider, sign in, and list the Ingress controller's pod network under the trusted proxies (admin UI,
-   Settings, *Network*), so rag-api reads the client address from `X-Forwarded-For`.
+6. **Set up sign-in** (*Sign-in*, below): register `https://<admin host>/signin-oidc` and `/signout-callback-oidc`
+   on the `ume-rag-admin` client at your identity provider, finish the setup wizard (or sign in, when sign-in is
+   declared), and list the Ingress controller's pod network under the trusted proxies (admin UI, Settings, *Network*),
+   so rag-api reads the client address from `X-Forwarded-For`.
 
 Settings go into the overlay as ConfigMap literals named the way the apps read them (`Section__Key`), for example
 `OTEL_EXPORTER_OTLP_ENDPOINT` or `Crawl__AllowedPrivateRanges`. Secrets stay in the secret files.
 
-**Opening the setup wizard again** (from the release that has the wizard): set `Setup__Reopen` in the overlay's
-`ume-rag-admin-config` to a new value (for example today's date) and deploy. rag-admin opens the wizard once and prints
-a new setup code, valid for one hour, in `kubectl -n ume-rag logs deploy/rag-admin` (either pod). Before restoring a
-database, remove the literal first. The code's key is `Setup__Secret` in `ume-rag-admin-secrets`, generated once by
-`init-deployment.sh`; it needs no backup.
+## Sign-in
+
+rag-admin's sign-in is set in its setup wizard (identity design §19). The base sets no `Oidc__*` value.
+
+1. After the first `deploy.sh`, read the setup code: `kubectl -n ume-rag logs deploy/rag-admin | grep 'Setup code'`.
+   Both pods print the same code; `deploy.sh` reminds you while setup is open. The code is valid for one hour; while
+   setup was never finished, `kubectl -n ume-rag rollout restart deployment/rag-admin` prints a new one. Treat it like a
+   password: whoever holds it chooses the sign-in provider while setup is open.
+2. Open `https://<admin host>/setup` through the Ingress (the redirect URIs are built from the address you open it at)
+   and enter the code.
+3. The wizard shows the redirect URIs, takes the provider address, the client ID (default `ume-rag-admin`), the client
+   secret and its optional expiry date, and the claim names under *Advanced* (presets for Keycloak and Entra ID).
+   **Test sign-in** opens the provider in a new window; sign in as yourself. *Finish* is offered only when the test
+   passed for a platform admin (the role `rag-platform-admin`, or a group in `Oidc__RoleGroups__rag-platform-admin`).
+
+The base's NetworkPolicies let rag-admin reach any address on 443, so the wizard's test reaches the provider; one on
+another port needs its own egress rule (*Network policies*).
+
+**Declaring sign-in instead:** each `Oidc__*` literal the overlay sets (`Oidc__Authority`, `Oidc__ClientId`,
+`Oidc__TenantId`, `Oidc__RefuseGuests`, the claim names) is the deployment's value and is locked in the wizard; the
+example overlay shows them commented out. With `Oidc__Authority` and the client secret (`init-deployment.sh
+--oidc-client-secret-file`, then `create-secrets.sh`, which puts `Oidc__ClientSecret` in `ume-rag-admin-secrets`) the
+wizard never opens.
+
+**Opening the setup wizard again** (a client secret about to expire, a new provider, a broken sign-in): set
+`Setup__Reopen` in the overlay's `ume-rag-admin-config` to a new value (for example today's date) and deploy. rag-admin
+opens the wizard once and prints a new setup code, valid for one hour, in `kubectl -n ume-rag logs deploy/rag-admin`
+(either pod); the current sign-in keeps working until you finish. Before restoring a database, remove the literal
+first. The code's key is `Setup__Secret` in `ume-rag-admin-secrets`, generated once by `init-deployment.sh`; it needs
+no backup. The client secrets the wizard stores need the same `data-protection.pfx` (runbook, *Sign-in and the setup
+wizard*). Kubernetes has no Open WebUI.
 
 ## Updates without downtime
 

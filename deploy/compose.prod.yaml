@@ -213,20 +213,23 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/admin.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
-      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:?Set the HTTPS OIDC authority in deploy/.env}
-      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
-      # Claims and role groups as the gateway's compose.prod.yaml passes them (identity design §1.5 env table, #468): the
-      # same identity provider and the same group names can drive both products. Empty role groups grant nothing.
-      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-roles}
-      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
-      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-teamCodes}
-      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-groups}
-      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-email}
+      # Sign-in (identity design §19): each value set in deploy/.env is the deployment's and locks its field in the setup
+      # wizard; an empty one is unset, so the wizard's value applies, else the code's default (client ume-rag-admin, the
+      # gateway's claim names roles, departmentCodes, teamCodes and groups, as its compose.prod.yaml has them, #468).
+      # With an authority and the secret file Oidc__ClientSecret the wizard never opens. Refusing guests is the secret file
+      # Oidc__RefuseGuests (init-deployment.sh --oidc-refuse-guests), since an empty boolean here would stop rag-admin.
+      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-}
+      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-}
+      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-}
+      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-}
+      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-}
+      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-}
+      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-}
       # The break-glass for the first platform admin (Decisions "Role groups as a setting"); every other role group is
-      # Settings.Identity.RoleGroups in the admin UI (Settings, Role groups), merged with this at each sign-in.
+      # Settings.Identity.RoleGroups in the admin UI (Settings, Role groups), merged with this at each sign-in. Empty role
+      # groups grant nothing.
       Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
       Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
-      Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in secrets/admin.
       Setup__Reopen: ${UME_RAG_SETUP_REOPEN:-}
       # Open WebUI (compose.openwebui.yaml): whether this deployment runs it and its address (the setup wizard's Open WebUI

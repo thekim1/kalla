@@ -2,7 +2,7 @@
 # Creates (or updates) the Kubernetes secrets from the certificates and secrets that deploy/init-deployment.sh
 # generated, so Kubernetes and Compose installations are set up the same way (docs/kubernetes.md).
 #
-#   ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
+#   ./deploy/init-deployment.sh --no-chown --yes \
 #       --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
 #       --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
 #       --gateway-credential-key-file worker=rag-worker.key \
@@ -17,7 +17,8 @@
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
 # Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb, the gateway
-# credential key Gateway__Key of api, admin and worker, and rag-admin's setup secret Setup__Secret) and
+# credential key Gateway__Key of api, admin and worker, rag-admin's setup secret Setup__Secret and, when sign-in is
+# declared instead of set in the setup wizard, its client secret Oidc__ClientSecret) and
 # ume-rag-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for api, admin, worker and
 # migrations, ume-rag-parser-certs, and ume-rag-blob-key (the blob master key). The connection strings point at the
 # host "postgres"; with your own database, edit deploy/secrets/<service>/ConnectionStrings__ragdb first.
@@ -31,7 +32,7 @@ while [ $# -gt 0 ]; do
     --renderer) renderer=1; shift;;
     --certs-dir) certs="$2"; shift 2;;
     --secrets-dir) secrets="$2"; shift 2;;
-    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done
@@ -72,3 +73,7 @@ if [ "$datastores" = 1 ]; then
 fi
 echo "Back up $secrets/.pepper, $secrets/keys/rag-blob-internal and $certs/data-protection.pfx outside the cluster:"
 echo "without them a restored database is unusable (runbook, Key escrow)."
+if [ ! -s "$secrets/admin/Oidc__ClientSecret" ]; then
+  echo "Sign-in: no client secret here, so after deploy.sh set it up in the setup wizard: the setup code is in"
+  echo "kubectl -n $ns logs deploy/rag-admin (either pod), the wizard at https://<admin host>/setup (docs/kubernetes.md)."
+fi

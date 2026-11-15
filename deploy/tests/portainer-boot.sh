@@ -15,6 +15,14 @@
 #   - rag-api's public URL, which no variable sets, is https://rag.<UME_DOMAIN> for citation links and for rag-admin;
 #     Open WebUI's WEBUI_URL is https://chat.<UME_DOMAIN>
 #   - rag-admin: / = 200 with the admin UI's index.html
+#   - rag-admin's setup wizard (identity design §19): the stack sets no Oidc value but the gateway's authority, as a
+#     deployer leaves it, so setup is open. rag-bootstrap's last lines point at https://rag-admin.boot.test/setup;
+#     rag-admin's output has the setup code; through rag-proxy, /bff/user says signIn.configured (an https authority
+#     and a public client are a usable sign-in) and setup.open; POST /bff/setup/session with the BFF's antiforgery
+#     refuses a wrong code (400 setup_code_invalid) and gives a setup session for the right one; GET /bff/setup/state
+#     answers first_run, the redirect URI for rag-admin.boot.test, the authority from the deployment, every other
+#     sign-in value from the code's defaults (none locked by the stack) and Open WebUI's deployment secret. The code is
+#     never printed: masked in GitHub Actions and cut from the logs a failure prints
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
 #   - rag-clamav runs and the worker's secret file ClamAv__Mode is on; rag-api's OpenWebUi__BaseUrl is rag-openwebui
@@ -51,7 +59,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stack=""; version=""; example="$here/../portainer/stack.env.example"; offset=10000; project=ume-rag-portainer-boot
 wait_timeout=900; keep=0; files=()
-usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version="$2"; shift 2;;
@@ -94,7 +102,6 @@ UME_GATEWAY_HOST=llm.boot.test
 UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
 UME_ADMIN_HOST=llm-admin.boot.test
 UME_DOMAIN=boot.test
-UME_RAG_OIDC_CLIENT_SECRET=boot-test-admin-client-secret
 UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=boot-test-openwebui-client-secret
 UME_GATEWAY_PORT=$gateway_port
 UME_ADMIN_PORT=$gateway_admin_port
@@ -116,7 +123,8 @@ ok() { echo "ok: $*"; }
 fail() {
   echo "error: $*" >&2
   dc ps -a >&2 || true
-  dc logs --no-color --tail 60 >&2 || true
+  # rag-admin's setup code is worth platform admin while setup is open: cut from the logs printed here.
+  dc logs --no-color --tail 60 2>&1 | sed -E 's/(Setup code: )[0-9A-Za-z-]+/\1(hidden)/' >&2 || true
   exit 1
 }
 cleanup() {
@@ -159,6 +167,13 @@ dc up -d --no-deps --no-recreate --wait --wait-timeout "$wait_timeout" "${long_r
   || fail "the long-running services did not become healthy within ${wait_timeout}s"
 ok "every long-running service up and every one with a health check healthy ($((SECONDS - start)) s)"
 dc ps -a --format 'table {{.Service}}\t{{.Status}}' | sed 's/^/  /'
+# setup_code: the last setup code on rag-admin's output (empty while there is none). In GitHub Actions it is masked as
+# soon as it is read, so no later step can show it.
+setup_code() {
+  dc logs --no-color --no-log-prefix rag-admin 2>/dev/null | sed -n 's/^rag-admin: setup mode is open until .*\. Setup code: //p' | tail -n 1
+}
+admin_code="$(setup_code)"
+if [ -n "$admin_code" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::add-mask::$admin_code"; fi
 
 echo "== containers"
 # Every service of the stack with these profiles has its container (the gateway's own profiles stay off).
@@ -188,6 +203,10 @@ grep -q '^rag-bootstrap: certificates and secrets ready$' <<< "$log" || fail "ra
 grep -q '^rag-bootstrap: every setting it checks is in place$' <<< "$log" \
   || { sed -n '/^rag-bootstrap: still to do/,$p' <<< "$log" | sed 's/^/  /'; fail "rag-bootstrap's checklist is not empty"; }
 ok "rag-bootstrap's checklist is empty: the gateway credential keys came from the manifest (M-17 C7), nothing pasted"
+# No client secret in the stack: rag-bootstrap can't see the database, so it points at the wizard on every run.
+grep -q '^rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin\.boot\.test/setup, ' <<< "$log" \
+  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.boot.test/setup"
+ok "rag-bootstrap points at the setup wizard (https://rag-admin.boot.test/setup); no client secret was typed into the stack"
 
 echo "== the gateway credential keys from the manifest (M-17 C7)"
 # The gateway's migrations created the integration Ume.Rag from UME_INTEGRATION_MANIFEST and wrote each key to the
@@ -302,6 +321,56 @@ wait_for 30 reached rag.boot.test /health/ready \
   || fail "rag-proxy: rag-api recreated at $new_ip (was $old_ip), https://rag.boot.test/health/ready answered $(through rag.boot.test /health/ready)"
 ok "rag-proxy follows a recreated rag-api to its new address ($old_ip → $new_ip) without a restart"
 
+echo "== rag-admin's setup wizard (identity design §19)"
+# The stack declares only the gateway's authority (UME_OIDC_AUTHORITY), so setup is open on this first run and rag-admin
+# wrote the setup code to its standard output. It is read from the log and never printed.
+has_setup_code() { [ -n "$(setup_code)" ]; }
+wait_for 60 has_setup_code || true
+admin_code="$(setup_code)"
+[ -n "$admin_code" ] || fail "rag-admin's output has no 'setup mode is open until … Setup code:' line"
+if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::add-mask::$admin_code"; fi
+grep -qE '^[0-9A-Z]{5}(-[0-9A-Z]{5}){3}-[0-9A-Z]{6}$' <<< "$admin_code" || fail "rag-admin's setup code is not in the form XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX"
+ok "rag-admin's output says setup mode is open and has a setup code (not shown)"
+# Through rag-proxy, as a browser reaches it, with a cookie jar and the admin UI's antiforgery headers
+# (src/admin-ui/src/api/client.ts): X-Requested-With and the RAG-XSRF-TOKEN cookie as X-XSRF-TOKEN.
+jar="$work/setup-cookies"; : > "$jar"
+setup_url="https://rag-admin.boot.test:$proxy_port"
+admin_ui() { curl -sS --max-time 15 --cacert "$work/proxy-certs/tls.crt" --resolve "rag-admin.boot.test:$proxy_port:127.0.0.1" \
+  -c "$jar" -b "$jar" "$@"; }
+user="$(admin_ui -H 'Accept: application/json' "$setup_url/bff/user")" || fail "rag-admin's /bff/user did not answer through rag-proxy"
+jq -e '.isAuthenticated == false and .signIn.configured == true and .setup.open == true' >/dev/null <<< "$user" \
+  || fail "rag-admin's /bff/user is not signed out, sign-in configured and setup open: $(jq -c '{isAuthenticated, signIn, setup}' <<< "$user")"
+ok "/bff/user: signIn.configured (the gateway's https authority, a public client until the wizard stores a secret) and setup.open"
+xsrf="$(awk '$6 == "RAG-XSRF-TOKEN" { print $7 }' "$jar")"
+[ -n "$xsrf" ] || fail "rag-admin's /bff/user set no RAG-XSRF-TOKEN cookie"
+# post PATH: a JSON body from standard input, as the admin UI posts; prints the body, then the status on a line of its own.
+post() { admin_ui -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' -H 'X-Requested-With: XMLHttpRequest' \
+  -H "X-XSRF-TOKEN: $xsrf" --data-binary @- -w '\n%{http_code}' "$setup_url$1"; }
+answer="$(printf '{"code":"%s"}' 00000-00000-00000-00000-000000 | post /bff/setup/session)"
+status="$(tail -n 1 <<< "$answer")"; body="$(sed '$d' <<< "$answer")"
+[ "$status" = 400 ] && [ "$(jq -r '.code // empty' <<< "$body")" = setup_code_invalid ] \
+  || fail "a wrong setup code answered $status $(jq -c '{code, detail}' <<< "$body" 2>/dev/null), expected 400 setup_code_invalid"
+ok "POST /bff/setup/session refuses a wrong code (400 setup_code_invalid)"
+answer="$(printf '{"code":"%s"}' "$admin_code" | post /bff/setup/session)"
+status="$(tail -n 1 <<< "$answer")"
+[ "$status" = 200 ] || fail "the setup code from rag-admin's output answered $status on POST /bff/setup/session, expected 200"
+grep -q $'\t__Secure-ume-rag-setup\t' "$jar" || fail "POST /bff/setup/session gave no setup session cookie"
+ok "POST /bff/setup/session takes the code from rag-admin's output: 200 and a setup session"
+state="$(admin_ui -H 'Accept: application/json' -w '\n%{http_code}' "$setup_url/bff/setup/state")"
+status="$(tail -n 1 <<< "$state")"; state="$(sed '$d' <<< "$state")"
+[ "$status" = 200 ] || fail "GET /bff/setup/state answered $status with the setup session, expected 200"
+jq -e '.kind == "first_run" and .redirectUris.signIn == "https://rag-admin.boot.test/signin-oidc"
+    and .signIn.authority.source == "deployment" and .signIn.authority.value == "https://keycloak.boot.test/realms/ume"
+    and .signIn.clientSecret.set == false' >/dev/null <<< "$state" \
+  || fail "GET /bff/setup/state: $(jq -c '{kind, redirectUris, authority: .signIn.authority, clientSecret: .signIn.clientSecret}' <<< "$state")"
+# Nothing else is locked: the stack passes the token's shape only when a variable sets it.
+locked="$(jq -r '.signIn | to_entries[] | select(.key != "authority" and (.value | type) == "object" and .value.source != "default") | .key' <<< "$state")"
+[ -z "$locked" ] || fail "the stack sets sign-in values a deployer didn't: $(tr '\n' ' ' <<< "$locked")"
+jq -e '.openWebUi.enabled == true and .openWebUi.signIn.clientSecret.source == "deployment"
+    and .openWebUi.redirectUri == "https://chat.boot.test/oauth/oidc/login/callback"' >/dev/null <<< "$state" \
+  || fail "GET /bff/setup/state's Open WebUI block: $(jq -c '.openWebUi | {enabled, redirectUri, clientSecret: .signIn.clientSecret}' <<< "$state")"
+ok "GET /bff/setup/state: first_run, redirect URI https://rag-admin.boot.test/signin-oidc, the authority from the deployment, every other value the code's default; Open WebUI's secret from the deployment"
+
 echo "== Open WebUI"
 owui() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$openwebui_port/health")" = 200 ]; }
 wait_for "$wait_timeout" owui || fail "Open WebUI's /health did not answer 200 within ${wait_timeout}s"
@@ -312,7 +381,8 @@ code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Conten
 [ "$code" = 403 ] || fail "Open WebUI's password sign-in answered $code, expected 403 (off)"
 ok "Open WebUI's password sign-in is off (403)"
 # Its sign-in settings (identity design §19): this test's UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET is a deployment value of
-# rag-api, with the provider derived from rag-admin's authority, so the start wrapper starts Open WebUI with OIDC sign-in.
+# rag-api, with the provider derived from rag-admin's authority, so the start wrapper starts Open WebUI with OIDC sign-in
+# (the declared path; rag-admin's own sign-in takes the wizard's path above, in the same boot).
 # Nothing of the route's answer is printed.
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/internal/openwebui/sign-in")"
 [ "$status" = 401 ] || fail "rag-api's Open WebUI sign-in route answered $status without a key, expected 401"

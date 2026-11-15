@@ -24,6 +24,16 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   change. `UME_RAG_OPENWEBUI_OIDC_*` are now deployment values of rag-api and rag-admin; Compose's
   `--openwebui-oidc-client-secret-file` writes their secret files instead of `openwebui.env`. The button's label is also
   a setting (`PUT /api/settings/openwebui`). The wizard's Open WebUI step in the admin UI comes in its own change.
+- **The deploy files and the operators' docs follow the setup wizard** (setup wizard S6): the Portainer template,
+  `compose.prod.yaml` and the Kubernetes base pass no `Oidc__*` default any more (a variable set is the deployment's
+  value; refusing guests reaches rag-admin as the file `Oidc__RefuseGuests`, from `rag-bootstrap` or
+  `init-deployment.sh --oidc-refuse-guests`). `stack.env.example` has five CHANGE values and no secret; the sign-in
+  variables are commented-out "declared instead" entries. `init-deployment.sh`'s `--oidc-*` options are optional and
+  never prompted (a re-run keeps the authority and client id from `deploy/.env`), and its closing notes,
+  `rag-bootstrap`'s last lines, `create-secrets.sh` and `deploy.sh` point at the wizard and the setup code. The release
+  boot test starts rag-admin without a client secret and checks the wizard up to a setup session. `docs/portainer.md`,
+  `production-setup.md`, `kubernetes.md`, the runbook and the upgrade guide describe the wizard, declaring sign-in
+  instead, re-opening, and the restore and lock-out cases.
 
 ## 0.6.0 (2026-11-15)
 
