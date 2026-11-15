@@ -74,13 +74,16 @@ jobs:
         name: Anything besides design documents changed
         env:
           BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
           # The admin UI job has nothing to build in a tree without src/admin-ui (main before stream B's #45), even when
           # contracts/admin/ or this workflow changed.
           ui=false; [ -f src/admin-ui/package-lock.json ] && ui=true
+          # Everything for a tag (release.yml), a moved one too: its push's "before" is the old tag, which exists, and
+          # would otherwise filter the release down to what changed since the old tag (0.6.0's second tag run).
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
-            || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            || [ "$REF_TYPE" = tag ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }

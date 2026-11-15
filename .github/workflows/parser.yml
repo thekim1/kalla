@@ -38,10 +38,13 @@ jobs:
         name: The parser or its contract changed
         env:
           BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
+          # Everything for a tag (release.yml), a moved one too: its push's "before" is the old tag, which exists, and
+          # would otherwise filter the release down to what changed since the old tag (0.6.0's second tag run).
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
-            || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            || [ "$REF_TYPE" = tag ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             echo "parser=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # The parser, its contract, the parser contract tests (the files at the top of tests/Ume.Rag.ContractTests/,
