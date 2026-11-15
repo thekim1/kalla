@@ -395,6 +395,22 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         }
     }
 
+    /// <summary>
+    /// #703: an answer whose body is not JSON is fatal <c>embed.bad_vector</c>, and the call still counts with the gateway's
+    /// <c>x-ume-cost-usd</c> and no tokens, since the gateway charged it.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_whose_body_cannot_be_read_is_fatal_and_counts_its_gateway_cost_alone()
+    {
+        using var rig = Build(primary: new MalformedBodyHandler(gateway.Server.CreateHandler()), profiles: Pilot with { CanaryEmbedding = null });
+        var sink = TestUsage.Sink();
+
+        var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7(), sink), Ct));
+        error.Reason.ShouldBe("embed.bad_vector");
+        sink.Usage.PendingCostUsd.ShouldBe(MalformedBodyHandler.CostUsd);
+        rig.Cache.Rows.ShouldBeEmpty();
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Forbidden, "gateway.max_residency_not_met")]
     [InlineData(HttpStatusCode.BadRequest, "embed.input_rejected")]
@@ -486,6 +502,22 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         {
             var response = await base.SendAsync(request, cancellationToken);
             response.Headers.Remove(GatewayHeaders.CostUsd);
+            return response;
+        }
+    }
+
+    /// <summary>The gateway's answer, headers kept, with a body cut off mid-JSON and <c>x-ume-cost-usd</c> set to <see cref="CostUsd"/>.</summary>
+    private sealed class MalformedBodyHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        public const decimal CostUsd = 0.00042m;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            response.Content.Dispose();
+            response.Content = new StringContent("""{"data":[{"index":0,"embedding":[0.1,""", System.Text.Encoding.UTF8, "application/json");
+            response.Headers.Remove(GatewayHeaders.CostUsd);
+            response.Headers.Add(GatewayHeaders.CostUsd, CostUsd.ToString(System.Globalization.CultureInfo.InvariantCulture));
             return response;
         }
     }

@@ -84,38 +84,29 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
                 throw await MapAsync(response, cancellationToken);
             }
 
-            JsonDocument document;
+            GatewayEmbeddingResponse? body;
             try
             {
-                document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+                body = await response.Content.ReadFromJsonAsync<GatewayEmbeddingResponse>(Json, cancellationToken);
             }
             catch (JsonException)
             {
-                await call.Usage.RecordEmbeddingAsync(new GatewayCallUsage(call.Step, profile.GatewayModel, default(GatewayTokens), GatewayUsageReader.CostHeader(response)),
-                    cancellationToken);
+                await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, tokens: null), cancellationToken);
                 throw new StageFatalException(RunItemOutcome.Failed, "embed.bad_vector");
             }
 
-            using (document)
-            {
-                await call.Usage.RecordEmbeddingAsync(GatewayUsageReader.Read(response, document.RootElement, call.Step, profile.GatewayModel), cancellationToken);
-                EmbeddingResponse? body;
-                try
-                {
-                    body = document.RootElement.Deserialize<EmbeddingResponse>(Json);
-                }
-                catch (JsonException)
-                {
-                    throw new StageFatalException(RunItemOutcome.Failed, "embed.bad_vector");
-                }
-
-                return Check(body, inputs.Count, profile.Dimensions);
-            }
+            await call.Usage.RecordEmbeddingAsync(Usage(response, call, profile, body?.Usage is { } usage ? GatewayUsageReader.UsageTokens(usage) : null),
+                cancellationToken);
+            return Check(body, inputs.Count, profile.Dimensions);
         }
     }
 
+    /// <summary>The call's usage: <paramref name="tokens"/> (0 when the body reports none or could not be read) and the cost header.</summary>
+    private static GatewayCallUsage Usage(HttpResponseMessage response, EmbeddingCall call, EmbeddingProfileRecord profile, GatewayTokens? tokens) =>
+        new(call.Step, profile.GatewayModel, tokens ?? default, GatewayUsageReader.CostHeader(response));
+
     /// <summary>One vector per input, in input order, each <paramref name="dimensions"/> finite floats.</summary>
-    internal static IReadOnlyList<float[]> Check(EmbeddingResponse? body, int inputs, int dimensions)
+    internal static IReadOnlyList<float[]> Check(GatewayEmbeddingResponse? body, int inputs, int dimensions)
     {
         if (body?.Data is not { } data || data.Count != inputs)
         {
@@ -178,8 +169,4 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
     private sealed record EmbeddingRequest(
         string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
-
-    internal sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
-
-    internal sealed record EmbeddingItem(int Index, float[]? Embedding);
 }

@@ -249,7 +249,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             throw Unavailable("The gateway changed the query (x-ume-pii).");
         }
 
-        var body = await response.Content.ReadFromJsonAsync<EmbeddingResponse>(Json, cancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<GatewayEmbeddingResponse>(Json, cancellationToken);
         if (body?.Data is not [{ Embedding: { } vector }])
         {
             throw Unavailable("The gateway answered without exactly one embedding.");
@@ -341,10 +341,6 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     private sealed record EmbeddingRequest(
         string Model, string Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
-
-    private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data, JsonElement? Usage);
-
-    private sealed record EmbeddingItem(float[]? Embedding);
 
     [LoggerMessage(LogLevel.Error, "The gateway refused the query embedding of profile {Profile} with {Status}: no target within the profile's ceiling")]
     private static partial void LogRefused(ILogger logger, string profile, int status);
