@@ -256,17 +256,106 @@ public sealed class RetrievalEngineTests : IDisposable
     [Fact]
     public async Task No_free_slot_within_the_wait_is_search_unavailable()
     {
+        // One search at once is two statement slots (§6.6, #764): K of two searches holds both.
         using var engine = Engine(options: new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromMilliseconds(50) });
         _index.HoldKeyword = new TaskCompletionSource();
         var first = engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct);
+        var second = engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct);
 
         var refused = await Should.ThrowAsync<SearchUnavailableException>(() =>
             engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct));
         refused.Message.ShouldContain("slot");
+        _index.KeywordQueries.Count.ShouldBe(2); // the refused search ran no statement
 
         _index.HoldKeyword.SetResult();
         await first;
-        await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct); // slot released
+        await second;
+        await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct); // slots released
+    }
+
+    [Fact]
+    public async Task A_statement_waits_for_a_slot_so_no_more_than_two_per_search_slot_run_at_once()
+    {
+        using var engine = Engine(options: new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromSeconds(30) });
+        _index.HoldKeyword = new TaskCompletionSource();
+        var searches = Enumerable.Range(0, 3)
+            .Select(_ => engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct)).ToList();
+
+        _index.KeywordQueries.Count.ShouldBe(2); // the third waits for a slot; its statement has not started
+
+        _index.HoldKeyword.SetResult();
+        await Task.WhenAll(searches);
+        _index.KeywordQueries.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task A_search_waiting_for_its_query_embedding_holds_no_slot()
+    {
+        // #764: the embedding call uses no connection. Three searches wait for it at once on an engine with two
+        // statement slots (before: one search slot, so the second was refused after SlotWait), and K of another still runs.
+        using var engine = Engine(options: new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromMilliseconds(50) });
+        var embedding = new TaskCompletionSource();
+        var waiting = 0;
+        async Task<ReadOnlyMemory<float>> Held(string query, CancellationToken ct)
+        {
+            Interlocked.Increment(ref waiting);
+            await embedding.Task.WaitAsync(ct);
+            return await Embed(query, ct);
+        }
+
+        var searches = Enumerable.Range(0, 3).Select(_ => engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Held), Ct)).ToList();
+        waiting.ShouldBe(3);
+        await Task.Delay(TimeSpan.FromMilliseconds(150), Ct); // longer than SlotWait: nothing is refused meanwhile
+
+        var keyword = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct);
+        keyword.Hits.ShouldNotBeEmpty();
+
+        embedding.SetResult();
+        foreach (var result in await Task.WhenAll(searches))
+        {
+            result.VectorSearch.ShouldBe(VectorSearch.Exact);
+            result.Degraded.ShouldBeNull();
+        }
+    }
+
+    [Fact]
+    public async Task A_search_waiting_for_its_rerank_call_holds_no_slot()
+    {
+        // #764: neither does the rerank call. Three searches wait in the reranker; a fourth runs K, V and its own text read.
+        var reranker = new HeldReranker();
+        using var engine = Engine(reranker, new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromMilliseconds(50) });
+        SearchRequest Request() => new("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu));
+
+        var searches = Enumerable.Range(0, 3).Select(_ => engine.SearchAsync(Request(), Ct)).ToList();
+        reranker.Waiting.ShouldBe(3);
+        await Task.Delay(TimeSpan.FromMilliseconds(150), Ct);
+
+        var fourth = engine.SearchAsync(Request(), Ct);
+        reranker.Waiting.ShouldBe(4); // through K, V and the text read while the others wait
+
+        reranker.Release.SetResult();
+        foreach (var result in await Task.WhenAll([.. searches, fourth]))
+        {
+            result.Degraded.ShouldBeNull();
+            result.Hits[0].Scores.RerankScore.ShouldNotBeNull();
+        }
+    }
+
+    /// <summary>A reranker whose calls wait for <see cref="Release"/>, then score every passage in its given order.</summary>
+    private sealed class HeldReranker : IReranker
+    {
+        private int _waiting;
+
+        public TaskCompletionSource Release { get; } = new();
+
+        public int Waiting => Volatile.Read(ref _waiting);
+
+        public async Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _waiting);
+            await Release.Task.WaitAsync(cancellationToken);
+            return new RerankScores([.. request.Passages.Select((_, i) => (double?)(1.0 - (i * 0.01)))]);
+        }
     }
 
     [Fact]
