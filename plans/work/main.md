@@ -101,8 +101,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Reviewed** 2026-11-15 by an independent agent; the findings are worked in (proposal §10).
 - **Progress:** S0 (#760: `UME_DOMAIN`; the boot-only run green with only the domain set) and S1 (#761: the settings,
   the encrypted secret, effective values with their source, `GET /api/settings/sign-in`) merged 2026-11-15. S2 (#762: sign-in from the effective
-  values, reload by fingerprint, start without an authority, a failed callback no longer a 500) merged. **S3 in work**
-  as two parts: the backend (setup state, code, session, the test sign-in as a hand-written code exchange, complete,
-  re-open, security events) and the deploy side (`Setup__Secret`, `UME_RAG_SETUP_REOPEN`, an AppHost opt-in). Stream b
+  values, reload by fingerprint, start without an authority, a failed callback no longer a 500) merged. S3 merged: the deploy side (#763: `Setup__Secret`,
+  `UME_RAG_SETUP_REOPEN`, the AppHost's `Setup:Try`) and the backend (#767: setup state, code, session, the test sign-in,
+  complete, re-open, events 6008–6012; an independent security review's findings fixed before the merge, proposal §10).
+  **In work:** S4 (the wizard's pages, without the Open WebUI step) and S5 (Open WebUI: storage, the second test
+  target, rag-api's internal route, the start wrapper), in parallel; the Open WebUI step of the UI follows both. Left
+  then: S6, S7, S8. Stream b
   was told on #759.
 
