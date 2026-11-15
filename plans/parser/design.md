@@ -87,8 +87,11 @@ Uploaded legacy `.doc`/`.xls`/`.ppt` and RTF are converted in the slot by `ume_p
 Office and RTF uploads"): `sniff_ole` names the format by the OLE root CLSID, else the main stream's name; RTF by its
 signature. LibreOffice from the image (`libreoffice-{writer,calc,impress}-nogui`) runs headless with the import filter
 forced, a fresh profile in the job directory, stdout and stderr discarded, in its own process group, killed at
-min(120 s, 60 % of the deadline) (`timeout`). No output gives `conversion_failed`. The DOCX, XLSX or PPTX it writes goes
-through the declarative backend, and the result keeps the sniffed format. `/v1/inspect` does not open these files. With
+min(120 s, 60 % of the deadline) (`timeout`), under `prlimit` with an address space of 3 GiB and a file-size limit equal
+to the zip pre-check's uncompressed total (512 MiB; #702: Calc reserves about 1.8 GB before it reads a cell, a 64 MB XLS
+peaks at 2.9 GB). No output, a breach of either limit included, gives `conversion_failed`. The DOCX, XLSX or PPTX it
+writes passes the same zip pre-check as an upload (`limit_exceeded` with the `zip_*` name), then goes through the
+declarative backend, and the result keeps the sniffed format. `/v1/inspect` does not open these files. With
 its defaults, LibreOffice 25.2 reads no linked local file (linked Writer sections, RTF `INCLUDETEXT`, Calc external
 references; tested on #526). **Before go-live:** keep LibreOffice in the parser or move it to a separate converter
 container, decided together with the parser's sandbox question.
@@ -488,7 +491,7 @@ measurement decides both (to-verify #65).
 |---|---|---|
 | Deadline | `min(deadline_ms, 120 s)`; Docling's own `document_timeout` set to max(deadline − 10 s, deadline ÷ 2) for a graceful `partial` | then `SIGKILL` at deadline + 10 s → `timeout` |
 | RSS watchdog | supervisor samples each slot with its children (Tesseract included) every 500 ms (`psutil`); kill above `PARSER_SLOT_MAX_RSS_MB` (2 800; 2 × 2: 2 600). Only children that have exec'd count, because a forked child that has not exec'd yet shares the slot's pages and would report its RSS twice. The development Compose sets 2 200 (1 × 2 threads in a 3.5g container next to `ner-0` ≈ 1 GB, so the watchdog fires before the container limit), `compose.host-24g.yaml` 2 600 | `resource_limit`, respawn |
-| `RLIMIT_AS` | not used for slots (torch and ONNX reserve large virtual ranges); used for inspect | – |
+| `RLIMIT_AS` | not used for slots (torch and ONNX reserve large virtual ranges); used for inspect, and for LibreOffice through `prlimit` (3 GiB, §4) | – |
 | OOM | slots `oom_score_adj=1000`, so the kernel picks them before the supervisor | supervisor survives, respawns |
 | Recycle | after 50 conversions, or when idle RSS exceeds warm RSS + 40 % | respawn between jobs; reason in metrics |
 | Job directory | `/tmp/jobs/<request_id>-<8 hex>/` (input and output) | removed after the response is sent or the slot is killed; wiped at start |
