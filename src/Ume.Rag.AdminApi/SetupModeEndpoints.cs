@@ -101,6 +101,13 @@ public static class SetupModeEndpoints
                 : null;
             if (refusal is not null)
             {
+                // A complete that lost the race with another one finds its session and tests deleted: setup has closed, which is
+                // a 404 like every other request after it, not a missing test.
+                if (!(await http.RequestServices.GetRequiredService<SetupMode>().ReadAsync(ct)).Open)
+                {
+                    throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                }
+
                 throw AdminFaults.Of(AdminErrorCodes.SetupTestRequired, new Dictionary<string, string> { ["reason"] = refusal });
             }
 
