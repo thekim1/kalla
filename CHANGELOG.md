@@ -11,13 +11,14 @@ A deploy that needs only what a process can't start without (M-17): the gateway 
 and the organisation's name, the Integration API's address, the residency ceiling, role groups, the embedding profile
 and Open WebUI's client and feedback key come from the gateway, the admin UI or the stack itself. Also: apps and keys
 connected in one go (M-16), the admin UI review (M-19), a stricter general-knowledge level per chat request (#726),
-Kubernetes NetworkPolicies on by default, and the fixes of the 2026-11-14 review (#694). Pins the gateway's v0.10.2.
+Kubernetes NetworkPolicies on by default, and the fixes of the 2026-11-14 review (#694). Pins the gateway's v0.10.3
+(its Ume.Rag preset limits every key to `OnPrem` and `Eu`, #747).
 **Rolling update: no** from 0.5.x (`RemoveWorkerConcurrency`: stop the old rag-admin before `rag-migrate`); some steps
 come **before** the update (rag-api's and rag-admin's keys get `OnPrem` and `Eu`). See `docs/upgrade-guide.md`.
 
 ### Changed
 
-- **The gateway creates Ume.Rag's credential keys** (M-17 C7): the Portainer stack pins the gateway's v0.10.2, whose
+- **The gateway creates Ume.Rag's credential keys** (M-17 C7): the Portainer stack pins the gateway's v0.10.3, whose
   migrations create the integration `Ume.Rag` and the keys `rag-api`, `rag-admin` and `rag-worker` from
   `UME_INTEGRATION_MANIFEST` (create-only, secrets on their own volume); rag-bootstrap gives each service its key, and a
   set `UME_RAG_*_GATEWAY_KEY` still wins. rag-admin joins the gateway's `edge` network for the Integration API (#727).
@@ -105,6 +106,8 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
 
 ### Fixed
 
+- The Portainer stack starts with the `openwebui` profile: `rag-openwebui-setup` reads its script from `rag-config`
+  instead of an inline config, which Compose can't write into a read-only container (#749).
 - A publish refused for want of an AI gateway key now says so and where to choose one, instead of reading like a cost
   note; the audit log's object links and *Only this object*, and a knowledge base's *Used by* links, have a 24 px target
   (WCAG 2.5.8). The browser tests pass again (#748).
