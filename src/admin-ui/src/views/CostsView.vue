@@ -61,7 +61,13 @@ const query = computed<CostReportQuery>(() => ({
   departmentId: filters.departmentId || undefined,
   kind: filters.kind || undefined,
 }))
-const csvUrl = computed(() => api.costs.csvUrl({ ...query.value, granularity: filters.granularity }))
+/** Day rows cover at most 400 days on the server (period_too_long), so a longer range downloads by month. */
+const csvByMonthOnly = computed(() => {
+  if (!filters.from || !filters.to) return false
+  return (Date.parse(filters.to) - Date.parse(filters.from)) / 86_400_000 + 1 > 400
+})
+const csvGranularity = computed<CostGranularity>(() => (csvByMonthOnly.value ? 'month' : filters.granularity))
+const csvUrl = computed(() => api.costs.csvUrl({ ...query.value, granularity: csvGranularity.value }))
 
 function objectName(row: DepartmentCostRow): string {
   return row.deleted || !row.objectName ? COSTS.deleted(row.objectId) : row.objectName
@@ -127,10 +133,13 @@ onMounted(async () => {
     <TextField id="costs-from" v-model="filters.from" type="date" :label="COSTS.from" />
     <TextField id="costs-to" v-model="filters.to" type="date" :label="COSTS.to" />
     <div class="flex flex-col gap-1.5">
-      <span class="font-medium" aria-hidden="true">{{ COSTS.granularity }}</span>
-      <SegmentedControl v-model="filters.granularity" :label="COSTS.granularity" :options="granularityOptions" />
+      <span class="font-medium" aria-hidden="true">{{ COSTS.csvGranularity }}</span>
+      <div class="flex flex-wrap items-center gap-3">
+        <SegmentedControl v-model="filters.granularity" :label="COSTS.csvGranularity" :options="granularityOptions" />
+        <a :href="csvUrl" class="link text-small" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
+      </div>
+      <span v-if="csvByMonthOnly" class="text-small text-fg-2" data-test="costs-csv-month-only">{{ COSTS.csvMonthOnly }}</span>
     </div>
-    <a :href="csvUrl" class="link text-small" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
   </form>
 
   <AsyncState :loading="report.loading.value" :error="report.error.value" :empty="groups.length === 0" :empty-text="COST_MESSAGES.empty" @retry="load()">

@@ -107,6 +107,20 @@ describe('Costs (admin design §8.6; B-41)', () => {
     expect(get).toHaveBeenCalledTimes(1) // the page's figures don't depend on it
   })
 
+  it('downloads a range over 400 days by month, and says so', async () => {
+    vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
+    const wrapper = await mountView('/costs')
+    const csvGranularity = () => new URL(wrapper.get('[data-test=costs-csv]').attributes('href')!, 'https://admin.example').searchParams.get('granularity')
+
+    expect(wrapper.find('[data-test=costs-csv-month-only]').exists()).toBe(false)
+    await wrapper.get('#costs-from').setValue('2024-01-01')
+    await wrapper.get('#costs-to').setValue('2025-06-30')
+    await flushPromises()
+    expect(csvGranularity()).toBe('month')
+    expect(wrapper.get('[data-test=costs-csv-month-only]').text()).toBe(COSTS.csvMonthOnly)
+  })
+
   it('labels every filter above its field, the same layout as Feedback', async () => {
     vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
