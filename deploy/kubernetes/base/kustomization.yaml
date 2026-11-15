@@ -30,13 +30,8 @@ configMapGenerator:
       - Rag__Roles=knowledge,chat,mcp
   - name: ume-rag-admin-config
     literals:
-      - Oidc__ClientId=ume-rag-admin
-      - Oidc__RoleClaim=roles
-      - Oidc__DepartmentClaim=departmentCodes
-      - Oidc__TeamClaim=teamCodes
-      - Oidc__GroupClaim=groups
-      - Oidc__ExtraScopes__0=email
-      - Oidc__RefuseGuests=true
+      # No Oidc__* here: sign-in is set in the setup wizard, and each Oidc__* an overlay sets is the deployment's value,
+      # locked in the wizard (identity design §19; ../example shows both ways).
       # Empty. A new value re-opens the setup wizard once (identity design §19); the setup code's key is the secret file
       # Setup__Secret in ume-rag-admin-secrets.
       - Setup__Reopen=

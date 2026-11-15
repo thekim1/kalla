@@ -4,27 +4,37 @@
 # keys, rag-admin's setup secret, the worker's crawl key pepper, the renderer's WebSocket path, the blob master key, the
 # pgBackRest repository settings and deploy/.env. Safe to re-run: existing secrets are never overwritten (a new pepper,
 # key, passphrase or Data Protection certificate would break existing data or backups); connection strings and other
-# derived files are written again. A re-run keeps UME_RAG_SETUP_REOPEN from deploy/.env: from the release with the
-# setup wizard, give it any new value there (for example today's date) and run `docker compose --env-file deploy/.env
-# up -d` to open the wizard once, for an hour, with a new setup code in rag-admin's log (identity design §19).
+# derived files are written again. A re-run keeps UME_RAG_SETUP_REOPEN from deploy/.env: give it any new value there
+# (for example today's date) and run `docker compose --env-file deploy/.env up -d` to open the setup wizard once, for
+# an hour, with a new setup code in rag-admin's log (identity design §19).
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
-#   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
-#       --oidc-client-secret-file ume-rag-admin.secret --domain intern.umea.se \
+#   ./deploy/init-deployment.sh --domain intern.umea.se \
 #       --gateway-url https://<gateway host> --gateway-credential-key-file api=rag-api.key \
 #       --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key \
-#       --openwebui-oidc-client-secret-file open-webui.secret \
 #       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
 #
-# Sign-in: P1 uses the Keycloak shared with the gateway (realm ume, RAG's clients from deploy/keycloak/). P2 (Entra):
-# --oidc-authority https://login.microsoftonline.com/<tenant>/v2.0 with the registrations ume-rag-admin and
-# ume-rag-open-webui (--openwebui-oidc-client-id).
+# Sign-in is set in rag-admin's setup wizard (identity design §19): after the first `up`, read the setup code with
+# `docker compose --env-file deploy/.env logs rag-admin` and open https://<admin host>/setup. The wizard shows the
+# redirect URIs to register, takes the client secrets and tests each sign-in before saving. To declare sign-in here
+# instead, pass the --oidc-* options: each one given locks its field in the wizard, and --oidc-authority with
+# --oidc-client-secret-file keeps the wizard closed. P1 uses the Keycloak shared with the gateway (realm ume, RAG's
+# clients from deploy/keycloak/); P2 (Entra) https://login.microsoftonline.com/<tenant>/v2.0 with the registrations
+# ume-rag-admin and ume-rag-open-webui.
 #
 # Options (defaults in brackets):
 #   --oidc-authority URL, --oidc-client-id ID [ume-rag-admin], --oidc-client-secret-file FILE
-#                           the admin BFF's own OIDC client (never the gateway's): P1 the shared Keycloak's realm ume
+#                           optional, never prompted: the admin BFF's own OIDC client (never the gateway's) as deployment
+#                           values; each one left out is the setup wizard's. A re-run without --oidc-authority or
+#                           --oidc-client-id keeps the value in deploy/.env (empty the line there to hand it to the
+#                           wizard), and the client secret file stays until you delete it. With the host firewall
+#                           (deploy/host/), rag-admin reaches only the provider of --oidc-authority
+#   --oidc-refuse-guests true|false
+#                           refusing guests (identity design §1.7) as a deployment value:
+#                           secrets/admin/Oidc__RefuseGuests (kept on a re-run without it); unset, the wizard's choice,
+#                           else true
 #   --domain DOMAIN         the base domain: --api-host, --admin-host and --openwebui-host default to rag.DOMAIN,
 #                           rag-admin.DOMAIN and chat.DOMAIN (the last only when another --openwebui-* option asks
 #                           for Open WebUI); each option given wins, and neither host is prompted for
@@ -58,9 +68,10 @@
 #     --openwebui-oidc-provider-url URL [the OIDC authority's /.well-known/openid-configuration],
 #     --openwebui-oidc-provider-name NAME [Umeå kommun]
 #                           Open WebUI's own OIDC client (P1: Keycloak client open-webui; P2: Entra ume-rag-open-webui)
-#                           and the name on its sign-in button: deployment values of rag-api, which serves them to
-#                           Open WebUI's start (identity design §19); each one left out is the setup wizard's, else the
-#                           default in brackets. The secret goes to secrets/api and secrets/admin
+#                           and the name on its sign-in button, optional and never prompted: deployment values of
+#                           rag-api, which serves them to Open WebUI's start (identity design §19); each one left out is
+#                           the setup wizard's (its Open WebUI step), else the default in brackets. The secret goes to
+#                           secrets/api and secrets/admin
 #                           Open WebUI's ume-rag-sk- key for rag-api is generated here, and rag-migrate registers it as
 #                           the deployment's own Open WebUI client (identity design §5.2): nothing to create by hand
 #     --openwebui-data-dir DIR [deploy/openwebui-data]
@@ -84,7 +95,7 @@ umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
-oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; domain=""; api_host=""; admin_host=""
+oidc_authority=""; oidc_client=""; oidc_secret_file=""; oidc_refuse_guests=""; domain=""; api_host=""; admin_host=""
 api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
 crawl_allow=""; host_memory=16; freshclam_proxy=""; clamav=""; role="all"; render=0
@@ -103,6 +114,7 @@ while [ $# -gt 0 ]; do
     --oidc-authority) oidc_authority="$2"; shift 2;;
     --oidc-client-id) oidc_client="$2"; shift 2;;
     --oidc-client-secret-file) oidc_secret_file="$2"; shift 2;;
+    --oidc-refuse-guests) oidc_refuse_guests="$2"; shift 2;;
     --domain) domain="$2"; shift 2;;
     --api-host) api_host="$2"; shift 2;;
     --admin-host) admin_host="$2"; shift 2;;
@@ -158,6 +170,7 @@ case "$key_provider" in
 esac
 case "$freshclam_proxy" in ""|*:[0-9]*) ;; *) die "--freshclam-proxy must be HOST:PORT";; esac
 case "$clamav" in ""|on|off) ;; *) die "--clamav must be on or off";; esac
+case "$oidc_refuse_guests" in ""|true|false) ;; *) die "--oidc-refuse-guests must be true or false";; esac
 # Without --clamav a re-run keeps the malware scan's mode from deploy/.env; a first run, or a deploy/.env without the
 # line, gets the default, on.
 if [ -z "$clamav" ] && [ -f "$env_file" ]; then
@@ -165,6 +178,13 @@ if [ -z "$clamav" ] && [ -f "$env_file" ]; then
   case "$clamav" in ""|on|off) ;; *) die "UME_RAG_CLAMAV_MODE in $env_file must be on or off: pass --clamav on|off";; esac
 fi
 clamav="${clamav:-on}"
+# Without --oidc-authority or --oidc-client-id a re-run keeps the value in deploy/.env: a declared sign-in doesn't move to
+# the setup wizard because a re-run left an option out (setup opens only on a first run or a re-open, identity design §19).
+if [ -f "$env_file" ]; then
+  [ -n "$oidc_authority" ] || oidc_authority="$(sed -n 's/^UME_RAG_OIDC_AUTHORITY=//p' "$env_file" | tail -n 1)"
+  [ -n "$oidc_client" ] || oidc_client="$(sed -n 's/^UME_RAG_OIDC_CLIENT_ID=//p' "$env_file" | tail -n 1)"
+fi
+case "$oidc_authority" in ""|https://*) ;; *) die "--oidc-authority must be an https:// URL";; esac
 # --domain: the host names not given default under it (Decisions "Setup wizard"; the Portainer stack's UME_DOMAIN).
 if [ -n "$domain" ]; then
   [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--domain takes a domain name such as example.se: $domain"
@@ -192,8 +212,6 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   echo "Ume Rag production setup"
   [ "$allow_file_keys" = 1 ] || die "the file key provider keeps the blob master key in a file on this host; pass \
 --allow-file-keys to accept that (pilot and test hosts, postponed decision K1)"
-  ask oidc_authority "OIDC authority URL (https://...)"
-  case "$oidc_authority" in https://*) ;; *) die "OIDC authority must be an https:// URL";; esac
   ask gateway_url "LLM gateway URL (https://...)"
   case "$gateway_url" in https://*) ;; *) die "the gateway URL must be an https:// URL";; esac
   gateway_url="${gateway_url%/}"
@@ -379,6 +397,8 @@ for f in "$secrets"/{api,admin,worker}/Gateway__Keys__*; do
   rm -f "$f"; removed_keys="$removed_keys ${f#"$secrets"/}"
 done
 if [ -n "$oidc_secret_file" ]; then tr -d '\r\n' < "$oidc_secret_file" > "$secrets/admin/Oidc__ClientSecret"; fi
+# Refusing guests as a file, not in rag-admin's environment, where an empty boolean would stop it at start.
+if [ -n "$oidc_refuse_guests" ]; then printf '%s' "$oidc_refuse_guests" > "$secrets/admin/Oidc__RefuseGuests"; fi
 # The Data API key of the admin's former org sync: the admin syncs with its credential key now, so delete it too.
 removed_data_key=""
 if [ -e "$secrets/admin/OrgSync__DataApiKey" ]; then rm -f "$secrets/admin/OrgSync__DataApiKey"; removed_data_key=1; fi
@@ -578,12 +598,16 @@ UME_RAG_CLAMAV_MODE=$clamav
 UME_RAG_HOST_MEMORY=$host_memory
 UME_RAG_CERTS_DIR=$certs
 UME_RAG_SECRETS_DIR=$secrets
+# Sign-in (identity design §19): empty is unset, so the setup wizard's value applies, else the code's default (client
+# ume-rag-admin). A value set here is the deployment's and is locked in the wizard; with the authority and the secret
+# file secrets/admin/Oidc__ClientSecret the wizard stays closed. The host firewall allows rag-admin only this provider.
 UME_RAG_OIDC_AUTHORITY=$oidc_authority
 UME_RAG_OIDC_CLIENT_ID=$oidc_client
 # The break-glass group(s) for the first platform admin (';'-separated; a rag- name or an Entra object id, #413), for an
 # identity provider whose tokens carry groups instead of the role; every other role's groups are set in RAG's admin
-# (Settings, Role groups; M-17 C10). Claim names default to roles, groups, departmentCodes and teamCodes
-# (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM, _TEAM_CLAIM), as the gateway's UME_OIDC_* do.
+# (Settings, Role groups; M-17 C10). The token's shape is the wizard's (Advanced) unless set here: the claim names
+# default to roles, groups, departmentCodes and teamCodes (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM,
+# _TEAM_CLAIM), as the gateway's UME_OIDC_* do, and UME_RAG_OIDC_EXTRA_SCOPE adds a scope.
 # UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=
 # With Entra ID directly (P2): UME_RAG_OIDC_TENANT_ID=<tenant id>
 # Empty. Any new value (for example today's date), then \`docker compose --env-file deploy/.env up -d\`, opens the setup
@@ -721,8 +745,8 @@ owui_note=""
 if [ -n "$owui_host" ]; then
   owui_todo=""
   [ -s "$secrets/api/OpenWebUi__Oidc__ClientSecret" ] || owui_todo="
-Its OIDC client's secret is not set here: Open WebUI starts without sign-in until it is, with
---openwebui-oidc-client-secret-file FILE (a re-run), or in rag-admin's setup wizard (from the release with its Open WebUI step)."
+Its OIDC client's secret is not set here: enter it in rag-admin's setup wizard (its Open WebUI step), or declare it
+with --openwebui-oidc-client-secret-file FILE (a re-run). Without one, Open WebUI signs in as a public client (PKCE)."
   owui_proxy=""
   [ "$proxy" = 1 ] || owui_proxy="
 Without --proxy, Open WebUI can't reach rag-api: its connection uses rag-api's public URL https://$api_host$public_api,
@@ -734,6 +758,20 @@ Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/l
 Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
 (its open-webui-setup mints the feedback service account's API key for rag-api; nothing to do by hand)."
 fi
+# Sign-in (identity design §19): declared by the options, or set in the setup wizard after the first up.
+if [ -n "$oidc_authority" ] && [ -s "$secrets/admin/Oidc__ClientSecret" ]; then
+  signin_step="  4. Sign-in is declared here (UME_RAG_OIDC_AUTHORITY and secrets/admin/Oidc__ClientSecret), so the setup
+     wizard stays closed: sign in at https://$admin_host$public_admin/."
+else
+  signin_step="  4. Set up sign-in in the setup wizard. Read the setup code (valid for an hour; while setup was never
+     finished, a restart of rag-admin prints a new one):
+       docker compose --env-file deploy/.env logs rag-admin | grep 'Setup code'
+     and open https://$admin_host$public_admin/setup. The wizard takes the client secret and tests the sign-in; whoever
+     tests needs the role rag-platform-admin."
+  [ -n "$oidc_authority" ] || signin_step="$signin_step
+     The host firewall of step 2 lets rag-admin reach only the provider in UME_RAG_OIDC_AUTHORITY, which is empty:
+     re-run with --oidc-authority URL first, and the wizard asks only for the client secret."
+fi
 
 cat <<EOF
 
@@ -744,22 +782,24 @@ Done. Generated:
 
 Next steps:
 $own_step
-  1. Register these redirect URIs on the OIDC client '$oidc_client' (code + PKCE; P1: the shared Keycloak's realm
-     ume, from RAG's realm additions in deploy/keycloak/; P2: the Entra registration):
+  1. Register these redirect URIs on the OIDC client '${oidc_client:-ume-rag-admin}' (code + PKCE; P1: the shared
+     Keycloak's realm ume, from RAG's realm additions in deploy/keycloak/; P2: the Entra registration); the setup
+     wizard shows them too:
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
   2. As root, before the first up: $here/host/install.sh (the ingestion slice the containers' cgroup_parent
      names, the firewall, and the backup, upload copy, restart-unhealthy and certificate-expiry timers;
      deploy/host/README.md).
   3. docker compose --env-file deploy/.env up -d --wait
-  4. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
+$signin_step
+  5. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
      Once per new database or repository (safe to repeat): WAL archiving fails until the stanza exists.$backup_note
-  5. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
+  6. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
      ($secrets/keys/rag-blob-internal and $secrets/pgbackrest/cipher-pass). Back up $secrets/.pepper and
      $certs/data-protection.pfx separately from database backups: without them a restored database is unusable.
-  6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
+  7. Internal certificates last 825 days; re-issue with: $0 --renew-certs
      (rag-cert-expiry.timer of step 2 warns 60 days ahead).
-  7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
+  8. Move $certs/ca.key off this host (with the backups in step 6). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
 $renew_note$proxy_note$rolling_note$gateway_note$clamav_note$render_note$owui_note
 EOF

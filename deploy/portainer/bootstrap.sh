@@ -7,8 +7,9 @@
 # existing secrets are never overwritten (a new pepper, key or Data Protection certificate would break existing data);
 # service certificates are re-issued when they expire within 30 days or their host names change (the checklist at the
 # end names the services to restart, and every certificate that expires within 60 days). Files that follow a variable
-# (the gateway credential keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written
-# again on every start, and removed when the variable is empty.
+# (the gateway credential keys, also taken from the gateway's manifest secrets; the OIDC client secrets and refusing
+# guests, when the stack declares its sign-in instead of the setup wizard) are written again on every start, and removed
+# when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
 # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -151,6 +152,13 @@ for svc in api admin worker; do
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
+# Refusing guests as a deployment value (identity design §19): a file, not rag-admin's environment, where an empty
+# boolean would stop it at start. Unset, the setup wizard's choice applies, else the default (refused). Anything but true
+# or false is left out and named on the checklist.
+case "${UME_RAG_OIDC_REFUSE_GUESTS:-}" in
+  ""|true|false) put admin Oidc__RefuseGuests "${UME_RAG_OIDC_REFUSE_GUESTS:-}" ;;
+  *) rm -f "$S/admin/Oidc__RefuseGuests" ;;
+esac
 # Open WebUI's client secret as a deployment value (identity design §19): rag-api serves it to Open WebUI's start, rag-admin
 # shows that it is set. Unset, the setup wizard's stored secret applies.
 put api OpenWebUi__Oidc__ClientSecret "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}"
@@ -249,7 +257,12 @@ case "$UME_RAG_API_HOST" in "rag.${UME_DOMAIN:-}") ;; *) example "$UME_RAG_API_H
 case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
-example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
+# Optional (identity design §19): unset, rag-admin's client secret is the setup wizard's; only a placeholder is noted,
+# since any value declares the sign-in and keeps the wizard closed.
+case "${UME_RAG_OIDC_CLIENT_SECRET:-}" in *example.se*|*CHANGE*)
+  note "UME_RAG_OIDC_CLIENT_SECRET is still an example value: set the real secret, or remove it for the setup wizard" ;; esac
+case "${UME_RAG_OIDC_REFUSE_GUESTS:-}" in ""|true|false) ;;
+  *) note "UME_RAG_OIDC_REFUSE_GUESTS must be true or false (or unset for the setup wizard's choice); it is left out" ;; esac
 # Certificates (#705): rag-postgres and rag-parser read theirs only at start, and a stack update recreates neither when
 # its configuration is unchanged (Kestrel watches rag-api's, rag-admin's and rag-worker's files). Each certificate that expires within
 # 60 days is named on every run; the service certificates are re-issued below 30 days, the CA never.
@@ -281,5 +294,11 @@ if [ -n "$todo" ]; then
 else
   echo "rag-bootstrap: every setting it checks is in place"
 fi
-# Not a setting to check here: who is a platform admin comes from the sign-in token.
-echo "rag-bootstrap: the first platform admin needs the role rag-platform-admin in the token's roles claim (Keycloak: give the user that realm role). Signed in without it, Ume.Rag's admin says you have no role: then give the role, or name a group of the token's in UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN"
+# Not settings to check here: rag-bootstrap has no network and can't see whether setup is done, so the sign-in line is
+# printed on every run; who is a platform admin comes from the sign-in token.
+if [ -n "${UME_RAG_OIDC_AUTHORITY:-}" ] && [ -s "$S/admin/Oidc__ClientSecret" ]; then
+  echo "rag-bootstrap: sign-in to Ume.Rag's admin is declared by the stack's variables (the authority and UME_RAG_OIDC_CLIENT_SECRET), so the setup wizard stays closed"
+else
+  echo "rag-bootstrap: sign-in is set in the setup wizard: https://$ADMIN_HOST/setup, with the setup code in rag-admin's log (first start, or after UME_RAG_SETUP_REOPEN); skip this if you can already sign in"
+fi
+echo "rag-bootstrap: the first platform admin needs the role rag-platform-admin in the token's roles claim, or a group named in UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN; the setup wizard's test sign-in says whether you have it"

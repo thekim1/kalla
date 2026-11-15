@@ -91,10 +91,12 @@ and passes `KeyProvider__Directory` to the worker, the api and the admin (#165);
 configuration wins. Keep the file as long as the development blobs: without it their `internal` blobs cannot be read.
 An earlier manual key in the same place is used as it is.
 
-**Trying the setup wizard.** With `Setup:Try=true` the admin API prints the setup code in its console log in the
-dashboard. A database whose setup is already done (any earlier run signed in with the AppHost's values) stays closed:
-also set `Setup:Reopen` to a new value, which the AppHost passes on. In the wizard, the bundled Keycloak's realm `ume`
-and the `oidc-client-secret` parameter are the values to test. Remove both settings to go back.
+**Trying the setup wizard.** With `Setup:Try=true` the admin API prints the setup code in its console log: the
+dashboard's `adminapi` resource, or `aspire logs adminapi` when the stack runs under `aspire start`; the wizard is the admin UI's `/setup`. A database whose setup is already done (any earlier run signed in with the AppHost's
+values) stays closed: also set `Setup:Reopen` to a new value, which the AppHost passes on. In the wizard the values to
+test are the bundled Keycloak's realm, `https://localhost:7411/realms/ume`, and the AppHost parameter
+`oidc-client-secret` as the client secret; the client ID `ume-rag-admin` is set by the AppHost and shows as locked.
+Remove both settings to go back.
 
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.

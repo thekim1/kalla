@@ -23,26 +23,54 @@ exception, with its own steps.
   without `UME_DOMAIN` keeps its names. To switch, set `UME_DOMAIN` and remove the host variables whose value is the
   default. **Check:** `rag-bootstrap`'s certificates and the proxy's names are unchanged (no `issuing certificate` for
   rag-api or rag-admin in its log unless a name changed).
-- **rag-admin's setup secret (setup wizard S3).** Rolling update, no migration. **Apply:** nothing; the next deploy
-  (`rag-bootstrap`, `init-deployment.sh`, then `create-secrets.sh` on Kubernetes) generates `admin/Setup__Secret`.
-  `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the setup wizard again.
-- **Open WebUI's sign-in settings come from rag-api (setup wizard S5).** Migration `OpenWebUiSignInSettings` (adds
-  columns and widens a check; rolling update: yes for the schema, but Open WebUI is recreated). Open WebUI now starts
-  through `deploy/openwebui/start-with-sign-in.py`, which asks rag-api for its OIDC settings and restarts Open WebUI
-  within a minute when they change; `UME_RAG_OPENWEBUI_OIDC_*` feed rag-api and rag-admin instead of Open WebUI, and
-  without a client secret Open WebUI starts without sign-in. **Portainer apply:** paste the new `compose.portainer.yaml`
-  and update the stack; your `UME_RAG_OPENWEBUI_OIDC_*` keep working as deployment values (`rag-bootstrap` writes the
-  secret to rag-api's and rag-admin's secret files). `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui` from
-  `stack.env.example` may go (it is the default; set, it locks the wizard's field). **Compose apply:** re-run
-  `init-deployment.sh` **with `--openwebui-oidc-client-secret-file` again** (the secret moves to
-  `secrets/api` and `secrets/admin/OpenWebUi__Oidc__ClientSecret`; the old `OAUTH_CLIENT_SECRET` line in
-  `secrets/openwebui.env` is no longer read and may be deleted), and with `--openwebui-oidc-client-id` and
-  `--openwebui-oidc-provider-url` only if they differ from the defaults: a re-run without them leaves them empty in
-  `deploy/.env`, so the defaults (or later the setup wizard) apply. Then `dc up -d` and
-  `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. A provider on another host than the
-  authority needs `--allow openwebui=HOST` for the host firewall. **Check:** rag-openwebui's (or open-webui's) log has
-  `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`, and Open WebUI's sign-in page shows the
-  button.
+- **Sign-in is set in the setup wizard (M-20 S1–S6; identity design §19).** rag-admin starts without an authority and,
+  on a first run, opens its setup wizard at `https://<admin host>/setup` with a setup code on its output: the wizard
+  shows the redirect URIs, takes the client secrets (stored encrypted with Data Protection) and saves only after a test
+  sign-in by a platform admin. A value the deployment sets wins and is locked in the wizard; an empty one is unset.
+  Open WebUI's start wrapper (`deploy/openwebui/start-with-sign-in.py`) asks rag-api for its sign-in settings and
+  restarts Open WebUI within a minute when they change. The stack files no longer pass `Oidc__*` defaults, and
+  `stack.env.example` has no secret left. Migrations `IdentityOidcSettings`, `SetupMode` and `OpenWebUiSignInSettings`
+  add columns and a table and widen a check: **rolling update: yes** for the schema (Open WebUI is recreated).
+  - **An existing deployment keeps working and never sees the wizard** when it has its authority and client secret in
+    its variables (Portainer: `UME_OIDC_AUTHORITY` or `UME_RAG_OIDC_AUTHORITY`, and `UME_RAG_OIDC_CLIENT_SECRET`;
+    Compose: `--oidc-authority` and `--oidc-client-secret-file`; Kubernetes: `Oidc__Authority` and the secret file):
+    rag-admin counts setup as done at its first start.
+  - **A token-shape variable you changed** (`UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`,
+    `_GROUP_CLAIM`, `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS`, `_CLIENT_ID`): keep the line. The stack files pass
+    each only when it is set, so the code's defaults (the old defaults; `email` is always requested) apply otherwise, or
+    the wizard's values. `UME_RAG_OIDC_REFUSE_GUESTS` now reaches rag-admin as a file: Portainer's `rag-bootstrap` writes
+    it; Compose passes `--oidc-refuse-guests true|false` to `init-deployment.sh` instead of the variable in
+    `deploy/.env`; Kubernetes keeps its `Oidc__RefuseGuests` literal, which the base no longer sets.
+  - **Open WebUI's variables** (`UME_RAG_OPENWEBUI_OIDC_*`) now feed rag-api and rag-admin, which serve them to Open
+    WebUI's start; they keep working as deployment values. `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui` may go (it is
+    the default; set, it locks the wizard's field). Without a client secret Open WebUI signs in as a public client
+    (PKCE). A confidential client's secret stays in the stack, or is entered in the wizard's Open WebUI step after a re-open.
+  - **Portainer apply:** paste the new `compose.portainer.yaml` and update the stack (`rag-bootstrap` writes
+    `admin/Setup__Secret`, and Open WebUI's secret to rag-api's and rag-admin's secret files). A leftover
+    `UME_RAG_OIDC_CLIENT_SECRET=CHANGE` declares a wrong secret and keeps the wizard closed: `rag-bootstrap`'s checklist
+    names it; remove it.
+  - **Compose apply:** re-run `init-deployment.sh` with your options and **`--openwebui-oidc-client-secret-file`
+    again** (the secret moved to `secrets/api` and `secrets/admin/OpenWebUi__Oidc__ClientSecret`; the old
+    `OAUTH_CLIENT_SECRET` line in `secrets/openwebui.env` is no longer read and may be deleted). Pass
+    `--openwebui-oidc-client-id` and `--openwebui-oidc-provider-url` only if they differ from the defaults. The
+    `--oidc-*` options are optional and never prompted; a re-run without `--oidc-authority` or `--oidc-client-id` keeps
+    the value in `deploy/.env`. With the host firewall, keep `--oidc-authority`: rag-admin reaches only that provider.
+    Then `dc up -d` and `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. A provider on
+    another host than the authority needs `--allow openwebui=HOST` for the host firewall.
+  - **Kubernetes apply:** `create-secrets.sh` after the re-run of `init-deployment.sh` (it carries
+    `admin/Setup__Secret`), then `deploy.sh`. The base no longer sets `Oidc__ClientId`, the claims, `Oidc__ExtraScopes__0`
+    or `Oidc__RefuseGuests`: add to your overlay any of them you had changed.
+  - **To move a declared deployment to the wizard** (and the secrets out of the variables): remove the client secret
+    (Portainer: `UME_RAG_OIDC_CLIENT_SECRET`, and Open WebUI's once the wizard has its step; Compose: delete
+    `secrets/admin/Oidc__ClientSecret`; Kubernetes: delete the key from `ume-rag-admin-secrets`), set
+    `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) to a new value, update the stack, then enter the values in the
+    wizard with the code from rag-admin's log. Until you finish, sign-in uses the stored values, which are now
+    incomplete: do it in one go. Keep the authority variable if the gateway shares it (it stays locked).
+  - **Check:** a declared deployment's rag-admin logs *The deployment declares the sign-in* once and signs in as
+    before; a new one prints `rag-admin: setup mode is open until … Setup code: …`. rag-openwebui's (or open-webui's)
+    log has `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`, and Open WebUI's sign-in page
+    shows the button. `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the
+    wizard again; remove it before restoring a database.
 
 ## 0.6.0
 
@@ -78,7 +106,7 @@ exception, with its own steps.
   Portainer) and `EmbeddingProfile__*` with the `ume-rag-migrations-config` map (Kubernetes) are gone. An existing
   profile stays as it is. **Apply:** remove those variables from the stack or `deploy/.env`; Kubernetes: take the new
   base and drop the `ume-rag-migrations-config` entry from your overlay. A new deployment: a platform admin creates the
-  profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 6).
+  profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 8).
 - **The Open WebUI feedback key is minted by the stack (M-17 C6).** A one-shot job (Portainer: `rag-openwebui-setup`;
   Compose: `open-webui-setup` in `compose.openwebui.yaml`) mints the feedback service account's key after Open WebUI
   starts, with password sign-in off, into `openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api now reads

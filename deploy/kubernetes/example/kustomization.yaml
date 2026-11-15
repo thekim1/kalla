@@ -49,10 +49,18 @@ configMapGenerator:
   - name: ume-rag-admin-config
     behavior: merge
     literals:
-      # change: your identity provider (docs/production-setup.md, Sign-in).
-      - Oidc__Authority=https://idp.example.se/realms/ume
-      # - Oidc__RoleGroups__rag-platform-admin=GG-Rag-Admins
+      # Sign-in (docs/kubernetes.md, Sign-in), one of two ways:
+      # - the setup wizard: leave the Oidc__ lines below commented out. After the first deploy, read the setup code with
+      #   kubectl -n ume-rag logs deploy/rag-admin | grep 'Setup code' (either pod) and open https://<admin host>/setup;
+      #   it shows the redirect URIs, takes the client secret and tests the sign-in before saving;
+      # - declared: each Oidc__ literal set is the deployment's value, locked in the wizard. With Oidc__Authority and the
+      #   client secret (init-deployment.sh --oidc-client-secret-file, in ume-rag-admin-secrets) the wizard never opens.
+      # - Oidc__Authority=https://idp.example.se/realms/ume
+      # - Oidc__ClientId=ume-rag-admin
       # - Oidc__TenantId=<Entra tenant id>
+      # - Oidc__RefuseGuests=false
+      # The break-glass group(s) for the first platform admin, only for an identity provider without roles in its tokens.
+      # - Oidc__RoleGroups__rag-platform-admin=rag-platform-admins
       # Any new value (for example today's date) opens the setup wizard again, once, for an hour; the new setup code is
       # in kubectl logs deploy/rag-admin. Remove it before restoring a database.
       # - Setup__Reopen=2026-11-15
