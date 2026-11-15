@@ -11,7 +11,9 @@
 #     gateway credential keys
 #   - rag-api: /health/ready = 200 (TLS verified against rag-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key and 200 with Open WebUI's key, which the stack generated and registered by itself
-#   - rag-api's public URL, which no variable sets, is https://<UME_RAG_API_HOST> for citation links and for rag-admin
+#   - Ume.Rag's three host names come from UME_DOMAIN alone (rag., rag-admin. and chat.boot.test; no UME_RAG_*_HOST)
+#   - rag-api's public URL, which no variable sets, is https://rag.<UME_DOMAIN> for citation links and for rag-admin;
+#     Open WebUI's WEBUI_URL is https://chat.<UME_DOMAIN>
 #   - rag-admin: / = 200 with the admin UI's index.html
 #   - the gateway from rag-worker: /health/ready over HTTPS, so the llm network and the gateway's CA work
 #   - the parser from rag-worker: /v1/info over HTTPS
@@ -47,7 +49,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stack=""; version=""; example="$here/../portainer/stack.env.example"; offset=10000; project=ume-rag-portainer-boot
 wait_timeout=900; keep=0; files=()
-usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version="$2"; shift 2;;
@@ -89,10 +91,8 @@ UME_OIDC_AUTHORITY=https://keycloak.boot.test/realms/ume
 UME_GATEWAY_HOST=llm.boot.test
 UME_GATEWAY_PUBLIC_URL=https://llm.boot.test
 UME_ADMIN_HOST=llm-admin.boot.test
-UME_RAG_API_HOST=rag.boot.test
-UME_RAG_ADMIN_HOST=rag-admin.boot.test
+UME_DOMAIN=boot.test
 UME_RAG_OIDC_CLIENT_SECRET=boot-test-admin-client-secret
-UME_RAG_OPENWEBUI_HOST=chat.boot.test
 UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=boot-test-openwebui-client-secret
 UME_GATEWAY_PORT=$gateway_port
 UME_ADMIN_PORT=$gateway_admin_port
@@ -242,6 +242,9 @@ env_of rag-api | grep -qx 'Knowledge__PublicBaseUrl=https://rag.boot.test' \
 env_of rag-admin | grep -qx 'Admin__ApiPublicUrl=https://rag.boot.test' \
   || fail "rag-admin's Admin__ApiPublicUrl is not https://rag.boot.test with UME_RAG_API_PUBLIC_URL unset"
 ok "rag-api's public URL defaults to https://rag.boot.test (citation links; rag-admin's How to connect)"
+env_of rag-openwebui | grep -qx 'WEBUI_URL=https://chat.boot.test' \
+  || fail "rag-openwebui's WEBUI_URL is not https://chat.boot.test with only UME_DOMAIN set"
+ok "Open WebUI's address defaults to https://chat.boot.test under UME_DOMAIN"
 
 echo "== rag-admin"
 status="$(https -o "$work/admin-index.html" -w '%{http_code}' "https://localhost:$admin_port/")"

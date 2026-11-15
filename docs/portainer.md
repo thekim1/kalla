@@ -42,8 +42,10 @@ to the services and verifies them against their internal CAs, so nothing else ne
 1. On the host, put one certificate for all five names (SAN or wildcard) in a directory, as `tls.crt` (with its chain)
    and `tls.key`, readable by uid 101 (`chown 101 tls.key && chmod 0400 tls.key`), and set
    `UME_RAG_PROXY_CERTS_DIR` to it (default `/etc/ume-rag/proxy-certs`). Without it `rag-proxy` doesn't start.
-2. Give each service a host name of its own: `UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`,
-   `UME_RAG_ADMIN_HOST`, `UME_RAG_OPENWEBUI_HOST`. A name shared with another service gets no route, and
+2. Give each service a host name of its own: `UME_GATEWAY_HOST` and `UME_ADMIN_HOST` for the gateway, and for
+   Ume.Rag `UME_DOMAIN`, which names rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI
+   `chat.<domain>` (`UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST`, `UME_RAG_OPENWEBUI_HOST` override one each). A name shared
+   with another service gets no route, and
    `rag-bootstrap`'s checklist says which. The public URLs are then plain `https://<host>` (`UME_GATEWAY_PUBLIC_URL`,
    the OIDC redirect URIs without a port).
 3. Bind the other published ports to loopback (`UME_GATEWAY_BIND`, `UME_ADMIN_BIND`, `UME_RAG_API_BIND`,
@@ -92,15 +94,18 @@ read the CA only at start.
    UME_ADMIN_PUBLIC_URL=https://llm-admin.example.se      # optional: links from Ume.Rag's admin to the gateway's
    UME_OIDC_CLIENT_SECRET=...                             # if ume-admin is a confidential client
    # Ume.Rag
-   UME_RAG_API_HOST=rag.example.se                        # its public URL is https://<this>; UME_RAG_API_PUBLIC_URL for a port
-   UME_RAG_ADMIN_HOST=rag-admin.example.se
+   UME_DOMAIN=example.se                                  # rag.example.se, rag-admin.example.se, chat.example.se
    UME_RAG_OIDC_CLIENT_SECRET=...
    COMPOSE_PROFILES=clamav,openwebui
    # Open WebUI
-   UME_RAG_OPENWEBUI_HOST=chat.example.se
    UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui
    UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=...
    ```
+
+   `UME_DOMAIN` gives Ume.Rag's three host names: rag-api `rag.<domain>` (its public URL `https://rag.<domain>`;
+   `UME_RAG_API_PUBLIC_URL` for a port), its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another
+   name for one, set `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` or `UME_RAG_OPENWEBUI_HOST`. A stack that sets the names
+   and no `UME_DOMAIN` works as before (the admin then shares rag-api's name unless `UME_RAG_ADMIN_HOST` is set).
 
    Keep `UME_INTEGRATION_MANIFEST` and `UME_INTEGRATION_API_URL` as the file has them: the gateway creates the
    integration `Ume.Rag` and its three credential keys from the manifest, and hands rag-admin the Integration API's
