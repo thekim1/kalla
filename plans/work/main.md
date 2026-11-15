@@ -105,8 +105,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   `UME_RAG_SETUP_REOPEN`, the AppHost's `Setup:Try`) and the backend (#767: setup state, code, session, the test sign-in,
   complete, re-open, events 6008–6012; an independent security review's findings fixed before the merge, proposal §10).
   S4 merged (#769: the wizard's pages; run end to end in a browser against the local Keycloak; #770 fixed a
-  race in `complete` that made a test flaky). **In work:** S5 (Open WebUI: storage, the second test target, rag-api's
-  internal route, the start wrapper). Then: the Open WebUI step of the UI and the Home reminder for a secret's expiry,
-  S6, S7, S8. Stream b
+  race in `complete` that made a test flaky). S5 merged (#771: Open WebUI's settings, the back-channel test, rag-api's internal route, the start wrapper,
+  which was run in the real pinned image). **In work, in parallel:** the UI follow-up (the wizard's Open WebUI step;
+  the Home reminder before a secret expires, with `GET /api/overview`'s `secretExpiry`) and S6 (deploy files without
+  defaults that lock fields, `stack.env.example` at 5 CHANGE values, the boot test through the wizard's API, the
+  operators' docs). Then S7 (the browser test) and S8 (the gateway). Stream b
   was told on #759.
 
