@@ -66,7 +66,7 @@ table says "user".
 ## Meanwhile: work that needs no input
 
 Each becomes a queue item when the main session picks it up.
-- **Grading dry run:** `scripts/grading/` end to end on a small synthetic set, so step 3 starts on working tools.
+- **Grading dry run: done** (main, 2026-11-15, FakeGateway stack): `answer` → graded CSV → `totals` against a live rag-api with a real integration key (5 questions, one off-topic; `totals` exits 1 on a failing gate and 2 on an inconsistent file, naming the rows). Step 3 starts on working tools. Set-up note for step 3: the pilot assistant needs a description, a contact and a gateway key of its department that reaches both the chat model and the collection's embedding model at the assistant's ceiling (#720 for the refusal's wording).
 - **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
   documents what the gaps cost before deciding them.
 - **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to

@@ -74,6 +74,7 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   - **Gateway models:** manual mirror rows `claude-haiku-5-5`, `claude-opus-5-5` and `Cohere-rerank-v5-fast`; model
     sync is off locally, so the embedding profile's model shows "Not among the gateway's models" (expected).
   - **Embedding profile:** `pilot-embedding`, in use, unchanged (a **Test** call was made, no save).
+- **Scripting uploads through the admin API:** upload slots are numbered from 1 (`PUT /api/upload-batches/{id}/files/1`), and the commit takes the slot numbers (`{"files": [1, 2, …]}`); an empty commit answers `upload_batch_too_large` (1 to 100 files). A published assistant needs a description, a contact and a gateway key (V39) whose residencies reach the collection's embedding model too. `aspire stop --all` returns before the persistent containers have stopped: wait a few seconds before `docker volume rm`. `dotnet dev-certs https --export-path x.pem --format Pem --no-password` also writes `x.key` (the dev certificate's private key): delete it afterwards.
 - **Admin API scripting:** `~/ume-rag-tools/` (outside the repo, no secrets in it): `admin.py` (BFF login from the
   AppHost user secret, XSRF; `python3 -I admin.py GET /api/assistants`, or `import admin; admin.call(m, path, body)`;
   raw uploads through `admin.req` with `X-XSRF-TOKEN` and `X-File-Name`), `pf.py '<preflight JSON>'`, `runwait.py
