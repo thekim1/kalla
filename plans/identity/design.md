@@ -411,7 +411,8 @@ Rules:
 Database checks stay as designed: `StoresHistory ⇒ ceiling ≠ sensitive`, `mcp-client ⇒ ceiling ≠ sensitive`.
 Pilot rows. The platform's own clients are seeded by the migration service in every deployment, insert-if-absent and
 marked managed by the deployment (Decisions "Deploy configuration"; #712): `admin-console`, the deployment's Open WebUI
-client while the `openwebui` profile is on (§5.2), and `rag-internal` once P2 uses it. A platform admin creates the others:
+client while the `openwebui` profile is on (§5.2), and `rag-internal` once P2 uses it. A managed client is unique per
+(kind, name) and found by them, so its name is not editable (user, 2026-11-15). A platform admin creates the others:
 
 | Client | Kind | Ceiling | StoresHistory |
 |---|---|---|---|

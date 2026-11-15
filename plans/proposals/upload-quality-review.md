@@ -63,7 +63,7 @@ guides were found, so Office files are not in it.
 **Two options for U1**, to compare on DoIT's files: keep a picture's OCR text as a block of its own, which costs no
 model call but keeps the noise; or describe each picture with a vision model through the gateway, which costs a call
 per picture and reads layout and arrows as well as text. Either way, a minimum picture size keeps logos and icons out.
-The same script on DoIT's real files at T6, Office files included, gives the numbers for that choice.
+The same script on DoIT's real files at T6, Office files included, gives the numbers for that choice. **Decided (user, 2026-11-15): wait for those numbers;** pictures stay dropped until U1 is decided at T6.
 
 ## Proposed order
 
