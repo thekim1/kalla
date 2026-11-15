@@ -62,6 +62,7 @@ public static class AuditSnapshots
         typeof(ClientAudit), typeof(NetworkSettings), typeof(RetentionSettings), typeof(DeletionGuardSettings), typeof(EvaluationSettings),
         typeof(JsonSectionSettings), typeof(PiiSettings), typeof(WorkerSettings), typeof(DataProtectionDto),
         typeof(CollectionAudit), typeof(SourceAudit), typeof(KeyAudit), typeof(AssistantAudit), typeof(DraftAudit),
+        typeof(SignInAudit), typeof(SignInCredentialAudit),
     ];
 }
 
