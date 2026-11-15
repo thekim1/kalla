@@ -1533,6 +1533,11 @@ display name, the client secret (encrypted, its own purpose) and its optional ex
 `POST complete`), shown only when the deployment runs Open WebUI (`OpenWebUi:Enabled`), with Open WebUI's redirect URI
 to register.
 
+- **Its default provider inside a setup session:** on a first run the admin's authority is tested but not saved when
+  this step comes (it is saved at Finish). So while rag-admin has no effective authority, the default provider URL of
+  this target follows the authority of the session's latest passed rag-admin test: the field can stay empty, the check
+  uses that provider, and null is saved, so the setting follows the admin's provider afterwards. Outside a setup
+  session nothing changes. A deployment secret is still sent only to a provider the deployment names.
 - **Its test is a back-channel check, not a sign-in:** the provider sends the browser back to Open WebUI, so rag-admin
   never sees a callback. The test fetches the discovery document (the provider URL must be the issuer's own) and the
   keys, then makes one token request with a random code and the candidate client: `invalid_grant` means the client was

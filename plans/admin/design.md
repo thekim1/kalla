@@ -1602,8 +1602,11 @@ A section's form is built in two steps:
    *Set by the deployment*. **Test sign-in** opens the provider in a new window; the result shows who signed in, the
    roles, groups and departments the token carried, and whether that person is a platform admin, with the claim that
    was read. A failed step says which (address, discovery, secret, a refused claim check).
-4. **Open WebUI** (only when the deployment runs it): the same fields and test for its client; **Skip for now** is
-   allowed.
+4. **Open WebUI** (only when the deployment runs it): Open WebUI's redirect URI with a copy button; provider address
+   (empty follows the sign-in provider), client id, client secret, optional expiry date, provider name. **Check** asks
+   the provider, without a sign-in: the discovery document found, and the client *accepted*, *refused* or *could not
+   be verified* (saving is still allowed, with a warning). **Save** needs a check that wasn't refused, unchanged
+   values, and step 3's passed test; the bottom button reads **Skip for now** until a save. Built in #773.
 5. **Summary.** The values to save with their sources (set by the deployment, set here, default), where the secret
    comes from, the same deployment facts as step 2, and the tested person. **Finish** is enabled when step 3's test
    passed for a platform admin and no value changed since, and leads to "Sign-in is set up" with a **Sign in** button
@@ -1613,8 +1616,7 @@ The sign-in page offers **Set up sign-in** while setup is open (and no *Sign in*
 says to restart rag-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
 in M-20 S4 (#769); the Open WebUI step follows S5.
 
-Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps (not built
-yet: M-20, after S5).
+Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps; each notice can be hidden per browser (#773).
 
 ## 6. Pipelines
 
