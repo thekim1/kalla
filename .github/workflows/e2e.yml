@@ -93,7 +93,7 @@ jobs:
         # Stops the first stack and starts Setup:Try on a fresh volume of its own; the wizard's spec closes setup on it.
         run: pwsh scripts/Start-E2E.ps1 -Setup
       - name: Mask the setup code and the secrets the setup spec types
-        if: steps.setup-stack.outcome == 'success'
+        if: ${{ !cancelled() && steps.setup-stack.outcome == 'success' }}
         # The spec reads them itself and prints none of them; masked as well, in case a log line shows one. ::add-mask:: lines
         # are not shown in the log.
         run: |
@@ -111,16 +111,16 @@ jobs:
             }'
       - name: Browser test of the setup wizard
         id: setup-tests
-        if: steps.setup-stack.outcome == 'success'
+        if: ${{ !cancelled() && steps.setup-stack.outcome == 'success' }}
         working-directory: tests/e2e
         # Its project records no trace, screenshot or video, and its error context has no page snapshot (setup.spec.ts).
         run: npx playwright test --project=setup
       - name: Error context of a failed setup test
-        if: steps.setup-tests.outcome == 'failure'
+        if: ${{ !cancelled() && steps.setup-tests.outcome == 'failure' }}
         working-directory: tests/e2e
         run: find test-results/setup -name error-context.md -exec sh -c 'echo "::group::$1"; cat "$1"; echo "::endgroup::"' _ {} \; 2>/dev/null || true
       - name: Server logs of a failed setup run
-        if: steps.setup-stack.outcome == 'failure' || steps.setup-tests.outcome == 'failure'
+        if: ${{ !cancelled() && (steps.setup-stack.outcome == 'failure' || steps.setup-tests.outcome == 'failure') }}
         # rag-admin's output holds the setup code: the line is redacted as well as masked.
         run: |
           for r in adminapi admin-ui keycloak; do
