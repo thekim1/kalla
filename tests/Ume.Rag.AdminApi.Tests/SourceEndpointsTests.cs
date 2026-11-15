@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// the J3 schemas, the impact token for scope changes, sync now with dedup and the running run, runs and items by keyset,
 /// and cancel-run.
 /// </summary>
-[Collection(AdminDatabaseGroup4.Name)]
+[Collection(AdminDatabaseGroup5.Name)]
 public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

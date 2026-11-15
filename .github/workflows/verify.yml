@@ -9,7 +9,7 @@ name: Verify
 # plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
-# Lean pull requests (user, 2026-11-05): backend skips docs- and deploy-only changes; images, renderer and evaluation-smoke run only when their paths changed; a dispatch and
+# Lean pull requests (user, 2026-11-05): backend skips docs-, deploy- and admin-UI-only changes; images, renderer and evaluation-smoke run only when their paths changed; a dispatch and
 # release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml) or by hand.
 on:
   pull_request:
@@ -90,8 +90,10 @@ jobs:
           # The backend job: anything besides the design documents, docs/ and deploy/, except the files of docs/ and deploy/
           # that the backend tests read (the Postgres init and role scripts and postgresql.conf, the Keycloak realm files,
           # docs/security-events.md, docs/openapi/). deploy-checks covers the rest of deploy/, doc-refs the documents.
+          # The admin UI's sources and the browser tests are not read by the backend's build or tests (the admin-ui job
+          # covers them; contracts/admin/ stays here): a pull request with only those skips the 8 minutes of backend.
           changed="$(git diff --name-only "$range")"
-          code="$(grep -vE '^(plans/|platforms/|docs/|deploy/)|^[^/]+\.md$' <<< "$changed" || true)"
+          code="$(grep -vE '^(plans/|platforms/|docs/|deploy/|src/admin-ui/|tests/e2e/)|^[^/]+\.md$' <<< "$changed" || true)"
           code="$code$(grep -E '^(deploy/postgres/|deploy/keycloak/|docs/security-events\.md$|docs/openapi/)' <<< "$changed" || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
@@ -137,8 +139,10 @@ jobs:
         run: |
           dotnet build UmeRag.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here;
-          # the evaluation smoke test has a job of its own (evaluation-smoke).
-          dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky" --filter-not-trait "Category=EvaluationSmoke"
+          # the evaluation smoke test has a job of its own (evaluation-smoke). The script runs every test project as a
+          # process of its own, all at once, and Ume.Rag.AdminApi.Tests as five (its collections wait for one another
+          # inside one process and set this job's time); it prints each process's totals and their sum.
+          scripts/ci/backend-tests.sh Release
           dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
           # The same check runs daily against main in audit.yml.
           python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json"

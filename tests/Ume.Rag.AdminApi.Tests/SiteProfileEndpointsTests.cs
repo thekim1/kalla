@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <c>contracts/site-profiles/v1</c>, changes are <c>edit-site-profile</c> / <c>rollback-site-profile</c> commands carrying
 /// <c>decidedBy</c> (#116) with their dedup keys, and the versions are read back.
 /// </summary>
-[Collection(AdminDatabaseGroup1.Name)]
+[Collection(AdminDatabaseGroup6.Name)]
 public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

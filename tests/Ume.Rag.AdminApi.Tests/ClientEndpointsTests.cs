@@ -27,7 +27,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// rag-api's address for "How to connect"; §4.5: a changed ceiling or history re-checks the assistants the client offers (#700), with
 /// the gateway's lists fetched once per save and outside the config version lock (§4.4, #696).
 /// </summary>
-[Collection(AdminDatabaseGroup4.Name)]
+[Collection(AdminDatabaseGroup7.Name)]
 public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
 {
     private const string Pepper = "client-endpoints-test-pepper-0123456789abcdef";
