@@ -98,6 +98,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   fetches its sign-in settings; the crawler's ranges stay deploy-time; reload in place.
 - **Waits on:** the user's agreement to the proposal as a whole (no code before it). S0 needs nothing else; S8 waits on
   the gateway.
-- **Done when:** `stack.env.example` has no secret and 6 CHANGE lines (stage 1), then 1 (stage 2), and the release's
-  boot test and `e2e.yml` pass through the wizard.
+- **Done when:** `stack.env.example` has no secret and 5 CHANGE values (stage 1), then 1 (stage 2); the release's
+  boot test passes with no sign-in value set and `e2e.yml` passes through the wizard.
+- **Reviewed** 2026-11-15 by an independent agent; the findings are worked in (proposal §10).
 
