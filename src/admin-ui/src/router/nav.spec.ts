@@ -88,7 +88,7 @@ describe('roles', () => {
   it('opens the pages to any rag-* role and nothing to a user without one', () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
-    auth.user = { isAuthenticated: true, name: 'A', email: null, roles: ['rag-viewer'], departmentCodes: [], departmentSources: [], sessionExpiresAt: null }
+    auth.user = { isAuthenticated: true, name: 'A', email: null, roles: ['rag-viewer'], departmentCodes: [], departmentSources: [], sessionExpiresAt: null, signIn: { configured: true }, setup: { open: false } }
     auth.status = 'authenticated'
     expect(auth.canOpen({ roles: ALL_ROLES })).toBe(true)
     expect(auth.canOpen({ roles: ['rag-platform-admin'] })).toBe(false)
@@ -104,7 +104,7 @@ describe('Costs (admin design §3.3, §8.6; B-41)', () => {
   function signIn(roles: string[]) {
     setActivePinia(createPinia())
     const auth = useAuthStore()
-    auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null }
+    auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null, signIn: { configured: true }, setup: { open: false } }
     auth.status = 'authenticated'
     return auth
   }

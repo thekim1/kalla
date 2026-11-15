@@ -40,6 +40,21 @@ describe('metadata-only BFF client', () => {
     await request('POST', '/api/keys/2/revoke')
     expect(onChangeDelayed).toHaveBeenCalledTimes(1)
   })
+  it('keeps a 429\'s Retry-After in seconds for the message', async () => {
+    document.cookie = 'RAG-XSRF-TOKEN=token; path=/'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"code":"setup_attempts_exhausted"}', { status: 429, headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '42' } })))
+    await expect(request('POST', '/bff/setup/session', { body: { code: 'x' } })).rejects.toMatchObject({ status: 429, problem: { retryAfter: 42 } })
+  })
+  it('leaves the admin session alone on a 401 of the setup session', async () => {
+    const onUnauthorized = vi.fn()
+    configureClient({ onUnauthorized })
+    const answer = () => new Response('{"code":"setup_session_required"}', { status: 401, headers: { 'Content-Type': 'application/problem+json' } })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(answer())))
+    await expect(request('GET', '/bff/setup/state', { ownSession: true })).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+    await expect(request('GET', '/api/overview')).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
   it('does not disguise a failed logout as success', async () => {
     document.cookie = 'RAG-XSRF-TOKEN=token; path=/'
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"detail":"CSRF invalid"}', { status: 400, headers: { 'Content-Type': 'application/problem+json' } })))

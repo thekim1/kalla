@@ -48,6 +48,134 @@ export interface BffUser {
   sessionExpiresAt: IsoDateTime | null
   /** The session's absolute end (Admin:MaxSessionHours after sign-in); extending never goes past it. */
   sessionLimitAt?: IsoDateTime | null
+  /** False while rag-admin has no usable identity provider (identity design §19, "Reload"). */
+  signIn: { configured: boolean }
+  /** Whether setup mode is open: the wizard at /setup takes the setup code (identity design §19, "Setup state"). */
+  setup: { open: boolean }
+}
+
+// ---------- Setup mode (identity design §19; admin design §5.11) ----------
+/** Where an effective sign-in value comes from (`SignInValueSources`). */
+export type SignInValueSource = 'deployment' | 'wizard' | 'default'
+
+export interface SignInValue<T> {
+  value: T
+  source: SignInValueSource
+}
+
+/** The client secret as the API shows it: never the value (`SignInSecretStatus`). */
+export interface SignInSecretStatus {
+  set: boolean
+  source: SignInValueSource
+  setAt: IsoDateTime | null
+  /** `yyyy-mm-dd`; only while the wizard's secret applies. */
+  expiresOn: string | null
+  unreadable: boolean
+}
+
+/** rag-admin's sign-in values, each with its source (`SignInSettingsDto`). */
+export interface SignInSettings {
+  authority: SignInValue<string | null>
+  clientId: SignInValue<string>
+  clientSecret: SignInSecretStatus
+  roleClaim: SignInValue<string>
+  departmentClaim: SignInValue<string>
+  teamClaim: SignInValue<string>
+  groupClaim: SignInValue<string>
+  extraScopes: SignInValue<string[]>
+  tenantId: SignInValue<string | null>
+  refuseGuests: SignInValue<boolean>
+  version: string
+}
+
+/** The wizard's values (`OidcWizardValues`): null is "not set in the wizard" (the deployment's value or the default applies). */
+export interface OidcWizardValues {
+  authority: string | null
+  clientId: string | null
+  roleClaim: string | null
+  departmentClaim: string | null
+  teamClaim: string | null
+  groupClaim: string | null
+  extraScopes: string[] | null
+  tenantId: string | null
+  refuseGuests: boolean | null
+  /** `yyyy-mm-dd`. */
+  clientSecretExpiresOn: string | null
+}
+
+/** `POST /bff/setup/test`. `clientSecret`: null uses the stored one, "" tests without one, a string tests with it. */
+export interface SetupValuesRequest extends OidcWizardValues {
+  clientSecret: string | null
+}
+
+/** `POST /bff/setup/complete`: the tested values exactly, without the secret (the test row holds it). */
+export interface SetupCompleteRequest extends OidcWizardValues {
+  testId: string
+}
+
+/** `POST /bff/setup/session`. */
+export interface SetupSessionStarted {
+  expiresAt: IsoDateTime
+  setupEndsAt: IsoDateTime
+}
+
+/** The claim names and checks a test read (`SetupClaimsRead`). */
+export interface SetupClaimsRead {
+  role: string
+  group: string
+  department: string
+  team: string
+  tenantId: string | null
+  refuseGuests: boolean
+}
+
+/** The tested person (`SetupTestResult`); lists hold at most 100 entries, `groupCount` is the whole count. */
+export interface SetupTestResult {
+  subject: string
+  name: string | null
+  roles: string[]
+  groups: string[]
+  groupCount: number
+  departmentCodes: string[]
+  teamCodes: string[]
+  isPlatformAdmin: boolean
+  claimsRead: SetupClaimsRead
+}
+
+export type SetupTestStatus = 'pending' | 'passed' | 'failed' | 'incomplete'
+
+/** Where a test's client secret came from (`SetupSecretSources`). */
+export type SetupSecretSource = 'deployment' | 'typed' | 'stored' | 'removed' | 'none'
+
+/** A test as the wizard shows it (`SetupTestDto`). */
+export interface SetupTest {
+  testId: string
+  target: string
+  status: SetupTestStatus
+  reason: string | null
+  startedAt: IsoDateTime
+  expiresAt: IsoDateTime
+  values: OidcWizardValues | null
+  clientSecret: SetupSecretSource | null
+  result: SetupTestResult | null
+}
+
+/** `GET /bff/setup/state`. */
+export interface SetupState {
+  kind: 'first_run' | 'reopen'
+  endsAt: IsoDateTime
+  sessionExpiresAt: IsoDateTime
+  signIn: SignInSettings
+  redirectUris: { signIn: string; signOutCallback: string }
+  deployment: { gatewayBaseUrl: string | null; apiPublicUrl: string | null; platformAdminGroups: string[] }
+  latestTest: SetupTest | null
+}
+
+/** `POST /bff/setup/test`: the provider address the wizard opens. */
+export interface SetupTestStarted {
+  testId: string
+  authorizeUrl: string
+  expiresAt: IsoDateTime
 }
 
 // ---------- Organisation ----------

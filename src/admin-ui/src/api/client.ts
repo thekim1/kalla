@@ -110,6 +110,8 @@ export interface RequestOptions {
   raw?: Blob
   headers?: Record<string, string>
   signal?: AbortSignal
+  /** A 401 that is not about the admin session (the setup session, identity design §19): the unauthorized hook is not called. */
+  ownSession?: boolean
 }
 
 export async function request<T>(method: HttpMethod, path: string, options: RequestOptions = {}): Promise<T> {
@@ -147,7 +149,10 @@ export async function request<T>(method: HttpMethod, path: string, options: Requ
   if (!response.ok) {
     const problem: ProblemDetails | null =
       payload && typeof payload === 'object' ? (payload as ProblemDetails) : null
-    if (response.status === 401) hooks.onUnauthorized?.()
+    // A 429's Retry-After header, in seconds, where retryAfterSeconds (utils/problem.ts) reads it.
+    const retryAfter = response.status === 429 ? Number(response.headers.get('Retry-After')) : NaN
+    if (problem && problem.retryAfter === undefined && Number.isFinite(retryAfter) && retryAfter > 0) problem.retryAfter = retryAfter
+    if (response.status === 401 && !options.ownSession) hooks.onUnauthorized?.()
     if (response.status === 403) hooks.onForbidden?.(method, path)
     throw new ApiError(response.status, method, problem)
   }

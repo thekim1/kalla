@@ -423,3 +423,63 @@ export function formatMessage(template: string, params?: Record<string, unknown>
 export const PLATFORM_RULE_MESSAGES: Record<string, string> = {
   limits_from_gateway: 'The AI gateway now sends this model’s limits, so they can no longer be set here. Reload the page to see them.',
 }
+
+/**
+ * Why a test sign-in failed (identity design §19; the codes are SETUP_TEST_REASONS in setup/setupValues.ts): the step that
+ * failed and what to do. An unknown code gets `setupTestMessage`'s generic text, naming the code.
+ */
+export const SETUP_TEST_MESSAGES: Record<string, string> = {
+  authority_invalid:
+    'The provider address is not valid. Enter the full https address of the provider, without a query or #, for example https://login.example.org/realms/ume.',
+  authority_unreachable:
+    'rag-admin could not reach the provider address. Check the address, and that rag-admin can reach the provider through the network and any proxy.',
+  tls: 'rag-admin does not trust the provider’s certificate. Add the provider’s certificate authority to rag-admin’s trusted certificates, or check the address.',
+  redirected:
+    'The provider address answered with a redirect, and rag-admin follows none. Enter the address the provider names as its issuer, exactly.',
+  not_discovery:
+    'The provider address does not lead to a sign-in discovery document. Check the address: for Keycloak it ends with /realms/ and the realm, for Entra ID with /v2.0.',
+  issuer_mismatch:
+    'The provider names itself with another address (its issuer). Enter exactly the issuer address the provider names, including any trailing slash.',
+  insecure_endpoint: 'The provider lists an address that is not https, and rag-admin signs in over https only. Fix the provider’s public address.',
+  par_required:
+    'The provider requires pushed authorization requests, which rag-admin does not make. Turn that requirement off for this client at the provider.',
+  keys_unavailable: 'rag-admin could not fetch the provider’s signing keys. Check that the provider publishes its keys and that rag-admin can reach them.',
+  stored_secret_unreadable: 'The stored client secret can no longer be read. Type the client secret again.',
+  provider_error:
+    'The provider sent you back with an error instead of signing you in. Check that the redirect URI is registered for this client, that the client is enabled and that you may use it. Then test again.',
+  token_refused: 'The provider refused rag-admin’s sign-in request. Most often the client secret or the client ID is wrong. Check both and test again.',
+  token_endpoint_unreachable:
+    'rag-admin could not reach the provider’s token address. Check that rag-admin can reach the provider through the network and any proxy.',
+  id_token_missing: 'The provider sent no ID token. Check that the client is an OpenID Connect client that allows the openid scope.',
+  id_token_invalid:
+    'The provider’s ID token did not pass the checks of its signature, issuer, audience (the client ID) or lifetime. Check the client ID, and that the clocks of rag-admin and the provider are right.',
+  nonce_mismatch: 'The provider’s answer did not belong to this test. Test again.',
+  secret_required:
+    'You changed the provider address or the client ID, so the stored client secret is not sent to it. Type the client secret of this client.',
+  deployment_secret_without_authority:
+    'The deployment sets the client secret but not the provider address, so that secret is not sent to an address typed here. Set the provider address in the deployment too, or remove the deployment’s secret.',
+  browser_mismatch: 'The sign-in finished in another browser than the one that started the test. Test again, and sign in in the window the test opens.',
+  session_expired: 'Your setup session ended before the sign-in finished. Enter the setup code again, then test again.',
+  unknown_test: 'The test is unknown, already used or expired. Test again.',
+  wrong_tenant: 'The account does not belong to the tenant under Tenant ID. Check the tenant ID, or sign in with an account of that tenant.',
+  guest_refused: 'The account is a guest account, and guests are refused. Sign in with an account of your own organisation, or turn off Refuse guests.',
+}
+
+/** A test reason's text; an unknown code gets a generic text that names it. */
+export function setupTestMessage(reason: string): string {
+  return SETUP_TEST_MESSAGES[reason] ?? `The test sign-in failed (${reason}). Check the values and test again.`
+}
+
+/** Why `POST /bff/setup/complete` refused to save (`setup_test_required`; SETUP_COMPLETE_REASONS in setup/setupValues.ts). */
+export const SETUP_COMPLETE_MESSAGES: Record<string, string> = {
+  unknown_test: 'The test is unknown to this setup session. Test sign-in again, then finish.',
+  not_latest: 'A newer test was started. Wait for its result, then finish.',
+  not_passed: 'The latest test sign-in did not pass. Test again.',
+  not_platform_admin: 'The person who tested is not a platform admin. Give them the role rag-platform-admin at the provider and test again.',
+  values_changed: 'The values differ from the ones tested. Test sign-in again with these values.',
+}
+
+/** A completion refusal's text; an unknown code gets a generic text that names it. */
+export function setupCompleteMessage(reason: string): string {
+  return SETUP_COMPLETE_MESSAGES[reason] ?? `Saving needs a passed test sign-in by a platform admin (${reason}). Test sign-in again.`
+}

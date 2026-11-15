@@ -12,6 +12,8 @@ declare module 'vue-router' {
     title?: string
     /** Roles allowed to open the page. Empty/undefined = any signed-in user. */
     roles?: Role[]
+    /** Open before sign-in, in its own frame without the menu and the session (the setup wizard). */
+    public?: boolean
   }
 }
 
@@ -36,6 +38,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: PAGE.audit.title, roles: MANAGE_ROLES } },
   { path: '/organisation', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: PAGE.organisation.title, roles: ALL_ROLES } },
   ...platformRoutes,
+  // Setup mode (admin design §5.11): before sign-in, outside the shell. `?test=done` is where the test sign-in's window ends.
+  { path: '/setup', name: 'setup', component: () => import('@/setup/SetupView.vue'), meta: { title: PAGE.setup.title, public: true } },
   { path: '/forbidden', name: 'forbidden', component: () => import('@/views/ForbiddenView.vue'), meta: { title: PAGE.forbidden.title } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { title: PAGE.notFound.title } },
 ]
@@ -85,6 +89,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
   router.beforeEach(async (to) => {
     const auth = useAuthStore()
     await auth.ensureLoaded()
+    if (to.meta.public) return true
     // Signed-out users see the sign-in page rendered by App.vue regardless of route.
     if (!auth.isAuthenticated) return true
     if (!auth.canOpen(to.meta)) {

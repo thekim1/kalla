@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../../../../contracts/admin/v1/error-codes.json?raw'
+import { SETUP_COMPLETE_REASONS, SETUP_TEST_REASONS } from '@/setup/setupValues'
 import { SOURCE } from './labels'
 import {
   EMBEDDING_TEST_MESSAGES,
   ERROR_MESSAGES,
   JOB_MESSAGES,
   JOB_MESSAGE_PREFIXES,
+  SETUP_COMPLETE_MESSAGES,
+  SETUP_TEST_MESSAGES,
   embeddingTestMessage,
   formatMessage,
   jobMessage,
+  setupCompleteMessage,
+  setupTestMessage,
 } from './messages'
 
 // The exported list of the admin API's error codes (admin design §4.1); CI fails when the UI misses one.
@@ -143,5 +148,22 @@ describe('embedding profile test messages', () => {
       const text = embeddingTestMessage({ ok: error === 'ok', error, dimensions: 768, residency: 'Eu' }, profile)
       expect(text).not.toMatch(/\{\w+\}/)
     }
+  })
+})
+
+describe('setup wizard messages (identity design §19)', () => {
+  it('has a text for every reason a test sign-in ends with, and no others', () => {
+    expect(Object.keys(SETUP_TEST_MESSAGES).sort()).toEqual([...SETUP_TEST_REASONS].sort())
+  })
+
+  it('has a text for every reason a completion is refused, and no others', () => {
+    expect(Object.keys(SETUP_COMPLETE_MESSAGES).sort()).toEqual([...SETUP_COMPLETE_REASONS].sort())
+  })
+
+  it('names an unknown reason in a generic text', () => {
+    expect(setupTestMessage('token_refused')).toBe(SETUP_TEST_MESSAGES.token_refused)
+    expect(setupTestMessage('new_reason')).toContain('(new_reason)')
+    expect(setupCompleteMessage('values_changed')).toBe(SETUP_COMPLETE_MESSAGES.values_changed)
+    expect(setupCompleteMessage('new_reason')).toContain('(new_reason)')
   })
 })
