@@ -2091,6 +2091,8 @@ export const COSTS = {
   periods: { '30': 'Last 30 days', '90': 'Last 90 days', '365': 'Last 12 months' } as Record<string, string>,
   granularity: 'Per',
   granularities: { day: 'Day', month: 'Month' } as Record<string, string>,
+  csvGranularity: 'CSV rows per',
+  csvMonthOnly: 'Ranges over 400 days download by month.',
   total: 'Total',
   gateway: 'From the AI gateway',
   estimated: 'Estimated',

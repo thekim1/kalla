@@ -6,19 +6,24 @@ export function useLoadable<T>(initial: T) {
   const loading = ref(false)
   const error = ref<unknown>(null)
   const loaded = ref(false)
+  let latest = 0
 
+  /** Only the newest call's answer or error is kept; an older call that ends later returns null and changes nothing. */
   async function run(fetcher: () => Promise<T>): Promise<T | null> {
+    const mine = ++latest
     loading.value = true
     error.value = null
     try {
-      data.value = await fetcher()
+      const result = await fetcher()
+      if (mine !== latest) return null
+      data.value = result
       loaded.value = true
-      return data.value
+      return result
     } catch (e) {
-      error.value = e
+      if (mine === latest) error.value = e
       return null
     } finally {
-      loading.value = false
+      if (mine === latest) loading.value = false
     }
   }
 

@@ -39,7 +39,7 @@ const emit = defineEmits<{ (e: 'committed'): void; (e: 'topics'): void }>()
 const ui = useUiStore()
 const auth = useAuthStore()
 
-/** Rows per page; a refresh reloads the rows already shown, at most the API's limit. */
+/** Rows per page; a refresh re-reads the rows already shown, at most the API's limit per request. */
 const PAGE = 50
 const MAX_LIMIT = 200
 const SEARCH_DELAY_MS = 300
@@ -76,20 +76,38 @@ const chips = computed(() => [
 const editing = computed(() => props.canEdit && !showDeleted.value)
 const allSelected = computed(() => files.value.length > 0 && files.value.every((f) => selected.value.includes(f.id)))
 
-/** The list from the top (`refresh`: as many rows as are shown, so a poll keeps the loaded pages) or the next page. */
+/**
+ * The list from the top, the next page (`more`), or the rows already shown again (`refresh`, #709): page by page from
+ * the top with `after` until as many rows as are shown are read, so a poll keeps every loaded page, the cursor after
+ * them and the selection of rows still listed. The rows keep their ids, so the list patches in place and keeps its scroll.
+ */
 async function load(mode: 'reset' | 'more' | 'refresh' = 'reset'): Promise<void> {
   const mine = ++request
-  const limit = mode === 'refresh' ? Math.min(Math.max(files.value.length, PAGE), MAX_LIMIT) : PAGE
+  const query = {
+    deleted: showDeleted.value || undefined, q: q.value || undefined, state: showDeleted.value ? undefined : state.value || undefined, sort: sort.value,
+  }
   try {
-    const page = await api.sources.files(props.source.id, {
-      deleted: showDeleted.value || undefined, q: q.value || undefined, state: showDeleted.value ? undefined : state.value || undefined,
-      sort: sort.value, after: mode === 'more' ? next.value ?? undefined : undefined, limit,
-    })
-    if (mine !== request) return
-    files.value = mode === 'more' ? [...files.value, ...page.items] : page.items
-    next.value = page.next
+    if (mode === 'more') {
+      const page = await api.sources.files(props.source.id, { ...query, after: next.value ?? undefined, limit: PAGE })
+      if (mine !== request) return
+      files.value = [...files.value, ...page.items]
+      next.value = page.next
+      return
+    }
+    const want = mode === 'refresh' ? Math.max(files.value.length, PAGE) : PAGE
+    const rows: UploadFile[] = []
+    let after: string | null = null
+    do {
+      const page = await api.sources.files(props.source.id, { ...query, after: after ?? undefined, limit: Math.min(want - rows.length, MAX_LIMIT) })
+      if (mine !== request) return
+      rows.push(...page.items)
+      after = page.items.length ? page.next : null
+    } while (mode === 'refresh' && after && rows.length < want)
+    files.value = rows
+    next.value = after
     loaded.value = true
-    if (mode !== 'more') selected.value = selected.value.filter((id) => files.value.some((f) => f.id === id))
+    const ids = new Set(rows.map((f) => f.id))
+    selected.value = selected.value.filter((id) => ids.has(id))
   } catch (e) {
     if (mine === request) error.value = e
   }

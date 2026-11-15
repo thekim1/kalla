@@ -50,7 +50,7 @@ describe('Costs (admin design §8.6; B-41)', () => {
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([{ id: 'd1', name: 'Bygg' }, { id: 'd2', name: 'Skola' }] as never)
     const wrapper = await mountView()
 
-    expect(get).toHaveBeenCalledWith(expect.objectContaining({ granularity: 'day' }))
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ granularity: 'month' }))
     const departments = wrapper.findAll('[data-test=costs-department]')
     expect(departments).toHaveLength(2)
     const bygg = departments[0]!
@@ -89,6 +89,36 @@ describe('Costs (admin design §8.6; B-41)', () => {
     expect(url.pathname).toBe('/api/costs')
     expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: 'd1', kind: 'collection', granularity: 'month' }))
     expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('asks by month for the page and keeps the chosen granularity for the CSV only (#710)', async () => {
+    const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
+    const wrapper = await mountView('/costs')
+    const csvGranularity = () => new URL(wrapper.get('[data-test=costs-csv]').attributes('href')!, 'https://admin.example').searchParams.get('granularity')
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ granularity: 'month' }))
+    expect(csvGranularity()).toBe('day')
+
+    await wrapper.findAll('button').find((b) => b.text() === COSTS.granularities.month)!.trigger('click')
+    await flushPromises()
+    expect(csvGranularity()).toBe('month')
+    expect(get).toHaveBeenCalledTimes(1) // the page's figures don't depend on it
+  })
+
+  it('downloads a range over 400 days by month, and says so', async () => {
+    vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
+    const wrapper = await mountView('/costs')
+    const csvGranularity = () => new URL(wrapper.get('[data-test=costs-csv]').attributes('href')!, 'https://admin.example').searchParams.get('granularity')
+
+    expect(wrapper.find('[data-test=costs-csv-month-only]').exists()).toBe(false)
+    await wrapper.get('#costs-from').setValue('2024-01-01')
+    await wrapper.get('#costs-to').setValue('2025-06-30')
+    await flushPromises()
+    expect(csvGranularity()).toBe('month')
+    expect(wrapper.get('[data-test=costs-csv-month-only]').text()).toBe(COSTS.csvMonthOnly)
   })
 
   it('labels every filter above its field, the same layout as Feedback', async () => {

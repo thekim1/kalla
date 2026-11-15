@@ -288,6 +288,47 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     wrapper.unmount()
   })
 
+  it('keeps every loaded row, the cursor and the selection when a poll refreshes more than 200 rows (#709)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    signIn()
+    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary({ total: 500, processing: 500 }))
+    let all = Array.from({ length: 500 }, (_, i) => slot(`u${i + 1}`, `f${String(i + 1).padStart(3, '0')}.pdf`, 'received'))
+    const files = vi.spyOn(api.sources, 'files').mockImplementation(async (_id, query) => {
+      const start = query?.after ? Number(query.after) : 0
+      const end = start + (query?.limit ?? 50)
+      return page(all.slice(start, end), end < all.length ? String(end) : null)
+    })
+    const wrapper = mount(FilesPanel, { props: { source, canEdit: true } })
+    await flushPromises()
+    for (let i = 0; i < 5; i++) {
+      await wrapper.get('[data-test=files-more]').trigger('click')
+      await flushPromises()
+    }
+    expect(wrapper.findAll('[data-test^=file-u]')).toHaveLength(300)
+    await wrapper.get('[data-test=file-u10]').get('input[type=checkbox]').setValue(true)
+    await wrapper.get('[data-test=file-u250]').get('input[type=checkbox]').setValue(true)
+    expect(wrapper.get('[data-test=delete-files]').text()).toBe('Remove 2 files')
+
+    all = all.map((f) => (f.id === 'u250' ? { ...f, state: 'indexed' } : f))
+    files.mockClear()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    // The loaded pages are read again from the top, at most 200 rows per request.
+    expect(files.mock.calls.map(([, query]) => [query?.after, query?.limit])).toEqual([[undefined, 200], ['200', 100]])
+    expect(wrapper.findAll('[data-test^=file-u]')).toHaveLength(300)
+    expect(wrapper.get('[data-test=file-u250]').text()).toContain(FILES.states.indexed)
+    expect(wrapper.get('[data-test=delete-files]').text()).toBe('Remove 2 files')
+    expect((wrapper.get('[data-test=file-u250]').get('input[type=checkbox]').element as HTMLInputElement).checked).toBe(true)
+
+    files.mockClear()
+    await wrapper.get('[data-test=files-more]').trigger('click') // the cursor still points after row 300
+    await flushPromises()
+    expect(files).toHaveBeenLastCalledWith('s1', expect.objectContaining({ after: '300', limit: 50 }))
+    expect(wrapper.findAll('[data-test^=file-u]')).toHaveLength(350)
+    wrapper.unmount()
+  })
+
   it('stops polling while the page is hidden and when the card goes away, and starts again after an upload', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     signIn()
