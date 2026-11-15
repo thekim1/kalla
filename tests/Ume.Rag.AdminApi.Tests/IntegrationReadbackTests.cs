@@ -211,4 +211,15 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         (error.GetProperty("reason").GetString(), error.GetProperty("status").GetInt32()).ShouldBe(("failed", 503));
         factory.Services.GetRequiredService<IHttpClientFactory>().CreateClient(IntegrationApiClient.HttpClientName).Timeout.ShouldBe(IntegrationApiClient.Timeout);
     }
+
+    [Theory]
+    [InlineData("https://adminapi:8443/integration/v1", "https://gateway:8443", true)]
+    [InlineData("https://adminapi:8443/integration/v1", "http://fake-gateway/", true)]
+    [InlineData("http://adminapi:8080/integration/v1", "https://gateway:8443", false)]
+    [InlineData("http://fake-gateway/integration/v1", "http://fake-gateway/", true)]
+    [InlineData("ftp://adminapi/integration/v1", "http://fake-gateway/", false)]
+    [InlineData("/integration/v1", "https://gateway:8443", false)]
+    [InlineData(null, "https://gateway:8443", false)]
+    public void The_credential_key_goes_only_to_https_unless_the_gateway_itself_is_http(string? address, string gatewayBaseUrl, bool usable) =>
+        IntegrationApiClient.Usable(address, gatewayBaseUrl).ShouldBe(usable);
 }

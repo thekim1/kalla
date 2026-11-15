@@ -29,7 +29,17 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
     private IntegrationApiError? _lastError;
 
     /// <summary>Whether the gateway's context names the Integration API's address (an absolute URL).</summary>
-    public bool Configured => Uri.TryCreate(features.IntegrationApiUrl, UriKind.Absolute, out _);
+    public bool Configured => Usable(features.IntegrationApiUrl, options.CurrentValue.BaseUrl);
+
+    /// <summary>
+    /// An address rag-admin sends its credential key to: absolute and <c>https</c>, or <c>http</c> only while the gateway's own
+    /// <c>Gateway:BaseUrl</c> is <c>http</c> too (development and tests, where the key already travels so). The address comes
+    /// from another system's context, so an <c>http</c> typo there must not put the key on the network in clear text.
+    /// </summary>
+    public static bool Usable([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? address, string? gatewayBaseUrl) =>
+        Uri.TryCreate(address, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps
+            || (uri.Scheme == Uri.UriSchemeHttp && Uri.TryCreate(gatewayBaseUrl, UriKind.Absolute, out var gateway) && gateway.Scheme == Uri.UriSchemeHttp));
 
     /// <summary>The last refusal or failure (null after a success or before any call), shown on the <i>Gateway</i> page.</summary>
     public IntegrationApiError? LastError => Volatile.Read(ref _lastError);
@@ -47,7 +57,7 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
     {
         // Read once: a context read may change the address meanwhile.
         var address = features.IntegrationApiUrl;
-        if (!Uri.TryCreate(address, UriKind.Absolute, out _))
+        if (!Usable(address, options.CurrentValue.BaseUrl))
         {
             return null;
         }
