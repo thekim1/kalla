@@ -374,7 +374,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     public async Task The_deployments_own_client_shows_as_managed_and_its_keys_and_kind_are_not_changed_here()
     {
         // Identity §5.2, M-17 C4: rag-migrate keeps the deployment's Open WebUI client and its one key. Its settings can be
-        // edited; its kind, and making, rotating or revoking its keys, are refused with client_managed_by_deployment.
+        // edited; its kind, and making, changing, rotating or revoking its keys, are refused with client_managed_by_deployment.
         var code = "M" + Random.Shared.Next(100_000, 999_999);
         Guid clientId, keyId;
         await using (var db = TestPostgres.Context(database.Connection(null)))
@@ -414,6 +414,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
         }
 
         await Refused(await admin.PostAsJsonAsync("/api/keys", new { clientId, name = "Another" }, Ct));
+        await Refused(await admin.PutAsJsonAsync($"/api/keys/{keyId}", new { name = "Renamed", allowedIpRanges = new[] { "10.0.0.0/8" } }, Ct));
         await Refused(await admin.PostAsJsonAsync($"/api/keys/{keyId}/rotate", new { mode = "RevokeImmediately" }, Ct));
         await Refused(await admin.PostAsync($"/api/keys/{keyId}/revoke", null, Ct));
 
