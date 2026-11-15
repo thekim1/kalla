@@ -35,6 +35,7 @@ import type {
   KeyRotationMode,
   GatewayKeyList,
   GatewayModel,
+  GeneralKnowledge,
   AccessExplanation,
   AuditDetail,
   ExplainAccessRequest,
@@ -181,7 +182,8 @@ export const api = {
     publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean; confirmGeneralKnowledge?: boolean }) =>
       http.post<Assistant>(`/api/assistants/${id}/publish`, body),
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
-    test: (id: string, body: { question: string; target?: 'Draft' | 'Published' }) => http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
+    test: (id: string, body: { question: string; target?: 'Draft' | 'Published'; generalKnowledge?: GeneralKnowledge }) =>
+      http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
     versions: (id: string) => http.get<AssistantVersionSummary[]>(`/api/assistants/${id}/versions`),
     version: (id: string, number: number) => http.get<AssistantVersion>(`/api/assistants/${id}/versions/${number}`),
     restore: (id: string, number: number, version: string, confirmGeneralKnowledge = false) =>
