@@ -7,6 +7,7 @@ import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { SETUP_WIZARD } from '@/utils/labels'
+import SetupSecretField from './SetupSecretField.vue'
 import SetupTestPanel from './SetupTestPanel.vue'
 import { applyPreset, isLocked, type ProviderPreset, type SetupForm, type SignInField, type TextFieldName } from './setupValues'
 
@@ -35,14 +36,6 @@ function hintOf(field: TextFieldName, own?: string): string | undefined {
   const value = signIn.value[field]
   return value.source === 'default' && value.value ? L.defaultHint(value.value) : own
 }
-const secretLocked = computed(() => locked('clientSecret'))
-const secretHint = computed(() => {
-  const secret = signIn.value.clientSecret
-  if (secretLocked.value) return L.locked
-  if (form.value.removeSecret) return L.secretRemoved
-  if (secret.unreadable) return L.secretUnreadable
-  return secret.set ? L.secretStored : L.secretNone
-})
 const presetOptions = [
   { value: 'keycloak' as const, label: L.presets.keycloak },
   { value: 'entra' as const, label: L.presets.entra },
@@ -69,17 +62,7 @@ watch(() => props.errors.tenantId, (error) => {
       :disabled="locked('authority')" inputmode="url" mono
     />
     <TextField id="setup-clientId" v-model="form.clientId" :label="L.clientId" :hint="hintOf('clientId')" :disabled="locked('clientId')" mono />
-    <div class="grid gap-2">
-      <TextField
-        id="setup-clientSecret" v-model="form.clientSecret" type="password" :label="L.clientSecret" :hint="secretHint"
-        :disabled="secretLocked || form.removeSecret" data-test="client-secret"
-      />
-      <CheckField v-if="!secretLocked" v-model="form.removeSecret" :label="L.removeSecret" data-test="remove-secret" />
-    </div>
-    <TextField
-      v-if="!secretLocked && !form.removeSecret" id="setup-clientSecretExpiresOn" v-model="form.clientSecretExpiresOn" type="date" :label="L.expiresOn"
-      :hint="L.expiresOnHint" short
-    />
+    <SetupSecretField v-model="form" :secret="signIn.clientSecret" id-prefix="setup" :removed-hint="L.secretRemoved" />
     <details :open="advancedOpen" class="rounded-card border border-border p-3" data-test="advanced" @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open">
       <summary class="min-h-6 cursor-pointer font-medium">{{ L.advanced }}</summary>
       <p class="mt-1 text-small text-fg-3">{{ L.advancedHint }}</p>

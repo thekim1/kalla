@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
 import type { CollectionSetup, Overview } from '@/api/types'
@@ -21,6 +21,7 @@ function overviewOf(overrides: Partial<Overview> = {}): Overview {
       organisationSync: { lastSuccessAt: null, consecutiveFailures: 0 },
       modelSync: { lastSuccessAt: null, consecutiveFailures: 0 },
     },
+    secretExpiry: [],
     ...overrides,
   }
 }
@@ -241,5 +242,74 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
     await wrapper.get('[data-test=hide]').trigger('click')
     expect(wrapper.find('[data-test=setup]').exists()).toBe(false)
     expect(wrapper.get('[data-test=show-hidden]').text()).toBe(OVERVIEW.showHidden(1))
+  })
+})
+
+describe('Home: the reminder before a client secret expires (admin design §5.11)', () => {
+  const L = OVERVIEW.secretExpiry
+  const entries: Overview['secretExpiry'] = [
+    { which: 'rag-admin', expiresOn: '2026-12-01' },
+    { which: 'open-webui', expiresOn: '2026-11-12' },
+  ]
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-15T10:00:00Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    window.localStorage.clear()
+  })
+
+  const platformAdmin = () => signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
+
+  it('shows a platform admin a notice per secret at the top, with the date, the days and the steps, and no link to setup', async () => {
+    platformAdmin()
+    vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ secretExpiry: entries, needsEmbeddingProfile: true }))
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    const admin = wrapper.get('[data-test=secret-expiry-rag-admin]')
+    expect(admin.get('[data-test=secret-expiry-text]').text()).toBe(L.expires('the admin UI', '1 Dec 2026', 16))
+    expect(admin.text()).toContain(L.steps)
+    expect(wrapper.get('[data-test=secret-expiry-open-webui] [data-test=secret-expiry-text]').text()).toBe(L.expired('Open WebUI', '12 Nov 2026', 3))
+    expect(wrapper.find('[data-test=secret-expiry] a').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('/setup')
+    // Above the first-run step and Live.
+    expect(wrapper.html().indexOf('data-test="secret-expiry"')).toBeLessThan(wrapper.html().indexOf('data-test="needs-profile"'))
+  })
+
+  it('says today and 1 day in plain words', () => {
+    expect(L.expires('Open WebUI', '15 Nov 2026', 0)).toContain('(today)')
+    expect(L.expires('Open WebUI', '16 Nov 2026', 1)).toContain('(in 1 day)')
+    expect(L.expired('Open WebUI', '14 Nov 2026', 1)).toContain('(1 day ago)')
+  })
+
+  it('hides a notice in this browser for that date, and shows it again for a new date', async () => {
+    platformAdmin()
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ secretExpiry: entries }))
+    let wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=secret-expiry-rag-admin] [data-test=secret-expiry-hide]').trigger('click')
+    expect(wrapper.find('[data-test=secret-expiry-rag-admin]').exists()).toBe(false)
+    expect(JSON.parse(window.localStorage.getItem('ume-home-hidden-secret-expiry')!)).toEqual(['rag-admin:2026-12-01'])
+    wrapper.unmount()
+
+    wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=secret-expiry-rag-admin]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=secret-expiry-open-webui]').exists()).toBe(true)
+    wrapper.unmount()
+
+    overview.mockResolvedValue(overviewOf({ secretExpiry: [{ which: 'rag-admin', expiresOn: '2026-12-10' }] }))
+    wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=secret-expiry-rag-admin]').exists()).toBe(true)
+  })
+
+  it('shows nothing to anyone but a platform admin', async () => {
+    signIn({ roles: ['rag-editor'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
+    vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ secretExpiry: entries }))
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=secret-expiry]').exists()).toBe(false)
   })
 })

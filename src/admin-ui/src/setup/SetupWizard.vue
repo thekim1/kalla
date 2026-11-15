@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '@/api'
 import { isApiError } from '@/api/client'
-import type { SetupState } from '@/api/types'
+import type { OpenWebUiTest, SetupState } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
@@ -14,10 +14,12 @@ import { setupCompleteMessage, setupTestMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 import SetupAddressesStep from './SetupAddressesStep.vue'
 import SetupCodeStep from './SetupCodeStep.vue'
+import SetupOpenWebUiStep from './SetupOpenWebUiStep.vue'
 import SetupSignInStep from './SetupSignInStep.vue'
 import SetupSummaryStep from './SetupSummaryStep.vue'
 import {
-  canFinish, completeRequestOf, isLocked, isStale, newForm, presetOf, testRequestOf, valuesOf, type ProviderPreset, type SetupForm,
+  canFinish, completeRequestOf, isLocked, isOpenWebUiStale, isStale, newForm, newOpenWebUiForm, openWebUiAllLocked, presetOf, testRequestOf, valuesOf,
+  type OpenWebUiForm, type OpenWebUiOutcome, type ProviderPreset, type SetupForm,
 } from './setupValues'
 import { listenForTestDone, openTestWindow } from './testWindow'
 
@@ -27,20 +29,23 @@ import { listenForTestDone, openTestWindow } from './testWindow'
 const L = SETUP_WIZARD
 const auth = useAuthStore()
 
-type StepKey = 'code' | 'addresses' | 'signIn' | 'summary'
-/** The steps in order. Open WebUI's step (admin design §5.11 step 4) goes before the summary when it is built. */
-const STEPS: { key: StepKey; label: string }[] = [
+type StepKey = 'code' | 'addresses' | 'signIn' | 'openWebUi' | 'summary'
+/** Whether the deployment runs Open WebUI, as the latest state said; kept while the wizard is back at the code. */
+const withOpenWebUi = ref(false)
+/** The steps in order; Open WebUI's (admin design §5.11 step 4) only when the deployment runs it. */
+const steps = computed<{ key: StepKey; label: string }[]>(() => [
   { key: 'code', label: L.steps.code },
   { key: 'addresses', label: L.steps.addresses },
   { key: 'signIn', label: L.steps.signIn },
+  ...(withOpenWebUi.value ? [{ key: 'openWebUi' as const, label: L.steps.openWebUi }] : []),
   { key: 'summary', label: L.steps.summary },
-]
-const indexOf = (key: StepKey) => STEPS.findIndex((s) => s.key === key)
+])
+const indexOf = (key: StepKey) => steps.value.findIndex((s) => s.key === key)
 
 type Phase = 'loading' | 'wizard' | 'closed' | 'closedMeanwhile' | 'done'
 const phase = ref<Phase>('loading')
 const stepIndex = ref(0)
-const current = computed(() => STEPS[stepIndex.value]!)
+const current = computed(() => steps.value[stepIndex.value]!)
 const state = ref<SetupState | null>(null)
 const form = ref<SetupForm | null>(null)
 const preset = ref<ProviderPreset>('keycloak')
@@ -58,6 +63,12 @@ const signInUrl = ref<string | null>(null)
 const now = ref(Date.now())
 const errors = useFormErrors({ authority: 'setup-authority', tenantId: 'setup-tenantId' })
 let popup: Window | null = null
+/** Open WebUI's form, as rag-admin's: the secret lives here only. */
+const openWebUiForm = ref<OpenWebUiForm | null>(null)
+const openWebUiSecretEdited = ref(false)
+/** After a save in this session: whether the check confirmed the client; null while nothing was saved. */
+const openWebUiVerified = ref<boolean | null>(null)
+const openWebUiSkipped = ref(false)
 
 const test = computed(() => {
   const latest = state.value?.latestTest ?? null
@@ -70,6 +81,20 @@ const savedValues = computed(() => {
   if (canFinish(t, stale.value)) return t.values
   return form.value && state.value ? valuesOf(form.value, state.value.signIn) : null
 })
+/** The session's latest rag-admin test passed as a platform admin: what saving Open WebUI's values needs (not that it is current). */
+const adminTestPassed = computed(() => test.value?.status === 'passed' && test.value.result?.isPlatformAdmin === true)
+const openWebUiTest = computed(() => state.value?.openWebUi.latestTest ?? null)
+const openWebUiStale = computed(() => !!openWebUiForm.value && !!state.value
+  && isOpenWebUiStale(openWebUiTest.value, openWebUiForm.value, state.value.openWebUi.signIn, openWebUiSecretEdited.value))
+const openWebUiLocked = computed(() => !!state.value && openWebUiAllLocked(state.value.openWebUi.signIn))
+const openWebUiOutcome = computed<OpenWebUiOutcome | null>(() => {
+  if (!state.value?.openWebUi.enabled) return null
+  if (openWebUiLocked.value) return 'deployment'
+  if (openWebUiVerified.value !== null) return 'saved'
+  return openWebUiSkipped.value ? 'skipped' : 'none'
+})
+/** On Open WebUI's step, Next skips it unless its values were saved or the deployment sets them all. */
+const skipsOpenWebUi = computed(() => current.value.key === 'openWebUi' && openWebUiOutcome.value !== 'saved' && openWebUiOutcome.value !== 'deployment')
 const minutesLeft = computed(() => (state.value ? Math.max(0, Math.ceil((Date.parse(state.value.endsAt) - now.value) / 60_000)) : 0))
 
 function reachable(index: number): boolean {
@@ -77,7 +102,7 @@ function reachable(index: number): boolean {
 }
 
 function goTo(index: number): void {
-  if (index < 0 || index >= STEPS.length || !reachable(index)) return
+  if (index < 0 || index >= steps.value.length || !reachable(index)) return
   stepIndex.value = index
 }
 
@@ -101,6 +126,7 @@ function backToCode(message: string): void {
   cancelledTestId.value = null
   closePopup()
   if (form.value) form.value.clientSecret = ''
+  if (openWebUiForm.value) openWebUiForm.value.clientSecret = ''
   if (stepIndex.value === 0) focus('setup-step-heading')
   stepIndex.value = 0
 }
@@ -109,6 +135,7 @@ function close(next: 'closed' | 'closedMeanwhile'): void {
   phase.value = next
   state.value = null
   form.value = null
+  openWebUiForm.value = null
   closePopup()
 }
 
@@ -128,10 +155,12 @@ function lost(error: unknown): boolean {
 
 function apply(next: SetupState): void {
   state.value = next
+  withOpenWebUi.value = next.openWebUi.enabled
   if (!form.value) {
     form.value = newForm(next.signIn, next.latestTest)
     preset.value = presetOf(form.value)
   }
+  openWebUiForm.value ??= newOpenWebUiForm(next.openWebUi.signIn, next.openWebUi.latestTest)
 }
 
 async function refresh(): Promise<void> {
@@ -176,6 +205,9 @@ const stopListening = listenForTestDone(() => void refresh())
 watch(() => [form.value?.clientSecret, form.value?.removeSecret] as const, (next, previous) => {
   if (next[0] !== undefined && previous[0] !== undefined) secretEdited.value = true
 })
+watch(() => [openWebUiForm.value?.clientSecret, openWebUiForm.value?.removeSecret] as const, (next, previous) => {
+  if (next[0] !== undefined && previous[0] !== undefined) openWebUiSecretEdited.value = true
+})
 
 onMounted(async () => {
   if (auth.user?.setup.open === false) {
@@ -185,8 +217,9 @@ onMounted(async () => {
   try {
     apply(await api.setup.state())
     phase.value = 'wizard'
-    // A reload with a live session: on at the addresses, or at the sign-in when a test was made.
-    stepIndex.value = indexOf(state.value?.latestTest ? 'signIn' : 'addresses')
+    // A reload with a live session: on at the addresses, at the sign-in when a test was made, at Open WebUI's step when it was checked.
+    const s = state.value
+    stepIndex.value = indexOf(s?.openWebUi.enabled && s.openWebUi.latestTest ? 'openWebUi' : s?.latestTest ? 'signIn' : 'addresses')
   } catch (e) {
     if (isApiError(e) && e.status === 404) {
       phase.value = 'closed'
@@ -267,9 +300,27 @@ async function finish(): Promise<void> {
   }
 }
 
+function onOpenWebUiChecked(checked: OpenWebUiTest): void {
+  const s = state.value
+  if (!s) return
+  state.value = { ...s, openWebUi: { ...s.openWebUi, latestTest: checked } }
+  openWebUiSecretEdited.value = false
+}
+
+async function onOpenWebUiSaved(verified: boolean): Promise<void> {
+  openWebUiVerified.value = verified
+  openWebUiSkipped.value = false
+  await refresh()
+}
+
+function next(): void {
+  if (skipsOpenWebUi.value) openWebUiSkipped.value = true
+  goTo(stepIndex.value + 1)
+}
+
 function stepDone(index: number): boolean {
-  const key = STEPS[index]!.key
-  return (key === 'code' && !!state.value) || (key === 'signIn' && finishable.value)
+  const key = steps.value[index]!.key
+  return (key === 'code' && !!state.value) || (key === 'signIn' && finishable.value) || (key === 'openWebUi' && openWebUiOutcome.value === 'saved')
 }
 </script>
 
@@ -303,7 +354,7 @@ function stepDone(index: number): boolean {
     <template v-else>
       <nav :aria-label="L.stepsLabel">
         <ol class="flex flex-wrap gap-2" data-test="stepper">
-          <li v-for="(s, index) in STEPS" :key="s.key">
+          <li v-for="(s, index) in steps" :key="s.key">
             <button
               type="button" class="inline-flex min-h-8 items-center gap-2 rounded-control px-2 text-small disabled:cursor-not-allowed"
               :class="index === stepIndex ? 'bg-surface font-medium text-fg shadow-1' : 'text-fg-2 hover:text-fg disabled:opacity-60'"
@@ -319,7 +370,7 @@ function stepDone(index: number): boolean {
 
       <section class="material grid gap-5 rounded-card p-6" aria-labelledby="setup-step-heading">
         <div>
-          <p class="text-caption text-fg-3" data-test="step-of">{{ L.stepOf(stepIndex + 1, STEPS.length) }}</p>
+          <p class="text-caption text-fg-3" data-test="step-of">{{ L.stepOf(stepIndex + 1, steps.length) }}</p>
           <h2 id="setup-step-heading" tabindex="-1" class="text-title-3 outline-none" data-test="step-heading">{{ current.label }}</h2>
         </div>
         <InlineError v-if="notice" tone="warn" :message="notice" data-test="setup-notice" />
@@ -330,13 +381,20 @@ function stepDone(index: number): boolean {
             v-else-if="current.key === 'signIn'" v-model="form" v-model:preset="preset" :state="state" :test="test" :stale="stale" :testing="testing"
             :blocked-url="blockedUrl" :errors="errors.errors" :test-error="testError" @test="startTest" @cancel="cancelTest"
           />
+          <SetupOpenWebUiStep
+            v-else-if="current.key === 'openWebUi' && openWebUiForm" v-model="openWebUiForm" :state="state" :test="openWebUiTest" :stale="openWebUiStale"
+            :admin-test-passed="adminTestPassed" :saved-verified="openWebUiVerified" :lost="lost" @checked="onOpenWebUiChecked" @saved="onOpenWebUiSaved"
+            @to-sign-in="goTo(indexOf('signIn'))"
+          />
           <SetupSummaryStep
-            v-else-if="savedValues" :state="state" :form="form" :values="savedValues" :test="test" :finishable="finishable" :finishing="finishing"
-            :error="finishError" @finish="finish"
+            v-else-if="current.key === 'summary' && savedValues" :state="state" :form="form" :values="savedValues" :test="test" :finishable="finishable"
+            :finishing="finishing" :error="finishError" :open-web-ui-outcome="openWebUiOutcome" @finish="finish"
           />
           <div class="flex flex-wrap gap-3 border-t border-border pt-4">
             <UiButton v-if="stepIndex > 1" icon="arrow_back" data-test="back" @click="goTo(stepIndex - 1)">{{ L.back }}</UiButton>
-            <UiButton v-if="stepIndex < STEPS.length - 1" variant="primary" icon="arrow_forward" data-test="next" @click="goTo(stepIndex + 1)">{{ L.next }}</UiButton>
+            <UiButton v-if="stepIndex < steps.length - 1" :variant="skipsOpenWebUi ? 'secondary' : 'primary'" icon="arrow_forward" data-test="next" @click="next">
+              {{ skipsOpenWebUi ? L.openWebUi.skip : current.key === 'openWebUi' ? L.openWebUi.continue : L.next }}
+            </UiButton>
           </div>
         </template>
       </section>

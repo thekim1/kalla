@@ -141,7 +141,7 @@ export const SETUP_WIZARD = {
   stepsLabel: 'Setup steps',
   stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
   stepDone: '(done)',
-  steps: { code: 'Setup code', addresses: 'Addresses', signIn: 'Sign-in', summary: 'Summary and finish' },
+  steps: { code: 'Setup code', addresses: 'Addresses', signIn: 'Sign-in', openWebUi: 'Open WebUI', summary: 'Summary and finish' },
   next: 'Next',
   back: 'Back',
   /** The setup window and the setup session, in local time and as minutes left. */
@@ -239,6 +239,45 @@ export const SETUP_WIZARD = {
     notAdminHelp: (role: string) => `Give this person the role rag-platform-admin at the provider (in the claim “${role}”), then test again.`,
     notAdminGroups: (groups: string) => `Or add them to a group the deployment names for platform admins: ${groups}.`,
   },
+  openWebUi: {
+    lead: 'Open WebUI, the chat, signs people in with a client of its own, at the same identity provider as the admin UI or at another one.',
+    redirectLead: 'Register this redirect URI on Open WebUI’s client at the provider:',
+    redirectUri: 'Open WebUI’s redirect URI',
+    copyRedirectUri: 'Copy Open WebUI’s redirect URI',
+    noRedirectUri:
+      'rag-admin does not know the chat’s public address (OpenWebUi:PublicUrl), so it cannot name the redirect URI. It is the chat’s public address followed by /oauth/oidc/login/callback.',
+    providerUrl: 'Provider address (discovery document)',
+    providerUrlHint: 'The address of the provider’s discovery document, for example https://login.example.org/realms/ume/.well-known/openid-configuration.',
+    followsSignIn: (value: string) => `Follows the sign-in provider: leave empty for ${value}.`,
+    providerUrlRequired:
+      'Enter the provider address, or pass the test sign-in in the Sign-in step first: left empty, the address then follows that provider.',
+    providerName: 'Provider name',
+    providerNameHint: 'The label on Open WebUI’s sign-in button.',
+    secretRemoved: 'The check runs without a secret, and saving removes the stored one.',
+    check: 'Check',
+    checkHint: 'rag-admin fetches the provider’s discovery document and asks its token address whether it accepts this client. Nobody signs in.',
+    toSignIn: 'Go to Sign-in',
+    save: 'Save',
+    saveNeeds: 'Save needs a check that found the discovery document and was not refused, with the values as they are now.',
+    saved: 'Saved',
+    savedVerified: 'Open WebUI’s sign-in values are saved, and the provider accepted the client.',
+    savedUnverified: 'Open WebUI’s sign-in values are saved. The client could not be verified: a wrong secret shows when the first user signs in to the chat.',
+    allDeployment: 'The deployment sets all of Open WebUI’s sign-in values, so there is nothing to save here. You can still check them.',
+    skip: 'Skip for now',
+    skipHint: 'This step is optional. You can set up Open WebUI’s sign-in later by opening setup again.',
+    continue: 'Continue',
+  },
+  openWebUiResult: {
+    failed: 'The check failed',
+    stale: 'You changed values after this check. Check again before saving.',
+    discovery: 'Discovery document',
+    discoveryOk: 'Found and valid',
+    client: 'Client',
+    accepted: 'Accepted',
+    refused: 'Refused',
+    unverified: 'Could not be verified',
+    unverifiedHelp: 'A wrong client ID or secret will then show only when the first user signs in to the chat. Saving is still allowed.',
+  },
   summary: {
     lead: 'These values are saved when you finish.',
     valuesTitle: 'Values to save',
@@ -251,6 +290,20 @@ export const SETUP_WIZARD = {
       removed: 'None (public client). The stored secret is removed.',
       none: 'None (public client)',
       deployment: 'Set by the deployment',
+    },
+    openWebUi: {
+      title: 'Open WebUI',
+      lead: 'Open WebUI’s sign-in values as they apply now. Finish does not depend on them.',
+      outcomeLabel: 'In this session',
+      outcome: {
+        saved: 'Saved in this session',
+        skipped: 'Skipped. You can set it up later by opening setup again.',
+        deployment: 'Set by the deployment',
+        none: 'Not saved in this session',
+      },
+      secretStored: 'A secret is stored',
+      secretUnreadable: 'A secret is stored, but it can no longer be read',
+      secretNone: 'None (public client)',
     },
     testedAs: 'Tested as',
     notTested: 'Not tested yet',
@@ -366,6 +419,18 @@ export const OVERVIEW = {
   hide: 'Hide',
   hideFor: (name: string) => `Hide Get started: ${name}`,
   showHidden: (n: number) => `Show ${n} hidden`,
+  /** The reminder before a client secret stored by the setup wizard expires (admin design §5.11), for platform admins. */
+  secretExpiry: {
+    clients: { 'rag-admin': 'the admin UI', 'open-webui': 'Open WebUI' },
+    expires: (client: string, date: string, days: number) =>
+      `The sign-in client secret of ${client} expires on ${date} (${days === 0 ? 'today' : days === 1 ? 'in 1 day' : `in ${days} days`}).`,
+    expired: (client: string, date: string, days: number) =>
+      `The sign-in client secret of ${client} expired on ${date} (${days === 1 ? '1 day ago' : `${days} days ago`}).`,
+    steps:
+      'Create a new secret for the client at the identity provider. Then ask the person who runs the deployment to open setup again: they set a new UME_RAG_SETUP_REOPEN value and read the setup code from rag-admin’s output. Enter the new secret in the setup wizard.',
+    hide: 'Hide',
+    hideFor: (client: string) => `Hide the reminder for ${client}`,
+  },
 } as const
 
 export const ORGANISATION = {

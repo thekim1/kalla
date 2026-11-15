@@ -458,6 +458,10 @@ export const SETUP_TEST_MESSAGES: Record<string, string> = {
     'You changed the provider address or the client ID, so the stored client secret is not sent to it. Type the client secret of this client.',
   deployment_secret_without_authority:
     'The deployment sets the client secret but not the provider address, so that secret is not sent to an address typed here. Set the provider address in the deployment too, or remove the deployment’s secret.',
+  provider_url_invalid:
+    'The provider address is not valid. Enter the full https address of the provider’s discovery document, without a query or #, for example https://login.example.org/realms/ume/.well-known/openid-configuration.',
+  client_refused: 'The provider refused this client ID or client secret. Check both at the provider and check again.',
+  client_unverified: 'The provider’s answer did not say whether it accepts this client ID and client secret.',
   browser_mismatch: 'The sign-in finished in another browser than the one that started the test. Test again, and sign in in the window the test opens.',
   session_expired: 'Your setup session ended before the sign-in finished. Enter the setup code again, then test again.',
   unknown_test: 'The test is unknown, already used or expired. Test again.',
@@ -477,9 +481,34 @@ export const SETUP_COMPLETE_MESSAGES: Record<string, string> = {
   not_passed: 'The latest test sign-in did not pass. Test again.',
   not_platform_admin: 'The person who tested is not a platform admin. Give them the role rag-platform-admin at the provider and test again.',
   values_changed: 'The values differ from the ones tested. Test sign-in again with these values.',
+  admin_test_required:
+    'Open WebUI’s values are saved only after a passed test sign-in by a platform admin in this setup session. Go to the Sign-in step and test sign-in first.',
 }
 
 /** A completion refusal's text; an unknown code gets a generic text that names it. */
 export function setupCompleteMessage(reason: string): string {
   return SETUP_COMPLETE_MESSAGES[reason] ?? `Saving needs a passed test sign-in by a platform admin (${reason}). Test sign-in again.`
+}
+
+/**
+ * Open WebUI's step (admin design §5.11 step 4) checks instead of signing in: where a reason of SETUP_TEST_REASONS or
+ * SETUP_COMPLETE_REASONS needs other words there (the address is a discovery document's, and the step has a Check button and
+ * Save, not Test sign-in and Finish), its text; every other reason keeps its text above.
+ */
+export const OPENWEBUI_CHECK_MESSAGES: Record<string, string> = {
+  redirected:
+    'The provider address answered with a redirect, and rag-admin follows none. Enter the discovery document’s address exactly: the issuer followed by /.well-known/openid-configuration.',
+  not_discovery:
+    'The provider address does not lead to a sign-in discovery document. Check the address: it ends with /.well-known/openid-configuration.',
+  issuer_mismatch:
+    'The discovery document names another issuer than the address it was fetched from. Enter the issuer the provider names, followed by /.well-known/openid-configuration.',
+  unknown_test: 'The check is unknown to this setup session. Check again, then save.',
+  not_latest: 'A newer check was made. Save after the newest one.',
+  not_passed: 'The latest check did not pass. Check again.',
+  values_changed: 'The values differ from the ones checked. Check again with these values.',
+}
+
+/** A reason's text in Open WebUI's step: its own wording where it has one, else the test's or the completion's. */
+export function openWebUiCheckMessage(reason: string): string {
+  return OPENWEBUI_CHECK_MESSAGES[reason] ?? SETUP_TEST_MESSAGES[reason] ?? setupCompleteMessage(reason)
 }

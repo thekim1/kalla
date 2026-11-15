@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Department, Overview, Role, SyncHealth } from '@/api/types'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
+import SecretExpiryNotices from '@/components/overview/SecretExpiryNotices.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -12,8 +13,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { formatNumber, formatRelative, formatUsdCost } from '@/utils/format'
 import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
+import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
-// Home (admin design §5.5.1, "P1's Home"), top to bottom: the platform's first-run step for a platform admin, the
+// Home (admin design §5.5.1, "P1's Home"), top to bottom: for a platform admin, a reminder per client secret stored by the setup
+// wizard that expires within 30 days (§5.11), each hideable in this browser; the platform's first-run step for a platform admin, the
 // embedding profile, until it exists (Decisions "Deploy configuration"); Live, a card per published assistant over the
 // last 7 days linking to its Statistics tab; Health, the runs of the last 24 hours per department, the job queue and the
 // organisation and model syncs; Get started, the empty state with Create knowledge base or a checklist per collection not
@@ -59,23 +62,8 @@ const lastSuccess = (sync: SyncHealth) => (sync.lastSuccessAt ? OVERVIEW.lastSuc
 
 // Hide is remembered per browser (§5.5.1 item 3); without storage it lasts until the page is left.
 const HIDDEN_STORAGE_KEY = 'ume-home-hidden-setup'
-function readHidden(): string[] {
-  try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(HIDDEN_STORAGE_KEY) ?? '[]')
-    return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
-  } catch {
-    return []
-  }
-}
-function writeHidden(ids: string[]): void {
-  try {
-    if (ids.length) window.localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(ids))
-    else window.localStorage.removeItem(HIDDEN_STORAGE_KEY)
-  } catch {
-    // Storage may be unavailable; the choice then lasts for this visit.
-  }
-}
-const hidden = ref<string[]>(readHidden())
+const writeHidden = (ids: string[]) => writeStoredIds(HIDDEN_STORAGE_KEY, ids)
+const hidden = ref<string[]>(readStoredIds(HIDDEN_STORAGE_KEY))
 const setups = computed(() => overview.data.value?.setup ?? [])
 const shownSetups = computed(() => setups.value.filter((s) => !hidden.value.includes(s.collectionId)))
 const hiddenCount = computed(() => setups.value.length - shownSetups.value.length)
@@ -93,6 +81,7 @@ function showHidden(): void {
 <template>
   <PageHeader :title="name ? OVERVIEW.welcome(name) : PAGE.overview.title" :description="OVERVIEW.lead" />
   <template v-if="overview.data.value">
+    <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
     <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">
       <p class="mb-4">{{ OVERVIEW.profileText }}</p>
       <UiButton variant="primary" icon="add" data-test="create-profile" @click="router.push({ name: 'platform-models' })">{{ OVERVIEW.profileAction }}</UiButton>

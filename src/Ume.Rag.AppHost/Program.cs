@@ -435,6 +435,9 @@ else
 if (setupTry)
 {
     adminApi.WithEnvironment("Setup__Secret", Secret("setup-secret", 64));
+    // The wizard's Open WebUI step too (identity design §19), whether or not the Open WebUI container runs: its values are
+    // then entered in the wizard (the local Keycloak's client open-webui-dev).
+    adminApi.WithEnvironment("OpenWebUi__Enabled", "true").WithEnvironment("OpenWebUi__PublicUrl", "http://localhost:7410");
     if (builder.Configuration["Setup:Reopen"] is { Length: > 0 } reopen)
     {
         adminApi.WithEnvironment("Setup__Reopen", reopen);

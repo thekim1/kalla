@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { setupTest, signInSettings, wizardValues } from '@/test/fixtures'
+import { openWebUiSignIn, openWebUiTest, openWebUiValues, setupTest, signInSettings, wizardValues } from '@/test/fixtures'
 import {
-  applyPreset, canFinish, completeRequestOf, isStale, newForm, presetOf, secretOf, testRequestOf, valuesOf,
+  applyPreset, canFinish, canSaveOpenWebUi, completeRequestOf, isOpenWebUiStale, isStale, newForm, newOpenWebUiForm, openWebUiAllLocked,
+  openWebUiCompleteRequestOf, openWebUiTestRequestOf, presetOf, secretOf, testRequestOf, valuesOf,
 } from './setupValues'
 
 const AUTHORITY = 'https://idp.example.org/realms/ume'
@@ -119,5 +120,60 @@ describe('setup values (admin design §5.11, identity design §19)', () => {
     applyPreset(form, signIn, 'keycloak')
     expect(form.tenantId).toBe('')
     expect(valuesOf(form, signIn)).toEqual(wizardValues())
+  })
+})
+
+describe('Open WebUI\'s values (admin design §5.11 step 4, identity design §19 "Open WebUI")', () => {
+  const CHAT = 'https://chat-idp.example.org/realms/chat/.well-known/openid-configuration'
+
+  it('sends only its own members, null for a default or a deployment value, and the secret in three states', () => {
+    const signIn = openWebUiSignIn({ clientId: { value: 'chat', source: 'deployment' } })
+    const form = newOpenWebUiForm(signIn)
+    expect(form).toMatchObject({ providerUrl: '', clientId: 'chat', providerName: '', clientSecret: '', removeSecret: false })
+    form.clientId = 'typed-over'
+    form.providerUrl = ` ${CHAT} `
+    expect(openWebUiTestRequestOf(form, signIn)).toEqual({ target: 'open-webui', ...openWebUiValues({ providerUrl: CHAT }), clientSecret: null })
+    form.clientSecret = 's3cret'
+    expect(openWebUiTestRequestOf(form, signIn).clientSecret).toBe('s3cret')
+    form.removeSecret = true
+    expect(openWebUiTestRequestOf(form, signIn).clientSecret).toBe('')
+  })
+
+  it('fills the form from the checked values on a reload, so the check still counts, and marks it stale on a change', () => {
+    const signIn = openWebUiSignIn()
+    const test = openWebUiTest({ values: openWebUiValues({ providerUrl: CHAT, clientSecretExpiresOn: '2027-01-31' }) })
+    const form = newOpenWebUiForm(signIn, test)
+    expect(form).toMatchObject({ providerUrl: CHAT, clientSecretExpiresOn: '2027-01-31', removeSecret: false, clientSecret: '' })
+    expect(newOpenWebUiForm(signIn, { ...test, clientSecret: 'removed' }).removeSecret).toBe(true)
+    expect(isOpenWebUiStale(test, form, signIn, false)).toBe(false)
+    expect(isOpenWebUiStale(test, form, signIn, true)).toBe(true)
+    form.providerName = 'Chatten'
+    expect(isOpenWebUiStale(test, form, signIn, false)).toBe(true)
+  })
+
+  it('offers Save for a current check that found the discovery document and was not refused', () => {
+    const test = openWebUiTest()
+    expect(canSaveOpenWebUi(test, false)).toBe(true)
+    expect(canSaveOpenWebUi({ ...test, result: { discovery: 'ok', clientAccepted: null, clientReason: 'client_unverified' } }, false)).toBe(true)
+    expect(canSaveOpenWebUi({ ...test, status: 'failed', reason: 'client_refused', result: { discovery: 'ok', clientAccepted: false, clientReason: 'client_refused' } }, false))
+      .toBe(false)
+    expect(canSaveOpenWebUi(test, true)).toBe(false)
+    expect(canSaveOpenWebUi(null, false)).toBe(false)
+    expect(canSaveOpenWebUi({ ...test, values: null }, false)).toBe(false)
+  })
+
+  it('completes with the checked values and the check\'s id, without a secret', () => {
+    const body = openWebUiCompleteRequestOf(openWebUiTest({ values: openWebUiValues({ clientId: ' chat ' }) }) as Parameters<typeof openWebUiCompleteRequestOf>[0])
+    expect(body).toEqual({ target: 'open-webui', ...openWebUiValues({ clientId: 'chat' }), testId: 'w1' })
+    expect(body).not.toHaveProperty('clientSecret')
+  })
+
+  it('knows when the deployment sets everything', () => {
+    const deployed = { value: 'x', source: 'deployment' as const }
+    const all = openWebUiSignIn({
+      providerUrl: deployed, clientId: deployed, providerName: deployed, clientSecret: { set: true, source: 'deployment', setAt: null, expiresOn: null, unreadable: false },
+    })
+    expect(openWebUiAllLocked(all)).toBe(true)
+    expect(openWebUiAllLocked({ ...all, clientSecret: { ...all.clientSecret, source: 'default', set: false } })).toBe(false)
   })
 })

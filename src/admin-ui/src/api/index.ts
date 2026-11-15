@@ -22,6 +22,10 @@ import type {
   AssistantVersion,
   AssistantVersionSummary,
   BffUser,
+  OpenWebUiCompleteRequest,
+  OpenWebUiSaved,
+  OpenWebUiTest,
+  OpenWebUiTestRequest,
   SetupCompleteRequest,
   SetupSessionStarted,
   SetupState,
@@ -113,6 +117,10 @@ export const api = {
     state: () => request<SetupState>('GET', '/bff/setup/state', { ownSession: true }),
     test: (body: SetupValuesRequest) => request<SetupTestStarted>('POST', '/bff/setup/test', { body, ownSession: true }),
     complete: (body: SetupCompleteRequest) => request<{ signInUrl: string }>('POST', '/bff/setup/complete', { body, ownSession: true }),
+    /** Open WebUI's check: the back channel only, answered at once (no window, no polling). */
+    testOpenWebUi: (body: OpenWebUiTestRequest) => request<OpenWebUiTest>('POST', '/bff/setup/test', { body, ownSession: true }),
+    /** Saves Open WebUI's checked values; setup stays open. */
+    completeOpenWebUi: (body: OpenWebUiCompleteRequest) => request<OpenWebUiSaved>('POST', '/bff/setup/complete', { body, ownSession: true }),
   },
   organisation: {
     departments: () => http.get<Department[]>('/api/organisation/departments'),

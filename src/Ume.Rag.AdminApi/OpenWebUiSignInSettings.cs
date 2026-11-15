@@ -17,9 +17,16 @@ public sealed class OpenWebUiSignInSettings(OpenWebUiSignInReader reader, IConfi
 
     public Task<EffectiveOpenWebUiSignIn> ReadAsync(CancellationToken ct) => reader.ReadAsync(ct);
 
-    /// <summary>The block <c>GET /bff/setup/state</c> and <c>GET /api/settings/sign-in</c> show: no secret, only whether one is set and when.</summary>
-    public async Task<OpenWebUiSettingsDto> ShowAsync(CancellationToken ct) =>
-        new(OpenWebUiSignIn.Enabled(configuration), OpenWebUiSignInDto.Of(await ReadAsync(ct)), OpenWebUiSignIn.RedirectUri(configuration));
+    /// <summary>The block <c>GET /api/settings/sign-in</c> shows: no secret, only whether one is set and when.</summary>
+    public Task<OpenWebUiSettingsDto> ShowAsync(CancellationToken ct) => ShowAsync(null, ct);
+
+    /// <summary>
+    /// The block as <c>GET /bff/setup/state</c> shows it: <paramref name="sessionAuthority"/> is the setup session's latest passed rag-admin
+    /// test's authority (<see cref="SetupOpenWebUiTest.SessionAuthorityAsync"/>), the default provider address's source while rag-admin's
+    /// effective authority is unset.
+    /// </summary>
+    public async Task<OpenWebUiSettingsDto> ShowAsync(string? sessionAuthority, CancellationToken ct) =>
+        new(OpenWebUiSignIn.Enabled(configuration), OpenWebUiSignInDto.Of(await reader.ReadAsync(sessionAuthority, ct)), OpenWebUiSignIn.RedirectUri(configuration));
 
     /// <summary>
     /// Saves the wizard's values through the settings write path (version bump, <c>pg_notify('rag_config')</c>, an audit entry with

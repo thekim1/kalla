@@ -10,7 +10,8 @@ namespace Ume.Rag.AdminApi;
 /// state (no stored progress flags). A collection's checklist is done once an assistant whose published version links it
 /// has a client audience (it is in Open WebUI). <c>GET /api/overview</c> is Home (§5.5.1, "P1's Home"): the caller's
 /// published assistants over the last 7 days (Live), the runs, queue and syncs (Health), and the collections whose
-/// checklist is not done yet (the attention items join it in P2).
+/// checklist is not done yet (the attention items join it in P2); for a platform admin also the client secrets stored by the
+/// setup wizard that expire within <see cref="SecretExpiryDays"/> days (§5.11).
 /// </summary>
 public static class SetupEndpoints
 {
@@ -22,6 +23,9 @@ public static class SetupEndpoints
 
     /// <summary>Health's period: the runs started in the last 24 hours.</summary>
     public static readonly TimeSpan RunWindow = TimeSpan.FromHours(24);
+
+    /// <summary>Home reminds platform admins of a wizard-stored client secret this many days before its expiry date (admin design §5.11).</summary>
+    public const int SecretExpiryDays = 30;
 
     public static RouteGroupBuilder MapSetup(this RouteGroupBuilder api)
     {
@@ -36,7 +40,8 @@ public static class SetupEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithTags("Collections").WithName("GetCollectionSetup")
             .WithSummary("The collection's setup checklist (Kom igång), computed from state");
 
-        api.MapGet("/overview", async (AdminContext admin, OrganisationSync organisation, GatewayModelSync models, CancellationToken ct) =>
+        api.MapGet("/overview", async (AdminContext admin, OrganisationSync organisation, GatewayModelSync models, SignInSettings signIn, OpenWebUiSignInSettings openWebUi,
+                CancellationToken ct) =>
             {
                 var collections = await CollectionEndpoints.Scoped(admin).AsNoTracking().OrderByDescending(c => c.UpdatedAt).ThenBy(c => c.Id).Take(OverviewCollections)
                     .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt, c.DepartmentId)).ToListAsync(ct);
@@ -45,10 +50,10 @@ public static class SetupEndpoints
                 var needsProfile = admin.IsPlatformAdmin
                     && !await admin.Db.EmbeddingProfiles.AsNoTracking().AnyAsync(p => p.IsDefault && p.State == EmbeddingProfileStates.Active, ct);
                 return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)], needsProfile, await LiveAsync(admin, ct),
-                    await HealthAsync(admin, organisation.Status, models.Status, ct));
+                    await HealthAsync(admin, organisation.Status, models.Status, ct), await SecretExpiryAsync(admin, signIn, openWebUi, ct));
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Overview").WithName("GetOverview")
-            .WithSummary("Home: the caller's published assistants over the last 7 days, the runs, queue and syncs, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created");
+            .WithSummary("Home: the caller's published assistants over the last 7 days, the runs, queue and syncs, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created and the client secrets that expire soon");
 
         return api;
     }
@@ -131,6 +136,29 @@ public static class SetupEndpoints
             queue, new SyncHealth(organisation.LastSuccessAt, organisation.ConsecutiveFailures), new SyncHealth(models.LastSuccessAt, models.ConsecutiveFailures));
     }
 
+    /// <summary>
+    /// The reminder before a client secret expires (admin design §5.11), for a platform admin only: rag-admin's and Open WebUI's
+    /// client secrets stored by the setup wizard whose expiry date is at most <see cref="SecretExpiryDays"/> days after today
+    /// (Europe/Stockholm), expired ones included. A deployment's secret has no date here (the readers show one only while the
+    /// wizard's secret applies), and Open WebUI's counts only while the deployment runs it (its secret is renewed in its wizard step).
+    /// </summary>
+    private static async Task<List<SecretExpiry>> SecretExpiryAsync(AdminContext admin, SignInSettings signIn, OpenWebUiSignInSettings openWebUi, CancellationToken ct)
+    {
+        if (!admin.IsPlatformAdmin)
+        {
+            return [];
+        }
+
+        var last = CostEndpoints.Today(admin).AddDays(SecretExpiryDays);
+        var chat = await openWebUi.ShowAsync(ct);
+        (string Which, DateOnly? ExpiresOn)[] secrets =
+        [
+            (SetupTargets.RagAdmin, SignInSettingsDto.Of(await signIn.ReadAsync(ct)).ClientSecret.ExpiresOn),
+            (SetupTargets.OpenWebUi, chat.Enabled ? chat.SignIn.ClientSecret.ExpiresOn : null),
+        ];
+        return [.. secrets.Where(s => s.ExpiresOn <= last).Select(s => new SecretExpiry(s.Which, s.ExpiresOn!.Value))];
+    }
+
     /// <summary>A handful of grouped queries for all <paramref name="collections"/> at once (no per-collection round trips).</summary>
     private static async Task<List<CollectionSetup>> ComputeAsync(AdminContext admin, IReadOnlyList<CollectionRef> collections, CancellationToken ct)
     {
@@ -206,10 +234,14 @@ public sealed record CollectionSetup(
 /// Home (§5.5.1): whether any collection is in scope (the empty state, §5.4 step 1), the checklists not done,
 /// <see cref="NeedsEmbeddingProfile"/>: the caller is a platform admin and there is no active default embedding profile yet,
 /// which a new collection needs (<c>no_embedding_profile</c>), the published assistants' last 7 days (<see cref="Live"/>) and
-/// <see cref="Health"/>.
+/// <see cref="Health"/>, and <see cref="SecretExpiry"/>: for a platform admin, the wizard-stored client secrets that expire within 30 days.
 /// </summary>
 public sealed record Overview(
-    bool HasCollections, IReadOnlyList<CollectionSetup> Setup, bool NeedsEmbeddingProfile, IReadOnlyList<LiveAssistant> Live, OverviewHealth Health);
+    bool HasCollections, IReadOnlyList<CollectionSetup> Setup, bool NeedsEmbeddingProfile, IReadOnlyList<LiveAssistant> Live, OverviewHealth Health,
+    IReadOnlyList<SecretExpiry> SecretExpiry);
+
+/// <summary>A client secret stored by the setup wizard that expires soon or has expired: <see cref="Which"/> is a <see cref="SetupTargets"/> value.</summary>
+public sealed record SecretExpiry(string Which, DateOnly ExpiresOn);
 
 /// <summary>
 /// A published assistant's last 7 days on Home: <see cref="Questions"/> are the totals' messages, <see cref="CostUsd"/> the
