@@ -266,15 +266,14 @@ sudo curl --cacert deploy/certs/ca.pem https://localhost:9543/health/ready
 
 Every .NET service also answers `/health/live` and `/version`.
 
-### 6. Before the first use of the admin UI
+### 6. The admin test panel's client
 
-A platform admin signs in to the admin UI and creates the **`admin-console` client** under *Apps and
-keys*: name `admin-console`, type `internal`, highest information class `Sensitive`, *Stores chat history* off
-(identity design §4.1). The assistant test panel writes the cost of each test turn under that client, so test use shows
-apart from real use on the *Costs* pages. Create it before anyone uses the test panel: without it the panel still
-answers, but its cost is not recorded, and rag-admin's log warns "Test panel usage of assistant … not written (… calls):
-no admin-console client row of kind internal" (runbook, *Gateway keys, budgets and the read-back*). The development seed
-creates this row; a production database starts without it.
+Nothing to do: rag-migrate creates the **`admin-console` client** on its first run, in every deployment (identity design
+§4.1): type `internal`, highest information class `Sensitive`, *Stores chat history* off, shown under *Apps and keys* as
+managed by the deployment. The assistant test panel writes the cost of each test turn under it, so test use shows apart
+from real use on the *Costs* pages. A platform admin may edit its settings; it has no keys, and none can be made on it.
+An `admin-console` client of type `internal` made by hand before becomes the managed one, and rag-migrate revokes any key
+it had.
 
 ## Gateway credential keys
 

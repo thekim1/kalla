@@ -1047,7 +1047,7 @@ export const PLATFORM_CLIENTS = {
   /** A kind the deployment sets up itself (identity design §5.2, M-17 C4): not added here. */
   byDeployment: 'Set up by the deployment',
   managed: 'Managed by the deployment',
-  managedNote: 'The deployment made this app and keeps its key. Its settings and the assistants it offers are edited here; its key changes only with a new deployment.',
+  managedNote: 'The deployment made this app and keeps its keys. Its settings and the assistants it offers are edited here; its keys change only with a new deployment.',
   steps: { kind: 'Type', fields: 'Settings', assistants: 'What it may use', firstKey: 'First key' },
   step: (n: number, total: number, title: string) => `Step ${n} of ${total}: ${title}`,
   next: 'Next',

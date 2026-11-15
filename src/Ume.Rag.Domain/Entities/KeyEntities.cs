@@ -35,6 +35,9 @@ public sealed class Client
     /// <summary>An <c>open-webui</c> client's default (chat design §13.3).</summary>
     public const int OpenWebUiFeedbackRetentionDays = 90;
 
+    /// <summary>The admin test panel's client, the deployment's managed <c>internal</c> one (identity design §4.1, admin design §4.9).</summary>
+    public const string AdminConsoleName = "admin-console";
+
     public string[] AllowedOrigins { get; set; } = [];
 
     /// <summary><c>none</c> or <c>read</c> (P3 <c>confirm</c>); tools design §5.1.</summary>
@@ -44,9 +47,10 @@ public sealed class Client
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// The deployment's own client (identity design §5.2, M-17 C4): <c>rag-migrate</c> creates it and keeps its one key, the
-    /// one the deployment generated; the admin edits its settings but not its keys. Only the managed <c>open-webui</c> client's
-    /// users are trusted from their JWT. At most one per kind (<c>IX_Clients_Managed</c>).
+    /// The deployment's own client (identity design §4.1, §5.2; M-17 C4, #712): <c>rag-migrate</c> creates it and keeps its keys:
+    /// Open WebUI's one key, the one the deployment generated, and none on <see cref="AdminConsoleName"/>; the admin edits its
+    /// settings but not its keys. Only the managed <c>open-webui</c> client's users are trusted from their JWT. At most one per
+    /// kind (<c>IX_Clients_Managed</c>).
     /// </summary>
     public bool IsManagedByDeployment { get; set; }
 

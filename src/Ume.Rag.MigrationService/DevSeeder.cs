@@ -48,20 +48,6 @@ public static class DevSeeder
 
         // A profile seeded before item 13 gets its canary text now; the admin API records the canary embedding.
         await EnsureCanaryTextAndIndexAsync(db, profile, clock, cancellationToken);
-
-        // Identity §4.1's pilot row: the admin test panel's usage is written under it (admin §4.9, B-39). Insert-if-absent by name and kind.
-        if (!await db.Clients.AnyAsync(c => c.Name == AdminConsoleClientName && c.Kind == ClientKinds.Internal, cancellationToken))
-        {
-            db.Clients.Add(new Client
-            {
-                Name = AdminConsoleClientName,
-                Kind = ClientKinds.Internal,
-                ClassificationCeiling = Classification.Sensitive,
-                UpdatedAt = clock.GetUtcNow(),
-                UpdatedBy = SettingsSeeder.Actor,
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
     }
 
     /// <summary>Sets the canary text when the profile has none, and creates the profile's partial HNSW index once.</summary>
@@ -77,9 +63,6 @@ public static class DevSeeder
 
         await db.Database.ExecuteSqlAsync($"SELECT content.rag_ensure_profile_index({profile.Id}, {profile.Dimensions})", cancellationToken);
     }
-
-    /// <summary>The admin test panel's client (identity §4.1: kind <c>internal</c>, ceiling <c>sensitive</c>, no history).</summary>
-    public const string AdminConsoleClientName = "admin-console";
 
     /// <summary>
     /// The client <see cref="DevClientName"/> (<c>open-webui</c>, ceiling <c>internal</c>, no history) with the key

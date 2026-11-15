@@ -52,7 +52,7 @@ public sealed partial class AdminTestPanel(
     public const int TextLength = 600;
 
     /// <summary>The client row the panel's usage is written under (identity §4.1: name <c>admin-console</c>, kind <c>internal</c>).</summary>
-    public const string ClientName = "admin-console";
+    public const string ClientName = Domain.Entities.Client.AdminConsoleName;
 
     private readonly ILogger _logger = loggers.CreateLogger<AdminTestPanel>();
 
@@ -172,11 +172,11 @@ public sealed partial class AdminTestPanel(
     }
 
     /// <summary>
-    /// The registry's <c>admin-console</c> row of kind <c>internal</c> (identity §4.1), or null when there is none. Names are not
-    /// unique, so with two such rows the oldest (lowest version-7 id) is taken, the same on every call (#625 review).
+    /// The registry's <c>admin-console</c> row (identity §4.1): the <c>internal</c> client rag-migrate keeps as managed by the
+    /// deployment (#712), found by its kind as Open WebUI's is, so a rename keeps it; null before rag-migrate has run.
     /// </summary>
     private static ClientEntry? AdminConsoleRow(PolicySnapshot snapshot) =>
-        snapshot.Clients.Values.Where(c => c.Name == ClientName && c.Kind == Domain.Entities.ClientKinds.Internal).OrderBy(c => c.Id).FirstOrDefault();
+        snapshot.Clients.Values.SingleOrDefault(c => c.Kind == Domain.Entities.ClientKinds.Internal && c.IsManagedByDeployment);
 
     /// <summary>
     /// Upserts <paramref name="records"/> into <c>chat."AssistantDailyUsage"</c> under the assistant and the <c>admin-console</c>
