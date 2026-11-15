@@ -24,97 +24,99 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 37)
+## Start here (session 38)
 
 1. **GitHub first.** `gh pr list`, then the latest comments on **#667** (the M-16 session, which builds M-17 and the
-   #694 fixes for the user, GitHub `thekim1`) and **#580** (stream b and gateway decisions). Review each new PR's
-   security-relevant parts. The user has the main session approve and merge ready PRs: update a stale branch first
-   (`gh pr update-branch`) so CI runs on the current `main`, and settle a PR's *Design deviations* on `main` after it
-   merges (the design is main's).
-2. **The M-16 session works down review #694** in its suggested order. Its next fix is **#702** (LibreOffice's output skips
-   the parser's zip-bomb check). Open from #694:
-   - high: #696 (gateway calls under the config lock) and #697 (Portainer bootstrap re-run test, shellcheck);
-   - medium: #700, #702, #703, #705–#710;
-   - small fixes: #711 (stream a) and #712 (stream b; its item 8, seeding `admin-console`, is decided).
-   - Also open: #720 (a misleading `gateway_key_model` text, from the grading dry run).
-3. **Main's own next item** (no input needed): sort the 124 open rows of `plans/to-verify.md` by phase (live block,
-   before go-live, P2), closing what no longer applies; 23 of them have their context only in archived passes. After
-   that, the roadmap's other *Meanwhile* items: measure the upload gaps U1–U7, and a faster `Ume.Rag.AdminApi.Tests`.
-4. **Small design debts:**
-   - repo-and-deployment's Portainer section needs a line for the `proxy` profile (C8).
-   - Two minor points from the C8 review are open on #690: the trusted-proxy address changes when `rag-proxy` is
-     recreated (docs), and Open WebUI's site sends no HSTS.
+   #694 fixes for the user, GitHub `thekim1`) and **#580** (stream b and gateway decisions). The user has the main
+   session approve and merge ready PRs: update a stale branch first (`gh pr update-branch`), review the
+   security-relevant parts, and settle a PR's *Design deviations* on `main` after it merges (the design is main's).
+2. **Review #727** (open, green): M-17 C7 and the Portainer stack's gateway pin to **v0.10.2**. The gateway's migrations
+   create Ume.Rag's three credential keys from `UME_INTEGRATION_MANIFEST`, `rag-bootstrap` copies them to the services
+   (a set `UME_RAG_*_GATEWAY_KEY` still wins), and rag-admin joins the gateway's `edge` network for
+   `https://adminapi:8443/integration/v1`. Security-relevant: where the key secrets land (their own volume, not
+   `ume-certs`, per the gateway's #87 decision), file modes, and who can read them. C12 and C11 follow from the M-16
+   session in their own PRs, then 0.6.0.
+3. **#726 needs a design answer** (from the user, for thekim1/supportbot): `ume.general_knowledge` per chat request,
+   capped by the assistant's level, so one assistant serves three strictness levels. It touches chat §3 (the `ume`
+   object), V36 (a public assistant with general knowledge) and the test panel. Present it as four options with a
+   recommendation (handbook; memory *Decisions: four alternatives*).
+4. **Review #694's fixes** as the M-16 session posts them. Still open: high #696 (gateway calls under the config lock),
+   #697 (Portainer bootstrap re-run test, shellcheck); medium #700, #702, #703, #705–#710; small #711 (stream a) and
+   #712 (stream b; item 8 decided); #720 (a misleading `gateway_key_model` text).
+5. **Main's next items, no input needed:**
+   - The 16 rows of `plans/to-verify.md` *Before go-live* (sorted this session): local tests and source readings such
+     as Cronos DST (#16), Open WebUI behaviour (#47, #50, #134, #165), the PDF viewer CSP (#95), licences (#109,
+     #110), the OTel Postgres receiver (#123). #69–#71 belong with #702's LibreOffice work.
+   - A faster `Ume.Rag.AdminApi.Tests` (stream b's project; ask on #580 first).
+   - M-19's two cosmetic leftovers (`plans/work/main.md`): a Live card's numbers in link colour, *Hide* on its own line
+     on a phone.
+6. **Small design debts:** repo-and-deployment's Portainer section needs a line for the `proxy` profile (C8); two
+   minor points from the C8 review are open on #690 (the trusted-proxy address changes when `rag-proxy` is recreated;
+   Open WebUI's site sends no HSTS).
 
 ## State
 
 - **Release:** `v0.5.1` is the last (2026-11-13). The user deployed **0.5.0** with the Portainer stack, `openwebui` and
-  `clamav` on ("deployed fine"). Their Open WebUI client was made by hand, so their next upgrade follows the upgrade
-  guide's C4 note.
-- **M-17 (deploy configuration):**
-  - **Merged:** C0–C6 and C8–C10 (#674, #683, #682, #684, #687, #689, #690 with the proxy fix #692, #691, #693). Their
-    design is on `main`.
-  - **Left:** C7, C11 and C12 wait on the gateway's releases. Its answers on #580: #89 accepted; #87 accepted as
-    create-only with its own volume; #88 a generic add with a preset file Ume.Rag owns; #90 declined, so the context
-    carries `integration_api_url` instead. The proposal's rows and `plans/work/main.md` follow them. **C13** (the
-    `init-deployment.sh` and docs clean-up) needs nothing.
-- **M-18** merged (#686).
-- **Review #694** (2026-11-14, the successor to #513, which is closed): 18 issues, #695–#712.
-  - Merged: #713 (#695), #714 (#699), #715 (#698), #716 (#701).
-  - #717 (#704) was done by main.
-- **Decided by the user on 2026-11-15:**
-  - **#704:** a tag release reads no shared cache. Built in #717; its tag path first runs at 0.6.0. Before go-live,
-    `release.yml` and `entra.yml` move to a runner of their own under a separate OS user (roadmap step 7). This settles
-    the old "CI runners A/B" call.
-  - **#712 item 8:** the migrator seeds the platform's own clients in every deployment, `admin-console` now and
-    `rag-internal` from P2 (identity §4.1, Decisions "Deploy configuration"). The code is stream b's.
-- **Grading dry run done** (2026-11-15, FakeGateway stack):
-  - `answer`, a graded CSV and `totals` worked against a live rag-api with a real integration key.
-  - The set-up the real run needs is in the roadmap and on #100, which stays open until the gold set (J13) exists.
+  `clamav` on. Their Open WebUI client was made by hand, so their next upgrade follows the upgrade guide's C4 note.
+- **Gateway v0.10.2** (2026-11-14) released all four of our requests: #87 (manifest provisioning, ADR 022), #88 (the
+  Ume.Rag preset, `deploy/integration-presets/ume-rag.json` is ours), #89 (`organisation_name`), #90's replacement
+  (`integration_api_url` in the context). M-17 C7, C11 and C12 are unblocked; C7 is #727.
+- **M-17 (deploy configuration):** merged C0–C6, C8–C10; open C7 (#727), C11, C12, C13.
+- **M-19 (admin UI review) done** (#724, decided by the user 2026-11-15, UI1 B, UI2 B, UI3 A, UI4 B):
+  - Home has a Live card per published assistant and a Health block, and folds published checklists.
+  - The knowledge base and assistant lists have more columns, and every list row is a real link.
+  - The audit log shows names linked to their objects, events in plain words, and pickers.
+  - The assistant page's wording says what saving does.
+  - Not done: Settings placeholders (the API doesn't return the value in force) and personal-data document links (no
+    document page). As-built details are in admin §5.5.1, §5.5.2, §5.5.4, §9.1.
+- **Upload gaps measured** (#722, `proposals/upload-quality-review.md` *Measurement 1*): U1 (pictures) is the largest
+  loss. On 14 public IT guides, 18 % of the text is inside screenshots, 19–76 % in step-by-step guides, and none of it
+  is kept. U5 and U7 cost little. `scripts/upload-gaps/measure.py` can run on DoIT's files at T6. U1 still needs a
+  Decisions entry (keep the OCR text, or a vision description).
+- **`plans/to-verify.md` is sorted by when a check can run** (#721): live block by roadmap step (43), before go-live
+  (16), P2 and later (53); 12 rows closed.
 - **Every stream-queue code item is done.** Stream b (remote) announces on #580, the M-16 session on #667.
-- **The test chatbot (T2–T6) is the user's team's** (2026-11-14): don't plan or prepare it; fix what they report.
-- **Local stack:** the user secrets still block the AppHost with the real gateway. A FakeGateway stack on a throwaway
-  volume works (handbook *Local stack*; the scripting notes are under *Lessons*). Nothing is running and no worktrees
-  are left.
+- **The test chatbot (T2–T6) is the user's team's**: don't plan or prepare it; fix what they report.
+- **Local stack:** the user secrets still block the AppHost with the real gateway. A FakeGateway stack on a copy of
+  the dev volume works for UI checks (session 37, *Lessons* below). Nothing is running; no worktrees are left.
 
 ## Next release (0.6.0), when the user asks
 
-- **CHANGELOG** *Unreleased* is current through #717 (#718): add what merges after. At the release, its *Rolling
-  update* line is **no** for rag-admin (`RemoveWorkerConcurrency`: stop the old rag-admin first).
-- **The upgrade guide's** *Unreleased* has notes for C1–C6, C8–C10 and M-18. C9's note is **to do before the update**: give
-  rag-api's and rag-admin's credential keys `OnPrem` and `Eu`.
+- **CHANGELOG** *Unreleased* is current through #724 (#725): add what merges after (#727, C11, C12). At the release,
+  its *Rolling update* line is **no** for rag-admin (`RemoveWorkerConcurrency`: stop the old rag-admin first).
+- **The upgrade guide's** *Unreleased* has notes for C1–C6, C8–C10 and M-18; C7 adds one. C9's note is **to do before
+  the update**: give rag-api's and rag-admin's credential keys `OnPrem` and `Eu`.
 - The repository setting *Allow GitHub Actions to create and approve pull requests* must be on for C0's pin PR.
-- The full CI set plus a release dry run (handbook *Lean CI*). Move the queues' ticked items to
+- The full CI set plus a release dry run (handbook *Lean CI*), the browser tests included: #724 changed
+  `tests/e2e/specs/pilot.spec.ts` (a run row's first cell is a link now). Move the queues' ticked items to
   `plans/archive/work/to-v0.6.0.md` (handbook *Plan files*).
+
+## Session 37 (2026-11-15)
+
+- **to-verify triage** (#721): the open rows are sorted into live block, before go-live, and P2 and later. Closed:
+  #60, #63, #68, #72, #91 (resolved by tests and `release.yml`); #36–#38, #147 (the gateway's own checks); #130.
+- **Upload gaps measured** (#722), above.
+- **Admin UI review:**
+  - A browser walk through 25 screens on a copy of the dev data.
+  - Three bugs fixed (#723): Documents by link, archived assistants, tabs in `?tab=`.
+  - The proposal was decided by the user, then built as M-19 by four implementor agents in parallel worktrees, merged
+    on one branch and checked in the browser (#724). The CHANGELOG is in #725.
+- **GitHub:** found the gateway's v0.10.2 and unblocked C7/C11/C12 on #667. No PRs from others came in until #727.
+- **Lessons:**
+  - Two implementor agents refused to commit (their rules say the user commits). Plan to commit their work yourself
+    after reading the diff.
+  - Parallel agents running test suites push the load to ~37, and vitest then fails at random in untouched specs.
+    Rerun alone before calling a failure real.
+  - The Playwright MCP browser rejects the dev certificate. Use a Node script with `tests/e2e/node_modules/playwright`
+    and `ignoreHTTPSErrors`, logging in from the user secret inside the script (never on the command line).
+  - Copy the dev volume (`ume-rag-m1-postgres`) to a throwaway volume with `alpine cp -a` for a realistic stack. Remove
+    it after.
+  - `uv run` in `src/parser` creates `.venv`, which breaks `check-doc-refs.py`. Delete it after use.
 
 ## Session 36 (2026-11-14 to 15)
 
-- **Reviews:**
-  - Reviewed C5 (#687), C6 (#689), C8 (#690, after merge), C9 (#691), C10 (#693), #715 and #716, then merged the
-    approved ones.
-  - In C6, rag-api's new secrets directory could override any of its configuration; it now takes only the feedback key.
-  - C9's first context read could throw a bare cancellation into a request; that is fixed and tested.
-  - My #687 nit about a create race was wrong: config writes already serialise on the version row. I corrected it on #688.
-- **Built:**
-  - **#692:** the proxy re-resolves its upstreams. Proved locally against the pinned nginx: 502 before the fix, 200
-    after, once another container held the old address.
-  - **#717:** #704's release caches.
-  - **#718 and #719:** the CHANGELOG and the upgrade note.
-- **Design on `main`:** C5, C6, C9 (identity §4.7), C10 (identity's group table and claim mapping, admin §5.10,
-  data-model §2.1), chat §12.2 and §17 (#698), and the two decisions above.
-- **Review #694:** four parallel reviewers covered deploy, the admin API, the worker and chat, and the admin UI. Each
-  finding was checked against the code before it was filed.
-
-## Session 35 (2026-11-14)
-
-- **M-17 C0** built and proven by a release dry run (#674); **C1** built on its branch.
-- **Parser audit fixed** (#678): the lock's `exclude-newer` moved to 2026-11-07, `opentelemetry-api` 1.45.2.
-- This machine's Docker has no free address pool for the stack's networks: `portainer-boot.sh --compose-file` with fixed
-  subnets (10.210.N.0/24) works. Port 5000 is taken here (a local registry must use another port). The `gh` token has
-  no `read:packages`, so Ume.Rag's released images can't be pulled here: build them into a local registry instead.
-
-## Session 34 (2026-11-13 to 14)
-
-- Deploy-configuration plan written and decided (#662); gateway issues llmgateway#87–#90 filed for the user.
-- Clients and keys page built with two implementor agents against a contract in admin §5.9 (#663); A-41 (#665); #684
-  reviewed (C4: rag-api trusts only the deployment's Open WebUI client); its upgrade note (#685).
-- The deploy was reported fine; the test chatbot moved to the user's team.
+- Reviewed and merged M-17 C5, C6, C8–C10 and #715/#716; built #692 (the proxy re-resolves its upstreams), #717
+  (#704's release caches), #718 and #719 (CHANGELOG, upgrade note).
+- Review #694 filed (18 issues, #695–#712) by four parallel reviewers, each finding checked against the code.
+- The user decided #704 (tag releases read no shared cache) and #712 item 8 (the migrator seeds the platform's own
+  clients). Grading dry run done on a FakeGateway stack.
