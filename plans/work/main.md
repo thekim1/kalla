@@ -90,7 +90,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   changes them.
 - **Done when:** C0–C13 merged (C7, C11, C12 once their gateway release exists); a fresh Portainer stack boots with the
   proposal's §2 "Net effect" (six values, no pasted keys once G1 is pinned), checked by C0's release boot test.
-- **Waits on:** nothing for C0; the gateway releases for C7, C11, C12.
+- **Waits on:** nothing. The gateway released all three in **v0.10.2** (2026-11-14): #87 (with #94, ADR 022, *Provisioning
+  from a manifest* in its `docs/integrations.md`), #89 and #90's replacement (#92), and #88's preset (#94). Pin v0.10.2
+  first.
 - **Read:** the proposal; Decisions above; docs/portainer.md; deploy/portainer/.
 - **Status (2026-11-15):** C0 merged (#674; the pin pull request runs first at the next tag release and needs the
   repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
@@ -103,7 +105,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   user's choice; upstream re-resolution #692), C9 (#691: each service's ceiling is its credential key's residencies from
   the context, `OnPrem` before the first one; `Gateway:MaxResidency` gone), C10 (#693: `Settings.Identity.RoleGroups`,
   *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass). Left: C7, C11 and
-  C12 on the gateway's releases (#580), and C13. The M-16 session continues with the next steps in order and announces each on #667.
+  C12 (unblocked by the gateway's v0.10.2, 2026-11-14) and C13. The M-16 session continues with the next steps in order and announces each on #667.
 
 ### [x] M-18 Remove `Settings.WorkerConcurrency` until P2 (user, 2026-11-14; #677)
 - **Do:** drop the member from `PlatformSettings`, the EF model (a migration dropping the column; no data step), the
