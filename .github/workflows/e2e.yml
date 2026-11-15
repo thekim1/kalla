@@ -4,7 +4,8 @@ name: E2E
 # stack with its own test database and the FakeGateway (scripts/Start-E2E.ps1). By hand from the Actions tab, or from
 # release.yml when asked (Decisions "E2E only on release or by hand (user, 2026-11-05)", "E2E optional on release (user,
 # 2026-11-06)"): never on a pull request or push, no schedule; the run takes long and loads the runner. The specs are stream B's (tests/e2e, P1b hand-off L7): until tests/e2e/package.json exists the job reports
-# that and passes without running anything.
+# that and passes without running anything. A second phase then runs the setup wizard's spec on a stack of its own
+# (Start-E2E.ps1 -Setup: Setup:Try on a fresh volume); it runs even when the first phase failed, and either failing fails the job.
 on:
   workflow_dispatch:
   workflow_call:
@@ -61,10 +62,7 @@ jobs:
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"   # global tools (aspire, pwsh) for the later steps
           dotnet dev-certs https
           if [ -f src/admin-ui/package-lock.json ]; then (cd src/admin-ui && npm ci); fi
-      - name: Start the test stack
-        if: steps.specs.outputs.present == 'true'
-        run: pwsh scripts/Start-E2E.ps1
-      - name: Browser tests
+      - name: Playwright and Chromium
         if: steps.specs.outputs.present == 'true'
         working-directory: tests/e2e
         run: |
@@ -72,7 +70,13 @@ jobs:
           # Browser only: the self-hosted runner has no sudo, so its system libraries are installed once by the runner's owner
           # (sudo npx playwright install-deps chromium).
           npx playwright install chromium
-          npx playwright test
+      - name: Start the test stack
+        if: steps.specs.outputs.present == 'true'
+        run: pwsh scripts/Start-E2E.ps1
+      - name: Browser tests
+        if: steps.specs.outputs.present == 'true'
+        working-directory: tests/e2e
+        run: npx playwright test --project=pilot --project=accessibility
       - name: Page snapshot of a failed test
         if: failure() && steps.specs.outputs.present == 'true'
         working-directory: tests/e2e
@@ -82,6 +86,47 @@ jobs:
         run: |
           for r in adminapi admin-ui api worker open-webui; do
             echo "::group::$r"; aspire logs "$r" --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj 2>&1 | tail -n 300 || true; echo "::endgroup::"
+          done
+      - name: Start the setup wizard's stack
+        id: setup-stack
+        if: ${{ !cancelled() && steps.specs.outputs.present == 'true' }}
+        # Stops the first stack and starts Setup:Try on a fresh volume of its own; the wizard's spec closes setup on it.
+        run: pwsh scripts/Start-E2E.ps1 -Setup
+      - name: Mask the setup code and the secrets the setup spec types
+        if: steps.setup-stack.outcome == 'success'
+        # The spec reads them itself and prints none of them; masked as well, in case a log line shows one. ::add-mask:: lines
+        # are not shown in the log.
+        run: |
+          for _ in $(seq 1 30); do
+            code=$(aspire logs adminapi --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive 2>/dev/null \
+              | grep -o 'Setup code: [0-9A-Z-]*' | tail -n 1 | cut -d' ' -f3 || true)
+            if [ -n "$code" ]; then echo "::add-mask::$code"; break; fi
+            sleep 2
+          done
+          node -e '
+            const secrets = require(process.env.HOME + "/.microsoft/usersecrets/ume-rag-apphost-dev/secrets.json")
+            for (const name of ["oidc-client-secret", "openwebui-client-secret", "dev-user-password"]) {
+              const value = secrets["Parameters:" + name]
+              if (value) console.log("::add-mask::" + value)
+            }'
+      - name: Browser test of the setup wizard
+        id: setup-tests
+        if: steps.setup-stack.outcome == 'success'
+        working-directory: tests/e2e
+        # Its project records no trace, screenshot or video, and its error context has no page snapshot (setup.spec.ts).
+        run: npx playwright test --project=setup
+      - name: Error context of a failed setup test
+        if: steps.setup-tests.outcome == 'failure'
+        working-directory: tests/e2e
+        run: find test-results/setup -name error-context.md -exec sh -c 'echo "::group::$1"; cat "$1"; echo "::endgroup::"' _ {} \; 2>/dev/null || true
+      - name: Server logs of a failed setup run
+        if: steps.setup-stack.outcome == 'failure' || steps.setup-tests.outcome == 'failure'
+        # rag-admin's output holds the setup code: the line is redacted as well as masked.
+        run: |
+          for r in adminapi admin-ui keycloak; do
+            echo "::group::$r"
+            aspire logs "$r" --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj 2>&1 | tail -n 300 | sed -E 's/(Setup code: )[0-9A-Za-z-]+/\1[redacted]/' || true
+            echo "::endgroup::"
           done
       - name: Stop the test stack
         if: always() && steps.specs.outputs.present == 'true'

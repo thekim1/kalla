@@ -1,6 +1,10 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import AxeBuilder from '@axe-core/playwright'
+import axe from 'axe-core'
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 export type Role = 'rag-platform-admin' | 'rag-department-admin' | 'rag-viewer' | 'rag-no-role'
@@ -10,7 +14,8 @@ export const apiUrl = process.env.RAG_API_URL ?? 'https://localhost:7401'
 /** The static Swedish website of fixture-site/ (scripts/Start-E2E.ps1 serves it on this port). */
 export const fixtureSiteUrl = process.env.FIXTURE_SITE_URL ?? 'http://127.0.0.1:7416'
 
-function appHostSecret(name: string, environment: string): string {
+/** An AppHost parameter from its user secrets, or from `environment`. Never print it. */
+export function appHostSecret(name: string, environment: string): string {
   const fromEnvironment = process.env[environment]
   if (fromEnvironment) return fromEnvironment
   const directory = process.env.APPDATA
@@ -24,6 +29,39 @@ function appHostSecret(name: string, environment: string): string {
 
 /** The seeded Open WebUI (dev) client's key (DevSeeder: ume-rag-sk- + the AppHost's dev-key). */
 export const devClientKey = () => `ume-rag-sk-${appHostSecret('dev-key', 'E2E_DEV_KEY')}`
+
+/**
+ * Types a secret into a field without a locator `fill`, whose value would show in the call log of a failed assertion. The
+ * input event lets the page's form (Vue's v-model, Keycloak's form) take the value.
+ */
+export async function typeSecret(field: Locator, value: string): Promise<void> {
+  await field.evaluate((element, secret) => {
+    const input = element as HTMLInputElement
+    input.value = secret
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
+}
+
+const appHostProject = fileURLToPath(new URL('../../src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj', import.meta.url))
+
+/**
+ * The setup code rag-admin wrote to its output (identity design §19) on the stack of `scripts/Start-E2E.ps1 -Setup`: from
+ * `E2E_SETUP_CODE`, or the last "Setup code:" line of `aspire logs adminapi` (the CLI from `ASPIRE_CLI`, else `aspire` on the
+ * path). Null while rag-admin has not written it yet. Never print it: the output is read here and only the code is kept.
+ */
+export function setupCode(): string | null {
+  if (process.env.E2E_SETUP_CODE) return process.env.E2E_SETUP_CODE
+  const aspire = process.env.ASPIRE_CLI ?? 'aspire'
+  let output: string
+  try {
+    output = execFileSync(aspire, ['logs', 'adminapi', '--apphost', appHostProject, '--non-interactive'],
+      { encoding: 'utf8', maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 })
+  } catch {
+    // The error would carry the output, and with it the code.
+    throw new Error(`"${aspire} logs adminapi" failed: start the stack with scripts/Start-E2E.ps1 -Setup, and set ASPIRE_CLI when aspire is not on the path.`)
+  }
+  return [...output.matchAll(/Setup code: ([0-9A-Z-]{20,40})/g)].pop()?.[1] ?? null
+}
 
 /** Collects Content-Security-Policy violations of every page the test opens; the spec expects none (item 14). */
 export function watchCsp(page: Page): string[] {
@@ -51,12 +89,7 @@ export async function login(page: Page, role: Role): Promise<void> {
   await page.goto('/')
   await page.getByRole('link', { name: 'Sign in', exact: true }).click()
   await page.locator('#username').fill(role)
-  // evaluate keeps the password out of locator call logs if a later assertion fails.
-  await page.locator('#password').evaluate((element, password) => {
-    const input = element as HTMLInputElement
-    input.value = password
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  }, appHostSecret('dev-user-password', 'E2E_PASSWORD'))
+  await typeSecret(page.locator('#password'), appHostSecret('dev-user-password', 'E2E_PASSWORD'))
   await page.locator('#kc-login').click()
   await page.waitForURL(url => url.origin === new URL(adminUiUrl).origin)
   await expect(page.locator('#page-title')).toBeVisible()
@@ -121,6 +154,19 @@ export async function listedModels(request: APIRequestContext, key: string): Pro
   const response = await request.get(`${apiUrl}/v1/models`, { headers: { Authorization: `Bearer ${key}` } })
   expect(response.status()).toBe(200)
   return ((await response.json()).data as { id: string }[]).map(model => model.id)
+}
+
+// WCAG 2.2 AA is the design target (admin design §10.1, docs/accessibility-statement.md); AAA rules are not part of the gate.
+const wcagTags = [...new Set(axe.getRules().flatMap(rule => rule.tags))].filter(tag => /^wcag(2|21|22)(a|aa)$/.test(tag))
+
+/** The page as it is passes the WCAG A/AA axe rules and target size; soft, so one run lists every failure. */
+export async function scan(page: Page, label: string): Promise<void> {
+  // A button whose variant just changed is mid-transition between two colour pairs, which axe would read as low contrast.
+  await page.waitForFunction(() => !document.getAnimations().some(a => a instanceof CSSTransition && a.playState === 'running'))
+  const result = await new AxeBuilder({ page }).withTags(wcagTags).analyze()
+  const failures = result.violations.map(v => ({ id: v.id, targets: v.nodes.map(node => node.target) }))
+  expect.soft(failures, `axe: ${label}`).toEqual([])
+  expect.soft(await undersizedControls(page), `target size (WCAG 2.5.8): ${label}`).toEqual([])
 }
 
 /**

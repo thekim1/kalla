@@ -231,8 +231,17 @@ Playwright tests (`tests/e2e`) arrive with the admin UI.
 ```powershell
 .\scripts\Start-E2E.ps1          # reset the test volume, start
 .\scripts\Start-E2E.ps1 -Keep    # start without resetting it
-.\scripts\Start-E2E.ps1 -Stop    # stop the stack and remove the test volume
+.\scripts\Start-E2E.ps1 -Setup   # the setup wizard's stack instead (below)
+.\scripts\Start-E2E.ps1 -Stop    # stop the stack and remove both test volumes
 ```
+
+The setup wizard's spec (`tests/e2e/specs/setup.spec.ts`) needs `Setup:Try` on a fresh database, so `-Setup` starts
+that stack on a volume of its own (`ume-rag-e2e-setup-postgres`, reset on every start, without parser, renderer, ClamAV
+and Open WebUI). Run it with `npx playwright test --project=setup` in `tests/e2e`, and the other specs with
+`--project=pilot --project=accessibility` on the normal stack. Finishing closes setup, so start `-Setup` again before
+another run. Without pwsh, set the script's variables by hand (`DevelopmentVolumes__Postgres=ume-rag-e2e-setup-postgres
+Seed__Enabled=true FakeGateway__Enabled=true Setup__Try=true Parser__Mode=off Render__Mode=off ClamAv__Mode=off
+OpenWebUi__Enabled=false`), and set `ASPIRE_CLI` when `aspire` is not on the path: the spec reads the setup code with it.
 
 ## Parser
 

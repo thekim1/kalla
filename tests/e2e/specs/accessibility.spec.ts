@@ -1,10 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
-import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { getJson, login, ready, undersizedControls, watchCsp } from '../helpers'
+import { getJson, login, ready, scan, watchCsp } from '../helpers'
 
-// WCAG 2.2 AA is the design target (admin design §10.1, docs/accessibility-statement.md); AAA rules are not part of the gate.
-const tags = [...new Set(axe.getRules().flatMap(rule => rule.tags))].filter(tag => /^wcag(2|21|22)(a|aa)$/.test(tag))
 const themes = ['light', 'dark', 'lumen'] as const
 const themeStorageKey = 'ume-theme'
 
@@ -14,13 +10,6 @@ const listPages = ['/', '/map', '/collections', '/assistants', '/feedback', '/au
   '/plattform/settings/site-profiles', '/plattform/gateway-models', '/forbidden', '/no-such-page']
 
 test.afterEach(async ({ page }) => { await page.close() })
-
-async function scan(page: Page, label: string): Promise<void> {
-  const result = await new AxeBuilder({ page }).withTags(tags).analyze()
-  const failures = result.violations.map(v => ({ id: v.id, targets: v.nodes.map(node => node.target) }))
-  expect.soft(failures, `axe: ${label}`).toEqual([])
-  expect.soft(await undersizedControls(page), `target size (WCAG 2.5.8): ${label}`).toEqual([])
-}
 
 /** The list pages plus one of each detail page, when the pilot journey (or earlier data) has made one. */
 async function allPages(page: Page): Promise<string[]> {

@@ -9,6 +9,10 @@ Playwright tests of the admin UI (admin design §10.1, §11.4; repo-and-deployme
 - `specs/accessibility.spec.ts`: axe (WCAG 2.2 A/AA) and target size on every page in the three themes, reflow at 320 px
   and 200 % text, keyboard landmarks, skip link and focus, forced colours. The result is summarised in
   `docs/accessibility-statement.md`.
+- `specs/setup.spec.ts`: the setup wizard (admin design §5.11, identity design §19) on a stack of its own: the code, the
+  addresses, failed and passed test sign-ins in the provider's window, Open WebUI's step, the summary, Finish, the first
+  sign-in, the stored values and Home's reminder of the secret's expiry, with axe on every step. Finishing closes setup, so
+  each run needs a fresh setup stack; on any other stack the spec skips.
 
 ## Running them
 
@@ -17,13 +21,19 @@ pwsh scripts/Start-E2E.ps1          # the test stack: own database volume, FakeG
 cd tests/e2e
 npm ci
 npx playwright install chromium
-npx playwright test
-pwsh scripts/Start-E2E.ps1 -Stop
+npx playwright test --project=pilot --project=accessibility
+pwsh scripts/Start-E2E.ps1 -Setup   # the setup wizard's stack: Setup:Try on a fresh volume of its own
+npx playwright test --project=setup
+pwsh scripts/Start-E2E.ps1 -Stop    # stops either stack and removes both test volumes
 ```
 
 The stack uses the dev stack's ports, so stop the dev stack first. `E2E:Enabled` (set by the script) starts the fixture
 website, lets the worker reach `127.0.0.1` and ignores user secrets that point at real systems. The specs read the
 development password and the dev client key from the AppHost's user secrets, or from `E2E_PASSWORD` and `E2E_DEV_KEY`.
+The setup spec also reads the client secrets `oidc-client-secret` and `openwebui-client-secret` there (or
+`E2E_OIDC_CLIENT_SECRET`, `E2E_OPENWEBUI_CLIENT_SECRET`), and the setup code from `aspire logs adminapi` (or
+`E2E_SETUP_CODE`; `ASPIRE_CLI` names the CLI when `aspire` is not on the path). It types them without a locator `fill`,
+puts none in an assertion message, and its project records no trace, screenshot, video or page snapshot.
 
 ## The fixture website
 
