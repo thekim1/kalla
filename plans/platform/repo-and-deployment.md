@@ -778,7 +778,10 @@ one stack, configured only through variables, for hosts where `init-deployment.s
   images pinned by digest) with `compose.rag.template.yaml` and inlines `bootstrap.sh` as `rag-bootstrap`'s script;
   `build-stack.sh --check` (deploy-checks) fails when the committed `compose.portainer.yaml` differs. `release.yml`
   pins the template to the release's images and publishes the file as a release asset; its boot test
-  (`deploy/tests/portainer-boot.sh`) starts it as Portainer does. `stack.env.example` is the variables file.
+  (`deploy/tests/portainer-boot.sh`) starts it as Portainer does: a plain `up -d`, then `--wait` on the long-running
+  services only (a one-shot that exits counts as a failure under `--wait` unless a service waits for it, #751). A manual
+  `release.yml` run with the input `portainer_boot: X.Y.Z` runs only this boot test, on that ref's stack file pinned to
+  that version's images on ghcr.io (#752). `stack.env.example` is the variables file.
 - **`rag-bootstrap`** (one-shot, `network_mode: none`) is the counterpart of `init-deployment.sh`: RAG's CA and
   certificates, the Data Protection certificate, passwords, peppers and keys in the `rag-certs`/`rag-secrets` volumes,
   never overwritten (re-run test `deploy/tests/portainer-rerun.sh`, #697); the gateway credential keys from the

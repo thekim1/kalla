@@ -147,6 +147,12 @@ main session needs:
     drifted from the pilot spec, which took nine CI rounds to clear; the accessibility spec found real target-size bugs.
   - An inline (`content:`) config can't go into a `read_only` service: copy the file into `rag-config` from the
     bootstrap instead (as `rag-proxy`, `rag-openwebui-setup`).
+  - **Test a stack-file or boot-test fix with the boot-only run, not a dry run** (#752, session 39):
+    `gh workflow run release.yml --ref <branch> -f portainer_boot=X.Y.Z` boots `<branch>`'s stack against X.Y.Z's
+    images on ghcr.io in about 2 minutes (a failed tag run has already pushed its images). 0.6.0's `--wait` fix went
+    green this way on the first try, instead of a 30-minute dry run.
+  - `docker compose up --wait` fails on a one-shot that exits 0 unless a service waits for it
+    (`service_completed_successfully`). The boot test waits only on the long-running services (#751).
 - **Playwright sign-in on the admin UI:** click `locator('a,button').filter({ hasText: 'Sign in' }).last()` and wait for
   the Keycloak URL together with the click.
 - **Agents as stream-a implementors** work well with `isolation: worktree`: review the diff, commit on an `a/` branch,
@@ -222,3 +228,6 @@ main session needs:
   `Parameters:data-api-key` are stale too (`docs/local-development.md` lists the current parameters).
 - **Git over HTTPS:** `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch|pull|push …`.
 - `172.30.0.0/16` is taken on this machine; test networks use 10.21x.0.0/24.
+- **`actionlint`** is installed (`/snap/bin/actionlint`): run it on every workflow change. `shellcheck` is not.
+- **`grep` here is ugrep**, which reads `$` mid-pattern as an anchor (`grep '${A:-'` doesn't match `${A:-x}`). Use
+  `grep -F` for literal `${...}`; the runner has GNU grep.
