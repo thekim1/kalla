@@ -1488,9 +1488,27 @@ session.
 `Settings.OpenWebUi.Oidc.*` (the provider's display name excepted). They change in setup mode after a re-open, during
 which the existing sign-in keeps working.
 
-**Reload.** rag-admin builds its `OpenIdConnectOptions` from the effective values and records the settings version;
-at each challenge and callback it compares that version with the database's and rebuilds the options when they
-differ. Existing sessions stay valid.
+**Reload.** rag-admin builds its `OpenIdConnectOptions` from the effective values through one configure step. Before
+authentication runs on `/bff/login`, `/bff/user`, `/bff/logout` and the callback it reads the effective values (one
+row) and compares a SHA-256 fingerprint of them, the secret included, with the one the live options were built from;
+when they differ the options are evicted and built again. The fingerprint, not the settings version, is compared, so a
+reloaded secret file is followed and an unrelated settings save rebuilds nothing; it is never logged. Every sign-in
+starts at `/bff/login`: a challenge from another route is redirected there (`/api` answers 401). Existing sessions stay
+valid; replicas share nothing and each follows at its own next sign-in. If the row can't be read, the last values stay
+in use. Without a usable authority (none, not an absolute https URL, or a stored secret that can't be read)
+`/bff/user` answers `signIn.configured: false` and a sign-in is refused with `sign_in_not_configured` (409). A callback
+that can't be completed gives no session, security event 5001 `callback_failed` and a redirect to `/?signin=failed`.
+Built in M-20 S2 (#762).
+
+**How the test sign-in runs** (S2's spike, read in the framework's source): not a second OpenID Connect scheme (two
+handlers share a callback path only with `SkipUnrecognizedRequests`, and a scheme's options are per process while
+candidate values belong to a setup session and the callback may land on another replica). The test is a hand-written
+authorization-code exchange: `state` is `rag-setup-test.<id>` (the handler's own state is base64url and never holds a
+dot), a middleware before authentication takes callbacks with that marker and passes every other one on untouched; the
+test row (single use, expiring) holds the PKCE verifier and nonce; the id token is validated with
+`Microsoft.IdentityModel` against the candidate's metadata (issuer, audience, signature, lifetime, nonce), and then the
+same `ValidateSignInAsync` as a real sign-in runs on the candidate values. A provider whose metadata requires pushed
+authorization requests is refused with a message.
 
 **Open WebUI.** `Settings.OpenWebUi.Oidc.*` (provider address, defaulting to rag-admin's authority's discovery
 document; client id, default `open-webui`; client secret; provider name) are set in the wizard's Open WebUI step with
