@@ -826,6 +826,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EmbeddingProfileId");
+
                     b.HasIndex("SupersededAt");
 
                     b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "ParseRuleKey" }, "IX_ChunkSets_Key")

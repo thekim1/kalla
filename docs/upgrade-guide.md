@@ -73,6 +73,8 @@ exception, with its own steps.
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
   rag-api and rag-worker name their columns and are not affected.
+- **Migration `ChunkSetsEmbeddingProfileIndex` (#712)** adds an index on `content."ChunkSets"."EmbeddingProfileId"`
+  for the admin's embedding-profile *in use* checks. Nothing else changes; the old services run against it.
 - **The Portainer stack pins the gateway's `v0.10.2`, and the gateway creates Ume.Rag's credential keys (M-17 C7).**
   The gateway's own upgrade notes for 0.10.2 apply (rolling update, no migration; a new volume
   `<stack>_integration-secrets`; a read grant on `Branding.OrganisationName`). The gateway's `migrations` now applies
