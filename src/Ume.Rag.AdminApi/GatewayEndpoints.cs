@@ -328,7 +328,7 @@ public static class GatewayEndpoints
                     var before = new { row.ContextWindow, row.MaxOutputTokens };
                     row.ContextWindow = request.ContextWindow;
                     row.MaxOutputTokens = request.MaxOutputTokens;
-                    return new AdminChange<GatewayModel>(row, "update", "gateway-model", row.Name, before, new { row.ContextWindow, row.MaxOutputTokens, row.Name });
+                    return new AdminChange<GatewayModel>(row, "update", AuditEntityTypes.GatewayModel, row.Name, before, new { row.ContextWindow, row.MaxOutputTokens, row.Name });
                 }, ct), null))
             .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateGatewayModel")
             .WithSummary("Set a mirror row's context window and output limit while the gateway sends none (null clears); the sync keeps them");
