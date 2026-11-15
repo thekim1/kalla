@@ -168,6 +168,11 @@ function saved(response: unknown): void {
   void load()
 }
 
+// A shown-once secret does not stay in memory after the drawer closes.
+watch(drawerOpen, (open) => {
+  if (!open) secret.value = null
+})
+
 watch(() => props.resource, () => {
   drawerOpen.value = false
   adminUrl.value = null

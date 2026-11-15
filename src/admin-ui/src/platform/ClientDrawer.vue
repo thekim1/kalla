@@ -112,6 +112,8 @@ async function saveAssistants(): Promise<void> {
 }
 
 watch(() => [props.open, props.clientId, props.keyId] as const, ([open, id]) => {
+  // A shown-once secret does not stay in memory after the drawer closes.
+  if (!open) secret.value = null
   if (!open || !id) return
   client.value = null
   keys.value = []

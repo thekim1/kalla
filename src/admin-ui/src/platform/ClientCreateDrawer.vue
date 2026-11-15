@@ -53,7 +53,11 @@ const errors = useFormErrors({
 let defaultKeyName = ''
 
 watch(() => props.open, (open) => {
-  if (!open) return
+  // The first key's secret is shown once: it does not stay in memory after the drawer closes.
+  if (!open) {
+    result.value = null
+    return
+  }
   step.value = 1
   kind.value = ''
   form.value = newClientForm('')

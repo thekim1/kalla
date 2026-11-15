@@ -152,6 +152,11 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     expect(wrapper.get('[data-test=client-keys] [data-test=secret]').text()).toContain('ume-rag-sk-shown')
     // The call to try now carries the key that is on screen.
     expect(wrapper.get('[data-test=connect-example] [data-test=copy-value]').text()).toContain('Bearer ume-rag-sk-shown')
+    // Shown once: closing the drawer drops it from the component's state.
+    await wrapper.setProps({ open: false })
+    expect((wrapper.vm as unknown as { secret: string | null }).secret).toBeNull()
+    await wrapper.setProps({ open: true })
+    await flushPromises()
 
     await wrapper.get('[data-test=new-key]').trigger('click')
     await flushPromises()
