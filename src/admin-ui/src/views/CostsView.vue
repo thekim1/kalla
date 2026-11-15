@@ -18,7 +18,8 @@ import { COST_MESSAGES } from '@/utils/messages'
 
 // Costs (admin design §8.6, FOLLOW-UP; department and platform admins): per department, one row per assistant and
 // knowledge base with its cost, highest first, expandable by step, department totals, and the CSV with the same filters.
-// The gateway's cost and the estimate are shown apart; the gateway is the record for charging.
+// The gateway's cost and the estimate are shown apart; the gateway is the record for charging. The page shows neither the
+// period nor the client, so it asks by month (fewer rows to sum, #710); the chosen granularity is the CSV's.
 interface ObjectRow {
   key: string
   kind: DepartmentCostRow['kind']
@@ -52,34 +53,47 @@ const departmentOptions = computed(() => [{ value: '', label: COSTS.allDepartmen
 const kindOptions = Object.entries(COSTS.kinds).map(([value, label]) => ({ value, label }))
 const granularityOptions = (['day', 'month'] as const).map((value) => ({ value, label: COSTS.granularities[value]! }))
 
+/** The on-screen report's query: by month whatever the granularity, so a granularity change doesn't ask again. */
 const query = computed<CostReportQuery>(() => ({
   from: filters.from || undefined,
   to: filters.to || undefined,
-  granularity: filters.granularity,
+  granularity: 'month',
   departmentId: filters.departmentId || undefined,
   kind: filters.kind || undefined,
 }))
-const csvUrl = computed(() => api.costs.csvUrl(query.value))
+const csvUrl = computed(() => api.costs.csvUrl({ ...query.value, granularity: filters.granularity }))
 
 function objectName(row: DepartmentCostRow): string {
   return row.deleted || !row.objectName ? COSTS.deleted(row.objectId) : row.objectName
 }
 
+/** The rows per department and object, grouped in one pass. */
 const groups = computed<DepartmentGroup[]>(() => {
-  const rows = report.data.value?.rows ?? []
-  const byDepartment = new Map<string, DepartmentCostRow[]>()
-  for (const r of rows) byDepartment.set(r.departmentId, [...(byDepartment.get(r.departmentId) ?? []), r])
+  const byDepartment = new Map<string, { rows: DepartmentCostRow[]; objects: Map<string, DepartmentCostRow[]> }>()
+  for (const r of report.data.value?.rows ?? []) {
+    let department = byDepartment.get(r.departmentId)
+    if (!department) {
+      department = { rows: [], objects: new Map() }
+      byDepartment.set(r.departmentId, department)
+    }
+    department.rows.push(r)
+    const key = `${r.kind}:${r.objectId}`
+    const own = department.objects.get(key)
+    if (own) own.push(r)
+    else department.objects.set(key, [r])
+  }
   return [...byDepartment.entries()]
-    .map(([id, rs]) => {
-      const objects = groupTotals(rs, (r) => `${r.kind}:${r.objectId}`).map<ObjectRow>((g) => {
-        const own = rs.filter((r) => `${r.kind}:${r.objectId}` === g.key)
-        const first = own[0]!
-        return {
-          key: g.key, kind: first.kind, objectId: first.objectId, name: objectName(first), totals: g.totals,
-          steps: groupTotals(own, (r) => r.step).map((s) => ({ ...s, label: stepLabel(s.key) })),
-        }
-      })
-      return { id, name: rs[0]?.departmentName ?? id, totals: sumTotals(rs), objects }
+    .map(([id, d]) => {
+      const objects = [...d.objects.entries()]
+        .map<ObjectRow>(([key, own]) => {
+          const first = own[0]!
+          return {
+            key, kind: first.kind, objectId: first.objectId, name: objectName(first), totals: sumTotals(own),
+            steps: groupTotals(own, (r) => r.step).map((s) => ({ ...s, label: stepLabel(s.key) })),
+          }
+        })
+        .sort((a, b) => totalCost(b.totals) - totalCost(a.totals) || a.key.localeCompare(b.key))
+      return { id, name: d.rows[0]?.departmentName ?? id, totals: sumTotals(d.rows), objects }
     })
     .sort((a, b) => totalCost(b.totals) - totalCost(a.totals) || a.name.localeCompare(b.name))
 })
@@ -96,7 +110,7 @@ async function load(): Promise<void> {
   await report.run(() => api.costs.report(query.value))
 }
 
-watch(filters, () => void load())
+watch(query, () => void load())
 onMounted(async () => {
   await load()
   departments.value = await api.organisation.departments().then((ds) => ds.map((d) => ({ id: d.id, name: d.name }))).catch(() => [])

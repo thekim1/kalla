@@ -46,7 +46,9 @@ export function groupTotals<R extends CostTotals>(rows: readonly R[], key: (row:
   const groups = new Map<string, R[]>()
   for (const r of rows) {
     const k = key(r)
-    groups.set(k, [...(groups.get(k) ?? []), r])
+    const group = groups.get(k)
+    if (group) group.push(r)
+    else groups.set(k, [r])
   }
   return [...groups.entries()].map(([k, rs]) => ({ key: k, totals: sumTotals(rs) })).sort((a, b) => totalCost(b.totals) - totalCost(a.totals) || a.key.localeCompare(b.key))
 }
