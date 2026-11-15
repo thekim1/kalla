@@ -148,6 +148,24 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
         return result;
     }
 
+    /// <summary>
+    /// Records an audit-only action (admin design §4.4: reveal a key) without the config version lock: <paramref name="read"/> changes
+    /// nothing, and its audit entry, with the config version current then, is saved before the result is returned, so a failed save
+    /// returns nothing; the 6001 event after save, as <see cref="WriteAsync{T}"/>.
+    /// </summary>
+    public async Task<T> AuditAsync<T>(Func<CancellationToken, Task<AdminChange<T>>> read, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        var actor = AdminActor.Of(Http);
+        var change = await read(ct);
+        var version = await Db.ConfigVersion.AsNoTracking().Select(v => v.Version).SingleAsync(ct);
+        var audit = Audit(actor, change, version);
+        Db.AuditLog.Add(audit);
+        await Db.SaveChangesAsync(ct);
+        SecurityEvents.AdminChange(_security, audit.Actor, audit.Action, audit.EntityType, audit.EntityId);
+        return change.Result;
+    }
+
     /// <summary>Sets the version the caller saw, so the save fails with <c>concurrent_change</c> if the row has moved on.</summary>
     public void ExpectVersion<TEntity>(TEntity entity, string? version) where TEntity : class
     {

@@ -42,6 +42,7 @@ public static class AssistantEndpoints
 
         assistants.MapPost("", async (AssistantCreateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                await models.WarmKeyAsync(ResidencyCeiling.ForLevel(request.Classification), request.GatewayKeyId, request.DepartmentId, ct);
                 var created = await admin.WriteAsync(async attempt =>
                 {
                     if (!await admin.Departments().AnyAsync(d => d.Id == request.DepartmentId, attempt))
@@ -91,6 +92,7 @@ public static class AssistantEndpoints
 
         assistants.MapPut("/{id:guid}", async (Guid id, AssistantUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                await WarmUpdateAsync(admin, models, id, request, ct);
                 var saved = await admin.WriteAsync(async attempt =>
                 {
                     var assistant = await LoadAsync(admin, id, attempt);
@@ -223,6 +225,7 @@ public static class AssistantEndpoints
 
         assistants.MapPost("/{id:guid}/publish", async (Guid id, PublishRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                await WarmAsync(admin, models, await LoadAsync(admin, id, ct, tracked: false), null, ct);
                 var saved = await admin.WriteAsync(async attempt =>
                 {
                     var assistant = await LoadAsync(admin, id, attempt);
@@ -269,6 +272,12 @@ public static class AssistantEndpoints
 
         assistants.MapPut("/{id:guid}/audiences", async (Guid id, AudiencesRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                if (await LoadAsync(admin, id, ct, tracked: false) is { PublishedVersionId: not null } offered)
+                {
+                    var ids = request.ClientIds.Distinct().ToList();
+                    await WarmAsync(admin, models, offered, await admin.Db.Clients.AsNoTracking().Where(c => ids.Contains(c.Id)).ToListAsync(ct), ct);
+                }
+
                 var saved = await admin.WriteAsync(async attempt =>
                 {
                     var assistant = await LoadAsync(admin, id, attempt);
@@ -313,6 +322,7 @@ public static class AssistantEndpoints
         assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, RestoreRequest request, AdminContext admin, GatewayModelCheck models,
                 CancellationToken ct) =>
             {
+                await WarmAsync(admin, models, await LoadAsync(admin, id, ct, tracked: false), null, ct);
                 var saved = await admin.WriteAsync(async attempt =>
                 {
                     var assistant = await LoadAsync(admin, id, attempt);
@@ -483,25 +493,15 @@ public static class AssistantEndpoints
     }
 
     /// <summary>
-    /// Makes <paramref name="clients"/> the assistant's audience within the caller's write: V7 and V9, for a published assistant its
-    /// whole rule set and V8 at the gateway, then the rows and the assistant's stamp. Shared by the assistant's own audience save
-    /// and a client's assistants (<c>POST /api/clients</c>, <c>PUT /api/clients/{id}/assistants</c>, admin design §5.9.1), where a
-    /// client may be new in this write. Returns the audience before, for the audit entry.
+    /// Makes <paramref name="clients"/> the assistant's audience within the caller's write: <see cref="CheckAudienceAsync"/>, then
+    /// the rows and the assistant's stamp. Shared by the assistant's own audience save and a client's assistants
+    /// (<c>POST /api/clients</c>, <c>PUT /api/clients/{id}/assistants</c>, admin design §5.9.1), where a client may be new in this
+    /// write. Returns the audience before, for the audit entry.
     /// </summary>
     internal static async Task<List<Guid?>> ApplyAudienceAsync(AdminContext admin, GatewayModelCheck models, Assistant assistant, IReadOnlyList<Client> clients,
         CancellationToken ct)
     {
-        if (assistant.PublishedVersionId is { } published)
-        {
-            var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, ct);
-            Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, ct, asKey: models));
-            await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), ct, assistant.GatewayKeyId);
-        }
-        else
-        {
-            Refuse(await AssistantRules.AudienceRulesAsync(admin, assistant, clients, ct));
-        }
-
+        await CheckAudienceAsync(admin, models, assistant, clients, ct);
         var ids = clients.Select(c => c.Id).ToList();
         var id = assistant.Id;
         var current = await admin.Db.AssistantAudiences.Where(a => a.AssistantId == id).ToListAsync(ct);
@@ -516,6 +516,57 @@ public static class AssistantEndpoints
         assistant.UpdatedAt = admin.Now;
         assistant.UpdatedBy = admin.Actor;
         return before;
+    }
+
+    /// <summary>
+    /// The rules of <paramref name="clients"/> as the assistant's audience: V7 and V9, for a published assistant its whole rule set
+    /// and V8 at the gateway. Also run for the assistants a client offers when the client's ceiling or history changes (admin
+    /// design §4.5, #700).
+    /// </summary>
+    internal static async Task CheckAudienceAsync(AdminContext admin, GatewayModelCheck models, Assistant assistant, IReadOnlyList<Client> clients, CancellationToken ct)
+    {
+        if (assistant.PublishedVersionId is { } published)
+        {
+            var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, ct);
+            Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, ct, asKey: models));
+            await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), ct, assistant.GatewayKeyId);
+        }
+        else
+        {
+            Refuse(await AssistantRules.AudienceRulesAsync(admin, assistant, clients, ct));
+        }
+    }
+
+    /// <summary>
+    /// Fetches, before the write and outside the config version lock (admin design §4.4, #696), the gateway list V8 and V39 will
+    /// check <paramref name="assistant"/> (as read now) against with <paramref name="audience"/> (null: its audience now). The write
+    /// reads the assistant again under the lock; a list it needs that differs is asked for there.
+    /// </summary>
+    internal static async Task WarmAsync(AdminContext admin, GatewayModelCheck models, Assistant assistant, IReadOnlyList<Client>? audience, CancellationToken ct)
+    {
+        var ceiling = AssistantRules.Ceiling(assistant, audience ?? await AudienceClientsAsync(admin, assistant.Id, ct));
+        await models.WarmAsync([(ceiling, assistant.GatewayKeyId, assistant.DepartmentId)], ct);
+    }
+
+    /// <summary>
+    /// <see cref="WarmAsync"/> for <c>PUT /api/assistants/{id}</c>: V8 and V39 on a published assistant's level change, V39 on a key
+    /// change, at the ceiling and with the key the request sets.
+    /// </summary>
+    private static async Task WarmUpdateAsync(AdminContext admin, GatewayModelCheck models, Guid id, AssistantUpdateRequest request, CancellationToken ct)
+    {
+        var assistant = await LoadAsync(admin, id, ct, tracked: false);
+        var servable = request.Classification != assistant.Classification && assistant.PublishedVersionId is not null;
+        if (!servable && request.GatewayKeyId == assistant.GatewayKeyId)
+        {
+            return;
+        }
+
+        assistant.Classification = request.Classification;
+        assistant.GatewayKeyId = request.GatewayKeyId;
+        var ceiling = AssistantRules.Ceiling(assistant, await AudienceClientsAsync(admin, id, ct));
+        await (servable
+            ? models.WarmAsync([(ceiling, assistant.GatewayKeyId, assistant.DepartmentId)], ct)
+            : models.WarmKeyAsync(ceiling, assistant.GatewayKeyId, assistant.DepartmentId, ct));
     }
 
     private static async Task<Assistant> LoadAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = true) =>

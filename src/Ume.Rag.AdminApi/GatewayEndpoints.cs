@@ -15,10 +15,61 @@ namespace Ume.Rag.AdminApi;
 /// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-ume-on-behalf-of</c>.
 /// The ceiling is lowered to rag-admin's credential key's residencies first, as chat lowers it (#237, M-17 C9).
 /// </summary>
+/// <remarks>
+/// Scoped, so one request asks the gateway once per ceiling and key (#696): every list it gets, or the failure, is kept for the
+/// request. An endpoint calls <see cref="WarmAsync"/> before its write, outside the config version lock (admin design §4.4), so
+/// the checks under the lock read the lists it fetched; a list it did not warm is still asked for under the lock.
+/// </remarks>
 public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, GatewayCeiling serviceCeiling, GatewayFeatures features)
 {
+    private readonly Dictionary<(Residency Ceiling, Guid? AsKey), Task<IReadOnlySet<string>>> _listed = [];
+
     /// <summary>The gateway acts as keys (feature <c>act-as-key</c> in this service's context, gateway phase 2; B-43).</summary>
     public bool ActsAsKeys => features.ActAsKey;
+
+    /// <summary>
+    /// Fetches, in parallel, the lists <see cref="EnsureServableAsync"/> will need for each model check at a ceiling with the gateway
+    /// key of an object of a department (and <see cref="KeyModelsAsync"/> for the same pair). A key is only used when it is a usable
+    /// key of that department, as the checks under the lock refuse any other before asking the gateway (V39); such a check is not
+    /// warmed. A failure is kept for the check that needs the list and not thrown here, so a pair warmed but not checked costs one
+    /// call and nothing else.
+    /// </summary>
+    public async Task WarmAsync(IEnumerable<(Residency Ceiling, Guid? GatewayKeyId, Guid DepartmentId)> checks, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(checks);
+        var wanted = checks.ToList();
+        var keyIds = ActsAsKeys ? wanted.Select(c => c.GatewayKeyId).OfType<Guid>().Distinct().ToList() : [];
+        var keys = keyIds.Count == 0
+            ? new Dictionary<Guid, GatewayKey>()
+            : await db.GatewayKeys.AsNoTracking().Where(k => keyIds.Contains(k.Id)).ToDictionaryAsync(k => k.Id, cancellationToken);
+        List<Task> pending = [];
+        foreach (var (ceiling, keyId, departmentId) in wanted)
+        {
+            var asKey = ActsAsKeys ? keyId : null;
+            if (asKey is { } id && !(keys.TryGetValue(id, out var key) && key.DepartmentId == departmentId && GatewayKeyRules.UnusableReason(key) is null))
+            {
+                continue;
+            }
+
+            pending.Add(ListedAsync(await serviceCeiling.CapAsync(ceiling, cancellationToken), asKey, cancellationToken));
+        }
+
+        try
+        {
+            await Task.WhenAll(pending);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Kept in the memo: the check under the lock maps it to its own refusal when it needs that list.
+        }
+    }
+
+    /// <summary>
+    /// <see cref="WarmAsync"/> for a V39 check alone (<see cref="KeyModelsAsync"/>), which asks the gateway only while it acts as
+    /// keys and the object has a key.
+    /// </summary>
+    public Task WarmKeyAsync(Residency ceiling, Guid? gatewayKeyId, Guid departmentId, CancellationToken cancellationToken) =>
+        ActsAsKeys && gatewayKeyId is not null ? WarmAsync([(ceiling, gatewayKeyId, departmentId)], cancellationToken) : Task.CompletedTask;
 
     /// <summary>
     /// Throws the V8 fault (<c>model_residency</c>, <c>model_not_listed</c>, <c>gateway_key_missing</c>,
@@ -62,7 +113,7 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
         IReadOnlySet<string> listed;
         try
         {
-            listed = await gateway.ListModelsAsync(ceiling, cancellationToken, key.Id);
+            listed = await ListedAsync(ceiling, key.Id, cancellationToken);
         }
         catch (GatewayKeyRefusedException refused)
         {
@@ -87,7 +138,7 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
     {
         try
         {
-            return await gateway.ListModelsAsync(ceiling, cancellationToken, asKey);
+            return await ListedAsync(ceiling, asKey, cancellationToken);
         }
         catch (GatewayKeyMissingException)
         {
@@ -103,6 +154,18 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
         {
             throw AdminFaults.Of(AdminErrorCodes.GatewayUnavailable, parameters);
         }
+    }
+
+    /// <summary>The gateway's list at the capped <paramref name="ceiling"/> as <paramref name="asKey"/>, asked once per request.</summary>
+    private Task<IReadOnlySet<string>> ListedAsync(Residency ceiling, Guid? asKey, CancellationToken cancellationToken)
+    {
+        if (!_listed.TryGetValue((ceiling, asKey), out var listed))
+        {
+            listed = gateway.ListModelsAsync(ceiling, cancellationToken, asKey);
+            _listed[(ceiling, asKey)] = listed;
+        }
+
+        return listed;
     }
 }
 
