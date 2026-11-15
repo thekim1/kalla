@@ -394,6 +394,7 @@ services:
       - {source: rag-postgres-conf, target: /config/postgresql.conf}
       - {source: rag-app-roles, target: /config/app-roles.sql}
       - {source: rag-proxy-conf-template, target: /config/nginx-proxy.conf.template}
+      - {source: rag-openwebui-setup-script, target: /config/feedback-key-setup.py}
     volumes:
       - rag-certs:/certs
       - rag-secrets:/secrets
@@ -847,9 +848,9 @@ services:
     environment:
       OWUI_URL: http://rag-openwebui:8080
       WEBUI_ADMIN_EMAIL: feedback-import@localhost
-    configs:
-      - {source: rag-openwebui-setup-script, target: /config/feedback-key-setup.py}
     volumes:
+      # Its script, which rag-bootstrap copies into rag-config: an inline config can't be written into a read-only container.
+      - {type: volume, source: rag-config, target: /config, read_only: true, volume: {subpath: openwebui-setup}}
       # The store's WAL needs its directory writable even for a read-only connection.
       - rag-openwebui-data:/data
       - {type: volume, source: rag-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
@@ -1260,7 +1261,9 @@ configs:
       fi
 
       # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
-      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations"
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations" "$$F/openwebui-setup"
+      # rag-openwebui-setup's script (profile openwebui): that service is read-only, so it reads the script from rag-config.
+      cp /config/feedback-key-setup.py "$$F/openwebui-setup/feedback-key-setup.py"
       cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
       cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
       cp /config/postgresql.conf "$$F/postgres/postgresql.conf"
