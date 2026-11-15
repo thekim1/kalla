@@ -17,7 +17,8 @@ umask 077
 C=/certs
 S=/secrets
 F=/conf
-: "${UME_RAG_API_HOST:?Set UME_RAG_API_HOST (public hostname of rag-api)}"
+# The host names come resolved from the stack file: UME_DOMAIN's defaults unless a UME_RAG_*_HOST is set.
+: "${UME_RAG_API_HOST:?Set UME_DOMAIN or UME_RAG_API_HOST (public hostname of rag-api)}"
 ADMIN_HOST="${UME_RAG_ADMIN_HOST:-$UME_RAG_API_HOST}"
 for d in postgres api admin worker parser migrations; do mkdir -p "$C/$d"; done
 for d in postgres api admin worker migrations keys renderer openwebui openwebui-feedback; do mkdir -p "$S/$d"; done
@@ -230,7 +231,9 @@ for svc in api admin worker; do
   up="$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
   [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: no key for rag-$svc. Set UME_INTEGRATION_MANIFEST (stack.env.example) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
 done
-example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
+# A name under UME_DOMAIN is named once, as the domain; a name set of its own, as its variable.
+if [ -n "${UME_DOMAIN:-}" ] && example "$UME_DOMAIN"; then note "UME_DOMAIN is still an example value (the host names default under it)"; fi
+case "$UME_RAG_API_HOST" in "rag.${UME_DOMAIN:-}") ;; *) example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value" ;; esac
 # Optional: unset, rag-api's public URL is https://<UME_RAG_API_HOST>.
 case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
@@ -256,7 +259,8 @@ for item in $proxy_todo; do [ -z "$item" ] || note "$item"; done
 IFS="$old_ifs"
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
-    example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name"
+    case "${UME_RAG_OPENWEBUI_HOST:-}" in "chat.${UME_DOMAIN:-}") ;;
+      *) example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name (or set UME_DOMAIN)" ;; esac
     example "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: users can't sign in to Open WebUI" ;;
 esac
 if [ -n "$todo" ]; then

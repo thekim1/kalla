@@ -147,7 +147,8 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--oidc-authority URL` | prompted | the admin BFF's identity provider (HTTPS): `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0` |
 | `--oidc-client-id ID` | `ume-rag-admin` | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's |
 | `--oidc-client-secret-file FILE` | – | the admin registration's secret: `secrets/admin/Oidc__ClientSecret` |
-| `--api-host HOST`, `--admin-host HOST` | prompted (the host name; the admin defaults to the api's) | public host names, in the listener certificates, `UME_RAG_API_PUBLIC_URL` and `UME_RAG_ADMIN_PUBLIC_HOST` |
+| `--domain DOMAIN` | – | the base domain: `--api-host`, `--admin-host` and `--openwebui-host` not given default to `rag.DOMAIN`, `rag-admin.DOMAIN` and `chat.DOMAIN` (the last only when another `--openwebui-*` option asks for Open WebUI), and neither host is prompted for |
+| `--api-host HOST`, `--admin-host HOST` | under `--domain`, else prompted (the host name; the admin defaults to the api's) | public host names, in the listener certificates, `UME_RAG_API_PUBLIC_URL` and `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--api-port N`, `--admin-port N` | 8543, 9543 | host ports of the two listeners |
 | `--bind ADDR` | `127.0.0.1` (`0.0.0.0` with `--proxy`) | address the listeners are published on |
 | `--gateway-url URL` | prompted | the LLM gateway (HTTPS): `UME_RAG_GATEWAY_URL` |
@@ -163,7 +164,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--freshclam-proxy HOST:PORT` | – | freshclam reaches `database.clamav.net` through this HTTP proxy |
 | `--clamav on\|off` | `on`; a re-run without it keeps the value in `deploy/.env` | the malware scan: `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and, with `on`, the profile `clamav` in `COMPOSE_PROFILES`, so `rag-clamav` runs. `off` runs no `rag-clamav`, writes no ClamAV confs (even with `--host-memory 24` or `--freshclam-proxy`) and says so at the end: files are stored without a malware scan (*Malware scan*, below). `--renew-certs` keeps what `deploy/.env` says |
 | `--render` | – | runs `rag-renderer` for sources with fetch mode `browser`: `COMPOSE_PROFILES=render` in `deploy/.env` and the worker's `secrets/worker/Render__Endpoint`. Without it neither, and those sources wait with `render.not_configured` (*Renderer*, below). `--renew-certs` keeps what `deploy/.env` says |
-| `--openwebui-host HOST` | – | the optional Open WebUI stack (below); the options below need it |
+| `--openwebui-host HOST` | `chat.DOMAIN` with `--domain` and another `--openwebui-*` option, else – | the optional Open WebUI stack (below); the options below need it |
 | `--openwebui-oidc-client-id ID` | `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`) |
 | `--openwebui-oidc-client-secret-file FILE` | – | that client's secret: `OAUTH_CLIENT_SECRET` in `secrets/openwebui.env` |
 | `--openwebui-oidc-provider-url URL` | the OIDC authority + `/.well-known/openid-configuration` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` |
@@ -499,7 +500,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
 3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
-   Ume.Rag's (`UME_RAG_API_HOST`, the three `UME_RAG_*_GATEWAY_KEY` and
+   Ume.Rag's (`UME_DOMAIN`, which names rag-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>`,
+   or `UME_RAG_API_HOST` and the other `UME_RAG_*_HOST` instead; the three `UME_RAG_*_GATEWAY_KEY` and
    `UME_RAG_OIDC_CLIENT_SECRET`), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the chat,
    `render` for JavaScript pages). The credential keys come from the gateway once it runs: start the stack, issue the
    keys in the gateway's admin (*Gateway credential keys* above), set them, and update the stack.
@@ -508,7 +510,8 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
    variables to match. Or add `proxy` to `COMPOSE_PROFILES`: the stack's own nginx with your certificate in front of
    all five host names ([portainer.md](portainer.md#tls-proxy)).
-5. **Open WebUI** (profile `openwebui`): set `UME_RAG_OPENWEBUI_HOST` and its OIDC client
+5. **Open WebUI** (profile `openwebui`): its host is `chat.<domain>` (`UME_RAG_OPENWEBUI_HOST` for another); set its
+   OIDC client
    (`UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`; redirect URI
    `https://<host>/oauth/oidc/login/callback`). Open WebUI's key for rag-api needs nothing: `rag-bootstrap` generates it
    and `rag-migrate` registers it as the deployment's own Open WebUI client (*Apps and keys*, marked *Managed by the

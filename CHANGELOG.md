@@ -5,6 +5,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+- **`UME_DOMAIN` gives the host names their defaults** (setup wizard S0): in the Portainer stack, rag-api, rag-admin
+  and Open WebUI default to `rag.<domain>`, `rag-admin.<domain>` and `chat.<domain>`, each `UME_RAG_*_HOST` still
+  overrides its own, and a stack with the names and no domain works as before; `init-deployment.sh --domain` does the
+  same for Compose. `stack.env.example` has `UME_DOMAIN` instead of the three host lines.
+
 ## 0.6.0 (2026-11-15)
 
 A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys,

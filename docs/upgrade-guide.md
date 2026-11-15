@@ -16,6 +16,13 @@ exception, with its own steps.
   change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
   allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
   preset keep their residencies: set them to `OnPrem` and `Eu` in the gateway's admin (0.6.0, *Before the update*).
+- **`UME_DOMAIN` names Ume.Rag's hosts (setup wizard S0).** Rolling update, no migration. Portainer: `UME_DOMAIN`
+  gives rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`; each `UME_RAG_*_HOST`
+  still overrides its own name. Compose: `init-deployment.sh --domain DOMAIN` does the same for `--api-host`,
+  `--admin-host` and, when another `--openwebui-*` option asks for Open WebUI, `--openwebui-host`. **Apply:** nothing; a stack that sets `UME_RAG_API_HOST` (and the others)
+  without `UME_DOMAIN` keeps its names. To switch, set `UME_DOMAIN` and remove the host variables whose value is the
+  default. **Check:** `rag-bootstrap`'s certificates and the proxy's names are unchanged (no `issuing certificate` for
+  rag-api or rag-admin in its log unless a name changed).
 
 ## 0.6.0
 

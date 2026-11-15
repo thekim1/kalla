@@ -8,11 +8,10 @@
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
 #   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
-#       --oidc-client-secret-file ume-rag-admin.secret \
-#       --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
+#       --oidc-client-secret-file ume-rag-admin.secret --domain intern.umea.se \
 #       --gateway-url https://<gateway host> --gateway-credential-key-file api=rag-api.key \
 #       --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key \
-#       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
+#       --openwebui-oidc-client-secret-file open-webui.secret \
 #       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
@@ -24,6 +23,9 @@
 # Options (defaults in brackets):
 #   --oidc-authority URL, --oidc-client-id ID [ume-rag-admin], --oidc-client-secret-file FILE
 #                           the admin BFF's own OIDC client (never the gateway's): P1 the shared Keycloak's realm ume
+#   --domain DOMAIN         the base domain: --api-host, --admin-host and --openwebui-host default to rag.DOMAIN,
+#                           rag-admin.DOMAIN and chat.DOMAIN (the last only when another --openwebui-* option asks
+#                           for Open WebUI); each option given wins, and neither host is prompted for
 #   --api-host HOST, --admin-host HOST, --api-port N [8543], --admin-port N [9543], --bind ADDR [127.0.0.1]
 #   --gateway-url URL       the LLM gateway (HTTPS); --ca-file FILE adds its CA (and your PKI chain) to the services'
 #                           trust store
@@ -78,12 +80,12 @@ umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
-oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; api_host=""; admin_host=""
+oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; domain=""; api_host=""; admin_host=""
 api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
 crawl_allow=""; host_memory=16; freshclam_proxy=""; clamav=""; role="all"; render=0
 owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
-owui_data=""
+owui_data=""; owui_asked=0
 proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
 yes=0; renew=0; renew_ca=0; chown=1; rolling=0
 credential_keys=()
@@ -97,6 +99,7 @@ while [ $# -gt 0 ]; do
     --oidc-authority) oidc_authority="$2"; shift 2;;
     --oidc-client-id) oidc_client="$2"; shift 2;;
     --oidc-client-secret-file) oidc_secret_file="$2"; shift 2;;
+    --domain) domain="$2"; shift 2;;
     --api-host) api_host="$2"; shift 2;;
     --admin-host) admin_host="$2"; shift 2;;
     --api-port) api_port="$2"; shift 2;;
@@ -118,11 +121,11 @@ while [ $# -gt 0 ]; do
     --clamav) clamav="$2"; shift 2;;
     --render) render=1; shift;;
     --openwebui-host) owui_host="$2"; shift 2;;
-    --openwebui-oidc-client-id) owui_client="$2"; shift 2;;
-    --openwebui-oidc-client-secret-file) owui_secret_file="$2"; shift 2;;
-    --openwebui-oidc-provider-url) owui_provider="$2"; shift 2;;
-    --openwebui-oidc-provider-name) owui_provider_name="$2"; shift 2;;
-    --openwebui-data-dir) owui_data="$2"; shift 2;;
+    --openwebui-oidc-client-id) owui_asked=1; owui_client="$2"; shift 2;;
+    --openwebui-oidc-client-secret-file) owui_asked=1; owui_secret_file="$2"; shift 2;;
+    --openwebui-oidc-provider-url) owui_asked=1; owui_provider="$2"; shift 2;;
+    --openwebui-oidc-provider-name) owui_asked=1; owui_provider_name="$2"; shift 2;;
+    --openwebui-data-dir) owui_asked=1; owui_data="$2"; shift 2;;
     --role) role="$2"; shift 2;;
     --proxy) proxy=1; shift;;
     --rolling) rolling=1; shift;;
@@ -158,6 +161,13 @@ if [ -z "$clamav" ] && [ -f "$env_file" ]; then
   case "$clamav" in ""|on|off) ;; *) die "UME_RAG_CLAMAV_MODE in $env_file must be on or off: pass --clamav on|off";; esac
 fi
 clamav="${clamav:-on}"
+# --domain: the host names not given default under it (Decisions "Setup wizard"; the Portainer stack's UME_DOMAIN).
+if [ -n "$domain" ]; then
+  [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--domain takes a domain name such as example.se: $domain"
+  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-rag-admin.$domain}"
+  # Open WebUI stays optional: its name defaults only when another --openwebui-* option asks for it.
+  [ "$owui_asked" = 0 ] || owui_host="${owui_host:-chat.$domain}"
+fi
 for a in ${proxy_sources//,/ }; do
   [[ "$a" =~ ^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$ ]] || die "--proxy-address takes IPv4 addresses or CIDRs, comma-separated: $a"
 done
