@@ -63,7 +63,7 @@ spec:
   egress:
     - ports: [{protocol: TCP, port: 443}]
 ---
-# rag-admin: out to the gateway (with Gateway__IntegrationApiUrl also its Admin API), the OIDC authority and Open WebUI
+# rag-admin: out to the gateway (also its Admin API, when the gateway's context names its Integration API), the OIDC authority and Open WebUI
 # (Compose: llm), on 443 at any address. Other ports (the gateway's 8443, its Admin API's 9443, the collector's 4317)
 # are added in the overlay.
 apiVersion: networking.k8s.io/v1

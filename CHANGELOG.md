@@ -22,6 +22,9 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - **The organisation's name comes from the gateway** (M-17 C12): the admin UI's header and sign-in page name the
   organisation the gateway's admin console is branded with (its context's `organisation_name`, gateway v0.10.2); a
   gateway without one, or before the first context answer, names none.
+- **The Integration API's address comes from the gateway** (M-17 C11): rag-admin's cost and budget read-back uses the
+  address its gateway context names (`integration_api_url`, the gateway's `UME_INTEGRATION_API_URL`, gateway v0.10.2);
+  without one there is no read-back, as before without the variable.
 - **The Portainer stack needs fewer variables** (M-17 C1–C3): rag-api's public URL defaults to `https://<its host>`, the
   checklist no longer demands a platform-admin group, and Open WebUI's feedback address and the malware-scan mode follow
   the `openwebui` and `clamav` profiles (#682, #683).
@@ -62,7 +65,8 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
 `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH` and `deploy/openwebui-feedback-key.sh` (C6);
 `UME_RAG_GATEWAY_MAX_RESIDENCY` (C9); `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` and
 `_VIEWER` (C10); `UME_RAG_ORGANISATION_NAME` (Compose), `UME_ORGANISATION_NAME` (Portainer) and Kubernetes'
-`Admin__OrganisationName` (C12); in the Portainer stack `UME_RAG_CLAMAV_MODE` and `UME_RAG_OPENWEBUI_BASE_URL` (C2, C3). The unread
+`Admin__OrganisationName` (C12); `UME_RAG_GATEWAY_INTEGRATION_API_URL` and Kubernetes' `Gateway__IntegrationApiUrl`
+(C11); in the Portainer stack `UME_RAG_CLAMAV_MODE` and `UME_RAG_OPENWEBUI_BASE_URL` (C2, C3). The unread
 `Settings.WorkerConcurrency` is dropped (M-18, #686).
 
 ### Fixed

@@ -100,7 +100,7 @@ export interface OrgSyncStatus {
   integration?: IntegrationReadback | null
 }
 
-/** Whether `Gateway:IntegrationApiUrl` is set, and the last read-back's refusal (`401`, `403` scope missing, `429`, or a failure). */
+/** Whether the gateway's context names its Integration API address (`integration_api_url`), and the last read-back's refusal (`401`, `403` scope missing, `429`, or a failure). */
 export interface IntegrationReadback {
   configured: boolean
   lastError: { reason: string; status: number | null; at: IsoDateTime } | null

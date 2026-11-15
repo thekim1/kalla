@@ -343,8 +343,8 @@ if (fakeGateway is not null)
             .WithEnvironment("Gateway__Key", gatewayKeys[name]);
     }
 
-    // B-45 (gateway-changes §5.6): the fake serves the Integration API on its own address, read by the admin only.
-    adminApi.WithEnvironment("Gateway__IntegrationApiUrl", fakeGateway.GetEndpoint("https"));
+    // B-45 (gateway-changes §5.6): the fake serves the Integration API on its own address and names it in its context
+    // (integration_api_url, M-17 C11), read by the admin only.
 }
 else
 {

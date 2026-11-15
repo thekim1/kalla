@@ -141,6 +141,35 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Fact]
+    public async Task The_context_read_names_the_organisation_and_the_integration_api()
+    {
+        // M-17 C11 and C12 (gateway v0.10.2): read with the ceiling, from the same context.
+        var (host, _) = BuildFromContext("Eu");
+        using var disposeHost = host;
+        await host.Services.GetRequiredService<GatewayCeiling>().MaximumAsync(Ct);
+        var features = host.Services.GetRequiredService<GatewayFeatures>();
+
+        features.OrganisationName.ShouldBe("Umeå kommun");
+        features.IntegrationApiUrl.ShouldBe("http://fake-gateway/integration/v1");
+    }
+
+    [Fact]
+    public void The_organisation_name_and_the_integration_api_count_only_under_their_features_and_empty_is_none()
+    {
+        var features = new GatewayFeatures();
+        features.Update(["organisation"]);
+        features.UpdateGateway("Exempelstad", "https://llm-admin.example.se/integration/v1");
+        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe((null, null)); // a gateway before v0.10.2
+
+        features.Update([GatewayFeatures.OrganisationNameFeature, GatewayFeatures.IntegrationApiUrlFeature]);
+        features.UpdateGateway(" Exempelstad ", "https://llm-admin.example.se/integration/v1");
+        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe(("Exempelstad", "https://llm-admin.example.se/integration/v1"));
+
+        features.UpdateGateway(" ", null);
+        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe((null, null));
+    }
+
+    [Fact]
     public async Task A_key_that_allows_every_residency_lets_a_public_call_run_at_External()
     {
         var (host, _) = BuildFromContext("External");
