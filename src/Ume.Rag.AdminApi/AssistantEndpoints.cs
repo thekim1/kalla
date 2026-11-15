@@ -528,7 +528,9 @@ public static class AssistantEndpoints
         if (assistant.PublishedVersionId is { } published)
         {
             var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, ct);
-            Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, ct, asKey: models));
+            // V36 is not re-checked on an audience or client change (admin §4.6: draft save, publish, restore, level change); the
+            // published level was confirmed at publish, so it does not block this save.
+            Refuse(await AssistantRules.CheckAsync(admin, assistant, version, clients, ct, confirmGeneralKnowledge: true, asKey: models));
             await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, clients), ct, assistant.GatewayKeyId);
         }
         else

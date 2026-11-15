@@ -622,4 +622,40 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
             name = "Renamed " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, version = client.GetProperty("version").GetString(),
         }, Ct));
     }
+
+    [Fact]
+    public async Task A_published_public_assistant_with_general_knowledge_changes_audience_and_client_without_V36()
+    {
+        // V36 is checked on publish, restore, draft save and level change (admin design §4.6), not on an audience or client change:
+        // a public assistant published with general knowledge confirmed keeps saving with other clients.
+        var (code, department, _) = await SeedTeamAsync();
+        var (clientId, ids) = await SeedPublishedAsync(code, department, Classification.Internal, Listed, "Eu", offered: true, Classification.Public);
+        Guid otherId;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var version = await db.AssistantVersions.SingleAsync(v => v.AssistantId == ids[0], Ct);
+            version.QuerySteps = """{"answer":{"generalKnowledge":"fallback"}}""";
+            var other = new Client { Name = "Other " + code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Public, UpdatedAt = DateTimeOffset.UtcNow };
+            db.Add(other);
+            await db.SaveChangesAsync(Ct);
+            otherId = other.Id;
+        }
+
+        await using var gateway = Gateway();
+        var probe = new ModelListProbe(gateway.Server.CreateHandler(), database.Connection(null));
+        await using var factory = GatewayFactory(probe);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        // (a) The assistant's own audience save.
+        var assistant = await Ok(await admin.GetAsync($"/api/assistants/{ids[0]}", Ct));
+        await Ok(await admin.PutAsJsonAsync($"/api/assistants/{ids[0]}/audiences",
+            new { clientIds = new[] { clientId, otherId }, version = assistant.GetProperty("version").GetString() }, Ct));
+
+        // (b) The offering client's history and ceiling change.
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+        var history = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(client, Classification.Internal, storesHistory: true), Ct));
+        history.GetProperty("storesHistory").GetBoolean().ShouldBeTrue();
+        var lowered = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(history, Classification.Public, storesHistory: true), Ct));
+        lowered.GetProperty("classificationCeiling").GetString().ShouldBe(Classification.Public);
+    }
 }
