@@ -1,6 +1,6 @@
 # Deploying and upgrading with Portainer (0.6.x)
 
-How to run Ume.Rag with the LLM gateway `v0.10.2` as one Portainer stack: a first deploy on a new VM, the upgrade of
+How to run Ume.Rag with the LLM gateway `v0.10.3` as one Portainer stack: a first deploy on a new VM, the upgrade of
 a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -15,7 +15,7 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 
 Use the **`compose.portainer.yaml` asset of the `v0.6.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.10.2`) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+(`v0.10.2` in the `v0.6.0` asset, `v0.10.3` in the repository since) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
 no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
 
 ## What you need
