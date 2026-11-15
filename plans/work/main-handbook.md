@@ -201,6 +201,20 @@ main session needs:
   their work yourself after reading the diff. Four agents testing at once push the load to ~37 and vitest then fails
   at random in untouched specs: rerun alone before calling a failure real. `uv run` in `src/parser` leaves a `.venv`
   that breaks `check-doc-refs.py`: delete it after use.
+- **Run `e2e.yml` only with the runners idle** (session 40): a PR's `backend` job on the other runner creates and
+  removes Docker networks, and Chromium then loses its page with `net::ERR_NETWORK_CHANGED`. Wait for the PR's checks,
+  then dispatch.
+- **A workflow step's `if:` without a status function implies `success()`:** a step meant to run after an earlier
+  failure needs `!cancelled() &&` (or `always()`), also when it tests another step's `outcome` (#774).
+- **An independent review agent for security-critical code** (session 40, S3): give it the code and the threat model,
+  not your conclusions; it found a secret-exfiltration path the main session's own reading missed. Check each finding
+  in the files before acting.
+- **Drive a new page in a real browser before the PR** (session 40): a Node script with `tests/e2e/node_modules/playwright`
+  on a throwaway stack found a usability gap that 400 unit tests didn't. For the setup wizard: `Setup__Try=true`
+  (HANDOVER has the recipe).
+- **Briefing implementors:** say which facts are assumptions. Two of the main session's own brief statements were wrong
+  in session 40 ("a new database has no settings row"; the first "declared deployment" rule) and came back as built.
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
