@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Persistence;
 
 namespace Ume.Rag.AdminApi;
@@ -31,8 +32,6 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
     /// <summary>After the worker's content maintenance (02:00), as the gateway's nightly run.</summary>
     public static readonly TimeOnly RunAt = new(3, 0);
 
-    public static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
-
     private int _running;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -56,16 +55,16 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
     /// </summary>
     public static DateTimeOffset NextRunAt(DateTimeOffset now)
     {
-        var local = TimeZoneInfo.ConvertTime(now, Stockholm);
+        var local = TimeZoneInfo.ConvertTime(now, StockholmTime.Zone);
         for (var day = 0; day <= 2; day++)
         {
             var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(RunAt);
-            if (Stockholm.IsInvalidTime(candidate))
+            if (StockholmTime.Zone.IsInvalidTime(candidate))
             {
                 candidate = candidate.AddHours(1);
             }
 
-            var at = new DateTimeOffset(candidate, Stockholm.GetUtcOffset(candidate));
+            var at = new DateTimeOffset(candidate, StockholmTime.Zone.GetUtcOffset(candidate));
             if (at > now)
             {
                 return at.ToUniversalTime();

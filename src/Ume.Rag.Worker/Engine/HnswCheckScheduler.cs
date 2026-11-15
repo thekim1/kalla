@@ -1,6 +1,7 @@
 using Cronos;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
@@ -28,7 +29,6 @@ public static class HnswCheckTriggers
     private const string ExactScanMaxChunks = """
         coalesce((SELECT ("Retrieval" ->> 'exactScanMaxChunks')::bigint FROM config."Settings" ORDER BY "Id" LIMIT 1), $1)
         """;
-
 
     private const string NightlySql = $"""
         WITH live AS (
@@ -176,7 +176,7 @@ public sealed partial class HnswCheckScheduler(JobDatabase database, IJobQueue q
     {
         DateTimeOffset? latest = null;
         var cursor = now - TimeSpan.FromDays(2);
-        while (Expression.GetNextOccurrence(cursor, SyncScheduler.Stockholm) is { } next && next <= now)
+        while (Expression.GetNextOccurrence(cursor, StockholmTime.Zone) is { } next && next <= now)
         {
             latest = next;
             cursor = next;

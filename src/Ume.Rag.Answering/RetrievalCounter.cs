@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Retrieval;
 
 namespace Ume.Rag.Answering;
@@ -17,8 +18,6 @@ public sealed partial class RetrievalCounter(NpgsqlDataSource dataSource, TimePr
 {
     public const int FlushAtKeys = 5000;
     public static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(30);
-
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     private ConcurrentDictionary<Key, Counts> _counts = new();
     private readonly SemaphoreSlim _flushNow = new(0, 1);
@@ -40,7 +39,7 @@ public sealed partial class RetrievalCounter(NpgsqlDataSource dataSource, TimePr
 
     private void Add(IEnumerable<RetrievedChunk> results, int retrieved, int cited)
     {
-        var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), Stockholm).DateTime);
+        var day = StockholmTime.Today(time);
         var counts = _counts;
         foreach (var r in results)
         {

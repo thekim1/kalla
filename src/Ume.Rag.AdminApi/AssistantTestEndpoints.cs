@@ -54,7 +54,6 @@ public sealed partial class AdminTestPanel(
     /// <summary>The client row the panel's usage is written under (identity §4.1: name <c>admin-console</c>, kind <c>internal</c>).</summary>
     public const string ClientName = "admin-console";
 
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
     private readonly ILogger _logger = loggers.CreateLogger<AdminTestPanel>();
 
     // Never started as a hosted service, so nothing it counts is written (§4.9: nothing is stored).
@@ -200,7 +199,7 @@ public sealed partial class AdminTestPanel(
 
         try
         {
-            var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime);
+            var day = StockholmTime.DayOf(at);
             // Not cancelled with the request: the calls were paid for even when the admin left; the write is short.
             await using var connection = await dataSource.OpenConnectionAsync(CancellationToken.None);
             await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);

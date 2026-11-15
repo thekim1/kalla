@@ -1,5 +1,6 @@
 using System.Net;
 using AngleSharp.Html.Parser;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Worker.Connectors.Changes;
@@ -26,8 +27,6 @@ public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
 {
     /// <summary>A file waits this long when ClamAV has no verdict (§11, fail closed).</summary>
     public static readonly TimeSpan ScanRetry = TimeSpan.FromSeconds(30);
-
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     /// <param name="context">The fetch's source, level and run.</param>
     /// <param name="blobs">Where the raw blob, its links and a quarantined file go (a preview's own prefix for previews).</param>
@@ -145,7 +144,7 @@ public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
     }
 
     /// <summary>The fetch day in Europe/Stockholm, for the date rule of the noise normalisation (§12.2).</summary>
-    private DateOnly FetchDay() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), Stockholm).DateTime);
+    private DateOnly FetchDay() => StockholmTime.Today(time);
 }
 
 /// <summary>The fetch results other than a body, as run item outcomes (connectors design §4, §15).</summary>

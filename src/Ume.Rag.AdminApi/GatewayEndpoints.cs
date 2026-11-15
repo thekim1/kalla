@@ -354,11 +354,7 @@ public static class GatewayEndpoints
                 // A key of a department outside the caller's scope is 404 before any gateway call, as /keys (admin §4.5; #618 review).
                 if (gatewayKeyId is { } keyId)
                 {
-                    var departments = admin.Departments().Select(d => d.Id);
-                    if (!await db.GatewayKeys.AsNoTracking().AnyAsync(k => k.Id == keyId && k.DepartmentId != null && departments.Contains(k.DepartmentId.Value), ct))
-                    {
-                        throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                    }
+                    await InScopeKeyAsync(admin, keyId, ct);
                 }
 
                 // level = an assistant's level (its ceiling); absent: the platform ceiling of the Settings pickers (V32).
@@ -443,8 +439,7 @@ public static class GatewayEndpoints
                 CancellationToken ct) =>
             {
                 await InScopeKeyAsync(admin, id, ct);
-                var period = CostPeriod.Of(from, to, granularity, DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now,
-                    TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm")).DateTime), maxDays: MaxIntegrationDays);
+                var period = CostPeriod.Of(from, to, granularity, StockholmTime.DayOf(admin.Now), maxDays: MaxIntegrationDays);
                 var usage = await integration.UsageAsync(id, period.From, period.To, period.Granularity, ct);
                 return usage is null ? JsonNull() : Results.Json(new KeyUsageDto(usage.From, usage.To, usage.Granularity, [.. usage.Items.Select(r =>
                     new KeyUsageRowDto(r.Period, r.Step, r.Requests, r.SuccessfulRequests, r.InputTokens, r.CachedInputTokens, r.OutputTokens, r.CostUsd))]));

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Npgsql;
 using Ume.Rag.Answering.Chat;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Infrastructure.Access;
 
@@ -27,8 +28,6 @@ public static class FeedbackEndpoints
         "dont_like_the_style", "too_verbose", "not_helpful", "not_factually_correct", "didnt_fully_follow_instructions", "refused_when_it_shouldnt_have",
         "being_lazy", "other",
     ], StringComparer.Ordinal);
-
-    private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     /// <summary>
     /// The plaintext category (main-session decision on #264): an Open WebUI key or one of the API's own reasons is kept,
@@ -145,34 +144,45 @@ public static class FeedbackEndpoints
                     await upsert.ExecuteNonQueryAsync(ct);
                 }
 
-                // §14.1: the totals move by the delta (a changed rating moves one count), on the rated message's day.
-                var up = (rating == 1 ? 1 : 0) - (previous == 1 ? 1 : 0);
-                var down = (rating == -1 ? 1 : 0) - (previous == -1 ? 1 : 0);
-                if (up != 0 || down != 0)
-                {
-                    await using var totals = new NpgsqlCommand("""
-                        INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
-                            "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
-                            "AgentLimitHits")
-                        VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 0, 0, 0, 0, 0, GREATEST($6, 0), GREATEST($7, 0), 0, 0, 0)
-                        ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
-                            "ThumbsUp" = GREATEST(t."ThumbsUp" + $6, 0), "ThumbsDown" = GREATEST(t."ThumbsDown" + $7, 0)
-                        """, connection, transaction)
-                    {
-                        Parameters =
-                        {
-                            new() { Value = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Stockholm).DateTime) }, new() { Value = assistantId },
-                            new() { Value = who.Client.Id }, new() { Value = level }, new() { Value = assistant.DepartmentId }, new() { Value = up }, new() { Value = down },
-                        },
-                    };
-                    await totals.ExecuteNonQueryAsync(ct);
-                }
-
+                await AddRatingToTotalsAsync(connection, transaction, at, assistantId, who.Client.Id, level, assistant.DepartmentId, previous, rating, ct);
                 await transaction.CommitAsync(ct);
                 return Results.NoContent();
             }))
             .WithTags("Chat").WithName("Feedback").WithSummary("Rate an assistant message of your own conversation (ratings only in P1)");
         return app;
+    }
+
+    /// <summary>
+    /// §14.1: moves the thumbs of <c>chat."AssistantDailyTotals"</c> by the rating's change from <paramref name="previous"/> (a
+    /// changed rating moves one count each way), on the rated message's day, in the caller's transaction; nothing when it is
+    /// unchanged. The API's ratings and the Open WebUI import (<see cref="FeedbackImporter"/>) both write through it.
+    /// </summary>
+    internal static async Task AddRatingToTotalsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, DateTimeOffset at, Guid assistantId,
+        Guid clientId, string level, Guid departmentId, short? previous, short rating, CancellationToken ct)
+    {
+        var up = (rating == 1 ? 1 : 0) - (previous == 1 ? 1 : 0);
+        var down = (rating == -1 ? 1 : 0) - (previous == -1 ? 1 : 0);
+        if (up == 0 && down == 0)
+        {
+            return;
+        }
+
+        await using var totals = new NpgsqlCommand("""
+            INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
+                "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
+                "AgentLimitHits")
+            VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 0, 0, 0, 0, 0, GREATEST($6, 0), GREATEST($7, 0), 0, 0, 0)
+            ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
+                "ThumbsUp" = GREATEST(t."ThumbsUp" + $6, 0), "ThumbsDown" = GREATEST(t."ThumbsDown" + $7, 0)
+            """, connection, transaction)
+        {
+            Parameters =
+            {
+                new() { Value = StockholmTime.DayOf(at) }, new() { Value = assistantId }, new() { Value = clientId }, new() { Value = level },
+                new() { Value = departmentId }, new() { Value = up }, new() { Value = down },
+            },
+        };
+        await totals.ExecuteNonQueryAsync(ct);
     }
 
     private static (Guid MessageId, short Rating, string? Reason) Parse(JsonElement body)

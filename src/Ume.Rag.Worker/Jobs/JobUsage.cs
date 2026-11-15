@@ -1,4 +1,5 @@
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Connectors.Persistence;
@@ -163,7 +164,7 @@ public sealed class JobUsage(IGatewayModelPrices prices, TimeProvider time, Acti
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(call);
         var record = UsageRecord.From(call, call.CostUsd is null ? await prices.GetAsync(call.Model, CancellationToken.None) : null);
-        var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), MaintenanceService.Stockholm).DateTime);
+        var day = StockholmTime.Today(time);
         lock (_lock)
         {
             _pending.Add(new Entry(day, owner, record));
