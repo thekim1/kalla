@@ -57,7 +57,8 @@ public sealed class RetrievalEvaluator(
 }
 
 /// <summary>
-/// The engines of one evaluation job: the collection's index, the scratch keyword copy for <c>hybrid-no-decompounder</c>,
+/// The engines of one evaluation job: the collection's index, the index whose statement K matches the keyword vector without
+/// compound parts (<see cref="KeywordVector.WithoutDecompounder"/>) for <c>hybrid-no-decompounder</c>,
 /// and the index with the reranker and its passage reader for <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>. Every
 /// search belongs to an evaluation run: its query embedding (a cache miss of the job's first search of the question) and its
 /// rerank call carry the run's id and are counted in the run's <see cref="UsageSink"/> (processing design §14.7).
@@ -80,7 +81,12 @@ public sealed class EvaluationSession : IDisposable
         // Questions run one after another (the eval class has concurrency 1), so one slot each.
         var options = new RetrievalEngineOptions { MaxConcurrentSearches = 1 };
         _engine = new RetrievalEngine(index, _sizes, options);
-        _withoutDecompounder = new RetrievalEngine(new NoDecompounderSearchIndex(dataSource, index, RetrievalEvaluator.StatementTimeout), _sizes, options);
+        var withoutDecompounder = new PostgresSearchIndex(dataSource, new PostgresSearchOptions
+        {
+            StatementTimeout = RetrievalEvaluator.StatementTimeout,
+            KeywordVector = KeywordVector.WithoutDecompounder,
+        });
+        _withoutDecompounder = new RetrievalEngine(withoutDecompounder, _sizes, options);
         _reranked = new RetrievalEngine(index, _sizes, new RetrievalEngineOptions
             {
                 MaxConcurrentSearches = 1,
