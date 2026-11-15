@@ -158,6 +158,12 @@ const portals = computed(() =>
 const whoCanUse = computed(() =>
   clients.value.filter((c) => assistant.data.value?.audienceClientIds.includes(c.id)).map((c) => (ASSISTANT.whoByKind[c.kind] ?? ASSISTANT.whoFallback)(c.name)),
 )
+/** The Draft tab's lead (admin design §5.5.4 Wording): what saving does in the assistant's current state. */
+const draftLead = computed(() => {
+  const a = assistant.data.value
+  if (!a?.publishedVersion) return ASSISTANT.draftLead.unpublished
+  return a.draft ? ASSISTANT.draftLead.changed(a.publishedVersion) : ASSISTANT.draftLead.published(a.publishedVersion)
+})
 const warnings = computed(() =>
   (draft.value?.warnings ?? []).map((w) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')),
 )
@@ -402,7 +408,7 @@ onMounted(load)
           {{ ASSISTANT.openIn(c.name) }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
         </UiButton>
         <template v-if="canEdit">
-          <UiButton icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
+          <UiButton icon="edit" data-test="edit" @click="editing = true">{{ ASSISTANT.editDetails }}</UiButton>
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
         </template>
@@ -417,9 +423,7 @@ onMounted(load)
       <UiTabs id="assistant" v-model="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" />
 
       <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-3xl gap-5">
-        <p v-if="!assistant.data.value.draft && assistant.data.value.publishedVersion" class="text-fg-2" data-test="draft-from">
-          {{ ASSISTANT.draftFrom(assistant.data.value.publishedVersion) }}
-        </p>
+        <p class="text-fg-2" data-test="draft-lead">{{ draftLead }}</p>
         <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
           <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
         </UiCard>

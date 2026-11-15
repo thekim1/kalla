@@ -9,8 +9,9 @@ import { formatNumber } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 
 // Knowledge on the Draft tab (admin design §5.5.4): each link shows the knowledge base, its owning department when it is
-// shared, and its topics ("All topics", or chips with Add topic); Add knowledge base opens a picker with Ours, Shared
-// with us and All, showing level, document count and topics. "Ours" is the assistant's own department.
+// shared, and its topics (chips and a field labelled "Limit to topics (empty: all topics)"; read-only, "All topics" when
+// there are none); Add knowledge base opens a picker with Ours, Shared with us and All, showing level, document count and
+// topics. "Ours" is the assistant's own department.
 type View = 'mine' | 'shared' | 'all'
 const props = defineProps<{ modelValue: CollectionLink[]; collections: CollectionSummary[]; departmentId: string; disabled?: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: CollectionLink[]): void }>()
@@ -76,7 +77,7 @@ function removeTopic(id: string, topic: string): void {
           </span>
           <UiButton v-if="!disabled" size="sm" variant="quiet" icon="close" :aria-label="ASSISTANT.removeCollection(nameOf(link.collectionId))" @click="remove(link.collectionId)" />
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div v-if="disabled || link.tags.length" class="flex flex-wrap items-center gap-2">
           <span v-if="link.tags.length === 0" class="text-small text-fg-2">{{ ASSISTANT.allTopics }}</span>
           <span v-for="t in link.tags" :key="t" class="inline-flex items-center gap-1 rounded-control bg-sunken px-2 py-0.5 text-small">
             <span class="font-mono">{{ t }}</span>
@@ -90,7 +91,7 @@ function removeTopic(id: string, topic: string): void {
         </div>
         <form v-if="!disabled" class="flex flex-wrap items-end gap-2" @submit.prevent="addTopic(link.collectionId)">
           <label class="grid gap-1 text-small">
-            <span>{{ ASSISTANT.topicsOf(nameOf(link.collectionId)) }}</span>
+            <span>{{ ASSISTANT.limitTopics }}</span>
             <input
               v-model="draftTopic[link.collectionId]" :list="`${uid}-topics-${link.collectionId}`" class="field-input font-mono"
               autocomplete="off"

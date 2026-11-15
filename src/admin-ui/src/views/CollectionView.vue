@@ -59,15 +59,17 @@ const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'top
 const tab = useTabQuery(TABS)
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
-const usedBy = computed(() =>
+/** The assistants that use it, each with its label; the Overview links each to its page (§5.5.2). */
+const users = computed(() =>
   (collection.data.value?.usedBy ?? []).map((u) => {
     // Another department's assistant is named with its department (a shared knowledge base, §3.2).
     const name = u.departmentId === collection.data.value?.departmentId ? u.name : `${u.name}, ${u.departmentName}`
     // An archived one stays listed (it still blocks deletion and can be restored) but says so (#374).
-    if (u.state === 'archived') return `${name} (${COLLECTION.archived})`
-    return u.published ? name : `${name} (${COLLECTION.draftOnly})`
-  }).join(', '),
+    if (u.state === 'archived') return { id: u.id, label: `${name} (${COLLECTION.archived})` }
+    return { id: u.id, label: u.published ? name : `${name} (${COLLECTION.draftOnly})` }
+  }),
 )
+const usedBy = computed(() => users.value.map((u) => u.label).join(', '))
 const lastRun = computed(() =>
   sources.data.value.map((s) => s.lastRun).filter((r) => r !== null).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null,
 )
@@ -293,12 +295,18 @@ onMounted(load)
               <span v-if="collection.data.value.contactName || collection.data.value.contactEmail" data-test="contact">
                 {{ [collection.data.value.contactName, collection.data.value.contactEmail].filter(Boolean).join(', ') }}
               </span>
-              <span v-else class="text-fg-3">{{ COLLECTION.noContact }}</span>
+              <span v-else class="flex flex-wrap items-center gap-3">
+                <span class="text-fg-3">{{ COLLECTION.noContact }}</span>
+                <UiButton v-if="canEdit" size="sm" icon="add" data-test="add-contact" @click="editing = true">{{ COLLECTION.addContact }}</UiButton>
+              </span>
             </DetailRow>
             <DetailRow :label="COLLECTION.usedBy">
-              <span v-if="collection.data.value.usedBy.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
+              <span v-if="users.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
               <span v-else data-test="used-by">
-                {{ usedBy }}
+                <template v-for="(u, i) in users" :key="u.id">
+                  <template v-if="i > 0">, </template>
+                  <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
+                </template>
               </span>
             </DetailRow>
             <!-- The live documents, as on the knowledge base list (#374). -->

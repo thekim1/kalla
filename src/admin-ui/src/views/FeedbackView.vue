@@ -4,10 +4,10 @@ import { api } from '@/api'
 import type { AssistantSummary, FeedbackItem, FeedbackSummary } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
-import FilterSelect from '@/components/ui/FilterSelect.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import MetricTile from '@/components/ui/MetricTile.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SelectField from '@/components/ui/SelectField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -99,7 +99,10 @@ onMounted(async () => {
   <PageHeader :title="PAGE.feedback.title" :description="FEEDBACK.lead" />
 
   <div v-if="totals" class="mb-6 grid gap-4 md:grid-cols-3" data-test="totals">
-    <MetricTile :label="FEEDBACK.answers" :value="formatNumber(totals.answers)" :context="FEEDBACK.notFoundShare(formatRatio(totals.answers ? totals.notFound / totals.answers : null))" />
+    <MetricTile
+      :label="FEEDBACK.answers" :value="formatNumber(totals.answers)"
+      :context="FEEDBACK.notFound(formatNumber(totals.notFound), totals.answers ? formatRatio(totals.notFound / totals.answers) : null)"
+    />
     <MetricTile :label="FEEDBACK.ratings" :value="formatNumber(ratings)" :context="FEEDBACK.thumbs(totals.thumbsUp, totals.thumbsDown)" />
     <UiCard :title="FEEDBACK.imports" data-test="imports">
       <p v-if="!summary?.imports.length" class="text-small text-fg-2">{{ FEEDBACK.noImports }}</p>
@@ -114,13 +117,14 @@ onMounted(async () => {
     </UiCard>
   </div>
 
-  <form class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="search" :aria-label="FEEDBACK.filters" @submit.prevent="load()">
+  <!-- The same filter layout as Costs: every label above its field, even columns. -->
+  <form class="mb-6 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-3" role="search" :aria-label="FEEDBACK.filters" @submit.prevent="load()">
     <TextField id="feedback-from" v-model="filters.from" type="date" :label="FEEDBACK.from" />
     <TextField id="feedback-to" v-model="filters.to" type="date" :label="FEEDBACK.to" />
-    <FilterSelect v-model="filters.assistantId" :label="FEEDBACK.assistant" :options="assistantOptions" />
-    <FilterSelect v-model="filters.rating" :label="FEEDBACK.rating" :options="ratingOptions" />
-    <FilterSelect v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" />
-    <FilterSelect v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" />
+    <SelectField id="feedback-assistant" v-model="filters.assistantId" :label="FEEDBACK.assistant" :options="assistantOptions" />
+    <SelectField id="feedback-rating" v-model="filters.rating" :label="FEEDBACK.rating" :options="ratingOptions" />
+    <SelectField id="feedback-outcome" v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" />
+    <SelectField id="feedback-state" v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" />
   </form>
   <p class="mb-4 text-small text-fg-2">{{ FEEDBACK.noContent }}</p>
   <InlineError v-if="markError" :message="problemMessage(markError)" class="mb-4" />

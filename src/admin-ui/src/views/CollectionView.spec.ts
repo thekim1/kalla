@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
@@ -7,6 +7,7 @@ import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button } from '@/test/helpers'
+import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
 // `?tab=` (the Files tab's `?tab=files`, §5.5.7) through a route the tests set.
@@ -163,9 +164,14 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     vi.spyOn(api.collections, 'sources').mockResolvedValue([])
     vi.spyOn(api.organisation, 'departmentNames').mockResolvedValue([{ id: 'd1', name: 'Kommunikation' }])
 
-    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    const wrapper = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     expect(wrapper.get('[data-test=used-by]').text()).toBe('Permits assistant, GK check (archived)')
+    // Each name links to its assistant (§5.5.2), the archived one too.
+    expect(wrapper.findAllComponents(RouterLinkStub).map((l) => l.props('to'))).toEqual([
+      { name: 'assistant', params: { id: 'a1' } },
+      { name: 'assistant', params: { id: 'a2' } },
+    ])
 
     await button(wrapper, 'Sharing').trigger('click')
     await flushPromises()
@@ -175,6 +181,37 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(rows[1]).toContain('GK check')
     expect(rows[1]).toContain('Archived')
     expect(rows[1]).not.toContain('Draft')
+  })
+
+  it('offers Add contact on an empty contact, which opens the Edit drawer; a reader sees no button (§5.5.2)', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection())
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('No contact yet')
+    expect(wrapper.getComponent(CollectionEditDrawer).props('open')).toBe(false)
+    await wrapper.get('[data-test=add-contact]').trigger('click')
+    expect(wrapper.getComponent(CollectionEditDrawer).props('open')).toBe(true)
+    wrapper.unmount()
+
+    signIn(['rag-viewer'])
+    const reader = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    expect(reader.text()).toContain('No contact yet')
+    expect(reader.find('[data-test=add-contact]').exists()).toBe(false)
+  })
+
+  it('shows a set contact without Add contact', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection({ contactName: 'Anna', contactEmail: 'anna@umea.se' }))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=contact]').text()).toBe('Anna, anna@umea.se')
+    expect(wrapper.find('[data-test=add-contact]').exists()).toBe(false)
   })
 
   it('lets a department admin publish with the version it read', async () => {

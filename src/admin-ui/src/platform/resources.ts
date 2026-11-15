@@ -69,6 +69,8 @@ export interface PlatformResource {
   /** The values an edit starts from; the row itself when absent. */
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
+  /** A heading above the list, for a page whose panels come first. */
+  listTitle?: string
   /** Panels shown above the list, in order. */
   panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary')[]
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
@@ -186,6 +188,7 @@ export const platformResources: PlatformResource[] = [
             },
           ]
         : [],
+    listTitle: PLATFORM.gatewayModels.listTitle,
     panels: ['gateway-context', 'embedding-profiles', 'embedding-canary'],
   },
 ]

@@ -91,10 +91,13 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     const link = wrapper.get('[data-test=link-c1]')
     expect(link.text()).toContain('Bygglov (not published)')
-    expect(link.text()).toContain('All topics')
+    // The topic field says what empty means, so no separate "All topics" line while it can be edited (UI4 B).
+    expect(link.get('label').text()).toBe('Limit to topics (empty: all topics)')
+    expect(link.text()).not.toContain('All topics')
+    expect(link.text()).not.toContain('Topics of')
     await link.get('input').setValue('bygglov')
     await link.get('form').trigger('submit')
-    expect(link.text()).not.toContain('All topics')
+    expect(link.find('.font-mono').text()).toBe('bygglov')
 
     await wrapper.get('#assistant-model').setValue('ume/chat-eu')
     await wrapper.get('#assistant-prompt').setValue('Svara kort.')
@@ -124,6 +127,42 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c2', tags: ['kompost'] }])
+  })
+
+  it('says in the Draft tab\'s lead what saving does, per state, and names the header button Edit details (UI4 B)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'version').mockResolvedValue({
+      number: 2, state: 'published', gatewayModel: null, systemPrompt: '', querySteps: {}, notFound: {}, collectionLinks: [],
+      restoredFrom: null, createdAt: '2026-11-01T10:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T10:00:00Z', publishedBy: 'anna',
+    })
+    const get = vi.spyOn(api.assistants, 'get')
+
+    const lead = async (a: Assistant) => {
+      get.mockResolvedValue(a)
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+      const text = wrapper.get('[data-test=draft-lead]').text()
+      expect(wrapper.get('[data-test=edit]').text()).toContain('Edit details')
+      wrapper.unmount()
+      return text
+    }
+
+    expect(await lead(assistant)).toBe('Saving keeps a draft; publish it to make the assistant available.')
+    expect(await lead({ ...assistant, publishedVersion: 2, draft: null })).toBe('Saving starts a draft from version 2; version 2 stays live until you publish.')
+    expect(await lead({ ...assistant, publishedVersion: 2 })).toBe('Draft changed since version 2.')
+  })
+
+  it('gives each general knowledge level its own help line (UI4 B)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    const helps = wrapper.findAll('[data-test=general-knowledge] label .text-small').map((h) => h.text())
+    expect(helps).toHaveLength(4)
+    expect(new Set(helps).size).toBe(4)
+    expect(helps[0]).toBe('Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.')
   })
 
   it('sends each link back with the topics it was loaded with', async () => {
@@ -285,7 +324,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     expect(version).toHaveBeenCalledWith('a1', 3)
     expect(draftCall).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-test=draft-from]').text()).toBe('Editing starts a new draft from version 3.')
+    expect(wrapper.get('[data-test=draft-lead]').text()).toBe('Saving starts a draft from version 3; version 3 stays live until you publish.')
     expect((wrapper.get('#assistant-model').element as HTMLSelectElement).value).toBe('ume/chat-eu')
     expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
     expect(wrapper.find('[data-test=link-c1]').exists()).toBe(true)

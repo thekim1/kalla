@@ -286,6 +286,7 @@ export const COLLECTION = {
   owner: 'Owner',
   contact: 'Contact',
   noContact: 'No contact yet',
+  addContact: 'Add contact',
   level: 'Information class',
   sharedWithYou: (owner: string) =>
     `${owner} shares this knowledge base with your department. Your assistants can use it; its sources and settings belong to ${owner}.`,
@@ -936,11 +937,12 @@ export const PLATFORM = {
     municipality: 'Whole organisation',
     sharedWith: 'Departments shared with',
     summary: (department: number, selected: number, municipality: number) =>
-      `${department} own · ${selected} selected · ${municipality} whole organisation`,
+      `Own: ${department} · Shared with selected departments: ${selected} · Shared with everyone: ${municipality}`,
   },
   gatewayModels: {
     limitsSource: 'Limits from',
-    limitsSources: { catalog: 'AI gateway', manual: 'Set here' } as Record<string, string>,
+    limitsSources: { catalog: 'AI gateway', manual: 'Manual' } as Record<string, string>,
+    listTitle: 'The AI gateway’s models',
     limits: 'Limits',
     limitsFromGateway: 'The AI gateway sends this model’s limits, so they cannot be changed here.',
     gateway: 'AI gateway',
@@ -1162,9 +1164,13 @@ export const SOURCE_PAGE = {
   piiLive: 'Searchable',
   piiNotApplies: 'Applies only to public knowledge bases.',
   piiTypes: PREVIEW.piiTypes,
-  piiFired: (types: string) => `Flagged for: ${types}`,
+  piiFlaggedFor: 'Flagged for',
   piiCounts: 'Personal data found',
   piiCount: (type: string, count: string) => `${type}: ${count}`,
+  /** The folded report's summary (admin design §5.5.3), e.g. "Personal data (50 documents, 4 flagged)". */
+  piiSummary: (documents: number, flagged: number) =>
+    `Personal data (${formatNumber(documents)} ${documents === 1 ? 'document' : 'documents'}, ${formatNumber(flagged)} flagged)`,
+  piiDocument: 'Document',
 } as const
 
 export const RUN_STATE_LABEL: Record<string, string> = {
@@ -1302,13 +1308,19 @@ export const ASSISTANT = {
   pickerAdd: (name: string) => `Add ${name}`,
   sharedFrom: (owner: string) => `${owner}, shared`,
   allTopics: 'All topics',
-  topicsOf: (name: string) => `Topics of ${name}`,
+  limitTopics: 'Limit to topics (empty: all topics)',
   addTopic: 'Add topic',
   noTopicChoice: 'Choose a topic',
   removeTopic: (topic: string) => `Remove the topic ${topic}`,
   removeCollection: (name: string) => `Remove ${name}`,
   saveDraft: 'Save draft',
-  draftFrom: (n: number) => `Editing starts a new draft from version ${n}.`,
+  /** The Draft tab's lead (admin design §5.5.4 Wording, UI4 B): what saving does. */
+  draftLead: {
+    unpublished: 'Saving keeps a draft; publish it to make the assistant available.',
+    published: (n: number) => `Saving starts a draft from version ${n}; version ${n} stays live until you publish.`,
+    changed: (n: number) => `Draft changed since version ${n}.`,
+  },
+  editDetails: 'Edit details',
   draftSaved: 'The draft has been saved.',
   warnings: 'Fix this before you publish',
   publish: 'Publish',
@@ -1329,18 +1341,18 @@ export const ASSISTANT = {
   generalKnowledge: 'General knowledge',
   generalKnowledgeHint: 'How far the assistant may use the language model’s own knowledge besides the knowledge bases.',
   generalKnowledgeLevels: {
-    off: { label: 'Off: only the knowledge bases', help: 'When nothing is found, the assistant says so and shows the contact links.' },
+    off: { label: 'Off: only the knowledge bases', help: 'Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.' },
     supplement: {
       label: 'Supplement: knowledge bases first, general knowledge for explanations',
-      help: 'When nothing is found, the assistant says so and shows the contact links.',
+      help: 'May use general knowledge to explain terms in an answer from the knowledge bases; when they have nothing, it says so and shows the contact links.',
     },
     fallback: {
       label: 'Fallback: as Supplement, and answer from general knowledge when nothing is found',
-      help: 'When nothing is found, the answer starts with a note that it is based on general knowledge, and the contact links follow.',
+      help: 'As Supplement, and when the knowledge bases have nothing it answers from general knowledge, marked as such, with the contact links.',
     },
     open: {
       label: 'Open: knowledge bases and general knowledge',
-      help: 'When nothing is found, the answer starts with a note that it is based on general knowledge, and the contact links follow.',
+      help: 'Uses the knowledge bases and general knowledge freely; answers from general knowledge are marked, with the contact links.',
     },
   } as Record<string, { label: string; help: string }>,
   generalKnowledgePublicWarning: 'Not recommended for a public assistant: the public may get general answers that are wrong for your organisation.',
@@ -1679,7 +1691,8 @@ export const FEEDBACK = {
   reopen: 'Open again',
   more: 'Show more',
   answers: 'Answers',
-  notFoundShare: (share: string) => `${share} found nothing`,
+  /** The Answers tile's sub-line, e.g. "12 not found (6 %)"; no share without answers. */
+  notFound: (count: string, share: string | null) => (share === null ? `${count} not found` : `${count} not found (${share})`),
   ratings: 'Ratings',
   thumbs: (up: number, down: number) => `${up} up, ${down} down`,
   imports: 'Import from Open WebUI',
