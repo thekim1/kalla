@@ -52,18 +52,24 @@ public static class ChatEndpoints
             await OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
-                JsonElement body;
+                JsonDocument body;
                 try
                 {
-                    body = (await JsonDocument.ParseAsync(http.Request.Body, cancellationToken: ct)).RootElement;
+                    body = await JsonDocument.ParseAsync(http.Request.Body, cancellationToken: ct);
                 }
                 catch (JsonException)
                 {
                     throw new ChatException(400, "invalid_request", "The body is not valid JSON.");
                 }
 
-                // §3.8: Open WebUI renders no ume chunk, so its requests ignore the member without validating it.
-                var parsed = ChatRequestParser.Parse(body, readUme: who.Client.Kind != "open-webui");
+                // The parsed request holds only copies (strings, numbers), so the document and its pooled buffers go now (#712).
+                ParsedChat parsed;
+                using (body)
+                {
+                    // §3.8: Open WebUI renders no ume chunk, so its requests ignore the member without validating it.
+                    parsed = ChatRequestParser.Parse(body.RootElement, readUme: who.Client.Kind != "open-webui");
+                }
+
                 limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user (or per key, when the key is the subject) and minute, before any model call
                 // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
                 // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
