@@ -912,13 +912,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Kind")
+                    b.HasIndex("OAuthClientId")
+                        .IsUnique();
+
+                    b.HasIndex("Kind", "Name")
                         .IsUnique()
                         .HasDatabaseName("IX_Clients_Managed")
                         .HasFilter("\"IsManagedByDeployment\"");
-
-                    b.HasIndex("OAuthClientId")
-                        .IsUnique();
 
                     b.ToTable("Clients", "config", t =>
                         {

@@ -271,7 +271,8 @@ Every .NET service also answers `/health/live` and `/version`.
 Nothing to do: rag-migrate creates the **`admin-console` client** on its first run, in every deployment (identity design
 §4.1): type `internal`, highest information class `Sensitive`, *Stores chat history* off, shown under *Apps and keys* as
 managed by the deployment. The assistant test panel writes the cost of each test turn under it, so test use shows apart
-from real use on the *Costs* pages. A platform admin may edit its settings; it has no keys, and none can be made on it.
+from real use on the *Costs* pages. A platform admin may edit its settings but not its name; it has no keys, and none can
+be made on it.
 An `admin-console` client of type `internal` made by hand before becomes the managed one, and rag-migrate revokes any key
 it had.
 

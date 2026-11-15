@@ -178,7 +178,8 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
     /// <summary>The <c>admin-console</c> row of identity §4.1 (as rag-migrate adds it, managed by the deployment), inserted once for the group.</summary>
     private static async Task<Guid> AdminConsoleAsync(Infrastructure.Persistence.RagDbContext db)
     {
-        var id = await db.Clients.AsNoTracking().Where(c => c.Kind == ClientKinds.Internal && c.IsManagedByDeployment).Select(c => (Guid?)c.Id)
+        var id = await db.Clients.AsNoTracking().Where(c => c.Kind == ClientKinds.Internal && c.Name == AdminTestPanel.ClientName && c.IsManagedByDeployment)
+            .Select(c => (Guid?)c.Id)
             .SingleOrDefaultAsync(Ct);
         if (id is { } known)
         {

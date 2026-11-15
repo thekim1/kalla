@@ -75,7 +75,10 @@ exception, with its own steps.
   rag-api and rag-worker name their columns and are not affected.
 - **The `admin-console` client is set up by the deployment (#712).** rag-migrate creates the test panel's client
   `admin-console` (type `internal`, *Managed by the deployment*) in every deployment; one made by hand becomes the managed
-  one, its settings kept and any key of it revoked. Its keys can no longer be made or changed in the admin. **Apply:**
+  one, its settings kept and any key of it revoked. Its keys can no longer be made or changed in the admin. Migration
+  `ClientsManagedPerName` makes the managed clients unique per type and name instead of per type, and rag-migrate finds
+  them by both, so the name of a client managed by the deployment (*Open WebUI*, `admin-console`) can no longer be
+  changed in the admin. **Apply:**
   nothing. **Check:** *Apps and keys* shows `admin-console` as managed; rag-migrate's log says "The admin test panel's
   client admin-console: Created" (or `Adopted`, then `Unchanged`).
 - **Migration `ChunkSetsEmbeddingProfileIndex` (#712)** adds an index on `content."ChunkSets"."EmbeddingProfileId"`

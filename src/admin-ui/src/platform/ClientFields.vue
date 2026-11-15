@@ -6,8 +6,9 @@ import UiSwitch from '@/components/ui/UiSwitch.vue'
 import { LEVEL_LABEL, PLATFORM_CLIENTS } from '@/utils/labels'
 import { fieldsFor, historyAllowed, LEVELS, type ClientField, type ClientForm } from './clients'
 
-// A client's fields for its kind (admin design §5.9 step 2), in the Add client drawer and in the client's drawer.
-const props = defineProps<{ kind: string; idPrefix: string; errors: Partial<Record<ClientField, string>> }>()
+// A client's fields for its kind (admin design §5.9 step 2), in the Add client drawer and in the client's drawer. A client
+// managed by the deployment keeps its name (`nameLocked`, #712).
+const props = defineProps<{ kind: string; idPrefix: string; errors: Partial<Record<ClientField, string>>; nameLocked?: boolean }>()
 const form = defineModel<ClientForm>({ required: true })
 
 const L = PLATFORM_CLIENTS
@@ -24,7 +25,10 @@ watch(historyDisabled, (disabled) => {
 
 <template>
   <div class="grid gap-5">
-    <TextField :id="id('name')" v-model="form.name" :label="L.fields.name" :error="errors.name" autocomplete="off" />
+    <TextField
+      :id="id('name')" v-model="form.name" :label="L.fields.name" :error="errors.name" :disabled="nameLocked" :hint="nameLocked ? L.hints.managedName : undefined"
+      autocomplete="off"
+    />
     <SelectField
       :id="id('classificationCeiling')" v-model="form.classificationCeiling" :label="L.fields.classificationCeiling" :options="levelOptions"
       :hint="L.hints.classificationCeiling" :error="errors.classificationCeiling"

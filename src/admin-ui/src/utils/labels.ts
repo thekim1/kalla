@@ -1066,6 +1066,7 @@ export const PLATFORM_CLIENTS = {
   },
   hints: {
     classificationCeiling: 'The highest information class the app may receive.',
+    managedName: 'The deployment finds this app by its name, so it cannot be changed.',
     clientRetentionDays: 'How long the feedback copied from Open WebUI is kept.',
     oAuthClientId: 'The azp of the app’s tokens.',
     portalUrl: 'Where users open the app; the assistant page links to it.',

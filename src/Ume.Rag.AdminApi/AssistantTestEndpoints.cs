@@ -172,11 +172,11 @@ public sealed partial class AdminTestPanel(
     }
 
     /// <summary>
-    /// The registry's <c>admin-console</c> row (identity §4.1): the <c>internal</c> client rag-migrate keeps as managed by the
-    /// deployment (#712), found by its kind as Open WebUI's is, so a rename keeps it; null before rag-migrate has run.
+    /// The registry's <c>admin-console</c> row (identity §4.1): the <c>internal</c> client of that name that rag-migrate keeps as
+    /// managed by the deployment (#712; one per kind and name, its name not editable); null before rag-migrate has run.
     /// </summary>
     private static ClientEntry? AdminConsoleRow(PolicySnapshot snapshot) =>
-        snapshot.Clients.Values.SingleOrDefault(c => c.Kind == Domain.Entities.ClientKinds.Internal && c.IsManagedByDeployment);
+        snapshot.Clients.Values.SingleOrDefault(c => c.Kind == Domain.Entities.ClientKinds.Internal && c.Name == ClientName && c.IsManagedByDeployment);
 
     /// <summary>
     /// Upserts <paramref name="records"/> into <c>chat."AssistantDailyUsage"</c> under the assistant and the <c>admin-console</c>
