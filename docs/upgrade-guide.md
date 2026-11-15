@@ -12,6 +12,11 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **Fewer Portainer variables (M-17 C1–C3, #682, #683).** The stack sets Open WebUI's feedback address while the
+  `openwebui` profile is on and the malware-scan mode from the `clamav` profile, so `UME_RAG_OPENWEBUI_BASE_URL` and
+  `UME_RAG_CLAMAV_MODE` are no longer read; `UME_RAG_API_PUBLIC_URL` defaults to `https://<UME_RAG_API_HOST>` and is
+  needed only for a public URL with a port. **Apply:** nothing is required (a leftover value is ignored); remove the two
+  variables when you paste the new stack file. **Check:** `rag-bootstrap`'s checklist names nothing about them.
 - **Open WebUI's client is set up by the deployment (M-17 C4, #684).** rag-migrate creates the client *Open WebUI*
   (*Managed by the deployment*) from a key the deployment generates, and rag-api trusts Open WebUI's users **only**
   for that client. An Open WebUI client made by hand stays in the registry but is no longer trusted, so until the
