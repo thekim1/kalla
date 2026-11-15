@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.TestKit;
 using FakeGatewayProgram = fakegateway::Program;
 
@@ -19,8 +20,9 @@ namespace Ume.Rag.AdminApi.Tests;
 
 /// <summary>
 /// B-45 (gateway phase 3; gateway-changes §5.6; admin design §4.5, §8.6): rag-admin reads a key's usage per step and its budgets
-/// from the gateway's Integration API with its credential key (<c>usage.read</c>), cached 5 minutes per key and query; without
-/// <c>Gateway:IntegrationApiUrl</c> the routes answer null without a call; a refusal is null with its reason on the status.
+/// from the gateway's Integration API with its credential key (<c>usage.read</c>), cached 5 minutes per key and query, at the
+/// address its gateway context names (<c>integration_api_url</c>, M-17 C11); without one the routes answer null without a
+/// call; a refusal is null with its reason on the status.
 /// </summary>
 [Collection(AdminDatabaseGroup3.Name)]
 public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
@@ -32,9 +34,15 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
 
     private int _integrationCalls;
 
-    private static WebApplicationFactory<FakeGatewayProgram> Gateway(bool usageRead = true) => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+    /// <summary>The FakeGateway; <paramref name="integrationApiUrl"/> false: its context names no Integration API address.</summary>
+    private static WebApplicationFactory<FakeGatewayProgram> Gateway(bool usageRead = true, bool integrationApiUrl = true) => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
+        if (!integrationApiUrl)
+        {
+            web.UseSetting("FakeGateway:Gateway:IntegrationApiUrl", "");
+        }
+
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
         web.UseSetting("FakeGateway:CredentialKeys:admin:Scopes:0", usageRead ? "usage.read" : "organisation.read");
         web.UseSetting("FakeGateway:CredentialKeys:api:Key", ApiKey);
@@ -43,15 +51,23 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:AssignedKeys:0:Budgets:0:Spent", "1000");
     });
 
-    private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway, bool configured = true, HttpMessageHandler? integration = null) =>
-        database.HeaderFactory().WithWebHostBuilder(web =>
+    /// <summary>rag-admin with its context read once from <paramref name="gateway"/>, which names the Integration API's address (M-17 C11).</summary>
+    private async Task<WebApplicationFactory<Program>> AdminAsync(WebApplicationFactory<FakeGatewayProgram> gateway, HttpMessageHandler? integration = null)
+    {
+        var factory = database.HeaderFactory().WithWebHostBuilder(web =>
         {
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
             web.UseSetting("Gateway:Key", AdminKey);
-            web.UseSetting("Gateway:IntegrationApiUrl", configured ? "http://fake-gateway/" : "");
-            web.ConfigureTestServices(services => services.AddHttpClient(IntegrationApiClient.HttpClientName)
-                .ConfigurePrimaryHttpMessageHandler(() => new Counting(integration ?? gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _integrationCalls))));
+            web.ConfigureTestServices(services =>
+            {
+                services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+                services.AddHttpClient(IntegrationApiClient.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => new Counting(integration ?? gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _integrationCalls)));
+            });
         });
+        (await factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
+        return factory;
+    }
 
     /// <summary>An Integration API that answers every call with 503.</summary>
     private sealed class Unavailable : HttpMessageHandler
@@ -114,7 +130,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         await ChatAsync(gateway, "chat-answer");
         await ChatAsync(gateway, "chat-answer");
         var served = gateway.Services.GetRequiredService<fakegateway::Ume.Rag.FakeGateway.FakeUsage>().Records.Where(r => r.KeyId == Chatbot).ToList();
-        await using var factory = Admin(gateway);
+        await using var factory = await AdminAsync(gateway);
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
 
         var usage = await admin.GetFromJsonAsync<JsonElement>($"/api/gateway/keys/{Chatbot}/usage?from={Today}&to={Today}", Ct);
@@ -148,12 +164,13 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task Without_the_url_the_routes_answer_null_without_a_call_and_a_missing_scope_is_shown_on_the_status()
+    public async Task Without_an_address_in_the_context_the_routes_answer_null_without_a_call_and_a_missing_scope_is_shown_on_the_status()
     {
         var code = await SeedAsync();
-        await using (var gateway = Gateway())
-        await using (var unset = Admin(gateway, configured: false))
+        await using (var gateway = Gateway(integrationApiUrl: false))
+        await using (var unset = await AdminAsync(gateway))
         {
+            unset.Services.GetRequiredService<IntegrationApiClient>().Configured.ShouldBeFalse();
             using var admin = await AdminDatabaseFixture.UserAsync(unset, RagRoles.DepartmentAdmin, code);
             (await admin.GetStringAsync($"/api/gateway/keys/{Chatbot}/budget", Ct)).ShouldBe("null");
             (await admin.GetStringAsync($"/api/gateway/keys/{Chatbot}/usage", Ct)).ShouldBe("null");
@@ -161,7 +178,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         }
 
         await using var withoutScope = Gateway(usageRead: false);
-        await using var factory = Admin(withoutScope);
+        await using var factory = await AdminAsync(withoutScope);
         using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         (await departmentAdmin.GetStringAsync($"/api/gateway/keys/{Chatbot}/budget", Ct)).ShouldBe("null");
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
@@ -183,7 +200,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         var code = await SeedAsync();
         await using var gateway = Gateway();
         using var unavailable = new Unavailable();
-        await using var factory = Admin(gateway, integration: unavailable);
+        await using var factory = await AdminAsync(gateway, unavailable);
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
 
         (await admin.GetStringAsync($"/api/gateway/keys/{Chatbot}/budget", Ct)).ShouldBe("null");

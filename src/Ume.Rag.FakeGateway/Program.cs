@@ -110,7 +110,9 @@ app.MapGet("/v1/ume/context", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
         return;
     }
 
-    await CacheableJson.WriteAsync(ctx, FakeContext.Build(key, options.Value, DateTimeOffset.UtcNow), ctx.RequestAborted);
+    // integration_api_url defaults to this fake's own /integration/v1 at the address the caller used (M-17 C11).
+    var ownIntegrationApi = $"{ctx.Request.Scheme}://{ctx.Request.Host}{ctx.Request.PathBase}/integration/v1";
+    await CacheableJson.WriteAsync(ctx, FakeContext.Build(key, options.Value, DateTimeOffset.UtcNow, ownIntegrationApi), ctx.RequestAborted);
 });
 
 app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options, FakeChatScripts scripts) =>

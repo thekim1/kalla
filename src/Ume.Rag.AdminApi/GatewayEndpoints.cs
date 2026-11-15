@@ -169,7 +169,7 @@ public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string G
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
     IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles, GatewayContextInfo? Gateway, OrgSyncStatus Organisation, GatewayActedStatus? Acted = null)
 {
-    /// <summary>The Integration API's read-back (B-45): whether <c>Gateway:IntegrationApiUrl</c> is set and its last refusal (<c>401</c>, <c>403</c>, <c>429</c>).</summary>
+    /// <summary>The Integration API's read-back (B-45): whether the gateway's context names its address and its last refusal (<c>401</c>, <c>403</c>, <c>429</c>).</summary>
     public IntegrationReadback? Integration { get; init; }
 }
 
@@ -365,7 +365,7 @@ public static class GatewayEndpoints
             .WithSummary("The department's assigned gateway keys for the key picker, with their settings and whether each can be chosen");
 
         // B-45 (admin §4.5, §8.6; gateway-changes §5.6): a key's budgets and its usage as the gateway counted them. The key's
-        // department must be in scope (404 before any gateway call); null when Gateway:IntegrationApiUrl is unset or the gateway
+        // department must be in scope (404 before any gateway call); null when the gateway names no Integration API address or
         // gives nothing (the Gateway page shows why).
         gateway.MapGet("/keys/{id:guid}/budget", async (Guid id, AdminContext admin, IntegrationApiClient integration, CancellationToken ct) =>
             {

@@ -58,9 +58,13 @@ public sealed class GatewayFeatures
     /// <summary>The context carries <c>gateway.organisation_name</c> (gateway v0.10.2; M-17 C12).</summary>
     public const string OrganisationNameFeature = "organisation-name";
 
+    /// <summary>The context carries <c>gateway.integration_api_url</c> (gateway v0.10.2; M-17 C11).</summary>
+    public const string IntegrationApiUrlFeature = "integration-api-url";
+
     private volatile HashSet<string> _features = new(StringComparer.Ordinal);
     private volatile StrongBox<Residency>? _credentialMaximum;
     private volatile string? _organisationName;
+    private volatile string? _integrationApiUrl;
 
     public IReadOnlySet<string> Current => _features;
 
@@ -80,14 +84,25 @@ public sealed class GatewayFeatures
     /// </summary>
     public string? OrganisationName => _organisationName;
 
+    /// <summary>
+    /// The gateway's Integration API base address, ending in <c>/integration/v1</c> (the context's
+    /// <c>gateway.integration_api_url</c>, feature <see cref="IntegrationApiUrlFeature"/>; M-17 C11): rag-admin's cost and
+    /// budget read-back. Null when the gateway has none set, lacks the feature, or before the first context answer.
+    /// </summary>
+    public string? IntegrationApiUrl => _integrationApiUrl;
+
     public void Update(IEnumerable<string> features) => _features = new HashSet<string>(features, StringComparer.Ordinal);
 
     /// <summary>
     /// What the context says about the gateway besides its features: <paramref name="organisationName"/> counts only under
-    /// <see cref="OrganisationNameFeature"/> (call <see cref="Update"/> first), and an empty one is none.
+    /// <see cref="OrganisationNameFeature"/> and <paramref name="integrationApiUrl"/> only under
+    /// <see cref="IntegrationApiUrlFeature"/> (call <see cref="Update"/> first); an empty one is none.
     /// </summary>
-    public void UpdateGateway(string? organisationName) =>
+    public void UpdateGateway(string? organisationName, string? integrationApiUrl)
+    {
         _organisationName = _features.Contains(OrganisationNameFeature) && !string.IsNullOrWhiteSpace(organisationName) ? organisationName.Trim() : null;
+        _integrationApiUrl = _features.Contains(IntegrationApiUrlFeature) && !string.IsNullOrWhiteSpace(integrationApiUrl) ? integrationApiUrl.Trim() : null;
+    }
 
     /// <summary>The credential key's ceiling from its <c>allowed_residencies</c> (<see cref="HighestOf"/>).</summary>
     public void UpdateCredentialResidencies(IReadOnlyList<string> allowedResidencies) =>
@@ -230,7 +245,7 @@ public sealed partial class GatewayContextReader(
             response.EnsureSuccessStatusCode();
             var context = await response.Content.ReadFromJsonAsync<ContextFeatures>(Json, cancellationToken);
             features.Update(context?.Gateway?.Features ?? []);
-            features.UpdateGateway(context?.Gateway?.OrganisationName);
+            features.UpdateGateway(context?.Gateway?.OrganisationName, context?.Gateway?.IntegrationApiUrl);
             // The credential key's residencies bound every call's ceiling (Decisions "Residency per level", M-17 C9); an
             // answer without them keeps the ceiling as it was (unknown: OnPrem).
             if (context?.Key?.AllowedResidencies is { } residencies)
@@ -254,7 +269,7 @@ public sealed partial class GatewayContextReader(
 
     private sealed record ContextKeyPart(IReadOnlyList<string>? AllowedResidencies);
 
-    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features, string? OrganisationName);
+    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features, string? OrganisationName, string? IntegrationApiUrl);
 
     [LoggerMessage(LogLevel.Information, "Gateway features: {Features}; the credential key's ceiling: {Ceiling}")]
     private static partial void LogRead(ILogger logger, string features, string ceiling);
