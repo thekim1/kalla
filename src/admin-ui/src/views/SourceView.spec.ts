@@ -74,7 +74,10 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(sync).toHaveBeenCalledWith('s1')
     expect(runs).toHaveBeenCalledTimes(2) // the list reloads with the new run
 
-    await wrapper.findAll('tbody tr')[0]!.find('button').trigger('click')
+    // A run row is a link to the run (§5.5.2 "Lists open as links"); a click elsewhere on the row opens it too.
+    const row = wrapper.findAll('tbody tr')[0]!
+    expect(row.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
+    await row.findAll('td')[0]!.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
@@ -88,7 +91,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
     const collection = vi.spyOn(api.collections, 'get').mockResolvedValue({ id: 'c1', classification: 'internal' } as never)
 
-    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body })
+    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     expect(wrapper.get('[data-test=demoted]').text()).toBe('www.umea.se/bygga/**/arkiv/** ×0,5')
     await wrapper.get('[data-test=edit-source]').trigger('click')

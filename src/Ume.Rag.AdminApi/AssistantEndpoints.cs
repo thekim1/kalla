@@ -32,15 +32,7 @@ public static class AssistantEndpoints
                 }
 
                 var total = await query.CountAsync(ct);
-                var rows = await query.OrderBy(a => a.Name).Skip(page.Skip).Take(page.Take)
-                    .Select(a => new { a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId, HasDraft = a.DraftVersionId != null })
-                    .ToListAsync(ct);
-                var publishedIds = rows.Where(r => r.PublishedVersionId != null).Select(r => r.PublishedVersionId!.Value).ToList();
-                var steps = await admin.Db.AssistantVersions.AsNoTracking().Where(v => publishedIds.Contains(v.Id)).Select(v => new { v.Id, v.QuerySteps })
-                    .ToDictionaryAsync(v => v.Id, v => v.QuerySteps, ct);
-                var items = rows.Select(a => new AssistantSummary(a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId != null, a.HasDraft,
-                    a.PublishedVersionId is { } v && steps.TryGetValue(v, out var json) ? GeneralKnowledgeOf(json) : null)).ToList();
-                return new PageDto<AssistantSummary>(items, total);
+                return new PageDto<AssistantSummary>(await SummariesAsync(admin, query.OrderBy(a => a.Name).Skip(page.Skip).Take(page.Take), ct), total);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListAssistants").WithSummary("Assistants of the caller's departments");
 
@@ -446,6 +438,42 @@ public static class AssistantEndpoints
             };
         }, ct);
         return await DetailAsync(admin, saved, ct);
+    }
+
+    /// <summary>
+    /// The list rows of <paramref name="query"/> (admin design §5.5.4), in grouped queries for the page: the knowledge bases and
+    /// model of the published version, else the draft; the published version's number, date and general knowledge; and the
+    /// questions (<c>AssistantDailyTotals.Messages</c>) of the last 7 Europe/Stockholm days, today included.
+    /// </summary>
+    private static async Task<List<AssistantSummary>> SummariesAsync(AdminContext admin, IQueryable<Assistant> query, CancellationToken ct)
+    {
+        var rows = await query.Select(a => new { a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId })
+            .ToListAsync(ct);
+        var versionIds = rows.Select(r => r.PublishedVersionId ?? r.DraftVersionId).OfType<Guid>().ToList();
+        var versions = await admin.Db.AssistantVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id))
+            .Select(v => new { v.Id, v.Number, v.GatewayModel, v.QuerySteps, v.CollectionLinks, v.PublishedAt })
+            .ToDictionaryAsync(v => v.Id, ct);
+        var collectionIds = versions.Values.SelectMany(v => v.CollectionLinks).Select(l => l.CollectionId).Distinct().ToList();
+        var collections = await admin.Db.Collections.AsNoTracking().Where(c => collectionIds.Contains(c.Id) && c.DeletedAt == null)
+            .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+        var ids = rows.Select(r => r.Id).ToList();
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(admin.Now, RetentionService.Stockholm).DateTime);
+        var firstDay = today.AddDays(-6);
+        var questions = await admin.Db.AssistantDailyTotals.AsNoTracking().Where(t => ids.Contains(t.AssistantId) && t.Day >= firstDay && t.Day <= today)
+            .GroupBy(t => t.AssistantId).Select(g => new { g.Key, Messages = g.Sum(t => t.Messages) })
+            .ToDictionaryAsync(g => g.Key, g => g.Messages, ct);
+        return
+        [
+            .. rows.Select(a =>
+            {
+                var shown = (a.PublishedVersionId ?? a.DraftVersionId) is { } id ? versions.GetValueOrDefault(id) : null;
+                var published = a.PublishedVersionId is { } p ? versions.GetValueOrDefault(p) : null;
+                return new AssistantSummary(a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, published is not null, a.DraftVersionId is not null,
+                    published is null ? null : GeneralKnowledgeOf(published.QuerySteps),
+                    [.. (shown?.CollectionLinks ?? []).Where(l => collections.ContainsKey(l.CollectionId)).Select(l => new AssistantCollectionRef(l.CollectionId, collections[l.CollectionId]))],
+                    shown?.GatewayModel, published?.Number, published?.PublishedAt, questions.GetValueOrDefault(a.Id));
+            }),
+        ];
     }
 
     private static IQueryable<Assistant> Scoped(AdminContext admin)
@@ -856,9 +884,17 @@ public static class AssistantRules
     }
 }
 
-/// <summary><see cref="GeneralKnowledge"/>: the published version's <c>answer.generalKnowledge</c>, null before the first publish.</summary>
+/// <summary>
+/// A list row (admin design §5.5.4). <see cref="GeneralKnowledge"/>: the published version's <c>answer.generalKnowledge</c>,
+/// null before the first publish; <see cref="Collections"/> and <see cref="Model"/>: the published version's, else the
+/// draft's; <see cref="PublishedVersion"/> and <see cref="PublishedAt"/>: null before the first publish;
+/// <see cref="Questions7d"/>: the messages of the last 7 Europe/Stockholm days, today included.
+/// </summary>
 public sealed record AssistantSummary(Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, string State, bool Published, bool HasDraft,
-    string? GeneralKnowledge);
+    string? GeneralKnowledge, IReadOnlyList<AssistantCollectionRef> Collections, string? Model, int? PublishedVersion, DateTimeOffset? PublishedAt, int Questions7d);
+
+/// <summary>A knowledge base an assistant's version links.</summary>
+public sealed record AssistantCollectionRef(Guid Id, string Name);
 
 public sealed record DraftInfo(int Number, DateTimeOffset UpdatedAt, bool BaseChanged, string Version);
 

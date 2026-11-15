@@ -127,7 +127,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     ])
     vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
 
-    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    const wrapper = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await button(wrapper, 'Sources (2)').trigger('click')
 
@@ -137,6 +137,10 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(crawl).toContain('Failed')
     expect(crawl?.replace(/\s/g, '')).toContain('2300')
     expect(upload).toContain('Not run yet')
+    // A source row is a link to the source (§5.5.2 "Lists open as links").
+    expect(wrapper.findAll('tbody tr').map((r) => r.getComponent(RouterLinkStub).props('to'))).toEqual([
+      { name: 'source', params: { id: 's1' } }, { name: 'source', params: { id: 's2' } },
+    ])
   })
 
   it('shows the live document count of the list, not every document that is not deleted (#374)', async () => {

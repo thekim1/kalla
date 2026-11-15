@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Department, DepartmentMap, MapRow } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -17,7 +16,6 @@ interface Row extends MapRow {
   key: string
   department: string
 }
-const router = useRouter()
 const departments = ref<Department[]>([])
 const department = ref('')
 const show = ref<Show>('all')
@@ -58,9 +56,8 @@ async function load(): Promise<void> {
   await maps.run(() => Promise.all(ids.map((id) => api.organisation.map(id))))
 }
 
-function open(row: Row): void {
-  void router.push(row.assistant ? { name: 'assistant', params: { id: row.assistant.id } } : { name: 'collection', params: { id: row.collection.id } })
-}
+/** A row opens its assistant, or the knowledge base when no assistant uses it. */
+const rowTo = (row: Row) => (row.assistant ? { name: 'assistant', params: { id: row.assistant.id } } : { name: 'collection', params: { id: row.collection.id } })
 
 watch(department, () => void load())
 
@@ -78,7 +75,7 @@ onMounted(async () => {
     <SelectField id="map-show" v-model="show" :label="MAP.show" :options="showOptions" class="min-w-56" />
   </div>
   <AsyncState :loading="maps.loading.value" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">
-    <DataTable :columns="columns" :rows="rows" :row-key="(r) => r.key" :caption="MAP.caption" clickable data-test="map" @row-click="open">
+    <DataTable :columns="columns" :rows="rows" :row-key="(r) => r.key" :caption="MAP.caption" :row-to="rowTo" data-test="map">
       <template #cell-department="{ row }">{{ row.department }}</template>
       <template #cell-collection="{ row }">
         <span class="font-medium">{{ row.collection.name }}</span>
