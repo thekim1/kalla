@@ -158,7 +158,9 @@ if [ -e "$S/admin/OrgSync__DataApiKey" ]; then
 fi
 
 # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
-mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations"
+mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/openwebui-setup"
+# rag-openwebui-setup's script (profile openwebui): that service is read-only, so it reads the script from rag-config.
+cp /config/feedback-key-setup.py "$F/openwebui-setup/feedback-key-setup.py"
 cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
 cp /config/postgresql.conf "$F/postgres/postgresql.conf"

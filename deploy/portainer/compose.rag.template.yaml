@@ -127,6 +127,7 @@ x-rag-secrets: &rag-secrets-mount
       - {source: rag-postgres-conf, target: /config/postgresql.conf}
       - {source: rag-app-roles, target: /config/app-roles.sql}
       - {source: rag-proxy-conf-template, target: /config/nginx-proxy.conf.template}
+      - {source: rag-openwebui-setup-script, target: /config/feedback-key-setup.py}
     volumes:
       - rag-certs:/certs
       - rag-secrets:/secrets
@@ -580,9 +581,9 @@ x-rag-secrets: &rag-secrets-mount
     environment:
       OWUI_URL: http://rag-openwebui:8080
       WEBUI_ADMIN_EMAIL: feedback-import@localhost
-    configs:
-      - {source: rag-openwebui-setup-script, target: /config/feedback-key-setup.py}
     volumes:
+      # Its script, which rag-bootstrap copies into rag-config: an inline config can't be written into a read-only container.
+      - {type: volume, source: rag-config, target: /config, read_only: true, volume: {subpath: openwebui-setup}}
       # The store's WAL needs its directory writable even for a read-only connection.
       - rag-openwebui-data:/data
       - {type: volume, source: rag-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
