@@ -351,6 +351,9 @@ by main before S1.
 | S7 | The browser test of the wizard in `e2e.yml`, where a Keycloak runs (the release boot test has none): the code from the output, the test sign-in, the lock, a re-open | `tests/e2e/` | Green on a manual `e2e.yml` run | b | S6 |
 | S8 | The gateway issues WG1–WG4, and Ume.Rag's side of each when released (the context's `oidc_authority` as the default; `UME_DOMAIN` for all five names) | issues; `src/Ume.Rag.Infrastructure/Gateway/`, `deploy/**` | `stack.env.example` has 1 CHANGE value | main, then b and a | the gateway |
 
+**As built:** the test sign-in moved from S2 to S3 (it has no caller before the setup API exists); S2 keeps the spike
+and reports its answer. S0 is #760, S1 #761.
+
 S0 needs nothing and is useful by itself. S1–S3 are the security-relevant part and get the main session's review of
 every line (handbook, *How we work*). Most of the code is in stream b's paths; **the main session builds all of it** on `main-session/` branches (user,
 2026-11-15), announced to stream b on an issue so it stays clear of the same files.
