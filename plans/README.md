@@ -35,6 +35,8 @@ nobody needs to read them end to end.
   outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open.
 - [`deploy-configuration.md`](proposals/deploy-configuration.md): moving the deployment's variables into settings,
   automatic setup and the gateway; decisions D1–D10, gateway changes G1–G5, steps C0–C13 (2026-11-13).
+- [`admin-ui-review.md`](proposals/admin-ui-review.md): a browser review of the admin UI; decisions UI1–UI4 (Home,
+  lists, audit log, assistant page) and small fixes (2026-11-15).
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.

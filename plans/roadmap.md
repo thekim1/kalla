@@ -88,6 +88,7 @@ The inputs of the critical path are in its table. The other open calls:
 | What | Who | Blocks |
 |---|---|---|
 | N1 product name; W1 relation to `chat.umea.se` | user, product owner | go-live |
+| Admin UI review UI1–UI4: Home, lists, audit log, assistant page ([`proposals/admin-ui-review.md`](proposals/admin-ui-review.md)) | user | nothing in P1b |
 | Upload gaps U1–U7: suggested picture descriptions (U1, needs a decision entry) and rerank on (U4) first | user | nothing in P1b |
 | Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (`work/main.md` M-11) | user | P2 |
 | Product calls: #333 finding 1 (`exactScanMaxChunks`, after the recall check on the test host); [`proposals/architecture-plans.md`](proposals/architecture-plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
