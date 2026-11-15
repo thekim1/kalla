@@ -1,0 +1,19 @@
+[Unit]
+Description=Ume Rag: warn when an internal certificate expires within 60 days (#705)
+Documentation=file:@DEPLOY_DIR@/host/README.md
+
+[Service]
+Type=oneshot
+ExecStart=@DEPLOY_DIR@/host/cert-expiry.sh --env-file @DEPLOY_DIR@/.env
+TimeoutStartSec=60s
+StateDirectory=ume-rag
+StateDirectoryMode=0755
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

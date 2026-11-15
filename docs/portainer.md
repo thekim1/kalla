@@ -54,6 +54,27 @@ to the services and verifies them against their internal CAs, so nothing else ne
 
 **Renewing the certificate:** replace both files and restart `rag-proxy` (*Containers*, select, *Restart*).
 
+## Internal certificates
+
+`rag-bootstrap` keeps RAG's internal CA (10 years) and the service certificates (825 days) in `rag-certs`. On every
+deploy it re-issues a service certificate that expires within 30 days, and the checklist at the end of its log:
+
+- says **restart `rag-postgres` `rag-parser`** after re-issuing theirs (*Containers*, select, *Restart*). They read
+  their certificates only at start, and a stack update recreates neither when its configuration is unchanged; rag-api,
+  rag-admin and rag-worker reload theirs. Without the restart Postgres keeps serving the old certificate, and once it
+  expires every service's database connection fails.
+- names **every certificate that expires within 60 days**. For a service certificate, update the stack once fewer than
+  30 days remain (nothing needs to change): `rag-bootstrap` then re-issues it.
+
+The checklist is written only when the stack is deployed. Update the stack at least once a year, or, with a shell on
+the host, run `deploy/host/cert-expiry.sh --certs-dir /var/lib/docker/volumes/<stack>_rag-certs/_data` as root daily
+(cron or a systemd timer): it names each certificate that expires within 60 days and then exits non-zero.
+
+**Replacing the CA** (the checklist names it 60 days before it expires): delete `ca.pem` and `ca.key` in `rag-certs`
+(`docker run --rm -v <stack>_rag-certs:/c alpine rm /c/ca.pem /c/ca.key`) and update the stack. `rag-bootstrap`
+creates a new CA and re-issues every service certificate; then restart every Ume.Rag service and `rag-proxy`, which
+read the CA only at start.
+
 ## First deploy
 
 1. **Create the stack.** *Stacks → Add stack*, a name you will keep (the volumes are found by it), *Web editor*: paste

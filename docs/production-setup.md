@@ -222,11 +222,11 @@ systemctl list-timers 'rag-*'
 ```
 
 It installs and enables `rag-ingestion.slice`, `rag-firewall.service` with its timer, and the backup, backup-status,
-upload-copy and restart-unhealthy timers ([`deploy/host/README.md`](../deploy/host/README.md)), with this deployment's
-`deploy/` path filled in. It warns when Docker does not use the systemd cgroup driver. The upload-copy timer is not
-enabled with an S3 backup target. Options: `--host-memory 16|24` (else from `deploy/.env`), `--deploy-dir DIR`,
-`--unit-dir DIR` (only writes the units there) and `--no-enable`. Re-run it after an upgrade or a change of
-`--host-memory`.
+upload-copy, restart-unhealthy and certificate-expiry timers ([`deploy/host/README.md`](../deploy/host/README.md)),
+with this deployment's `deploy/` path filled in. It warns when Docker does not use the systemd cgroup driver. The
+upload-copy timer is not enabled with an S3 backup target. Options: `--host-memory 16|24` (else from `deploy/.env`),
+`--deploy-dir DIR`, `--unit-dir DIR` (only writes the units there) and `--no-enable`. Re-run it after an upgrade or a
+change of `--host-memory`.
 
 Check the firewall rules it applies (no root needed for the dry run):
 

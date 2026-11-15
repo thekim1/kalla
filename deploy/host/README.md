@@ -21,6 +21,7 @@ writes the rendered units (CI runs `systemd-analyze verify` on them).
 | `rag-backup-status.service` + `.timer` | `backup-postgres.sh --status-only`: backup age and WAL archive age from `pgbackrest info` and `pg_stat_archiver` | Every 2 minutes |
 | `rag-upload-backup.service` + `.timer` | `backup-uploads.sh`: new files below `uploads/` to the upload copy, never overwriting | Every 10 minutes (not enabled with an S3 backup target) |
 | `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `ume-rag.restart-unhealthy=true` that are unhealthy (rag-clamav) | Every minute |
+| `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates under `UME_RAG_CERTS_DIR`; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
 
 ## Requirements
 
@@ -52,14 +53,17 @@ out.
 
 ## Metrics and alerts (§7.4 rule 5)
 
-The backup scripts write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`, `upload-backup.prom`); point
-node_exporter's textfile collector (or the collector that reads them, to-verify §14) at that directory. Proposed alerts:
+The backup scripts and `cert-expiry.sh` write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`,
+`upload-backup.prom`, `certs.prom`); point node_exporter's textfile collector (or the collector that reads them,
+to-verify §14) at that directory. Proposed alerts:
 
 - `rag_backup_age_seconds > 93600` (no backup for 26 hours);
 - `rag-backup.service` failed, or `rag_backup_last_run_success == 0`;
 - `rag_backup_wal_archive_age_seconds > 300` for 2 minutes (the newest archived WAL is older than the 5-minute RPO);
 - `rag_backup_repo_status != 0`, or `rag_backup_status_timestamp_seconds` older than 10 minutes;
 - `rag_upload_backup_last_success_timestamp_seconds` older than 30 minutes.
+- `rag_cert_expiry_timestamp_seconds - time() < 60 * 86400` (an internal certificate expires within 60 days), or
+  `rag-cert-expiry.service` failed.
 
 ## Restore and escrow
 
