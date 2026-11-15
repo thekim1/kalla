@@ -152,6 +152,8 @@ export const NAV_KEYWORDS = {
   audit: ['log', 'changes', 'events', 'who', 'history', 'traceability'],
   feedback: ['feedback', 'thumbs', 'rating', 'reason', 'open webui', 'import'],
   costs: ['cost', 'money', 'usd', 'tokens', 'budget', 'csv', 'charging', 'estimate'],
+  models: ['gateway models', 'embedding profiles', 'canary', 'context window', 'model limits'],
+  settings: ['configuration', 'site profiles', 'data protection', 'retention', 'prompts'],
 } as const
 
 export const PAGE = {
