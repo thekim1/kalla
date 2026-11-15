@@ -11,6 +11,65 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   fields, the first key made with the client (for Open WebUI with the two stack lines to copy), and the client's keys and
   assistants in its drawer; keys get pickers instead of JSON. `POST /api/clients` takes `firstKey` and answers
   `{ client, key }` (#663).
+- **Open WebUI's client is set up by the deployment** (M-17 C4): rag-migrate registers it from a key the deployment
+  generates, it shows as *Managed by the deployment*, and rag-api trusts Open WebUI's users only for that client. A
+  hand-made Open WebUI client is no longer trusted: move its assistants over as the upgrade guide says (#684, #685).
+- **The residency ceiling comes from the gateway** (M-17 C9): each service's maximum is its credential key's
+  residencies in its own gateway context, `OnPrem` until the first context answer; give rag-api's and rag-admin's keys
+  `OnPrem` and `Eu` in the gateway **before** the update (#691).
+- **Role groups are a setting** (M-17 C10): *Settings → Role groups* maps sign-in groups to roles, read at each sign-in;
+  the deployment's platform-admin group stays as the break-glass and is merged in (#693).
+- **The Portainer stack needs fewer variables** (M-17 C1–C3): rag-api's public URL defaults to `https://<its host>`, the
+  checklist no longer demands a platform-admin group, and Open WebUI's feedback address and the malware-scan mode follow
+  the `openwebui` and `clamav` profiles (#682, #683).
+- **Settings is one page of sections** (M-16): Chat, Search and Processing's schedules as fields with their defaults
+  (the rest under *Advanced*), Personal data's flag rules as a table, site profiles and data protection as sections, and
+  a new site profile's information class as a select (#673, #676, #679, #681).
+
+### Added
+
+- **Apps and keys: connect an app in one go** (M-16): *Add app* picks its assistants and ends in *How to connect*; the
+  app's drawer sets its assistants and lists its keys with their last use (rag-api records a key's last use at most every
+  five minutes per key); a new key asks only for its name, the rest under *Restrictions* (#668–#672).
+- **Every platform page in the side menu**: Apps and keys, Models, Settings, Organisation and Audit log; the *Platform
+  objects* page goes (#675).
+- **The embedding profile is created in the admin UI** (M-17 C5): *Models → Embedding profiles → Create profile* from
+  one of the gateway's embedding models, its size measured by a test embedding; platform admins see a Home card until it
+  exists (#687, #688).
+- **The Open WebUI feedback key is minted by the stack** (M-17 C6): a one-shot job after Open WebUI starts, with
+  password sign-in kept off; rag-api reads it without a restart (#689).
+- **An optional TLS proxy in the Portainer stack** (M-17 C8): the `proxy` profile runs nginx with the operator's
+  certificate in front of the five host names, re-encrypting to the services and following them when a stack update
+  recreates one (#690, #692).
+- The Integration API read-back (a key's budget and usage) on the Gateway models view (A-41, #665).
+- The release's smoke test boots the Portainer stack, and `deploy-checks` fails on a stale stack file (M-17 C0, #674).
+
+### Removed
+
+Deployment variables whose values are now set up automatically or in the admin UI (the upgrade guide says what to do
+for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `UME_RAG_EMBEDDING_MODEL`,
+`_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS`, `_MAX_RESIDENCY` and Kubernetes' `EmbeddingProfile__*` (C5);
+`UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH` and `deploy/openwebui-feedback-key.sh` (C6);
+`UME_RAG_GATEWAY_MAX_RESIDENCY` (C9); `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` and
+`_VIEWER` (C10); in the Portainer stack `UME_RAG_CLAMAV_MODE` and `UME_RAG_OPENWEBUI_BASE_URL` (C2, C3). The unread
+`Settings.WorkerConcurrency` is dropped (M-18, #686).
+
+### Fixed
+
+- A non-streamed answer (API `stream:false`, the admin test panel) is bounded by `Chat:MaxAnswerDurationSeconds`
+  instead of the 15 s headers timeout, which cut longer answers off with `503 upstream_unavailable` (#695, #713).
+- The Integration API client no longer retries refused calls and has a 10 s timeout, so a failed read-back answers
+  `null` with its reason instead of `500` (#701, #716).
+
+### Security
+
+- Every admin request type with validation attributes is validated: the test panel's question and history lengths,
+  `topK`, key scopes (#699, #714).
+- Open WebUI's message-id headers are taken only as UUIDs, a reused id no longer breaks the conversation writer, and the
+  writer retries only transient errors, so one user can't stall it or drop other users' usage rows (#698, #715).
+- A tag release reads no cache that pull-request jobs can write: no build cache, its own NuGet and npm caches (#704,
+  #717).
+- The parser's `opentelemetry-api` 1.45.2 (CVE-2026-126360) (#678).
 
 ## 0.5.1 (2026-11-13)
 
