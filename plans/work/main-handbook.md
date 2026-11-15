@@ -184,9 +184,11 @@ main session needs:
 - **Designs hold the specification.** History (answered questions, deferred items, milestones) goes to
   `plans/archive/design-history/<area>.md`; a moved section keeps its number and heading with a `Moved to [...]` line,
   which `scripts/check-doc-refs.py` follows. Non-binding papers go to `plans/proposals/` with a status line.
+- **`to-verify.md` is sorted by when a check can run** (2026-11-15): the live block under the roadmap step whose input
+  it needs, before go-live (no input needed), and P2 and later. When a step's input arrives, its section is that
+  step's checklist; a new row goes where it can run.
 - **Left for when each area is next worked on:** cite stable IDs (V39, a rule's name, a heading anchor) in new
-  citations rather than bare §-numbers; triage `to-verify.md` (124 open rows, 23 with their context in archived passes)
-  into live block, before go-live and P2, closing what no longer applies; move the *Phases and planning* section of
+  citations rather than bare §-numbers; move the *Phases and planning* section of
   `decisions.md` into the roadmap, keeping only binding rules there.
 
 ## Environment notes

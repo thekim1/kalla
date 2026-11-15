@@ -722,7 +722,11 @@ at P0 against the pinned version:
   `export_to_markdown(page_no=…)` and `page_break_placeholder`, JSON pointer `self_ref`, table cell fields
   (`row_span`, `col_span`, `column_header`).
 - Excel backend: `data_only` values, hidden sheets, several tables per sheet; PPTX slide = page; DOCX `page_no`.
+  **Resolved (2026-11-15, to-verify #63):** `tests/test_declarative.py` reads cached formula values, skips hidden
+  sheets, gives a slide per page and DOCX no pages.
 - How Docling handles `.docm` and OLE inputs (must not reach a backend: our sniffing refuses them first).
+  **Resolved (2026-11-15, to-verify #60):** `.docm` is refused as `macro_enabled` before any backend; legacy OLE files
+  go to LibreOffice as its own process with a timeout (`legacy.py`), not through Docling.
 - Pipeline caching per options in `DocumentConverter` and the memory cost of several cached pipelines.
 - Current layout model name, Hugging Face repositories, revisions, sizes and **model licences**; TableFormer sizes.
 - Supported Python versions of the pinned release.
@@ -746,7 +750,8 @@ Libraries and licences:
 
 - pypdfium2's pdfium build without V8/XFA; licence of the bundled pdfium.
 - lxml ≥ 5 default `resolve_entities`; whether openpyxl, python-docx and python-pptx (used by Docling) resolve
-  external entities; openpyxl's use of `defusedxml`.
+  external entities; openpyxl's use of `defusedxml`. **Resolved (2026-11-15, to-verify #72):** the `xxe.docx` and
+  `xxe.odt` fixtures never resolve the entity; `defusedxml` is in the lock.
 - uvicorn: detection of client disconnect during a long await; `h11_max_incomplete_event_size` behaviour for bodies.
 - `snapshot.debian.org` usability for `debian-security` in CI builds (rate limits).
 
