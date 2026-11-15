@@ -1,0 +1,39 @@
+# rag-clamav's NetworkPolicies, added to the base's (default deny): clamd has no TLS and no authentication, so only the
+# worker may reach it. They come with the component, so nothing of rag-clamav is rendered without it.
+
+# rag-clamav: clamd only from the worker; out to database.clamav.net for freshclam (Compose: mirror), at public
+# addresses only. freshclam's HTTP proxy, if it goes through one, is added in the overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-clamav
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+      ports: [{protocol: TCP, port: 3310}]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10, 127.0.0.0/8]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 80}]
+---
+# rag-worker: out to clamd.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-worker-clamav
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+      ports: [{protocol: TCP, port: 3310}]

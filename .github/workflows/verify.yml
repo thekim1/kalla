@@ -305,7 +305,25 @@ jobs:
             build "${1/#$RUNNER_TEMP//tmp/runner}"; }
           sh deploy/kubernetes/sync-config.sh
           git diff --exit-code -- deploy/kubernetes || { echo "Run deploy/kubernetes/sync-config.sh and commit the copies"; exit 1; }
-          kustomize deploy/kubernetes/base > /dev/null
+          # A NetworkPolicy by name from a rendered file.
+          np() { awk -v n="$2" '/^---$/ { if (f) exit; d = ""; next } { d = d $0 "\n" } $0 == "  name: " n { f = 1 } END { if (f) printf "%s", d }' "$1"; }
+          kustomize deploy/kubernetes/base > "$RUNNER_TEMP/k8s-base.yaml"
+          # The base denies all traffic to and from the stack's pods (#706); the policies after it allow the flows.
+          diff -u - <(np "$RUNNER_TEMP/k8s-base.yaml" ume-rag-default-deny) <<'EOF'
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            labels:
+              app.kubernetes.io/part-of: ume-rag
+            name: ume-rag-default-deny
+          spec:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: ume-rag
+            policyTypes:
+            - Ingress
+            - Egress
+          EOF
           kustomize deploy/kubernetes/example > "$RUNNER_TEMP/k8s-example.yaml"
           # ClamAV is its own component, in the example by default with the worker's ClamAv__Mode on (#535); without it
           # the overlay sets off, and nothing of rag-clamav is left but the worker's unused ClamAv__Host.
@@ -321,11 +339,25 @@ jobs:
             echo "rag-clamav is rendered without components/clamav"; exit 1
           fi
           cp -R deploy/kubernetes "$RUNNER_TEMP/k8s"
-          sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' \
-            -e 's|# - \.\./components/networkpolicies|- ../components/networkpolicies|' "$RUNNER_TEMP/k8s/example/kustomization.yaml"
+          sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' "$RUNNER_TEMP/k8s/example/kustomization.yaml"
           kustomize "$RUNNER_TEMP/k8s/example" > "$RUNNER_TEMP/k8s.yaml"
           for kind in NetworkPolicy Deployment StatefulSet Job; do printf '%s ' "$kind"; grep -c "^kind: $kind$" "$RUNNER_TEMP/k8s.yaml"; done
           grep -q 'name: rag-renderer' "$RUNNER_TEMP/k8s.yaml"
+          # Each NetworkPolicy once, the Ingress controller's among them.
+          awk '/^---$/ { k = "" } /^kind: / { k = $2 } k == "NetworkPolicy" && /^  name: / { print $2 }' "$RUNNER_TEMP/k8s.yaml" \
+            | sort | uniq -d | grep . && { echo "a NetworkPolicy is rendered twice"; exit 1; }
+          np "$RUNNER_TEMP/k8s.yaml" ume-rag-ingress-controller | grep -q 'kubernetes.io/metadata.name: ingress-nginx'
+          # The worker's crawl and freshclam reach public addresses only on 80 and 443 (#706): every egress rule has a
+          # destination, and the one with 80 or 443 is 0.0.0.0/0 without the link-local range (cloud metadata), among
+          # the private ones.
+          for p in ume-rag-worker ume-rag-clamav; do
+            np "$RUNNER_TEMP/k8s.yaml" "$p" | awk '
+              /^  egress:/ { e = 1; next } e && /^  [a-z]/ { e = 0 } e && /^  - / { i++ }
+              e && /- port: (80|443)$/ { web[i] = 1 } e && /^  [- ] to:$/ { to[i] = 1 }
+              e && /cidr: 0\.0\.0\.0\/0$/ { any[i] = 1 } e && /- 169\.254\.0\.0\/16$/ { meta[i] = 1 }
+              END { for (j = 1; j <= i; j++) { if (!to[j] || web[j] && !(any[j] && meta[j])) bad = 1; if (web[j]) w = 1 }
+                exit bad || !w }' || { echo "$p: an egress rule has no destination, or 80/443 is not limited to public addresses"; exit 1; }
+          done
       - name: The Portainer stack is what its template gives
         # deploy/portainer/compose.portainer.yaml is generated (build-stack.sh): a change to the template, to
         # bootstrap.sh or to a file it includes that was not followed by a rebuild fails here, not at a deploy. Built

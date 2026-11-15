@@ -19,8 +19,9 @@ components:
   - ../components/clamav
   # The renderer for JavaScript-rendered pages (copy its seccomp profile to the nodes first; docs/kubernetes.md).
   # - ../components/renderer
-  # NetworkPolicies for the flows in docs/network-and-ports.md; check the lines marked "change" in it first.
-  # - ../components/networkpolicies
+  # The Ingress controller's way in to rag-api and rag-admin (the base's NetworkPolicies deny any other). It admits
+  # the namespace ingress-nginx; change: for another controller, see the NetworkPolicy patches below.
+  - ../components/ingress-controller
 images:
   # The released images. A release bundle already pins the base to them by digest, so these lines only matter when you
   # deploy from the repository, or set newName to your own registry (pin by digest: digest: sha256:...).
@@ -72,3 +73,34 @@ patches:
       - op: add
         path: /spec/storageClassName
         value: nfs-client
+  # NetworkPolicies (docs/kubernetes.md, Network policies). The base lets each pod reach only the stack's own flows, the
+  # crawl and freshclam at public addresses on 80 and 443, and rag-api and rag-admin any address on 443. NetworkPolicy
+  # cannot filter by host name, so change: give each destination these do not cover its own rule, for example
+  # - your Ingress controller's namespace, if it is not ingress-nginx:
+  # - target: {kind: NetworkPolicy, name: ume-rag-ingress-controller}
+  #   patch: |-
+  #     - op: replace
+  #       path: /spec/ingress/0/from/0/namespaceSelector/matchLabels/kubernetes.io~1metadata.name
+  #       value: traefik
+  # - the ranges of Crawl__AllowedPrivateRanges above, the same list, and the gateway if it has a private address or
+  #   another port than 443 (the gateway's Compose stack publishes 8443); rag-api and rag-admin need that port too
+  #   (ume-rag-api, ume-rag-admin), as they do the OTLP collector's (4317):
+  # - target: {kind: NetworkPolicy, name: ume-rag-worker}
+  #   patch: |-
+  #     - op: add
+  #       path: /spec/egress/-
+  #       value:
+  #         to: [{ipBlock: {cidr: 10.20.0.0/16}}, {ipBlock: {cidr: 10.30.0.10/32}}]
+  #         ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 80}, {protocol: TCP, port: 8443}]
+  # - pgBackRest's S3 store, with ../components/datastores (ume-rag-postgres), or freshclam's proxy (ume-rag-clamav):
+  # - target: {kind: NetworkPolicy, name: ume-rag-postgres}
+  #   patch: |-
+  #     - op: add
+  #       path: /spec/egress/-
+  #       value: {to: [{ipBlock: {cidr: 10.40.0.20/32}}], ports: [{protocol: TCP, port: 443}]}
+  # - your own Postgres instead of ../components/datastores:
+  # - target: {kind: NetworkPolicy, name: ume-rag-database}
+  #   patch: |-
+  #     - op: replace
+  #       path: /spec/egress/0/to
+  #       value: [{ipBlock: {cidr: 10.50.0.30/32}}]

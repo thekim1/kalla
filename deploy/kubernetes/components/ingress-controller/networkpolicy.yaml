@@ -1,0 +1,17 @@
+# rag-api and rag-admin: clients through the Ingress controller (Compose: edge). The overlay patches the namespace if
+# yours is not ingress-nginx.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-ingress-controller
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag}
+    matchExpressions:
+      - {key: app.kubernetes.io/component, operator: In, values: [rag-api, rag-admin]}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: ingress-nginx}
+      ports: [{protocol: TCP, port: 8443}]

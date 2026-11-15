@@ -1,0 +1,8 @@
+# Lets the Ingress controller reach rag-api and rag-admin on 8443. The base's NetworkPolicies deny every other inbound
+# connection, so without this component (or a policy of your own for another entry, such as a Gateway API
+# implementation) the stack is unreachable. The policy admits the namespace ingress-nginx; for another controller,
+# patch it in your overlay (../../example/kustomization.yaml; docs/kubernetes.md, Network policies).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - networkpolicy.yaml
