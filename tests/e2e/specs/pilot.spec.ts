@@ -28,7 +28,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await login(page, 'rag-department-admin')
     await expect(page.getByRole('heading', { name: /^Welcome, /, level: 1 })).toBeVisible()
 
-    // 2 Create the knowledge base: name, department, information class (none preselected).
+    // 2 Create the knowledge base: name, department, information class (none preselected), what goes in.
     await act.press(page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Knowledge bases' }))
     await expect(page.locator('#page-title')).toHaveText('Knowledge bases')
     await act.press(page.getByRole('main').getByRole('button', { name: 'Create knowledge base' }))
@@ -37,6 +37,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.select(create.getByRole('combobox', { name: 'Department' }), { label: 'Kommunledningskontoret' })
     await expect(create.getByRole('radio', { checked: true })).toHaveCount(0)
     await act.check(create.getByRole('radio', { name: /^Public/ }))
+    // What goes in (required since the one-step create, #532): a website, whose source is added on the next page.
+    await act.check(create.getByRole('radio', { name: /^A website or a list of addresses/ }))
     await act.press(create.getByRole('button', { name: 'Create knowledge base' }))
     await expect(create).toBeHidden()
     await expect(page.locator('#page-title')).toHaveText(collection)
@@ -143,7 +145,13 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(answer.getByText('Answered', { exact: true })).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Cited', { exact: true }).first()).toBeVisible()
 
-    // 11 Publish the assistant.
+    // 11 Publish the assistant. It runs on its department's AI gateway key: while the gateway acts as keys, publish needs one
+    // that reaches its models (V39); the E2E stack's FakeGateway has "Digitalisering – pilot" for that (AppHost).
+    await act.press(page.getByRole('button', { name: 'Edit details' }))
+    const details = page.getByRole('dialog', { name: 'Edit assistant' })
+    await act.select(details.getByRole('combobox', { name: 'AI gateway key' }), { label: 'Digitalisering – pilot' })
+    await act.press(details.getByRole('button', { name: 'Save', exact: true }))
+    await expect(details).toBeHidden()
     await act.press(page.getByRole('button', { name: 'Publish', exact: true }))
     await expect(page.getByText('Published: version 1')).toBeVisible()
 
@@ -164,10 +172,10 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     const slug = (await page.getByText(/^Model name in Open WebUI: /).textContent())!.replace('Model name in Open WebUI: ', '').trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'rag-api lists the assistant', 60_000)
 
-    // 14 Share the knowledge base with the whole municipality (admin design §5.5.2, item 36).
+    // 14 Share the knowledge base with the whole organisation (admin design §5.5.2, item 36; renamed in #544).
     await ready(page, collectionPage)
     await act.press(page.getByRole('tab', { name: 'Sharing' }))
-    await act.check(page.getByRole('radio', { name: 'Whole municipality' }))
+    await act.check(page.getByRole('radio', { name: /^Whole organisation/ }))
     await act.press(page.getByRole('button', { name: 'Save sharing' }))
     await expect(page.getByText('The sharing has been saved.')).toBeVisible()
 
@@ -192,7 +200,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(otherPicker).toBeHidden()
     const link = other.getByRole('listitem').filter({ hasText: collection })
     await expect(link.getByText('(Kommunledningskontoret, shared)')).toBeVisible()
-    await otherAct.fill(link.getByRole('combobox', { name: `Topics of ${collection}` }), 'isytor')
+    await otherAct.fill(link.getByRole('combobox', { name: /^Limit to topics/ }), 'isytor')
     await otherAct.press(link.getByRole('button', { name: 'Add topic' }))
     await expect(link.getByText('isytor', { exact: true })).toBeVisible()
     await otherAct.press(other.getByRole('button', { name: 'Save draft' }))

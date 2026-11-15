@@ -434,7 +434,7 @@
     {
       "code": "gateway_key_required",
       "status": 409,
-      "message": "No AI gateway key is chosen: the calls are charged to the platform\u0027s owner team."
+      "message": "No AI gateway key is chosen: the assistant can\u0027t be published without one, and until then its calls are charged to the platform\u0027s owner team."
     },
     {
       "code": "gateway_key_system_prompt",

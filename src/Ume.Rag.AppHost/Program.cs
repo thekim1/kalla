@@ -104,6 +104,18 @@ if (fakeGateway is not null)
     {
         fakeGateway.WithEnvironment($"FakeGateway__Latency__{setting.Key}", setting.Value);
     }
+
+    // The browser tests' pilot journey publishes a public assistant of Kommunledningskontoret over a knowledge base on
+    // bge-m3 (OnPrem): V39 needs an assigned key of that department reaching both its chat model (Eu) and the embedding
+    // model (admin §4.6). The development catalogue's keys don't (Kontaktcenter's is Eu only, #720), so the E2E stack adds one.
+    if (e2e)
+    {
+        fakeGateway.WithEnvironment("FakeGateway__AssignedKeys__5__Id", "019a0000-0000-7000-8000-00000000b0e2")
+            .WithEnvironment("FakeGateway__AssignedKeys__5__Name", "Digitalisering – pilot")
+            .WithEnvironment("FakeGateway__AssignedKeys__5__TeamId", "019a0000-0000-7000-8000-000000001001")
+            .WithEnvironment("FakeGateway__AssignedKeys__5__AllowedResidencies__0", "OnPrem")
+            .WithEnvironment("FakeGateway__AssignedKeys__5__AllowedResidencies__1", "Eu");
+    }
 }
 
 // Ollama:Enabled=true: real BGE-M3 embeddings behind the fake gateway (dev only).
