@@ -16,8 +16,8 @@
 #                      instead of waiting for a renderer
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
-# Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb and the gateway
-# credential key Gateway__Key of api, admin and worker) and
+# Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb, the gateway
+# credential key Gateway__Key of api, admin and worker, and rag-admin's setup secret Setup__Secret) and
 # ume-rag-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for api, admin, worker and
 # migrations, ume-rag-parser-certs, and ume-rag-blob-key (the blob master key). The connection strings point at the
 # host "postgres"; with your own database, edit deploy/secrets/<service>/ConnectionStrings__ragdb first.

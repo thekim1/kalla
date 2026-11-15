@@ -2,13 +2,13 @@
 # One-shot bootstrap of the RAG part of compose.portainer.yaml (the gateway's stack plus RAG, one Portainer stack).
 # The Portainer counterpart of deploy/init-deployment.sh, after the gateway's deploy/portainer/bootstrap.sh: creates
 # RAG's internal CA, its service certificates, the Data Protection certificate, the database passwords, the key pepper,
-# the api's keys, the worker's crawl key pepper, the renderer's WebSocket path and the blob master key in the rag-certs
-# and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
-# overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
-# re-issued when they expire within 30 days or their host names change (the checklist at the end names the services to
-# restart, and every certificate that expires within 60 days). Files that follow a variable (the gateway credential
-# keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written again on every start, and
-# removed when the variable is empty.
+# the api's keys, rag-admin's setup secret, the worker's crawl key pepper, the renderer's WebSocket path and the blob
+# master key in the rag-certs and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent:
+# existing secrets are never overwritten (a new pepper, key or Data Protection certificate would break existing data);
+# service certificates are re-issued when they expire within 30 days or their host names change (the checklist at the
+# end names the services to restart, and every certificate that expires within 60 days). Files that follow a variable
+# (the gateway credential keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written
+# again on every start, and removed when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
 # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -78,10 +78,13 @@ connection worker 10 > "$S/worker/ConnectionStrings__ragdb"
 [ -f "$S/.pepper" ] || openssl rand -hex 48 > "$S/.pepper"
 for d in migrations api admin; do tr -d '\n' < "$S/.pepper" > "$S/$d/Security__KeyPepper"; done
 
-# --- The api's and the worker's own keys --------------------------------------------------------------------------
+# --- The api's, rag-admin's and the worker's own keys -------------------------------------------------------------
 [ -f "$S/api/Security__DownloadGrantKeys__k1" ] || rand > "$S/api/Security__DownloadGrantKeys__k1"
 [ -f "$S/api/Security__CacheKeyPepper" ] || rand > "$S/api/Security__CacheKeyPepper"
 [ -f "$S/api/Security__ConversationIdKeys__k1" ] || rand > "$S/api/Security__ConversationIdKeys__k1"
+# rag-admin's setup secret (identity design §19): the setup code is derived from it. Kept, but not worth backing up: a
+# new one only changes the setup codes printed from then on.
+[ -f "$S/admin/Setup__Secret" ] || rand > "$S/admin/Setup__Secret"
 # Open WebUI's user JWT secret: unused without Open WebUI, but rag-api expects the file (identity design §5.2).
 [ -f "$S/.openwebui-jwt-secret" ] || rand > "$S/.openwebui-jwt-secret"
 tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/api/OpenWebUi__JwtSecret"

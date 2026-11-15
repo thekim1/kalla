@@ -75,6 +75,7 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 | `Ollama:Enabled` | `false` | real BGE-M3 embeddings from Ollama behind the fake gateway (development only: the AppHost refuses it outside run mode) |
 | `Redis:Enabled` | `false` | adds Redis (the P2 multi-host path; the pilot keeps rate limits and caches in process) |
 | `Oidc:Authority` | unset | an existing identity provider instead of the bundled Keycloak, which then does not start; every `Oidc:*` setting is passed to the admin API |
+| `Setup:Try` | `false` | `true` starts the admin API without `Oidc__Authority` and `Oidc__ClientSecret` and with a generated `Setup__Secret` (parameter `setup-secret`), so the setup wizard opens (identity design §19); below |
 | `Seed:Enabled` | `true` | demo data on an empty database |
 | `DevelopmentVolumes:Postgres` | generated | the Postgres volume's name |
 | `DevelopmentVolumes:Ollama` | generated | the Ollama volume's name |
@@ -89,6 +90,11 @@ AppHost creates a development key once under `~/.ume-rag/keys/rag-blob-internal`
 and passes `KeyProvider__Directory` to the worker, the api and the admin (#165); `KeyProvider:Directory` in the AppHost's
 configuration wins. Keep the file as long as the development blobs: without it their `internal` blobs cannot be read.
 An earlier manual key in the same place is used as it is.
+
+**Trying the setup wizard.** With `Setup:Try=true` the admin API prints the setup code in its console log in the
+dashboard. A database whose setup is already done (any earlier run signed in with the AppHost's values) stays closed:
+also set `Setup:Reopen` to a new value, which the AppHost passes on. In the wizard, the bundled Keycloak's realm `ume`
+and the `oidc-client-secret` parameter are the values to test. Remove both settings to go back.
 
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.

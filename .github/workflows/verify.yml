@@ -404,7 +404,8 @@ jobs:
           grep -q "RAG_API_IMAGE:-ghcr.io/example/ume-rag/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
       - name: init-deployment.sh keeps its secrets on a re-run
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
-        # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the
+        # crawl key pepper, rag-admin's setup secret and the renderer's WebSocket path among them, is unchanged by the
+        # second run, and the deployer's UME_RAG_SETUP_REOPEN in deploy/.env is kept; the
         # gateway credential keys land one per service (a per-level key file or the Data API key left from before is
         # deleted, and the Data API options are refused); the Open WebUI files render with the generated deploy/.env;
         # --render turns the renderer's profile and the worker's endpoint on together; --clamav on|off sets the malware
@@ -423,7 +424,8 @@ jobs:
           generated() {
             s="$d/deploy/secrets"
             sha256sum "$s"/.pepper "$s"/.openwebui-jwt-secret "$s"/postgres/*_password "$s"/api/Security__* \
-              "$s"/worker/Security__CrawlKeyPepper "$s"/.render-ws-path "$s"/worker/Render__Endpoint "$s"/renderer.env \
+              "$s"/admin/Setup__Secret "$s"/worker/Security__CrawlKeyPepper "$s"/.render-ws-path \
+              "$s"/worker/Render__Endpoint "$s"/renderer.env \
               "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
               "$s"/openwebui/webui_secret_key "$s"/.openwebui-rag-api-key "$d"/deploy/certs/data-protection.pfx
           }
@@ -432,6 +434,16 @@ jobs:
           diff -u "$d/first" "$d/second"
           s="$d/deploy/secrets"
           [ "$(wc -c < "$s/worker/Security__CrawlKeyPepper")" = 64 ]
+          # rag-admin's setup secret (M-20 S3): 32 random bytes, hex, in rag-admin's directory only; a re-run keeps the
+          # deployer's re-open value, which reaches rag-admin as Setup__Reopen.
+          grep -qxE '[0-9a-f]{64}' "$s/admin/Setup__Secret"
+          [ -z "$(find "$s" -name Setup__Secret ! -path "$s/admin/*")" ]
+          grep -qx 'UME_RAG_SETUP_REOPEN=' "$d/deploy/.env"
+          sed -i 's/^UME_RAG_SETUP_REOPEN=.*/UME_RAG_SETUP_REOPEN=2026-11-15/' "$d/deploy/.env"
+          init --render > "$d/init.log"
+          grep -qx 'UME_RAG_SETUP_REOPEN=2026-11-15' "$d/deploy/.env"
+          docker compose --env-file "$d/deploy/.env" config --format json \
+            | jq -e '.services["rag-admin"].environment.Setup__Reopen == "2026-11-15"' >/dev/null
           # The renderer's secret path: the same in the worker's endpoint and the renderer's environment.
           grep -qxE 'UME_RAG_RENDER_WS_PATH=/[0-9a-f]{64}' "$s/renderer.env"
           [ "$(cat "$s/worker/Render__Endpoint")" = "ws://rag-renderer:3000$(sed -n 's/^UME_RAG_RENDER_WS_PATH=//p' "$s/renderer.env")" ]

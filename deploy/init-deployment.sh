@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # First-run setup for the production Compose files (plans/platform/repo-and-deployment.md §6, §7.1): generates an
 # internal CA, service certificates, the Data Protection certificate, the database passwords, the key pepper, the api's
-# keys, the worker's crawl key pepper, the renderer's WebSocket path, the blob master key, the pgBackRest repository
-# settings and deploy/.env. Safe to
-# re-run: existing secrets are never overwritten (a new pepper, key, passphrase or Data Protection certificate would
-# break existing data or backups); connection strings and other derived files are written again.
+# keys, rag-admin's setup secret, the worker's crawl key pepper, the renderer's WebSocket path, the blob master key, the
+# pgBackRest repository settings and deploy/.env. Safe to re-run: existing secrets are never overwritten (a new pepper,
+# key, passphrase or Data Protection certificate would break existing data or backups); connection strings and other
+# derived files are written again. A re-run keeps UME_RAG_SETUP_REOPEN from deploy/.env: from the release with the
+# setup wizard, give it any new value there (for example today's date) and run `docker compose --env-file deploy/.env
+# up -d` to open the wizard once, for an hour, with a new setup code in rag-admin's log (identity design §19).
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
 #   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
@@ -338,6 +340,9 @@ for svc in migrations api admin; do tr -d '\n' < "$secrets/.pepper" > "$secrets/
 new_file "$secrets/api/Security__DownloadGrantKeys__k1" && rand > "$secrets/api/Security__DownloadGrantKeys__k1"
 new_file "$secrets/api/Security__CacheKeyPepper" && rand > "$secrets/api/Security__CacheKeyPepper"
 new_file "$secrets/api/Security__ConversationIdKeys__k1" && rand > "$secrets/api/Security__ConversationIdKeys__k1"
+# rag-admin's setup secret (identity design §19): the setup code is derived from it. Kept, but not worth backing up: a
+# new one only changes the setup codes printed from then on.
+new_file "$secrets/admin/Setup__Secret" && rand > "$secrets/admin/Setup__Secret"
 # Shared with Open WebUI (FORWARD_USER_INFO_HEADER_JWT_SECRET), which signs the user JWT with it (identity design §5.2).
 new_file "$secrets/.openwebui-jwt-secret" && rand > "$secrets/.openwebui-jwt-secret"
 tr -d '\n' < "$secrets/.openwebui-jwt-secret" > "$secrets/api/OpenWebUi__JwtSecret"
@@ -550,6 +555,9 @@ profiles=""
 [ "$clamav" = on ] && profiles="clamav"
 [ "$render" = 1 ] && profiles="${profiles:+$profiles,}render"
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
+  # The deployer's re-open value (rag-admin's Setup:Reopen) survives a re-run: it is set by hand, never by an option.
+  setup_reopen=""
+  [ ! -f "$env_file" ] || setup_reopen="$(env_value UME_RAG_SETUP_REOPEN)"
   if [ -e "$env_file" ]; then
     mv "$env_file" "$env_file.bak"; echo "Existing .env saved as $(basename "$env_file").bak"
   fi
@@ -575,6 +583,9 @@ UME_RAG_OIDC_CLIENT_ID=$oidc_client
 # (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM, _TEAM_CLAIM), as the gateway's UME_OIDC_* do.
 # UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=
 # With Entra ID directly (P2): UME_RAG_OIDC_TENANT_ID=<tenant id>
+# Empty. Any new value (for example today's date), then \`docker compose --env-file deploy/.env up -d\`, opens the setup
+# wizard once, for an hour, with a new setup code in rag-admin's log; remove it before restoring a database.
+UME_RAG_SETUP_REOPEN=$setup_reopen
 UME_RAG_GATEWAY_URL=$gateway_url
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
 UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
