@@ -1,7 +1,8 @@
 name: Release
 # Push a tag vX.Y.Z (or vX.Y.Z-pre) to release (plans/platform/repo-and-deployment.md §7.2, §8.1; as the gateway's):
-#   1. verify.yml and parser.yml run in full; e2e.yml (called) only when asked: the repository variable RELEASE_E2E is
-#      'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E optional on release");
+#   1. verify.yml and parser.yml run in full, beside build (2-3); e2e.yml (called) only when asked, after build: the
+#      repository variable RELEASE_E2E is 'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E
+#      optional on release");
 #   2. every image is pushed to ghcr.io/<owner>/ume-rag/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
 #      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav,
 #      renderer and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET
@@ -9,8 +10,11 @@ name: Release
 #   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults and the Portainer stack to those digests;
 #      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test, and deploy/tests/portainer-boot.sh
 #      boots the Portainer stack (the gateway from the release it pins, the profiles clamav and openwebui);
-#   4. a GitHub release is created with the bundle, the Portainer stack, the SBOMs and SHA256SUMS, and a pull request
-#      pins deploy/portainer/ to the release's images (not for a pre-release).
+#   4. once 1-3 are green: :latest moves to the images (not for a pre-release), a GitHub release is created with the
+#      bundle, the Portainer stack, the SBOMs and SHA256SUMS, and a pull request pins deploy/portainer/ to the release's
+#      images (not for a pre-release).
+# build doesn't wait for verify and parser (about 8 minutes on both runners): a red test stops publish, so only the
+# version's images (never :latest) can reach ghcr.io from a commit whose tests fail, as when a boot test fails.
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
 # nothing reaches ghcr.io and no release or tag is created.
 # A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
@@ -113,20 +117,17 @@ jobs:
   e2e:
     # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
     # variable RELEASE_E2E is 'true', a dry run when its e2e input is ticked. Skipped otherwise; a failed run still stops
-    # the release. After verify and parser, never beside them: both runners share one machine, and with verify's backend
-    # and renderer jobs running next to it the browser's requests to the admin UI failed (run 42469437132; alone, run
-    # 42471519711 passed on the same commit).
-    needs: [verify, parser]
+    # the release. After verify, parser and build, never beside them: both runners share one machine, and with verify's
+    # backend and renderer jobs running next to it the browser's requests to the admin UI failed (run 42469437132; alone,
+    # run 42471519711 passed on the same commit).
+    needs: [verify, parser, build]
     if: (github.event_name == 'push' && vars.RELEASE_E2E == 'true') || (github.event_name == 'workflow_dispatch' && inputs.e2e)
     uses: ./.github/workflows/e2e.yml
 
   build:
-    # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job.
-    needs: [verify, parser, e2e]
-    # A skipped e2e (not asked for) lets the build go on; a failed or cancelled one does not.
-    if: >-
-      !cancelled() && needs.verify.result == 'success' && needs.parser.result == 'success' &&
-      (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
+    # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job. Beside
+    # verify and parser, not after them (header); publish waits for all three.
+    if: inputs.portainer_boot == ''
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
@@ -157,11 +158,8 @@ jobs:
             registry_host=localhost:5000; repository=ume-rag
           fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$version' is not X.Y.Z[-pre]"; exit 1; }
-          # :latest follows the newest release, never a pre-release or a dry run.
-          latest=false
-          if [ "$GITHUB_EVENT_NAME" = push ]; then case "$version" in *-*) ;; *) latest=true;; esac; fi
-          { echo "version=$version"; echo "registry_host=$registry_host"; echo "repository=$repository"
-            echo "latest=$latest"; } | tee -a "$GITHUB_OUTPUT"
+          { echo "version=$version"; echo "registry_host=$registry_host"; echo "repository=$repository"; } \
+            | tee -a "$GITHUB_OUTPUT"
       - name: Log in to ghcr.io
         if: github.event_name == 'push'
         env:
@@ -325,7 +323,9 @@ jobs:
             if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "${BUILD_CACHE:?}/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
           done
           du -sh "$BUILD_CACHE"/* 2>/dev/null || true
-      - name: Image pins and SBOMs of the other images
+      - name: Image pins of the other images, and their SBOMs in the background
+        # Syft takes about two minutes for the four images (the parser's is 3 GB): it runs beside the smoke test and the
+        # Portainer boot, and "The other images' SBOMs" below waits for it.
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
@@ -336,19 +336,22 @@ jobs:
           # The dry run's registry speaks plain HTTP.
           SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
         run: |
+          syft_dir="$RUNNER_TEMP/syft"; mkdir -p "$syft_dir"; : > "$syft_dir/refs"
           for name in postgres clamav renderer parser; do
             digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
             echo "${name^^}_IMAGE=$ref" | tee -a images.env
-            syft scan "registry:$ref" -o "spdx-json=sbom/ume-rag-$name-$VERSION.spdx.json" -q
+            echo "$name $ref" >> "$syft_dir/refs"
           done
-          ls -l sbom
-      - name: Tag latest
-        if: steps.version.outputs.latest == 'true'
-        run: |
-          while IFS='=' read -r _ ref; do
-            repo="${ref%%@*}"; repo="${repo%:*}"
-            docker buildx imagetools create -t "$repo:latest" "$ref"
-          done < images.env
+          # The exit code goes to a file: a later step can't `wait` for a process this step started. Every stream of the
+          # background part is redirected, or the runner would wait for it before ending the step.
+          # shellcheck disable=SC2016 # the inner script's variables expand in the inner shell
+          (
+            bash -c 'set -e
+              while read -r name ref; do
+                syft scan "registry:$ref" -o "spdx-json=sbom/ume-rag-$name-$VERSION.spdx.json" -q
+              done < "$1/refs"' _ "$syft_dir" > "$syft_dir/log" 2>&1 || rc=$?
+            echo "${rc:-0}" > "$syft_dir/exit"
+          ) < /dev/null > /dev/null 2>&1 &
       - name: Build the release bundle
         run: |
           set -a; . ./images.env; set +a
@@ -366,6 +369,17 @@ jobs:
         # (deploy-configuration plan, step C0). After the smoke test, which has removed its own stack by now.
         run: |
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
+      - name: The other images' SBOMs
+        # Started above, beside the boot tests; normally done by now.
+        run: |
+          syft_dir="$RUNNER_TEMP/syft"; deadline=$((SECONDS + 900))
+          until [ -s "$syft_dir/exit" ]; do
+            [ "$SECONDS" -lt "$deadline" ] || { cat "$syft_dir/log"; echo "::error::Syft did not finish within 15 minutes"; exit 1; }
+            sleep 5
+          done
+          cat "$syft_dir/log"
+          [ "$(cat "$syft_dir/exit")" = 0 ] || { echo "::error::Syft failed (exit $(cat "$syft_dir/exit"))"; exit 1; }
+          ls -l sbom
       - uses: actions/upload-artifact@v7
         with:
           name: release
@@ -379,15 +393,24 @@ jobs:
         run: docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
 
   publish:
-    # Only for a pushed tag; a dry run ends after the smoke test.
-    needs: build
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.build.result == 'success' }}
+    # Only for a pushed tag, once verify, parser, build and (when asked) e2e are green; a dry run ends after build.
+    needs: [verify, parser, build, e2e]
+    if: >-
+      !cancelled() && github.event_name == 'push' && needs.verify.result == 'success' &&
+      needs.parser.result == 'success' && needs.build.result == 'success' &&
+      (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
+      packages: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # As in build: the ghcr.io login for :latest must not outlive the job.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: GitHub CLI
         # v0.2.0's publish failed with "gh: command not found" on the self-hosted runner.
         run: |
@@ -401,6 +424,17 @@ jobs:
         with:
           name: release
           path: release
+      - name: Tag latest
+        # Here, not in build: only once every test is green (header). Not for a pre-release.
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          while IFS='=' read -r _ ref; do
+            repo="${ref%%@*}"; repo="${repo%:*}"
+            docker buildx imagetools create -t "$repo:latest" "$ref"
+          done < release/images.env
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

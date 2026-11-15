@@ -139,8 +139,9 @@ main session needs:
   - The smoke test can't re-run `init-deployment.sh` on the runner (not root; the files belong to the containers'
     users after the first run); verify.yml's deploy-checks test the re-run.
   - Measure before optimising: v0.3.0's smoke test took 1 min 51 s; the time was in image builds and pushes.
-  - **A dry run with `e2e=true` skips `build` when e2e fails**, so neither smoke test runs (0.6.0: the Portainer boot
-    first ran at the tag and failed, #749). After fixing e2e, run a dry run with `e2e=false` before tagging.
+  - Until the release-speed change (session 39), a dry run with `e2e=true` skipped `build` when e2e failed, so neither
+    smoke test ran (0.6.0: the Portainer boot first ran at the tag and failed, #749). Now `build` runs beside verify and
+    parser, and e2e after all three.
   - The shared `~/.docker/config.json`'s stale ghcr.io login also denied the e2e stack's Open WebUI pull (#748): every
     workflow that pulls from ghcr.io sets its own `DOCKER_CONFIG`.
   - **Run `e2e.yml` at least once between releases.** It hadn't run from 2026-11-08 to 11-15 and seven UI changes had
