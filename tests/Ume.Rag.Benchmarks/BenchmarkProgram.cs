@@ -8,5 +8,15 @@ namespace Ume.Rag.Benchmarks;
 /// </summary>
 public static class BenchmarkProgram
 {
-    public static void Main(string[] args) => BenchmarkSwitcher.FromAssembly(typeof(BenchmarkProgram).Assembly).Run(args);
+    public static async Task<int> Main(string[] args)
+    {
+        // "measure <name>": the Stopwatch measurements of Measurements/HotPathMeasurements.cs, not BenchmarkDotNet.
+        if (args is ["measure", .. var rest])
+        {
+            return await Measurements.HotPathMeasurements.RunAsync(rest);
+        }
+
+        BenchmarkSwitcher.FromAssembly(typeof(BenchmarkProgram).Assembly).Run(args);
+        return 0;
+    }
 }

@@ -40,6 +40,23 @@ dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- --filter '*' --job d
 
 Results go to `BenchmarkDotNet.Artifacts/results/` under the working directory: one Markdown table per class.
 
+## Measurements (`measure`)
+
+`Measurements/HotPathMeasurements.cs` holds Stopwatch measurements that count outcomes as well as time (503s, recall,
+rows read), which BenchmarkDotNet does not report. They were written for issue #764 and print Markdown tables:
+
+```bash
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure slots         # search slots under concurrent searches (no Docker)
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure jobs          # job claim at 1,000 to 100,000 queued jobs
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure vectorinsert  # 1,000 vectors through unnest: text[] against vector[]
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure vectortext    # formatting a vector as text (no Docker)
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure vector        # statement V: exact, exact on halfvec, HNSW, with recall
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure hydrate       # hydration at neighbour radius 0 to 8
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure stream        # flush per token, the Open WebUI user JWT (no Docker)
+```
+
+Without a name every measurement runs (about 10 minutes). The results of 2026-11-15 are in issue #764.
+
 Run on an otherwise idle machine, on AC power, and close anything that uses CPU (another `dotnet test`, a browser
 build). Compare **ratios and allocations** with the baseline rather than absolute times: they move less between
 machines. A change of more than 10–15 % in a hot path, or any new allocation per token or per candidate, is worth a
