@@ -69,8 +69,10 @@ Each becomes a queue item when the main session picks it up.
 - **Grading dry run: done** (main, 2026-11-15, FakeGateway stack): `answer` → graded CSV → `totals` against a live rag-api with a real integration key (5 questions, one off-topic; `totals` exits 1 on a failing gate and 2 on an inconsistent file, naming the rows). Step 3 starts on working tools. Set-up note for step 3: the pilot assistant needs a description, a contact and a gateway key of its department that reaches both the chat model and the collection's embedding model at the assistant's ceiling (#720 for the refusal's wording).
 - **Checks before go-live:** the 16 rows of [`to-verify.md`](to-verify.md) *Before go-live* need no input (local
   tests, source readings, the NVDA pass, licences); the live block's rows are listed there under each step below.
-- **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measure on public
-  documents what the gaps cost before deciding them.
+- **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measured on 14
+  public IT guides (2026-11-15). U1 is the largest loss: 18 % of the text is inside screenshots (19–76 % in
+  step-by-step guides), none of it kept. U5 and U7 cost little. The same script (`scripts/upload-gaps/measure.py`)
+  runs on DoIT's files at T6.
 - **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
   stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
