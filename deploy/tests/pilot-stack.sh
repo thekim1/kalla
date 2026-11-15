@@ -4,8 +4,6 @@
 #
 #   - the base files (compose.prod.yaml + compose.ingestion.yaml) keep every cpus cap at 2 or less (decisions table,
 #     "Low CPU during development") and carry the 16 GB limits of §6.2;
-#   - rag-admin's Gateway__IntegrationApiUrl (the gateway's cost and budget read-back) is empty unless
-#     UME_RAG_GATEWAY_INTEGRATION_API_URL is set, in both admin slots;
 #   - with compose.host-24g.yaml (and compose.clamav-conf.yaml, as init-deployment.sh --host-memory 24 lists them) every
 #     container has the pilot caps and the 24 GB limits of §6.2, the parser runs 2 slots x 2 threads and postgres the
 #     24 GB memory settings; deploy/host/install.sh --host-memory 24 writes the slice's MemoryMax=11G;
@@ -31,7 +29,7 @@ export UME_RAG_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume UME_RAG_GAT
 export UME_RAG_API_PUBLIC_URL=https://rag-api.example.se UME_RAG_OPENWEBUI_HOST=chat.example.se
 export UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui UME_RAG_OPENWEBUI_DATA_DIR=/openwebui-data
 export UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration
-unset UME_RAG_OPENWEBUI_PASSWORD_AUTH UME_RAG_GATEWAY_INTEGRATION_API_URL
+unset UME_RAG_OPENWEBUI_PASSWORD_AUTH
 mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
 
 failures=0
@@ -80,11 +78,6 @@ if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail 
 env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
 env_is "$base" rag-api OpenWebUi__BaseUrl ""
-# The Integration API read-back (#580): empty, so off, unless UME_RAG_GATEWAY_INTEGRATION_API_URL is set.
-env_is "$base" rag-admin Gateway__IntegrationApiUrl ""
-readback="$(UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.example.se render compose.prod.yaml compose.rolling.yaml)"
-env_is "$readback" rag-admin Gateway__IntegrationApiUrl https://llm-admin.example.se
-env_is "$readback" rag-admin-b Gateway__IntegrationApiUrl https://llm-admin.example.se
 
 # --- 24 GB pilot host: pilot caps and limits ------------------------------------------------------------------------
 pilot="$(render compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml)"

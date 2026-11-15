@@ -69,6 +69,15 @@ exception, with its own steps.
   (Kubernetes, `ume-rag-admin-config`) are no longer read. **Apply:** set the organisation's name in the gateway's admin
   console (branding) if it isn't, and remove the variable. With an older gateway, or an empty name, the texts name no
   organisation. **Check:** RAG's sign-in page names the organisation.
+- **The Integration API's address comes from the gateway (M-17 C11).** rag-admin reads the address of the gateway's
+  Integration API (the cost and budget read-back) from its gateway context's `integration_api_url` (gateway v0.10.2,
+  feature `integration-api-url`). `UME_RAG_GATEWAY_INTEGRATION_API_URL` (Compose, Portainer) and
+  `Gateway__IntegrationApiUrl` (Kubernetes, `ume-rag-admin-config`) are no longer read. **Apply:** if you used the
+  read-back, the gateway admin sets the gateway's `UME_INTEGRATION_API_URL` to the Admin API's address as rag-admin
+  reaches it, **ending in `/integration/v1`** (your old value plus `/integration/v1`); then remove the variable. Compose
+  with the host firewall: the variable no longer adds the host to `llm`, so run `docker-user-firewall.sh` with
+  `--allow llm=<gateway admin host>:<port>` (a drop-in for `rag-firewall.service` that adds it to `ExecStart`). Without the gateway's address there is no
+  read-back. **Check:** `GET /api/gateway/status` has `integration.configured: true` within 5 minutes of the update.
 - **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.

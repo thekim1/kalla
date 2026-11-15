@@ -984,7 +984,7 @@ export const PLATFORM = {
     noFeatures: 'None',
     /** The Integration API read-back (#654, admin design §4.5, §8.6): cost and budgets from the AI gateway. */
     readback: 'Cost and budgets from the AI gateway',
-    readbackOff: 'Off: Gateway:IntegrationApiUrl is not set, so cost cards show the platform’s own figures only.',
+    readbackOff: 'Off: the gateway names no Integration API address (its UME_INTEGRATION_API_URL), so cost cards show the platform’s own figures only.',
     readbackOn: 'On: no refusal since the admin service started.',
     readbackFailed: (reason: string, status: number | null, at: string) => `Not read at ${at}: ${reason}${status ? ` (HTTP ${status})` : ''}.`,
     readbackReasons: {

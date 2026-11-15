@@ -48,8 +48,8 @@ spec:
     # publishes 8443), and the OTLP collector's (4317).
     - ports: [{protocol: TCP, port: 443}]
 ---
-# rag-admin: browsers through the Ingress controller; out to Postgres, the gateway (with Gateway__IntegrationApiUrl
-# also its Admin API) and the IdP.
+# rag-admin: browsers through the Ingress controller; out to Postgres, the gateway (also its Admin API, when the
+# gateway's context names its Integration API) and the IdP.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

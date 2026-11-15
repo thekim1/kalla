@@ -107,13 +107,11 @@ to the services and verifies them against their internal CAs, so nothing else ne
    UME_RAG_API_GATEWAY_KEY=...
    UME_RAG_ADMIN_GATEWAY_KEY=...
    UME_RAG_WORKER_GATEWAY_KEY=...
-   UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.example.se:9443   # optional: the gateway's cost and budgets
    ```
 
    *Update the stack*. From `0.5.1` the services pick up the new keys within seconds (the secret files reload); with
-   `0.5.0`'s images restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*). The read-back URL is the gateway admin's address as `rag-admin` reaches it: `adminapi` isn't on
-   the `llm` network, so use its published address (`https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443>`); without it
-   there is no read-back.
+   `0.5.0`'s images restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*). The gateway's cost and budget read-back needs the gateway's
+   `UME_INTEGRATION_API_URL` set to an address `rag-admin` reaches; without it there is no read-back.
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
