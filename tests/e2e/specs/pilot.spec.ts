@@ -165,13 +165,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // WebUI) in a new tab, and rag-api offers the assistant's model name to the client's key.
     const portal = page.getByRole('link', { name: 'Open in Open WebUI (dev) (opens in a new tab)' })
     const portalUrl = new URL((await portal.getAttribute('href'))!)
-    // The link opens a new tab; headless Chromium on the runner stopped emitting that tab after 2026-11-08 (issue filed),
-    // so the test checks the link's target and opens its address itself.
-    await expect(portal).toHaveAttribute('target', '_blank')
-    await expect(portal).toHaveAttribute('rel', /noopener/)
-    const openWebUi = await page.context().newPage()
-    // Open WebUI starts after rag-api and migrates its own store first: give it up to three minutes to answer.
-    await eventually(() => openWebUi.goto(portalUrl.href, { timeout: 20_000 }).then(() => true, () => false), 'Open WebUI answers', 180_000)
+    const [openWebUi] = await Promise.all([page.context().waitForEvent('page'), act.press(portal)])
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
     await openWebUi.close()

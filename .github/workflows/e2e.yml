@@ -24,6 +24,13 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 60
     steps:
+      - name: A Docker config of its own
+        # The runners share one user's ~/.docker/config.json, which still holds an expired ghcr.io login from a tag release:
+        # with it, pulling the public Open WebUI image from ghcr.io is "denied" and the container never starts (handbook,
+        # Release dry runs; as release.yml and parser.yml since #572).
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - name: Specs present
         id: specs
