@@ -40,6 +40,31 @@ wait on DoIT's documents and tickets.
 | U6 | **Versions and near-duplicates** | "Policy 2024.pdf" and "Policy 2025.pdf" uploaded side by side are both used in answers. Dedup only catches identical text (`DocumentId`, `TextHash`), and age decay is off for uploads | A near-duplicate warning when a file is uploaded (similar name or text to an existing one, with "Replace instead?"); optional age decay for upload sources | not planned |
 | U7 | **OCR is Tesseract `swe` only** | Printed Swedish scans are fine. English or mixed scans are weaker, and handwriting is not read | Add `eng` as a second language when the OCR check shows a need; handwriting is out of scope | parser §9 |
 
+## Measurement 1 (2026-11-15): public IT guides
+
+What the gaps cost in content, before anyone asks a question. The parser image (with LibreOffice, after #526) at its
+defaults, PDFs in ranges of 8 pages as the worker sends them, measured by
+[`scripts/upload-gaps/measure.py`](../../scripts/upload-gaps/measure.py), which reports numbers only. Answer quality
+is still unmeasured: that needs DoIT's tickets or the gold set.
+
+**Corpus:** 14 public PDFs of the kind DoIT keeps, from Swedish municipalities and two unions, plus one English guide.
+They cover VPN and remote access, MFA and Authenticator, Teams, printing, sign-in, an e-service guide (umea.se),
+time reporting, an IT handbook, a password rule and IT security. 136 pages in all. No public Word or PowerPoint
+guides were found, so Office files are not in it.
+
+| Gap | Result | What it means |
+|---|---|---|
+| U1 pictures | 277 pictures (2 per page), **none with a caption**, so the chunker keeps nothing of them. OCR finds **18 %** of all the text inside pictures: **19–76 %** in the ten step-by-step guides, under 7 % in the four text documents (policy, security, handbook). Pictures cover at least 20 % of 33 pages and never 60 % of one: screenshots sit beside text, not as whole-page slides | The largest loss for DoIT's kind of documents. Part of the picture text is instruction ("press the green Save button", a confirmation message with its time limit, form field names), part is interface noise and OCR garble. Example screenshots carry made-up personal data (a sample personnummer and name), so picture text or descriptions must pass the personal-data check (processing §9) like any text. Word and PowerPoint files run no OCR (Docling's declarative backends), so their screenshots lose all of their text, and this measurement can't see it |
+| U5 no headings | No document has fewer than two headings (0.3–5.5 per page) | Little cost on guides like these |
+| U7 OCR languages | 3 of 136 pages have no text layer; the English guide has one | `swe` OCR touches mainly the text inside pictures, where English interface labels are read with the Swedish model. Little cost |
+| U3 spreadsheets | Six tables of 3–25 rows; no spreadsheets | Not measured |
+| U2, U4, U6 | – | Not measurable on documents: they need e-mails, the gold set, and documents with several versions |
+
+**Two options for U1**, to compare on DoIT's files: keep a picture's OCR text as a block of its own, which costs no
+model call but keeps the noise; or describe each picture with a vision model through the gateway, which costs a call
+per picture and reads layout and arrows as well as text. Either way, a minimum picture size keeps logos and icons out.
+The same script on DoIT's real files at T6, Office files included, gives the numbers for that choice.
+
 ## Proposed order
 
 1. **Measure first.** Run the support-assistant proof of concept on real DoIT documents and tickets as soon as they
