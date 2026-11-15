@@ -100,8 +100,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   boot test passes with no sign-in value set and `e2e.yml` passes through the wizard.
 - **Reviewed** 2026-11-15 by an independent agent; the findings are worked in (proposal §10).
 - **Progress:** S0 (#760: `UME_DOMAIN`; the boot-only run green with only the domain set) and S1 (#761: the settings,
-  the encrypted secret, effective values with their source, `GET /api/settings/sign-in`) merged 2026-11-15. S2 in
-  work: sign-in from the effective values, reload, start without an authority. **The test sign-in moved from S2 to
-  S3**, where the setup API that calls it is built; S2 ends with the spike's answer on sharing the callback. Stream b
+  the encrypted secret, effective values with their source, `GET /api/settings/sign-in`) merged 2026-11-15. S2 (#762: sign-in from the effective
+  values, reload by fingerprint, start without an authority, a failed callback no longer a 500) merged. **S3 in work**
+  as two parts: the backend (setup state, code, session, the test sign-in as a hand-written code exchange, complete,
+  re-open, security events) and the deploy side (`Setup__Secret`, `UME_RAG_SETUP_REOPEN`, an AppHost opt-in). Stream b
   was told on #759.
 

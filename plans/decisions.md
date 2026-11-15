@@ -239,7 +239,7 @@ by user, 2026-11-15.
 Sign-in is set up in the browser. While setup is open, rag-admin prints a one-time setup code on its standard output
 (derived from a generated setup secret file and a nonce in the database, the same on every replica, valid one hour,
 never sent through the logger); the admin UI's `/setup` asks for it. Setup is open only before its first completion
-and after a re-open; a fault never opens it, and a deployment that declares an authority and a client id counts as
+and after a re-open; a fault never opens it, and a deployment that declares an authority and a client secret counts as
 completed. Saving sign-in values needs a passed test sign-in with those values by a person who comes out as a platform
 admin. Afterwards rag-admin's and Open WebUI's sign-in provider, client and secret change only in setup mode, never
 from an admin session; the deployer re-opens it by giving `Setup:Reopen` a new value, which is consumed when setup
