@@ -170,7 +170,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(portal).toHaveAttribute('target', '_blank')
     await expect(portal).toHaveAttribute('rel', /noopener/)
     const openWebUi = await page.context().newPage()
-    await openWebUi.goto(portalUrl.href)
+    // Open WebUI starts after rag-api and migrates its own store first: give it up to three minutes to answer.
+    await eventually(() => openWebUi.goto(portalUrl.href, { timeout: 20_000 }).then(() => true, () => false), 'Open WebUI answers', 180_000)
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
     await openWebUi.close()

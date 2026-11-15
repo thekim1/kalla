@@ -73,7 +73,7 @@ jobs:
       - name: Server logs of a failed run
         if: failure() && steps.specs.outputs.present == 'true'
         run: |
-          for r in adminapi admin-ui api worker; do
+          for r in adminapi admin-ui api worker open-webui; do
             echo "::group::$r"; aspire logs "$r" --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj 2>&1 | tail -n 300 || true; echo "::endgroup::"
           done
       - name: Stop the test stack
