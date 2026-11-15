@@ -85,8 +85,13 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             }
         }
 
-        // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3).
+        // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3). A request's
+        // ume.general_knowledge only tightens it (§3.8); the routing, the frame and the plan read this effective level.
         var settings = resolved.Settings(assistant);
+        if (chat.Ume?.GeneralKnowledge is { } requested)
+        {
+            settings = settings with { GeneralKnowledge = GeneralKnowledgeLevels.Effective(settings.GeneralKnowledge, requested) };
+        }
         // B-42 (identity §4.7, cost-attribution §4.1): every call of the turn runs as the assistant's gateway key.
         using var acting = GatewayCallScope.Begin(Acting(assistant));
 

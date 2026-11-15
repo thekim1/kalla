@@ -42,6 +42,12 @@ public static class GeneralKnowledgeLevels
         _ => Off,
     };
 
+    /// <summary>
+    /// The turn's level (chat design §3.8, §7.3): the stricter of the assistant's own and the one a request asked for, so a
+    /// request never loosens what the assistant's admins set; null asks for nothing.
+    /// </summary>
+    public static GeneralKnowledge Effective(GeneralKnowledge own, GeneralKnowledge? requested) => requested is { } r && r < own ? r : own;
+
     /// <summary>Whether coverage <c>Low</c> gets a model answer without sources instead of the not-found text (§6.2).</summary>
     public static bool AnswersWithoutSources(GeneralKnowledge level) => level is GeneralKnowledge.Fallback or GeneralKnowledge.Open;
 }

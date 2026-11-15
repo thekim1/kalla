@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using Ume.Rag.Answering.Chat;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.Api.Tests;
@@ -41,6 +42,7 @@ public sealed partial class ChatApiTests
     [InlineData("\"x\"", "invalid_request", "ume")]
     [InlineData("""{"related_documents":11}""", "invalid_request", "ume.related_documents")]
     [InlineData("""{"follow_ups":6}""", "invalid_request", "ume.follow_ups")]
+    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "ume.general_knowledge")]
     [InlineData("""{"foo":1}""", "unsupported_parameter", "ume.foo")]
     public async Task An_invalid_ume_from_an_integration_client_is_refused_before_any_model_call(string ume, string code, string param)
     {
@@ -61,6 +63,7 @@ public sealed partial class ChatApiTests
     [InlineData("\"x\"")]
     [InlineData("""{"foo":1,"related_documents":99}""")]
     [InlineData("""{"related_documents":5}""")]
+    [InlineData("""{"general_knowledge":"loose"}""")]
     public async Task Open_webui_requests_ignore_ume_without_validating_it(string ume)
     {
         await using var api = WireHost(null, openWebUi: true, Upstream.Fake);
@@ -157,6 +160,67 @@ public sealed partial class ChatApiTests
         var (_, ume) = await UmeAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", """{"related_documents":5}"""));
         (ume.GetProperty("outcome").GetString(), ume.GetProperty("degraded").GetBoolean()).ShouldBe((outcome, false));
         ume.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("fallback", "{}", "answered-general")]
+    [InlineData("fallback", """{"general_knowledge":null}""", "answered-general")]
+    [InlineData("fallback", """{"general_knowledge":"open"}""", "answered-general")]
+    [InlineData("fallback", """{"general_knowledge":"supplement"}""", "not-found")]
+    [InlineData("fallback", """{"general_knowledge":"off"}""", "not-found")]
+    [InlineData("off", """{"general_knowledge":"fallback"}""", "not-found")]
+    [InlineData("off", """{"general_knowledge":"open"}""", "not-found")]
+    public async Task A_requested_general_knowledge_level_only_tightens_the_assistants(string level, string ume, string outcome)
+    {
+        // #726 (§3.8): the turn runs at the stricter of ume.general_knowledge and the assistant's level; absent or null is the assistant's.
+        await using var api = GeneralHost(level);
+        using var client = Client(api, db.IntegrationKey);
+        var before = await WrittenAsync(api, null);
+
+        var (body, answer) = await UmeAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", ume));
+        answer.GetProperty("outcome").GetString().ShouldBe(outcome);
+        var content = body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
+        if (outcome == "not-found")
+        {
+            content.ShouldBe("Inget svar i källorna." + ContactLinks);
+            body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0); // no model call
+        }
+        else
+        {
+            content.ShouldStartWith(FixedTexts.GeneralCaveatSv + "\n\n");
+        }
+
+        var after = await WrittenAsync(api, body.GetProperty("id").GetString());
+        var general = outcome == "answered-general" ? 1L : 0L;
+        (after.Outcome, after.NotFound - before.NotFound, after.General - before.General).ShouldBe((outcome, 1L - general, general));
+    }
+
+    [Fact]
+    public async Task The_frame_is_the_effective_levels()
+    {
+        // #726 (§7.3): with an open assistant, the answer call's frame is the level the request tightened it to.
+        var calls = new ConcurrentQueue<GatewayCall>();
+        using var logs = new CapturingLoggerProvider();
+        await using var api = LongHost(calls, LongFault.None, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, """{"answer":{"generalKnowledge":"open"}}""");
+        using var client = Client(api, db.IntegrationKey);
+        var name = Snapshot().Assistants[db.AssistantId].Name;
+
+        async Task<string> SystemAsync(string question, string asked)
+        {
+            calls.Clear();
+            using var response = await AskUme(client, question, $$"""{"general_knowledge":"{{asked}}"}""");
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+            return calls.Single(c => c.Step == GatewayChatClient.AnswerStep).Body.GetProperty("messages")[0].GetProperty("content").GetString()!;
+        }
+
+        foreach (var level in new[] { GeneralKnowledge.Open, GeneralKnowledge.Fallback, GeneralKnowledge.Supplement, GeneralKnowledge.Off })
+        {
+            (await SystemAsync(AltanQuestion, GeneralKnowledgeLevels.ToValue(level))).ShouldStartWith(PromptBuilder.Frame(name, PromptKind.Sources, level, false, false));
+        }
+
+        // Without sources (coverage Low): fallback's general frame, not open's.
+        (await SystemAsync("Hur långt är det till månen i kilometer?", GeneralKnowledgeLevels.Fallback))
+            .ShouldStartWith(PromptBuilder.Frame(name, PromptKind.General, GeneralKnowledge.Fallback, false, false));
     }
 
     [Fact]

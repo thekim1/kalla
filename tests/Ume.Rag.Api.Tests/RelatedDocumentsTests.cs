@@ -27,6 +27,26 @@ public sealed class RelatedDocumentsTests
     public void The_ume_member_is_parsed_with_its_counts(string ume, int related, int followUps) =>
         ChatRequestParser.Parse(Body(ume)).Ume.ShouldBe(new UmeRequest(related, followUps));
 
+    [Theory]
+    [InlineData("""{"general_knowledge":"off"}""", GeneralKnowledge.Off)]
+    [InlineData("""{"general_knowledge":"supplement"}""", GeneralKnowledge.Supplement)]
+    [InlineData("""{"general_knowledge":"fallback","related_documents":3}""", GeneralKnowledge.Fallback)]
+    [InlineData("""{"general_knowledge":"open"}""", GeneralKnowledge.Open)]
+    [InlineData("""{"general_knowledge":null}""", null)]
+    [InlineData("""{}""", null)]
+    public void The_ume_member_carries_the_requested_general_knowledge_level(string ume, GeneralKnowledge? expected) =>
+        ChatRequestParser.Parse(Body(ume)).Ume!.GeneralKnowledge.ShouldBe(expected);
+
+    [Theory]
+    [InlineData(GeneralKnowledge.Fallback, null, GeneralKnowledge.Fallback)]
+    [InlineData(GeneralKnowledge.Fallback, GeneralKnowledge.Open, GeneralKnowledge.Fallback)]
+    [InlineData(GeneralKnowledge.Fallback, GeneralKnowledge.Supplement, GeneralKnowledge.Supplement)]
+    [InlineData(GeneralKnowledge.Fallback, GeneralKnowledge.Off, GeneralKnowledge.Off)]
+    [InlineData(GeneralKnowledge.Off, GeneralKnowledge.Open, GeneralKnowledge.Off)]
+    [InlineData(GeneralKnowledge.Open, GeneralKnowledge.Open, GeneralKnowledge.Open)]
+    public void The_effective_level_is_the_stricter_of_the_assistants_and_the_requested(GeneralKnowledge own, GeneralKnowledge? requested, GeneralKnowledge expected) =>
+        GeneralKnowledgeLevels.Effective(own, requested).ShouldBe(expected);
+
     [Fact]
     public void Without_ume_or_with_null_there_is_no_extension()
     {
@@ -45,6 +65,13 @@ public sealed class RelatedDocumentsTests
     [InlineData("""{"related_documents":null}""", "invalid_request", "ume.related_documents")]
     [InlineData("""{"follow_ups":6}""", "invalid_request", "ume.follow_ups")]
     [InlineData("""{"follow_ups":true}""", "invalid_request", "ume.follow_ups")]
+    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"general_knowledge":"Off"}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"general_knowledge":""}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"general_knowledge":1}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"general_knowledge":false}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"general_knowledge":["off"]}""", "invalid_request", "ume.general_knowledge")]
+    [InlineData("""{"generalKnowledge":"off"}""", "unsupported_parameter", "ume.generalKnowledge")]
     [InlineData("""{"foo":1}""", "unsupported_parameter", "ume.foo")]
     [InlineData("""{"related_documents":3,"relatedDocuments":3}""", "unsupported_parameter", "ume.relatedDocuments")]
     public void An_invalid_ume_member_is_refused_with_its_param(string ume, string code, string param)
@@ -57,6 +84,7 @@ public sealed class RelatedDocumentsTests
     [InlineData("\"x\"")]
     [InlineData("""{"foo":1,"related_documents":99}""")]
     [InlineData("""{"related_documents":5}""")]
+    [InlineData("""{"general_knowledge":"loose"}""")]
     public void A_client_that_does_not_read_ume_ignores_it_without_validation(string ume) =>
         ChatRequestParser.Parse(Body(ume), readUme: false).Ume.ShouldBeNull();
 

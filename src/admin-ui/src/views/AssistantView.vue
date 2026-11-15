@@ -90,6 +90,19 @@ const GENERAL_KNOWLEDGE_LEVELS: GeneralKnowledge[] = ['off', 'supplement', 'fall
 const audience = ref<string[]>([])
 const question = ref('')
 const result = ref<AssistantTestResult | null>(null)
+// The test's general-knowledge level (#726, admin design §4.9): '' sends none, so the tested version's own level runs; the
+// picker offers only levels up to that one, since a request can only make it stricter.
+const testLevel = ref('')
+/** The tested version's saved level: the draft's, else the published version's (the panel tests the draft when there is one). */
+const testedLevel = computed(() => levelOf(querySteps.value))
+const testLevelOptions = computed(() => [
+  { value: '', label: ASSISTANT.testGeneralKnowledgeOwn(ASSISTANT.generalKnowledgeNames[testedLevel.value]!) },
+  ...GENERAL_KNOWLEDGE_LEVELS.slice(0, GENERAL_KNOWLEDGE_LEVELS.indexOf(testedLevel.value) + 1)
+    .map((g) => ({ value: g, label: ASSISTANT.generalKnowledgeLevels[g]!.label })),
+])
+watch(testLevelOptions, (options) => {
+  if (!options.some((o) => o.value === testLevel.value)) testLevel.value = ''
+})
 const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
 const versions = ref<AssistantVersionSummary[] | null>(null)
 const restoring = ref<number | null>(null)
@@ -320,7 +333,9 @@ const publish = () => run('publish', async () => {
 })
 
 const test = () => run('test', async () => {
-  result.value = await api.assistants.test(props.id, { question: question.value.trim() })
+  result.value = await api.assistants.test(props.id, {
+    question: question.value.trim(), ...(testLevel.value ? { generalKnowledge: testLevel.value as GeneralKnowledge } : {}),
+  })
 })
 
 const saveAudience = () => run('audience', async () => {
@@ -486,6 +501,10 @@ onMounted(load)
       <div v-else-if="tab === 'test'" id="assistant-panel-test" role="tabpanel" aria-labelledby="assistant-tab-test" class="grid max-w-3xl gap-5">
         <form class="grid gap-3" @submit.prevent="test">
           <TextAreaField id="assistant-question" v-model="question" :label="ASSISTANT.question" :hint="ASSISTANT.askHint" :rows="2" />
+          <SelectField
+            id="assistant-test-general-knowledge" v-model="testLevel" :label="ASSISTANT.testGeneralKnowledge" :hint="ASSISTANT.testGeneralKnowledgeHint"
+            :options="testLevelOptions"
+          />
           <div><UiButton type="submit" variant="primary" :loading="busy === 'test'" :disabled="!question.trim()" data-test="ask">{{ ASSISTANT.ask }}</UiButton></div>
         </form>
         <template v-if="result">
@@ -493,7 +512,10 @@ onMounted(load)
             <UiBadge :label="ASSISTANT.outcome[result.answer.outcome.replace('-', '')] ?? result.answer.outcome" class="mb-2" />
             <p class="whitespace-pre-wrap">{{ result.answer.delivered }}</p>
             <details v-if="result.answer.raw" class="mt-3"><summary class="cursor-pointer text-small">{{ ASSISTANT.raw }}</summary><p class="whitespace-pre-wrap text-small text-fg-2">{{ result.answer.raw }}</p></details>
-            <p class="mt-3 text-small text-fg-3">{{ ASSISTANT.gateway(result.gateway.model, result.gateway.residency, String(Math.round(result.durationMs))) }}</p>
+            <p class="mt-3 text-small text-fg-3" data-test="test-general-knowledge">
+              {{ ASSISTANT.testGeneralKnowledgeRan(ASSISTANT.generalKnowledgeNames[result.generalKnowledge] ?? result.generalKnowledge) }}
+            </p>
+            <p class="text-small text-fg-3">{{ ASSISTANT.gateway(result.gateway.model, result.gateway.residency, String(Math.round(result.durationMs))) }}</p>
             <p v-if="result.gateway.maxTokensSource" class="text-small text-fg-3" data-test="max-tokens-sent">
               {{ ASSISTANT.maxTokensSent(result.gateway.maxTokens == null ? null : formatNumber(result.gateway.maxTokens),
                                          ASSISTANT.maxTokensSources[result.gateway.maxTokensSource] ?? result.gateway.maxTokensSource) }}

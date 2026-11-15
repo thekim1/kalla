@@ -44,18 +44,19 @@ public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task The_assistant_test_panel_refuses_a_long_question_and_history()
+    public async Task The_assistant_test_panel_refuses_a_long_question_history_and_an_unknown_general_knowledge_level()
     {
         await using var factory = database.HeaderFactory();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var history = Enumerable.Range(0, 11).Select(i => new { role = "user", text = i == 0 ? new string('x', 4001) : "Hej" }).ToArray();
 
         var errors = await RefusedAsync(await admin.PostAsJsonAsync($"/api/assistants/{Guid.NewGuid()}/test",
-            new { question = new string('x', 2001), history }, Ct));
+            new { question = new string('x', 2001), history, generalKnowledge = "loose" }, Ct));
 
         errors.ShouldContainKey("question");
         errors.ShouldContainKey("history");
         errors.ShouldContainKey("history[0].text");
+        errors.ShouldContainKey("generalKnowledge"); // #726: off, supplement, fallback or open
     }
 
     [Fact]

@@ -38,7 +38,8 @@ public sealed record ChatCompletion(Guid MessageId, string Model, string Content
 
 /// <summary>
 /// A turn decided up to the gateway call (chat design §4.1 steps 5–12): either a fixed text (<see cref="Fixed"/>, no model
-/// call) or the prompt with everything the call and the citations need.
+/// call) or the prompt with everything the call and the citations need. <see cref="Settings"/> carries the turn's effective
+/// general-knowledge level (§3.8: the stricter of the assistant's and the request's).
 /// </summary>
 public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Created, AssistantEntry Assistant, Residency Ceiling, AssistantChatSettings Settings,
     int? MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,

@@ -212,7 +212,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task A_weak_question_to_a_fallback_draft_shows_the_caveat_line()
+    public async Task A_weak_question_to_a_fallback_draft_shows_the_caveat_line_and_an_asked_level_only_tightens_it()
     {
         // P1b item 40 (admin design §5.5.4): the panel runs the draft's general-knowledge level. Embeddings as the FakeGateway
         // makes them, so the vector side works and an unrelated question gets coverage Low.
@@ -275,5 +275,24 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         answer.GetProperty("raw").GetString()!.ShouldNotContain("sources"); // the fake echoes the user message: only the question was sent
         answer.GetProperty("citations").GetArrayLength().ShouldBe(0);
         result.GetProperty("gateway").GetProperty("inputTokens").GetInt32().ShouldBeGreaterThan(0);
+        result.GetProperty("generalKnowledge").GetString().ShouldBe("fallback"); // nothing asked: the version's level
+
+        // #726 (§4.9): an asked level only tightens the version's, as a chat request's ume.general_knowledge does (chat §3.8).
+        foreach (var (asked, outcome, effective) in new[] { ("open", "answered-general", "fallback"), ("supplement", "not-found", "supplement"), ("off", "not-found", "off") })
+        {
+            using var tested = await editor.PostAsJsonAsync($"/api/assistants/{assistant.Id}/test",
+                new { question = "Hur långt är det till månen i kilometer?", generalKnowledge = asked }, Ct);
+            tested.StatusCode.ShouldBe(HttpStatusCode.OK, await tested.Content.ReadAsStringAsync(Ct));
+            var body = await tested.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            (body.GetProperty("answer").GetProperty("outcome").GetString(), body.GetProperty("generalKnowledge").GetString()).ShouldBe((outcome, effective), asked);
+        }
+
+        foreach (var invalid in new[] { "loose", "Fallback", "" })
+        {
+            using var refused = await editor.PostAsJsonAsync($"/api/assistants/{assistant.Id}/test",
+                new { question = "Hur långt är det till månen i kilometer?", generalKnowledge = invalid }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, invalid);
+            (await refused.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("errors").TryGetProperty("generalKnowledge", out _).ShouldBeTrue(invalid);
+        }
     }
 }

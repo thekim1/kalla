@@ -88,7 +88,11 @@ public sealed partial class AdminTestPanel(
         var knowledge = new KnowledgeService(source, policy, retrieval.Engine, retrieval.Hydrator, retrieval.Embedder, _counter, dataSource, new NoDownloadLinks(),
             loggers.CreateLogger<KnowledgeService>());
         var chat = new ChatService(source, policy, knowledge, gateway, chatOptions, serviceCeiling, time, loggers.CreateLogger<ChatService>());
-        var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null);
+        // §4.9 (#726): an asked level tightens the version's as a chat request's ume.general_knowledge does (chat §3.8).
+        var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null)
+        {
+            Ume = request.GeneralKnowledge is { } level ? new UmeRequest(0, 0, GeneralKnowledgeLevels.Parse(level)) : null,
+        };
 
         var started = Stopwatch.GetTimestamp();
         // B-39 (§4.9, chat §8.3): the turn's usage records as chat collects them, written under admin-console whatever the outcome.
@@ -141,7 +145,7 @@ public sealed partial class AdminTestPanel(
                 new TestGateway(version.GatewayModel, ResidencyCeiling.ToHeader(plan.Ceiling), latencyMs, answer?.PromptTokens, answer?.CompletionTokens,
                     plan.Fixed is null ? plan.MaxTokens : null, plan.Fixed is null ? plan.MaxTokensSource : null, answer?.FinishReason,
                     records.Sum(r => r.CostUsd + r.EstimatedCostUsd), records.Any(r => r.Estimated)),
-                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds, GeneralKnowledgeLevels.ToValue(plan.Settings.GeneralKnowledge));
         }
         catch (ChatException ex) when (ex.Unavailable)
         {
@@ -349,6 +353,13 @@ public sealed record AssistantTestRequest : AdminRequest
 
     /// <summary><c>Draft</c> (default; the published version when there is no draft) or <c>Published</c>.</summary>
     public AssistantTestTarget Target { get; init; } = AssistantTestTarget.Draft;
+
+    /// <summary>
+    /// A general-knowledge level for the test (#726); the turn runs at the stricter of it and the target version's level, as a
+    /// chat request's <c>ume.general_knowledge</c> (chat §3.8). Omitted or null: the version's level.
+    /// </summary>
+    [AllowedValues(null, GeneralKnowledgeLevels.Off, GeneralKnowledgeLevels.Supplement, GeneralKnowledgeLevels.Fallback, GeneralKnowledgeLevels.Open)]
+    public string? GeneralKnowledge { get; init; }
 }
 
 public sealed record TestedCollectionRef(Guid Id, string Name, bool Published);
@@ -378,5 +389,7 @@ public sealed record TestAnswer(string? Raw, string Delivered, IReadOnlyDictiona
 public sealed record TestGateway(string Model, string Residency, double? LatencyMs, int? InputTokens, int? OutputTokens, int? MaxTokens = null,
     string? MaxTokensSource = null, string? FinishReason = null, decimal CostUsd = 0m, bool CostEstimated = false);
 
+/// <summary>The panel's answer (admin design §4.9); <see cref="GeneralKnowledge"/> is the level the turn ran at (the stricter of the asked and the version's).</summary>
 public sealed record AssistantTestResult(
-    AssistantTestTarget Target, int VersionNumber, TestRetrieval Retrieval, TestCondense Condense, TestAnswer Answer, TestGateway Gateway, double DurationMs);
+    AssistantTestTarget Target, int VersionNumber, TestRetrieval Retrieval, TestCondense Condense, TestAnswer Answer, TestGateway Gateway, double DurationMs,
+    string GeneralKnowledge);

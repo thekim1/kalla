@@ -421,7 +421,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     signIn(['rag-department-admin'])
     mocks()
     const test = vi.spyOn(api.assistants, 'test').mockResolvedValue({
-      target: 'Draft', versionNumber: 1, durationMs: 812.4, condense: { used: false, outcome: null },
+      target: 'Draft', versionNumber: 1, durationMs: 812.4, generalKnowledge: 'off', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [{ rank: 1, documentId: 'x', title: 'Altan', urlOrFileName: null, headingPath: 'Bygglov › Altan', text: 'Du behöver bygglov…', cited: true }] },
       answer: { raw: 'Ja [1].', delivered: 'Ja [1].', outcome: 'answered', language: 'sv', citations: [] },
       gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
@@ -593,7 +593,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     mocks()
     const caveat = '*Jag hittar inget om detta i kommunens källor. Svaret bygger på allmän kunskap och kan vara fel för Umeå kommun.*'
     vi.spyOn(api.assistants, 'test').mockResolvedValue({
-      target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+      target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'fallback', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
       answer: { raw: 'Ungefär 384 400 km.', delivered: `${caveat}\n\nUngefär 384 400 km.`, outcome: 'answered-general', language: 'sv', citations: [] },
       gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
@@ -609,6 +609,57 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const answer = wrapper.get('[data-test=answer]').text()
     expect(answer).toContain('Answered from general knowledge')
     expect(answer).toContain('Jag hittar inget om detta i kommunens källor.')
+  })
+
+  it('tests at a stricter general knowledge level, offering only levels up to the draft\'s, and shows the level it ran at (#726)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, querySteps: { answer: { generalKnowledge: 'fallback' } } })
+    const test = vi.spyOn(api.assistants, 'test').mockResolvedValue({
+      target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'fallback', condense: { used: false, outcome: null },
+      retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
+      answer: { raw: 'Ungefär 384 400 km.', delivered: 'Ungefär 384 400 km.', outcome: 'answered-general', language: 'sv', citations: [] },
+      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
+    })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    await button(wrapper, 'Test').trigger('click')
+    const options = wrapper.findAll('#assistant-test-general-knowledge option')
+    expect(options.map((o) => o.attributes('value'))).toEqual(['', 'off', 'supplement', 'fallback']) // never looser than the draft's own
+    expect(options[0]!.text()).toBe('The assistant’s level (Fallback)')
+    expect(options[1]!.text()).toBe(ASSISTANT.generalKnowledgeLevels.off!.label)
+
+    // The default sends no level: the draft's own runs.
+    await wrapper.get('#assistant-question').setValue('Hur långt är det till månen?')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(test).toHaveBeenLastCalledWith('a1', { question: 'Hur långt är det till månen?' })
+    expect(wrapper.get('[data-test=test-general-knowledge]').text()).toBe('General knowledge: Fallback')
+
+    test.mockResolvedValue({
+      target: 'Draft', versionNumber: 1, durationMs: 300, generalKnowledge: 'supplement', condense: { used: false, outcome: null },
+      retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
+      answer: { raw: null, delivered: 'Inget svar i källorna.', outcome: 'not-found', language: 'sv', citations: [] },
+      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: null, inputTokens: null, outputTokens: null, costUsd: 0, costEstimated: false },
+    })
+    await wrapper.get('#assistant-test-general-knowledge').setValue('supplement')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(test).toHaveBeenLastCalledWith('a1', { question: 'Hur långt är det till månen?', generalKnowledge: 'supplement' })
+    expect(wrapper.get('[data-test=answer]').text()).toContain('Found nothing')
+    expect(wrapper.get('[data-test=test-general-knowledge]').text()).toBe('General knowledge: Supplement')
+  })
+
+  it('offers only Off besides the assistant\'s own level when the draft keeps to the knowledge bases (#726)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    await button(wrapper, 'Test').trigger('click')
+    const options = wrapper.findAll('#assistant-test-general-knowledge option')
+    expect(options.map((o) => o.attributes('value'))).toEqual(['', 'off'])
+    expect(options[0]!.text()).toBe('The assistant’s level (Off)')
   })
 
   describe('answer length (Decisions "Answer length from the model", admin design §5.5.4)', () => {
@@ -717,7 +768,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       signIn(['rag-editor'])
       mocks()
       vi.spyOn(api.assistants, 'test').mockResolvedValue({
-        target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+        target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'off', condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Ett långt svar', delivered: 'Ett långt svar', outcome: 'answered', language: 'sv', citations: [] },
         gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length', costUsd: 0.0012, costEstimated: true },
@@ -758,7 +809,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       signIn(['rag-editor'])
       mocks()
       vi.spyOn(api.assistants, 'test').mockResolvedValue({
-        target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+        target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'off', condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Kort.', delivered: 'Kort.', outcome: 'answered', language: 'sv', citations: [] },
         gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00002, costEstimated: false },

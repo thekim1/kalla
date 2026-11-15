@@ -44,9 +44,11 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 
 /// <summary>
 /// The <c>ume</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
-/// questions to suggest (§9.8); 0 is none. Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
+/// questions to suggest (§9.8); 0 is none. <see cref="GeneralKnowledge"/> is a stricter general-knowledge level for the turn
+/// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). Any object, <c>{}</c> included, gives the
+/// answer's <c>ume</c> with its outcome.
 /// </summary>
-public sealed record UmeRequest(int RelatedDocuments, int FollowUps)
+public sealed record UmeRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null)
 {
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
@@ -204,8 +206,9 @@ public static partial class ChatRequestParser
 
     /// <summary>
     /// The <c>ume</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
-    /// 0–10 and <c>follow_ups</c> 0–5 as integers, else 400 <c>invalid_request</c>; any other member is 400
-    /// <c>unsupported_parameter</c> (the namespace is ours, so a typo fails instead of doing nothing).
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, and <c>general_knowledge</c> one of the level values or <c>null</c>, else 400
+    /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
+    /// instead of doing nothing).
     /// </summary>
     private static UmeRequest? Ume(JsonElement ume)
     {
@@ -220,6 +223,7 @@ public static partial class ChatRequestParser
         }
 
         var (related, followUps) = (0, 0);
+        GeneralKnowledge? generalKnowledge = null;
         foreach (var member in ume.EnumerateObject())
         {
             switch (member.Name)
@@ -230,13 +234,24 @@ public static partial class ChatRequestParser
                 case "follow_ups":
                     followUps = UmeCount(member, UmeRequest.MaxFollowUps);
                     break;
+                case "general_knowledge":
+                    generalKnowledge = UmeLevel(member);
+                    break;
                 default:
                     throw new ChatException(400, "unsupported_parameter", $"ume.{member.Name} is not supported.", "ume." + member.Name);
             }
         }
 
-        return new UmeRequest(related, followUps);
+        return new UmeRequest(related, followUps, generalKnowledge);
     }
+
+    /// <summary><c>ume.general_knowledge</c>: <c>null</c> is none; a level value exactly as stored (lower case), else 400.</summary>
+    private static GeneralKnowledge? UmeLevel(JsonProperty member) => member.Value.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.String when GeneralKnowledgeLevels.All.Contains(member.Value.GetString()!) => GeneralKnowledgeLevels.Parse(member.Value.GetString()),
+        _ => throw Invalid($"ume.{member.Name} must be one of {string.Join(", ", GeneralKnowledgeLevels.All)}.", "ume." + member.Name),
+    };
 
     private static int UmeCount(JsonProperty member, int max) =>
         member.Value.ValueKind == JsonValueKind.Number && member.Value.TryGetInt32(out var count) && count >= 0 && count <= max

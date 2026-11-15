@@ -1150,6 +1150,8 @@ export interface AssistantTestResult {
     costEstimated: boolean
   }
   durationMs: number
+  /** The level the test ran at: the stricter of the asked `generalKnowledge` and the tested version's (#726, admin design §4.9). */
+  generalKnowledge: GeneralKnowledge
 }
 
 /** `GET /api/collections/{id}/setup`: the setup checklist computed from state (admin design §5.4). */
