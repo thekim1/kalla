@@ -89,15 +89,13 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 
 ### [ ] M-20 Setup wizard: sign-in and the last deploy values set in the browser (user, 2026-11-15)
 - **Do:** the steps S0–S8 of [`../proposals/setup-wizard.md`](../proposals/setup-wizard.md) §8 in their order, one PR
-  per step, each step's paths, done-when and stream as listed there. First, on the user's agreement to the proposal:
-  its §9 (Decisions "Deploy configuration" changed, a new entry "Setup wizard", the designs), then the stream queue
-  items and the gateway issues WG1–WG4.
+  per step, on `main-session/m20-<step>` branches: the main session builds all of it, stream b's paths included (user,
+  2026-11-15; announced on an issue). The rules are Decisions "Setup wizard", identity §19 and admin §5.11.
 - **Decided** (user, 2026-11-15, W1–W10): the whole stack with Ume.Rag first; Portainer, Compose and Kubernetes; a
   setup code from rag-admin's log; a test sign-in before saving, re-opened only with host access; the deployment's
   value wins; wizard values in the database, secrets encrypted; host names under one `UME_DOMAIN`; Open WebUI's wrapper
   fetches its sign-in settings; the crawler's ranges stay deploy-time; reload in place.
-- **Waits on:** the user's agreement to the proposal as a whole (no code before it). S0 needs nothing else; S8 waits on
-  the gateway.
+- **Waits on:** nothing (agreed 2026-11-15); S8 waits on the gateway, and its issues WG1–WG4 on the user's word.
 - **Done when:** `stack.env.example` has no secret and 5 CHANGE values (stage 1), then 1 (stage 2); the release's
   boot test passes with no sign-in value set and `e2e.yml` passes through the wizard.
 - **Reviewed** 2026-11-15 by an independent agent; the findings are worked in (proposal §10).

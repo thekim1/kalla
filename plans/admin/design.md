@@ -1586,6 +1586,28 @@ A section's form is built in two steps:
    Processing, Personal data. JSON stays only under **Advanced (JSON)** for members with no control yet. The server's
    validation is unchanged.
 
+### 5.11 The setup wizard (user, 2026-11-15; Decisions "Setup wizard"; `work/main.md` M-20)
+
+`/setup`, outside the signed-in shell, before step 1 of §5.4. The rules it shows are identity §19. Texts are in
+`labels.ts` and `messages.ts`. While setup is closed the page says so and links to sign-in.
+
+1. **Setup code.** One field; where to find the code (the rag-admin container's output, with the command per deploy
+   form). A wrong code and the attempt limit have their own messages.
+2. **Addresses.** The public host names the deployment gave (read-only), each with *Test* (does it answer through the
+   proxy), and the redirect URIs to register at the provider, each with a copy button.
+3. **Sign-in.** Provider address, client id, client secret, an optional expiry date of the secret; *Advanced* holds
+   the token-shape values with a preset for Keycloak and for Entra ID. A value set by the deployment is locked with
+   *Set by the deployment*. **Test sign-in** opens the provider in a new window; the result shows who signed in, the
+   roles, groups and departments the token carried, and whether that person is a platform admin, with the claim that
+   was read. A failed step says which (address, discovery, secret, a refused claim check).
+4. **Open WebUI** (only when the deployment runs it): the same fields and test for its client; **Skip for now** is
+   allowed.
+5. **Summary.** Everything the deployment set, read-only with its source: ports, profiles, the crawler's private
+   ranges, the gateway's address. **Finish** is enabled when step 3's test passed for a platform admin, and leads to
+   sign-in and the *Get started* checklist (§5.5.1).
+
+Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps.
+
 ## 6. Pipelines
 
 ### 6.1 Template parameters on the source

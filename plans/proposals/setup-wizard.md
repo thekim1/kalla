@@ -1,9 +1,9 @@
 # Setup wizard: sign-in and the last deploy values set in the browser
 
-**Status:** **proposed** (main session, session 40, 2026-11-15). The user answered the ten questions W1–W10 (§3) the
-same day; the design that follows from them (§4–§8) waits for the user's agreement. **Reviewed** the same day by an
-independent agent against the code; its findings, each re-checked by the main session, are worked in and listed in §10. Nothing here binds until
-Decisions "Deploy configuration" is changed (§9), and no code is written before that.
+**Status:** **agreed** (user, 2026-11-15: W1–W10 answered, the design agreed after an independent review, §10). The
+binding rules are in Decisions "Setup wizard" and "Deploy configuration", identity §19, admin §5.11 and
+repo-and-deployment §6.3 and §7.1; the work is `work/main.md` **M-20**. The main session builds every step, stream b's
+paths included (user, 2026-11-15). Written by the main session, session 40.
 
 **Goal** (the user's idea, 2026-11-15): the platform is easy to set up. What a deployer still types into Portainer's
 stack variables, `deploy/.env` or the Kubernetes values moves into a first-run wizard in the admin UI wherever that is
@@ -352,8 +352,8 @@ by main before S1.
 | S8 | The gateway issues WG1–WG4, and Ume.Rag's side of each when released (the context's `oidc_authority` as the default; `UME_DOMAIN` for all five names) | issues; `src/Ume.Rag.Infrastructure/Gateway/`, `deploy/**` | `stack.env.example` has 1 CHANGE value | main, then b and a | the gateway |
 
 S0 needs nothing and is useful by itself. S1–S3 are the security-relevant part and get the main session's review of
-every line (handbook, *How we work*). Most of the code is stream b's, which is remote: the main session asks on an
-issue first, and may take steps on `main-session/` branches if stream b prefers (handbook).
+every line (handbook, *How we work*). Most of the code is in stream b's paths; **the main session builds all of it** on `main-session/` branches (user,
+2026-11-15), announced to stream b on an issue so it stays clear of the same files.
 
 ## 9. What changes in the binding documents (on agreement)
 

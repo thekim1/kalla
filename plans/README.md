@@ -38,7 +38,7 @@ nobody needs to read them end to end.
 - [`admin-ui-review.md`](proposals/admin-ui-review.md): a browser review of the admin UI; decisions UI1–UI4 (Home,
   lists, audit log, assistant page) and small fixes (2026-11-15).
 - [`setup-wizard.md`](proposals/setup-wizard.md): a first-run wizard for sign-in and the last deploy values;
-  decisions W1–W10 (answered), gateway changes WG1–WG4, steps S0–S8 (2026-11-15, proposed).
+  decisions W1–W10 (answered), gateway changes WG1–WG4, steps S0–S8 (2026-11-15, agreed).
 
 Registers, kept current:
 - [`postponed-decisions.md`](postponed-decisions.md): decisions put off on purpose, with stopgap, deadline and owner.
