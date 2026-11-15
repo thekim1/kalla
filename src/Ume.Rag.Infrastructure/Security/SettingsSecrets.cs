@@ -13,6 +13,9 @@ public sealed class StoredSecret
     /// <summary>rag-admin's client secret, <c>Settings.Identity.Oidc.ClientSecret</c>.</summary>
     public static readonly StoredSecret IdentityOidcClientSecret = new("Ume.Rag.Settings.Identity.Oidc.ClientSecret");
 
+    /// <summary>A setup test sign-in's candidate values, PKCE verifier and nonce (<c>config."SetupTests"."Protected"</c>, identity design §19).</summary>
+    public static readonly StoredSecret SetupTest = new("Ume.Rag.Setup.Test");
+
     private StoredSecret(string purpose) => Purpose = purpose;
 
     public string Purpose { get; }

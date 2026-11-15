@@ -43,6 +43,8 @@ internal static class IngestionConfigModel
             e.Property(x => x.IdentityRoleGroups).HasColumnType("jsonb");
             e.Property(x => x.IdentityOidc).HasColumnType("jsonb");
             e.Property(x => x.IdentityOidcEncryptedClientSecret).HasMaxLength(2000);
+            e.Property(x => x.SetupNonce).HasMaxLength(64);
+            e.Property(x => x.SetupReopenConsumed).HasMaxLength(200);
             e.Property(x => x.PiiOwnDomains).HasColumnType("text[]");
             e.Property(x => x.NerMinScore).HasPrecision(3, 2);
             e.Property(x => x.EvaluationModel).HasMaxLength(200);

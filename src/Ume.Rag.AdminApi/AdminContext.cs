@@ -106,10 +106,16 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
     /// at commit), all in one transaction; the 6001 event after commit.
     /// <paramref name="apply"/> may run more than once (transient failures retry), so it loads everything it changes.
     /// </summary>
-    public async Task<T> WriteAsync<T>(Func<CancellationToken, Task<AdminChange<T>>> apply, CancellationToken ct)
+    public Task<T> WriteAsync<T>(Func<CancellationToken, Task<AdminChange<T>>> apply, CancellationToken ct) => WriteAsAsync(AdminActor.Of(Http), apply, ct);
+
+    /// <summary>
+    /// <see cref="WriteAsync{T}"/> with an explicit actor instead of the signed-in user: setup completion, whose actor is the person of
+    /// the passed test sign-in (<see cref="AdminActor.ForSetup"/>, identity design §19), on an anonymous request.
+    /// </summary>
+    internal async Task<T> WriteAsAsync<T>(AdminActor actor, Func<CancellationToken, Task<AdminChange<T>>> apply, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(actor);
         ArgumentNullException.ThrowIfNull(apply);
-        var actor = AdminActor.Of(Http);
         AuditLogEntry? audit = null;
         T result;
         try

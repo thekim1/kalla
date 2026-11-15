@@ -54,6 +54,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         // Cost per step (data-model §1.2, §2.2, §2.3; cost-attribution §5): the worker writes its knowledge bases' usage, the
         // admin reads it; the admin also upserts the test panel's assistant usage (I U, no D), the api owns the assistant's.
         string[] collectionUsage = ["content.CollectionDailyUsage"];
+
+        // Setup mode (identity design §19): only the admin has the setup sessions and test sign-ins, which hold candidate values.
+        string[] setup = ["config.SetupSessions", "config.SetupTests"];
         string[] assistantUsage = ["chat.AssistantDailyUsage"];
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
@@ -64,9 +67,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe([.. all, "config.PublishedAssistantVersions"], ignoreOrder: true); // explain access (identity §4.9)
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog", .. assistantUsage], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites, .. assistantUsage], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, .. setup, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog", .. assistantUsage], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, .. setup, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites, .. assistantUsage], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. gatewayKeys, .. ingestionConfig, .. shares, .. servingConfig, .. setup, "config.AdminSessions"], ignoreOrder: true);
 
         // The worker also reads the model mirror (the evaluation's residency checks, #130).
         (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels", .. collectionUsage],

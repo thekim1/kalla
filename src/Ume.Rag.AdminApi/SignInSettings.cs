@@ -91,7 +91,14 @@ public sealed class SignInClientSecret(string source, string? value, DateTimeOff
 public sealed record EffectiveSignIn(
     SignInValue<string?> Authority, SignInValue<string> ClientId, SignInClientSecret ClientSecret, SignInValue<string> RoleClaim,
     SignInValue<string> DepartmentClaim, SignInValue<string> TeamClaim, SignInValue<string> GroupClaim, SignInValue<IReadOnlyList<string>> ExtraScopes,
-    SignInValue<string?> TenantId, SignInValue<bool> RefuseGuests, DateOnly? ClientSecretExpiresOn, uint Version, DateTimeOffset? SetupCompletedAt);
+    SignInValue<string?> TenantId, SignInValue<bool> RefuseGuests, DateOnly? ClientSecretExpiresOn, uint Version, DateTimeOffset? SetupCompletedAt)
+{
+    /// <summary>When the current setup opening started, read with the values; null while no opening has a nonce (<see cref="SetupMode.IsOpen(EffectiveSignIn, DateTimeOffset)"/>).</summary>
+    public DateTimeOffset? SetupOpenedAt { get; init; }
+
+    /// <summary>Whether the deployment declares the sign-in (<see cref="SignInSettings.DeclaresSignIn"/>): its authority and client secret.</summary>
+    public bool DeclaredByDeployment => Authority.Source == SignInValueSources.Deployment && ClientSecret.Source == SignInValueSources.Deployment;
+}
 
 /// <summary>
 /// rag-admin's sign-in values (identity design §19): each from the deployment (<c>Oidc:*</c> in the raw configuration, where an
@@ -109,26 +116,33 @@ public sealed class SignInSettings(RagDbContext db, IConfiguration configuration
     public async Task<EffectiveSignIn> ReadAsync(CancellationToken ct)
     {
         var row = await db.Settings.AsNoTracking()
-            .Select(s => new { s.IdentityOidc, s.IdentityOidcEncryptedClientSecret, s.IdentityOidcClientSecretSetAt, s.SetupCompletedAt, s.Version })
+            .Select(s => new
+            {
+                s.IdentityOidc, s.IdentityOidcEncryptedClientSecret, s.IdentityOidcClientSecretSetAt, s.SetupCompletedAt, s.Version,
+                SetupOpenedAt = s.SetupNonce == null ? null : s.SetupOpenedAt,
+            })
             .SingleOrDefaultAsync(ct);
         var wizard = OidcWizardValues.Parse(row?.IdentityOidc);
         return Resolve(configuration, wizard, () => secrets.Unprotect(StoredSecret.IdentityOidcClientSecret, row?.IdentityOidcEncryptedClientSecret),
-            row?.IdentityOidcClientSecretSetAt, row?.Version ?? 0, row?.SetupCompletedAt);
+            row?.IdentityOidcClientSecretSetAt, row?.Version ?? 0, row?.SetupCompletedAt) with { SetupOpenedAt = row?.SetupOpenedAt };
     }
 
     /// <summary>
     /// Saves the wizard's values through the settings write path (version bump, <c>pg_notify('rag_config')</c>, an audit entry that
-    /// holds whether a secret is set and when, never the secret). <paramref name="clientSecret"/>: null keeps the stored one, an
-    /// empty or blank value removes it. For setup mode (identity design §19); no admin-session route calls it.
+    /// holds whether a secret is set and when, never the secret) as <paramref name="actor"/>. <paramref name="clientSecret"/>: null
+    /// keeps the stored one, an empty or blank value removes it. <paramref name="alsoApply"/> changes the same row in the same
+    /// transaction (setup completion closes setup, identity design §19). Only setup mode calls it; no admin-session route does.
     /// </summary>
-    public async Task<EffectiveSignIn> SaveWizardValuesAsync(AdminContext admin, OidcWizardValues values, string? clientSecret, CancellationToken ct)
+    public async Task<EffectiveSignIn> SaveWizardValuesAsync(AdminContext admin, AdminActor actor, OidcWizardValues values, string? clientSecret, string? reason,
+        Func<PlatformSettings, CancellationToken, Task>? alsoApply, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
+        ArgumentNullException.ThrowIfNull(actor);
         ArgumentNullException.ThrowIfNull(values);
         var stored = values.Normalized().ToJson();
         // Protected once, outside the retried write: the ciphertext does not depend on the row.
         var encrypted = string.IsNullOrWhiteSpace(clientSecret) ? null : secrets.Protect(StoredSecret.IdentityOidcClientSecret, clientSecret);
-        await admin.WriteAsync(async attempt =>
+        await admin.WriteAsAsync(actor, async attempt =>
         {
             var row = await admin.Db.Settings.SingleOrDefaultAsync(attempt);
             if (row is null)
@@ -146,10 +160,54 @@ public sealed class SignInSettings(RagDbContext db, IConfiguration configuration
             }
 
             row.UpdatedAt = admin.Now;
-            row.UpdatedBy = admin.Actor;
-            return new AdminChange<PlatformSettings>(row, "update", AuditEntityTypes.Settings, AuditEntityId, before, SignInAudit.Of(row));
+            row.UpdatedBy = actor.Subject;
+            if (alsoApply is not null)
+            {
+                await alsoApply(row, attempt);
+            }
+
+            return new AdminChange<PlatformSettings>(row, "update", AuditEntityTypes.Settings, AuditEntityId, before, SignInAudit.Of(row)) { Reason = reason };
         }, ct);
         return await ReadAsync(ct);
+    }
+
+    /// <summary>
+    /// Whether the deployment declares rag-admin's sign-in: an authority and a client secret in the raw configuration (the client id
+    /// has a code default, so it alone cannot say). Such a deployment counts as setup completed (identity design §19, "Setup state").
+    /// </summary>
+    public static bool DeclaresSignIn(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var oidc = configuration.GetSection(OidcOptions.SectionName);
+        return Deployed(oidc, nameof(OidcOptions.Authority)) is not null && Deployed(oidc, nameof(OidcOptions.ClientSecret)) is not null;
+    }
+
+    /// <summary>Whether the deployment's raw configuration sets the authority.</summary>
+    public static bool DeploysAuthority(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        return Deployed(configuration.GetSection(OidcOptions.SectionName), nameof(OidcOptions.Authority)) is not null;
+    }
+
+    /// <summary><paramref name="values"/> without what the deployment sets: a deployment value wins, so setup stores none of those.</summary>
+    public static OidcWizardValues WithoutDeployed(IConfiguration configuration, OidcWizardValues values)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(values);
+        var oidc = configuration.GetSection(OidcOptions.SectionName);
+        string? Keep(string key, string? value) => Deployed(oidc, key) is null ? value : null;
+        var deployedScopes = oidc.GetSection(nameof(OidcOptions.ExtraScopes)).GetChildren().Any(c => !string.IsNullOrWhiteSpace(c.Value));
+        var v = values.Normalized();
+        return v with
+        {
+            Authority = Keep(nameof(OidcOptions.Authority), v.Authority), ClientId = Keep(nameof(OidcOptions.ClientId), v.ClientId),
+            RoleClaim = Keep(nameof(OidcOptions.RoleClaim), v.RoleClaim), DepartmentClaim = Keep(nameof(OidcOptions.DepartmentClaim), v.DepartmentClaim),
+            TeamClaim = Keep(nameof(OidcOptions.TeamClaim), v.TeamClaim), GroupClaim = Keep(nameof(OidcOptions.GroupClaim), v.GroupClaim),
+            ExtraScopes = deployedScopes ? null : v.ExtraScopes, TenantId = Keep(nameof(OidcOptions.TenantId), v.TenantId),
+            RefuseGuests = Deployed(oidc, nameof(OidcOptions.RefuseGuests)) is null ? v.RefuseGuests : null,
+            // The expiry date belongs to a secret typed in the wizard.
+            ClientSecretExpiresOn = Deployed(oidc, nameof(OidcOptions.ClientSecret)) is null ? v.ClientSecretExpiresOn : null,
+        };
     }
 
     /// <summary>

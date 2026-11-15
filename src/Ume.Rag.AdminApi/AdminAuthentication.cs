@@ -279,7 +279,7 @@ public static partial class AdminAuthentication
             return Results.Challenge(new AuthenticationProperties { RedirectUri = destination }, [OpenIdConnectDefaults.AuthenticationScheme]);
         });
         app.MapGet(UserPath, async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin, GatewayFeatures gateway,
-            AdminSignIn signIn) =>
+            AdminSignIn signIn, TimeProvider time) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append(AdminCookies.XsrfToken, tokens.RequestToken!, new CookieOptions
@@ -306,6 +306,8 @@ public static partial class AdminAuthentication
                 sessionLimitAt = AdminSessionLimit.LimitOf(auth.Properties, TimeSpan.FromHours(admin.Value.MaxSessionHours)),
                 // Read before this request (AdminSignIn.Refreshes): false while no usable identity provider is set (identity design §19).
                 signIn = new { configured = signIn.Current.IsConfigured },
+                // From the same read: whether setup mode is open, so the admin UI goes to /setup (identity design §19).
+                setup = new { open = SetupMode.IsOpen(signIn.Current.Values, time.GetUtcNow()) },
             });
         });
         app.MapPost(LogoutPath, (HttpContext http, ILoggerFactory loggers) =>

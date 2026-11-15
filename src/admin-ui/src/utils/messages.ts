@@ -95,6 +95,11 @@ export const ERROR_MESSAGES: Record<string, string> = {
   test_assistant_unavailable: '{reason}',
   test_budget_exceeded: '{reason}',
   sign_in_not_configured: 'Sign-in is not set up yet. Contact the platform team.',
+  setup_code_invalid: 'The setup code is not right. Check it in the output of the rag-admin container and try again.',
+  setup_attempts_exhausted: 'Too many setup code attempts. Wait a minute and try again.',
+  setup_session_required: 'Enter the setup code first.',
+  setup_test_refused: 'The test sign-in could not start ({reason}).',
+  setup_test_required: 'Saving needs a passed test sign-in by a platform admin with exactly these values ({reason}).',
   search_unavailable: 'The search could not run right now. Try again in a moment.',
 }
 

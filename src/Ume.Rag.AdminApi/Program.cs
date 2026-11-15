@@ -42,6 +42,17 @@ builder.AddRagDataProtection();
 // Sign-in values from the deployment, the setup wizard's settings or the defaults (identity design §19); the wizard's secret encrypted.
 builder.Services.AddSingleton<SettingsSecretProtector>();
 builder.Services.AddScoped<SignInSettings>();
+// Setup mode (identity design §19): the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.
+builder.Services.AddSingleton<SetupSecret>();
+builder.Services.AddSingleton<SetupCodeThrottle>();
+builder.Services.AddSingleton<SetupEventSampler>();
+builder.Services.AddSingleton<SetupCleanup>();
+builder.Services.AddSingleton(new SetupConsole());
+builder.Services.AddSingleton(_ => SetupProviderClient.Create());
+builder.Services.AddScoped<SetupMode>();
+builder.Services.AddScoped<SetupSessions>();
+builder.Services.AddScoped<SetupTestSignIn>();
+builder.Services.AddHostedService<SetupStartup>();
 // Explain access (identity §4.9): the policy snapshot loaded at the current version for each question (no monitor: the
 // admin applies no outbox), and the api's policy with the same Knowledge:OpenToClientKinds.
 builder.Services.TryAddSingleton<ConfigVersionState>();
@@ -129,14 +140,19 @@ app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
 app.UseProblemDetailsForEmptyErrors("The action could not be completed");
 // Outside authentication and authorization, so it sees their 403s and the signed-in user afterwards.
 app.UseMiddleware<AdminActivityMiddleware>();
+// Before authentication: a setup test's callback (state rag-setup-test.*) is taken here; every other request passes on (identity design §19).
+app.UseMiddleware<SetupCallbackMiddleware>();
 // Before authentication: the sign-in start, callback and sign-out read the current sign-in values (identity design §19, "Reload").
 app.UseMiddleware<AdminSignInRefreshMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+// Before antiforgery: /bff/setup answers 404 to everything while setup is closed.
+app.UseMiddleware<SetupGateMiddleware>();
 app.UseMiddleware<AdminAntiforgeryMiddleware>();
 app.MapDefaultEndpoints();
 app.MapAdminAuthentication();
+app.MapSetupMode();
 
 // /api needs a rag-* role (Read); each endpoint adds its own policy from the permission matrix (admin design §3.4).
 var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireRateLimiting(AdminRateLimits.PerUser)

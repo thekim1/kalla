@@ -64,6 +64,11 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
 | 6005 | `rag.admin.session.extended` | Information | admin | *Stanna inloggad* | `Actor`, `SessionId`, `ExpiresAt`, `SourceAddress` | P0 |
 | 6006 | `rag.admin.access.denied` | Warning | admin | A 403 for a signed-in user; at most once a minute per user, with the count since the last | `Actor`, `Method`, `Path`, `Count`, `SourceAddress`, `Roles` | P0 |
 | 6007 | `rag.admin.data.read` | Information | admin | A read of a sensitive list: the audit log (P0); keys, feedback, the access log and conversation views as they arrive | `Actor`, `Path`, `Query`, `SourceAddress` | P0 |
+| 6008 | `rag.admin.setup.opened` | Warning | admin | Setup mode opened at rag-admin's start (identity design §19): `Kind` `first_run` (never completed) or `reopen` (a new `Setup:Reopen` value). Never the setup code | `Kind`, `EndsAt` | P1 |
+| 6009 | `rag.admin.setup.code_refused` | Warning | admin | Wrong setup codes, sampled: at most one event per 10 seconds per instance, with the number since the last event (the code checks are limited to 20 a minute per instance; a wrong code never voids the code) | `SourceAddress` (of the latest), `Count` | P1 |
+| 6010 | `rag.admin.setup.session` | Warning | admin | A setup session started for a correct setup code | `SessionId` (`setup-` and a random id, never the cookie), `SourceAddress`, `ExpiresAt` | P1 |
+| 6011 | `rag.admin.setup.test` | Warning | admin | A setup test sign-in finished, or callbacks with an unknown, replayed or expired test (`Reason` `unknown_test`, sampled like 6009) | `Result` (`passed`, `failed`), `Reason`, `Subject` (the tested person's `oid`, else `sub`), `PlatformAdmin`, `SessionId`, `SourceAddress`, `Count` (1, or the sampled `unknown_test` callbacks since the last event) | P1 |
+| 6012 | `rag.admin.setup.completed` | Warning | admin | Setup completed: the tested values are saved and setup is closed; the audit entry names the same person | `Actor` (the tested person), `SessionId`, `SourceAddress` | P1 |
 
 ### `Reason` values
 
@@ -72,6 +77,10 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
   `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`, `token_expired`, `wrong_tenant`,
   `guest_refused`, `client_unknown`, `permission_missing`, `grant_invalid`, `grant_expired`. In P0 the admin emits
   `wrong_tenant` and `guest_refused` (identity design §1.7).
+- **6011:** `passed`, or the step that failed: `browser_mismatch`, `secret_required`,
+  `deployment_secret_without_authority`, `provider_error`, `token_refused`, `token_endpoint_unreachable`, `tls`,
+  `insecure_endpoint`, `redirected`, `id_token_missing`, `id_token_invalid`, `nonce_mismatch`, `keys_unavailable`,
+  `wrong_tenant`, `guest_refused`, `session_expired`, `unknown_test`.
 - **5002:** the access-policy reasons (identity design §4.3), `conversation_not_owned`, and from P2 the tool reasons
   (`tool_not_allowed`, `tool_grant_missing`, `tool_clearance`, `tool_unapproved`, `tool_drifted`, `tool_write_disabled`,
   `client_tool_policy`, `skill_audience`).
@@ -91,6 +100,8 @@ Gateway counterparts: our 5001 with `wrong_tenant`/`guest_refused` is the gatewa
 - any **5001** `user_jwt_invalid` (Open WebUI secret mismatch or forgery);
 - **5001** `wrong_tenant` or `guest_refused` repeatedly;
 - several **6006** from one user (probing for rights);
+- any **6008** that no deployer asked for, and bursts of **6009** (someone guessing the setup code);
+- any **6012** (the sign-in provider or client changed).
 - **6002** from an address outside the municipal networks, or one `Actor` from two addresses at once;
 - **6005** many times for one `SessionId` (a session kept alive unattended);
 - **6007** of `/api/audit` outside office hours;

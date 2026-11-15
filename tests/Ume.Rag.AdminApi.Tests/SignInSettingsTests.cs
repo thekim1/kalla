@@ -262,7 +262,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         try
         {
             return await scope.ServiceProvider.GetRequiredService<SignInSettings>()
-                .SaveWizardValuesAsync(scope.ServiceProvider.GetRequiredService<AdminContext>(), values, clientSecret, Ct);
+                .SaveWizardValuesAsync(scope.ServiceProvider.GetRequiredService<AdminContext>(), AdminActor.Of(accessor.HttpContext), values, clientSecret, null, null, Ct);
         }
         finally
         {

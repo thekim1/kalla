@@ -31,6 +31,8 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ApiKey> Keys => Set<ApiKey>();
     public DbSet<KeyLastUse> KeyLastUse => Set<KeyLastUse>();
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
+    public DbSet<SetupSession> SetupSessions => Set<SetupSession>();
+    public DbSet<SetupTest> SetupTests => Set<SetupTest>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<GatewayKey> GatewayKeys => Set<GatewayKey>();
@@ -228,6 +230,28 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             e.HasKey(x => x.SessionId);
             e.Property(x => x.SessionId).HasMaxLength(64);
             e.HasIndex(x => x.ExpiresAt);
+        });
+
+        // Setup mode (identity design §19): short-lived rows without the outbox trigger, so deleting them bumps no config version.
+        modelBuilder.Entity<SetupSession>(e =>
+        {
+            e.ToTable("SetupSessions", ConfigSchema);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.OpeningNonce).HasMaxLength(64);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<SetupTest>(e =>
+        {
+            e.ToTable("SetupTests", ConfigSchema, t => t.HasCheckConstraint("CK_SetupTests_Target", $"\"Target\" IN ({SqlList(SetupTargets.All)})"));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Target).HasMaxLength(30);
+            e.Property(x => x.Protected).HasMaxLength(16000);
+            e.Property(x => x.Reason).HasMaxLength(50);
+            e.Property(x => x.Result).HasColumnType("jsonb");
+            e.HasIndex(x => x.MarkerHash).IsUnique();
+            e.HasIndex(x => x.SessionId);
+            e.HasOne<SetupSession>().WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<KeyLastUse>(e =>
