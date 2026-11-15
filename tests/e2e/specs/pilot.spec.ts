@@ -28,7 +28,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await login(page, 'rag-department-admin')
     await expect(page.getByRole('heading', { name: /^Welcome, /, level: 1 })).toBeVisible()
 
-    // 2 Create the knowledge base: name, department, information class (none preselected).
+    // 2 Create the knowledge base: name, department, information class (none preselected), what goes in.
     await act.press(page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Knowledge bases' }))
     await expect(page.locator('#page-title')).toHaveText('Knowledge bases')
     await act.press(page.getByRole('main').getByRole('button', { name: 'Create knowledge base' }))
@@ -37,6 +37,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.select(create.getByRole('combobox', { name: 'Department' }), { label: 'Kommunledningskontoret' })
     await expect(create.getByRole('radio', { checked: true })).toHaveCount(0)
     await act.check(create.getByRole('radio', { name: /^Public/ }))
+    // What goes in (required since the one-step create, #532): a website, whose source is added on the next page.
+    await act.check(create.getByRole('radio', { name: /^A website or a list of addresses/ }))
     await act.press(create.getByRole('button', { name: 'Create knowledge base' }))
     await expect(create).toBeHidden()
     await expect(page.locator('#page-title')).toHaveText(collection)
