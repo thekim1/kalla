@@ -654,18 +654,21 @@ allows invented municipal facts or cites general knowledge. With `supplement` th
 the not-found text; with `fallback` and `open`, coverage `low` gets an answer without sources behind a fixed platform
 caveat, stored as `answered-general` and counted apart from not-found. "Search unavailable" is the fixed text at every
 level. On a `public` assistant a level other than `off` is a warning and needs
-explicit confirmation on publish, restore and a level change to `public` (V36). Detail: `chat-api/design.md` §7.3,
-§10.4; `admin/design.md` §4.6.
+explicit confirmation on publish, restore and a level change to `public` (V36). A client other than Open WebUI may
+ask for a level per chat request (`ume.general_knowledge`); the turn runs at the stricter of the request's level and
+the assistant's, so a request only tightens and V36 keeps holding (#726). The admin's test panel takes the same
+optional level. Detail: `chat-api/design.md` §3.8, §7.3, §10.4; `admin/design.md` §4.6, §4.9.
 
-*From:* log rows 103, 111; decided by user, 2026-11-07.
+*From:* log rows 103, 111; decided by user, 2026-11-07; the per-request level by user, 2026-11-15 (#726).
 *Also:* "General knowledge on a public assistant"
 
 ### Related documents and the `ume` chat extension
 
 A client other than Open WebUI may add `ume` to a chat request to get the turn's `outcome` and `degraded`, plus on
 request `related_documents` (1–10, from the same retrieval, empty on coverage `low`) and `follow_ups` (1–5, one
-condense-model call within 2 s, never stored, lines with markers, links or personal data dropped). Unknown members are
-refused. Detail: `chat-api/design.md` §3.8, §9.7, §9.8.
+condense-model call within 2 s, never stored, lines with markers, links or personal data dropped), and
+`general_knowledge`, a stricter general-knowledge level for the turn (Decisions "General knowledge per assistant").
+Unknown members are refused. Detail: `chat-api/design.md` §3.8, §9.7, §9.8.
 
 *From:* log rows 106, 107; decided by user, 2026-11-06.
 *Also:* "Follow-up suggestions"

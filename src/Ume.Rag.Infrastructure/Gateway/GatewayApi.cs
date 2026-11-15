@@ -108,7 +108,7 @@ public sealed class GatewayApi(IHttpClientFactory clients)
         }.WithMaxResidency(ceiling);
         var started = Stopwatch.GetTimestamp();
         using var response = await SendAsync(request, cancellationToken);
-        var body = await response.Content.ReadFromJsonAsync<EmbeddingResponse>(Json, cancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<GatewayEmbeddingResponse>(Json, cancellationToken);
         var vectors = body?.Data?.OrderBy(d => d.Index).Select(d => d.Embedding ?? []).ToList();
         if (vectors is null || vectors.Count != inputs.Count)
         {
@@ -182,10 +182,6 @@ public sealed class GatewayApi(IHttpClientFactory clients)
         string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
 
-    private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
-
-    private sealed record EmbeddingItem(int Index, float[]? Embedding);
-
     private sealed record ErrorEnvelope(ErrorBody? Error);
 
     private sealed record ErrorBody(string? Code);
@@ -193,6 +189,15 @@ public sealed class GatewayApi(IHttpClientFactory clients)
 
 /// <summary>Embeddings in input order, the residency that answered, and the call's duration.</summary>
 public sealed record GatewayEmbedding(IReadOnlyList<float[]> Vectors, Residency Residency, TimeSpan Duration);
+
+/// <summary>
+/// The body of a <c>POST /v1/embeddings</c> answer, read in one pass by every caller: the vectors and the raw <c>usage</c>
+/// object, for <see cref="GatewayUsageReader.UsageTokens"/>.
+/// </summary>
+public sealed record GatewayEmbeddingResponse(IReadOnlyList<GatewayEmbeddingItem>? Data, JsonElement? Usage);
+
+/// <summary>One vector of a <see cref="GatewayEmbeddingResponse"/> and the index of its input.</summary>
+public sealed record GatewayEmbeddingItem(int Index, float[]? Embedding);
 
 /// <summary>The gateway was unreachable, timed out or answered 5xx/429: retry later.</summary>
 public sealed class GatewayUnavailableException(string message, Exception? inner) : Exception(message, inner)

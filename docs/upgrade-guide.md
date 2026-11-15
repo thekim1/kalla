@@ -73,6 +73,21 @@ exception, with its own steps.
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
   rag-api and rag-worker name their columns and are not affected.
+- **The Portainer stack pins the gateway's `v0.10.2`, and the gateway creates Ume.Rag's credential keys (M-17 C7).**
+  The gateway's own upgrade notes for 0.10.2 apply (rolling update, no migration; a new volume
+  `<stack>_integration-secrets`; a read grant on `Branding.OrganisationName`). The gateway's `migrations` now applies
+  `UME_INTEGRATION_MANIFEST` (in `stack.env.example`): it creates the integration `Ume.Rag`, its owner team and the keys
+  `rag-api`, `rag-admin` and `rag-worker` where they don't exist, by name, and never changes one that does;
+  `rag-bootstrap` copies their secrets to the services. `UME_RAG_*_GATEWAY_KEY`, set, still wins. `rag-bootstrap` now
+  waits for the gateway's `migrations`, and rag-admin joins the gateway's `edge` network to reach `adminapi`.
+  **Apply** to a stack whose keys were made by hand: paste the new stack file and keep your three `UME_RAG_*_GATEWAY_KEY`
+  variables; add `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1` (the cost read-back's address, handed
+  to rag-admin in the gateway's context). Add `UME_INTEGRATION_MANIFEST` only if your integration is named `Ume.Rag` and
+  its keys `rag-api`, `rag-admin` and `rag-worker` (then nothing is created, and the existing keys' secrets are written
+  to the volume, audited as a reveal), or once you want the gateway to issue new keys under those names; set its
+  `teamCode` to the integration's owner team. A new stack: keep both from `stack.env.example`, change `departmentCode`.
+  **Check:** the gateway's `migrations` log says *'Ume.Rag' applied*; `rag-bootstrap`'s checklist names no gateway key;
+  *Models* in RAG's admin shows `act-as-key`.
 
 ## 0.5.1
 

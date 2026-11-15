@@ -34,16 +34,19 @@ afterEach(() => {
 async function open(put: () => Response = () => json({ value: {}, version: '4' })) {
   setActivePinia(createPinia())
   document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
+  const server = { version: '3' }
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/api/settings/chat/prompts') return Promise.resolve(json(sections))
     if (url === '/api/settings/chat' && init?.method === 'PUT') return Promise.resolve(put())
-    if (url === '/api/settings/chat') return Promise.resolve(json({ value: { condenseModel: 'ume/chat-eu', prompts: { caveats: { general: { sv: '*Sparad text.*' } } } }, version: '3' }))
+    if (url === '/api/settings/chat') {
+      return Promise.resolve(json({ value: { condenseModel: 'ume/chat-eu', prompts: { caveats: { general: { sv: '*Sparad text.*' } } } }, version: server.version }))
+    }
     return Promise.resolve(json([]))
   })
   vi.stubGlobal('fetch', fetch)
   const wrapper = mount(PromptTextsPanel, { attachTo: document.body })
   await flushPromises()
-  return { wrapper, fetch }
+  return { wrapper, fetch, server }
 }
 
 const area = (wrapper: ReturnType<typeof mount>, member: string) => wrapper.get(`#prompt-${member.replaceAll('.', '-')}`)
@@ -81,6 +84,20 @@ describe('Settings: Prompt texts (admin design §4.5, chat design §7.3)', () =>
       condenseModel: 'ume/chat-eu',
       prompts: { rules: { off: 'Svara bara utifrån källorna.' }, caveats: { general: { sv: '*Sparad text.*' } } },
     })
+    wrapper.unmount()
+  })
+
+  it('saves with the version read at load, so another admin\'s change in between answers 409 instead of being overwritten', async () => {
+    const conflict = { title: 'Conflict', status: 409, code: 'concurrent_change' }
+    const { wrapper, fetch, server } = await open(() => json(conflict, 409))
+    server.version = '5' // another admin saved after this panel loaded
+    await area(wrapper, 'rules.off').setValue('Svara bara utifrån källorna.')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(putBody(fetch).version).toBe('3')
+    expect(wrapper.get('[data-test=prompt-texts]').text()).toContain(ERROR_MESSAGES.concurrent_change)
+    expect((area(wrapper, 'rules.off').element as HTMLTextAreaElement).value).toBe('Svara bara utifrån källorna.') // the edit stays
     wrapper.unmount()
   })
 

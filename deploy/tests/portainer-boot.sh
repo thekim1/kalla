@@ -171,15 +171,35 @@ ok "both bootstraps and both migrations completed; every other container runs an
 echo "== rag-bootstrap's checklist"
 log="$(dc logs --no-color --no-log-prefix rag-bootstrap)"
 grep -q '^rag-bootstrap: certificates and secrets ready$' <<< "$log" || fail "rag-bootstrap did not finish its secrets"
-checklist="$(sed -n '/^rag-bootstrap: still to do/,$p' <<< "$log")"
-[ -n "$checklist" ] || fail "rag-bootstrap printed no checklist, though this test sets no gateway credential key"
-awk '{print "  " $0}' <<< "$checklist"
-items="$(grep -c '^  - ' <<< "$checklist" || true)"
-for var in UME_RAG_API_GATEWAY_KEY UME_RAG_ADMIN_GATEWAY_KEY UME_RAG_WORKER_GATEWAY_KEY; do
-  grep -q "^  - $var" <<< "$checklist" || fail "the checklist does not name $var"
+grep -q '^rag-bootstrap: every setting it checks is in place$' <<< "$log" \
+  || { sed -n '/^rag-bootstrap: still to do/,$p' <<< "$log" | sed 's/^/  /'; fail "rag-bootstrap's checklist is not empty"; }
+ok "rag-bootstrap's checklist is empty: the gateway credential keys came from the manifest (M-17 C7), nothing pasted"
+
+echo "== the gateway credential keys from the manifest (M-17 C7)"
+# The gateway's migrations created the integration Ume.Rag from UME_INTEGRATION_MANIFEST and wrote each key to the
+# integration-secrets volume; rag-bootstrap copied them to each service. The gateway accepts each one on its context.
+gw_helper="$(dc config --images | grep -m1 '/alpine/openssl@')"
+docker run --rm --network none -v "${project}_ume-certs:/c:ro" --entrypoint cat "$gw_helper" /c/ca.pem > "$work/gateway-ca.pem" \
+  || fail "could not read the gateway's CA from the volume ${project}_ume-certs"
+for svc in api admin worker; do
+  key="$(docker run --rm --network none -v "${project}_rag-secrets:/s:ro" --entrypoint cat "$gw_helper" "/s/$svc/Gateway__Key" 2>/dev/null)" \
+    || fail "rag-secrets/$svc/Gateway__Key is missing"
+  manifest_key="$(docker run --rm --network none -v "${project}_integration-secrets:/i:ro" --entrypoint cat "$gw_helper" "/i/Ume.Rag/rag-$svc" 2>/dev/null)" \
+    || fail "integration-secrets/Ume.Rag/rag-$svc is missing: the gateway did not provision the manifest"
+  [ "$key" = "$manifest_key" ] || fail "rag-$svc's Gateway__Key is not the manifest's key"
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$work/gateway-ca.pem" \
+    --resolve "gateway:$gateway_port:127.0.0.1" -H "Authorization: Bearer $key" "https://gateway:$gateway_port/v1/ume/context")"
+  [ "$status" = 200 ] || fail "the gateway's /v1/ume/context answered $status to rag-$svc's key, expected 200"
 done
-[ "$items" = 3 ] || fail "the checklist has $items items, expected the three gateway credential keys"
-ok "the checklist names the three gateway credential keys, and nothing else (Open WebUI's client is set up by the stack)"
+ok "rag-api, rag-admin and rag-worker each have the manifest's key, and the gateway accepts it (/v1/ume/context = 200)"
+context="$(docker run --rm --network none -v "${project}_rag-secrets:/s:ro" --entrypoint cat "$gw_helper" /s/admin/Gateway__Key)"
+api_url="$(curl -sS --max-time 15 --cacert "$work/gateway-ca.pem" --resolve "gateway:$gateway_port:127.0.0.1" \
+  -H "Authorization: Bearer $context" "https://gateway:$gateway_port/v1/ume/context" | jq -r '.gateway.integration_api_url')"
+[ "$api_url" = https://adminapi:8443/integration/v1 ] || fail "the context's integration_api_url is '$api_url'"
+ok "the context names the Integration API at https://adminapi:8443/integration/v1"
+probe_admin() { dc exec -T -e "UME_HEALTHCHECK_URL=$1" rag-admin dotnet Ume.Rag.AdminApi.dll --health-check; }
+probe_admin https://adminapi:8443/health/live || fail "rag-admin could not reach the gateway's adminapi (the edge network, the gateway's CA)"
+ok "rag-admin reaches https://adminapi:8443 (the gateway's edge network)"
 
 echo "== rag-api"
 helper="$(dc config --images | grep -m1 '/alpine/openssl@')"

@@ -236,6 +236,7 @@ namespace, so it cannot collide with a later OpenAI member; OpenAI's own `metada
 | `ume` | optional; absent or `null`: no extension and no `ume` in the answer. Not an object → 400 `invalid_request`, `param` `ume`. Any object, `{}` included, gives the answer's `ume` with `outcome` and `degraded` |
 | `ume.related_documents` | integer 0–10; how many retrieved documents to list (§9.7); 0 = none; otherwise 400 `invalid_request`, `param` `ume.related_documents` |
 | `ume.follow_ups` | integer 0–5; the most follow-up questions to suggest (§9.8); 0 = none; otherwise 400 `invalid_request`, `param` `ume.follow_ups` |
+| `ume.general_knowledge` | `off`, `supplement`, `fallback` or `open` (#726): the turn runs at the **stricter** of this level and the assistant's own (`QuerySteps.answer.generalKnowledge`, strictest first in that order), so a request never loosens what the assistant's admins set (§7.3, admin V36). Absent or `null`: the assistant's level. Any other value → 400 `invalid_request`, `param` `ume.general_knowledge`. The **effective** level is what §6.2's routing, §7.3's frame and §10.4 use, and what logs and metrics record |
 | any other member of `ume` | 400 `unsupported_parameter`, `param` `ume.<name>`: the namespace is ours, so a typo fails instead of silently doing nothing |
 | client kind `open-webui` | `ume` is ignored, not validated: Open WebUI renders neither chunk, gets its sources as `source` events (§9.3), and its own follow-up generation stays off (§4.3) |
 
@@ -618,7 +619,8 @@ Without sources the citation line and the `<sources>` data line are dropped too 
 "Hitta aldrig på källnummer. Skriv inga länkar, …" stays, so those rules hold at every level. General-knowledge text
 never carries markers (§9.2 is unchanged). The level never widens access: the same collections, levels and ceiling apply,
 and a `public` assistant runs the level its published version names: a level other than `off` on a `public`
-assistant was confirmed at publish (admin V36, #445), so the runtime does not override it.
+assistant was confirmed at publish (admin V36, #445), so the runtime does not override it. A request's
+`ume.general_knowledge` (§3.8) can only make the level stricter: the frame is the effective level's.
 
 **No-sources frame** (conversational messages, §6.2, every `generalKnowledge` level): the rule lines, the citation
 line, the no-invented-numbers line and the `<sources>` data line are replaced by `conversational`, default "Inga källor har hämtats för detta

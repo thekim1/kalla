@@ -1,6 +1,6 @@
 # Deploying and upgrading with Portainer (0.5.x)
 
-How to run Ume.Rag `0.5.0` with the LLM gateway `v0.10.1` as one Portainer stack: a first deploy on a new VM, and the
+How to run Ume.Rag with the LLM gateway `v0.10.2` as one Portainer stack: a first deploy on a new VM, and the
 upgrade of an existing stack from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -14,7 +14,7 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 ## Which file
 
 Use the **`compose.portainer.yaml` asset of the `v0.5.1` release** (or later), or the same file in the repository at
-`deploy/portainer/compose.portainer.yaml`. It pins the gateway's images (`v0.10.1`) and Ume.Rag's (`0.5.1`) by digest,
+`deploy/portainer/compose.portainer.yaml`. It pins the gateway's images (`v0.10.2`) and Ume.Rag's (`0.5.1`) by digest,
 so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
 no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
 
@@ -80,40 +80,34 @@ to the services and verifies them against their internal CAs, so nothing else ne
    UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=...
    ```
 
-   Leave the gateway keys of Ume.Rag empty for now. The other optional variables (ports, binds, groups, the gateway's
+   Keep `UME_INTEGRATION_MANIFEST` and `UME_INTEGRATION_API_URL` as the file has them: the gateway creates the
+   integration `Ume.Rag` and its three credential keys from the manifest, and hands rag-admin the Integration API's
+   address (M-17 C7, C11). If the team `ume-rag` doesn't exist in the gateway yet, it is created in the department whose
+   cost centre code is the manifest's `departmentCode`: change that to yours (and `departmentName`), or create the team
+   first. The other optional variables (ports, binds, groups, the gateway's
    settings) are in the file's header. **The first platform admin** is whoever's sign-in token carries the role
    `rag-platform-admin` in its `roles` claim (Keycloak: that realm role, directly or through a group,
    [`deploy/keycloak/README.md`](../deploy/keycloak/README.md)). Only an identity provider whose tokens carry groups
    instead needs `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `rag-bootstrap` create the internal CAs,
-   certificates and secrets in the volumes; both databases are created and migrated; the services start. Ume.Rag's
-   services log that they have no gateway credential key: expected until step 5. **The end of `rag-bootstrap`'s log
-   lists what is still missing** (keys, example values left in, the ClamAV profile, Open WebUI's settings); it is
-   printed again on every deploy, until it says every setting it checks is in place.
+   certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
+   creates the integration `Ume.Rag` and its keys `rag-api`, `rag-admin` and `rag-worker` from the manifest and writes
+   their secrets to the volume `<stack>_integration-secrets`, from which `rag-bootstrap` gives each service its key; the
+   services start. **The end of `rag-bootstrap`'s log lists what is still missing** (example values left in, Open
+   WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place.
 4. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
-   has every field):
-   - *Access → Integrations*: create the integration `Ume.Rag` with its owner team.
-   - Three **credential keys** in it, one per service: `Ume.Rag api`, `Ume.Rag admin` (scopes `organisation.read` and
-     `usage.read`) and `Ume.Rag worker`, each with the residencies `OnPrem` and `Eu` only (register M2: every model call
-     EU-hosted). These residencies are Ume.Rag's ceiling: no call carries a higher one. `RequireMaxResidency` on, PII policy
-     `Off` or `Allow`. **Address list:** the services reach the gateway over the stack's internal network `llm`, whose
-     subnet Docker chose (Portainer: *Networks → <stack>_llm*, or `docker network inspect <stack>_llm`); allow that
-     subnet, or leave the list empty.
-   - The **assigned keys** the assistants and knowledge bases will run on, one or more per department, in the
-     integration with role *Assigned*.
-5. **Back in the stack**, set the keys and update it:
-
-   ```text
-   UME_RAG_API_GATEWAY_KEY=...
-   UME_RAG_ADMIN_GATEWAY_KEY=...
-   UME_RAG_WORKER_GATEWAY_KEY=...
-   UME_RAG_GATEWAY_INTEGRATION_API_URL=https://llm-admin.example.se:9443   # optional: the gateway's cost and budgets
-   ```
-
-   *Update the stack*. From `0.5.1` the services pick up the new keys within seconds (the secret files reload); with
-   `0.5.0`'s images restart `rag-api`, `rag-admin` and `rag-worker` (*Containers*, select, *Restart*). The read-back URL is the gateway admin's address as `rag-admin` reaches it: `adminapi` isn't on
-   the `llm` network, so use its published address (`https://<UME_ADMIN_HOST>:<UME_ADMIN_PORT, 9443>`); without it
-   there is no read-back.
+   has every field): under *Access → Integrations → Ume.Rag*, check the three credential keys (residencies `OnPrem`
+   and `Eu`: Ume.Rag's ceiling, register M2), then create the **assigned keys** the assistants and knowledge bases
+   will run on, one or more per department, in the integration with role *Assigned*. The manifest never changes a key
+   that exists: change one here. **Rotate** a credential key here (with a grace period), then delete its file
+   `Ume.Rag/rag-<service>` in `<stack>_integration-secrets` and update the stack; the gateway writes the new secret and
+   the service picks it up within seconds.
+5. **Keys issued by hand instead** (no manifest, or the gateway runs elsewhere): create the integration `Ume.Rag` and
+   the three credential keys as production-setup.md says, set `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`
+   and `UME_RAG_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and update the stack. The services
+   pick them up within seconds. **Address list** of a credential key: the services reach the gateway over the stack's
+   internal network `llm`, whose subnet Docker chose (`docker network inspect <stack>_llm`); allow that subnet, or
+   leave the list empty.
 6. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create

@@ -6,7 +6,8 @@
 # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
 # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
 # re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
-# credential keys, the OIDC client secret) are written again on every start, and removed when the variable is empty.
+# credential keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written again on every
+# start, and removed when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
 # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -125,12 +126,18 @@ fi
 put() {
   if [ -n "$3" ]; then printf '%s' "$3" > "$S/$1/$2"; else rm -f "$S/$1/$2"; fi
 }
-# Each service's credential key of the gateway integration Ume.Rag (identity design §4.7):
-# UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY. The per-level keys they
-# replace are revoked at the gateway and read by no service, so none is left in the volume.
+# Each service's credential key of the gateway integration Ume.Rag (identity design §4.7). From the gateway's
+# manifest (M-17 C7): the gateway's migrations provision the integration from UME_INTEGRATION_MANIFEST and write each
+# new key's secret to the integration-secrets volume as Ume.Rag/rag-<service>; that volume is mounted read-only at
+# /integration-secrets. UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY, when set,
+# win over the files (keys issued by hand, or a gateway elsewhere). The per-level keys they replace are revoked at the
+# gateway and read by no service, so none is left in the volume.
+I=/integration-secrets/Ume.Rag
 for svc in api admin worker; do
   up="$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
-  put "$svc" Gateway__Key "$(printenv "UME_RAG_${up}_GATEWAY_KEY" || true)"
+  key="$(printenv "UME_RAG_${up}_GATEWAY_KEY" || true)"
+  if [ -z "$key" ] && [ -s "$I/rag-$svc" ]; then key="$(cat "$I/rag-$svc")"; fi
+  put "$svc" Gateway__Key "$key"
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
@@ -211,7 +218,7 @@ note() { todo="$todo
 example() { case "$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
 for svc in api admin worker; do
   up="$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
-  [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: issue rag-$svc's credential key in the gateway's admin (integration Ume.Rag) and update the stack; no restart needed"
+  [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: no key for rag-$svc. Set UME_INTEGRATION_MANIFEST (stack.env.example) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
 done
 example "$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
 # Optional: unset, rag-api's public URL is https://<UME_RAG_API_HOST>.

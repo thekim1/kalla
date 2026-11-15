@@ -30,6 +30,11 @@
 #   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, UME_DATA_PORT 10443, UME_DATA_HOST,
 #                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md)
 #   UME_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
+#   UME_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
+#   UME_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
+#                             https://adminapi:8443/integration/v1 when they share a network with adminapi)
+#   UME_INTEGRATION_MANIFEST  an integration manifest (JSON) to provision on every deploy; each new credential key's
+#                             secret is written to the <stack>_integration-secrets volume (docs/integrations.md)
 #
 # The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
 # (<stack>_ume-config holds static configuration and is rewritten on every start).
@@ -50,11 +55,18 @@
 #
 # Required variables (besides the gateway's above)
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
+#   UME_INTEGRATION_MANIFEST  (the gateway's) the integration Ume.Rag with its three credential keys, as in
+#                             stack.env.example: the gateway's migrations create what is missing (never change what
+#                             exists) and write each new key to the volume <stack>_integration-secrets, from which
+#                             rag-bootstrap gives each service its key (M-17 C7). Without it, or for a key issued by hand:
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
-#                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
-#                             one the stack starts but that service's model calls are refused. To add or rotate one,
-#                             change it and update the stack: the services pick it up within seconds, no restart.
+#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
+#                             manifest's. Without a key the stack starts but that service's model calls are refused. To
+#                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
+#                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
+#   UME_INTEGRATION_API_URL   (the gateway's) https://adminapi:8443/integration/v1: the Integration API's address the
+#                             gateway hands rag-admin in its context, for the cost and budget read-back (rag-admin
+#                             joins the gateway's edge network to reach adminapi)
 # Recommended
 #   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
 #                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
@@ -156,6 +168,7 @@ services:
       UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
       UME_DATA_HOST: ${UME_DATA_HOST:-}
       UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
+      UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
     configs:
       - {source: bootstrap-script, target: /config/bootstrap.sh}
       - {source: redis-acl-template, target: /config/users.acl.example}
@@ -167,6 +180,7 @@ services:
       - ume-certs:/certs
       - ume-secrets:/secrets
       - ume-config:/conf
+      - integration-secrets:/integration-secrets
     networks: [data]
 
   postgres:
@@ -216,7 +230,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.1@sha256:f402b51b408d46f1790a8fbec4c1ad63e842e39a295d040ddf5b86babec241c9}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.2@sha256:40369c71bddbdc9111d54c04d6ce2099259dc7d827e4cbe643c064549d87e5dd}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -225,17 +239,21 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
+      # UME_INTEGRATION_MANIFEST, written by the bootstrap (docs/integrations.md, "Provisioning from a manifest").
+      Provisioning__Manifests: /run/config/integration-manifests
+      Provisioning__SecretsPath: /run/integration-secrets
     volumes:
       - {<<: *conf-mount, volume: {subpath: migrations}}
       - {<<: *certs-mount, volume: {subpath: migrations}}
       - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: migrations}}
+      - integration-secrets:/run/integration-secrets
     depends_on:
       postgres: {condition: service_healthy}
     networks: [data]
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.1@sha256:d22d4ecd71866aca64455ae8c983a895e2a68db6010a483390f3850a31dadcea}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.2@sha256:cc318dc88c9659f49189c67aa0dee599729a5cae8274c86f117e3b8e91b82314}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -250,6 +268,7 @@ services:
       Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
       # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
+      Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem
@@ -271,7 +290,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.1@sha256:135276c9b9d482deb82217d585b72f8a71494529afc82307e983df078825eefc}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.2@sha256:e2386b619a065aaca1c048181f1759f15b7a6150c33f9b28cdd12a98d791f3f7}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
@@ -321,7 +340,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.1@sha256:04fbded22d6142e8d1bf47c4078cce7900dc9ad338ebd68035de5ed834ebc754}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.2@sha256:b5a1bea5c933c2e14200c2f11af80ab418327eff7ae5a0f712f8f25caca1d0bd}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
@@ -385,8 +404,12 @@ services:
       - rag-blobs:/blobs
       - rag-openwebui-data:/openwebui-data
       - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
+      # The credential keys the gateway's migrations created from UME_INTEGRATION_MANIFEST (M-17 C7).
+      - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
     depends_on:
       bootstrap: {condition: service_completed_successfully}
+      # The gateway's migrations write the manifest's keys before rag-bootstrap copies them.
+      migrations: {condition: service_completed_successfully}
     network_mode: none
 
   rag-postgres:
@@ -559,6 +582,8 @@ services:
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
+      # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
+      edge: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
@@ -928,7 +953,12 @@ configs:
 
       # Static configuration files (services run read-only, so they get them from a volume).
       F=/conf
-      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/redis" "$$F/migrations"
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/redis" "$$F/migrations" "$$F/migrations/integration-manifests"
+      # Integration manifest (optional): rewritten from the variable on every start, so removing it provisions nothing more.
+      rm -f "$$F/migrations/integration-manifests/"*.json
+      if [ -n "$${UME_INTEGRATION_MANIFEST:-}" ]; then
+        printf '%s' "$$UME_INTEGRATION_MANIFEST" > "$$F/migrations/integration-manifests/manifest.json"
+      fi
       cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
       cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
       cp /config/redis.conf "$$F/redis/redis.conf"
@@ -939,6 +969,8 @@ configs:
       chown -R 999:999 "$$C/redis" "$$S/redis"
       chown -R 1654:1654 "$$C/gateway" "$$C/adminapi" "$$C/dataapi" "$$C/migrations" "$$S/gateway" "$$S/adminapi" "$$S/dataapi" "$$S/migrations"
       chmod 755 "$$C" "$$S"
+      # Secrets of credential keys created from the manifest: the migration service writes them, a platform's bootstrap reads them.
+      chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
       echo "bootstrap: certificates and secrets ready"
   redis-acl-template:
     content: |
@@ -1028,6 +1060,8 @@ configs:
         "UsageRecords", "UsageMonthlyTotals", "AlertEvents", "AuthFailures", "DataProtectionKeys" TO ume_gateway;
       GRANT INSERT ON "UsageRecords", "AlertEvents", "AuthFailures" TO ume_gateway;
       GRANT UPDATE ("LastUsedAt") ON "VirtualKeys" TO ume_gateway;
+      -- The organisation's name for integrations' context; never the logo.
+      GRANT SELECT ("OrganisationName") ON "Branding" TO ume_gateway;
 
       -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
       -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.
@@ -1079,7 +1113,8 @@ configs:
       # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
       # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
       # re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
-      # credential keys, the OIDC client secret) are written again on every start, and removed when the variable is empty.
+      # credential keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written again on every
+      # start, and removed when the variable is empty.
       #
       # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
       # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -1198,12 +1233,18 @@ configs:
       put() {
         if [ -n "$$3" ]; then printf '%s' "$$3" > "$$S/$$1/$$2"; else rm -f "$$S/$$1/$$2"; fi
       }
-      # Each service's credential key of the gateway integration Ume.Rag (identity design §4.7):
-      # UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY. The per-level keys they
-      # replace are revoked at the gateway and read by no service, so none is left in the volume.
+      # Each service's credential key of the gateway integration Ume.Rag (identity design §4.7). From the gateway's
+      # manifest (M-17 C7): the gateway's migrations provision the integration from UME_INTEGRATION_MANIFEST and write each
+      # new key's secret to the integration-secrets volume as Ume.Rag/rag-<service>; that volume is mounted read-only at
+      # /integration-secrets. UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY, when set,
+      # win over the files (keys issued by hand, or a gateway elsewhere). The per-level keys they replace are revoked at the
+      # gateway and read by no service, so none is left in the volume.
+      I=/integration-secrets/Ume.Rag
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
-        put "$$svc" Gateway__Key "$$(printenv "UME_RAG_$${up}_GATEWAY_KEY" || true)"
+        key="$$(printenv "UME_RAG_$${up}_GATEWAY_KEY" || true)"
+        if [ -z "$$key" ] && [ -s "$$I/rag-$$svc" ]; then key="$$(cat "$$I/rag-$$svc")"; fi
+        put "$$svc" Gateway__Key "$$key"
         rm -f "$$S/$$svc"/Gateway__Keys__*
       done
       put admin Oidc__ClientSecret "$${UME_RAG_OIDC_CLIENT_SECRET:-}"
@@ -1284,7 +1325,7 @@ configs:
       example() { case "$$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
-        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: issue rag-$$svc's credential key in the gateway's admin (integration Ume.Rag) and update the stack; no restart needed"
+        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: no key for rag-$$svc. Set UME_INTEGRATION_MANIFEST (stack.env.example) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
       done
       example "$$UME_RAG_API_HOST" && note "UME_RAG_API_HOST is still an example value"
       # Optional: unset, rag-api's public URL is https://<UME_RAG_API_HOST>.
@@ -1921,6 +1962,8 @@ volumes:
   ume-certs:
   ume-secrets:
   ume-config:
+  # Credential key secrets from UME_INTEGRATION_MANIFEST, for a platform's bootstrap in the same stack only.
+  integration-secrets:
   rag-postgres-data:
   rag-openwebui-data:
   rag-certs:

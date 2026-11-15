@@ -175,6 +175,15 @@ main session needs:
   the next free number. Cite stable IDs (V39, a rule's name) where one exists.
 - **AdminApi.Tests database classes** go into one of `AdminDatabaseGroup1`..`4`, the shortest by measured time
   (#648); the per-project test times are in the `backend` job log's *Test run summary*.
+- **UI checks on realistic data** (session 37): copy the dev volume (`ume-rag-m1-postgres`) to a throwaway one with
+  `docker run --rm -v ume-rag-m1-postgres:/from:ro -v <copy>:/to alpine cp -a /from/. /to/`, start the FakeGateway stack
+  on it (*Local stack*), and remove it afterwards. The Playwright MCP browser rejects the dev certificate: drive a Node
+  script with `tests/e2e/node_modules/playwright` and `ignoreHTTPSErrors: true`, reading the login password from the
+  user secret inside the script, never on a command line.
+- **Parallel implementor agents** (session 37): some refuse to commit (their rules say the user commits), so commit
+  their work yourself after reading the diff. Four agents testing at once push the load to ~37 and vitest then fails
+  at random in untouched specs: rerun alone before calling a failure real. `uv run` in `src/parser` leaves a `.venv`
+  that breaks `check-doc-refs.py`: delete it after use.
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
