@@ -43,6 +43,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   recreates one (#690, #692).
 - The Integration API read-back (a key's budget and usage) on the Gateway models view (A-41, #665).
 - The release's smoke test boots the Portainer stack, and `deploy-checks` fails on a stale stack file (M-17 C0, #674).
+- **Home shows what is running** (M-19): a *Live* card per published assistant (7 days: questions, not found, ratings,
+  cost), *Health* (runs of the last 24 hours per department, the queue, organisation and model sync), and published
+  knowledge bases' checklists folded, each with *Hide* (#724).
+- **The lists say more** (M-19): knowledge bases show their last fetch and quality, assistants their knowledge bases,
+  model, published version and questions in 7 days; every list row is a real link (#724).
+- **The audit log is readable** (M-19): object names linked to their pages, events in plain words, pickers for event
+  and object type, and *Only this object* (#724).
 
 ### Removed
 
@@ -60,6 +67,10 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
   instead of the 15 s headers timeout, which cut longer answers off with `503 upstream_unavailable` (#695, #713).
 - The Integration API client no longer retries refused calls and has a 10 s timeout, so a failed read-back answers
   `null` with its reason instead of `500` (#701, #716).
+- Admin UI: a knowledge base opened on its Documents tab by link or reload listed its documents as "No documents yet";
+  archived assistants showed as "Draft only"; the knowledge base and assistant pages now keep their tab in `?tab=`
+  (#723). The assistant page's wording says what saving a draft does, and the general-knowledge modes have distinct
+  descriptions (#724).
 
 ### Security
 
