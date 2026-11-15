@@ -227,7 +227,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.2@sha256:40369c71bddbdc9111d54c04d6ce2099259dc7d827e4cbe643c064549d87e5dd}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.3@sha256:6922650dc684204c15a05bc6fae9a8fb14ee7294cf20843fbb3cf9c307d62984}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -250,7 +250,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.2@sha256:cc318dc88c9659f49189c67aa0dee599729a5cae8274c86f117e3b8e91b82314}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.3@sha256:29f4b9309fb297575fc7a33bd38a744b817c0a53e523d19b32dd21ae0af4aba0}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -287,7 +287,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.2@sha256:e2386b619a065aaca1c048181f1759f15b7a6150c33f9b28cdd12a98d791f3f7}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.3@sha256:41609b36f4f6d8923ec8f5cbc54b45d65160beba190aa2a908d232a925f58ca0}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
@@ -337,7 +337,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.2@sha256:b5a1bea5c933c2e14200c2f11af80ab418327eff7ae5a0f712f8f25caca1d0bd}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.3@sha256:87df3ad16329a5eec9351bc0c0fdf352b579c7fc418a3263b0bf2f3d08592be2}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]

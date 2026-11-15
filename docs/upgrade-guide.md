@@ -12,6 +12,11 @@ exception, with its own steps.
 
 ## Unreleased
 
+- **The Portainer stack pins the gateway's `v0.10.3`.** Rolling update, no migration, no new variable: the only
+  change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
+  allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
+  preset keep their residencies: set them to `OnPrem` and `Eu` in the gateway's admin (0.6.0, *Before the update*).
+
 ## 0.6.0
 
 - **Rolling update: no** from 0.5.x. Migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads:
