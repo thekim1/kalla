@@ -33,14 +33,22 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
         // The shared database's mirror is seeded by the tests: the gateway syncs, which start with any host that has a
         // gateway key, stay off here (OrganisationSyncTests and GatewayClientTests run them on databases of their own).
         web.ConfigureTestServices(services => services.RemoveGatewaySyncs());
-        // As the gateway's AdminFixture: a static OIDC configuration, so nothing is fetched from the placeholder authority.
+        // As the gateway's AdminFixture: a static OIDC configuration, so nothing is fetched from the placeholder authority. It
+        // follows the effective authority the options were built with (identity design §19), and none is set without one.
         web.ConfigureTestServices(services => services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
-            o.Configuration = new OpenIdConnectConfiguration
+        {
+            if (o.Authority is { } authority)
             {
-                Issuer = "https://idp.invalid/realms/ume", AuthorizationEndpoint = "https://idp.invalid/authorize",
-                TokenEndpoint = "https://idp.invalid/token", EndSessionEndpoint = "https://idp.invalid/logout",
-            }));
+                o.Configuration = StaticConfiguration(authority);
+            }
+        }));
     });
+
+    /// <summary>The placeholder provider's metadata under <paramref name="authority"/>: its endpoints are the authority's paths.</summary>
+    public static OpenIdConnectConfiguration StaticConfiguration(string authority) => new()
+    {
+        Issuer = authority, AuthorizationEndpoint = authority + "/authorize", TokenEndpoint = authority + "/token", EndSessionEndpoint = authority + "/logout",
+    };
 
     /// <summary>An HTTPS client: the session and antiforgery cookies are Secure.</summary>
     public static HttpClient HttpsClient(WebApplicationFactory<Program> factory, bool allowAutoRedirect = true) =>

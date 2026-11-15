@@ -56,6 +56,7 @@ builder.Services.AddOptions<CrawlCeilingOptions>().BindConfiguration(CrawlCeilin
     .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<OidcOptions>, OidcOptionsValidator>(); // role groups: rag- names or Entra ids (#413)
+builder.Services.AddSingleton<IValidateOptions<OidcOptions>, OidcAuthorityValidator>(); // a set authority is https; none is allowed (identity design §19)
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IAdminSessionStore, PostgresAdminSessionStore>();
 builder.Services.AddSingleton<AccessDeniedThrottle>();
@@ -128,6 +129,8 @@ app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
 app.UseProblemDetailsForEmptyErrors("The action could not be completed");
 // Outside authentication and authorization, so it sees their 403s and the signed-in user afterwards.
 app.UseMiddleware<AdminActivityMiddleware>();
+// Before authentication: the sign-in start, callback and sign-out read the current sign-in values (identity design §19, "Reload").
+app.UseMiddleware<AdminSignInRefreshMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

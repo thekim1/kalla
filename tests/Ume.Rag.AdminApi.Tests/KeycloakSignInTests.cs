@@ -191,12 +191,70 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
         login.StatusCode.ShouldBe(HttpStatusCode.Redirect);
         var callback = await LoginAtKeycloakAsync(login.Headers.Location!.ToString(), user);
 
-        var path = new Uri(callback.Action).PathAndQuery;
-        using var signedIn = callback.Fields.Count > 0
-            ? await admin.PostAsync(path, new FormUrlEncodedContent(callback.Fields), Ct)
-            : await admin.GetAsync(path, Ct);
+        using var signedIn = await CallbackAsync(admin, callback);
         signedIn.StatusCode.ShouldBe(HttpStatusCode.Redirect, await signedIn.Content.ReadAsStringAsync(Ct));
         signedIn.Headers.Location!.ToString().ShouldBe("/");
+    }
+
+    /// <summary>Sends Keycloak's response back to <c>/signin-oidc</c>, as the browser does.</summary>
+    private static async Task<HttpResponseMessage> CallbackAsync(HttpClient admin, (string Action, Dictionary<string, string> Fields) callback)
+    {
+        var path = new Uri(callback.Action).PathAndQuery;
+        return callback.Fields.Count > 0
+            ? await admin.PostAsync(path, new FormUrlEncodedContent(callback.Fields), Ct)
+            : await admin.GetAsync(path, Ct);
+    }
+
+    private static HttpClient AdminClient(WebApplicationFactory<Program> factory) =>
+        factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost:5174"), AllowAutoRedirect = false });
+
+    [Fact]
+    public async Task Sign_in_follows_the_wizards_values_and_one_started_before_a_change_fails_cleanly()
+    {
+        // M-20 S2 (identity design §19): no Oidc:Authority or secret in the deployment, the realm's from the setup wizard's settings.
+        await using var factory = keycloak.Factory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Oidc:Authority", "");
+            web.UseSetting("Oidc:ClientSecret", "");
+        });
+        var values = new OidcWizardValues { Authority = keycloak.Authority };
+        try
+        {
+            await SignInSettingsTests.SaveAsync(factory, values, keycloak.OidcClientSecret);
+            using (var admin = AdminClient(factory))
+            {
+                await SignInAsync(admin, "rag-platform-admin");
+                using var json = JsonDocument.Parse(await admin.GetStringAsync("/bff/user", Ct));
+                Strings(json.RootElement.GetProperty("roles")).ShouldBe(["rag-platform-admin"]);
+                json.RootElement.GetProperty("signIn").GetProperty("configured").GetBoolean().ShouldBeTrue();
+            }
+
+            // Started with the right secret, finished after a wrong one was saved: the realm refuses the code exchange, and the
+            // callback sends the person back to sign in without a session (not a 500).
+            using var stale = AdminClient(factory);
+            using var login = await stale.GetAsync("/bff/login", Ct);
+            login.StatusCode.ShouldBe(HttpStatusCode.Redirect);
+            var callback = await LoginAtKeycloakAsync(login.Headers.Location!.ToString(), "rag-viewer");
+            await SignInSettingsTests.SaveAsync(factory, values, "not-the-realms-secret");
+            using (var failed = await CallbackAsync(stale, callback))
+            {
+                failed.StatusCode.ShouldBe(HttpStatusCode.Redirect, await failed.Content.ReadAsStringAsync(Ct));
+                failed.Headers.Location!.OriginalString.ShouldBe("/?signin=failed");
+            }
+
+            using (var json = JsonDocument.Parse(await stale.GetStringAsync("/bff/user", Ct)))
+            {
+                json.RootElement.GetProperty("isAuthenticated").GetBoolean().ShouldBeFalse();
+            }
+
+            // With the right secret again, the next sign-in works, without a restart.
+            await SignInSettingsTests.SaveAsync(factory, values, keycloak.OidcClientSecret);
+            await SignInAsync(stale, "rag-viewer");
+        }
+        finally
+        {
+            await SignInSettingsTests.SaveAsync(factory, new OidcWizardValues(), "");
+        }
     }
 
     /// <summary>

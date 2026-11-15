@@ -250,7 +250,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         (json.GetProperty(name).GetProperty("value").GetString(), json.GetProperty(name).GetProperty("source").GetString());
 
     /// <summary>The store's write as setup mode will call it, in a request of a platform admin.</summary>
-    private static async Task<EffectiveSignIn> SaveAsync(WebApplicationFactory<Program> factory, OidcWizardValues values, string? clientSecret)
+    internal static async Task<EffectiveSignIn> SaveAsync(WebApplicationFactory<Program> factory, OidcWizardValues values, string? clientSecret)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();

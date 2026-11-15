@@ -455,6 +455,11 @@
       "code": "test_budget_exceeded",
       "status": 402,
       "message": "{reason}"
+    },
+    {
+      "code": "sign_in_not_configured",
+      "status": 409,
+      "message": "Sign-in is not set up yet."
     }
   ]
 }
