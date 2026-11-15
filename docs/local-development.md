@@ -187,6 +187,10 @@ dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Cat
 `--filter-not-trait` skips the tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does; plain
 `dotnet test --solution UmeRag.slnx` runs them too. A flaky mark is a to-do: say why next to the trait and fix the test.
 
+CI runs the same tests with `scripts/ci/backend-tests.sh` (after `dotnet build UmeRag.slnx -c Release`): every test
+project as a process of its own and `Ume.Rag.AdminApi.Tests` as five, which takes about half the time of
+`dotnet test --solution`. It works locally too and prints each process's totals; a failed process's output follows.
+
 The integration tests start Postgres with Testcontainers, so Docker must be running. By default they use the same
 pinned `pgvector/pgvector` image as the AppHost (`TestPostgres.DefaultImage`). To run them against the production
 image, build it and name it in `UME_RAG_TEST_POSTGRES_IMAGE`:

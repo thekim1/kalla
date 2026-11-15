@@ -22,7 +22,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// collections whose checklist is not done, the published assistants' last 7 days (Live), the runs, queue and syncs (Health),
 /// and the reminder before a wizard-stored client secret expires (§5.11).
 /// </summary>
-[Collection(AdminDatabaseGroup1.Name)]
+[Collection(AdminDatabaseGroup7.Name)]
 public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

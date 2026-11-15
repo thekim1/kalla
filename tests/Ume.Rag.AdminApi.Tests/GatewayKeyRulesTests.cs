@@ -13,7 +13,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// B-36 (#580, cost-attribution B4): the key picker's list (admin design §4.5 <c>GET /api/gateway/keys</c>) and V39 on an
 /// assistant's and a knowledge base's gateway key (§4.6), against keys of the <c>GatewayKeys</c> mirror.
 /// </summary>
-[Collection(AdminDatabaseGroup2.Name)]
+[Collection(AdminDatabaseGroup8.Name)]
 public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
 {
     private const string AnswerModel = "ume/chat-eu";

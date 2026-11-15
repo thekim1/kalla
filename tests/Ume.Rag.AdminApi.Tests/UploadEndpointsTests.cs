@@ -19,7 +19,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// pre-check (415), replace by slot, commit writing the manifest and the <c>sync-upload</c> job, discard; and the per-endpoint
 /// body limit (to-verify #32: 60 MB for a file, 1 MB for everything else).
 /// </summary>
-[Collection(AdminDatabaseGroup4.Name)]
+[Collection(AdminDatabaseGroup8.Name)]
 public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

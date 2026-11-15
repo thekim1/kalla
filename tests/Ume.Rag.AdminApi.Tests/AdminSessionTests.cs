@@ -92,8 +92,10 @@ public static class GatewaySyncTestExtensions
 }
 
 // The admin-db collections, each with its own database, as the worker tests' ragdb-N. The classes of one collection run one
-// after the other, the collections in parallel. Classes are spread by measured duration (about 46 s each locally), so the
-// collections end at about the same time; a new class goes to the one that is shortest then.
+// after the other, the collections in parallel. Classes are spread by measured duration (about 100 s each locally,
+// 2026-11-15; the longest collection sets the project's time), so the collections end at about the same time; a new class
+// goes to the one that is shortest then. In CI collection N runs in process (N-1) mod 4 of scripts/ci/backend-tests.sh: the
+// collections of one process wait for one another (what for is not found), those of different processes don't.
 
 [CollectionDefinition(Name)]
 public sealed class AdminDatabaseGroup1 : ICollectionFixture<AdminDatabaseFixture>
@@ -117,6 +119,30 @@ public sealed class AdminDatabaseGroup3 : ICollectionFixture<AdminDatabaseFixtur
 public sealed class AdminDatabaseGroup4 : ICollectionFixture<AdminDatabaseFixture>
 {
     public const string Name = "admin-db-4";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup5 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-5";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup6 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-6";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup7 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-7";
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup8 : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db-8";
 }
 
 /// <summary>

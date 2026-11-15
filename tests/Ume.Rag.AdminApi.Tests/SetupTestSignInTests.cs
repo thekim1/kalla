@@ -177,7 +177,7 @@ internal sealed class DrippingHandler : HttpMessageHandler
 /// the test process, its refusals, the secret rules, the browser binding, the callback and its checks, single use, and what completion
 /// saves. The real round trip at Keycloak is in <see cref="KeycloakSignInTests"/>.
 /// </summary>
-[Collection(AdminDatabaseGroup3.Name)]
+[Collection(AdminDatabaseGroup5.Name)]
 public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsyncLifetime
 {
     /// <summary>Long enough to be an HS256 key, so the "signed with the client secret" token is well-formed.</summary>

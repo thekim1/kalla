@@ -914,7 +914,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 
 ### 8.2 What runs on every PR (`verify.yml`, `parser.yml`)
 
-Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/` and `deploy/`, where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `images` runs only when `images/postgres/`, `images/clamav/` or
+Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/`, `deploy/`, the admin UI's sources (`src/admin-ui/`) and the browser tests (`tests/e2e/`), where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `images` runs only when `images/postgres/`, `images/clamav/` or `backend` runs its tests through `scripts/ci/backend-tests.sh`: every test project as a process of its own, all at once, and `Ume.Rag.AdminApi.Tests` as five processes (the classes of its database collections `admin-db-N` by collection, the rest in a fifth), because its collections wait for one another inside one process (measured 2026-11-15: 234–259 s as one process, 148 s as two).
 `deploy/postgres/` changed, `evaluation-smoke` only when the code on its path (worker, retrieval, answering, api,
 infrastructure, pipelines, domain), `tests/evaluation/`, the Postgres image or the package and build files changed, and
 the parser jobs only when the parser changed; `e2e` runs only by hand (dispatch) or from `release.yml` when asked

@@ -19,7 +19,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// is written, the wrong-code limit, the setup session and its cookie. Each test resets setup's state in the shared database and the
 /// class leaves it completed and closed.
 /// </summary>
-[Collection(AdminDatabaseGroup2.Name)]
+[Collection(AdminDatabaseGroup6.Name)]
 public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
