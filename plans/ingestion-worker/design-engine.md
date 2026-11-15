@@ -567,7 +567,11 @@ listening connection, not a second one, which the worker's 12-connection cap has
 (`IJobQueue.ReadyDepartmentsAsync`, a `GROUP BY "DepartmentId"` over the class's queued jobs, which also returns
 how long until the next not-yet-ready one is due) and probes them in ascending
 order of the jobs this instance already runs for them, then by best priority, then by oldest ready job; the first hit
-wins (data-model §4.2). Fairness is per instance and approximate. **Later (P2):** at 20+ departments the
+wins (data-model §4.2). The list costs one pass over the class's queued jobs, so a lane keeps the one it read for at
+most a second (`JobDispatcher.ReadyListLifetime`) while it gives jobs: the order between its departments is computed
+for every claim, a department whose dequeue finds nothing leaves the list, and a list that is used up is read again
+before the lane decides it is idle; a department that becomes ready is seen within that second (#764, #768).
+Fairness is per instance and approximate. **Later (P2):** at 20+ departments the
 recursive-CTE loose index scan builds the department list every 5 s, shared per instance, with a per-department cap of
 `max(1, ⌈slots ÷ departments⌉)` per instance (to-verify #9).
 
