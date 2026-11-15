@@ -139,6 +139,14 @@ main session needs:
   - The smoke test can't re-run `init-deployment.sh` on the runner (not root; the files belong to the containers'
     users after the first run); verify.yml's deploy-checks test the re-run.
   - Measure before optimising: v0.3.0's smoke test took 1 min 51 s; the time was in image builds and pushes.
+  - **A dry run with `e2e=true` skips `build` when e2e fails**, so neither smoke test runs (0.6.0: the Portainer boot
+    first ran at the tag and failed, #749). After fixing e2e, run a dry run with `e2e=false` before tagging.
+  - The shared `~/.docker/config.json`'s stale ghcr.io login also denied the e2e stack's Open WebUI pull (#748): every
+    workflow that pulls from ghcr.io sets its own `DOCKER_CONFIG`.
+  - **Run `e2e.yml` at least once between releases.** It hadn't run from 2026-11-08 to 11-15 and seven UI changes had
+    drifted from the pilot spec, which took nine CI rounds to clear; the accessibility spec found real target-size bugs.
+  - An inline (`content:`) config can't go into a `read_only` service: copy the file into `rag-config` from the
+    bootstrap instead (as `rag-proxy`, `rag-openwebui-setup`).
 - **Playwright sign-in on the admin UI:** click `locator('a,button').filter({ hasText: 'Sign in' }).last()` and wait for
   the Keycloak URL together with the click.
 - **Agents as stream-a implementors** work well with `isolation: worktree`: review the diff, commit on an `a/` branch,
