@@ -309,9 +309,17 @@ COMMIT  → rag_config and rag_jobs notifications delivered
   skew). Taking the `ConfigVersion` row lock before reading makes admin config writes serial. Admin writes are a few
   per minute, so the cost is nil; a lock wait over 5 s answers 503 `config_busy` (retry) and is measured
   (`rag.admin.config_lock.wait`).
+- **No gateway call under the lock** (#696): the lock is cheap only while nothing slow runs under it. The gateway's
+  model lists that V8 and V39 check (`GatewayModelCheck`) are memoised per request by (capped ceiling, key) and fetched
+  in parallel **before** step 1 for the pairs the write will check (client, assistant and collection writes);
+  failures are memoised too and refused under the lock as before. A pair the locked code needs that was not fetched is
+  still asked there, so correctness never depends on the pre-fetch. The pre-fetch calls as a key only when it is a
+  usable key of the object's department. Each model-list call has its own 5 s timeout (`gateway_unavailable`). Settings
+  V32 is the exception: it lists models under the lock, with the memo and the timeout, as settings saves are rare.
 - Adapted from `AdminContext.SaveAsync` (`AdminContext.cs:158-169`): the audit entry is staged with the change; the
   actor stamp (`AdminActor.Stamp`, `:38-49`) and the 6001 event after save (`:50-58`) are copied.
-- Audit-only actions (reveal a key, read a comment, read the audit log) use `AuditAsync` (`:148-152`) without the lock.
+- Audit-only actions (reveal a key, read a comment, read the audit log) use `AuditAsync` without the lock: the audit
+  entry is saved (with the current `ConfigVersion`) before a revealed secret is returned (#696).
 - Writes to `chat."Feedback".ReviewState` and `audit."ConversationAccess"` are two transactions; the access event is
   written **first**, so a crash never leaves an unaudited read (§8.2).
 
@@ -452,7 +460,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET/POST/PUT/DELETE /api/clients[/{id}]` | Read (pickers) / Admin | `CK_Clients_*` as field rules (V21); raising a ceiling or changing `StoresHistory` re-validates every assistant offered to the client |
+| `GET/POST/PUT/DELETE /api/clients[/{id}]` | Read (pickers) / Admin | `CK_Clients_*` as field rules (V21); changing the ceiling (either way) or `StoresHistory` re-checks every assistant offered to the client with the updated client (V7, V9; for a published assistant its rule set and V8 at the gateway, V36 excepted), refusals as field errors (`classificationCeiling`, `storesHistory`) naming the assistant (#700) |
 | `GET /api/clients/{id}/health` | Admin | missing `X-Rag-Owui-Message-Id` warning (chat §11.4), feedback import state (§8.1) |
 | `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `ume-rag-sk-`/`-pk-` (identity §6.4) |
 | `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`, `identity`; `tools` from P2) | Admin | sections of `config."Settings"`; `chat` carries `maxAnswerTokens` (optional integer 256–1,000,000, absent = no platform ceiling; shown as **Longest answer, all assistants** with the hint "Caps every assistant's answer length, overrides included; leave empty to use each model's limit", chat §6.3, Decisions "Answer length from the model") and `prompts` (V38): the Settings page's **Prompt texts** panel shows the whole frame in order, each editable text as a field prefilled with its current value and a **Reset to default** link, the locked lines read-only between them, and a note that a save changes every assistant's answers at once (Decisions "Chat prompt texts configurable"); `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |

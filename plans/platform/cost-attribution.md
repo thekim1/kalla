@@ -94,7 +94,8 @@ embeddings included; the knowledge base's key pays for keeping it indexed.
 Reporting only. Ume.Rag records tokens and cost of every model call per assistant, knowledge base, step and client, and
 takes the cost from the gateway wherever the gateway gives it: `x-ume-cost-usd` on complete answers and the stream
 comment for streamed answers (`x-ume-stream-cost: 1`, gateway phase 2). A call with neither, such as an aborted
-stream, is estimated from the mirror's prices (cached input at its own price) and kept apart as an estimate; replacing
+stream, is estimated from the mirror's prices (cached input at its own price; the worker reads them once a minute and
+prices with no cancellation, so a charged call is always recorded, #711) and kept apart as an estimate; replacing
 estimates with the Integration API's usage by run id (phase 3) is stage 2's B7 (§6). The gateway stays the record for charging (it also
 counts fallbacks and retries the caller does not see); Ume.Rag's split per step joins it on `x-ume-run-id` and
 `x-ume-step` (gateway-changes §7.1).
