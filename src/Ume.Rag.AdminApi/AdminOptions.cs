@@ -57,13 +57,6 @@ public sealed class AdminOptions
     public SourceAddressMode AuditSourceAddress { get; set; } = SourceAddressMode.Full;
 
     /// <summary>
-    /// The organisation's display name in the admin UI (header and sign-in page); <c>Umeå kommun</c> by default. Set to an
-    /// empty string, the UI words its texts without a name. Shown before sign-in, so it is not a secret.
-    /// </summary>
-    [StringLength(100)]
-    public string? OrganisationName { get; set; } = "Umeå kommun";
-
-    /// <summary>
     /// The gateway admin UI's address for the links (admin design §2.3) when the gateway's context carries no
     /// <c>admin_url</c>; unset by default (#619). Only an absolute http(s) URL is used.
     /// </summary>

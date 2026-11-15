@@ -4,10 +4,17 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.TestKit;
 using FakeCatalog = fakegateway::Ume.Rag.FakeGateway.FakeCatalog;
+using FakeGatewayOptions = fakegateway::Ume.Rag.FakeGateway.FakeGatewayOptions;
+using FakeGatewayProgram = fakegateway::Program;
 
 namespace Ume.Rag.AdminApi.Tests;
 
@@ -135,32 +142,55 @@ public sealed class BffTests(AdminDatabaseFixture database)
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         json.RootElement.GetProperty("isAuthenticated").GetBoolean().ShouldBeFalse();
         json.RootElement.GetProperty("departmentSources").GetArrayLength().ShouldBe(0);
-        json.RootElement.GetProperty("organisationName").GetString().ShouldBe("Umeå kommun"); // the default
+        json.RootElement.GetProperty("organisationName").ValueKind.ShouldBe(JsonValueKind.Null); // no gateway context read
         var cookies = response.Headers.GetValues("Set-Cookie").ToList();
         cookies.ShouldContain(c => c.StartsWith(AdminCookies.XsrfToken + "=", StringComparison.Ordinal));
         cookies.ShouldContain(c => c.StartsWith(AdminCookies.Antiforgery + "=", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task The_user_document_carries_the_configured_organisation_name_before_sign_in()
+    /// <summary>
+    /// The user document's <c>organisationName</c> with rag-admin's context read from a FakeGateway whose admin console names
+    /// <paramref name="organisationName"/> (M-17 C12), with or without the feature <c>organisation-name</c>.
+    /// </summary>
+    private async Task<JsonElement> OrganisationNameFromContextAsync(string organisationName, bool feature = true)
     {
-        await using var factory = database.Factory().WithWebHostBuilder(web => web.UseSetting("Admin:OrganisationName", " Exempelstad "));
+        await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+        {
+            web.UseEnvironment("Development");
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", ContextKey);
+            web.UseSetting("FakeGateway:Gateway:OrganisationName", organisationName);
+            if (!feature)
+            {
+                // A gateway before v0.10.2 (the binder appends to a list with a default, so the feature is removed here).
+                web.ConfigureTestServices(services => services.PostConfigure<FakeGatewayOptions>(o => o.Gateway.Features.Remove(GatewayFeatures.OrganisationNameFeature)));
+            }
+        });
+        await using var factory = database.Factory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
+            web.UseSetting("Gateway:Key", ContextKey);
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
+        });
+        (await factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
         using var client = AdminDatabaseFixture.HttpsClient(factory);
         using var response = await client.GetAsync("/bff/user", Ct);
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
-        json.RootElement.GetProperty("organisationName").GetString().ShouldBe("Exempelstad");
+        return json.RootElement.GetProperty("organisationName").Clone();
     }
 
-    [Fact]
-    public async Task An_empty_organisation_name_is_sent_as_null()
-    {
-        await using var factory = database.Factory().WithWebHostBuilder(web => web.UseSetting("Admin:OrganisationName", ""));
-        using var client = AdminDatabaseFixture.HttpsClient(factory);
-        using var response = await client.GetAsync("/bff/user", Ct);
+    private const string ContextKey = "sk-ume-bff-organisation-0000000000";
 
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
-        json.RootElement.GetProperty("organisationName").ValueKind.ShouldBe(JsonValueKind.Null);
+    [Fact]
+    public async Task The_user_document_names_the_gateways_organisation_before_sign_in() =>
+        (await OrganisationNameFromContextAsync(" Exempelstad ")).GetString().ShouldBe("Exempelstad");
+
+    [Fact]
+    public async Task A_gateway_without_an_organisation_name_gives_null()
+    {
+        (await OrganisationNameFromContextAsync("")).ValueKind.ShouldBe(JsonValueKind.Null);
+        (await OrganisationNameFromContextAsync("Exempelstad", feature: false)).ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]

@@ -55,8 +55,12 @@ public sealed class GatewayFeatures
     public const string ActAsKeyFeature = "act-as-key";
     public const string RunMetadataFeature = "run-metadata";
 
+    /// <summary>The context carries <c>gateway.organisation_name</c> (gateway v0.10.2; M-17 C12).</summary>
+    public const string OrganisationNameFeature = "organisation-name";
+
     private volatile HashSet<string> _features = new(StringComparer.Ordinal);
     private volatile StrongBox<Residency>? _credentialMaximum;
+    private volatile string? _organisationName;
 
     public IReadOnlySet<string> Current => _features;
 
@@ -69,7 +73,21 @@ public sealed class GatewayFeatures
     /// </summary>
     public Residency? CredentialMaximum => _credentialMaximum?.Value;
 
+    /// <summary>
+    /// The organisation's name from the gateway admin console's branding (the context's <c>gateway.organisation_name</c>,
+    /// feature <see cref="OrganisationNameFeature"/>; M-17 C12), trimmed; null when the gateway has none, lacks the feature,
+    /// or before the first context answer. Shown in the admin UI before sign-in, so it is not a secret.
+    /// </summary>
+    public string? OrganisationName => _organisationName;
+
     public void Update(IEnumerable<string> features) => _features = new HashSet<string>(features, StringComparer.Ordinal);
+
+    /// <summary>
+    /// What the context says about the gateway besides its features: <paramref name="organisationName"/> counts only under
+    /// <see cref="OrganisationNameFeature"/> (call <see cref="Update"/> first), and an empty one is none.
+    /// </summary>
+    public void UpdateGateway(string? organisationName) =>
+        _organisationName = _features.Contains(OrganisationNameFeature) && !string.IsNullOrWhiteSpace(organisationName) ? organisationName.Trim() : null;
 
     /// <summary>The credential key's ceiling from its <c>allowed_residencies</c> (<see cref="HighestOf"/>).</summary>
     public void UpdateCredentialResidencies(IReadOnlyList<string> allowedResidencies) =>
@@ -212,6 +230,7 @@ public sealed partial class GatewayContextReader(
             response.EnsureSuccessStatusCode();
             var context = await response.Content.ReadFromJsonAsync<ContextFeatures>(Json, cancellationToken);
             features.Update(context?.Gateway?.Features ?? []);
+            features.UpdateGateway(context?.Gateway?.OrganisationName);
             // The credential key's residencies bound every call's ceiling (Decisions "Residency per level", M-17 C9); an
             // answer without them keeps the ceiling as it was (unknown: OnPrem).
             if (context?.Key?.AllowedResidencies is { } residencies)
@@ -235,7 +254,7 @@ public sealed partial class GatewayContextReader(
 
     private sealed record ContextKeyPart(IReadOnlyList<string>? AllowedResidencies);
 
-    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features);
+    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features, string? OrganisationName);
 
     [LoggerMessage(LogLevel.Information, "Gateway features: {Features}; the credential key's ceiling: {Ceiling}")]
     private static partial void LogRead(ILogger logger, string features, string ceiling);

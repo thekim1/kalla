@@ -566,8 +566,6 @@ services:
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
       OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-admin
-      # The organisation the admin UI names in its header and sign-in texts; empty names none (#544).
-      Admin__OrganisationName: ${UME_ORGANISATION_NAME-Umeå kommun}
       # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
       Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST}}
       SSL_CERT_FILE: /run/certs/ca.pem
