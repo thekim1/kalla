@@ -118,7 +118,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   Processing section has no concurrency; backend and admin-ui tests green.
 - **Read:** data-model §2.1 (`Settings`), engine §9.1.
 
-### [ ] M-19 Admin UI review: Home, lists, audit log, assistant page (user, 2026-11-15; `proposals/admin-ui-review.md`)
+### [x] M-19 Admin UI review: Home, lists, audit log, assistant page (user, 2026-11-15; `proposals/admin-ui-review.md`)
 - **Do**, four parts on `main-session/` branches (stream b's paths, announced on #667):
   - **M-19a** assistant-page wording (UI4 B) and the review's small points (Settings placeholders where the value in
     force is known, Feedback and Costs filter layout, Models table heading and "Set here", Organisation wording, the
@@ -129,3 +129,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   - **M-19d** audit log: names, plain-word events, pickers (UI3 A).
 - **Done when:** each part's PR is merged with its tests and a check in the browser on the dev data's copy.
 - **Read:** admin §5.3, §5.5.1, §5.5.2, §5.5.4, §9.1; Decisions "Admin API and UI".
+- **Status (2026-11-15):** all four parts merged in #724 (built in parallel, merged on one branch); deviations settled in
+  the design. Not done: Settings placeholders (the API doesn't return the value in force) and document links in the
+  personal-data table (no document page). Cosmetic, open: a Live card's numbers show in link colour, and *Hide* wraps
+  to its own line on a phone.

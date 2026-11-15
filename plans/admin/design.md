@@ -1023,7 +1023,11 @@ Home                                                                         Dep
 `AssistantDailyUsage` cost plus estimate, all summed over the 7 days and every client) and `health: { departments:
 [{ departmentId, departmentName, runs: { succeeded, degraded, failed, running } }], queue: { waiting,
 oldestQueuedAt }, organisationSync: { lastSuccessAt, consecutiveFailures }, modelSync: { lastSuccessAt,
-consecutiveFailures } }`. `setup` items gain `published` already; the UI folds on it.
+consecutiveFailures } }`. `setup` items gain `published` already; the UI folds on it. As built (#724): Health lists
+only departments with runs in the window; a run awaiting the deletion decision counts as *with remarks* and cancelled
+runs are not counted; the queue counts `queued` jobs within the caller's scope (platform admins: all); the sync
+status (a time and a count, held per instance) shows to every role; Live keeps its cards when every count is zero,
+since cost may come from the test panel.
 
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
 items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
@@ -1091,7 +1095,8 @@ Documents, **Last fetch** (the latest run of any of its sources: its start time 
 remarks*, *Failed* or *Running*, linked to the run; "Never" before the first) and **Quality** (the latest finished
 evaluation's recall@10 with its date; "–" before the first), then State. `GET /api/collections` items add `lastRun: {
 id, sourceId, state, startedAt, finishedAt } | null` and `latestEvaluation: { recallAtK, finishedAt } | null`, read in
-grouped queries for the page (no per-row round trips). On a phone the card shows the same fields.
+grouped queries for the page (no per-row round trips). On a phone the card shows the same fields. A shared row
+(§4.5) has neither (shown "–"); Quality takes the hybrid run first, as the Overview does.
 
 **Lists open as links** (every list page): the first cell of a clickable row is a real link (`<a href>` through the
 router) to the row's page, so a row opens in a new tab, its address can be copied, and keyboard users get a link;
@@ -1216,7 +1221,7 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
   published version, else the draft), **Model** (the same version's), **Published** (version and date; "Draft only"
   before the first; *Archived*) and **Questions, 7 days**. `GET /api/assistants` items add `collections: [{ id, name }]`,
   `model: string | null`, `publishedVersion: number | null`, `publishedAt` and `questions7d` (`AssistantDailyTotals.
-  Messages`), in grouped queries.
+  Messages`), in grouped queries. "Model name" here is the slug.
 - **Badges**: `[Draft]` alone before the first publish; `[Published: version n]` afterwards, plus `[Draft changed …]`
   while a draft exists; `[Archived]` when archived. **Uses tools** is a derived label (P2), never a
   setting: it appears when a linked skill's served version carries tools, and the Skills field explains that such
@@ -1881,7 +1886,10 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   field-level diff viewer and **History** tabs on entity pages are P2.
 - **Readable entries** (user, 2026-11-15, UI3 A): `GET /api/audit` items add `entityName`: the object's current name
   for the types with one (collection, source, assistant, client, key, embedding profile, site profile, gateway model),
-  read in one grouped query per type for the page; else the `Name` in the entry's snapshot; else null. The page shows
+  read in one grouped query per type for the page; else the `Name` in the entry's snapshot; else null; and
+  `entityExists` (whether the lookup found it), so a deleted object's name shows without a link. A site profile's
+  name is its host; a settings row shows its section's label; no entry carries a publication id, so none links to a
+  publication page. The page shows
   the name (the id only when there is no name), linked to the object's page where it has one (collection, source,
   assistant, run, publication; settings sections to *Settings → section*); a deleted object's name is shown
   without a link. Events show in plain words, one label per §9.2 action in `labels.ts` (`source.sync` "Fetch
