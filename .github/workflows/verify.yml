@@ -504,6 +504,10 @@ jobs:
         # owner and mode, is unchanged by the second run; the gateway credential keys follow the variable, else the
         # manifest's file.
         run: bash deploy/tests/portainer-rerun.sh
+      - name: Open WebUI's settings match in Compose and the Portainer stack
+        # #707: open-webui (compose.openwebui.yaml) and rag-openwebui (the generated compose.portainer.yaml) have the same
+        # environment keys and values, apart from the deployment-specific ones the script lists.
+        run: bash deploy/tests/openwebui-parity.sh
       - name: The certificate expiry check warns 60 days ahead
         # #705: deploy/host/cert-expiry.sh (rag-cert-expiry.timer) passes on fresh certificates, writes certs.prom, and
         # fails naming the certificate that expires within 60 days.
