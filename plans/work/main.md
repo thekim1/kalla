@@ -117,3 +117,15 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Done when:** `grep -rn WorkerConcurrency src tests` finds only the dropping migration; the Settings page's
   Processing section has no concurrency; backend and admin-ui tests green.
 - **Read:** data-model §2.1 (`Settings`), engine §9.1.
+
+### [ ] M-19 Admin UI review: Home, lists, audit log, assistant page (user, 2026-11-15; `proposals/admin-ui-review.md`)
+- **Do**, four parts on `main-session/` branches (stream b's paths, announced on #667):
+  - **M-19a** assistant-page wording (UI4 B) and the review's small points (Settings placeholders where the value in
+    force is known, Feedback and Costs filter layout, Models table heading and "Set here", Organisation wording, the
+    source page's personal-data table and failed-run link, the knowledge base Overview's *Add contact* and linked
+    *Used by*);
+  - **M-19b** list columns and rows as links (UI2 B);
+  - **M-19c** Home: Live cards, health, folded checklists (UI1 B);
+  - **M-19d** audit log: names, plain-word events, pickers (UI3 A).
+- **Done when:** each part's PR is merged with its tests and a check in the browser on the dev data's copy.
+- **Read:** admin §5.3, §5.5.1, §5.5.2, §5.5.4, §9.1; Decisions "Admin API and UI".

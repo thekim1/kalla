@@ -753,9 +753,14 @@ pass of the pilot journey before the pilot. Pilot department admins set up their
 with the platform team pairing.
 P1 has pages for the department journey only, platform objects use generic forms and Scalar, except clients and keys, which have a page of their own (user, 2026-11-13; `admin/design.md` §5.9). An app is connected in one go (its assistants, its first key and how to connect, §5.9.1), every platform page is in the side menu and Settings is a page of sections (§5.10; user, 2026-11-13, M-16). The test panel runs
 chat's code on the draft, unpublished collections included; its extra detail and the Overview attention items are P2.
-Detail: `admin/design.md` §1, §4.9, §5.
+From the admin UI review (user, 2026-11-15): Home shows sync health and a **Live** card per published assistant beside the
+setup checklists, which fold away once published (§5.5.1); the knowledge base and assistant lists show last fetch,
+quality, knowledge bases, model and use, and every list row is a real link (§5.5.2, §5.5.4); the audit log shows
+names linked to their objects, events in plain words and pickers for its filters (§9.1); the assistant page keeps
+its draft form, with wording that says what saving does (§5.5.4).
+Detail: `admin/design.md` §1, §4.9, §5, §9.1.
 
-*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13; connect flow, menu and Settings page, user 2026-11-13.
+*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13; connect flow, menu and Settings page, user 2026-11-13; admin UI review UI1 B, UI2 B, UI3 A, UI4 B, user 2026-11-15 (`proposals/admin-ui-review.md`).
 
 ### Assistants
 

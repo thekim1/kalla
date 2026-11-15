@@ -945,7 +945,7 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 
 | Page | P1 | P2 | P3 |
 |---|---|---|---|
-| Home | attention items, setup checklist, sync health per department, queue age, org/model sync | drift, approvals, parse-profile proposals | trends |
+| Home | setup checklists (folded once published), sync health per department, queue age, org/model sync, a Live card per published assistant (§5.5.1); attention items P2 | drift, approvals, parse-profile proposals | trends |
 | Map | P1b: the Map as a table (§5.5.6) | the drawing, skills and workspaces in the map | – |
 | Knowledge bases | list; detail tabs Overview (checklist, sources, counts, state, contact), Sources, Documents (incl. personal data), Topics, Test questions and quality, Search settings, Sharing; the list's *Shared with us* and *All* tabs | History tab, coverage-threshold histogram and proposal | analytics |
 | Source | URL list, crawl, upload forms with template parameters; preflight; preview with site-profile before/after; impact; runs; crawl report; files; quarantine; deletions; held | SharePoint with preflight, crawl hierarchy tree, parameter diff | more connectors |
@@ -956,7 +956,7 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 | Costs | per department, assistant, knowledge base and step, by day or month, CSV; cost cards on the assistant and knowledge base pages (§8.6) | the gateway's figures and budget status beside them (cost-attribution §6 B7) | – |
 | Conversation review | – (when A1 allows stored content, weakness review §4: conversation behind a feedback item, access log) | search by assistant and period, `sensitive` two-person flow | user notification |
 | Platform objects | generic forms (§5.8) | dedicated pages where generic forms prove too thin; parse-profile proposals | OBO configuration, profile changes |
-| Audit log | list with filters | field-level diff viewer | – |
+| Audit log | list with names linked to their objects, events in plain words, pickers (§9.1) | field-level diff viewer | – |
 
 ### 5.4 The pilot department admin's journey (answered 2)
 
@@ -1002,6 +1002,28 @@ Home                                                                         Dep
 │ [Show runs]                             │ │ Processing: 3, 2 min     │ │ 👍 41  👎 9   [Feedback]           │
 └────────────────────────────────────────┘ └───────────────────────────┘ └───────────────────────────────────┘
 ```
+
+**P1's Home** (user, 2026-11-15, admin UI review UI1 B; `proposals/admin-ui-review.md`), top to bottom:
+
+1. **Live**: one card per published, active assistant in the caller's departments (platform admins: all), over the
+   last 7 days (Europe/Stockholm, today included): questions, not found, thumbs up and down, cost (the gateway's cost
+   plus the estimate, as §8.6), each linking to the assistant's Statistics tab; "No questions in the last 7 days" when
+   all are zero. Ordered by questions, most first. Absent when no assistant is published.
+2. **Health**: per department, the runs started in the last 24 hours by outcome (done, with remarks, failed, running;
+   linked to the knowledge base list); the queue (waiting jobs and the oldest one's age); organisation sync and model
+   sync (last success, and consecutive failures when any, linked to Organisation and Models).
+3. **Get started**: the setup checklists, as now. A checklist whose knowledge base is published is folded to one line
+   ("Personalhandbok: 5 of 8 steps done"), and each checklist has **Hide**, remembered per browser (local storage; a
+   reset brings them back). The embedding-profile first-run step stays first while it applies.
+4. **Your access**, as now.
+
+`GET /api/overview` adds, beside `hasCollections`, `setup` and `needsEmbeddingProfile`:
+`live: [{ assistantId, name, departmentId, publishedVersion, questions, notFound, thumbsUp, thumbsDown, costUsd }]`
+(`questions` = `AssistantDailyTotals.Messages`, `notFound` = `NotFound`, thumbs from the same rows, `costUsd` =
+`AssistantDailyUsage` cost plus estimate, all summed over the 7 days and every client) and `health: { departments:
+[{ departmentId, departmentName, runs: { succeeded, degraded, failed, running } }], queue: { waiting,
+oldestQueuedAt }, organisationSync: { lastSuccessAt, consecutiveFailures }, modelSync: { lastSuccessAt,
+consecutiveFailures } }`. `setup` items gain `published` already; the UI folds on it.
 
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
 items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
@@ -1063,6 +1085,18 @@ The document count (the list, the Overview and the Sources table's *Documents*) 
 deleted and with a live chunk set, so a source in its first fetch shows 0 until its documents are indexed. The
 *Documents* tab lists every document that is not deleted, marked *Searchable* or *Not searchable*. *Used by* lists
 archived assistants too, marked *Archived* (they still block deletion and can be unarchived, #374).
+
+**The knowledge base list** (user, 2026-11-15, UI2 B) has the columns Name, Department, Information class, Sharing,
+Documents, **Last fetch** (the latest run of any of its sources: its start time and outcome, *Done*, *Done with
+remarks*, *Failed* or *Running*, linked to the run; "Never" before the first) and **Quality** (the latest finished
+evaluation's recall@10 with its date; "–" before the first), then State. `GET /api/collections` items add `lastRun: {
+id, sourceId, state, startedAt, finishedAt } | null` and `latestEvaluation: { recallAtK, finishedAt } | null`, read in
+grouped queries for the page (no per-row round trips). On a phone the card shows the same fields.
+
+**Lists open as links** (every list page): the first cell of a clickable row is a real link (`<a href>` through the
+router) to the row's page, so a row opens in a new tab, its address can be copied, and keyboard users get a link;
+clicking elsewhere on the row still opens it. The *Overview* knowledge base's **Used by** names link to the
+assistants, and an empty **Contact** offers **Add contact** (it opens the Edit drawer).
 
 **Edit** (a header button next to **Publish**, as on the assistant page, until the admin UI has a menu component for
 `⋯`) opens a drawer with the collection's own fields: name, contact, **level** (`edit` on the
@@ -1133,13 +1167,19 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
 - **Knowledge** (Knowledge bases in the draft): each link shows the knowledge base, its owning department when it is
   shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
   knowledge base** opens a picker with *Ours*, *Shared with us* and *All* (relative to the assistant's department, not
-  the user's), showing level, document count and topics. The topic field is free text with the knowledge base's current
+  the user's), showing level, document count and topics. The topic field, labelled "Limit to topics (empty: all
+  topics)", is free text with the knowledge base's current
   topics as suggestions, so a topic a path rule is about to set can be linked; V11 `topic_invalid` checks the format.
 - **General knowledge** (`answer.generalKnowledge`, in the Draft tab, not under Advanced, since it changes what
   users get): a radio group *Off: only the knowledge bases* (`off`, default), *Supplement: knowledge bases first,
   general knowledge for explanations* (`supplement`), *Fallback: as Supplement, and answer from general knowledge when
-  nothing is found* (`fallback`), *Open: knowledge bases and general knowledge* (`open`), each with one line of help on
-  what happens when nothing is found. For a `public` assistant all four stay enabled; any choice but `off` shows the
+  nothing is found* (`fallback`), *Open: knowledge bases and general knowledge* (`open`), each with one line of help
+  that says what sets it apart (UI4 B, 2026-11-15): *Off* "Answers only from the knowledge bases; when they have
+  nothing, it says so and shows the contact links"; *Supplement* "May use general knowledge to explain terms in an
+  answer from the knowledge bases; when they have nothing, it says so and shows the contact links"; *Fallback* "As
+  Supplement, and when the knowledge bases have nothing it answers from general knowledge, marked as such, with the
+  contact links"; *Open* "Uses the knowledge bases and general knowledge freely; answers from general knowledge are
+  marked, with the contact links". For a `public` assistant all four stay enabled; any choice but `off` shows the
   warning "Not recommended for a public assistant: citizens may get general answers that are wrong for Umeå kommun"
   under the group, and **Publish** then asks for one extra confirmation (V36, #445). A
   published version with a level other than `off`
@@ -1168,6 +1208,15 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
   in to it"; department and group audiences follow the W3 spike and E1. The tab's **Check access** runs explain access
   (§4.5, identity §4.9) for a client and a subject; a key subject is entered by its key id (no key picker), and the
   residency ceiling shows as the API returns it (the header form, e.g. `eu`).
+- **Wording** (UI4 B, 2026-11-15): the header's button that opens the drawer of the assistant's own fields is **Edit
+  details**; the Draft tab's lead says what saving does: before the first publish "Saving keeps a draft; publish it to
+  make the assistant available", afterwards "Saving starts a draft from version n; version n stays live until you
+  publish", and with a draft "Draft changed since version n".
+- **The assistant list** (UI2 B) has Name (with the model name), Information class, **Knowledge bases** (names, from the
+  published version, else the draft), **Model** (the same version's), **Published** (version and date; "Draft only"
+  before the first; *Archived*) and **Questions, 7 days**. `GET /api/assistants` items add `collections: [{ id, name }]`,
+  `model: string | null`, `publishedVersion: number | null`, `publishedAt` and `questions7d` (`AssistantDailyTotals.
+  Messages`), in grouped queries.
 - **Badges**: `[Draft]` alone before the first publish; `[Published: version n]` afterwards, plus `[Draft changed …]`
   while a draft exists; `[Archived]` when archived. **Uses tools** is a derived label (P2), never a
   setting: it appears when a linked skill's served version carries tools, and the Skills field explains that such
@@ -1830,6 +1879,15 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   through `AuditLog.DepartmentId` (§13). The API takes the department filter; the page (its own **Audit log** menu
   item, §5.2) offers the others, since the API already scopes department admins. The
   field-level diff viewer and **History** tabs on entity pages are P2.
+- **Readable entries** (user, 2026-11-15, UI3 A): `GET /api/audit` items add `entityName`: the object's current name
+  for the types with one (collection, source, assistant, client, key, embedding profile, site profile, gateway model),
+  read in one grouped query per type for the page; else the `Name` in the entry's snapshot; else null. The page shows
+  the name (the id only when there is no name), linked to the object's page where it has one (collection, source,
+  assistant, run, publication; settings sections to *Settings → section*); a deleted object's name is shown
+  without a link. Events show in plain words, one label per §9.2 action in `labels.ts` (`source.sync` "Fetch
+  started", `collection.publish` "Knowledge base published"), the code as the label's title; an unknown action shows
+  its code. **Event** and **Type of object** are pickers built from those labels; each row's object has **Only this
+  object**, which sets the object filter, and the object-id field moves under *More filters*.
 - Reading the audit log emits 6007 (identity §10).
 
 ### 9.2 Audit actions
