@@ -108,8 +108,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   race in `complete` that made a test flaky). S5 merged (#771: Open WebUI's settings, the back-channel test, rag-api's internal route, the start wrapper,
   run in the real pinned image). S6 merged (#772: no defaults that lock fields, `stack.env.example` at 5 CHANGE
   values and no secret, the boot test through the wizard's API, the operators' docs). The UI follow-up merged (#773:
-  the wizard's Open WebUI step, run end to end in a browser, and Home's reminder before a secret expires). **In
-  work:** S7 (the browser test of the wizard in `e2e.yml`, on its own stack with `Setup:Try`). **Open after S7:** the
+  the wizard's Open WebUI step, run end to end in a browser, and Home's reminder before a secret expires). S7 merged
+  (#774: the browser test, green in both phases of a manual `e2e.yml` run, 43762339453). **Stage 1 is built.** **Open:** the
   next release dry run must show S6's boot-test assertions and the wrapper's TLS path to rag-api; the Compose host
   firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up); S8 (the
   gateway, WG1–WG4, on the user's word). Stream b

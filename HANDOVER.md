@@ -24,12 +24,12 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 41): finish the setup wizard (M-20), then a release dry run
+## Start here (session 41): a release dry run for the setup wizard (M-20), and the user's open answers
 
 **What happened in session 40.** The design session on the setup wizard ended in an agreed proposal
 (`plans/proposals/setup-wizard.md`, W1–W10 answered by the user, reviewed twice by independent agents), and the user
 then asked the main session to **build it, stream b's paths included** (announced on #759; stream b hasn't answered and
-worked elsewhere). Stage 1 is built and merged except the last step:
+worked elsewhere). Stage 1 is built and merged, all eight steps:
 
 | Step | What | PR |
 |---|---|---|
@@ -41,28 +41,16 @@ worked elsewhere). Stage 1 is built and merged except the last step:
 | S5 | Open WebUI: settings, the back-channel test, rag-api's internal route, the start wrapper | #771 |
 | – | The wizard's Open WebUI step; Home's reminder before a client secret expires | #773 |
 | S6 | Deploy files without locking defaults, `stack.env.example` at 5 CHANGE values and no secret, the boot test through the wizard's API, the operators' docs | #772 |
-| S7 | The browser test of the wizard (`tests/e2e/specs/setup.spec.ts`, a second phase of `e2e.yml`) | **#774, open** |
+| S7 | The browser test of the wizard (`tests/e2e/specs/setup.spec.ts`, a second phase of `e2e.yml`) | #774 |
 
 The rules are Decisions "Setup wizard" and "Deploy configuration", identity §19 and admin §5.11; the queue item is
 `plans/work/main.md` M-20.
 
-**First, #774 (S7):**
-- Its verify checks are green. Its done-when is a green manual `e2e.yml` run on the branch
-  (`main-session/m20-s7-setup-e2e`). Run [43760928883](https://github.com/thekim1/ume-rag-platform/actions/runs/43760928883)
-  failed for two reasons that aren't the wizard's: it ran while the PR's `backend` job ran on the other runner (the
-  pilot spec lost its page with `net::ERR_NETWORK_CHANGED`: e2e must run alone, handbook), and the setup phase's steps
-  were skipped after the failed first phase (an `if:` without a status function implies `success()`; fixed on the
-  branch). Run [43762339453](https://github.com/thekim1/ume-rag-platform/actions/runs/43762339453) was started with
-  the runners idle and was in progress at handover.
-- **Green in both phases:** merge #774 (`gh pr list --base main-session/m20-s7-setup-e2e` first), remove the worktree
-  `.claude/worktrees/agent-ada737f0d0bb5e917` and its branches, tick S7 in M-20's progress, comment on #759.
-- **The pilot spec fails again with the runners idle:** then it is a real regression from session 40's UI changes
-  (the sign-in page, `App.vue`'s public route, `api/client.ts`, the shared `scan` helper that now waits for
-  transitions). Find it before anything else; the page snapshot and server logs are in the run's log.
-- **Only the setup phase fails:** `Start-E2E.ps1 -Setup` and the new workflow steps had never run before (no pwsh on
-  this machine); the spec itself passed 9 of 9 locally on a stack started by hand.
+**S7's done-when is met:** the manual `e2e.yml` run [43762339453](https://github.com/thekim1/ume-rag-platform/actions/runs/43762339453)
+passed in both phases (9 pilot and accessibility tests in 9.7 min, the wizard's 9 in 15 s), run with the runners idle.
+An earlier run failed because it ran beside the PR's `backend` job (`net::ERR_NETWORK_CHANGED`; handbook).
 
-**Then, to call stage 1 done: a release dry run.** Two things can only be shown with images built from `main` (0.6.0's
+**First, to call stage 1 done: a release dry run.** Two things can only be shown with images built from `main` (0.6.0's
 have no setup mode):
 - `deploy/tests/portainer-boot.sh`'s wizard assertions (#772): the setup line in rag-admin's output, a wrong and the
   right code, `GET /bff/setup/state` with nothing locked by accident, the code masked in the log, no restart of
@@ -132,8 +120,7 @@ admin-ui`; the code is in `aspire logs adminapi | grep 'Setup code:'`; the provi
   `signIn.configured` and `setup.open`; `GET /api/overview` gains `secretExpiry`; `UME_DOMAIN`,
   `UME_RAG_SETUP_REOPEN`, `Setup__Secret`; `UME_RAG_OIDC_REFUSE_GUESTS` reaches rag-admin as a file (an empty boolean
   stops it at start); Open WebUI starts through `deploy/openwebui/start-with-sign-in.py`.
-- **Local stack:** stopped; every throwaway volume of the session is removed; no worktree besides the main clone and
-  S7's (above).
+- **Local stack:** stopped; every throwaway volume of the session is removed; no worktree besides the main clone.
 - **Open proposals for the user:** `plans/proposals/support-chatbot-features.md`.
 - **U1 (pictures in uploads)** waits for DoIT's files at T6 (decided 2026-11-15).
 - **The Eneo report PDF** is only at `/mnt/c/temp/eneo-vs-ume-rag.pdf`; the user hasn't said whether to keep it in the
@@ -146,7 +133,7 @@ admin-ui`; the code is in `aspire logs adminapi | grep 'Setup code:'`; the provi
 
 - **Design:** the setup wizard's proposal, agreed; a survey of 14 products' first-run and SSO settings; the first
   review (14 findings, all worked in: an explicit setup state, a derived code, 9 not 11 values).
-- **Build:** S0–S6 and the UI follow-up merged, S7 open (table above). Each step by an implementor agent in a
+- **Build:** S0–S7 and the UI follow-up merged (table above). Each step by an implementor agent in a
   worktree; the main session read the diffs, re-ran the tests and opened the PRs.
 - **The security review of S3's code** (an independent agent) found what the main session's own reading had missed: a
   code holder could have had the stored or the deployment's client secret sent to a provider of their choice. Fixed
