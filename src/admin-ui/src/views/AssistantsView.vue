@@ -29,7 +29,9 @@ const columns: Column[] = [
 ]
 
 async function load(): Promise<void> {
-  await assistants.run(async () => (await api.assistants.list({ pageSize: 200 })).items)
+  // Archived assistants last, marked Archived (admin design §5.5.4 badges); otherwise the API's order.
+  const archived = (a: AssistantSummary) => (a.state === 'archived' ? 1 : 0)
+  await assistants.run(async () => (await api.assistants.list({ pageSize: 200 })).items.sort((a, b) => archived(a) - archived(b)))
 }
 
 function created(assistant: Assistant): void {
@@ -55,7 +57,8 @@ onMounted(async () => {
       <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span><span class="block font-mono text-small text-fg-3">{{ row.slug }}</span></template>
       <template #cell-level="{ row }">{{ LEVEL_LABEL[row.classification as AssistantSummary['classification']] }}</template>
       <template #cell-state="{ row }">
-        <UiBadge :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? ASSISTANTS.published : ASSISTANTS.draftOnly" />
+        <UiBadge v-if="row.state === 'archived'" :label="ASSISTANTS.archived" :data-test="`archived-${row.id}`" />
+        <UiBadge v-else :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? ASSISTANTS.published : ASSISTANTS.draftOnly" />
         <UiBadge
           v-if="row.generalKnowledge && row.generalKnowledge !== 'off'" :label="ASSISTANTS.generalKnowledge" class="ml-2"
           :data-test="`general-knowledge-${row.id}`"

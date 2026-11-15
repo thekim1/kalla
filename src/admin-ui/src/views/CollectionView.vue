@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
+import { useTabQuery } from '@/composables/useTabQuery'
 import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
 import CollectionTopics from '@/components/collections/CollectionTopics.vue'
@@ -43,7 +44,6 @@ const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
-const route = useRoute()
 const setup = ref<CollectionSetup | null>(null)
 const read = useLoadable<CollectionRead | null>(null)
 /** The owner's detail; null for a shared knowledge base. */
@@ -54,10 +54,9 @@ const evaluation = ref<EvaluationOverview | null>(null)
 const documents = useLoadable<DocumentSummary[]>([])
 const next = ref<string | null>(null)
 const onlyPii = ref(false)
-const TABS: Tab[] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
-/** `?tab=` opens a tab directly (the setup checklist links to them). */
-const fromQuery = (value: unknown): Tab => (TABS.includes(value as Tab) ? (value as Tab) : 'overview')
-const tab = ref<Tab>(fromQuery(route?.query.tab))
+const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
+/** The tab is kept in `?tab=` (the setup checklist links to them; a reload keeps it). */
+const tab = useTabQuery(TABS)
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
 const usedBy = computed(() =>
@@ -144,6 +143,8 @@ async function load(): Promise<void> {
   evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
+  // Opened on Documents (a link or a reload): the tab watch below fires only on a change.
+  if (tab.value === 'documents' && !documents.loaded.value) void loadDocuments()
 }
 
 /** The upload source the Files tab shows: the one picked while it still exists, else the first; none sends Files to Sources. */
@@ -234,9 +235,6 @@ watch([tab, fileSourceId], ([t]) => {
   if (t !== 'files') return
   if (sources.loaded.value && !fileSourceId.value) pickFileSource()
   else void loadFileSource()
-})
-watch(() => route?.query.tab, (t) => {
-  if (t !== undefined) tab.value = fromQuery(t)
 })
 onMounted(load)
 </script>

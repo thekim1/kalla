@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
+import { useTabQuery } from '@/composables/useTabQuery'
 import { ApiError } from '@/api/client'
 import type {
   CostQuery,
@@ -43,7 +44,8 @@ const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const assistant = useLoadable<Assistant | null>(null)
-const tab = ref<Tab>('draft')
+/** The tab is kept in `?tab=`, so a reload or a link opens it. */
+const tab = useTabQuery<Tab>(['draft', 'test', 'versions', 'audience', 'storage', 'statistics'])
 /** The Statistics tab's Cost card (admin design §8.6). */
 const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
@@ -258,6 +260,8 @@ async function load(): Promise<void> {
     api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
     api.clients.list().catch(() => []),
   ])
+  // Opened on Versions or Storage (a link or a reload): the tab watch fires only on a change.
+  openTab(tab.value)
 }
 
 async function run(kind: typeof busy.value, action: () => Promise<void>): Promise<void> {
@@ -337,10 +341,12 @@ watch(() => [assistant.data.value?.classification, assistant.data.value?.gateway
   models.value = await api.gateway.models(level, key).catch(() => models.value)
 })
 
-watch(tab, (t) => {
+function openTab(t: Tab): void {
   if (t === 'versions') void loadVersions()
   if (t === 'storage') void loadPolicy()
-})
+}
+
+watch(tab, openTab)
 
 async function restore(): Promise<void> {
   const n = restoring.value!
