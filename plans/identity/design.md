@@ -159,7 +159,6 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | – | `Admin:MaxSessionHours` | 12 | copy (`AdminOptions.cs:19-20`) |
 | – | `Admin:RequestsPerMinute` | 120 | copy (`AdminOptions.cs:12-13`) |
 | – | `Admin:AuditSourceAddress` | `Full` | copy (`AdminOptions.cs:26`) |
-| `UME_RAG_ORGANISATION_NAME` | `Admin:OrganisationName` | `Umeå kommun` | **new** (#544): the header and sign-in texts; empty names no organisation |
 
 ### 1.5 `/bff/user`
 
@@ -167,7 +166,9 @@ Copied (`AdminAuthentication.cs:188-208`): `isAuthenticated`, `environment`, `na
 `departmentCodes`, `teamCodes`, `sessionExpiresAt`, `sessionLimitAt`. One addition, also in the gateway (feature C,
 §2.7): `departmentSources` (`[{ code, source: "claim" | "group" }]`), so the setup check in
 `docs/identity-and-roles.md:217-229` also shows where a department came from. No group ids are returned. Also
-`organisationName` (`Admin:OrganisationName`, null when empty, #544), sent before sign-in too.
+`organisationName`, sent before sign-in too: the gateway context's `gateway.organisation_name` under the feature
+`organisation-name` (gateway v0.10.2; M-17 C12), trimmed; null when empty, without the feature or before the first
+context answer.
 
 ### 1.6 Own registration (decided)
 
