@@ -3,8 +3,8 @@
 # on the same throwaway volumes, the way a stack update re-runs it, and checks:
 #
 #   - every secret that existing data depends on is unchanged by the second run: the internal CA, the Data Protection
-#     certificate, the database passwords, the key pepper, the api's keys, the worker's crawl key pepper, the
-#     renderer's WebSocket path, Open WebUI's secrets and key for rag-api, and the blob master key
+#     certificate, the database passwords, the key pepper, the api's keys, rag-admin's setup secret, the worker's crawl
+#     key pepper, the renderer's WebSocket path, Open WebUI's secrets and key for rag-api, and the blob master key
 #   - every file and directory in rag-certs and rag-secrets has the same owner and mode after both runs, and the ones
 #     a service depends on have the expected ones (openwebui-feedback 2750 1000:1654, the blob key 400 1654:1654, ...)
 #   - the gateway credential keys: a UME_RAG_*_GATEWAY_KEY variable wins over the manifest's file in
@@ -61,7 +61,8 @@ snapshot() {
   in_helper -v "${project}_rag-certs:/certs:ro" -v "${project}_rag-secrets:/secrets:ro" "$helper" -c '
     cd / && sha256sum certs/ca.key certs/ca.pem certs/data-protection.pfx secrets/.pepper secrets/postgres/*_password \
       secrets/api/Security__DownloadGrantKeys__k1 secrets/api/Security__CacheKeyPepper \
-      secrets/api/Security__ConversationIdKeys__k1 secrets/worker/Security__CrawlKeyPepper secrets/.render-ws-path \
+      secrets/api/Security__ConversationIdKeys__k1 secrets/admin/Setup__Secret \
+      secrets/worker/Security__CrawlKeyPepper secrets/.render-ws-path \
       secrets/.openwebui-jwt-secret secrets/openwebui/webui_secret_key secrets/openwebui/admin-password \
       secrets/.openwebui-rag-api-key secrets/keys/rag-blob-internal
     find certs secrets -exec stat -c "%a %u:%g %n" {} + | sort -k3'

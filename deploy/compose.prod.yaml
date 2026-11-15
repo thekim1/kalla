@@ -220,6 +220,8 @@ services:
       Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
       Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
+      # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in secrets/admin.
+      Setup__Reopen: ${UME_RAG_SETUP_REOPEN:-}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}

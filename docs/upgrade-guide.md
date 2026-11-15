@@ -23,6 +23,9 @@ exception, with its own steps.
   without `UME_DOMAIN` keeps its names. To switch, set `UME_DOMAIN` and remove the host variables whose value is the
   default. **Check:** `rag-bootstrap`'s certificates and the proxy's names are unchanged (no `issuing certificate` for
   rag-api or rag-admin in its log unless a name changed).
+- **rag-admin's setup secret (setup wizard S3).** Rolling update, no migration. **Apply:** nothing; the next deploy
+  (`rag-bootstrap`, `init-deployment.sh`, then `create-secrets.sh` on Kubernetes) generates `admin/Setup__Secret`.
+  `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the setup wizard again.
 
 ## 0.6.0
 

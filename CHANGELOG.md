@@ -9,6 +9,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   and Open WebUI default to `rag.<domain>`, `rag-admin.<domain>` and `chat.<domain>`, each `UME_RAG_*_HOST` still
   overrides its own, and a stack with the names and no domain works as before; `init-deployment.sh --domain` does the
   same for Compose. `stack.env.example` has `UME_DOMAIN` instead of the three host lines.
+- **rag-admin's setup secret and the re-open variable** (setup wizard S3, deploy side): `rag-bootstrap`,
+  `init-deployment.sh` and so `create-secrets.sh` generate `admin/Setup__Secret` once (never overwritten), the key of
+  the setup wizard's code; `UME_RAG_SETUP_REOPEN` (Portainer, `deploy/.env`, kept on a re-run) and `Setup__Reopen`
+  (Kubernetes) pass rag-admin `Setup:Reopen`, empty by default. The AppHost's `Setup:Try=true` starts rag-admin without
+  the sign-in authority and client secret and with a setup secret, to try the wizard locally.
 
 ## 0.6.0 (2026-11-15)
 

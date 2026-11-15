@@ -70,6 +70,9 @@
 #                             feedback-import@localhost, and the one-shot rag-openwebui-setup mints its API key after
 #                             Open WebUI starts (password sign-in stays off) and keeps it while it works. A new key: delete
 #                             <stack>_rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
+#   UME_RAG_SETUP_REOPEN      empty; from the release with the setup wizard, any new value (for example today's date)
+#                             opens the wizard once, for an hour, with a new setup code in rag-admin's log (remove it
+#                             before restoring a database)
 #   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
@@ -296,6 +299,8 @@ x-rag-secrets: &rag-secrets-mount
       Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
       Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
       Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
+      # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in rag-secrets.
+      Setup__Reopen: ${UME_RAG_SETUP_REOPEN:-}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}

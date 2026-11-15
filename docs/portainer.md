@@ -247,6 +247,15 @@ rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgr
 Tokens and cost per assistant and day from before the upgrade are gone (`DailyTotalsWithoutCost`); from the upgrade
 on they are recorded per model call.
 
+## Opening the setup wizard again
+
+From the release that has the setup wizard; nothing in today's steps uses it. To change sign-in after setup, set
+`UME_RAG_SETUP_REOPEN` to a new value (for example today's date) and update the stack. rag-admin opens the wizard once
+and prints a new setup code in its log (*Containers → rag-admin → Logs*), valid for one hour. Before restoring a
+database, remove the variable first, or the restored database opens the wizard again. The code is derived from
+`rag-secrets/admin/Setup__Secret`, which `rag-bootstrap` generates once; it needs no backup (a new one only changes
+future codes).
+
 ## When something fails
 
 | Symptom | Look at |

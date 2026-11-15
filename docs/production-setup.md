@@ -129,7 +129,8 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
 Without `--yes` it prompts for what is missing. It generates, under `deploy/certs` and `deploy/secrets`: an internal CA
 and certificates for postgres, the worker, the parser and the two public listeners; the Data Protection certificate;
 the database passwords and connection strings; the key pepper; the api's download-grant, cache-key and
-conversation-id keys; the Open WebUI JWT secret; the worker's crawl key pepper (`Security__CrawlKeyPepper`, the HMAC key
+conversation-id keys; the admin's setup secret (`admin/Setup__Secret`, the key of the setup wizard's code; it needs no
+backup, a new one only changes future codes); the Open WebUI JWT secret; the worker's crawl key pepper (`Security__CrawlKeyPepper`, the HMAC key
 of the host hash in security event 5101); the renderer's secret WebSocket path (`.render-ws-path`, written for the
 renderer as `renderer.env` and, with `--render`, for the worker as `worker/Render__Endpoint`); the blob master key
 `keys/rag-blob-internal`; the pgBackRest passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings
@@ -140,7 +141,7 @@ and the renderer are the exceptions: they read their secrets only from their env
 It is safe to re-run: existing secrets, keys and the Data Protection certificate are never overwritten (a new one would
 break existing data or backups). Connection strings and other derived files are written again, and a re-run without
 `--renew-certs` rewrites `deploy/.env` and keeps the previous one as `deploy/.env.bak`, so carry over any lines you
-added by hand. After the first run the files belong to the containers' users, so re-run it as root.
+added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the files belong to the containers' users, so re-run it as root.
 
 | Option | Default | Effect |
 |---|---|---|
@@ -214,6 +215,11 @@ RAG roles is open in #468.
 **Entra ID from P2:** RAG's own registrations (`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are
 Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
 [`infra/entra/README.md`](../infra/entra/README.md). Switching is configuration (`Oidc:*`), not code.
+
+**Opening the setup wizard again** (from the release that has the wizard): set `UME_RAG_SETUP_REOPEN` in `deploy/.env`
+to a new value (for example today's date) and run `docker compose --env-file deploy/.env up -d`. rag-admin opens the
+wizard once and prints a new setup code, valid for one hour, in `docker compose --env-file deploy/.env logs rag-admin`.
+Before restoring a database, empty the variable first, or the restored database opens the wizard again.
 
 ### 4. Host units
 

@@ -414,22 +414,44 @@ else
     }
 }
 
+// Setup:Try=true (AppHost user secrets) starts rag-admin without a sign-in authority and client secret and with a setup
+// secret, so the setup wizard opens (identity design §19); Setup:Reopen is passed on for a database whose setup is done.
+var setupTry = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("Setup:Try");
 if (keycloak is not null)
 {
-    adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/ume"))
-        .WithEnvironment("Oidc__ClientSecret", oidcSecret)
-        .WaitFor(keycloak);
+    if (!setupTry)
+    {
+        adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/ume"))
+            .WithEnvironment("Oidc__ClientSecret", oidcSecret);
+    }
+
+    adminApi.WaitFor(keycloak);
 }
 else
 {
     adminApi.WithExternalHttpEndpoints();
 }
 
+if (setupTry)
+{
+    adminApi.WithEnvironment("Setup__Secret", Secret("setup-secret", 64));
+    if (builder.Configuration["Setup:Reopen"] is { Length: > 0 } reopen)
+    {
+        adminApi.WithEnvironment("Setup__Reopen", reopen);
+    }
+}
+
 if (externalOidc)
 {
-    // Every Oidc:* setting (Authority, ClientId, ClientSecret, RoleClaim, ...) is passed through.
+    // Every Oidc:* setting (Authority, ClientId, ClientSecret, RoleClaim, ...) is passed through; with Setup:Try, all but
+    // the authority and the client secret.
     foreach (var (key, value) in builder.Configuration.GetSection("Oidc").AsEnumerable(makePathsRelative: true))
     {
+        if (setupTry && key is "Authority" or "ClientSecret")
+        {
+            continue;
+        }
+
         if (value is not null)
         {
             adminApi.WithEnvironment("Oidc__" + key.Replace(":", "__", StringComparison.Ordinal), value);

@@ -103,6 +103,12 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
 Settings go into the overlay as ConfigMap literals named the way the apps read them (`Section__Key`), for example
 `OTEL_EXPORTER_OTLP_ENDPOINT` or `Crawl__AllowedPrivateRanges`. Secrets stay in the secret files.
 
+**Opening the setup wizard again** (from the release that has the wizard): set `Setup__Reopen` in the overlay's
+`ume-rag-admin-config` to a new value (for example today's date) and deploy. rag-admin opens the wizard once and prints
+a new setup code, valid for one hour, in `kubectl -n ume-rag logs deploy/rag-admin` (either pod). Before restoring a
+database, remove the literal first. The code's key is `Setup__Secret` in `ume-rag-admin-secrets`, generated once by
+`init-deployment.sh`; it needs no backup.
+
 ## Updates without downtime
 
 Change the image digests in the overlay and run `deploy.sh` again. It:
