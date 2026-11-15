@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { api } from '@/api'
 import type { ApiKey, AssistantSummary, CollectionSummary, Department, KeyCreated, KeyRequest } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -18,7 +18,16 @@ import { COMMON, KEY_FORM, PLATFORM } from '@/utils/labels'
 // Limit to assistants lists the assistants the app offers (`audienceIds`), and any the key names that it no longer offers,
 // so they can be unticked; Limit to knowledge bases lists every knowledge base, since it also limits the knowledge
 // routes, which do not go through an assistant. The expiry is a date: the key stops working at the end of that day.
-const props = defineProps<{ formId: string; apiKey: ApiKey | null; clientId: string; audienceIds: string[] }>()
+// The pickers' rows come from the drawer, which reads them once (`useClientChoices`), not once per key.
+const props = defineProps<{
+  formId: string
+  apiKey: ApiKey | null
+  clientId: string
+  audienceIds: string[]
+  assistants: AssistantSummary[]
+  departments: Department[]
+  collections: CollectionSummary[]
+}>()
 const emit = defineEmits<{ (e: 'saved', response: KeyCreated | ApiKey): void; (e: 'cancel'): void }>()
 
 const K = KEY_FORM
@@ -46,18 +55,13 @@ const restrictionsOpen = ref(
     || values.requestsPerMinute),
 )
 const saving = ref(false)
-/** The pickers' rows are being read: the lists say so instead of that there are none. */
-const loading = ref(true)
-const departments = ref<Department[]>([])
-const assistants = ref<AssistantSummary[]>([])
-const collections = ref<CollectionSummary[]>([])
 
 const teamOptions = computed(() => [
   { value: '', label: K.noTeam },
-  ...departments.value.flatMap((d) => d.teams.filter((t) => t.isActive || t.id === values.teamId).map((t) => ({ value: t.id, label: `${d.name}: ${t.name}` }))),
+  ...props.departments.flatMap((d) => d.teams.filter((t) => t.isActive || t.id === values.teamId).map((t) => ({ value: t.id, label: `${d.name}: ${t.name}` }))),
 ])
 const scopeAssistants = computed(() =>
-  assistants.value.filter((a) => props.audienceIds.includes(a.id) || values.assistantIds.includes(a.id)).map((a) => ({
+  props.assistants.filter((a) => props.audienceIds.includes(a.id) || values.assistantIds.includes(a.id)).map((a) => ({
     ...a, offered: props.audienceIds.includes(a.id),
   })),
 )
@@ -107,15 +111,6 @@ async function save(): Promise<void> {
     saving.value = false
   }
 }
-
-onMounted(async () => {
-  ;[departments.value, assistants.value, collections.value] = await Promise.all([
-    api.organisation.departments().catch(() => []),
-    api.assistants.list({ pageSize: 200 }).then((p) => p.items).catch(() => []),
-    api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
-  ])
-  loading.value = false
-})
 </script>
 
 <template>
@@ -143,8 +138,7 @@ onMounted(async () => {
               :model-value="values.assistantIds.includes(a.id)" @update:model-value="values.assistantIds = toggle(values.assistantIds, a.id, $event)"
             />
           </div>
-          <p v-if="loading" class="text-small text-fg-3" role="status">{{ COMMON.loading }}</p>
-          <p v-else-if="scopeAssistants.length === 0" class="text-small text-fg-3">{{ K.noAssistants }}</p>
+          <p v-if="scopeAssistants.length === 0" class="text-small text-fg-3">{{ K.noAssistants }}</p>
         </fieldset>
         <fieldset class="grid gap-1" :aria-describedby="`${id('collections')}-hint`" data-test="scope-collections">
           <legend class="mb-1 font-medium">{{ K.collections }}</legend>
@@ -155,7 +149,7 @@ onMounted(async () => {
               @update:model-value="values.collectionIds = toggle(values.collectionIds, c.id, $event)"
             />
           </div>
-          <p v-if="!loading && collections.length === 0" class="text-small text-fg-3">{{ K.noCollections }}</p>
+          <p v-if="collections.length === 0" class="text-small text-fg-3">{{ K.noCollections }}</p>
           <p v-if="form.errors.scopes" class="text-small text-danger">{{ form.errors.scopes }}</p>
         </fieldset>
         <TextField :id="id('expiresAt')" v-model="values.expiresAt" type="date" :label="K.expiresAt" :hint="K.expiresHint" :error="form.errors.expiresAt" />

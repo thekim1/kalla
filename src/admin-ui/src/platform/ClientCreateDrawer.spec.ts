@@ -121,6 +121,10 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     expect(result.get('[data-test=secret]').text()).toContain('ume-rag-sk-secret')
     expect(result.get('[data-test=client-id]').text()).toContain('0199-client')
     expect(result.find('[data-test=connect-example]').exists()).toBe(true)
+
+    // Shown once: closing the drawer drops the secret from the component's state.
+    await wrapper.setProps({ open: false })
+    expect((wrapper.vm as unknown as { result: unknown }).result).toBeNull()
     wrapper.unmount()
   })
 

@@ -5,7 +5,7 @@ import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
 import { createAppRouter, routes } from '.'
 import { ALL_ROLES, filterEntries, mobileTabs, navGroups, searchEntries } from './nav'
-import { PAGE, PLATFORM } from '@/utils/labels'
+import { NAV_KEYWORDS, PAGE, PLATFORM } from '@/utils/labels'
 
 describe('menu structure (copied checks)', () => {
   const items = navGroups.flatMap((g) => g.items)
@@ -40,6 +40,13 @@ describe('search', () => {
     expect(filterEntries(entries, 'api keys').map((e) => e.id)).toEqual(['platform-clients'])
     expect(filterEntries(entries, 'embedding profiles').map((e) => e.id)).toContain('platform-models')
     for (const query of ['member groups', 'sharing', 'municipality']) expect(filterEntries(entries, query).map((e) => e.id)).toContain('organisation')
+  })
+
+  it('takes the platform pages\' search words from labels.ts, like every other page', () => {
+    const items = navGroups.flatMap((g) => g.items)
+    expect(items.find((i) => i.name === 'platform-models')?.keywords).toEqual([...NAV_KEYWORDS.models])
+    expect(items.find((i) => i.name === 'platform-settings')?.keywords).toEqual([...NAV_KEYWORDS.settings])
+    expect(filterEntries(entries, 'retention').map((e) => e.id)).toContain('platform-settings')
   })
 
   it('opens the old addresses of the Platform objects pages where their content went', async () => {
