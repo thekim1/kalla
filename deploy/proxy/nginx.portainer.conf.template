@@ -51,30 +51,30 @@ http {
     }
 
     # The gateway (its deploy/proxy/nginx.conf.example).
-    server {
-        listen 8443 ssl;
-        http2 on;
-        server_name @GATEWAY_HOST@;
-        client_max_body_size 52m;          # image edits (gateway default 50 MB), audio uploads (26 MB), documents
-        location / {
-            proxy_pass https://ume_gateway;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $ume_connection;
-            proxy_set_header Host $host;
-            # List this proxy under the gateway admin's Settings > Trusted proxies, or the gateway ignores the header.
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_buffering off;           # stream tokens as they arrive (SSE)
-            proxy_request_buffering off;   # uploads straight through: no recordings in proxy temp files
-            proxy_read_timeout 600s;
-            proxy_send_timeout 600s;
-            proxy_connect_timeout 5s;
-            proxy_ssl_verify on;
-            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
-            proxy_ssl_name gateway;
-            proxy_ssl_server_name on;
-        }
-    }
+#gateway    server {
+#gateway        listen 8443 ssl;
+#gateway        http2 on;
+#gateway        server_name @GATEWAY_HOST@;
+#gateway        client_max_body_size 52m;          # image edits (gateway default 50 MB), audio uploads (26 MB), documents
+#gateway        location / {
+#gateway            proxy_pass https://ume_gateway;
+#gateway            proxy_http_version 1.1;
+#gateway            proxy_set_header Upgrade $http_upgrade;
+#gateway            proxy_set_header Connection $ume_connection;
+#gateway            proxy_set_header Host $host;
+#gateway            # List this proxy under the gateway admin's Settings > Trusted proxies, or the gateway ignores the header.
+#gateway            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#gateway            proxy_buffering off;           # stream tokens as they arrive (SSE)
+#gateway            proxy_request_buffering off;   # uploads straight through: no recordings in proxy temp files
+#gateway            proxy_read_timeout 600s;
+#gateway            proxy_send_timeout 600s;
+#gateway            proxy_connect_timeout 5s;
+#gateway            proxy_ssl_verify on;
+#gateway            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+#gateway            proxy_ssl_name gateway;
+#gateway            proxy_ssl_server_name on;
+#gateway        }
+#gateway    }
 
     # The gateway's admin UI and API.
 #gwadmin    server {
@@ -95,28 +95,28 @@ http {
 #gwadmin    }
 
     # rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
-    server {
-        listen 8443 ssl;
-        http2 on;
-        server_name @API_HOST@;
-        client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
-        location / {
-            proxy_pass https://ume_rag_api;
-            proxy_http_version 1.1;
-            proxy_set_header Connection '';
-            proxy_set_header Host $host;
-            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
-            proxy_read_timeout 600s;
-            proxy_send_timeout 600s;
-            proxy_connect_timeout 5s;
-            proxy_ssl_verify on;
-            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
-            proxy_ssl_name rag-api;
-            proxy_ssl_server_name on;
-        }
-    }
+#ragapi    server {
+#ragapi        listen 8443 ssl;
+#ragapi        http2 on;
+#ragapi        server_name @API_HOST@;
+#ragapi        client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
+#ragapi        location / {
+#ragapi            proxy_pass https://ume_rag_api;
+#ragapi            proxy_http_version 1.1;
+#ragapi            proxy_set_header Connection '';
+#ragapi            proxy_set_header Host $host;
+#ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
+#ragapi            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#ragapi            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
+#ragapi            proxy_read_timeout 600s;
+#ragapi            proxy_send_timeout 600s;
+#ragapi            proxy_connect_timeout 5s;
+#ragapi            proxy_ssl_verify on;
+#ragapi            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+#ragapi            proxy_ssl_name rag-api;
+#ragapi            proxy_ssl_server_name on;
+#ragapi        }
+#ragapi    }
 
     # rag-admin: the admin UI and its API (BFF).
 #ragadmin    server {

@@ -1273,24 +1273,28 @@ configs:
       case ",$${COMPOSE_PROFILES:-}," in
         *,proxy,*)
           hostname_ok() { printf '%s' "$$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$$'; }
-          gw="$${UME_GATEWAY_HOST:-}"; gw_admin="$${UME_ADMIN_HOST:-}"; rag_admin="$${UME_RAG_ADMIN_HOST:-}"
+          gw="$${UME_GATEWAY_HOST:-}"; gw_admin="$${UME_ADMIN_HOST:-}"; api="$$UME_RAG_API_HOST"; rag_admin="$${UME_RAG_ADMIN_HOST:-}"
           owui_host="$${UME_RAG_OPENWEBUI_HOST:-}"
-          hostname_ok "$$gw" || proxy_todo="$$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"
-          hostname_ok "$$UME_RAG_API_HOST" || proxy_todo="$$proxy_todo|UME_RAG_API_HOST is not a host name"
-          enable="-e /^#gwadmin/d"
-          if hostname_ok "$$gw_admin" && [ "$$gw_admin" != "$$gw" ]; then enable="-e s/^#gwadmin//"
-          else proxy_todo="$$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
-          if hostname_ok "$$rag_admin" && [ "$$rag_admin" != "$$UME_RAG_API_HOST" ]; then enable="$$enable -e s/^#ragadmin//"
-          else enable="$$enable -e /^#ragadmin/d"
+          # Every block has a marker and is written only for a valid host name, and only validated names reach sed (#711): a
+          # URL or a typo leaves that block out and names it on the checklist instead of stopping rag-bootstrap.
+          if hostname_ok "$$gw"; then enable="-e s/^#gateway//"
+          else gw=""; enable="-e /^#gateway/d"; proxy_todo="$$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"; fi
+          if hostname_ok "$$api"; then enable="$$enable -e s/^#ragapi//"
+          else api=""; enable="$$enable -e /^#ragapi/d"; proxy_todo="$$proxy_todo|UME_RAG_API_HOST is not a host name, so the proxy has no rag-api block"; fi
+          if hostname_ok "$$gw_admin" && [ "$$gw_admin" != "$$gw" ]; then enable="$$enable -e s/^#gwadmin//"
+          else gw_admin=""; enable="$$enable -e /^#gwadmin/d"
+            proxy_todo="$$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
+          if hostname_ok "$$rag_admin" && [ "$$rag_admin" != "$$api" ]; then enable="$$enable -e s/^#ragadmin//"
+          else rag_admin=""; enable="$$enable -e /^#ragadmin/d"
             proxy_todo="$$proxy_todo|UME_RAG_ADMIN_HOST: the proxy serves Ume.Rag's admin only on a host name of its own"; fi
           case ",$${COMPOSE_PROFILES:-}," in
             *,openwebui,*)
               if hostname_ok "$$owui_host"; then enable="$$enable -e s/^#owui//"
-              else enable="$$enable -e /^#owui/d"; proxy_todo="$$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
-            *) enable="$$enable -e /^#owui/d" ;;
+              else owui_host=""; enable="$$enable -e /^#owui/d"; proxy_todo="$$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
+            *) owui_host=""; enable="$$enable -e /^#owui/d" ;;
           esac
           # shellcheck disable=SC2086 # $$enable is a list of sed expressions
-          sed $$enable -e "s/@GATEWAY_HOST@/$$gw/g" -e "s/@ADMIN_HOST@/$$gw_admin/g" -e "s/@API_HOST@/$$UME_RAG_API_HOST/g" \
+          sed $$enable -e "s/@GATEWAY_HOST@/$$gw/g" -e "s/@ADMIN_HOST@/$$gw_admin/g" -e "s/@API_HOST@/$$api/g" \
             -e "s/@RAG_ADMIN_HOST@/$$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$$owui_host/g" /config/nginx-proxy.conf.template > "$$F/proxy/nginx.conf"
           # The internal CAs it verifies the upstreams against (public certificates only; ume-certs also holds private keys).
           cp "$$C/ca.pem" "$$F/proxy/rag-ca.pem"
@@ -1834,30 +1838,30 @@ configs:
           }
 
           # The gateway (its deploy/proxy/nginx.conf.example).
-          server {
-              listen 8443 ssl;
-              http2 on;
-              server_name @GATEWAY_HOST@;
-              client_max_body_size 52m;          # image edits (gateway default 50 MB), audio uploads (26 MB), documents
-              location / {
-                  proxy_pass https://ume_gateway;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade $$http_upgrade;
-                  proxy_set_header Connection $$ume_connection;
-                  proxy_set_header Host $$host;
-                  # List this proxy under the gateway admin's Settings > Trusted proxies, or the gateway ignores the header.
-                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-                  proxy_buffering off;           # stream tokens as they arrive (SSE)
-                  proxy_request_buffering off;   # uploads straight through: no recordings in proxy temp files
-                  proxy_read_timeout 600s;
-                  proxy_send_timeout 600s;
-                  proxy_connect_timeout 5s;
-                  proxy_ssl_verify on;
-                  proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
-                  proxy_ssl_name gateway;
-                  proxy_ssl_server_name on;
-              }
-          }
+      #gateway    server {
+      #gateway        listen 8443 ssl;
+      #gateway        http2 on;
+      #gateway        server_name @GATEWAY_HOST@;
+      #gateway        client_max_body_size 52m;          # image edits (gateway default 50 MB), audio uploads (26 MB), documents
+      #gateway        location / {
+      #gateway            proxy_pass https://ume_gateway;
+      #gateway            proxy_http_version 1.1;
+      #gateway            proxy_set_header Upgrade $$http_upgrade;
+      #gateway            proxy_set_header Connection $$ume_connection;
+      #gateway            proxy_set_header Host $$host;
+      #gateway            # List this proxy under the gateway admin's Settings > Trusted proxies, or the gateway ignores the header.
+      #gateway            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #gateway            proxy_buffering off;           # stream tokens as they arrive (SSE)
+      #gateway            proxy_request_buffering off;   # uploads straight through: no recordings in proxy temp files
+      #gateway            proxy_read_timeout 600s;
+      #gateway            proxy_send_timeout 600s;
+      #gateway            proxy_connect_timeout 5s;
+      #gateway            proxy_ssl_verify on;
+      #gateway            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+      #gateway            proxy_ssl_name gateway;
+      #gateway            proxy_ssl_server_name on;
+      #gateway        }
+      #gateway    }
 
           # The gateway's admin UI and API.
       #gwadmin    server {
@@ -1878,28 +1882,28 @@ configs:
       #gwadmin    }
 
           # rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
-          server {
-              listen 8443 ssl;
-              http2 on;
-              server_name @API_HOST@;
-              client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
-              location / {
-                  proxy_pass https://ume_rag_api;
-                  proxy_http_version 1.1;
-                  proxy_set_header Connection '';
-                  proxy_set_header Host $$host;
-                  # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
-                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-                  proxy_buffering off;           # stream answer tokens as they arrive (SSE)
-                  proxy_read_timeout 600s;
-                  proxy_send_timeout 600s;
-                  proxy_connect_timeout 5s;
-                  proxy_ssl_verify on;
-                  proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
-                  proxy_ssl_name rag-api;
-                  proxy_ssl_server_name on;
-              }
-          }
+      #ragapi    server {
+      #ragapi        listen 8443 ssl;
+      #ragapi        http2 on;
+      #ragapi        server_name @API_HOST@;
+      #ragapi        client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
+      #ragapi        location / {
+      #ragapi            proxy_pass https://ume_rag_api;
+      #ragapi            proxy_http_version 1.1;
+      #ragapi            proxy_set_header Connection '';
+      #ragapi            proxy_set_header Host $$host;
+      #ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
+      #ragapi            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+      #ragapi            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
+      #ragapi            proxy_read_timeout 600s;
+      #ragapi            proxy_send_timeout 600s;
+      #ragapi            proxy_connect_timeout 5s;
+      #ragapi            proxy_ssl_verify on;
+      #ragapi            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragapi            proxy_ssl_name rag-api;
+      #ragapi            proxy_ssl_server_name on;
+      #ragapi        }
+      #ragapi    }
 
           # rag-admin: the admin UI and its API (BFF).
       #ragadmin    server {

@@ -9,6 +9,8 @@
 #     a service depends on have the expected ones (openwebui-feedback 2750 1000:1654, the blob key 400 1654:1654, ...)
 #   - the gateway credential keys: a UME_RAG_*_GATEWAY_KEY variable wins over the manifest's file in
 #     integration-secrets, the file is used without one, and with neither the service has no key
+#   - the TLS proxy (profile proxy): a URL where a host name belongs leaves that block out of nginx.conf and names it on
+#     the checklist, instead of stopping rag-bootstrap (#711)
 #
 # No image but rag-bootstrap's (alpine/openssl) is pulled and nothing else starts: the gateway's ume-certs volume is
 # faked with a CA certificate only, and integration-secrets with one key file.
@@ -106,3 +108,14 @@ grep -q 'UME_RAG_ADMIN_GATEWAY_KEY: no key for rag-admin' "$work/bootstrap-2.log
   || fail "the checklist does not name rag-admin's missing key"
 grep -qE 'UME_RAG_(API|WORKER)_GATEWAY_KEY' "$work/bootstrap-2.log" && fail "the checklist names a key that is set"
 ok "a variable wins over the manifest's file, the file is used without one, and a missing key is on the checklist"
+
+echo "== the proxy with a URL as a host name"
+sed -i 's|^UME_GATEWAY_HOST=.*|UME_GATEWAY_HOST=https://llm.example.se|' "$work/stack.env"
+grep -q '^UME_GATEWAY_HOST=https://' "$work/stack.env" || echo "UME_GATEWAY_HOST=https://llm.example.se" >> "$work/stack.env"
+run_bootstrap 3
+grep -q 'UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block' "$work/bootstrap-3.log" \
+  || fail "the checklist does not name the bad UME_GATEWAY_HOST"
+conf="$(in_helper -v "${project}_rag-config:/f:ro" "$helper" -c 'cat /f/proxy/nginx.conf')"
+grep -q 'server_name rag.example.se;' <<< "$conf" || fail "the proxy lost rag-api's block"
+grep -q 'llm.example.se\|@GATEWAY_HOST@' <<< "$conf" && fail "nginx.conf still has a gateway block"
+ok "a URL as UME_GATEWAY_HOST leaves the gateway block out and is on the checklist; rag-bootstrap completes"

@@ -171,24 +171,28 @@ mkdir -p "$F/proxy"
 case ",${COMPOSE_PROFILES:-}," in
   *,proxy,*)
     hostname_ok() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'; }
-    gw="${UME_GATEWAY_HOST:-}"; gw_admin="${UME_ADMIN_HOST:-}"; rag_admin="${UME_RAG_ADMIN_HOST:-}"
+    gw="${UME_GATEWAY_HOST:-}"; gw_admin="${UME_ADMIN_HOST:-}"; api="$UME_RAG_API_HOST"; rag_admin="${UME_RAG_ADMIN_HOST:-}"
     owui_host="${UME_RAG_OPENWEBUI_HOST:-}"
-    hostname_ok "$gw" || proxy_todo="$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"
-    hostname_ok "$UME_RAG_API_HOST" || proxy_todo="$proxy_todo|UME_RAG_API_HOST is not a host name"
-    enable="-e /^#gwadmin/d"
-    if hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="-e s/^#gwadmin//"
-    else proxy_todo="$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
-    if hostname_ok "$rag_admin" && [ "$rag_admin" != "$UME_RAG_API_HOST" ]; then enable="$enable -e s/^#ragadmin//"
-    else enable="$enable -e /^#ragadmin/d"
+    # Every block has a marker and is written only for a valid host name, and only validated names reach sed (#711): a
+    # URL or a typo leaves that block out and names it on the checklist instead of stopping rag-bootstrap.
+    if hostname_ok "$gw"; then enable="-e s/^#gateway//"
+    else gw=""; enable="-e /^#gateway/d"; proxy_todo="$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"; fi
+    if hostname_ok "$api"; then enable="$enable -e s/^#ragapi//"
+    else api=""; enable="$enable -e /^#ragapi/d"; proxy_todo="$proxy_todo|UME_RAG_API_HOST is not a host name, so the proxy has no rag-api block"; fi
+    if hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="$enable -e s/^#gwadmin//"
+    else gw_admin=""; enable="$enable -e /^#gwadmin/d"
+      proxy_todo="$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
+    if hostname_ok "$rag_admin" && [ "$rag_admin" != "$api" ]; then enable="$enable -e s/^#ragadmin//"
+    else rag_admin=""; enable="$enable -e /^#ragadmin/d"
       proxy_todo="$proxy_todo|UME_RAG_ADMIN_HOST: the proxy serves Ume.Rag's admin only on a host name of its own"; fi
     case ",${COMPOSE_PROFILES:-}," in
       *,openwebui,*)
         if hostname_ok "$owui_host"; then enable="$enable -e s/^#owui//"
-        else enable="$enable -e /^#owui/d"; proxy_todo="$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
-      *) enable="$enable -e /^#owui/d" ;;
+        else owui_host=""; enable="$enable -e /^#owui/d"; proxy_todo="$proxy_todo|UME_RAG_OPENWEBUI_HOST: the proxy has no Open WebUI block"; fi ;;
+      *) owui_host=""; enable="$enable -e /^#owui/d" ;;
     esac
     # shellcheck disable=SC2086 # $enable is a list of sed expressions
-    sed $enable -e "s/@GATEWAY_HOST@/$gw/g" -e "s/@ADMIN_HOST@/$gw_admin/g" -e "s/@API_HOST@/$UME_RAG_API_HOST/g" \
+    sed $enable -e "s/@GATEWAY_HOST@/$gw/g" -e "s/@ADMIN_HOST@/$gw_admin/g" -e "s/@API_HOST@/$api/g" \
       -e "s/@RAG_ADMIN_HOST@/$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$owui_host/g" /config/nginx-proxy.conf.template > "$F/proxy/nginx.conf"
     # The internal CAs it verifies the upstreams against (public certificates only; ume-certs also holds private keys).
     cp "$C/ca.pem" "$F/proxy/rag-ca.pem"

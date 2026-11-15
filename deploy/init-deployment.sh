@@ -258,16 +258,19 @@ issue() { # issue DIR SAN... — DIR/DIR.crt and DIR/DIR.key, valid for each DNS
     -CAserial "$tmp/ca.srl" -out "$certs/$svc/$svc.crt" -days 825 -extfile "$tmp/leaf.ext" >/dev/null 2>&1
   rm -rf "$tmp"; : > "$certs/$svc/.internal"
 }
+# env_value KEY: KEY's last value in deploy/.env, surrounding quotes removed. The file is Compose's .env, not a shell
+# script (a value such as a name with a space or a ;-separated list would run as a command), so it is read, never sourced.
+env_value() {
+  sed -n "s/^$1=//p" "$env_file" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
 if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
-  # shellcheck disable=SC1090
-  . "$env_file"
-  api_host="${UME_RAG_API_PUBLIC_URL#https://}"; api_host="${api_host%%[:/]*}"
-  admin_host="${UME_RAG_ADMIN_PUBLIC_HOST:-$api_host}"
+  api_host="$(env_value UME_RAG_API_PUBLIC_URL)"; api_host="${api_host#https://}"; api_host="${api_host%%[:/]*}"
+  admin_host="$(env_value UME_RAG_ADMIN_PUBLIC_HOST)"; admin_host="${admin_host:-$api_host}"
   # The kept deploy/.env decides whether the renderer runs, so its endpoint follows the profile; and the malware scan's
   # mode, for the closing notes.
   render=0
-  case ",${COMPOSE_PROFILES:-}," in *,render,*) render=1;; esac
-  clamav="${UME_RAG_CLAMAV_MODE:-on}"
+  case ",$(env_value COMPOSE_PROFILES)," in *,render,*) render=1;; esac
+  clamav="$(env_value UME_RAG_CLAMAV_MODE)"; clamav="${clamav:-on}"
 fi
 # Internal names only: rag-worker's listener serves its health probe, rag-parser's the worker, postgres every service.
 if [ "$renew" = 1 ] || new_file "$certs/postgres/postgres.crt"; then issue postgres postgres; fi
