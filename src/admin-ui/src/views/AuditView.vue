@@ -192,14 +192,14 @@ onMounted(() => load())
       <template #cell-entity="{ row }">
         <span class="flex flex-wrap items-baseline gap-x-3">
           <RouterLink
-            v-if="objectLink(row)" :to="objectLink(row)!" class="text-accent-ink underline" :title="row.entityId ?? undefined" data-test="object-link" @click.stop
+            v-if="objectLink(row)" :to="objectLink(row)!" class="inline-flex min-h-6 items-center text-accent-ink underline" :title="row.entityId ?? undefined" data-test="object-link" @click.stop
           >
             {{ objectName(row) ?? row.entityId }}
           </RouterLink>
           <span v-else-if="objectName(row)" :title="row.entityId ?? undefined" data-test="object-name">{{ objectName(row) }}</span>
           <span v-else class="break-all font-mono text-small text-fg-2" data-test="object-name">{{ row.entityId ?? '–' }}</span>
           <button
-            v-if="row.entityId" type="button" class="text-small text-accent-ink underline" :aria-label="AUDIT.onlyThisLabel(objectName(row) ?? row.entityId)"
+            v-if="row.entityId" type="button" class="inline-flex min-h-6 items-center text-small text-accent-ink underline" :aria-label="AUDIT.onlyThisLabel(objectName(row) ?? row.entityId)"
             data-test="only-this" @click.stop="only(row)"
           >
             {{ AUDIT.onlyThis }}

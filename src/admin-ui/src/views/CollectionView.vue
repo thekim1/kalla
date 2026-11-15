@@ -303,7 +303,7 @@ onMounted(load)
               <span v-else data-test="used-by">
                 <template v-for="(u, i) in users" :key="u.id">
                   <template v-if="i > 0">, </template>
-                  <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
+                  <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link inline-flex min-h-6 items-center" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
                 </template>
               </span>
             </DetailRow>
