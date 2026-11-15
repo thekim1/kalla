@@ -165,6 +165,14 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // WebUI) in a new tab, and rag-api offers the assistant's model name to the client's key.
     const portal = page.getByRole('link', { name: 'Open in Open WebUI (dev) (opens in a new tab)' })
     const portalUrl = new URL((await portal.getAttribute('href'))!)
+    // TEMPORARY probe (dry run of 0.6.0): why the link opens no tab.
+    console.log('PORTAL-PROBE', JSON.stringify(await portal.evaluate((e) => {
+      const r = e.getBoundingClientRect()
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+      return { html: e.outerHTML.slice(0, 300), rect: [r.x, r.y, r.width, r.height], top: top?.outerHTML.slice(0, 200), sameAsLink: top === e || e.contains(top),
+        inert: !!e.closest('[inert]'), dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.outerHTML.slice(0, 120)) }
+    })))
+    page.on('console', (m) => console.log('PAGE-CONSOLE', m.type(), m.text()))
     const [openWebUi] = await Promise.all([page.context().waitForEvent('page'), act.press(portal)])
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
