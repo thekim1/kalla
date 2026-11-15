@@ -579,8 +579,8 @@ def run_job(job: dict[str, Any], pipelines: Pipelines) -> dict[str, Any]:
     elif fmt in sniff.IMAGES:
         out = _run_image(job, options, pipelines, fmt)
     elif fmt in sniff.LEGACY:
-        # LibreOffice first (ume_parser.legacy), then the OOXML file through the declarative backend; the result keeps
-        # the sniffed legacy format.
+        # LibreOffice first (ume_parser.legacy, which runs the zip pre-check on its output), then the OOXML file through
+        # the declarative backend; the result keeps the sniffed legacy format.
         target = sniff.LEGACY[fmt]
         work_dir = Path(job["dir"]) / "legacy"
         converted = legacy.convert(Path(job["input"]), fmt, target, work_dir, options.deadline_ms / 1000)

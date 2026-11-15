@@ -148,7 +148,7 @@ a queue item when a stream or the main session picks it up.
 | 79 | KB NER model: labels returned (`PER`/`PRS`), `transformers` 5 tokenizer loading, quality on the fixtures, CPU fp32 vs int8. **Partly done (P1a item 5, PR #84, 2026-10-31):** the pinned model's labels have `PER` for persons and no `PRS` alone (only mixed labels, returned as `person_ambiguous`); `transformers` 5.20.2 builds a fast tokenizer from `vocab.txt` once `model_max_length=512` is passed; fp32 and int8 find the same persons on every fixture sentence, int8 with lower scores ("Annas" 0.81 vs 1.00). Quality on the PII corpus, and so whether `NerMinScore` 0.80 holds for int8, remains (processing §17, P1a item 7) | `ingestion-worker/design-processing.md` §21; `parser/design.md` §7.8, §12 | P1 | test | open |
 | 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test | open |
 | 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test | open |
-| 71 | LibreOffice under `RLIMIT_AS` 1.5 GB for large spreadsheets | `parser/design.md` §19 | P2 (legacy Office) | test | open: #702 (LibreOffice runs with no memory cap) |
+| 71 | LibreOffice under `RLIMIT_AS` for large spreadsheets | `parser/design.md` §4, §19 | P2 (legacy Office) | test | done (#702, results-a): 1.5 GB is too low, 3 GiB converts a 64 MB XLS; real municipal legacy files stay a live-block check |
 
 ### UI and accessibility
 
