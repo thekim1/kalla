@@ -3,7 +3,9 @@
 # compose.portainer.yaml, the gateway and Ume.Rag as one stack, the way Portainer does (the stack file, variables, no
 # scripts and no host files but the proxy's certificate), with the profiles clamav, openwebui and proxy, then checks:
 #
-#   - `up --wait`: every service with a health check healthy, both bootstraps and both migrations completed
+#   - every long-running service up (healthy where it has a health check), both bootstraps and both migrations
+#     completed. Not `up --wait` over the whole stack: it counts a one-shot that exits as a failure, even with code 0,
+#     unless a service waits for it, and nothing waits for rag-openwebui-setup (Portainer doesn't use --wait)
 #   - no container restarted or exited with an error; every image is pinned by digest (*_IMAGE variables are unset)
 #   - rag-bootstrap's log ends with its checklist, and the checklist names exactly what this test leaves out: the three
 #     gateway credential keys
@@ -33,7 +35,7 @@
 #   --compose-file FILE     an extra Compose file after the stack (repeatable), for example fixed subnets on a developer
 #                           machine whose Docker address pools are used up
 #   --project NAME          the Compose project, which is the stack's name [ume-rag-portainer-boot]
-#   --wait-timeout SECONDS  for `up --wait` and for each service without a health check [900]: the parser warms up and
+#   --wait-timeout SECONDS  for the start, for the health checks and for each later wait [900]: the parser warms up and
 #                           Open WebUI migrates its database first
 #   --keep                  leave the stack running
 #
@@ -106,7 +108,8 @@ UME_RAG_ADMIN_BIND=127.0.0.1
 UME_RAG_OPENWEBUI_BIND=127.0.0.1
 EOF
 
-dc() { docker compose -p "$project" -f "$stack" ${files[@]+"${files[@]}"} --env-file "$example" --env-file "$work/test.env" "$@"; }
+compose=(docker compose -p "$project" -f "$stack" ${files[@]+"${files[@]}"} --env-file "$example" --env-file "$work/test.env")
+dc() { "${compose[@]}" "$@"; }
 ok() { echo "ok: $*"; }
 fail() {
   echo "error: $*" >&2
@@ -140,10 +143,19 @@ unpinned="$(dc config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"
 [ -z "$unpinned" ] || fail "images not pinned by digest: $unpinned"
 dc config --images | sort -u | sed 's/^/  /'
 
-echo "== up --wait (profiles clamav, openwebui, proxy)"
+echo "== up (profiles clamav, openwebui, proxy)"
+dc pull --quiet || fail "could not pull the stack's images"
 start=$SECONDS
-dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not start and become healthy within ${wait_timeout}s"
-ok "every service with a health check healthy ($((SECONDS - start)) s)"
+# Plain `up -d`, the way Portainer starts the stack: Compose still holds each dependent until its one-shot has completed
+# (service_completed_successfully) and its dependencies are healthy. Bounded, since a hanging one-shot would block it.
+timeout "$wait_timeout" "${compose[@]}" up -d || fail "the stack did not start within ${wait_timeout}s"
+# Then --wait on the long-running services only (restart is not "no"). --no-deps keeps Compose from starting the
+# one-shots again; rag-openwebui-setup may still be running and is checked below.
+mapfile -t long_running < <(dc config --format json | jq -r '.services | to_entries[] | select((.value.restart // "no") != "no") | .key')
+[ "${#long_running[@]}" -gt 0 ] || fail "the stack has no long-running services"
+dc up -d --no-deps --no-recreate --wait --wait-timeout "$wait_timeout" "${long_running[@]}" \
+  || fail "the long-running services did not become healthy within ${wait_timeout}s"
+ok "every long-running service up and every one with a health check healthy ($((SECONDS - start)) s)"
 dc ps -a --format 'table {{.Service}}\t{{.Status}}' | sed 's/^/  /'
 
 echo "== containers"
