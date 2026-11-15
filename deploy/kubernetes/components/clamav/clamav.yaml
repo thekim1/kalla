@@ -1,4 +1,4 @@
-# rag-clamav: clamd on TCP 3310 for rag-worker (plain TCP: keep it to the worker with ../networkpolicies). freshclam
+# rag-clamav: clamd on TCP 3310 for rag-worker (plain TCP: networkpolicies.yaml keeps it to the worker). freshclam
 # downloads the signatures from database.clamav.net on first start (several minutes) and 4 times a day after.
 apiVersion: apps/v1
 kind: Deployment

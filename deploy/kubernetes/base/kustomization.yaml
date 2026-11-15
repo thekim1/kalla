@@ -1,6 +1,7 @@
-# Ume Rag on Kubernetes: rag-api, rag-admin, the rag-migrate Job and the blob volume. Postgres comes from your platform
-# or from components/datastores; the worker and parser from components/ingestion; ClamAV from components/clamav; the
-# renderer from components/renderer. Do not edit this base: make an overlay (start from ../example) and see
+# Ume Rag on Kubernetes: rag-api, rag-admin, the rag-migrate Job, the blob volume and the NetworkPolicies of every
+# service (default deny). Postgres comes from your platform or from components/datastores; the worker and parser from
+# components/ingestion; ClamAV from components/clamav; the renderer from components/renderer; the Ingress controller's
+# way in from components/ingress-controller. Do not edit this base: make an overlay (start from ../example) and see
 # docs/kubernetes.md.
 # Names match the Compose services (rag-api, rag-admin, postgres, ...), so the certificates and connection strings that
 # deploy/init-deployment.sh generates work unchanged.
@@ -13,6 +14,7 @@ resources:
   - migrations.yaml
   - api.yaml
   - admin.yaml
+  - networkpolicies.yaml
 configMapGenerator:
   # app-roles.sql is a copy of deploy/postgres/app-roles.sql (deploy/kubernetes/sync-config.sh; CI checks it).
   - name: ume-rag-app-roles

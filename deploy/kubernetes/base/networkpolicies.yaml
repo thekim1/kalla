@@ -1,0 +1,159 @@
+# NetworkPolicies, on by default: deny all traffic to and from the stack's pods except the flows of
+# docs/network-and-ports.md, as the Compose networks and host firewall allow them. rag-parser (no authentication) and
+# Postgres (its pg_hba.conf accepts the app roles from any address) rely on them to keep other pods away. Needs a CNI
+# that enforces NetworkPolicy (Calico, Cilium, Antrea, recent kindnet...); others ignore it. Policies for the pods of
+# a component (Postgres, worker, parser, renderer) select no pod without it; ClamAV's come with ../components/clamav.
+# Who may reach rag-api and rag-admin comes from ../components/ingress-controller. NetworkPolicy cannot filter by host
+# name: a destination at a private address, or on a port these rules do not open, gets its own rule in the overlay
+# (../example/kustomization.yaml, patches; docs/kubernetes.md, Network policies).
+#
+# Every policy selects pods by app.kubernetes.io/name: ume-rag plus their component, so other workloads in the
+# namespace are left alone. Policies add up: a pod may do what any policy that selects it allows.
+
+# Nothing in or out unless a policy below allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-default-deny
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag}
+  policyTypes: [Ingress, Egress]
+---
+# Name resolution for every pod (cluster DNS or NodeLocal DNSCache, wherever it runs).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-dns
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag}
+  policyTypes: [Egress]
+  egress:
+    - ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+# The database's clients (Compose: the internal data network): rag-api, rag-admin, rag-worker and rag-migrate to
+# Postgres. With your own Postgres, the overlay replaces the destination with an ipBlock for it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-database
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag}
+    matchExpressions:
+      - {key: app.kubernetes.io/component, operator: In, values: [rag-api, rag-admin, rag-worker, rag-migrate]}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+      ports: [{protocol: TCP, port: 5432}]
+---
+# rag-api: out to the gateway, the OIDC authority and Open WebUI (Compose: llm), on 443 at any address. The gateway's
+# own port (its Compose stack publishes 8443) and the OTLP collector's (4317) are added in the overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-api
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  policyTypes: [Egress]
+  egress:
+    - ports: [{protocol: TCP, port: 443}]
+---
+# rag-admin: out to the gateway (with Gateway__IntegrationApiUrl also its Admin API), the OIDC authority and Open WebUI
+# (Compose: llm), on 443 at any address. Other ports (the gateway's 8443, its Admin API's 9443, the collector's 4317)
+# are added in the overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-admin
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
+  policyTypes: [Egress]
+  egress:
+    - ports: [{protocol: TCP, port: 443}]
+---
+# Postgres: the app roles from the database's clients only. Egress: none; pgBackRest's S3 store is added in the overlay
+# (Compose: the backup network, allowed to the S3 endpoint only).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-postgres
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: postgres}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag}
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: In, values: [rag-api, rag-admin, rag-worker, rag-migrate]}
+      ports: [{protocol: TCP, port: 5432}]
+  egress: []
+---
+# rag-worker: no inbound; out to the parser, the renderer (clamd: ../components/clamav), and the crawl (Compose: crawl,
+# filtered by the host firewall to public addresses plus UME_RAG_CRAWL_ALLOW). The crawl rule reaches public addresses
+# only: not the private, link-local (the cloud metadata service), CGNAT and loopback ranges, so not the API server or
+# other pods and Services either, whatever the crawler's own guard lets through. Its Crawl__AllowedPrivateRanges, and
+# the gateway at a private address or on another port, are added in the overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-worker
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+      ports: [{protocol: TCP, port: 8000}]
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+      ports: [{protocol: TCP, port: 3000}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10, 127.0.0.0/8]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 80}]
+---
+# rag-parser: only from the worker; no egress (Compose: the internal parser network).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-parser
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+      ports: [{protocol: TCP, port: 8000}]
+  egress: []
+---
+# rag-renderer: only from the worker; no egress at all: every request its Chromium makes goes back to the worker
+# over the same WebSocket, which fetches it with the crawler's guard (connectors design §8.3).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ume-rag-renderer
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+      ports: [{protocol: TCP, port: 3000}]
+  egress: []

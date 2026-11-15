@@ -999,7 +999,7 @@ connection budget can no longer be fixed per host. What changes against Compose:
 
 | Compose | Kubernetes |
 |---|---|
-| internal networks, firewall on bridges | NetworkPolicies: parser and renderer ingress only from worker, egress none; crawl egress via an egress gateway or CIDR policy |
+| internal networks, firewall on bridges | NetworkPolicies in `base` with default-deny (#706): parser and renderer ingress only from worker, egress none; Postgres only from the four app roles; the worker's and freshclam's 80/443 egress to `0.0.0.0/0` except the private, link-local, CGNAT and loopback ranges (`Crawl__AllowedPrivateRanges` and a private gateway each get an overlay rule); ClamAV's rules in `components/clamav`, the Ingress controller's in `components/ingress-controller` |
 | CPU shares, slice | requests/limits, `PriorityClass` `rag-data-plane` > `rag-ingestion`, ResourceQuota per namespace (`ume-rag`, `ume-rag-ingestion`) |
 | one host | ingestion on its own node pool (`nodeSelector` + taint); data plane never schedules OCR (plan §2) |
 | file blob volume | S3-compatible or Azure Blob only (no RWX volume) |

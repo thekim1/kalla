@@ -11,12 +11,12 @@ and connection strings `init-deployment.sh` generates work unchanged. Docker Com
 
 | Part | Contents |
 |---|---|
-| `base/` | rag-api and rag-admin (2 replicas each, rolling updates, PodDisruptionBudgets, probes on `/health/*`), their Services, the `rag-migrate` Job and the blob volume `rag-blobs` |
+| `base/` | rag-api and rag-admin (2 replicas each, rolling updates, PodDisruptionBudgets, probes on `/health/*`), their Services, the `rag-migrate` Job, the blob volume `rag-blobs` and the NetworkPolicies: default deny, then only the stack's own flows (below) |
 | `components/datastores/` | Optional single-instance Postgres (StatefulSet with the `ume-rag/postgres` image: pgvector, pgBackRest and WAL archiving, as in Compose), TLS and separate database roles |
 | `components/ingestion/` | rag-worker (1 replica, stop-then-start) and rag-parser: crawling, uploads and parsing |
-| `components/clamav/` | rag-clamav, the malware scan, with its signature volume; in the example by default (below) |
+| `components/clamav/` | rag-clamav, the malware scan, with its signature volume and NetworkPolicies; in the example by default (below) |
 | `components/renderer/` | Optional rag-renderer for JavaScript-rendered pages (needs a seccomp profile on the nodes, below) |
-| `components/networkpolicies/` | Optional NetworkPolicies: default deny, then only the stack's own flows (below) |
+| `components/ingress-controller/` | The NetworkPolicy that lets the Ingress controller reach rag-api and rag-admin; in the example by default (below) |
 | `example/` | An overlay to copy: namespace, images, settings, Ingress, the blob volume's storage class |
 | `create-secrets.sh` | Creates the Kubernetes secrets from what `init-deployment.sh` generates |
 | `deploy.sh` | Deploys or updates an overlay: Postgres, the migration, then a rolling update |
@@ -80,8 +80,11 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
      annotations are for ingress-nginx; with Traefik use a ServersTransport, with the Gateway API an HTTPRoute and a
      BackendTLSPolicy. Pass the Host header through, turn off response buffering for rag-api (streamed answers) and
      request buffering for the admin host (uploads up to 60 MB).
-   - Optionally `../components/renderer`, `../components/networkpolicies`, more replicas, resources, node placement;
-     or no malware scan (*Malware scan*, below).
+   - The NetworkPolicy patches, for the destinations the base's policies do not open: an Ingress controller outside
+     the namespace `ingress-nginx`, `Crawl__AllowedPrivateRanges`, the gateway at a private address or on another port
+     than 443 (*Network policies*, below).
+   - Optionally `../components/renderer`, more replicas, resources, node placement; or no malware scan (*Malware
+     scan*, below).
 
 4. **Deploy:**
 
@@ -180,26 +183,46 @@ namespaces (Ubuntu 23.10 and later), check that the pod becomes ready. The worke
 
 ## Network policies
 
-`components/networkpolicies` denies all traffic to and from the stack's pods, then allows only what the Compose
-networks and host firewall allow: the Ingress controller to rag-api and rag-admin on 8443; the apps and `rag-migrate`
-to Postgres (5432); the worker to the parser (8000), clamd (3310) and the renderer (3000); DNS; outbound HTTPS from
-rag-api and rag-admin (gateway, IdP), HTTP and HTTPS from the worker (the crawl, the gateway) and from ClamAV
-(freshclam; its policy selects no pod without `components/clamav`). The parser and the renderer get no egress at all. The flows are listed in
-[Network and ports](network-and-ports.md).
+The base denies all traffic to and from the stack's pods (`ume-rag-default-deny`), then allows only what the Compose
+networks and host firewall allow (`base/networkpolicies.yaml`). rag-parser has no authentication, clamd neither
+authentication nor TLS, and Postgres accepts the app roles from any address, so these policies are what keeps other
+pods in the cluster away from them. On by default:
 
-Before enabling it, adjust the lines marked `change` in `networkpolicies.yaml`:
+- DNS (port 53) from every pod.
+- rag-api, rag-admin, rag-worker and `rag-migrate` to Postgres (5432), and Postgres from them only
+  (`ume-rag-database`, `ume-rag-postgres`). Postgres has no egress.
+- The worker to the parser (8000), clamd (3310, with `components/clamav`) and the renderer (3000); those three accept
+  the worker only. The parser and the renderer get no egress at all.
+- rag-api and rag-admin out on 443 to any address (gateway, IdP, Open WebUI).
+- The worker (the crawl, the gateway) and ClamAV (freshclam) out on 80 and 443 to **public addresses only**: the rule is
+  `0.0.0.0/0` except `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` (the cloud metadata service),
+  `100.64.0.0/10` and `127.0.0.0/8`. A gap in the crawler's guard therefore cannot reach the API server, the metadata
+  service or other pods and Services.
+- With `components/ingress-controller` (in the example), the Ingress controller to rag-api and rag-admin on 8443. The
+  base admits nothing inbound to them, so without that component, or a policy of your own for another entry, the
+  stack is unreachable.
 
-- **Ingress controller.** The policies admit the namespace `ingress-nginx`; use the namespace (or pods) of yours.
-- **Ports other than 443:** the gateway (its Compose stack publishes 8443) and its Admin API with the read-back (9443),
-  an IdP not on 443, the OTLP collector (4317), pgBackRest's S3 store from Postgres.
-- **Your own Postgres:** replace the rules that name the `postgres` pods with an `ipBlock` for your database.
-- **The crawl:** NetworkPolicy cannot filter by host name. The crawler refuses private addresses outside
-  `Crawl:AllowedPrivateRanges` itself; an `ipBlock` with `except` for your internal ranges is a second layer.
+The flows are listed in [Network and ports](network-and-ports.md). NetworkPolicy cannot filter by host name: keep the
+public destinations in your egress firewall or proxy, and give every destination the rules above do not cover its own
+rule in the overlay. The example overlay has a commented patch for each:
+
+- **Ingress controller.** The policy `ume-rag-ingress-controller` admits the namespace `ingress-nginx`; replace it with
+  yours (the label `kubernetes.io/metadata.name`). Another in-cluster client of rag-api's Service, such as Open WebUI
+  calling it directly rather than through the Ingress, needs a rule of its own.
+- **Private crawl ranges.** Each range in `Crawl__AllowedPrivateRanges` needs the same range as an egress rule of
+  `ume-rag-worker` (`ipBlock`, ports 80 and 443): the crawler's guard and the policy must both allow it.
+- **The gateway** at a private address, or on a port other than 443 (its Compose stack publishes 8443): an egress rule
+  of `ume-rag-worker` for its address and port; add the port to `ume-rag-api` and `ume-rag-admin` too, and the Admin
+  API's (9443) to `ume-rag-admin` with the read-back. The same for an IdP not on 443 and the OTLP collector (4317).
+- **pgBackRest's S3 store**, with `components/datastores`: an egress rule of `ume-rag-postgres`. Until then WAL
+  archiving and the stanza fail. freshclam's proxy, if it uses one: `ume-rag-clamav`.
+- **Your own Postgres:** replace the destination of `ume-rag-database` with an `ipBlock` for your database.
 
 The policies need a CNI that enforces them (Calico, Cilium, Antrea and others); with one that does not, they are
-silently ignored. Kubelet probes come from the node and are not blocked by them with the common CNIs. The component
-renders in CI, but no test in this repository runs the stack with it enforced: check the stack after enabling it (sign
-in to the admin UI, ask a question, crawl a page).
+silently ignored. They cover IPv4 only: on a dual-stack cluster the pods get no IPv6 egress. Kubelet probes come from
+the node and are not blocked by them with the common CNIs. The manifests render in CI, but no test in this repository
+runs the stack with them enforced: check the stack after deploying (sign in to the admin UI, ask a question, crawl a
+page, upload a file).
 
 ## Scaling and placement
 
