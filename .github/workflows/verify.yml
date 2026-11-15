@@ -511,6 +511,11 @@ jobs:
           docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-clamav
           if out="$(init --clamav maybe 2>&1)"; then echo "--clamav maybe was accepted"; exit 1; fi
           grep -q -- '--clamav must be on or off' <<< "$out"
+          # --renew-certs reads deploy/.env, never runs it (#711): a value with a space and a ;-list, valid in Compose's
+          # .env, don't stop the renewal, and rag-api's certificate keeps its public host name.
+          printf 'UME_RAG_EXAMPLE_NAME=Umeå kommun\nUME_RAG_EXAMPLE_GROUPS=a;b;c\n' >> "$d/deploy/.env"
+          bash "$d/deploy/init-deployment.sh" --renew-certs --yes > "$d/init.log"
+          openssl x509 -in "$d/deploy/certs/api/api.crt" -noout -ext subjectAltName | grep -q 'DNS:rag-api.example.se'
       - name: init-deployment.sh --proxy writes an nginx config that nginx accepts
         # deploy/proxy/nginx.conf.example in the gateway's shape (#468): rendered for rag-api, rag-admin and Open WebUI,
         # then nginx -t with throwaway certificates (the pinned image of the AppHost's fixture site).
