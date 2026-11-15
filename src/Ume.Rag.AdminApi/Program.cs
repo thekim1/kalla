@@ -39,6 +39,9 @@ builder.AddRagBlobEnvelope();
 builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
 builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
+// Sign-in values from the deployment, the setup wizard's settings or the defaults (identity design §19); the wizard's secret encrypted.
+builder.Services.AddSingleton<SettingsSecretProtector>();
+builder.Services.AddScoped<SignInSettings>();
 // Explain access (identity §4.9): the policy snapshot loaded at the current version for each question (no monitor: the
 // admin applies no outbox), and the api's policy with the same Knowledge:OpenToClientKinds.
 builder.Services.TryAddSingleton<ConfigVersionState>();

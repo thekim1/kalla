@@ -3118,6 +3118,17 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("IdentityOidc")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("IdentityOidcClientSecretSetAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdentityOidcEncryptedClientSecret")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("IdentityRoleGroups")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -3154,6 +3165,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("ScheduleJitterMinutes")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("SetupCompletedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.PrimitiveCollection<string[]>("TrustedProxies")
                         .IsRequired()

@@ -80,6 +80,9 @@ public static class SettingsEndpoints
             });
         // Decisions "Role groups as a setting" (M-17 C10): which IdP groups grant which role, read at each sign-in.
         Section(settings, "identity", IdentitySettings.Of, (IdentitySettingsRequest r, PlatformSettings s) => s.IdentityRoleGroups = r.ToJson());
+        // Identity design §19: rag-admin's sign-in values with their sources. Read-only here: they change only in setup mode.
+        settings.MapGet("/sign-in", async (SignInSettings signIn, CancellationToken ct) => SignInSettingsDto.Of(await signIn.ReadAsync(ct)))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("GetSignInSettings").WithSummary("Platform settings: sign-in values and where each comes from");
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
             s.PiiFlagRules = r.FlagRules.ToJsonString();

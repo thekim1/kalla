@@ -53,6 +53,20 @@ public sealed class PlatformSettings
     /// </summary>
     public string IdentityRoleGroups { get; set; } = "{}";
 
+    /// <summary>
+    /// <c>Settings.Identity.Oidc</c> (<c>jsonb</c>, identity design §19): rag-admin's sign-in values set in the setup wizard; a
+    /// value the deployment's <c>Oidc:*</c> sets wins. The client secret is not in it but in <see cref="IdentityOidcEncryptedClientSecret"/>.
+    /// </summary>
+    public string IdentityOidc { get; set; } = "{}";
+
+    /// <summary>The wizard's client secret, protected with Data Protection under its own purpose (identity design §19); never in a response or the audit.</summary>
+    public string? IdentityOidcEncryptedClientSecret { get; set; }
+
+    public DateTimeOffset? IdentityOidcClientSecretSetAt { get; set; }
+
+    /// <summary>When setup was last completed (identity design §19, "Setup state"); null while setup has never been completed.</summary>
+    public DateTimeOffset? SetupCompletedAt { get; set; }
+
     public string[] PiiOwnDomains { get; set; } = [];
     public decimal NerMinScore { get; set; } = 0.80m;
     public string? EvaluationModel { get; set; }
