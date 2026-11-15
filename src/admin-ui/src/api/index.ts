@@ -22,6 +22,11 @@ import type {
   AssistantVersion,
   AssistantVersionSummary,
   BffUser,
+  SetupCompleteRequest,
+  SetupSessionStarted,
+  SetupState,
+  SetupTestStarted,
+  SetupValuesRequest,
   ApiKey,
   Client,
   ClientConnection,
@@ -98,6 +103,16 @@ export const api = {
     logout: () => postLogout(),
     extendSession: () => http.post<{ sessionExpiresAt: string; sessionLimitAt: string | null }>('/bff/session/extend'),
     loginUrl: (returnUrl: string) => buildUrl('/bff/login', { returnUrl }),
+  },
+  /**
+   * Setup mode (identity design §19, "Setup API"): 404 while setup is closed; a 401 is the setup session's, never the admin
+   * session's. The code and a secret go only in the body.
+   */
+  setup: {
+    session: (code: string) => request<SetupSessionStarted>('POST', '/bff/setup/session', { body: { code }, ownSession: true }),
+    state: () => request<SetupState>('GET', '/bff/setup/state', { ownSession: true }),
+    test: (body: SetupValuesRequest) => request<SetupTestStarted>('POST', '/bff/setup/test', { body, ownSession: true }),
+    complete: (body: SetupCompleteRequest) => request<{ signInUrl: string }>('POST', '/bff/setup/complete', { body, ownSession: true }),
   },
   organisation: {
     departments: () => http.get<Department[]>('/api/organisation/departments'),

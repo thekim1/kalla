@@ -1,4 +1,6 @@
-import type { AssistantSummary, BffUser, Collection, CollectionSummary, CollectionUser, Department } from '@/api/types'
+import type {
+  AssistantSummary, BffUser, Collection, CollectionSummary, CollectionUser, Department, OidcWizardValues, SetupState, SetupTest, SignInSettings,
+} from '@/api/types'
 
 /** A signed-in user of `/bff/user`; override what the test cares about. */
 export function bffUser(overrides: Partial<BffUser> = {}): BffUser {
@@ -11,6 +13,8 @@ export function bffUser(overrides: Partial<BffUser> = {}): BffUser {
     departmentCodes: ['1000'],
     departmentSources: [{ code: '1000', source: 'claim' }],
     sessionExpiresAt: null,
+    signIn: { configured: true },
+    setup: { open: false },
     ...overrides,
   }
 }
@@ -61,6 +65,59 @@ export function assistantSummary(overrides: Partial<AssistantSummary> = {}): Ass
 export function collectionUser(overrides: Partial<CollectionUser> = {}): CollectionUser {
   return {
     id: 'a1', name: 'Bygglovsassistenten', classification: 'internal', state: 'active', published: true, draft: false, departmentId: 'd1', departmentName: 'Stadsbyggnad', topics: [],
+    ...overrides,
+  }
+}
+
+/** rag-admin's sign-in values of `GET /bff/setup/state`, all defaults (a first run); override per value. */
+export function signInSettings(overrides: Partial<SignInSettings> = {}): SignInSettings {
+  return {
+    authority: { value: null, source: 'default' },
+    clientId: { value: 'ume-rag-admin', source: 'default' },
+    clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false },
+    roleClaim: { value: 'roles', source: 'default' },
+    departmentClaim: { value: 'departmentCodes', source: 'default' },
+    teamClaim: { value: 'teamCodes', source: 'default' },
+    groupClaim: { value: 'groups', source: 'default' },
+    extraScopes: { value: [], source: 'default' },
+    tenantId: { value: null, source: 'default' },
+    refuseGuests: { value: true, source: 'default' },
+    version: '1',
+    ...overrides,
+  }
+}
+
+/** The wizard's values with nothing set; override what the test types. */
+export function wizardValues(overrides: Partial<OidcWizardValues> = {}): OidcWizardValues {
+  return {
+    authority: null, clientId: null, roleClaim: null, departmentClaim: null, teamClaim: null, groupClaim: null, extraScopes: null, tenantId: null,
+    refuseGuests: null, clientSecretExpiresOn: null, ...overrides,
+  }
+}
+
+/** A passed test by a platform admin of the provider https://idp.example.org/realms/ume. */
+export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
+  return {
+    testId: 't1', target: 'rag-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
+    values: wizardValues({ authority: 'https://idp.example.org/realms/ume' }), clientSecret: 'typed',
+    result: {
+      subject: 'sub-1', name: 'Anna Andersson', roles: ['rag-platform-admin'], groups: ['rag-admins'], groupCount: 1, departmentCodes: ['1000'], teamCodes: [],
+      isPlatformAdmin: true, claimsRead: { role: 'roles', group: 'groups', department: 'departmentCodes', team: 'teamCodes', tenantId: null, refuseGuests: true },
+    },
+    ...overrides,
+  }
+}
+
+/** `GET /bff/setup/state` of a first run: the window ends in 50 minutes, the session in 25. */
+export function setupState(overrides: Partial<SetupState> = {}, now: number = Date.now()): SetupState {
+  return {
+    kind: 'first_run',
+    endsAt: new Date(now + 50 * 60_000).toISOString(),
+    sessionExpiresAt: new Date(now + 25 * 60_000).toISOString(),
+    signIn: signInSettings(),
+    redirectUris: { signIn: 'https://rag-admin.example.org/signin-oidc', signOutCallback: 'https://rag-admin.example.org/signout-callback-oidc' },
+    deployment: { gatewayBaseUrl: 'https://gateway.example.org', apiPublicUrl: null, platformAdminGroups: [] },
+    latestTest: null,
     ...overrides,
   }
 }
