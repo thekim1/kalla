@@ -10,6 +10,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
 import { clientLabel, groupTotals, INDEXING_STEPS, lastDays, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
 import { formatNumber, formatUsdCost } from '@/utils/format'
+import { gatewayHref } from '@/utils/gateway'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
 
@@ -51,10 +52,7 @@ async function load(): Promise<void> {
 }
 
 /** The gateway's usage report, linked when there is no read-back. */
-const gatewayLink = computed(() => {
-  const url = keyList.value?.adminUrl
-  return url && /^https?:\/\//i.test(url) ? `${url.replace(/\/+$/, '')}/usage` : null
-})
+const gatewayLink = computed(() => gatewayHref(keyList.value?.adminUrl, '/usage'))
 /** Admin §8.6: the note only when several assistants or knowledge bases share the key, so its figures include theirs. */
 const sharedKey = computed(() => (keyList.value?.keys.find((k) => k.id === props.gatewayKeyId)?.usedBy ?? 0) > 1)
 

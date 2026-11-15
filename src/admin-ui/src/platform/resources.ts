@@ -100,16 +100,11 @@ export async function gatewayContext(): Promise<GatewayContextInfo | null> {
 
 /**
  * The gateway links' address (admin design §2.3): the status's `adminUrl`, which is the context's `admin_url`, else
- * `Admin:GatewayAdminUrl`; null when neither is set, the status cannot be read, or the address is not an http(s) URL
- * (it becomes a link's `href`).
+ * `Admin:GatewayAdminUrl`; null when neither is set or the status cannot be read. Links are made with `gatewayHref`, which
+ * takes only an http(s) address.
  */
 export async function gatewayAdminUrl(): Promise<string | null> {
-  const url = (await orgSyncStatus())?.adminUrl
-  return url && /^https?:\/\//i.test(url) ? url : null
-}
-
-export function gatewayLink(adminUrl: string, page: GatewayPage): string {
-  return `${adminUrl.replace(/\/+$/, '')}${page.path}`
+  return (await orgSyncStatus())?.adminUrl ?? null
 }
 
 export async function listRows(resource: PlatformResource): Promise<Row[]> {

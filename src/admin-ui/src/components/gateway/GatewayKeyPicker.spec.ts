@@ -21,8 +21,8 @@ const keys = [
   key('k4', 'With prompt', { hasSystemPrompt: true, allowedModels: [] }),
 ]
 
-async function picker(value: string | null) {
-  const list = vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl: 'https://llm.example.se/', keys })
+async function picker(value: string | null, adminUrl = 'https://llm.example.se/') {
+  const list = vi.spyOn(api.gateway, 'keys').mockResolvedValue({ adminUrl, keys })
   const wrapper = mount(GatewayKeyPicker, { props: { id: 'key', departmentId: 'd1', modelValue: value, hint: 'hint' } })
   await flushPromises()
   return { wrapper, list }
@@ -52,6 +52,12 @@ describe('Gateway key picker (admin design §5.5.4, B-36)', () => {
     expect(settings.findAll('input, select, textarea')).toHaveLength(0)
     expect(wrapper.find('[data-test="key-link"]').attributes('href')).toBe('https://llm.example.se/keys')
     expect(wrapper.find('[data-test="no-key-warning"]').exists()).toBe(false)
+  })
+
+  it('links nothing when the gateway’s admin address is not http(s) (#712)', async () => {
+    const { wrapper } = await picker('k1', 'javascript:alert(1)//')
+    expect(wrapper.find('[data-test="key-settings"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="key-link"]').exists()).toBe(false)
   })
 
   it('warns about a key with a system prompt and says “All” for an empty model list', async () => {

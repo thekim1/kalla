@@ -12,6 +12,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
+import { gatewayHref } from '@/utils/gateway'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import CopyValue from './CopyValue.vue'
@@ -21,7 +22,7 @@ import GatewayContextPanel from './GatewayContextPanel.vue'
 import SecretOnce from './SecretOnce.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
-import { gatewayAdminUrl, gatewayLink, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
+import { gatewayAdminUrl, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
 // A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions. `embedded`:
@@ -56,7 +57,7 @@ const details = computed(() => (selected.value && resource.value?.details ? reso
 // A row without an edit opens its details alone; with one, they stand above its form.
 const showDetails = computed(() => details.value.length > 0 && (!editable(selected.value!) || openForm.value?.operation === resource.value!.update))
 const drawerTitle = computed(() => openForm.value?.title ?? (selected.value && resource.value ? rowTitle(selected.value) : resource.value?.label ?? ''))
-const gatewayHref = computed(() => (adminUrl.value && resource.value?.gatewayPage ? gatewayLink(adminUrl.value, resource.value.gatewayPage) : null))
+const gatewayPageHref = computed(() => (resource.value?.gatewayPage ? gatewayHref(adminUrl.value, resource.value.gatewayPage.path) : null))
 // Every generic drawer shows the row's id with a copy button (admin design §5.8).
 const rowId = computed(() => (typeof selected.value?.id === 'string' ? selected.value.id : null))
 
@@ -182,7 +183,7 @@ watch(() => props.resource, () => {
     </div>
     <PageHeader v-else-if="!embedded" :title="resource.label" :description="resource.description">
       <UiButton
-        v-if="gatewayHref && resource.gatewayPage" :href="gatewayHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page"
+        v-if="gatewayPageHref && resource.gatewayPage" :href="gatewayPageHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page"
       >
         {{ resource.gatewayPage.label }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
       </UiButton>
