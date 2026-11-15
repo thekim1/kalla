@@ -63,6 +63,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   gateway_key_invalid: 'The AI gateway key {key} cannot be used ({reason}). Choose an active key of this department.',
   gateway_key_residency: 'The AI gateway key {key} allows no residency within {ceiling}. Choose a key that may run at this information class.',
   gateway_key_model: 'The AI gateway key {key} does not allow every model this uses.',
+  gateway_key_model_residency: 'The AI gateway key {key} reaches {model} only at {modelResidencies}, which the key does not allow (it allows {keyResidencies}).',
+  gateway_key_embedding_residency: 'The AI gateway key {key} reaches {model}, the knowledge base’s embedding model, only at {modelResidencies}, which the key does not allow (it allows {keyResidencies}).',
   gateway_key_required: 'No AI gateway key is chosen, so the calls are charged to the platform’s owner team.',
   gateway_key_system_prompt: 'The AI gateway key {key} adds its team’s system prompt to every call, which changes the assistant’s prompts.',
   period_too_long: 'The period is too long: at most 400 days by day, or 36 months by month.',

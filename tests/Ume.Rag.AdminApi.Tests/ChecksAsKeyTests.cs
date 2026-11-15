@@ -36,6 +36,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     private static readonly Guid AnswerOnly = new("019a0000-0000-7000-8000-00000000b0c1"); // allows only the answer model
     private static readonly Guid Disabled = new("019a0000-0000-7000-8000-00000000b0c2");
     private static readonly Guid Full = new("019a0000-0000-7000-8000-00000000b0c3");
+    private static readonly Guid EuOnly = new("019a0000-0000-7000-8000-00000000b0c4"); // every model, at Eu only (the dev chatbot key's case, #720)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -56,6 +57,11 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
                     web.UseSetting($"FakeGateway:AssignedKeys:{n}:AllowedModels:0", model);
                 }
             }
+
+            web.UseSetting("FakeGateway:AssignedKeys:8:Id", EuOnly.ToString());
+            web.UseSetting("FakeGateway:AssignedKeys:8:Name", "Checks 8");
+            web.UseSetting("FakeGateway:AssignedKeys:8:TeamId", "019a0000-0000-7000-8000-000000001002");
+            web.UseSetting("FakeGateway:AssignedKeys:8:AllowedResidencies:0", "Eu");
 
             if (!acting)
             {
@@ -220,6 +226,51 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
             .ToDictionary(m => m.GetProperty("name").GetString()!, m => m.GetProperty("available"));
         models[AnswerModel].GetBoolean().ShouldBeTrue();
         models[CondenseModel].GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task V39_as_the_key_names_the_embedding_model_the_key_allows_but_reaches_only_at_another_residency()
+    {
+        // #720: the key lists bge-m3 and allows Eu only; bge-m3 runs only at OnPrem, so the key's list at Eu lacks it.
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var profile = await db.Collections.Where(c => c.Id == seed.Collection).Select(c => c.EmbeddingProfileId).SingleAsync(Ct);
+            await db.EmbeddingProfiles.Where(p => p.Id == profile).ExecuteUpdateAsync(u => u.SetProperty(p => p.GatewayModel, "bge-m3"), Ct);
+            if (!await db.GatewayModels.AnyAsync(m => m.Name == "bge-m3", Ct))
+            {
+                db.GatewayModels.Add(new GatewayModel { Name = "bge-m3", ModelKind = GatewayModelModelKinds.Embedding, Residencies = ["OnPrem"], Source = GatewayModelSources.Manual });
+            }
+
+            // As the mirror sync writes it from the FakeGateway's catalogue.
+            await db.GatewayModels.Where(m => m.Name == "bge-m3")
+                .ExecuteUpdateAsync(u => u.SetProperty(m => m.ModelKind, GatewayModelModelKinds.Embedding).SetProperty(m => m.Residencies, new[] { "OnPrem" }), Ct);
+            await db.GatewayKeys.Where(k => k.Id == EuOnly).ExecuteDeleteAsync(Ct);
+            var team = await db.GatewayKeys.Where(k => k.Id == Full).Select(k => k.TeamId).SingleAsync(Ct);
+            db.GatewayKeys.Add(new GatewayKey
+            {
+                Id = EuOnly, Name = "Checks Eu only", TeamId = team, DepartmentId = seed.Department, Status = "Active", OwnerActive = true, Usable = true,
+                AllowedModels = [AnswerModel, "bge-m3"], AllowedResidencies = ["Eu"], PiiPolicy = "Off", ContentGuardPolicy = "Off", SyncedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var gateway = Gateway();
+        await using var factory = await AdminAsync(database, gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        var (id, detail) = await AssistantAsync(admin, seed);
+
+        using var response = await SetKeyAsync(admin, id, detail, EuOnly);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync(Ct));
+        var problem = (await Json(response)).GetProperty("problems").EnumerateArray().Single();
+        problem.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.GatewayKeyEmbeddingResidency.Code);
+        var parameters = problem.GetProperty("params");
+        parameters.GetProperty("key").GetString().ShouldBe("Checks Eu only");
+        parameters.GetProperty("model").GetString().ShouldBe("bge-m3");
+        parameters.GetProperty("modelResidencies").GetString().ShouldBe("OnPrem");
+        parameters.GetProperty("keyResidencies").GetString().ShouldBe("Eu");
+        problem.GetProperty("affected").EnumerateArray().Select(a => a.GetString()).ShouldBe(["bge-m3"]);
     }
 
     [Fact]
