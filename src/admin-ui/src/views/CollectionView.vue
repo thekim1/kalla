@@ -223,9 +223,7 @@ function sharingSaved(saved: Collection): void {
   read.data.value = { ...saved }
 }
 
-function openSource(source: SourceSummary): void {
-  void router.push({ name: 'source', params: { id: source.id } })
-}
+const sourceTo = (source: SourceSummary) => ({ name: 'source', params: { id: source.id } })
 
 watch(tab, (t) => {
   if (t === 'documents' && !documents.loaded.value) void loadDocuments()
@@ -358,7 +356,7 @@ onMounted(load)
         </div>
         <InlineError v-if="addFilesError" :message="problemMessage(addFilesError)" class="mb-4" />
         <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
-          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" clickable @row-click="openSource">
+          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" :row-to="sourceTo">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
             <template #cell-lastRun="{ row }">

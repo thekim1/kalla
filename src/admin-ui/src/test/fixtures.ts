@@ -1,4 +1,4 @@
-import type { BffUser, Collection, CollectionSummary, CollectionUser, Department } from '@/api/types'
+import type { AssistantSummary, BffUser, Collection, CollectionSummary, CollectionUser, Department } from '@/api/types'
 
 /** A signed-in user of `/bff/user`; override what the test cares about. */
 export function bffUser(overrides: Partial<BffUser> = {}): BffUser {
@@ -44,7 +44,16 @@ export function collection(overrides: Partial<Collection> = {}): Collection {
 export function collectionSummary(overrides: Partial<CollectionSummary> = {}): CollectionSummary {
   return {
     id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', departmentName: 'Stadsbyggnad', classification: 'internal', publishedAt: null,
-    sharedWith: 'department', shared: false, contactName: null, contactEmail: null, documentCount: 0, topics: [], ...overrides,
+    sharedWith: 'department', shared: false, contactName: null, contactEmail: null, documentCount: 0, topics: [], lastRun: null,
+    latestEvaluation: null, ...overrides,
+  }
+}
+
+/** A list row of `GET /api/assistants`: published (version 1), no draft. */
+export function assistantSummary(overrides: Partial<AssistantSummary> = {}): AssistantSummary {
+  return {
+    id: 'a1', slug: 'bygglov', name: 'Bygglovsassistenten', departmentId: 'd1', classification: 'internal', state: 'active', published: true, hasDraft: false,
+    generalKnowledge: null, collections: [], model: null, publishedVersion: 1, publishedAt: '2026-11-01T09:00:00Z', questions7d: 0, ...overrides,
   }
 }
 

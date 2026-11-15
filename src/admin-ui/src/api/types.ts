@@ -144,6 +144,10 @@ export interface CollectionSummary extends CollectionBase {
   shared: boolean
   documentCount: number
   topics: string[]
+  /** The latest run of any of its sources (the list's Last fetch, admin design §5.5.2); null before the first and on a shared row. */
+  lastRun: { id: string; sourceId: string; state: string; startedAt: IsoDateTime; finishedAt: IsoDateTime | null } | null
+  /** The latest finished evaluation's recall@10 (the list's Quality); null before the first and on a shared row. */
+  latestEvaluation: { recallAtK: number; finishedAt: IsoDateTime } | null
 }
 
 export type CollectionView = 'mine' | 'shared' | 'all'
@@ -820,6 +824,15 @@ export interface AssistantSummary {
   hasDraft: boolean
   /** The published version's level; null before the first publish. */
   generalKnowledge: GeneralKnowledge | null
+  /** The knowledge bases of the published version, else the draft's (admin design §5.5.4). */
+  collections: { id: string; name: string }[]
+  /** The answer model of the same version. */
+  model: string | null
+  /** The published version's number and date; null before the first publish. */
+  publishedVersion: number | null
+  publishedAt: IsoDateTime | null
+  /** Questions of the last 7 Europe/Stockholm days, today included. */
+  questions7d: number
 }
 
 /** An assistant's reranker (`QuerySteps.retrieval.rerank`, B-16); absent is off. */

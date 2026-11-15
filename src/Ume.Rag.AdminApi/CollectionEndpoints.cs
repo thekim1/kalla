@@ -248,7 +248,11 @@ public static class CollectionEndpoints
                group d by src.CollectionId into g
                select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
-    /// <summary>The list rows (the shared summary) of <paramref name="query"/>, with owner names, live document counts and topics.</summary>
+    /// <summary>
+    /// The list rows (the shared summary) of <paramref name="query"/>, with owner names, live document counts and topics; the
+    /// caller's own rows also with their last fetch and quality (admin design §5.5.2). A shared row never shows its sources or
+    /// evaluation (§4.5), so both are null there.
+    /// </summary>
     private static async Task<List<CollectionSummary>> SummariesAsync(AdminContext admin, IQueryable<Collection> query, CancellationToken ct)
     {
         var rows = await query.Select(c => new { c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail })
@@ -259,9 +263,43 @@ public static class CollectionEndpoints
         var names = await admin.Db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
         var documents = await LiveDocumentCountsAsync(admin, ids, ct);
         var topics = await CollectionSharing.TopicCountsAsync(admin.Db, ids, ct);
+        var ownIds = rows.Where(r => own.Contains(r.DepartmentId)).Select(r => r.Id).ToArray();
+        var latest = await LatestAsync(admin, ownIds, ct);
         return [.. rows.Select(r => new CollectionSummary(r.Id, r.Slug, r.Name, r.DepartmentId, names.GetValueOrDefault(r.DepartmentId) ?? "", r.Classification,
             r.PublishedAt, r.SharedWith, !own.Contains(r.DepartmentId), r.ContactName, r.ContactEmail, documents.GetValueOrDefault(r.Id),
-            [.. topics.Where(t => t.CollectionId == r.Id).Select(t => t.Tag)]))];
+            [.. topics.Where(t => t.CollectionId == r.Id).Select(t => t.Tag)], latest.GetValueOrDefault(r.Id).LastRun, latest.GetValueOrDefault(r.Id).LatestEvaluation))];
+    }
+
+    /// <summary>
+    /// In one query for all <paramref name="ids"/>: the latest run of any of a collection's sources that are not deleted, and
+    /// its latest finished evaluation of the saved settings (not a candidate run), the hybrid variant first as on the Overview.
+    /// </summary>
+    private static async Task<Dictionary<Guid, (CollectionLastRun? LastRun, CollectionEvaluation? LatestEvaluation)>> LatestAsync(
+        AdminContext admin, Guid[] ids, CancellationToken ct)
+    {
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        var db = admin.Db;
+        var rows = await db.Collections.AsNoTracking().Where(c => ids.Contains(c.Id))
+            .Select(c => new
+            {
+                c.Id,
+                LastRun = (from r in db.Runs
+                           join s in db.Sources on r.SourceId equals s.Id
+                           where s.CollectionId == c.Id && s.DeletedAt == null
+                           orderby r.StartedAt descending, r.Id descending
+                           select new CollectionLastRun(r.Id, r.SourceId, r.State, r.StartedAt, r.FinishedAt)).FirstOrDefault(),
+                LatestEvaluation = (from r in db.EvaluationRuns
+                                    join set in db.EvaluationSets on r.SetId equals set.Id
+                                    where set.CollectionId == c.Id && r.FinishedAt != null && !r.Candidate && r.RecallAtK != null
+                                    orderby r.Variant == EvaluationVariants.Hybrid descending, r.FinishedAt descending, r.Id descending
+                                    select new CollectionEvaluation(r.RecallAtK!.Value, r.FinishedAt!.Value)).FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.Id, r => (r.LastRun, r.LatestEvaluation));
     }
 
     private static string? Contact(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -552,11 +590,18 @@ public sealed record PageDto<T>(IReadOnlyList<T> Items, int Total);
 
 /// <summary>
 /// A list row. For a collection of another department (<see cref="Shared"/>) this is the shared summary of admin design
-/// §4.5: name, owning department, level, contact, document count and topics; never its sources or settings.
+/// §4.5: name, owning department, level, contact, document count and topics; never its sources or settings, so its <see cref="LastRun"/> and
+/// <see cref="LatestEvaluation"/> are null.
 /// </summary>
 public sealed record CollectionSummary(
     Guid Id, string Slug, string Name, Guid DepartmentId, string DepartmentName, string Classification, DateTimeOffset? PublishedAt, string SharedWith, bool Shared,
-    string? ContactName, string? ContactEmail, int DocumentCount, IReadOnlyList<string> Topics);
+    string? ContactName, string? ContactEmail, int DocumentCount, IReadOnlyList<string> Topics, CollectionLastRun? LastRun, CollectionEvaluation? LatestEvaluation);
+
+/// <summary>The latest run of any of a collection's sources (the list's Last fetch, admin design §5.5.2).</summary>
+public sealed record CollectionLastRun(Guid Id, Guid SourceId, string State, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
+
+/// <summary>The latest finished evaluation's recall@k (k = 10) and when it finished (the list's Quality, admin design §5.5.2).</summary>
+public sealed record CollectionEvaluation(decimal RecallAtK, DateTimeOffset FinishedAt);
 
 /// <summary>
 /// An assistant that links a collection: through its published version, its draft, or both; with its state

@@ -268,6 +268,11 @@ export const COLLECTIONS = {
   shared: 'Shared',
   documents: 'Documents',
   topics: 'Topics',
+  lastFetch: 'Last fetch',
+  neverFetched: 'Never',
+  quality: 'Quality',
+  /** No quality yet; on a shared row, its Last fetch (another department's sources are not shown). */
+  noValue: '–',
 } as const
 
 /** Sharing levels in plain words (admin design §3.2, §5.5.2). */
@@ -1242,12 +1247,17 @@ export const ASSISTANTS = {
   descriptionHint: 'What the assistant helps with. Shown to the users.',
   contactName: 'Contact person',
   contactEmail: 'Contact person’s email',
-  state: 'State',
   published: 'Published',
   draftOnly: 'Draft only',
   archived: 'Archived',
   generalKnowledge: 'General knowledge',
   created: (name: string) => `The assistant ${name} has been created.`,
+  collections: 'Knowledge bases',
+  noCollections: 'None',
+  model: 'Model',
+  noModel: 'Not chosen',
+  questions7d: 'Questions, 7 days',
+  publishedVersion: (version: number) => `Version ${version}`,
 } as const
 
 export const ASSISTANT = {

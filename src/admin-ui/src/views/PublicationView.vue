@@ -18,6 +18,7 @@ import { formatDateTime, formatNumber, formatUsdCost } from '@/utils/format'
 import { PUBLICATION, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
+import { runStateTone } from '@/utils/runs'
 
 // Publicering (admin design §6.6, §6.7; P1b item 11): the plan of a pipeline publication (documents re-processed, time and
 // cost, the sources and their collections), Bekräfta (409 when the pipeline changed since the plan), the re-processing of
@@ -54,10 +55,6 @@ const reported = computed(() => collectionIds.value.length > 0 && collectionIds.
 const previous = computed(() =>
   (pipeline.value?.versions ?? []).filter((v) => v.state === 'superseded' && v.number < (version.value?.number ?? 0)).sort((a, b) => b.number - a.number)[0] ?? null,
 )
-
-function runTone(state: string | undefined): 'ok' | 'warn' | 'danger' | 'neutral' {
-  return state === 'succeeded' ? 'ok' : state === 'failed' ? 'danger' : state === 'running' || !state ? 'neutral' : 'warn'
-}
 
 /** The source's re-processing run of this publication: the newest publish-triggered run since the version was published. */
 async function loadRun(sourceId: string): Promise<void> {
@@ -163,7 +160,7 @@ onBeforeUnmount(() => {
                 <RouterLink :to="{ name: 'source', params: { id: s.sourceId } }" class="link">{{ sources[s.sourceId]?.name ?? s.sourceId }}</RouterLink>
                 <span class="text-fg-2"> · {{ PUBLICATION.documents(formatNumber(s.documents)) }}</span>
                 <span v-if="published" class="ml-2">
-                  <UiBadge :tone="runTone(runs[s.sourceId]?.state)" :label="runs[s.sourceId] ? (RUN_STATE_LABEL[runs[s.sourceId]!.state] ?? runs[s.sourceId]!.state) : PUBLICATION.waiting" />
+                  <UiBadge :tone="runStateTone(runs[s.sourceId]?.state)" :label="runs[s.sourceId] ? (RUN_STATE_LABEL[runs[s.sourceId]!.state] ?? runs[s.sourceId]!.state) : PUBLICATION.waiting" />
                   <RouterLink v-if="runs[s.sourceId]" :to="{ name: 'run', params: { id: runs[s.sourceId]!.id } }" class="link ml-2 text-small">{{ PUBLICATION.openRun }}</RouterLink>
                 </span>
               </li>

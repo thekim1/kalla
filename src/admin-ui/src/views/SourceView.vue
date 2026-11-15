@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
@@ -22,6 +21,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
 import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
@@ -29,7 +29,6 @@ import { problemMessage } from '@/utils/problem'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
-const router = useRouter()
 const source = useLoadable<Source | null>(null)
 const runs = useLoadable<RunSummary[]>([])
 const pii = ref<PiiReport | null>(null)
@@ -72,10 +71,6 @@ function saved(updated: Source): void {
   ui.notify(SOURCE_EDIT.saved)
 }
 
-function stateTone(state: string): 'ok' | 'warn' | 'danger' | 'neutral' {
-  return state === 'succeeded' ? 'ok' : state === 'failed' ? 'danger' : state === 'running' ? 'neutral' : 'warn'
-}
-
 async function loadRuns(append = false): Promise<void> {
   const previous = append ? runs.data.value : []
   await runs.run(async () => {
@@ -105,9 +100,7 @@ async function syncNow(): Promise<void> {
   }
 }
 
-function openRun(run: RunSummary): void {
-  void router.push({ name: 'run', params: { id: run.id } })
-}
+const runTo = (run: RunSummary) => ({ name: 'run', params: { id: run.id } })
 
 onMounted(load)
 </script>
@@ -148,9 +141,9 @@ onMounted(load)
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
       <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
-        <DataTable :columns="runColumns" :rows="runs.data.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" clickable @row-click="openRun">
+        <DataTable :columns="runColumns" :rows="runs.data.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" :row-to="runTo">
           <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
-          <template #cell-state="{ row }"><UiBadge :tone="stateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
+          <template #cell-state="{ row }"><UiBadge :tone="runStateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
           <template #cell-counts="{ row }">
             <span class="tabular text-small">{{ SOURCE_PAGE.runCounts(formatNumber(row.added), formatNumber(row.updated), formatNumber(row.deleted)) }}<span
               v-if="row.failed" class="text-danger"

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -708,5 +709,92 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "assistant" && a.EntityId == id.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
             .ShouldBe(["create", "draft", "publish", "draft", "publish", "draft", "restore", "archive", "unarchive", "retention"]);
+    }
+
+    [Fact]
+    public async Task The_list_shows_the_shown_versions_knowledge_bases_and_model_the_publication_and_the_questions_of_7_stockholm_days()
+    {
+        var seed = await SeedAsync();
+        // 23:30 UTC on 28 March 2026 is already 29 March in Stockholm (CET): the 7 days are 23–29 March.
+        var now = new DateTimeOffset(2026, 3, 28, 23, 30, 0, TimeSpan.Zero);
+        var today = new DateOnly(2026, 3, 29);
+        await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
+            web.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new FakeTimeProvider(now))));
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+
+        Guid published, draftOnly, empty, draftCollection;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var original = await db.Collections.AsNoTracking().SingleAsync(c => c.Id == seed.Collection, Ct);
+            Collection CollectionOf(string name) => new()
+            {
+                Slug = $"{name.ToLowerInvariant()}-{seed.Code.ToLowerInvariant()}", Name = $"{name} {seed.Code}", DepartmentId = seed.Department,
+                Classification = Classification.Internal, EmbeddingProfileId = original.EmbeddingProfileId, UpdatedAt = now,
+            };
+            var other = CollectionOf("Detaljplaner");
+            var drafted = CollectionOf("Skolor");
+            Assistant AssistantOf(string name) => new()
+            {
+                Slug = $"{name.ToLowerInvariant()}-{seed.Code.ToLowerInvariant()}", Name = $"{name} {seed.Code}", DepartmentId = seed.Department,
+                Classification = Classification.Internal, UpdatedAt = now,
+            };
+            var live = AssistantOf("Publicerad");
+            var draft = AssistantOf("Utkast");
+            var none = AssistantOf("Tom");
+            db.AddRange(other, drafted, live, draft, none);
+            await db.SaveChangesAsync(Ct);
+
+            AssistantVersion VersionOf(Guid assistant, int number, string state, string model, params Guid[] collections) => new()
+            {
+                AssistantId = assistant, Number = number, State = state, GatewayModel = model, CollectionLinks = [.. collections.Select(CollectionLink.Whole)],
+                PublishedAt = state == AssistantVersionStates.Draft ? null : now.AddDays(-number), PublishedBy = state == AssistantVersionStates.Draft ? null : "test",
+                CreatedAt = now, UpdatedAt = now,
+            };
+            var v1 = VersionOf(live.Id, 1, AssistantVersionStates.Superseded, "old-model", drafted.Id);
+            var v2 = VersionOf(live.Id, 2, AssistantVersionStates.Published, Model, other.Id, seed.Collection);
+            var v3 = VersionOf(live.Id, 3, AssistantVersionStates.Draft, "draft-model", drafted.Id);
+            var d1 = VersionOf(draft.Id, 1, AssistantVersionStates.Draft, "draft-model", drafted.Id);
+            db.AssistantVersions.AddRange(v1, v2, v3, d1);
+            await db.SaveChangesAsync(Ct);
+            (live.PublishedVersionId, live.DraftVersionId, draft.DraftVersionId) = (v2.Id, v3.Id, d1.Id);
+
+            AssistantDailyTotal TotalOf(Guid assistant, DateOnly day, Guid client, int messages) => new()
+            {
+                Day = day, AssistantId = assistant, ClientId = client, DepartmentId = seed.Department, Classification = Classification.Internal, Messages = messages,
+            };
+            db.AssistantDailyTotals.AddRange(
+                TotalOf(live.Id, today.AddDays(-7), seed.InternalClient, 1000), // 22 March: inside the window of the UTC date, outside Stockholm's
+                TotalOf(live.Id, today.AddDays(-6), seed.InternalClient, 7),
+                TotalOf(live.Id, today, seed.InternalClient, 11),
+                TotalOf(live.Id, today, seed.PublicClient, 2),
+                TotalOf(live.Id, today.AddDays(1), seed.InternalClient, 100)); // after today
+            await db.SaveChangesAsync(Ct);
+            (published, draftOnly, empty, draftCollection) = (live.Id, draft.Id, none.Id, drafted.Id);
+        }
+
+        var items = (await admin.GetFromJsonAsync<JsonElement>("/api/assistants?pageSize=200", Ct)).GetProperty("items").EnumerateArray()
+            .ToDictionary(a => a.GetProperty("id").GetGuid());
+
+        // The published version's links (in their order) and model, not the draft's.
+        var listed = items[published];
+        listed.GetProperty("collections").EnumerateArray().Select(c => c.GetProperty("name").GetString()).ShouldBe([$"Detaljplaner {seed.Code}", $"Bygglov {seed.Code}"]);
+        listed.GetProperty("collections")[1].GetProperty("id").GetGuid().ShouldBe(seed.Collection);
+        listed.GetProperty("model").GetString().ShouldBe(Model);
+        listed.GetProperty("publishedVersion").GetInt32().ShouldBe(2);
+        listed.GetProperty("publishedAt").GetDateTimeOffset().ShouldBe(now.AddDays(-2));
+        listed.GetProperty("questions7d").GetInt32().ShouldBe(20);
+
+        // Before the first publish: the draft's links and model, no publication, no questions.
+        var unpublished = items[draftOnly];
+        unpublished.GetProperty("collections").EnumerateArray().Select(c => c.GetProperty("id").GetGuid()).ShouldBe([draftCollection]);
+        unpublished.GetProperty("model").GetString().ShouldBe("draft-model");
+        unpublished.GetProperty("publishedVersion").ValueKind.ShouldBe(JsonValueKind.Null);
+        unpublished.GetProperty("publishedAt").ValueKind.ShouldBe(JsonValueKind.Null);
+        unpublished.GetProperty("questions7d").GetInt32().ShouldBe(0);
+
+        // No version at all.
+        var unversioned = items[empty];
+        unversioned.GetProperty("collections").GetArrayLength().ShouldBe(0);
+        unversioned.GetProperty("model").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 }
