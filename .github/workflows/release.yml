@@ -13,6 +13,9 @@ name: Release
 #      pins deploy/portainer/ to the release's images (not for a pre-release).
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
 # nothing reaches ghcr.io and no release or tag is created.
+# A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
+# compose.portainer.yaml pinned to that version's images already on ghcr.io (a tag run pushes them before its boot
+# tests), so a fix to the stack file or the boot test is tested without building anything (handbook, "Release dry runs").
 on:
   push:
     tags: ['v*.*.*']
@@ -26,6 +29,10 @@ on:
         description: Run the browser tests (e2e.yml) first; they take about 10 minutes and load the runner
         type: boolean
         default: false
+      portainer_boot:
+        description: Only boot the Portainer stack against this version's images on ghcr.io (X.Y.Z); skips everything else
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -51,10 +58,57 @@ env:
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
   verify:
+    if: inputs.portainer_boot == ''
     uses: ./.github/workflows/verify.yml
 
   parser:
+    if: inputs.portainer_boot == ''
     uses: ./.github/workflows/parser.yml
+
+  portainer-boot:
+    # Only with the input portainer_boot (header). verify, parser, e2e and build are skipped, so publish is too.
+    if: github.event_name == 'workflow_dispatch' && inputs.portainer_boot != ''
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: A Docker client config of this job's own
+        # As in build: the login below must not outlive the job in the runner user's shared ~/.docker/config.json.
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-config"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
+      - name: Log in to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: The stack pinned to the version's images
+        # images.env as build writes it (each image by digest), then the pins build-release-bundle.sh applies to the
+        # release's compose.portainer.yaml asset.
+        env:
+          VERSION: ${{ inputs.portainer_boot }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$VERSION' is not X.Y.Z[-pre]"; exit 1; }
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+          : > images.env
+          for name in api admin worker migrations postgres clamav renderer parser; do
+            ref="$prefix/$name:$VERSION"
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)" || true
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image $ref on ghcr.io"; exit 1; }
+            echo "${name^^}_IMAGE=$ref@$digest" | tee -a images.env
+          done
+          mkdir -p dist
+          sed 's/\r$//' deploy/portainer/compose.portainer.yaml > dist/compose.portainer.yaml
+          while IFS='=' read -r var ref; do
+            grep -qF "\${RAG_${var}:-" dist/compose.portainer.yaml || { echo "::error::RAG_$var is not used in the stack"; exit 1; }
+            sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" dist/compose.portainer.yaml
+          done < images.env
+          grep -oE 'ume-rag/[a-z]+:[^@]+@sha256:[0-9a-f]{12}' dist/compose.portainer.yaml | sort -u
+      - name: Boot the Portainer stack
+        env:
+          VERSION: ${{ inputs.portainer_boot }}
+        run: bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "$VERSION"
 
   e2e:
     # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
@@ -268,7 +322,7 @@ jobs:
         # A local cache only grows when written over itself: keep each image's new cache and drop the old one.
         run: |
           for name in postgres clamav renderer parser; do
-            if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "$BUILD_CACHE/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
+            if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "${BUILD_CACHE:?}/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
           done
           du -sh "$BUILD_CACHE"/* 2>/dev/null || true
       - name: Image pins and SBOMs of the other images
