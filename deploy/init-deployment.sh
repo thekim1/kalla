@@ -586,8 +586,6 @@ UME_RAG_UPLOAD_BACKUP_DIR=$upload_dir
 UME_RAG_CRAWL_ALLOW=$crawl_allow
 # freshclam's HTTP proxy (host firewall: the mirror network reaches only this).
 UME_RAG_FRESHCLAM_PROXY=$freshclam_proxy
-# The organisation the admin UI names (default Umeå kommun; set it empty to name none):
-# UME_RAG_ORGANISATION_NAME=Umeå kommun
 # UME_RAG_OTEL_ENDPOINT=
 # The share of requests traced (default parentbased_traceidratio at 0.1; always_on traces every request):
 # UME_RAG_OTEL_TRACES_SAMPLER=parentbased_traceidratio

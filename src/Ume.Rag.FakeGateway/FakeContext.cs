@@ -7,7 +7,7 @@ namespace Ume.Rag.FakeGateway;
 
 /// <summary>
 /// <c>GET /v1/ume/context</c> as the gateway builds it (<c>ContextEndpoint.Build</c>, thekim1/llmgateway
-/// <c>v0.10.0</c>; the contract's <c>UmeContext</c>, <c>contracts/gateway/integrations.json</c>): the presented key, and for
+/// <c>v0.10.2</c>; the contract's <c>UmeContext</c>, <c>contracts/gateway/integrations.json</c>): the presented key, and for
 /// a credential key its integration, the assigned keys that are not revoked, and their teams and departments; with the
 /// scope <c>organisation.read</c> every department and team, an inactive one included, and the departments' member
 /// groups (feature <c>member-groups</c>). A per-level dev key is an ordinary
@@ -48,6 +48,8 @@ public static class FakeContext
             {
                 ["version"] = options.Gateway.Version,
                 ["admin_url"] = string.IsNullOrEmpty(options.Gateway.AdminUrl) ? null : options.Gateway.AdminUrl,
+                ["integration_api_url"] = null,
+                ["organisation_name"] = string.IsNullOrEmpty(options.Gateway.OrganisationName) ? null : options.Gateway.OrganisationName,
                 ["features"] = Strings(options.Gateway.Features),
             },
             ["key"] = new JsonObject

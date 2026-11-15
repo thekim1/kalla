@@ -63,6 +63,12 @@ exception, with its own steps.
   `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays as the break-glass and is merged with the setting. **Apply:** if you set
   any of the four, enter the same groups on that page right after the update and remove the variables; until then, a
   user who had a role only through one of those groups doesn't have it. With the shared Keycloak the roles come in the token and nothing changes.
+- **The organisation's name comes from the gateway (M-17 C12).** RAG's admin UI names the organisation from its gateway
+  context's `organisation_name` (the gateway admin console's branding; gateway v0.10.2, feature `organisation-name`).
+  `UME_RAG_ORGANISATION_NAME` (Compose), `UME_ORGANISATION_NAME` (Portainer, for rag-admin) and `Admin__OrganisationName`
+  (Kubernetes, `ume-rag-admin-config`) are no longer read. **Apply:** set the organisation's name in the gateway's admin
+  console (branding) if it isn't, and remove the variable. With an older gateway, or an empty name, the texts name no
+  organisation. **Check:** RAG's sign-in page names the organisation.
 - **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.

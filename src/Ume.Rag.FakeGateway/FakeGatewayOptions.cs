@@ -175,11 +175,17 @@ public sealed class FakeGatewayInfo
     public string? AdminUrl { get; set; }
 
     /// <summary>
-    /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
-    /// thekim1/llmgateway <c>v0.10.0</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42) and
-    /// <c>stream-cost</c> (B-38).
+    /// The organisation's name as the gateway's admin console brands it (the context's <c>organisation_name</c>, feature
+    /// <c>organisation-name</c>, gateway <c>v0.10.2</c>); empty: null in the context.
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups"];
+    public string? OrganisationName { get; set; } = "Umeå kommun";
+
+    /// <summary>
+    /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
+    /// thekim1/llmgateway <c>v0.10.2</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42),
+    /// <c>stream-cost</c> (B-38) and <c>organisation-name</c> (M-17 C12).
+    /// </summary>
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name"];
 }
 
 /// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>

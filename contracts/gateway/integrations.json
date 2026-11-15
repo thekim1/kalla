@@ -486,6 +486,8 @@
         "required": [
           "version",
           "admin_url",
+          "integration_api_url",
+          "organisation_name",
           "features"
         ],
         "properties": {
@@ -502,12 +504,26 @@
             ],
             "description": "Gateway:AdminUrl, for links to a key or budget."
           },
+          "integration_api_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Gateway:IntegrationApiUrl: the Integration API's base address (ending in /integration/v1) as integrations reach it; null when not set. Feature integration-api-url."
+          },
+          "organisation_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The organisation's name from the admin console's branding; null when it is empty. Feature organisation-name."
+          },
           "features": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups."
+            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups, organisation-name, integration-api-url."
           }
         }
       },

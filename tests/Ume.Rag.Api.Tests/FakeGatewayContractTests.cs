@@ -39,6 +39,8 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
         context["integration"]!["name"]!.GetValue<string>().ShouldBe("Ume.Rag");
         context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("organisation");
         context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("member-groups");
+        context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("organisation-name");
+        context["gateway"]!["organisation_name"]!.GetValue<string>().ShouldBe("Umeå kommun"); // gateway v0.10.2
 
         var departments = context["departments"]!.AsArray();
         departments.Count.ShouldBe(4);

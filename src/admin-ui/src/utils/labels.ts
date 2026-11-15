@@ -112,7 +112,7 @@ export const PALETTE = {
 
 export const SIGN_IN = {
   title: 'Sign in to the Knowledge platform',
-  /** `organisation` is `Admin:OrganisationName` (default Umeå kommun); set empty, the texts name no organisation. */
+  /** `organisation` is the gateway's organisation name; without one, the texts name no organisation. */
   lead: (organisation: string | null) =>
     `Administration of ${organisation ? `${organisation}’s` : 'the'} knowledge bases and assistants. Sign in with your organisation account.`,
   failed: 'Your sign-in could not be checked. Try again.',

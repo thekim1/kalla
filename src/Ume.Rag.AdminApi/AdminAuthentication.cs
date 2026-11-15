@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Admin;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
 
@@ -226,7 +227,7 @@ public static class AdminAuthentication
             }
             return Results.Challenge(new AuthenticationProperties { RedirectUri = destination }, [OpenIdConnectDefaults.AuthenticationScheme]);
         });
-        app.MapGet("/bff/user", async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin) =>
+        app.MapGet("/bff/user", async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin, GatewayFeatures gateway) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append(AdminCookies.XsrfToken, tokens.RequestToken!, new CookieOptions
@@ -239,7 +240,8 @@ public static class AdminAuthentication
             {
                 isAuthenticated = http.User.Identity?.IsAuthenticated == true,
                 environment = environment.EnvironmentName,
-                organisationName = string.IsNullOrWhiteSpace(admin.Value.OrganisationName) ? null : admin.Value.OrganisationName.Trim(),
+                // The gateway's organisation (its context's organisation_name, M-17 C12); null before the first context answer.
+                organisationName = gateway.OrganisationName,
                 name = http.User.Identity?.Name,
                 email = http.User.FindFirstValue("email"),
                 roles = http.User.FindAll(AdminClaims.Roles).Select(c => c.Value).ToArray(),
