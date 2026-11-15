@@ -16,6 +16,14 @@ namespace Ume.Rag.Worker.Jobs;
 /// <c>rag_jobs</c> notification) or until the class's next queued job is due, at most <c>Worker:IdleWaitSeconds</c>
 /// (30 s), so an idle worker issues no queue statement between notifications (#505); after a job or a wake-up it looks
 /// again at once.
+/// <para>
+/// The list of ready departments is one pass over the class's queued jobs, so its cost grows with the queue. A lane keeps
+/// the list it read for <see cref="ReadyListLifetime"/> and claims from it while it keeps giving jobs (#764): the order
+/// between its departments is recomputed for every claim from the jobs this instance runs now, a department whose dequeue
+/// finds nothing leaves the list, and a list that gives no job is read again before the lane decides it is idle. So a
+/// department that becomes ready, or a higher priority in another department, is seen within that lifetime; within a
+/// department the dequeue statement itself takes the highest priority first.
+/// </para>
 /// </summary>
 /// <remarks>
 /// Each job runs in its own scope under the <c>ConfigVersion</c> log scope. Capacity refusals (an unconfirmed config, a
@@ -49,6 +57,9 @@ public sealed partial class JobDispatcher(
 
     /// <summary><c>LastError</c> of an unhandled exception in a handler (type name in the log only).</summary>
     public const string ExceptionCode = "job.exception";
+
+    /// <summary>How long a lane claims from the ready departments it read before reading them again (#764).</summary>
+    public static readonly TimeSpan ReadyListLifetime = TimeSpan.FromSeconds(1);
 
     private static readonly TimeSpan DefaultCapacityDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan MaxDatabaseBackoff = TimeSpan.FromSeconds(30);
@@ -121,12 +132,13 @@ public sealed partial class JobDispatcher(
                 TimeSpan? nextReadyIn;
                 try
                 {
-                    (job, nextReadyIn) = await TryDequeueAsync(lane.Policy, dispatching);
+                    (job, nextReadyIn) = await TryDequeueAsync(lane, dispatching);
                     failures = 0;
                 }
                 catch (Exception ex) when (!dispatching.IsCancellationRequested)
                 {
                     // Postgres unavailable: back off 1 s → 30 s (engine design §16).
+                    lane.Ready = null;
                     lane.Slots.Release();
                     var delay = TimeSpan.FromTicks(Math.Min(TimeSpan.FromSeconds(1 << Math.Min(failures++, 5)).Ticks, MaxDatabaseBackoff.Ticks));
                     LogDequeueFailed(logger, ex, lane.Policy.Class, delay.TotalSeconds);
@@ -160,30 +172,59 @@ public sealed partial class JobDispatcher(
     /// Per-department fairness (data-model §4.2): fewest running here first, then priority, then age. Without a hit, how
     /// long until the class's next queued job is due.
     /// </summary>
-    private async Task<(LeasedJob? Job, TimeSpan? NextReadyIn)> TryDequeueAsync(JobClassPolicy policy, CancellationToken cancellationToken)
+    /// <summary>
+    /// The lane's next job, from the ready list it holds when that is younger than <see cref="ReadyListLifetime"/>, else
+    /// from a new one. Null with the time until the class's next job is due only after a list read in this call gave
+    /// nothing, so an idle lane's wait is always computed from the queue as it is now.
+    /// </summary>
+    private async Task<(LeasedJob? Job, TimeSpan? NextReadyIn)> TryDequeueAsync(Lane lane, CancellationToken cancellationToken)
     {
-        var ready = await queue.ReadyDepartmentsAsync(policy.Class, cancellationToken);
-        foreach (var department in ready.Departments
-                     .OrderBy(d => running.CountFor(policy.Class, d.DepartmentId))
-                     .ThenByDescending(d => d.MaxPriority)
-                     .ThenBy(d => d.OldestAvailableAt)
-                     .ThenBy(d => d.DepartmentId))
+        var policy = lane.Policy;
+        var ready = lane.Ready;
+        var fresh = false;
+        if (ready is null || time.GetElapsedTime(ready.ReadAt) >= ReadyListLifetime)
         {
-            // Not cancellable: a dequeue cancelled after its commit would strand a leased job until the reaper.
-            var job = await queue.DequeueAsync(new DequeueRequest(policy.Class, department.DepartmentId, identity.InstanceId, policy.Lease), CancellationToken.None);
-            if (job is not null)
-            {
-                return (job, null);
-            }
+            ready = await ReadReadyAsync(lane, cancellationToken);
+            fresh = true;
         }
 
-        return (null, ready.NextReadyIn);
+        while (true)
+        {
+            foreach (var department in ready.Departments
+                         .OrderBy(d => running.CountFor(policy.Class, d.DepartmentId))
+                         .ThenByDescending(d => d.MaxPriority)
+                         .ThenBy(d => d.OldestAvailableAt)
+                         .ThenBy(d => d.DepartmentId)
+                         .ToList())
+            {
+                // Not cancellable: a dequeue cancelled after its commit would strand a leased job until the reaper.
+                var job = await queue.DequeueAsync(new DequeueRequest(policy.Class, department.DepartmentId, identity.InstanceId, policy.Lease), CancellationToken.None);
+                if (job is not null)
+                {
+                    return (job, null);
+                }
+
+                ready.Departments.Remove(department); // drained, here or by another instance
+            }
+
+            lane.Ready = null;
+            if (fresh)
+            {
+                return (null, ready.NextReadyIn);
+            }
+
+            // The kept list is used up: only the queue itself says whether the lane is idle.
+            ready = await ReadReadyAsync(lane, cancellationToken);
+            fresh = true;
+        }
     }
 
-    /// <summary>
-    /// Until the next queued job is due, rounded up to a whole millisecond and at least one (a timer that fires a little
-    /// early costs one more probe), and at most <paramref name="cap"/>.
-    /// </summary>
+    private async Task<ReadyList> ReadReadyAsync(Lane lane, CancellationToken cancellationToken)
+    {
+        var read = await queue.ReadyDepartmentsAsync(lane.Policy.Class, cancellationToken);
+        return lane.Ready = new ReadyList(time.GetTimestamp(), [.. read.Departments], read.NextReadyIn);
+    }
+
     internal static TimeSpan IdleWait(TimeSpan? nextReadyIn, TimeSpan cap) =>
         nextReadyIn is { } next && next < cap ? TimeSpan.FromMilliseconds(Math.Ceiling(Math.Max(next.TotalMilliseconds, 1))) : cap;
 
@@ -403,7 +444,13 @@ public sealed partial class JobDispatcher(
 
         /// <summary>Free slots. Never disposed: running jobs release theirs after the loop has ended.</summary>
         public SemaphoreSlim Slots { get; } = new(concurrency, concurrency);
+
+        /// <summary>The ready departments the lane's loop last read, while it claims from them; only that loop touches it.</summary>
+        public ReadyList? Ready { get; set; }
     }
+
+    /// <summary>A class's ready departments as read at <paramref name="ReadAt"/> (a <see cref="TimeProvider"/> timestamp), less those found drained since.</summary>
+    private sealed record ReadyList(long ReadAt, List<ReadyDepartment> Departments, TimeSpan? NextReadyIn);
 
     /// <summary>The <c>outcome</c> dimension of <c>rag.jobs.duration</c>: a job state, or what happened instead.</summary>
     private static class JobStatesOutcome
