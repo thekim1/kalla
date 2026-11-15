@@ -12,6 +12,15 @@ exception, with its own steps.
 
 ## Unreleased
 
+## 0.6.0
+
+- **Rolling update: no** from 0.5.x. Migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads:
+  stop the old rag-admin before `rag-migrate` runs, then start the new one (rag-api and rag-worker are not affected).
+- **Before the update:** give rag-api's and rag-admin's credential keys the residencies `OnPrem` and `Eu` in the
+  gateway (C9, below). **Portainer:** paste the new `compose.portainer.yaml` (gateway v0.10.2, Ume.Rag 0.6.0) and add
+  `UME_INTEGRATION_API_URL` (C11); keep your `UME_RAG_*_GATEWAY_KEY` variables unless you move to the manifest (C7).
+- **After the update:** create the embedding profile if none exists (C5) and check *Models* shows `act-as-key`.
+
 - **Fewer Portainer variables (M-17 C1–C3, #682, #683).** The stack sets Open WebUI's feedback address while the
   `openwebui` profile is on and the malware-scan mode from the `clamav` profile, so `UME_RAG_OPENWEBUI_BASE_URL` and
   `UME_RAG_CLAMAV_MODE` are no longer read; `UME_RAG_API_PUBLIC_URL` defaults to `https://<UME_RAG_API_HOST>` and is
@@ -107,6 +116,18 @@ exception, with its own steps.
   `teamCode` to the integration's owner team. A new stack: keep both from `stack.env.example`, change `departmentCode`.
   **Check:** the gateway's `migrations` log says *'Ume.Rag' applied*; `rag-bootstrap`'s checklist names no gateway key;
   *Models* in RAG's admin shows `act-as-key`.
+
+- **Kubernetes NetworkPolicies are on by default (#706).** `base` now carries default-deny and every flow the stack
+  needs; `components/networkpolicies` is gone and the Ingress controller's rule is `components/ingress-controller`
+  (namespace `ingress-nginx`). The worker's and freshclam's 80/443 egress reaches public addresses only. **Apply:** in
+  your overlay replace `../components/networkpolicies` with `../components/ingress-controller` (change its namespace
+  with the example's patch if yours differs); add the example overlay's egress rules for a gateway at a private address
+  or on 8443, each `Crawl__AllowedPrivateRanges` range, and pgBackRest's S3 store. **Check:** with an enforcing CNI,
+  sign in to the admin UI, ask a question, crawl a page and upload a file ([kubernetes.md](kubernetes.md), *Network
+  policies*).
+- **Certificate expiry is watched (#705).** **Apply (Compose):** run `deploy/host/install.sh` again to install and
+  enable `rag-cert-expiry.timer` (daily; it fails below 60 days and writes `certs.prom`). Portainer: nothing; the
+  checklist names expiring certificates on every deploy. **Check:** `systemctl status rag-cert-expiry.timer`.
 
 ## 0.5.1
 
