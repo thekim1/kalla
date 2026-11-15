@@ -400,3 +400,10 @@ their sign-in and are unaffected.
 
 **Not reviewed:** the gateway's side (§6), the identity, admin and deployment design texts that §9 changes,
 `init-deployment.sh`'s prompts, and whether Portainer's bundled Compose resolves nested defaults (S0 tests it).
+
+**Second review (2026-11-15, of S3's code, by an independent agent; each finding checked by the main session):** a
+code holder could have had the stored or the deployment's client secret sent to a provider of their choice (fixed: a
+secret goes only to the provider it belongs to); ten wrong codes shut out the right one for the opening (fixed: a
+per-minute throttle, nothing stored); a test could be finished in another person's browser (fixed: a cookie binds it);
+a missing settings row opened setup (fixed: closed, as §4.2 says); the body of a provider's answer had no timeout;
+abandoned sessions kept typed secrets. The rules are in identity §19.
