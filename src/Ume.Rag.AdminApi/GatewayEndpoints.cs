@@ -98,7 +98,8 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
     /// <summary>
     /// V39's model part as the key (admin §4.6, B-43): while the gateway acts as keys, <c>GET /v1/models</c> as
     /// <paramref name="key"/> at <paramref name="ceiling"/>, and each model the object uses that it does not list is named in
-    /// <c>gateway_key_model</c>; a refusal of the key is <c>gateway_key_invalid</c>. Empty when the gateway does not act as keys.
+    /// <c>gateway_key_model</c>, unless the key allows the model and the model runs only at residencies the key does not allow
+    /// (<see cref="ResidencyProblemsAsync"/>); a refusal of the key is <c>gateway_key_invalid</c>. Empty when the gateway does not act as keys.
     /// </summary>
     public async Task<IReadOnlyList<RuleProblem>> KeyModelsAsync(GatewayKey key, Residency ceiling, IEnumerable<string?> models, CancellationToken cancellationToken)
     {
@@ -131,8 +132,59 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
 
         var missing = models.OfType<string>().Where(m => m.Length > 0).Distinct(StringComparer.Ordinal).Where(m => !listed.Contains(m))
             .Order(StringComparer.Ordinal).ToList();
-        return missing.Count == 0 ? [] : [new(AdminErrorCodes.GatewayKeyModel, new Dictionary<string, string> { ["key"] = key.Name }, missing)];
+        if (missing.Count == 0)
+        {
+            return [];
+        }
+
+        var byResidency = await ResidencyProblemsAsync(key, ceiling, missing, cancellationToken);
+        var unexplained = missing.Where(m => byResidency.All(p => p.Affected[0] != m)).ToList();
+        return unexplained.Count == 0
+            ? byResidency
+            : [new(AdminErrorCodes.GatewayKeyModel, new Dictionary<string, string> { ["key"] = key.Name }, unexplained), .. byResidency];
     }
+
+    /// <summary>
+    /// The models of <paramref name="missing"/> the key allows (its model list, empty = all) that the mirror says run within
+    /// <paramref name="ceiling"/> only at residencies the key does not allow (#720): each is named with its residencies and the
+    /// key's in <c>gateway_key_model_residency</c>, or <c>gateway_key_embedding_residency</c> for an embedding model (an object
+    /// uses one only as its knowledge base's embedding profile's).
+    /// </summary>
+    private async Task<IReadOnlyList<RuleProblem>> ResidencyProblemsAsync(GatewayKey key, Residency ceiling, List<string> missing, CancellationToken cancellationToken)
+    {
+        var keyResidencies = Residencies(key.AllowedResidencies, Residency.External);
+        var allowed = missing.Where(m => key.AllowedModels.Length == 0 || key.AllowedModels.Contains(m, StringComparer.Ordinal)).ToList();
+        if (keyResidencies.Count == 0 || allowed.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await db.GatewayModels.AsNoTracking().Where(m => allowed.Contains(m.Name)).Select(m => new { m.Name, m.ModelKind, m.Residencies })
+            .ToListAsync(cancellationToken);
+        List<RuleProblem> problems = [];
+        foreach (var row in rows.OrderBy(r => r.Name, StringComparer.Ordinal))
+        {
+            var modelResidencies = Residencies(row.Residencies, ceiling);
+            if (modelResidencies.Count == 0 || modelResidencies.Any(keyResidencies.Contains))
+            {
+                continue;
+            }
+
+            problems.Add(new(row.ModelKind == GatewayModelModelKinds.Embedding ? AdminErrorCodes.GatewayKeyEmbeddingResidency : AdminErrorCodes.GatewayKeyModelResidency,
+                new Dictionary<string, string>
+                {
+                    ["key"] = key.Name, ["model"] = row.Name,
+                    ["modelResidencies"] = string.Join(", ", modelResidencies.Select(ResidencyCeiling.ToHeader)),
+                    ["keyResidencies"] = string.Join(", ", keyResidencies.Select(ResidencyCeiling.ToHeader)),
+                }, [row.Name]));
+        }
+
+        return problems;
+    }
+
+    /// <summary>The residencies of <paramref name="values"/> up to <paramref name="ceiling"/>, distinct and in the ceiling's order.</summary>
+    private static List<Residency> Residencies(IEnumerable<string> values, Residency ceiling) =>
+        [.. values.Select(v => ResidencyCeiling.TryParse(v, out var r) ? r : (Residency?)null).OfType<Residency>().Where(r => r <= ceiling).Distinct().Order()];
 
     private async Task<IReadOnlySet<string>> ListAsync(Residency ceiling, Guid? asKey, Dictionary<string, string> parameters, CancellationToken cancellationToken)
     {

@@ -278,6 +278,17 @@ public static class AdminErrorCodes
     /// <summary>V39: the key's model list lacks models the object uses; <c>affected</c> lists them.</summary>
     public static AdminErrorCode GatewayKeyModel { get; } = new("gateway_key_model", 409, "The AI gateway key {key} does not allow every model this uses.");
 
+    /// <summary>
+    /// V39 as the key (#720): the key allows <c>{model}</c>, but the model runs within the ceiling only at
+    /// <c>{modelResidencies}</c> and the key allows none of them (<c>{keyResidencies}</c>); <c>affected</c> is the model.
+    /// </summary>
+    public static AdminErrorCode GatewayKeyModelResidency { get; } = new("gateway_key_model_residency", 409,
+        "The AI gateway key {key} reaches {model} only at {modelResidencies}, which the key does not allow (it allows {keyResidencies}).");
+
+    /// <summary><see cref="GatewayKeyModelResidency"/> for an embedding model, which an object uses as its knowledge base's embedding profile's (#720).</summary>
+    public static AdminErrorCode GatewayKeyEmbeddingResidency { get; } = new("gateway_key_embedding_residency", 409,
+        "The AI gateway key {key} reaches {model}, the knowledge base's embedding model, only at {modelResidencies}, which the key does not allow (it allows {keyResidencies}).");
+
     /// <summary>V39: the object has no key. A warning until the gateway acts as keys (feature <c>act-as-key</c>), then publish refuses it.</summary>
     public static AdminErrorCode GatewayKeyRequired { get; } = new("gateway_key_required", 409, "No AI gateway key is chosen: the calls are charged to the platform's owner team.");
 
@@ -302,5 +313,5 @@ public static class AdminErrorCodes
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
-            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded];
+            GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded];
 }

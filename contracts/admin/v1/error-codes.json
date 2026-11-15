@@ -422,6 +422,16 @@
       "message": "The AI gateway key {key} does not allow every model this uses."
     },
     {
+      "code": "gateway_key_model_residency",
+      "status": 409,
+      "message": "The AI gateway key {key} reaches {model} only at {modelResidencies}, which the key does not allow (it allows {keyResidencies})."
+    },
+    {
+      "code": "gateway_key_embedding_residency",
+      "status": 409,
+      "message": "The AI gateway key {key} reaches {model}, the knowledge base\u0027s embedding model, only at {modelResidencies}, which the key does not allow (it allows {keyResidencies})."
+    },
+    {
       "code": "gateway_key_required",
       "status": 409,
       "message": "No AI gateway key is chosen: the calls are charged to the platform\u0027s owner team."
