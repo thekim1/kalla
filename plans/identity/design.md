@@ -1526,11 +1526,33 @@ test row (single use, expiring) holds the PKCE verifier and nonce; the id token 
 same `ValidateSignInAsync` as a real sign-in runs on the candidate values. A provider whose metadata requires pushed
 authorization requests is refused with a message.
 
-**Open WebUI.** `Settings.OpenWebUi.Oidc.*` (provider address, defaulting to rag-admin's authority's discovery
-document; client id, default `open-webui`; client secret; provider name) are set in the wizard's Open WebUI step with
-the same test, against Open WebUI's redirect URI. rag-api serves them on an internal route to the managed Open WebUI
-client only (§5). Open WebUI's start wrapper fetches them before it starts, starts without OIDC sign-in when there are
-none, asks again every minute and exits when the answer changed.
+**Open WebUI.** `Settings.OpenWebUi.Oidc.*`: the provider URL (the discovery document's address; default rag-admin's
+effective authority + `/.well-known/openid-configuration`), the client id (default `open-webui`), the provider's
+display name, the client secret (encrypted, its own purpose) and its optional expiry date. A deployment value
+(`OpenWebUi:Oidc:*`) wins. They are set in the wizard's Open WebUI step (`target: "open-webui"` on `POST test` and
+`POST complete`), shown only when the deployment runs Open WebUI (`OpenWebUi:Enabled`), with Open WebUI's redirect URI
+to register.
+
+- **Its test is a back-channel check, not a sign-in:** the provider sends the browser back to Open WebUI, so rag-admin
+  never sees a callback. The test fetches the discovery document (the provider URL must be the issuer's own) and the
+  keys, then makes one token request with a random code and the candidate client: `invalid_grant` means the client was
+  accepted, `invalid_client` or any 401 that it was refused, anything else that it could not be verified (saving is
+  allowed, with a warning). It can't tell whether Open WebUI's redirect URI is registered. The secret rules above apply;
+  a deployment secret also goes to the default derived from the deployment's own authority.
+- **Saving** needs a session whose latest rag-admin test passed as a platform admin (that person is the audit's actor),
+  a test with discovery ok and the client not refused, and the same values; it doesn't close setup (event 6013).
+- **rag-api** serves the effective values on `GET /internal/openwebui/sign-in` to the managed Open WebUI client only
+  (§5): 401 without a key, 403 for any other client, `no-store`, not in the API reference. Its `version` is an HMAC of
+  the values under a deployment key, so it changes with any value and can't be used to test guesses. The Portainer
+  proxy answers 404 for `/internal/`; in Compose Open WebUI calls rag-api by its public address, so only the key opens
+  it there.
+- **Open WebUI's start wrapper** (`deploy/openwebui/start-with-sign-in.py`) fetches them before it starts, starts
+  without OIDC sign-in when there are none (a public client gets PKCE instead of a secret), asks again every minute
+  and exits when the answer changed, so the restart policy starts Open WebUI with the new values. A failed call changes
+  nothing.
+- The provider's display name alone is an ordinary setting (`PUT /api/settings/openwebui`).
+
+Built in M-20 S5 (#771).
 
 **Security events:** setup opened, setup code refused, test sign-in (result), setup completed, each with the address;
 `docs/security-events.md` has the numbers. The audit row of a completion names the tested person.
