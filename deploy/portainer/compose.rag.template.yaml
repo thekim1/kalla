@@ -24,11 +24,18 @@
 #
 # Required variables (besides the gateway's above)
 #   UME_RAG_API_HOST          public hostname of rag-api (for example rag.example.se)
+#   UME_INTEGRATION_MANIFEST  (the gateway's) the integration Ume.Rag with its three credential keys, as in
+#                             stack.env.example: the gateway's migrations create what is missing (never change what
+#                             exists) and write each new key to the volume <stack>_integration-secrets, from which
+#                             rag-bootstrap gives each service its key (M-17 C7). Without it, or for a key issued by hand:
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag (a gateway admin issues
-#                             them, docs/production-setup.md in the RAG repository, "Gateway credential keys"); without
-#                             one the stack starts but that service's model calls are refused. To add or rotate one,
-#                             change it and update the stack: the services pick it up within seconds, no restart.
+#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
+#                             manifest's. Without a key the stack starts but that service's model calls are refused. To
+#                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
+#                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
+#   UME_INTEGRATION_API_URL   (the gateway's) https://adminapi:8443/integration/v1: the Integration API's address the
+#                             gateway hands rag-admin in its context, for the cost and budget read-back (rag-admin
+#                             joins the gateway's edge network to reach adminapi)
 # Recommended
 #   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
 #                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
@@ -130,8 +137,12 @@ x-rag-secrets: &rag-secrets-mount
       - rag-blobs:/blobs
       - rag-openwebui-data:/openwebui-data
       - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
+      # The credential keys the gateway's migrations created from UME_INTEGRATION_MANIFEST (M-17 C7).
+      - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
     depends_on:
       bootstrap: {condition: service_completed_successfully}
+      # The gateway's migrations write the manifest's keys before rag-bootstrap copies them.
+      migrations: {condition: service_completed_successfully}
     network_mode: none
 
   rag-postgres:
@@ -306,6 +317,8 @@ x-rag-secrets: &rag-secrets-mount
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
+      # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
+      edge: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
