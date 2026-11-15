@@ -12,12 +12,12 @@ variable `RELEASE_E2E` to `true` for tag releases, or tick `e2e` on a dry run (D
 Run them **alone**: dispatch `e2e.yml` only when no other workflow is running (`gh run list --status in_progress`).
 With `verify.yml`'s backend and renderer jobs on the other runner at the same time, the admin UI's requests failed in
 the browser ("The server cannot be reached") although the same commit passed alone. `release.yml` starts them after
-`verify` and `parser` for that reason.
+`verify`, `parser` and `build` for that reason (`build` runs beside `verify` and `parser`).
 
 ## Working with the workflows
 
 - **Before a release, run a release dry run** and fix what it finds:
-  `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 30 minutes). It is the only run of the
+  `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 14 minutes; a tag run about 17). It is the only run of the
   bundle's smoke test (`deploy/tests/release-smoke.sh`) and of the Portainer stack's boot test
   (`deploy/tests/portainer-boot.sh`: the release's `compose.portainer.yaml` with the gateway's pinned release, `clamav`
   and `openwebui`), and it never reaches the publish job.
