@@ -44,6 +44,13 @@ interface Pending {
 /** Files sent at the same time; the API takes them in any order within a batch. */
 const PARALLEL_SENDS = 3
 
+/**
+ * The most rows listed (#712): a folder of thousands is shown as counts and the rows that need a look first, in this order,
+ * so a per-file change re-renders a short list instead of every file.
+ */
+const MAX_ROWS = 50
+const ROW_ORDER: readonly Pending['state'][] = ['failed', 'sending', 'skipped', 'waiting', 'sent']
+
 const pending = ref<Pending[]>([])
 const batches = ref<Batch[]>([])
 const busy = ref(false)
@@ -57,9 +64,18 @@ const replacing = ref<UploadFile | null>(null)
 let nextKey = 1
 
 const maxMb = computed(() => Number(props.source.settings.maxFileSizeMb ?? 50))
-const sendable = computed(() => pending.value.filter((p) => p.state === 'waiting' || p.state === 'failed' || p.state === 'sending').length)
-const toCommit = computed(() => pending.value.filter((p) => p.state !== 'skipped').length)
-const skipped = computed(() => pending.value.filter((p) => p.state === 'skipped').length)
+/** The pending files by state, in one pass. */
+const byState = computed(() => {
+  const groups: Record<Pending['state'], Pending[]> = { waiting: [], sending: [], sent: [], failed: [], skipped: [] }
+  for (const p of pending.value) groups[p.state].push(p)
+  return groups
+})
+const sendable = computed(() => byState.value.waiting.length + byState.value.failed.length + byState.value.sending.length)
+const toCommit = computed(() => pending.value.length - byState.value.skipped.length)
+const skipped = computed(() => byState.value.skipped.length)
+const sent = computed(() => byState.value.sent.length)
+const shown = computed(() => ROW_ORDER.flatMap((state) => byState.value[state]).slice(0, MAX_ROWS))
+const hidden = computed(() => pending.value.length - shown.value.length)
 
 /** Adds files to the list; those the API would refuse are listed as skipped with the reason and never sent. */
 function add(chosen: PickedFile[]): void {
@@ -221,19 +237,21 @@ onMounted(() => {
     <template v-if="pending.length">
       <div class="mt-3 flex flex-wrap items-center gap-3 text-small" data-test="pending-summary">
         <span class="font-medium">{{ FILES.ready(toCommit) }}</span>
+        <span v-if="sent" class="text-fg-3" data-test="sent-count">{{ FILES.sentCount(sent, toCommit) }}</span>
         <span v-if="skipped" class="text-fg-3">{{ FILES.skippedCount(skipped) }}</span>
         <UiButton v-if="skipped" size="sm" variant="quiet" data-test="clear-skipped" @click="clearSkipped">{{ FILES.clearSkipped }}</UiButton>
         <span class="flex-1" />
         <UiButton v-if="sendable" variant="primary" :loading="busy" data-test="upload" @click="upload">{{ FILES.upload(toCommit) }}</UiButton>
       </div>
       <ul class="mt-2 grid max-h-72 gap-1 overflow-y-auto" aria-live="polite" data-test="pending">
-        <li v-for="p in pending" :key="p.key" class="flex flex-wrap items-center gap-2 text-small">
+        <li v-for="p in shown" :key="p.key" class="flex flex-wrap items-center gap-2 text-small">
           <span class="break-all font-medium" :class="{ 'text-fg-3': p.state === 'skipped' }">{{ p.path }}</span>
           <span class="text-fg-3">{{ sizeText(p.file.size) }}</span>
           <UiBadge :tone="p.state === 'sent' ? 'ok' : p.state === 'failed' ? 'danger' : 'neutral'" :label="FILES.fileStates[p.state]" />
           <span v-if="p.error" :class="p.state === 'skipped' ? 'text-fg-3' : 'text-danger'">{{ p.error }}</span>
           <UiButton v-if="p.state !== 'sending'" size="sm" variant="quiet" :aria-label="FILES.remove" @click="drop(p)">×</UiButton>
         </li>
+        <li v-if="hidden" class="text-small text-fg-3" data-test="pending-more">{{ FILES.moreFiles(hidden) }}</li>
       </ul>
     </template>
     <InlineError v-if="error" :message="problemMessage(error)" class="mt-3" />

@@ -622,6 +622,9 @@ export const FILES = {
   reading: 'Reading the folder…',
   ready: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} ready`,
   skippedCount: (n: number) => `${n} skipped`,
+  sentCount: (sent: number, total: number) => `${formatNumber(sent)} of ${formatNumber(total)} sent`,
+  /** Under the pending list, for the files it does not show (failed, sending and skipped files come first). */
+  moreFiles: (n: number) => `and ${formatNumber(n)} more`,
   clearSkipped: 'Clear skipped',
   skipReasons: {
     type: 'This file type cannot be uploaded.',
