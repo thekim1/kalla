@@ -14,6 +14,16 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   the setup wizard's code; `UME_RAG_SETUP_REOPEN` (Portainer, `deploy/.env`, kept on a re-run) and `Setup__Reopen`
   (Kubernetes) pass rag-admin `Setup:Reopen`, empty by default. The AppHost's `Setup:Try=true` starts rag-admin without
   the sign-in authority and client secret and with a setup secret, to try the wizard locally.
+- **Open WebUI's sign-in settings from the setup wizard** (setup wizard S5, identity design §19): `Settings.OpenWebUi.Oidc`
+  (provider URL, client id, button label, the client secret encrypted under its own purpose) with each value's source;
+  the setup API's `test` and `complete` take `target: open-webui` (a back-channel test of the discovery document and the
+  client's credentials; saving needs the session's passed platform-admin test and leaves setup open; event 6013), and
+  `GET /bff/setup/state` and `GET /api/settings/sign-in` show Open WebUI's block. rag-api registers the shared key ring
+  read-only and serves the effective values on `/internal/openwebui/sign-in` to the deployment's own Open WebUI client
+  only; Open WebUI's new start wrapper fetches them, starts without sign-in when there are none, and restarts it when they
+  change. `UME_RAG_OPENWEBUI_OIDC_*` are now deployment values of rag-api and rag-admin; Compose's
+  `--openwebui-oidc-client-secret-file` writes their secret files instead of `openwebui.env`. The button's label is also
+  a setting (`PUT /api/settings/openwebui`). The wizard's Open WebUI step in the admin UI comes in its own change.
 
 ## 0.6.0 (2026-11-15)
 

@@ -8,10 +8,12 @@
 #     container has the pilot caps and the 24 GB limits of §6.2, the parser runs 2 slots x 2 threads and postgres the
 #     24 GB memory settings; deploy/host/install.sh --host-memory 24 writes the slice's MemoryMax=11G;
 #   - compose.openwebui.yaml: the §6.2 row for open-webui, API keys only for the feedback routes, the admin's chat
-#     access and export off, password sign-in always off, OIDC users as role user; open-webui-setup (the feedback key,
+#     access and export off, password sign-in always off, OIDC users as role user, its OIDC settings from rag-api through
+#     start-with-sign-in.py (identity design §19); open-webui-setup (the feedback key,
 #     M-17 C6) as Open WebUI's user, read-only, without capabilities, writing only secrets/openwebui-feedback;
-#   - init-deployment.sh --openwebui-host writes the feedback service account once (a re-run keeps its password), and
-#     secrets/openwebui-feedback exists for rag-api's mount.
+#   - init-deployment.sh --openwebui-host writes the feedback service account once (a re-run keeps its password),
+#     secrets/openwebui-feedback exists for rag-api's mount, and Open WebUI's client secret goes to secrets/api and
+#     secrets/admin, not to openwebui.env.
 #
 #   deploy/tests/pilot-stack.sh
 #
@@ -118,6 +120,11 @@ env_is "$owui" open-webui DEFAULT_USER_ROLE user
 env_is "$owui" open-webui ENABLE_PERSISTENT_CONFIG false
 env_is "$owui" open-webui DEFAULT_MODEL_METADATA '{"capabilities":{"builtin_tools":false}}'
 env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" open-webui ENABLE_PASSWORD_AUTH false
+# Its OIDC settings come from rag-api through the start wrapper (identity design §19).
+env_is "$owui" open-webui UME_RAG_SIGN_IN_URL https://rag-api.example.se/internal/openwebui/sign-in
+if [ "$(jq -c '.services["open-webui"].entrypoint' <<< "$owui")" = '["python3","-I","/config/start-with-sign-in.py","--","bash","start.sh"]' ]; then
+  ok "open-webui: starts through start-with-sign-in.py"
+else fail "open-webui: entrypoint is $(jq -c '.services["open-webui"].entrypoint' <<< "$owui")"; fi
 setup_ok="$(jq -r '.services["open-webui-setup"] | [.user, (.read_only | tostring), (.cap_drop | join(",")),
   ([.volumes[] | select(.read_only != true) | .target] | sort | join(","))] | join(" ")' <<< "$owui")"
 if [ "$setup_ok" = "1000:1000 true ALL /data,/run/feedback" ]; then
@@ -147,6 +154,15 @@ if diff -q "$i/first" "$i/second" >/dev/null; then ok "init-deployment.sh: a re-
 else fail "init-deployment.sh: a re-run changed the service account"; fi
 if [ -d "$i/deploy/secrets/openwebui-feedback" ]; then ok "init-deployment.sh: secrets/openwebui-feedback exists for rag-api's mount"
 else fail "init-deployment.sh: no secrets/openwebui-feedback"; fi
+# Open WebUI's client secret is a deployment value of rag-api and rag-admin (identity design §19), never Open WebUI's env.
+if [ "$(cat "$i/deploy/secrets/api/OpenWebUi__Oidc__ClientSecret")" = owui-secret-placeholder ] &&
+   [ "$(cat "$i/deploy/secrets/admin/OpenWebUi__Oidc__ClientSecret")" = owui-secret-placeholder ] &&
+   ! grep -q 'OAUTH_\|owui-secret-placeholder' "$i/deploy/secrets/openwebui.env"; then
+  ok "init-deployment.sh --openwebui-oidc-client-secret-file: the secret in secrets/api and secrets/admin, not in openwebui.env"
+else fail "init-deployment.sh --openwebui-oidc-client-secret-file: the secret is not where rag-api and rag-admin read it, or in openwebui.env"; fi
+if grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=' "$i/deploy/.env" && grep -qx 'UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=' "$i/deploy/.env"; then
+  ok "init-deployment.sh: without --openwebui-oidc-client-id and -provider-url, neither is a deployment value"
+else fail "init-deployment.sh: deploy/.env sets Open WebUI's client id or provider without the options"; fi
 if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
   ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
 else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi

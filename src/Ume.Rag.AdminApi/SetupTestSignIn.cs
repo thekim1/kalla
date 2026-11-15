@@ -214,7 +214,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         {
             if (sampler.ShouldLog(UnknownTestEvent, out var count))
             {
-                SecurityEvents.SetupTestSignIn(security, "failed", SetupTestReasons.UnknownTest, null, false, null, address, count);
+                SecurityEvents.SetupTestSignIn(security, SetupTargets.RagAdmin, "failed", SetupTestReasons.UnknownTest, null, false, null, address, count);
             }
 
             http.Response.Redirect(DonePath);
@@ -232,7 +232,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         test.Reason = test.Passed == true ? null : reason;
         test.Result = result is null ? null : JsonSerializer.Serialize(result, Json);
         await db.SaveChangesAsync(CancellationToken.None);
-        SecurityEvents.SetupTestSignIn(security, test.Passed == true ? "passed" : "failed", reason, result?.Subject, result?.IsPlatformAdmin == true,
+        SecurityEvents.SetupTestSignIn(security, test.Target, test.Passed == true ? "passed" : "failed", reason, result?.Subject, result?.IsPlatformAdmin == true,
             session is null ? null : SetupSessions.EventId(session), address, 1);
         http.Response.Redirect(DonePath);
     }
@@ -259,7 +259,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         return null;
     }
 
-    private static bool Same(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.Ordinal);
+    internal static bool Same(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.Ordinal);
 
     /// <summary>
     /// The test cookie: <c>SameSite=None</c>, since the provider's form_post back is a cross-site POST, scoped to the callback path and
@@ -285,8 +285,11 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
     public static byte[] Fingerprint(string target, OidcWizardValues values)
     {
         ArgumentNullException.ThrowIfNull(values);
-        return SHA256.HashData(Encoding.UTF8.GetBytes(target + "\n" + values.Normalized().ToJson()));
+        return Fingerprint(target, values.Normalized().ToJson());
     }
+
+    /// <summary>The same over a target's normalized values as JSON (Open WebUI's, <see cref="SetupOpenWebUiTest"/>).</summary>
+    public static byte[] Fingerprint(string target, string normalizedJson) => SHA256.HashData(Encoding.UTF8.GetBytes(target + "\n" + normalizedJson));
 
     /// <summary>The redirect URI as the OpenID Connect handler builds it: the request's scheme and host (behind the proxy, its Host header), path base and <paramref name="path"/>.</summary>
     public static string RedirectUri(HttpContext http, PathString path)
@@ -295,7 +298,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         return http.Request.Scheme + Uri.SchemeDelimiter + http.Request.Host.ToUriComponent() + http.Request.PathBase.ToUriComponent() + path.ToUriComponent();
     }
 
-    private static Ume.Rag.ServiceDefaults.ApiFaultException Refused(string reason) =>
+    internal static Ume.Rag.ServiceDefaults.ApiFaultException Refused(string reason) =>
         AdminFaults.Of(AdminErrorCodes.SetupTestRefused, new Dictionary<string, string> { ["reason"] = reason });
 
     /// <summary>The candidate's effective values at the callback, through the same precedence (the deployment may have changed since).</summary>

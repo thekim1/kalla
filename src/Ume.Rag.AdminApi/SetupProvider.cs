@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using Ume.Rag.Infrastructure.Security;
 
 namespace Ume.Rag.AdminApi;
 
@@ -40,6 +41,18 @@ public static class SetupTestReasons
 
     /// <summary>The provider's signing keys could not be fetched, or there are none.</summary>
     public const string KeysUnavailable = "keys_unavailable";
+
+    /// <summary>Open WebUI's provider address is missing, not an absolute https URL (http in Development only), or holds user info, a query or a fragment.</summary>
+    public const string ProviderUrlInvalid = "provider_url_invalid";
+
+    /// <summary>Open WebUI's test: the token endpoint answered <c>invalid_client</c> or 401, so the client id or secret is wrong.</summary>
+    public const string ClientRefused = "client_refused";
+
+    /// <summary>
+    /// Open WebUI's test: the token endpoint's answer neither refused nor accepted the client (anything but <c>invalid_client</c> or
+    /// <c>invalid_grant</c>); a wrong secret then shows only when a user signs in.
+    /// </summary>
+    public const string ClientUnverified = "client_unverified";
 
     /// <summary>The wizard's stored client secret cannot be read by the key ring; type it again.</summary>
     public const string StoredSecretUnreadable = "stored_secret_unreadable";
@@ -91,8 +104,12 @@ public enum ProviderOutcome
     TooLarge = 5,
 }
 
-/// <summary>A back-channel answer: <see cref="Body"/> only when <see cref="Outcome"/> is <see cref="ProviderOutcome.Ok"/>.</summary>
-public sealed record ProviderResponse(ProviderOutcome Outcome, string? Body = null);
+/// <summary>
+/// A back-channel answer: <see cref="Body"/> when <see cref="Outcome"/> is <see cref="ProviderOutcome.Ok"/>, and for
+/// <see cref="ProviderOutcome.Status"/> (with its <see cref="StatusCode"/>) only when the caller asked for the error body. Never
+/// returned to a client.
+/// </summary>
+public sealed record ProviderResponse(ProviderOutcome Outcome, string? Body = null, int? StatusCode = null);
 
 /// <summary>
 /// The setup test's back channel to a candidate provider (identity design §19): a code holder chooses the address, so it is an SSRF
@@ -121,12 +138,13 @@ public sealed class SetupProviderClient(HttpMessageHandler handler, TimeSpan? ti
 
     public Task<ProviderResponse> GetAsync(Uri uri, CancellationToken ct) => SendAsync(new HttpRequestMessage(HttpMethod.Get, uri), ct);
 
-    public Task<ProviderResponse> PostFormAsync(Uri uri, IEnumerable<KeyValuePair<string, string>> form, CancellationToken ct) =>
-        SendAsync(new HttpRequestMessage(HttpMethod.Post, uri) { Content = new FormUrlEncodedContent(form) }, ct);
+    /// <summary>A form POST; <paramref name="errorBody"/>: an error status's body comes back too (the OAuth error code of a token request).</summary>
+    public Task<ProviderResponse> PostFormAsync(Uri uri, IEnumerable<KeyValuePair<string, string>> form, CancellationToken ct, bool errorBody = false) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Post, uri) { Content = new FormUrlEncodedContent(form) }, ct, errorBody);
 
     public void Dispose() => _http.Dispose();
 
-    private async Task<ProviderResponse> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    private async Task<ProviderResponse> SendAsync(HttpRequestMessage request, CancellationToken ct, bool errorBody = false)
     {
         using (request)
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
@@ -143,14 +161,16 @@ public sealed class SetupProviderClient(HttpMessageHandler handler, TimeSpan? ti
                     return new ProviderResponse(ProviderOutcome.Redirected);
                 }
 
-                if (!response.IsSuccessStatusCode)
+                var outcome = response.IsSuccessStatusCode ? ProviderOutcome.Ok : ProviderOutcome.Status;
+                if (outcome == ProviderOutcome.Status && !errorBody)
                 {
                     return new ProviderResponse(ProviderOutcome.Status);
                 }
 
+                int? errorStatus = outcome == ProviderOutcome.Status ? status : null;
                 if (response.Content.Headers.ContentLength > MaxResponseBytes)
                 {
-                    return new ProviderResponse(ProviderOutcome.TooLarge);
+                    return new ProviderResponse(outcome == ProviderOutcome.Ok ? ProviderOutcome.TooLarge : ProviderOutcome.Status, null, errorStatus);
                 }
 
                 await using var stream = await response.Content.ReadAsStreamAsync(call);
@@ -163,8 +183,8 @@ public sealed class SetupProviderClient(HttpMessageHandler handler, TimeSpan? ti
                 }
 
                 return read > MaxResponseBytes
-                    ? new ProviderResponse(ProviderOutcome.TooLarge)
-                    : new ProviderResponse(ProviderOutcome.Ok, Encoding.UTF8.GetString(buffer, 0, read));
+                    ? new ProviderResponse(outcome == ProviderOutcome.Ok ? ProviderOutcome.TooLarge : ProviderOutcome.Status, null, errorStatus)
+                    : new ProviderResponse(outcome, Encoding.UTF8.GetString(buffer, 0, read), errorStatus);
             }
             catch (HttpRequestException ex)
             {
@@ -198,11 +218,34 @@ public static class SetupDiscovery
         return uri.IsAbsoluteUri && uri.UserInfo.Length == 0 && (uri.Scheme == Uri.UriSchemeHttps || (!requireHttps && uri.Scheme == Uri.UriSchemeHttp));
     }
 
-    /// <summary>The metadata, or the refusal's reason.</summary>
-    public static async Task<(ProviderMetadata? Metadata, string? Refusal)> FetchAsync(SetupProviderClient provider, string authority, bool requireHttps, CancellationToken ct)
+    /// <summary>
+    /// The metadata of <paramref name="authority"/>'s discovery document, or the refusal's reason. OpenID Connect Discovery 1.0 §4.3:
+    /// the issuer is the authority the document was fetched for.
+    /// </summary>
+    public static Task<(ProviderMetadata? Metadata, string? Refusal)> FetchAsync(SetupProviderClient provider, string authority, bool requireHttps, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+        return FetchAsync(provider, MetadataAddress(authority), issuer => string.Equals(issuer.TrimEnd('/'), authority.TrimEnd('/'), StringComparison.Ordinal),
+            requireHttps, ct);
+    }
+
+    /// <summary>
+    /// The metadata of the discovery document at <paramref name="address"/> (Open WebUI's provider address names the document, not
+    /// the authority): the document's issuer must give that address, issuer + <c>/.well-known/openid-configuration</c>.
+    /// </summary>
+    public static Task<(ProviderMetadata? Metadata, string? Refusal)> FetchDocumentAsync(SetupProviderClient provider, Uri address, bool requireHttps, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        var wanted = address.AbsoluteUri.TrimEnd('/');
+        return FetchAsync(provider, address, issuer => Uri.TryCreate(OpenWebUiSignIn.DiscoveryAddress(issuer.TrimEnd('/')),
+            UriKind.Absolute, out var derived) && string.Equals(derived.AbsoluteUri.TrimEnd('/'), wanted, StringComparison.Ordinal), requireHttps, ct);
+    }
+
+    private static async Task<(ProviderMetadata? Metadata, string? Refusal)> FetchAsync(SetupProviderClient provider, Uri address, Func<string, bool> issuerMatches,
+        bool requireHttps, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(provider);
-        var response = await provider.GetAsync(MetadataAddress(authority), ct);
+        var response = await provider.GetAsync(address, ct);
         if (Refusal(response.Outcome, SetupTestReasons.AuthorityUnreachable, SetupTestReasons.NotDiscovery) is { } refused)
         {
             return (null, refused);
@@ -232,8 +275,7 @@ public static class SetupDiscovery
             return (null, SetupTestReasons.NotDiscovery);
         }
 
-        // OpenID Connect Discovery 1.0 §4.3: the issuer is the authority the document was fetched for.
-        if (!string.Equals(document.Issuer.TrimEnd('/'), authority.TrimEnd('/'), StringComparison.Ordinal))
+        if (!issuerMatches(document.Issuer))
         {
             return (null, SetupTestReasons.IssuerMismatch);
         }

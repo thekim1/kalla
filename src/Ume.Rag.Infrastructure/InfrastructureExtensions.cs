@@ -190,13 +190,21 @@ public static class InfrastructureExtensions
     /// ASP.NET Data Protection with the key ring in <c>config."DataProtectionKeys"</c> (data-model §2.1, as the gateway's
     /// <c>AddGatewaySecurity</c>): admin sessions and revealable key secrets. Production protects the key ring at rest with a
     /// certificate (<c>DataProtection:CertificatePath</c>); without one it is stored unencrypted (local development only).
+    /// <paramref name="readOnly"/>: the same ring and certificate with key generation off, for a service that only unprotects
+    /// (rag-api, Open WebUI's stored client secret; identity design §19, "Stored secrets"); its database role reads the key table
+    /// only, and rag-admin creates and rotates the keys.
     /// </summary>
-    public static IHostApplicationBuilder AddRagDataProtection(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddRagDataProtection(this IHostApplicationBuilder builder, bool readOnly = false)
     {
         ArgumentNullException.ThrowIfNull(builder);
         var dataProtection = builder.Services.AddDataProtection()
             .SetApplicationName(DataProtectionApplicationName)
             .PersistKeysToDbContext<RagDbContext>();
+        if (readOnly)
+        {
+            dataProtection.DisableAutomaticKeyGeneration();
+        }
+
         var certPath = builder.Configuration["DataProtection:CertificatePath"];
         if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(certPath))
         {

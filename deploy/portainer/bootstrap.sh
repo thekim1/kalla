@@ -117,11 +117,13 @@ esac
 # new key: delete .openwebui-rag-api-key in the volume and update the stack (rag-migrate revokes the old one).
 [ -f "$S/.openwebui-rag-api-key" ] || printf 'ume-rag-sk-%s' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$S/.openwebui-rag-api-key"
 cp "$S/.openwebui-rag-api-key" "$S/openwebui/rag-api-key"
+# rag-admin's setup wizard offers Open WebUI's sign-in step only while it runs (OpenWebUi__Enabled, identity design §19).
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     printf 'http://rag-openwebui:8080' > "$S/api/OpenWebUi__BaseUrl"
+    printf true > "$S/admin/OpenWebUi__Enabled"
     cp "$S/.openwebui-rag-api-key" "$S/migrations/OpenWebUi__ApiKey" ;;
-  *) rm -f "$S/api/OpenWebUi__BaseUrl" "$S/migrations/OpenWebUi__ApiKey" ;;
+  *) rm -f "$S/api/OpenWebUi__BaseUrl" "$S/admin/OpenWebUi__Enabled" "$S/migrations/OpenWebUi__ApiKey" ;;
 esac
 # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
 if [ ! -f "$S/keys/rag-blob-internal" ]; then
@@ -149,6 +151,10 @@ for svc in api admin worker; do
   rm -f "$S/$svc"/Gateway__Keys__*
 done
 put admin Oidc__ClientSecret "${UME_RAG_OIDC_CLIENT_SECRET:-}"
+# Open WebUI's client secret as a deployment value (identity design §19): rag-api serves it to Open WebUI's start, rag-admin
+# shows that it is set. Unset, the setup wizard's stored secret applies.
+put api OpenWebUi__Oidc__ClientSecret "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}"
+put admin OpenWebUi__Oidc__ClientSecret "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}"
 # The feedback service account's Open WebUI key (chat design §13.3) is minted by rag-openwebui-setup into
 # openwebui-feedback (M-17 C6); the hand-made key of UME_RAG_OPENWEBUI_ADMIN_API_KEY that rag-api read before goes.
 if [ -e "$S/api/OpenWebUi__AdminApiKey" ]; then
@@ -162,9 +168,11 @@ if [ -e "$S/admin/OrgSync__DataApiKey" ]; then
 fi
 
 # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
-mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/openwebui-setup"
-# rag-openwebui-setup's script (profile openwebui): that service is read-only, so it reads the script from rag-config.
+mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/openwebui-setup" "$F/openwebui"
+# rag-openwebui-setup's script and rag-openwebui's start wrapper (profile openwebui): those services are read-only, so they
+# read their scripts from rag-config.
 cp /config/feedback-key-setup.py "$F/openwebui-setup/feedback-key-setup.py"
+cp /config/start-with-sign-in.py "$F/openwebui/start-with-sign-in.py"
 cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
 cp /config/postgresql.conf "$F/postgres/postgresql.conf"
@@ -264,7 +272,9 @@ case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     case "${UME_RAG_OPENWEBUI_HOST:-}" in "chat.${UME_DOMAIN:-}") ;;
       *) example "${UME_RAG_OPENWEBUI_HOST:-}" && note "UME_RAG_OPENWEBUI_HOST: the chat's public host name (or set UME_DOMAIN)" ;; esac
-    example "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: users can't sign in to Open WebUI" ;;
+    # Optional (identity design §19): unset, Open WebUI's client secret is the setup wizard's; only a placeholder is noted.
+    case "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}" in *example.se*|*CHANGE*)
+      note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET is still an example value: set the real secret, or empty it for the setup wizard" ;; esac ;;
 esac
 if [ -n "$todo" ]; then
   echo "rag-bootstrap: still to do (docs/portainer.md):$todo"

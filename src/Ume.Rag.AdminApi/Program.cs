@@ -42,6 +42,9 @@ builder.AddRagDataProtection();
 // Sign-in values from the deployment, the setup wizard's settings or the defaults (identity design §19); the wizard's secret encrypted.
 builder.Services.AddSingleton<SettingsSecretProtector>();
 builder.Services.AddScoped<SignInSettings>();
+// Open WebUI's sign-in values (identity design §19, "Open WebUI"): shown here, saved in setup mode, served to Open WebUI by rag-api.
+builder.Services.AddScoped<OpenWebUiSignInReader>();
+builder.Services.AddScoped<OpenWebUiSignInSettings>();
 // Setup mode (identity design §19): the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.
 builder.Services.AddSingleton<SetupSecret>();
 builder.Services.AddSingleton<SetupCodeThrottle>();
@@ -52,6 +55,7 @@ builder.Services.AddSingleton(_ => SetupProviderClient.Create());
 builder.Services.AddScoped<SetupMode>();
 builder.Services.AddScoped<SetupSessions>();
 builder.Services.AddScoped<SetupTestSignIn>();
+builder.Services.AddScoped<SetupOpenWebUiTest>();
 builder.Services.AddHostedService<SetupStartup>();
 // Explain access (identity §4.9): the policy snapshot loaded at the current version for each question (no monitor: the
 // admin applies no outbox), and the api's policy with the same Knowledge:OpenToClientKinds.

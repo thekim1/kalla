@@ -196,17 +196,27 @@ public static partial class SecurityEvents
     public static partial void SetupSessionStarted(ILogger logger, string sessionId, string? sourceAddress, DateTimeOffset expiresAt);
 
     /// <summary>
-    /// A setup test sign-in finished: <c>Result</c> <c>passed</c> or <c>failed</c> with its reason, the tested person's subject.
-    /// Callbacks with an unknown test are sampled like 6009, <c>Count</c> the number since the last event (1 otherwise).
+    /// A setup test finished: <c>Target</c> <c>rag-admin</c> (a test sign-in, with the tested person's subject) or <c>open-webui</c>
+    /// (a back-channel test, no person); <c>Result</c> <c>passed</c> or <c>failed</c> with its reason. Callbacks with an unknown test
+    /// are sampled like 6009, <c>Count</c> the number since the last event (1 otherwise).
     /// </summary>
     [LoggerMessage(6011, LogLevel.Warning,
-        "Setup test sign-in {Result} ({Reason}) for {Subject} as platform admin {PlatformAdmin}; setup session {SessionId} from {SourceAddress}, x{Count}",
+        "Setup test of {Target} {Result} ({Reason}) for {Subject} as platform admin {PlatformAdmin}; setup session {SessionId} from {SourceAddress}, x{Count}",
         EventName = "rag.admin.setup.test")]
-    public static partial void SetupTestSignIn(ILogger logger, string result, string reason, string? subject, bool platformAdmin, string? sessionId, string? sourceAddress,
-        int count);
+    public static partial void SetupTestSignIn(ILogger logger, string target, string result, string reason, string? subject, bool platformAdmin, string? sessionId,
+        string? sourceAddress, int count);
 
     /// <summary>Setup completed: the sign-in values the tested person signed in with are saved and setup is closed.</summary>
     [LoggerMessage(6012, LogLevel.Warning,
         "Setup completed by {Actor} in setup session {SessionId} from {SourceAddress}", EventName = "rag.admin.setup.completed")]
     public static partial void SetupCompleted(ILogger logger, string actor, string? sessionId, string? sourceAddress);
+
+    /// <summary>
+    /// Open WebUI's sign-in values saved in setup mode (identity design §19), setup still open; <c>Actor</c> is the person of the session's
+    /// passed rag-admin test, <c>ClientVerified</c> whether the test confirmed the client's credentials. Never a value.
+    /// </summary>
+    [LoggerMessage(6013, LogLevel.Warning,
+        "Open WebUI's sign-in values saved by {Actor} in setup session {SessionId} from {SourceAddress}; client verified {ClientVerified}",
+        EventName = "rag.admin.setup.openwebui_saved")]
+    public static partial void SetupOpenWebUiSaved(ILogger logger, string actor, string? sessionId, string? sourceAddress, bool clientVerified);
 }

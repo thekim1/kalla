@@ -97,10 +97,19 @@ read the CA only at start.
    UME_DOMAIN=example.se                                  # rag.example.se, rag-admin.example.se, chat.example.se
    UME_RAG_OIDC_CLIENT_SECRET=...
    COMPOSE_PROFILES=clamav,openwebui
-   # Open WebUI
-   UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui
+   # Open WebUI (optional: see below)
    UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=...
    ```
+
+   **Open WebUI's sign-in** (identity design §19): `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID` (default `open-webui`),
+   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` (default: rag-admin's authority +
+   `/.well-known/openid-configuration`) and `UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME` (the button, default *Umeå kommun*)
+   are now settings of rag-api and rag-admin: rag-api serves them to Open WebUI's start wrapper, which starts Open WebUI
+   with them and restarts it within a minute when they change. Each one you set is a deployment value that wins. From the
+   release with the setup wizard's Open WebUI step you may leave them empty and set them in rag-admin's setup wizard
+   instead (its fields for the values the stack sets are locked). Without a client secret from either, Open WebUI still
+   starts, but offers no sign-in, so nobody can sign in. Register the redirect URI
+   `https://<chat host>/oauth/oidc/login/callback` on its client either way.
 
    `UME_DOMAIN` gives Ume.Rag's three host names: rag-api `rag.<domain>` (its public URL `https://rag.<domain>`;
    `UME_RAG_API_PUBLIC_URL` for a port), its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another

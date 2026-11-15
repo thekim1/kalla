@@ -83,9 +83,14 @@ internal sealed class FakeProvider : HttpMessageHandler
         }
 
         var path = request.RequestUri!.AbsolutePath;
+        Dictionary<string, string>? form = null;
         if (path.EndsWith("/token", StringComparison.Ordinal))
         {
             Interlocked.Increment(ref _tokenRequests);
+            // Kept before any replaced answer, so a test sees what was sent to a token endpoint it answers itself.
+            form = (await request.Content!.ReadAsStringAsync(cancellationToken)).Split('&')
+                .Select(p => p.Split('=', 2)).ToDictionary(p => WebUtility.UrlDecode(p[0]), p => WebUtility.UrlDecode(p[1]));
+            LastTokenForm = form;
         }
 
         if (Overrides.TryGetValue(path, out var answer))
@@ -104,11 +109,8 @@ internal sealed class FakeProvider : HttpMessageHandler
             return Json(new { keys = new[] { new { kty = "RSA", use = "sig", alg = "RS256", kid = KeyId, n = Base64UrlEncoder.Encode(key.Modulus), e = Base64UrlEncoder.Encode(key.Exponent) } } });
         }
 
-        if (path.EndsWith("/token", StringComparison.Ordinal))
+        if (form is not null)
         {
-            var form = (await request.Content!.ReadAsStringAsync(cancellationToken)).Split('&')
-                .Select(p => p.Split('=', 2)).ToDictionary(p => WebUtility.UrlDecode(p[0]), p => WebUtility.UrlDecode(p[1]));
-            LastTokenForm = form;
             var now = DateTime.UtcNow;
             var token = IdTokenFactory?.Invoke(form) ?? new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
             {

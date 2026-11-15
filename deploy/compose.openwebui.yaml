@@ -12,7 +12,9 @@
 # Sign-in (chat design §4.3, identity design §5.3): P1 the Keycloak shared with the gateway, client open-webui in realm
 # ume (the OIDC provider URL defaults to the admin's authority + /.well-known/openid-configuration); P2 Entra, the
 # registration ume-rag-open-webui (--openwebui-oidc-client-id ume-rag-open-webui --openwebui-oidc-provider-url
-# https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration).
+# https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration). These options are rag-api's and
+# rag-admin's deployment values now (identity design §19): rag-api serves them to Open WebUI's start wrapper; left out,
+# the setup wizard's values apply (from the release with its Open WebUI step).
 #
 # One connection only: our API (no gateway connection), so the signed user JWT goes only to rag-api. Its own task
 # models, RAG, web search, tools, code execution, uploads and admin chat access are off. Settings come from this file
@@ -40,10 +42,15 @@ services:
     mem_limit: 1.5g
     pids_limit: 256
     ports: ["${UME_RAG_OPENWEBUI_BIND:-127.0.0.1}:${UME_RAG_OPENWEBUI_PORT:-3000}:8080"]
-    # FORWARD_USER_INFO_HEADER_JWT_SECRET, OPENAI_API_KEYS, OAUTH_CLIENT_SECRET: Open WebUI reads them only from its
-    # environment, so they come from this file (written by init-deployment.sh, mode 0600), not from deploy/.env.
+    # FORWARD_USER_INFO_HEADER_JWT_SECRET, OPENAI_API_KEYS: Open WebUI reads them only from its environment, so they come
+    # from this file (written by init-deployment.sh, mode 0600), not from deploy/.env.
     env_file: ["${UME_RAG_SECRETS_DIR:?Run deploy/init-deployment.sh first}/openwebui.env"]
+    # Its OIDC settings come from rag-api (identity design §19): the start wrapper asks rag-api's internal route with the
+    # key above, starts Open WebUI as the image does (bash start.sh) with them, and exits when they change, so this
+    # restart policy starts it anew (openwebui/start-with-sign-in.py).
+    entrypoint: [python3, -I, /config/start-with-sign-in.py, --, bash, start.sh]
     environment:
+      UME_RAG_SIGN_IN_URL: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}/internal/openwebui/sign-in
       HOME: /tmp
       # Its SQLite database and caches, outside the image's /app/backend/data (which keeps the baked models read-only).
       DATA_DIR: /data
@@ -104,12 +111,10 @@ services:
       # in is identity design §16 question 5).
       DEFAULT_USER_ROLE: user
       ENABLE_SIGNUP: "false"
-      ENABLE_OAUTH_SIGNUP: "true"
+      # ENABLE_OAUTH_SIGNUP, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_PROVIDER_URL and OAUTH_PROVIDER_NAME come from the
+      # start wrapper: rag-api's sign-in settings (the --openwebui-oidc-* options of init-deployment.sh, else the setup
+      # wizard's). Without any, Open WebUI starts without sign-in.
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "false"
-      # The sign-in button's label (--openwebui-oidc-provider-name).
-      OAUTH_PROVIDER_NAME: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-Umeå kommun}
-      OAUTH_CLIENT_ID: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:?Set UME_RAG_OPENWEBUI_OIDC_CLIENT_ID in deploy/.env}
-      OPENID_PROVIDER_URL: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:?Set UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL in deploy/.env}
       # The current callback path, as the realm additions and the Entra registration register it (identity design
       # §5.3: moved from the legacy /oauth/oidc/callback at the go-live pin bump, A-4/B-6, #452).
       OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/login/callback
@@ -117,6 +122,7 @@ services:
       # Its own SQLite store, on the host's encrypted disk (§12 #8): never ragdb.
       - ${UME_RAG_OPENWEBUI_DATA_DIR:?Set UME_RAG_OPENWEBUI_DATA_DIR in deploy/.env}:/data
       - ${UME_RAG_SECRETS_DIR}/openwebui:/run/owui-secrets:ro
+      - ./openwebui/start-with-sign-in.py:/config/start-with-sign-in.py:ro
     networks: [openwebui]
 
   open-webui-setup:

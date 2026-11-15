@@ -26,6 +26,23 @@ exception, with its own steps.
 - **rag-admin's setup secret (setup wizard S3).** Rolling update, no migration. **Apply:** nothing; the next deploy
   (`rag-bootstrap`, `init-deployment.sh`, then `create-secrets.sh` on Kubernetes) generates `admin/Setup__Secret`.
   `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the setup wizard again.
+- **Open WebUI's sign-in settings come from rag-api (setup wizard S5).** Migration `OpenWebUiSignInSettings` (adds
+  columns and widens a check; rolling update: yes for the schema, but Open WebUI is recreated). Open WebUI now starts
+  through `deploy/openwebui/start-with-sign-in.py`, which asks rag-api for its OIDC settings and restarts Open WebUI
+  within a minute when they change; `UME_RAG_OPENWEBUI_OIDC_*` feed rag-api and rag-admin instead of Open WebUI, and
+  without a client secret Open WebUI starts without sign-in. **Portainer apply:** paste the new `compose.portainer.yaml`
+  and update the stack; your `UME_RAG_OPENWEBUI_OIDC_*` keep working as deployment values (`rag-bootstrap` writes the
+  secret to rag-api's and rag-admin's secret files). `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui` from
+  `stack.env.example` may go (it is the default; set, it locks the wizard's field). **Compose apply:** re-run
+  `init-deployment.sh` **with `--openwebui-oidc-client-secret-file` again** (the secret moves to
+  `secrets/api` and `secrets/admin/OpenWebUi__Oidc__ClientSecret`; the old `OAUTH_CLIENT_SECRET` line in
+  `secrets/openwebui.env` is no longer read and may be deleted), and with `--openwebui-oidc-client-id` and
+  `--openwebui-oidc-provider-url` only if they differ from the defaults: a re-run without them leaves them empty in
+  `deploy/.env`, so the defaults (or later the setup wizard) apply. Then `dc up -d` and
+  `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. A provider on another host than the
+  authority needs `--allow openwebui=HOST` for the host firewall. **Check:** rag-openwebui's (or open-webui's) log has
+  `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`, and Open WebUI's sign-in page shows the
+  button.
 
 ## 0.6.0
 
