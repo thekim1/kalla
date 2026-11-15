@@ -17,6 +17,12 @@ public sealed class GatewayApi(IHttpClientFactory clients)
 {
     public const string HttpClientName = "gateway-admin";
 
+    /// <summary>
+    /// How long <see cref="ListModelsAsync"/> waits for the list (#696): the admin's model checks and pickers wait on it, some of them
+    /// before a config write. The client's other calls (the model mirror, canary embeddings) keep HttpClient's timeout.
+    /// </summary>
+    public static readonly TimeSpan ListModelsTimeout = TimeSpan.FromSeconds(5);
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>The gateway's discovery answers are snake_case (<c>contracts/gateway/integrations.json</c>).</summary>
@@ -55,7 +61,8 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     /// <remarks>
     /// With <paramref name="asKey"/> (gateway phase 2) the list is the assigned key's, within both keys' residencies and the
     /// ceiling (gateway-changes §5.5), while the gateway acts as keys; a refusal of the key throws <see cref="GatewayKeyRefusedException"/>
-    /// and a missing echo <see cref="GatewayDelegationEchoException"/>.
+    /// and a missing echo <see cref="GatewayDelegationEchoException"/>. An answer that takes longer than <see cref="ListModelsTimeout"/>
+    /// throws <see cref="GatewayUnavailableException"/>.
     /// </remarks>
     public async Task<IReadOnlySet<string>> ListModelsAsync(Residency ceiling, CancellationToken cancellationToken, Guid? asKey = null)
     {
@@ -65,10 +72,19 @@ public sealed class GatewayApi(IHttpClientFactory clients)
             request.For(new GatewayCall(key, "models"));
         }
 
-        using var response = await SendAsync(request, cancellationToken);
-        var list = await response.Content.ReadFromJsonAsync<ModelList>(Json, cancellationToken)
-            ?? throw new GatewayUnavailableException("The gateway's model list was empty.", null);
-        return list.Data?.Select(m => m.Id).OfType<string>().ToHashSet(StringComparer.Ordinal) ?? [];
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ListModelsTimeout);
+        try
+        {
+            using var response = await SendAsync(request, timeout.Token);
+            var list = await response.Content.ReadFromJsonAsync<ModelList>(Json, timeout.Token)
+                ?? throw new GatewayUnavailableException("The gateway's model list was empty.", null);
+            return list.Data?.Select(m => m.Id).OfType<string>().ToHashSet(StringComparer.Ordinal) ?? [];
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new GatewayUnavailableException("The gateway did not list its models in time.", ex);
+        }
     }
 
     /// <summary>

@@ -58,6 +58,9 @@ public static class ClientEndpoints
                 CancellationToken ct) =>
             {
                 var generated = request.FirstKey is null ? null : hasher.Get().Generate();
+                var offered = new Client { Name = "", Kind = "", ClassificationCeiling = "" };
+                request.ApplyTo(offered, admin);
+                await WarmAsync(admin, models, offered, request.AssistantIds.Distinct().ToList(), _ => true, ct);
                 var (client, key) = await admin.WriteAsync(async attempt =>
                 {
                     var client = new Client { Name = "", Kind = "", ClassificationCeiling = "" };
@@ -83,45 +86,70 @@ public static class ClientEndpoints
             })
             .RequireAuthorization(AdminPolicies.Admin).WithName("CreateClient").WithSummary("Register a client, optionally with its first key (the secret shown this once)");
 
-        clients.MapPut("/{id:guid}", async (Guid id, ClientUpdateRequest request, AdminContext admin, CancellationToken ct) =>
-            await DtoAsync(admin, await admin.WriteAsync(async attempt =>
+        // A changed ceiling or history re-checks every assistant the client offers (admin design §4.5, #700); the gateway lists those
+        // checks need are fetched before the write, outside the config version lock (§4.4, #696).
+        clients.MapPut("/{id:guid}", async (Guid id, ClientUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
-                var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                admin.ExpectVersion(client, request.Version);
-                // The deployment's own client stays what the deployment made it (identity design §5.2): its kind is fixed.
-                if (client.IsManagedByDeployment && request.Kind != client.Kind)
+                if (await admin.Db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) is { } current && Revalidates(current, request))
                 {
-                    throw AdminFaults.Field("kind", AdminErrorCodes.ClientManagedByDeployment);
+                    request.ApplyTo(current, admin);
+                    await WarmAsync(admin, models, current, await Offering(admin, id).ToListAsync(ct), _ => true, ct);
                 }
 
-                var before = ClientAudit.Of(client);
-                request.ApplyTo(client, admin);
-                return new AdminChange<Client>(client, "update", AuditEntityTypes.Client, client.Id, before, ClientAudit.Of(client))
+                return await DtoAsync(admin, await admin.WriteAsync(async attempt =>
                 {
-                    Classification = client.ClassificationCeiling,
-                };
-            }, ct), ct))
-            .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateClient").WithSummary("Change a client");
+                    var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    admin.ExpectVersion(client, request.Version);
+                    // The deployment's own client stays what the deployment made it (identity design §5.2): its kind is fixed.
+                    if (client.IsManagedByDeployment && request.Kind != client.Kind)
+                    {
+                        throw AdminFaults.Field("kind", AdminErrorCodes.ClientManagedByDeployment);
+                    }
+
+                    var before = ClientAudit.Of(client);
+                    var revalidate = Revalidates(client, request);
+                    var ceilingChanged = request.ClassificationCeiling != client.ClassificationCeiling;
+                    request.ApplyTo(client, admin);
+                    if (revalidate)
+                    {
+                        await RecheckAssistantsAsync(admin, models, client, ceilingChanged, attempt);
+                    }
+
+                    return new AdminChange<Client>(client, "update", AuditEntityTypes.Client, client.Id, before, ClientAudit.Of(client))
+                    {
+                        Classification = client.ClassificationCeiling,
+                    };
+                }, ct), ct);
+            })
+            .RequireAuthorization(AdminPolicies.Admin).WithName("UpdateClient").WithSummary("Change a client (a changed ceiling or history re-checks V7, V8, V9 per offered assistant)");
 
         // The assistants that offer the client, set from the client's side (admin design §5.9.1): each changed assistant's audience
         // is checked and audited as its own audience save.
         clients.MapPut("/{id:guid}/assistants", async (Guid id, ClientAssistantsRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
-            await DtoAsync(admin, await admin.WriteAsync(async attempt =>
             {
-                var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                admin.ExpectVersion(client, request.Version);
-                var current = await admin.Db.AssistantAudiences.Where(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == id).Select(a => a.AssistantId)
-                    .ToListAsync(attempt);
-                var also = await SetAssistantsAsync(admin, models, client, request.AssistantIds, current, attempt);
-                // The stamp moves the client's xmin, so a concurrent save of the same list conflicts (admin design §4.3).
-                client.UpdatedAt = admin.Now;
-                client.UpdatedBy = admin.Actor;
-                return new AdminChange<Client>(client, "assistants", AuditEntityTypes.Client, client.Id, new { assistantIds = current },
-                    new { assistantIds = request.AssistantIds.Distinct().ToList() })
+                if (await admin.Db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) is { } offered)
                 {
-                    Classification = client.ClassificationCeiling, Also = also,
-                };
-            }, ct), ct))
+                    var wanted = request.AssistantIds.Distinct().ToList();
+                    var before = await Offering(admin, id).ToListAsync(ct);
+                    await WarmAsync(admin, models, offered, [.. wanted.Except(before).Concat(before.Except(wanted))], wanted.Contains, ct);
+                }
+
+                return await DtoAsync(admin, await admin.WriteAsync(async attempt =>
+                {
+                    var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    admin.ExpectVersion(client, request.Version);
+                    var current = await Offering(admin, id).ToListAsync(attempt);
+                    var also = await SetAssistantsAsync(admin, models, client, request.AssistantIds, current, attempt);
+                    // The stamp moves the client's xmin, so a concurrent save of the same list conflicts (admin design §4.3).
+                    client.UpdatedAt = admin.Now;
+                    client.UpdatedBy = admin.Actor;
+                    return new AdminChange<Client>(client, "assistants", AuditEntityTypes.Client, client.Id, new { assistantIds = current },
+                        new { assistantIds = request.AssistantIds.Distinct().ToList() })
+                    {
+                        Classification = client.ClassificationCeiling, Also = also,
+                    };
+                }, ct), ct);
+            })
             .RequireAuthorization(AdminPolicies.Admin).WithName("SetClientAssistants").WithSummary("The assistants that offer the client (V7, V8, V9 per assistant)");
 
         return api;
@@ -176,13 +204,10 @@ public static class ClientEndpoints
             throw AdminFaults.Field("assistantIds", AdminErrorCodes.InvalidValue);
         }
 
-        var clientId = client.Id;
         foreach (var assistant in assistants)
         {
             var assistantId = assistant.Id;
-            var others = admin.Db.AssistantAudiences.Where(a => a.AssistantId == assistantId && a.Kind == AssistantAudienceKinds.Client && a.SubjectId != clientId)
-                .Select(a => a.SubjectId);
-            var audience = await admin.Db.Clients.AsNoTracking().Where(c => others.Contains(c.Id)).OrderBy(c => c.Name).ToListAsync(ct);
+            var audience = await OtherClientsAsync(admin, assistantId, client.Id, ct);
             if (wanted.Contains(assistantId))
             {
                 audience.Add(client);
@@ -203,6 +228,83 @@ public static class ClientEndpoints
         }
 
         return also;
+    }
+
+    /// <summary>The client's ceiling or history changes, so the assistants it offers are checked again (admin design §4.5).</summary>
+    private static bool Revalidates(Client client, ClientRequest request) =>
+        request.ClassificationCeiling != client.ClassificationCeiling || request.StoresHistory != client.StoresHistory;
+
+    /// <summary>
+    /// Checks every assistant that offers <paramref name="client"/> again with the client's new ceiling and history (admin design §4.5;
+    /// V7, V9, and for a published assistant its rule set and V8 at the gateway; #700), as an audience save of it would; nothing of
+    /// the assistant changes. A refusal is a field error that names the assistant: on <c>storesHistory</c> for V9 and when only the
+    /// history changed, else on <c>classificationCeiling</c>.
+    /// </summary>
+    private static async Task RecheckAssistantsAsync(AdminContext admin, GatewayModelCheck models, Client client, bool ceilingChanged, CancellationToken ct)
+    {
+        var offering = Offering(admin, client.Id);
+        var assistants = await admin.Db.Assistants.AsNoTracking().Where(a => offering.Contains(a.Id)).OrderBy(a => a.Name).ToListAsync(ct);
+        foreach (var assistant in assistants)
+        {
+            var audience = await OtherClientsAsync(admin, assistant.Id, client.Id, ct);
+            audience.Add(client);
+            try
+            {
+                await AssistantEndpoints.CheckAudienceAsync(admin, models, assistant, audience, ct);
+            }
+            catch (ApiFaultException refusal) when (refusal.Status == StatusCodes.Status409Conflict)
+            {
+                var code = refusal.Extensions?.TryGetValue("code", out var c) == true ? c as string : null;
+                var field = code == AdminErrorCodes.ClientStoresHistory.Code || (!ceilingChanged && code != AdminErrorCodes.AudienceAboveCeiling.Code)
+                    ? "storesHistory"
+                    : "classificationCeiling";
+                throw AdminFaults.Field(field, assistant.Name, refusal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fetches, before the write and outside the config version lock (admin design §4.4, #696), the gateway lists V8 and V39 will
+    /// check for the published ones of <paramref name="assistantIds"/>: each with its other clients and, where
+    /// <paramref name="offers"/> says so, <paramref name="client"/> as the request makes it.
+    /// </summary>
+    private static async Task WarmAsync(AdminContext admin, GatewayModelCheck models, Client client, List<Guid> assistantIds, Func<Guid, bool> offers,
+        CancellationToken ct)
+    {
+        if (assistantIds.Count == 0)
+        {
+            return;
+        }
+
+        var clientId = client.Id;
+        var assistants = await admin.Db.Assistants.AsNoTracking().Where(a => assistantIds.Contains(a.Id) && a.PublishedVersionId != null).ToListAsync(ct);
+        var rows = await admin.Db.AssistantAudiences.AsNoTracking()
+            .Where(a => assistantIds.Contains(a.AssistantId) && a.Kind == AssistantAudienceKinds.Client && a.SubjectId != clientId)
+            .Select(a => new { a.AssistantId, a.SubjectId }).ToListAsync(ct);
+        var otherIds = rows.Select(r => r.SubjectId).OfType<Guid>().Distinct().ToList();
+        var others = await admin.Db.Clients.AsNoTracking().Where(c => otherIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
+        await models.WarmAsync(assistants.Select(a =>
+        {
+            List<Client> audience = [.. rows.Where(r => r.AssistantId == a.Id && r.SubjectId is { } s && others.ContainsKey(s)).Select(r => others[r.SubjectId!.Value])];
+            if (offers(a.Id))
+            {
+                audience.Add(client);
+            }
+
+            return (AssistantRules.Ceiling(a, audience), a.GatewayKeyId, a.DepartmentId);
+        }), ct);
+    }
+
+    /// <summary>The assistants with a <c>client</c> audience row for client <paramref name="clientId"/>.</summary>
+    private static IQueryable<Guid> Offering(AdminContext admin, Guid clientId) =>
+        admin.Db.AssistantAudiences.Where(a => a.Kind == AssistantAudienceKinds.Client && a.SubjectId == clientId).Select(a => a.AssistantId);
+
+    /// <summary>The clients of the assistant's audience other than <paramref name="clientId"/>, by name.</summary>
+    private static Task<List<Client>> OtherClientsAsync(AdminContext admin, Guid assistantId, Guid clientId, CancellationToken ct)
+    {
+        var others = admin.Db.AssistantAudiences.Where(a => a.AssistantId == assistantId && a.Kind == AssistantAudienceKinds.Client && a.SubjectId != clientId)
+            .Select(a => a.SubjectId);
+        return admin.Db.Clients.AsNoTracking().Where(c => others.Contains(c.Id)).OrderBy(c => c.Name).ToListAsync(ct);
     }
 
     private static async Task<ClientDto> DtoAsync(AdminContext admin, Client client, CancellationToken ct)

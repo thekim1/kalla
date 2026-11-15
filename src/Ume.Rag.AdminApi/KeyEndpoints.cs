@@ -98,11 +98,11 @@ public static class KeyEndpoints
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("RotateKey").WithSummary("Replace a key; the response holds the new secret, shown this once");
 
-        // Platform admins only; every reveal or copy is audited (identity §6.4).
+        // Platform admins only; every reveal or copy is audited (identity §6.4), without the config version lock (admin design §4.4).
         keys.MapPost("/{id:guid}/reveal", async (Guid id, RevealRequest request, AdminContext admin, IDataProtectionProvider protection, CancellationToken ct) =>
-                await admin.WriteAsync(async attempt =>
+                await admin.AuditAsync(async token =>
                 {
-                    var key = await FindAsync(admin, id, attempt);
+                    var key = await FindAsync(admin, id, token);
                     if (key.RevokedAt is not null)
                     {
                         throw AdminFaults.Of(AdminErrorCodes.KeyRevoked);

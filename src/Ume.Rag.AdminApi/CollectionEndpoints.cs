@@ -67,6 +67,8 @@ public static class CollectionEndpoints
 
         collections.MapPost("", async (CollectionCreateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                // V39's list as the key is fetched before the write, outside the config version lock (admin design §4.4, #696).
+                await models.WarmKeyAsync(ResidencyCeiling.ForLevel(request.Classification), request.GatewayKeyId, request.DepartmentId, ct);
                 var created = await admin.WriteAsync(async attempt =>
                 {
                     await CheckDepartmentAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
@@ -111,6 +113,12 @@ public static class CollectionEndpoints
 
         collections.MapPut("/{id:guid}", async (Guid id, CollectionUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
+                if (await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) is { } current
+                    && (request.GatewayKeyId != current.GatewayKeyId || request.Classification != current.Classification))
+                {
+                    await models.WarmKeyAsync(ResidencyCeiling.ForLevel(request.Classification), request.GatewayKeyId, current.DepartmentId, ct); // as on create
+                }
+
                 var saved = await admin.WriteAsync(async attempt =>
                 {
                     var collection = await LoadAsync(admin, id, attempt);

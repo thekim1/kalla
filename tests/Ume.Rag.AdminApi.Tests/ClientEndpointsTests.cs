@@ -1,14 +1,22 @@
-﻿using System.Net;
+﻿extern alias fakegateway;
+
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.TestKit;
+using FakeGatewayProgram = fakegateway::Program;
 
 namespace Ume.Rag.AdminApi.Tests;
 
@@ -16,7 +24,8 @@ namespace Ume.Rag.AdminApi.Tests;
 /// The clients page's API (admin design §5.9): an Open WebUI client's feedback retention (chat design §13.3, #343), no chat
 /// history at <c>sensitive</c> as a field error, a client created with its first key in one transaction, the list's active keys
 /// and the client's assistants; §5.9.1: the assistants a client offers set with it and from its side, the keys' last use, and
-/// rag-api's address for "How to connect".
+/// rag-api's address for "How to connect"; §4.5: a changed ceiling or history re-checks the assistants the client offers (#700), with
+/// the gateway's lists fetched once per save and outside the config version lock (§4.4, #696).
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
 public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
@@ -420,5 +429,233 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
             name = "Chat " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, version = renamed.GetProperty("version").GetString(),
         }, Ct), HttpStatusCode.BadRequest);
         kind.GetProperty("errorCodes").GetProperty("kind")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ClientManagedByDeployment.Code);
+    }
+
+    private const string AdminKey = "fake-eu-key-client-checks-0123456"; // rag-admin's credential key
+    private const string Listed = "ume/chat-eu"; // the FakeGateway serves it at Eu
+
+    /// <summary>
+    /// Counts the gateway's <c>/v1/models</c> calls on the way to the FakeGateway, and those made while a config write holds the
+    /// version lock: a probe asks for the lock with <c>NOWAIT</c> before each call.
+    /// </summary>
+    private sealed class ModelListProbe(HttpMessageHandler inner, string connection) : DelegatingHandler(inner)
+    {
+        public int ModelLists;
+        public int UnderLock;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/v1/models", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref ModelLists);
+                await using var db = new NpgsqlConnection(connection);
+                await db.OpenAsync(cancellationToken);
+                await using var transaction = await db.BeginTransactionAsync(cancellationToken);
+                await using var probe = new NpgsqlCommand("""SELECT 1 FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE NOWAIT""", db, transaction);
+                try
+                {
+                    await probe.ExecuteScalarAsync(cancellationToken);
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+                {
+                    Interlocked.Increment(ref UnderLock);
+                }
+            }
+
+            return await base.SendAsync(request, cancellationToken);
+        }
+    }
+
+    private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+    {
+        web.UseEnvironment("Development");
+        web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
+    });
+
+    /// <summary>The admin API with its credential key, its <c>/v1/models</c> calls through <paramref name="probe"/>.</summary>
+    private WebApplicationFactory<Program> GatewayFactory(ModelListProbe probe) => Factory().WithWebHostBuilder(web =>
+    {
+        web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
+        web.UseSetting("Gateway:Key", AdminKey);
+        web.ConfigureTestServices(services =>
+        {
+            services.UseGatewayCredentialCeiling();
+            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => probe);
+        });
+    });
+
+    /// <summary>
+    /// A client at <paramref name="ceiling"/> without history and published assistants of <paramref name="department"/> at
+    /// <paramref name="levels"/> answering with <paramref name="model"/> (a mirror row with <paramref name="residency"/>), offered to the
+    /// client when <paramref name="offered"/>.
+    /// </summary>
+    private async Task<(Guid Client, Guid[] Assistants)> SeedPublishedAsync(string code, Guid department, string ceiling, string model, string residency, bool offered,
+        params string[] levels)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await using var db = TestPostgres.Context(database.Connection(null));
+        if (!await db.GatewayModels.AnyAsync(m => m.Name == model, Ct))
+        {
+            db.GatewayModels.Add(new GatewayModel { Name = model, ModelKind = GatewayModelModelKinds.Chat, Residencies = [residency], Source = GatewayModelSources.Catalog });
+        }
+
+        var client = new Client { Name = "Checked " + code, Kind = ClientKinds.Integration, ClassificationCeiling = ceiling, UpdatedAt = now };
+        var assistants = levels.Select((level, i) => new Assistant
+        {
+            Slug = $"cp-{i}-{code.ToLowerInvariant()}", Name = $"Published {i} {code}", DepartmentId = department, Classification = level, UpdatedAt = now,
+        }).ToList();
+        db.Add(client);
+        db.AddRange(assistants);
+        await db.SaveChangesAsync(Ct);
+        var versions = assistants.Select(a => new AssistantVersion
+        {
+            AssistantId = a.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = model, PublishedAt = now, PublishedBy = "seed", CreatedAt = now,
+            UpdatedAt = now,
+        }).ToList();
+        db.AddRange(versions);
+        if (offered)
+        {
+            db.AddRange(assistants.Select(a => new AssistantAudience { AssistantId = a.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id }));
+        }
+
+        await db.SaveChangesAsync(Ct);
+        foreach (var (assistant, version) in assistants.Zip(versions))
+        {
+            assistant.PublishedVersionId = version.Id;
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return (client.Id, [.. assistants.Select(a => a.Id)]);
+    }
+
+    private static object Update(JsonElement client, string ceiling, bool storesHistory) => new
+    {
+        name = client.GetProperty("name").GetString(), kind = client.GetProperty("kind").GetString(), classificationCeiling = ceiling, storesHistory,
+        version = client.GetProperty("version").GetString(),
+    };
+
+    [Fact]
+    public async Task A_client_save_lists_each_ceilings_models_once_and_before_the_config_lock()
+    {
+        // #696: three published assistants at one ceiling without keys need one list, fetched before the write takes the lock.
+        var (code, department, _) = await SeedTeamAsync();
+        var (clientId, ids) = await SeedPublishedAsync(code, department, Classification.Internal, Listed, "Eu", offered: false,
+            Classification.Internal, Classification.Internal, Classification.Internal);
+        await using var gateway = Gateway();
+        var probe = new ModelListProbe(gateway.Server.CreateHandler(), database.Connection(null));
+        await using var factory = GatewayFactory(probe);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+
+        var offered = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}/assistants", new { assistantIds = ids, version = client.GetProperty("version").GetString() }, Ct));
+        offered.GetProperty("assistants").GetArrayLength().ShouldBe(3);
+        (probe.ModelLists, probe.UnderLock).ShouldBe((1, 0));
+
+        // #700: switching on history re-checks the three (the internal ceiling stays Eu), again with one list outside the lock.
+        var saved = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(offered, Classification.Internal, storesHistory: true), Ct));
+        saved.GetProperty("storesHistory").GetBoolean().ShouldBeTrue();
+        (probe.ModelLists, probe.UnderLock).ShouldBe((2, 0));
+
+        // A save that changes neither the ceiling nor history checks nothing.
+        await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", new
+        {
+            name = "Renamed " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, storesHistory = true,
+            version = saved.GetProperty("version").GetString(),
+        }, Ct));
+        probe.ModelLists.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Lowering_a_clients_ceiling_below_an_offered_assistants_level_is_refused()
+    {
+        // #700, V7: an internal assistant offered to the client would vanish from it at a public ceiling.
+        var (code, department, _) = await SeedTeamAsync();
+        var (clientId, _) = await SeedPublishedAsync(code, department, Classification.Internal, Listed, "Eu", offered: true, Classification.Public, Classification.Internal);
+        await using var gateway = Gateway();
+        var probe = new ModelListProbe(gateway.Server.CreateHandler(), database.Connection(null));
+        await using var factory = GatewayFactory(probe);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+
+        var refused = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(client, Classification.Public, storesHistory: false), Ct),
+            HttpStatusCode.BadRequest);
+        refused.GetProperty("errors").GetProperty("classificationCeiling")[0].GetString()!.ShouldStartWith($"Published 1 {code}: ");
+        var coded = refused.GetProperty("errorCodes").GetProperty("classificationCeiling")[0];
+        coded.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.AudienceAboveCeiling.Code);
+        (coded.GetProperty("params").GetProperty("subject").GetString(), coded.GetProperty("params").GetProperty("level").GetString())
+            .ShouldBe(($"Published 1 {code}", Classification.Internal));
+        probe.UnderLock.ShouldBe(0);
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        (await db.Clients.AsNoTracking().SingleAsync(c => c.Id == clientId, Ct)).ClassificationCeiling.ShouldBe(Classification.Internal);
+    }
+
+    [Fact]
+    public async Task Switching_on_history_that_raises_an_offered_assistants_ceiling_above_its_model_is_refused()
+    {
+        // #700, V8: a public assistant's ceiling becomes the internal client's once the client stores history, and its model is
+        // served only outside the EU.
+        var (code, department, _) = await SeedTeamAsync();
+        var external = "external-chat-" + code.ToLowerInvariant();
+        var (clientId, _) = await SeedPublishedAsync(code, department, Classification.Internal, external, "External", offered: true, Classification.Public);
+        await using var gateway = Gateway();
+        var probe = new ModelListProbe(gateway.Server.CreateHandler(), database.Connection(null));
+        await using var factory = GatewayFactory(probe);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+
+        var refused = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(client, Classification.Internal, storesHistory: true), Ct),
+            HttpStatusCode.BadRequest);
+        refused.GetProperty("errors").GetProperty("storesHistory")[0].GetString()!.ShouldStartWith($"Published 0 {code}: ");
+        var coded = refused.GetProperty("errorCodes").GetProperty("storesHistory")[0];
+        coded.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ModelResidency.Code);
+        coded.GetProperty("params").GetProperty("model").GetString().ShouldBe(external);
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.Clients.AsNoTracking().SingleAsync(c => c.Id == clientId, Ct)).StoresHistory.ShouldBeFalse();
+        }
+
+        // Without history the public assistant keeps its External ceiling, so the client's other changes save.
+        await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", new
+        {
+            name = "Renamed " + code, kind = ClientKinds.Integration, classificationCeiling = Classification.Internal, version = client.GetProperty("version").GetString(),
+        }, Ct));
+    }
+
+    [Fact]
+    public async Task A_published_public_assistant_with_general_knowledge_changes_audience_and_client_without_V36()
+    {
+        // V36 is checked on publish, restore, draft save and level change (admin design §4.6), not on an audience or client change:
+        // a public assistant published with general knowledge confirmed keeps saving with other clients.
+        var (code, department, _) = await SeedTeamAsync();
+        var (clientId, ids) = await SeedPublishedAsync(code, department, Classification.Internal, Listed, "Eu", offered: true, Classification.Public);
+        Guid otherId;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var version = await db.AssistantVersions.SingleAsync(v => v.AssistantId == ids[0], Ct);
+            version.QuerySteps = """{"answer":{"generalKnowledge":"fallback"}}""";
+            var other = new Client { Name = "Other " + code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Public, UpdatedAt = DateTimeOffset.UtcNow };
+            db.Add(other);
+            await db.SaveChangesAsync(Ct);
+            otherId = other.Id;
+        }
+
+        await using var gateway = Gateway();
+        var probe = new ModelListProbe(gateway.Server.CreateHandler(), database.Connection(null));
+        await using var factory = GatewayFactory(probe);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        // (a) The assistant's own audience save.
+        var assistant = await Ok(await admin.GetAsync($"/api/assistants/{ids[0]}", Ct));
+        await Ok(await admin.PutAsJsonAsync($"/api/assistants/{ids[0]}/audiences",
+            new { clientIds = new[] { clientId, otherId }, version = assistant.GetProperty("version").GetString() }, Ct));
+
+        // (b) The offering client's history and ceiling change.
+        var client = await Ok(await admin.GetAsync($"/api/clients/{clientId}", Ct));
+        var history = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(client, Classification.Internal, storesHistory: true), Ct));
+        history.GetProperty("storesHistory").GetBoolean().ShouldBeTrue();
+        var lowered = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", Update(history, Classification.Public, storesHistory: true), Ct));
+        lowered.GetProperty("classificationCeiling").GetString().ShouldBe(Classification.Public);
     }
 }
