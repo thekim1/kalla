@@ -1,15 +1,17 @@
 # To verify: package, behaviour and estimate checks
 
-The open checks of every detail document: what to confirm, where it applies, in which phase and how. Closed rows
-(resolved or dropped) are in [`archive/to-verify-closed.md`](archive/to-verify-closed.md) under the same number: a
-number missing here is there. The per-document "To verify" sections hold the full context; this file is the index to
+The open checks of every detail document: what to confirm, where it applies, in which phase and how, sorted by when
+they can run: in the **live block** (each under the roadmap step whose input it needs), **before go-live** with no input
+from people, or in **P2 and later** (triaged 2026-11-15). Closed rows (resolved or dropped) are in
+[`archive/to-verify-closed.md`](archive/to-verify-closed.md) under the same number and topic: a number missing here is
+there. The per-document "To verify" sections hold the full context; this file is the index to
 plan and track them.
 
 *Status*: `open`, or `open: <note>` when the item is accepted for now and checked again later. When a recorded result
 settles a row, write the result in the document's section (the evidence goes in the row and the streams' results
 files), set the status to `resolved (<date>)`, or `dropped: <why>` when it no longer applies, and move the row to the
-archive file under the same heading. Numbers are never reused: a new check takes the next free number (182 on
-2026-11-08). Version checks follow postponed decision V1 and the 7-day package rule
+archive file under its topic. Numbers are never reused: a new check takes the next free number (182 on 2026-11-08) and
+goes in the section of when it can run. Version checks follow postponed decision V1 and the 7-day package rule
 (`platform/repo-and-deployment.md` §12.12); licences feed postponed decision P2
 ([`postponed-decisions.md`](postponed-decisions.md)).
 
@@ -21,74 +23,194 @@ source, release notes or documentation at the pinned version), **measure** (benc
 **ask** (a person or team named in the row). Document names are relative to `plans/`; "gateway design" is
 `gateway-changes/design.md`.
 
-## Postgres and pgvector
+## Live block
+
+Checks that need an input from people: the deployed gateway, the umea.se crawl, the gold set, the test host, the DPIA or
+pilot data. The steps are the umea.se pilot's critical path in [`roadmap.md`](roadmap.md).
+
+### Step 1: the gateway and the pilot's models
+
+With the gateway as deployed (T0, step 1).
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 6 | Exact-scan cost at 10,000 TOASTed `vector(1024)` values within 25 ms p95; else lower `Settings.Retrieval.exactScanMaxChunks` or move to `halfvec` | `knowledge-api/design.md` §6.4, §20 | P1 | measure | open |
-| 9 | Recursive-CTE loose index scan over `IX_Jobs_Ready` on the unpartitioned `Jobs` table (per-department fairness) | `ingestion-worker/design-engine.md` §9.3 | P2 (first multi-host deployment) | test | open |
-| 11 | CloudNativePG image requirements with pgvector (its own images or the stock pgvector image) | `platform/repo-and-deployment.md` §10 | P3 | source | open |
-| 129 | pgBackRest WAL archiving (`archive_timeout` 60 s) and weekly full / daily differential backups from the host timer (`docker compose exec postgres pgbackrest backup`); point-in-time restore drill meets RPO ≤ 5 min and RTO ≤ 4 h on the test host. **Partly done (P0, PR #40, 2026-10-30, local stack):** full and differential backups through `backup-postgres.sh`, `backup.prom` written; WAL archive lag ≤ 43 s (RPO < 1 min); two PITR drills with `restore-pitr.sh` restored exactly to the target, RTO ≈ 23 s on 30 MB. The test-host drill with a realistic size and the real backup target remains (H6, P1b) | `archive/passes/simplification-pass.md` §4, §14; `platform/repo-and-deployment.md` §7.4, §14 | P0 | test + measure | open |
-| 161 | `ume-rag/postgres` (stock pgvector image + PGDG `pgbackrest`): the package installs on the stock base; synchronous `archive-push` from inside the container on a read-only root file system (no spool volume); restore in a one-off container of the image; how the backup timer's result reaches `rag.backup.age`. **Partly done (P0, PR #5 and PR #40, 2026-10-30):** PGDG `pgbackrest` 2.59.3 installs on the stock base; archive-push, backup and restore with WAL replay run inside the image on a read-only root (#5); point-in-time restore runs locally and the backup script writes `rag_backup_age_seconds` to `backup.prom` (#40). The test-host drill and how `backup.prom` reaches the collector remain | `archive/passes/simplification-pass.md` §14; `platform/repo-and-deployment.md` §5.2, §7.4, §14 | P0 | test (`deploy/postgres/test.sh`, test host) | open |
-| 130 | Managed Postgres (Azure Database for PostgreSQL) with pgvector ≥ 0.8 and the needed settings (`shared_preload_libraries`, HNSW settings, `archive/passes/performance-pass.md` §3.2) | `archive/passes/simplification-pass.md` §3; `archive/passes/performance-pass.md` §3.2 | P2 | source | open |
-| 141 | Swap transaction: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; duration and WAL p95 per document for sets of 50–500 chunks during a large publish beside chat traffic, and for the largest sets (20,000 chunks). **Behaviour tested (P1a item 9, PR #108, 2026-10-31):** the swap clears `DeletedAt` on the new set's chunks and sets it on the old set's in one short transaction with the fence, the live pointer, the run item and the job's completion (one `UPDATE` per set); a failed fence rolls back and the old set stays live. Duration and WAL p95 not measured | `platform/data-model.md` §14; `ingestion-worker/design-engine.md` §23 | P1 | measure | open |
+| 149 | Interactive gateway headers timeout 15 s: TTFT p99 of the slowest pilot answer model for a full 16k-token prompt stays below it | `chat-api/design.md` §8.3, §22 | P0 (checklist #22, weakness review §5) | measure | open |
+
+### Step 2: U1 and the umea.se crawl
+
+With the web editors (U1) and the full crawl.
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 94 | About-page URL for the crawler's user agent; umea.se `robots.txt` allows it | `ingestion-worker/design-connectors.md` §22; postponed U1 | P1 (before the first production crawl) | ask (web editors) | open |
+| 170 | umea.se `lastmod` sample (weakness review §3): 500 random sitemap URLs fetched, their noise-normalised content hashes recorded, re-fetched over several weeks and compared with `lastmod` (a content change without a newer `lastmod` counts against it); the site profile's `lastmodReliable` is set by hand only from this recorded result (passes when at most 2 % of the sampled URLs, re-fetched at least 7 days apart, changed their main content without a newer `lastmod`); until then the umea.se source runs full traversals without the `lastmod` skip **Before a host is marked reliable**: #435 (the reliable `lastmod` and HTTP `Last-Modified` never reach production chunk dates). | `ingestion-worker/design-connectors.md` §5.4, §5.6, §22 | P1 | measure | open |
+
+### Step 3: the gold set
+
+On the gold set with DoIT (`scripts/grading/`).
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
 | 143 | `coverageMinKeywordScore` default: `ts_rank_cd` of the pilot gold set's answerable vs unanswerable questions, the best-separating value (weakness review §2; until then `low` is vector-side only), checked against the coverage log events of the first pilot weeks | `knowledge-api/design.md` §7, §20 | P1a | measure (gold set, pilot data) | open |
 | 168 | Three-way run of the pilot gold set: vector-only vs hybrid vs hybrid without the decompounder (recall@10 and MRR on answerable questions, coverage outcomes on unanswerable ones); hybrid and the decompounder stay only if they beat vector-only; result recorded (weakness review §2) | `knowledge-api/design.md` §1, §20; `ingestion-worker/design-processing.md` §13.4 | P1a | measure (gold set) | open |
 | 169 | Not-found thresholds from the gold set: `coverageMaxDistance` and `coverageMinKeywordScore` at the values that best separate answerable from unanswerable questions (replaces "95th percentile of answerable + 0.03"); resulting false not-found ≤ 10 % and off-topic not-found ≥ 80 % before the go-live gate (weakness review §2) | `knowledge-api/design.md` §7; `ingestion-worker/design-processing.md` §13.6 | P1a | measure (gold set) | open |
 | 171 | Age decay and `demote` on the pilot gold set's temporal questions: with the `website` template's `recency` (half-life 730 days, weight 0.15, PDFs) the current document ranks above the outdated one, and recall@10 on the other answerable questions does not drop against `recency` off; values adjusted if either fails (weakness review §3) | `knowledge-api/design.md` §6.5, §20; `ingestion-worker/design-processing.md` §13.4 | P1b | measure (gold set) | open |
-| 144 | Chat bucket-key creation race: one `DataKeys` row per (level, expiry month) under concurrent first writes | `platform/data-model.md` §14 | when A1 allows stored content (weakness review §4) | test | open |
-| 180 | HNSW-over-`halfvec` recall against exact search on the pilot collection (the umea.se collection exceeds `exactScanMaxChunks`, so the pilot runs HNSW); #117 covers only the generic halfvec delta (added 2026-11-01, weakness review, lower-ranked finding 4) | `knowledge-api/design.md` §6.4 | P1b (live block) | measure | open (narrow-topic scope size done, B-10, 2026-11-06; the recall measurement on the pilot collection is live-block; results-b) |
-| 181 | The `Jobs`-bloat scaling trigger's threshold (dequeue p95 rising → day partitions for `Jobs`), set from P1 measurements (added 2026-11-01) | `archive/passes/performance-pass.md` §6 | P1b | measure | open |
 
-## .NET, Npgsql, EF Core and NuGet packages
+### Step 4: the test host
+
+Deploy from the release bundle, restore drill, R1 performance test and a week of nightly evaluation (A-L5–A-L7).
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 6 | Exact-scan cost at 10,000 TOASTed `vector(1024)` values within 25 ms p95; else lower `Settings.Retrieval.exactScanMaxChunks` or move to `halfvec` | `knowledge-api/design.md` §6.4, §20 | P1 | measure | open |
+| 129 | pgBackRest WAL archiving (`archive_timeout` 60 s) and weekly full / daily differential backups from the host timer (`docker compose exec postgres pgbackrest backup`); point-in-time restore drill meets RPO ≤ 5 min and RTO ≤ 4 h on the test host. **Partly done (P0, PR #40, 2026-10-30, local stack):** full and differential backups through `backup-postgres.sh`, `backup.prom` written; WAL archive lag ≤ 43 s (RPO < 1 min); two PITR drills with `restore-pitr.sh` restored exactly to the target, RTO ≈ 23 s on 30 MB. The test-host drill with a realistic size and the real backup target remains (H6, P1b) | `archive/passes/simplification-pass.md` §4, §14; `platform/repo-and-deployment.md` §7.4, §14 | P0 | test + measure | open |
+| 161 | `ume-rag/postgres` (stock pgvector image + PGDG `pgbackrest`): the package installs on the stock base; synchronous `archive-push` from inside the container on a read-only root file system (no spool volume); restore in a one-off container of the image; how the backup timer's result reaches `rag.backup.age`. **Partly done (P0, PR #5 and PR #40, 2026-10-30):** PGDG `pgbackrest` 2.59.3 installs on the stock base; archive-push, backup and restore with WAL replay run inside the image on a read-only root (#5); point-in-time restore runs locally and the backup script writes `rag_backup_age_seconds` to `backup.prom` (#40). The test-host drill and how `backup.prom` reaches the collector remain | `archive/passes/simplification-pass.md` §14; `platform/repo-and-deployment.md` §5.2, §7.4, §14 | P0 | test (`deploy/postgres/test.sh`, test host) | open |
+| 141 | Swap transaction: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; duration and WAL p95 per document for sets of 50–500 chunks during a large publish beside chat traffic, and for the largest sets (20,000 chunks). **Behaviour tested (P1a item 9, PR #108, 2026-10-31):** the swap clears `DeletedAt` on the new set's chunks and sets it on the old set's in one short transaction with the fence, the live pointer, the run item and the job's completion (one `UPDATE` per set); a failed fence rolls back and the old set stays live. Duration and WAL p95 not measured | `platform/data-model.md` §14; `ingestion-worker/design-engine.md` §23 | P1 | measure | open |
+| 181 | The `Jobs`-bloat scaling trigger's threshold (dequeue p95 rising → day partitions for `Jobs`), set from P1 measurements (added 2026-11-01) | `archive/passes/performance-pass.md` §6 | P1b | measure | open |
+| 20 | Npgsql batch with `SELECT … FOR UPDATE` + inserts as one round trip (COPY not needed) | `chat-api/design.md` §12.2 | P1 | test | open: moved to the R1 test (A-L6, #394, closing #392): the writer is batched only if it falls behind |
+| 21 | Npgsql binary `COPY` of `vector` via `Pgvector` inside a transaction; HNSW insert cost; a chunk set written with `DeletedAt` set in batches of ≤ 1,000, then a short swap per document. **Partly done (P1a item 9, PR #108, 2026-10-31):** a set is written invisible (`writing`, every chunk with `DeletedAt` set) in batches of ≤ 1,000 rows, each its own transaction, then one short fenced swap per document; a crash-left `writing` set is never searchable. Binary `COPY` is not used: one `INSERT … SELECT FROM unnest(…)` per batch with the vector as pgvector text cast to `vector`, because the shared data source maps no `vector` type. HNSW insert cost not measured; details in `archive/p1/results-a.md` | `ingestion-worker/design-engine.md` §23 | P1 | test + measure | open |
+| 23 | Version lock: `SELECT … FOR UPDATE` on `config."ConfigVersion"` before `SaveChanges`, then the bumped value read after the outbox trigger in the same transaction; no deadlock with the trigger's own update of that row; lock waits at the admin's real write rate | `admin/design.md` §4.4, §15 | P1 | test + measure (`rag.admin.config_lock.wait`) | open (partly: lock order tested and histogram built, B-13; the measurement at the real write rate is A-L6; results-b) |
+| 140 | `rag-api` pool 12 with `Retrieval:MaxConcurrentSearches` 4 = ⌊(pool − 3) ÷ 2⌋ (each search may hold 2 connections while K and V overlap); admin 5, worker 10, `max_connections` 100: pool waits and 503s at 20 msg/s next to the chat writer and the stats flush. **Partly done (P0, PR #7, 2026-10-30):** connection caps hold (the 27th api connection is refused); pool waits at 20 msg/s remain for the R1 test (P1) | `archive/passes/simplification-pass.md` §9; `archive/passes/performance-pass.md` §3.1; `knowledge-api/design.md` §6.6, §20; `platform/data-model.md` §1.1, §14 | P0 (measure), P1 (R1) | measure | open |
+| 162 | In-process `IRateLimitStore` and query-embedding cache (`ISharedCache` in-memory) in the one-slot pilot: a `rag-api` restart or maintenance-window update resets rate-limit windows and empties the cache without errors; cache hit rate and query-embedding p95 just after a restart; memory within the cache's size cap | `archive/passes/simplification-pass.md` §14; `platform/data-model.md` §11; `knowledge-api/design.md` §5.4 | P1 | test + measure | open |
+| 29 | Renderer spike: Playwright .NET `ConnectAsync` to `run-server` with `RouteAsync("**/*")` + `FulfillAsync` for every resource type (module scripts, CORS preflights), fulfilled redirects, `ServiceWorkers = Block`, WebSockets routed and closed, DNS prefetch; the `render` network fails closed for anything the route misses; Chromium's sandbox under Compose; `Microsoft.Playwright` = the server's exact version; the §8.8 measurements (pages/hour, render p50/p95, requests per page, peak memory, text against a browser, chat p95 during the crawl), and Lightpanda next to Chromium | `ingestion-worker/design-connectors.md` §8, §22; `platform/repo-and-deployment.md` §5.4 | P1 (renderer, A-9) | source + test + measure | open (real sites done: Klimatkollen and e.umea.se crawled completely, two defects fixed, `Render:QuietPeriod` 500 ms and `Render:MaxConcurrent` 4 set from the numbers, chat p95 unaffected during a mixed crawl; results-a 2026-11-07/08, "item A-13 (live sites)", "item A-19 live check". Left: a Linux Docker Engine host (Ubuntu's `apparmor_restrict_unprivileged_userns` and Chromium's sandbox, on the test host), Lightpanda's bypass behaviour (P2 only)) |
+| 44 | On-prem LLM through the gateway: JSON output mode; judge stability at temperature 0; run-to-run variance of nightly retrieval runs on an unchanged collection (input to any future gate) | `ingestion-worker/design-processing.md` §21 | P1 | test + measure | open |
+| 49 | Creating the feedback-import admin service account with `ENABLE_LOGIN_FORM=false`. **Confirmed locally (P1b item 17, PR #135, 2026-10-31, pinned v0.12.3):** `WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD` make Open WebUI create the account as the first user of an empty store (role `admin`); `ENABLE_LOGIN_FORM` only hides the form, so `ENABLE_PASSWORD_AUTH=false` (since M-17 C6, #689 at v0.12.5, always: the deployment's setup job mints the key with a session token, and the Portainer boot test checks it); the key reads, creates and deletes feedback and gets 403 elsewhere; OIDC users need `DEFAULT_USER_ROLE=user` (chat design §4.3). **Test-host run open** (L10); details in `work/results-a.md` | `chat-api/design.md` §14.2 | P1 | test | open (confirmed locally 2026-10-31, results-a; the run on the test host is A-L5/L10) |
+| 135 | Feedback import and feedback pruning through Open WebUI's HTTP API only (no SQL against its database): feedback list paging by `updated_at`, admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key, admin service account. Chat copies cannot be pruned without `ENABLE_ADMIN_CHAT_ACCESS`: postponed W2 | `archive/passes/simplification-pass.md` §1, §11a; `chat-api/design.md` §13.3, §14.2, §22 | P1 | source + test | open (paging, delete route and admin account confirmed from the source 2026-11-01; the endpoint-restricted key is live-block; results-b) |
+| 65 | Docling pipeline caching per option set and its memory cost. **Measured (P0, PR #16):** about 0.5 GiB per cached option set; LRU of three peaks at 2.30 GiB on a 3.5 GiB slot. **Decided (user, 2026-10-30):** the cache size is set with the P1 RSS watchdog against `PARSER_SLOT_MAX_RSS_MB` and `ner-0`; three until then **Open (P1a item 5, PR #84, 2026-10-31):** the RSS-growth recycle (idle RSS > warm × 1.4) recycles a slot ≈ 8 s after a second option set is built (+0.5 GB), so the LRU of three holds one or two sets in practice; design values kept, decided with the P1 watchdog sizing measurement (`PARSER_SLOT_MAX_RSS_MB` 2 200 dev, 2 600 24 GB host) | `parser/design.md` §10.2, §19 | P0 | measure | open |
+| 80 | Parser memory with the NER model loaded inside the 3.5g limit; latency of the gated `/v1/ner` call for Swedish names (≈ 0.3–1.0 s per page). **Memory done (P0, PR #9 and PR #16, 2026-10-30):** idle 0.86–1.03 GiB; a 20-page mixed PDF peaks at 2.05 GiB; each cached option set adds ≈ 0.5 GiB (row 65); with `ner-0` loaded the worst case is ≈ 3.0 GiB inside 3.5g. **Latency measured (P1a item 5, PR #84, 2026-10-31, development host, `NER_THREADS` 2, int8):** one 2,800-character page with 45 names p50 0.81 s, max 0.91 s; 20 sentence units in one request p50 0.86 s; `ner-0` warms at 1,026 MB, a convert slot peaks at 1.3 GB on a scanned page and 1.7–2.0 GB with a second option set, inside 3.5g. The test-host numbers (R1) remain | `platform/repo-and-deployment.md` §6.2; `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P0 (memory), P1/R1 (throughput) | measure | open |
+| 90 | cgroup v2 and the systemd driver on the host image (ingestion slice) | `platform/repo-and-deployment.md` §6.2 | P0 | test (test host) | open |
+| 92 | Docker IPv6 on the `crawl` network and the IPv6 firewall rules | `ingestion-worker/design-connectors.md` §7, §22 | P1 | test | open |
+| 145 | Backup target with IT (S3-compatible or share), encryption at rest, and where the offline key escrow lives | `platform/repo-and-deployment.md` §7.1, §7.4, §14; `archive/passes/simplification-pass.md` §4 | P0 | ask (IT operations) | open |
+| 100 | Planning numbers: CPU and statements per page | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-connectors.md` §17, §22; `ingestion-worker/design-processing.md` §14.7, §16, §21 | P1 (R1) | measure | open |
+| 101 | Ingestion targets: 10k pages/h without moving chat p95 > 10 %; unchanged re-crawl runs no parse/embed; one parse per URL for two departments (caches; one fetch only with the shared frontier, P2, weakness review §1); restart loses no work | `archive/area-plans/ingestion-worker.md` §9 | P1 (R1) | measure | open |
+| 102 | Knowledge database part p95 < 100 ms at 100k chunks | `archive/area-plans/knowledge-api.md` §4; `knowledge-api/design.md` §11 | P1 | measure (load test) | open: accepted for the pilot (user, 2026-11-07; pilot collections are a few thousand chunks, within budget); re-measured in the R1 test (A-L6), optimised only if R1 shows it (frequent terms fixed; topic terms in 10–30 % of 100k chunks at 60–95 ms; results-b) |
+| 104 | On-prem condense model latency p95 within the 600 ms timeout | `chat-api/design.md` §5, §16 | P0 (checklist #22, weakness review §5) | measure | open: the pilot's condense model runs at `Eu`, so the R1 test measures that one against the 600 ms timeout; the on-prem p95 waits on M2 (P2) |
+| 106 | Admin API p95 budgets and the overview query at 100k run items | `admin/design.md` §10.2 | P1 (R1) | measure | open |
+
+### Step 5: the crawled collection
+
+On the full umea.se crawl (A-L8, A-L9).
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 180 | HNSW-over-`halfvec` recall against exact search on the pilot collection (the umea.se collection exceeds `exactScanMaxChunks`, so the pilot runs HNSW); #117 covers only the generic halfvec delta (added 2026-11-01, weakness review, lower-ranked finding 4) | `knowledge-api/design.md` §6.4 | P1b (live block) | measure | open (narrow-topic scope size done, B-10, 2026-11-06; the recall measurement on the pilot collection is live-block; results-b) |
+| 179 | Personal-data dry run on the **full** umea.se crawl before the pilot (only Kommun och politik has run: 43 pages reported, none with a personnummer); with `piiMode: report` a single e-mail outside `PiiOwnDomains` no longer holds a `public` document, so this measures the report's size and noise (added 2026-11-01, weakness review, lower-ranked finding 3) | `ingestion-worker/design-processing.md` §9.5 | P1b (live block) | measure | open |
+| 131 | Tesseract `swe` acceptance check: å/ä/ö recall ≥ 95 % on a 20-page Umeå sample (EasyOCR reconsidered only if it fails). **Partly done (P1a item 5, PR #84, 2026-10-31):** on the repository's synthetic 20-page print-scanned sample through Docling OCR with Tesseract `swe`, å/ä/ö recall 0.982 (lowest page 0.923), CER 0.052, ≈ 2 s/page at 2 threads; `scripts/ocr_check.py` and an image-build test (≥ 0.95). The real Umeå pages remain (live block, test host) | `archive/passes/simplification-pass.md` §1; `parser/design.md` §9; postponed P1 (closed) | P1 | measure | open |
+| 132 | pypdfium2 text-layer fast path in the parser: throughput (pages/s per slot) and the share of umea.se PDF pages it takes vs Docling layout and OCR. **Tool ready (P1a item 5, PR #84, 2026-10-31):** `scripts/compare_paths.py` sorts pages by processing §3.1 rules and compares the fast path with Docling; on the fixtures the fast path runs ≈ 55 pages/s per slot over HTTP (431 in-process) against Docling 0.7–0.8 pages/s, and a ruled table with 9 path objects (below rule 4's 40) reads worse on the fast path (similarity 0.643). The umea.se share remains (live block) | `archive/passes/simplification-pass.md` §9; `archive/passes/performance-pass.md` §3.8 | P1 | measure | open |
+| 150 | Parser `text-layer` fast path (pypdfium2): per-character font size through `FPDFText_GetFontSize`, line and paragraph grouping from character boxes, reading order on two-column pages and whether inspect needs a column signal, block shape, heading levels and furniture labels as the worker expects, agreement with Docling text on clean pages. **Partly done (P0, PR #16, 2026-10-30):** `FPDFText_GetFontSize` ignores the text matrix, so characters are sized by box height; line/paragraph grouping, heading levels by size rank and `page_footer` furniture as Docling labels them; body text agrees with Docling (similarity 1.0) on clean pages; a scanned page falls back with `text_layer_rejected`. Found: a small ruled table passes `path_objects < 40` and loses its structure. Two-column reading order, the table-dense threshold, real umea.se PDFs and p50/p95 remain (P1 corpus, `bench.py`) | `parser/design.md` §19; `ingestion-worker/design-processing.md` §4.2, §21 | P0 | test | open |
+| 62 | `DoclingDocument`: `content_layer` values, `SectionHeaderItem.level` on PDFs, `export_to_markdown(page_no)`, `self_ref`, cell fields, cross-page table merging. **Partly done (P0, PR #16, 2026-10-30):** `content_layer` values known (parser emits body and furniture); `SectionHeaderItem.level` on PDFs is unusable (Heron gives level 1 to every heading), so the worker re-levels; `self_ref` → `ref`; cell fields as designed; the parser builds its own Markdown with page markers. Cross-page table merging remains (P1 corpus) | `parser/design.md` §7.3, §8.2, §19 | P0 | test | open |
+
+### Step 6: the DPIA (G1)
+
+With the data protection officer.
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 172 | `WEBUI_BANNERS` at v0.12.5: the fixed input warning (`dismissible: false`) shows on every new chat for every user and cannot be closed, and survives a restart with `ENABLE_PERSISTENT_CONFIG=false`. Source read 2026-10-30: env JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`, `ow/config.py:2218-2235`); shown only on the new-chat screen (`src/lib/components/chat/Navbar.svelte:349`) (weakness review §4). **Partly refuted (P0, PR #31, 2026-10-30, v0.12.3):** a `dismissible: false` banner is not remembered, but its close button is always drawn, so it can be hidden until the page reloads; served from the environment and back after a restart. Whether "per page load" is enough goes to the DPIA (G1); the browser check for every user remains | `chat-api/design.md` §4.3, §22 | P1b | test | open |
+| 173 | Public-records request: how one user's conversation is found and exported for the registrar from Open WebUI v0.12.5 with `ENABLE_ADMIN_CHAT_ACCESS=false` and `ENABLE_ADMIN_EXPORT=false` (the user's own export, a temporary admin-access window, or a read-only query), for the runbook section (weakness review §4). **Source read at the pin v0.12.3 (2026-10-31):** both flags are read once from the environment (default `True`); with them off an admin's list of a user's chats, chat by id, all-chats and database export are refused (401 or owner only), and only the user's own export works; there is no admin export route with the pilot settings (`docs/runbook.md` *Public-records requests*; `ow/env.py:371`, `ow/routers/chats.py:783-796`). The route remains for G1 | `chat-api/design.md` §13.3; `platform/repo-and-deployment.md` §11 #19 | P1b (before go-live, with the DPIA G1) | source + test | open |
+
+### Pilot weeks
+
+On real pilot questions after go-live; the test chatbot's data (T5–T6) counts where it fits.
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure | open |
+| 105 | `LanguageGuess` ≥ 97 % on real pilot questions | `chat-api/design.md` §10.3 | P1 | measure (pilot data) | open |
+| 136 | Condense skip heuristic (length, no anaphora): share of follow-ups skipped and wrongly skipped, and retrieval recall of skipped vs condensed follow-ups, on real pilot questions | `archive/passes/simplification-pass.md` §8; `chat-api/design.md` §5, §22 | P1 | measure (pilot data) | open |
+| 154 | Conversational check: no false positives on real questions (a short question of stop words plus one content word is not conversational); the .NET Snowball stop lists match Postgres's | `chat-api/design.md` §6.2, §22 | P1 | test + measure (pilot data) | open |
+
+## Before go-live
+
+Checks that need no input from people: a local test, a source reading or a question the team can ask now. Each becomes
+a queue item when a stream or the main session picks it up.
+
+### .NET, Npgsql, EF Core and NuGet packages
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 16 | `Cronos`: version, 5-field syntax, DST behaviour. Version done (Stage 0, 2026-10-30): 0.13.0 (2026-04-29, MIT); the syntax and DST tests are stream A's, with the scheduler | `platform/repo-and-deployment.md` §2.2; `ingestion-worker/design-engine.md` §23 | P0 | source + test | open |
-| 20 | Npgsql batch with `SELECT … FOR UPDATE` + inserts as one round trip (COPY not needed) | `chat-api/design.md` §12.2 | P1 | test | open (partly: one transaction in key order, not one round trip; results-b, 2026-11-06) |
-| 21 | Npgsql binary `COPY` of `vector` via `Pgvector` inside a transaction; HNSW insert cost; a chunk set written with `DeletedAt` set in batches of ≤ 1,000, then a short swap per document. **Partly done (P1a item 9, PR #108, 2026-10-31):** a set is written invisible (`writing`, every chunk with `DeletedAt` set) in batches of ≤ 1,000 rows, each its own transaction, then one short fenced swap per document; a crash-left `writing` set is never searchable. Binary `COPY` is not used: one `INSERT … SELECT FROM unnest(…)` per batch with the vector as pgvector text cast to `vector`, because the shared data source maps no `vector` type. HNSW insert cost not measured; details in `archive/p1/results-a.md` | `ingestion-worker/design-engine.md` §23 | P1 | test + measure | open |
-| 23 | Version lock: `SELECT … FOR UPDATE` on `config."ConfigVersion"` before `SaveChanges`, then the bumped value read after the outbox trigger in the same transaction; no deadlock with the trigger's own update of that row; lock waits at the admin's real write rate | `admin/design.md` §4.4, §15 | P1 | test + measure (`rag.admin.config_lock.wait`) | open (partly: lock order tested and histogram built, B-13; the measurement at the real write rate is A-L6; results-b) |
-| 24 | EF Core needs `e.Ignore(...)` for non-mapped `VirtualKey` members | gateway design §16 | P2 (release 2: delegation views) | test | dropped: team delegation replaced by the gateway's integrations design (#580, gateway design §5) |
-| 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P2 (release 2: feature C, tenant/guest) | test | open |
-| 29 | Renderer spike: Playwright .NET `ConnectAsync` to `run-server` with `RouteAsync("**/*")` + `FulfillAsync` for every resource type (module scripts, CORS preflights), fulfilled redirects, `ServiceWorkers = Block`, WebSockets routed and closed, DNS prefetch; the `render` network fails closed for anything the route misses; Chromium's sandbox under Compose; `Microsoft.Playwright` = the server's exact version; the §8.8 measurements (pages/hour, render p50/p95, requests per page, peak memory, text against a browser, chat p95 during the crawl), and Lightpanda next to Chromium | `ingestion-worker/design-connectors.md` §8, §22; `platform/repo-and-deployment.md` §5.4 | P1 (renderer, A-9) | source + test + measure | open (real sites done: Klimatkollen and e.umea.se crawled completely, two defects fixed, `Render:QuietPeriod` 500 ms and `Render:MaxConcurrent` 4 set from the numbers, chat p95 unaffected during a mixed crawl; results-a 2026-11-07/08, "item A-13 (live sites)", "item A-19 live check". Left: a Linux Docker Engine host (Ubuntu's `apparmor_restrict_unprivileged_userns` and Chromium's sandbox, on the test host), Lightpanda's bypass behaviour (P2 only)) |
-| 31 | SmartReader as the fallback for hosts without a site profile; the Sitevision preset against the ≈ 20 saved umea.se pages. **Preset part done (P1a item 8, PR #104, 2026-10-31):** the built-in Sitevision preset extracts the same content as the hand-checked umea.se profile on all 20 saved pages, each with a hand-read golden; reading them fixed four faults (root `main, .pagecontent` tried in order, breadcrumb crumbs, list-item lines, menu/archive/file-list portlets as link blocks); hub pages end `skipped` `parse.empty`. **SmartReader open:** not built (without a matching root the extractor falls back to the landmarks, then `body`); details in `archive/p1/results-a.md` | `ingestion-worker/design-processing.md` §21 | P1 | test | open |
 | 32 | Kestrel per-endpoint request body limits when roles share a host (knowledge routes; chat 2 MB; admin uploads 60 MB while the rest keeps 1 MB); nginx `proxy_request_buffering off` | `knowledge-api/design.md` §3.6; `chat-api/design.md` §3.2; `admin/design.md` §2.2 | P1 | test | open |
-| 33 | Kestrel client-certificate listener vs health probes; shared Data Protection key ring in `AddRagDatabase` (separate `rag-tools` service) | `tools/design.md` §2.2, §8.3 | P3 | test | open |
-| 35 | Azure Key Vault SDK versions | `platform/repo-and-deployment.md` §2.2 | when K1 is decided (P2) | source | open |
 
-## LLM gateway
-
-| # | Item | Where | Phase | How | Status |
-|---|---|---|---|---|---|
-| 36 | OpenAI .NET SDK default `encoding_format` | gateway design §6, §16 | P1 (release 1: FakeLlm) | source + test | open |
-| 37 | Ollama `/v1/embeddings` with `dimensions` (low priority) | gateway design §16 | P1 (release 1: FakeLlm) | test | open |
-| 38 | WebSocket clients can set custom headers on upgrade | gateway design §16 | P1 (release 1) | test | open |
-| 39 | Compose nested default `${A:-${B:-true}}` | gateway design §16 | P2 (release 2: guest settings) | test | open |
-| 40 | No gateway code reads `key.TeamId` as owner after step 1b except the listed places | gateway design §16 | P2 (release 2: delegation) | grep at implementation | dropped: team delegation replaced by the gateway's integrations design (#580, gateway design §5) |
-| 44 | On-prem LLM through the gateway: JSON output mode; judge stability at temperature 0; run-to-run variance of nightly retrieval runs on an unchanged collection (input to any future gate) | `ingestion-worker/design-processing.md` §21 | P1 | test + measure | open |
-| 45 | Streamed `tool_calls` deltas through every adapter; `cached_tokens` in usage; provider tool-name rules; on-prem tool calling, Swedish tool choice, the `tools` feature tag | `tools/design.md` §6.4 | P1 (release 1 tests) / P2 | test | open |
-| 133 | Gateway rerank endpoint for `bge-reranker-v2-m3` on-prem (a separate P2 gateway release; the gateway has none today): latency over 30 passages on the on-prem hardware against the 1.5 s limit (Decisions "Gateway rerank time limit 1.5 s"), and whether it allows a shorter one | `archive/passes/simplification-pass.md` §8; `knowledge-api/design.md` §6.7, §20; gateway design §7.4 | P2 | measure | open |
-| 147 | The gateway's attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection (`CircuitStatus` after `SelectCandidatesAsync`, `Stores.cs:175`), for the 503 with `Retry-After` | gateway design §3.3, §16 | P1 (release 1) | test | open |
-| 148 | Path and request shape of the P2 rerank endpoint agreed with the gateway team, and the on-prem runtime serving `bge-reranker-v2-m3`, before the FakeGateway rerank fake is fixed | gateway design §7.4, §16; `platform/repo-and-deployment.md` §4.3, §14 | P1 | ask (gateway team) | open |
-| 149 | Interactive gateway headers timeout 15 s: TTFT p99 of the slowest pilot answer model for a full 16k-token prompt stays below it | `chat-api/design.md` §8.3, §22 | P0 (checklist #22, weakness review §5) | measure | open |
-
-## Open WebUI
+### Open WebUI
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 47 | Stop button closes the upstream stream; a `source` event before the content chunk renders the chip; `metadata.external` + `#page=` with text-fragment links | `chat-api/design.md` §9.3 | P1 | test | open |
-| 49 | Creating the feedback-import admin service account with `ENABLE_LOGIN_FORM=false`. **Confirmed locally (P1b item 17, PR #135, 2026-10-31, pinned v0.12.3):** `WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD` make Open WebUI create the account as the first user of an empty store (role `admin`); `ENABLE_LOGIN_FORM` only hides the form, so `ENABLE_PASSWORD_AUTH=false` (since M-17 C6, #689 at v0.12.5, always: the deployment's setup job mints the key with a session token, and the Portainer boot test checks it); the key reads, creates and deletes feedback and gets 403 elsewhere; OIDC users need `DEFAULT_USER_ROLE=user` (chat design §4.3). **Test-host run open** (L10); details in `work/results-a.md` | `chat-api/design.md` §14.2 | P1 | test | open (confirmed locally 2026-10-31, results-a; the run on the test host is A-L5/L10) |
 | 50 | `{{MESSAGE_ID}}` non-empty for every completion and regeneration | `chat-api/design.md` §11.4 | P1 | test | open |
 | 134 | Open WebUI v0.12.5 settings that switch off title, tag and follow-up generation (none of them reaches the RAG assistants). **Partly done (P0, PR #31, 2026-10-30):** at v0.12.3 the `ENABLE_*_GENERATION` settings and the other chat design §4.3 settings exist under the same names and the environment wins with `ENABLE_PERSISTENT_CONFIG=false`; the stack starts with login form and sign-up off. That no task request reaches a model remains (chat API, P1) | `archive/passes/simplification-pass.md` §1 | P0 | source + test | open |
-| 135 | Feedback import and feedback pruning through Open WebUI's HTTP API only (no SQL against its database): feedback list paging by `updated_at`, admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key, admin service account. Chat copies cannot be pruned without `ENABLE_ADMIN_CHAT_ACCESS`: postponed W2 | `archive/passes/simplification-pass.md` §1, §11a; `chat-api/design.md` §13.3, §14.2, §22 | P1 | source + test | open (paging, delete route and admin account confirmed from the source 2026-11-01; the endpoint-restricted key is live-block; results-b) |
-| 52 | `status` events from an external connection forwarded, stored and rendered with `source` events; `hidden: true`; `: ping` comments ignored | `tools/design.md` §6.7 | P2 | test | open |
 | 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `archive/passes/simplification-pass.md` §15 | P1 | source + test | open |
-| 172 | `WEBUI_BANNERS` at v0.12.5: the fixed input warning (`dismissible: false`) shows on every new chat for every user and cannot be closed, and survives a restart with `ENABLE_PERSISTENT_CONFIG=false`. Source read 2026-10-30: env JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`, `ow/config.py:2218-2235`); shown only on the new-chat screen (`src/lib/components/chat/Navbar.svelte:349`) (weakness review §4). **Partly refuted (P0, PR #31, 2026-10-30, v0.12.3):** a `dismissible: false` banner is not remembered, but its close button is always drawn, so it can be hidden until the page reloads; served from the environment and back after a restart. Whether "per page load" is enough goes to the DPIA (G1); the browser check for every user remains | `chat-api/design.md` §4.3, §22 | P1b | test | open |
-| 173 | Public-records request: how one user's conversation is found and exported for the registrar from Open WebUI v0.12.5 with `ENABLE_ADMIN_CHAT_ACCESS=false` and `ENABLE_ADMIN_EXPORT=false` (the user's own export, a temporary admin-access window, or a read-only query), for the runbook section (weakness review §4). **Source read at the pin v0.12.3 (2026-10-31):** both flags are read once from the environment (default `True`); with them off an admin's list of a user's chats, chat by id, all-chats and database export are refused (401 or owner only), and only the user's own export works; there is no admin export route with the pilot settings (`docs/runbook.md` *Public-records requests*; `ow/env.py:371`, `ow/routers/chats.py:783-796`). The route remains for G1 | `chat-api/design.md` §13.3; `platform/repo-and-deployment.md` §11 #19 | P1b (before go-live, with the DPIA G1) | source + test | open |
+
+### Docling, parser, OCR and NER
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 79 | KB NER model: labels returned (`PER`/`PRS`), `transformers` 5 tokenizer loading, quality on the fixtures, CPU fp32 vs int8. **Partly done (P1a item 5, PR #84, 2026-10-31):** the pinned model's labels have `PER` for persons and no `PRS` alone (only mixed labels, returned as `person_ambiguous`); `transformers` 5.20.2 builds a fast tokenizer from `vocab.txt` once `model_max_length=512` is passed; fp32 and int8 find the same persons on every fixture sentence, int8 with lower scores ("Annas" 0.81 vs 1.00). Quality on the PII corpus, and so whether `NerMinScore` 0.80 holds for int8, remains (processing §17, P1a item 7) | `ingestion-worker/design-processing.md` §21; `parser/design.md` §7.8, §12 | P1 | test | open |
+| 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test | open |
+| 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test | open |
+| 71 | LibreOffice under `RLIMIT_AS` 1.5 GB for large spreadsheets | `parser/design.md` §19 | P2 (legacy Office) | test | open: #702 (LibreOffice runs with no memory cap) |
+
+### UI and accessibility
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 95 | Browser PDF viewers with `CSP default-src 'none'` and `#page=n` on download URLs | `knowledge-api/design.md` §3.5, §10.4 | P1 | test (Edge, Chrome, Firefox) | open |
+| 96 | DOS-lagen scope for an intranet admin app and its tillgänglighetsredogörelse | `admin/design.md` §10.1 | P1 | ask (municipal web/accessibility coordinator) | open (scope and statement accepted by the user 2026-11-06, B-4; the NVDA pass is still to run; results-b) |
+
+### Licences and external data
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 109 | Model and library licences in the parser image: Docling layout and TableFormer models, `olefile`, pypdfium2 (pdfium built without V8/XFA). **Partly done (P0, PR #9, 2026-10-30):** model licences (Apache-2.0, CDLA-Permissive-2.0, MIT) and pdfium without V8/XFA; `LICENSES.md` and SUC 3.0 terms remain | `parser/design.md` §9.2, §11, §12, §19; postponed P2 | P0 | source | open |
+| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | open |
+
+### Performance and scale
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version. **Test part done (P1a item 3, PR #93, 2026-10-31):** the `AssistantVersions` outbox triggers skip drafts (`WHEN … <> 'draft'`), so a draft save or a draft delete leaves `ConfigVersion` untouched; a publish in one transaction bumps it once; creating or discarding a draft bumps once through `Assistants.DraftVersionId`. The snapshot build time and memory with 300 versions remain (api config snapshot, P1 item 15); details in `archive/p1/results-b.md` | `platform/data-model.md` §5, §14; `archive/passes/simplification-pass.md` §15 | P1 | measure + test | open |
+| 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `archive/passes/performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test | open |
+
+## P2 and later
+
+Checks for features or deployments that come after the pilot: Entra ID, tools and MCP, on-prem models, the object
+store, scale tests, e-mail, site-profile learning, stored chat content (A1) and gateway release 2.
+
+### Postgres and pgvector
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 9 | Recursive-CTE loose index scan over `IX_Jobs_Ready` on the unpartitioned `Jobs` table (per-department fairness) | `ingestion-worker/design-engine.md` §9.3 | P2 (first multi-host deployment) | test | open |
+| 11 | CloudNativePG image requirements with pgvector (its own images or the stock pgvector image) | `platform/repo-and-deployment.md` §10 | P3 | source | open |
+| 144 | Chat bucket-key creation race: one `DataKeys` row per (level, expiry month) under concurrent first writes | `platform/data-model.md` §14 | when A1 allows stored content (weakness review §4) | test | open |
+
+### .NET, Npgsql, EF Core and NuGet packages
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P2 (release 2: feature C, tenant/guest) | test | open |
+| 33 | Kestrel client-certificate listener vs health probes; shared Data Protection key ring in `AddRagDatabase` (separate `rag-tools` service) | `tools/design.md` §2.2, §8.3 | P3 | test | open |
+| 35 | Azure Key Vault SDK versions | `platform/repo-and-deployment.md` §2.2 | when K1 is decided (P2) | source | open |
+| 31 | SmartReader as the fallback for hosts without a site profile; the Sitevision preset against the ≈ 20 saved umea.se pages. **Preset part done (P1a item 8, PR #104, 2026-10-31):** the built-in Sitevision preset extracts the same content as the hand-checked umea.se profile on all 20 saved pages, each with a hand-read golden; reading them fixed four faults (root `main, .pagecontent` tried in order, breadcrumb crumbs, list-item lines, menu/archive/file-list portlets as link blocks); hub pages end `skipped` `parse.empty`. **SmartReader open:** not built (without a matching root the extractor falls back to the landmarks, then `body`); details in `archive/p1/results-a.md` | `ingestion-worker/design-processing.md` §21 | P1 | test | open: not built; for hosts without a site profile, with site-profile learning (P2) |
+
+### LLM gateway
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 39 | Compose nested default `${A:-${B:-true}}` | gateway design §16 | P2 (release 2: guest settings) | test | open |
+| 45 | Streamed `tool_calls` deltas through every adapter; `cached_tokens` in usage; provider tool-name rules; on-prem tool calling, Swedish tool choice, the `tools` feature tag | `tools/design.md` §6.4 | P1 (release 1 tests) / P2 | test | open |
+| 133 | Gateway rerank endpoint for `bge-reranker-v2-m3` on-prem (a separate P2 gateway release; the gateway has none today): latency over 30 passages on the on-prem hardware against the 1.5 s limit (Decisions "Gateway rerank time limit 1.5 s"), and whether it allows a shorter one | `archive/passes/simplification-pass.md` §8; `knowledge-api/design.md` §6.7, §20; gateway design §7.4 | P2 | measure | open |
+| 148 | Path and request shape of the P2 rerank endpoint agreed with the gateway team, and the on-prem runtime serving `bge-reranker-v2-m3`, before the FakeGateway rerank fake is fixed | gateway design §7.4, §16; `platform/repo-and-deployment.md` §4.3, §14 | P1 | ask (gateway team) | open: the path and shape are settled (the gateway's `/v1/rerank`, thekim1/llmgateway#68, and the FakeGateway's fake); the on-prem runtime for `bge-reranker-v2-m3` is P2 |
+
+### Open WebUI
+
+| # | Item | Where | Phase | How | Status |
+|---|---|---|---|---|---|
+| 52 | `status` events from an external connection forwarded, stored and rendered with `source` events; `hidden: true`; `: ping` comments ignored | `tools/design.md` §6.7 | P2 | test | open |
 | 175 | E1 (weakness review §5): Open WebUI `auth_type: system_oauth` forwards a real Entra token with `api://rag-api/Chat.Use` and refreshes it; our JWT and token checks accept it (identity design §9.4) | `postponed-decisions.md` E1; `identity/design.md` §9.4 | P1b (spike) | test (tenant) | open |
 | 178 | Open WebUI account keying on a provider switch (local Keycloak → LDAP-federated Keycloak, Keycloak → Entra in P2): whether, with `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false`, Open WebUI keys accounts by the provider's `sub`, so a new provider `sub` creates a new Open WebUI user and new `SubjectId`s for our conversations (source at the pin, then a test); whether pilot accounts and chats are migrated or start over is identity §16 P1 question 7 (added 2026-10-31) | `identity/design.md` §5.3, §16 | P1 (before the provider switch is planned) | source + test | open |
 
-## MCP and skills
+### MCP and skills
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
@@ -97,28 +219,14 @@ source, release notes or documentation at the pinned version), **measure** (benc
 | 55 | Agent Skills spec changes after `69ef37e`; `evals/evals.json` stays guidance only | `tools/design.md` §3.1–§3.2 | P2 | source | open |
 | 56 | Data sources of the first real tools | `archive/area-plans/tools.md` §7 | P2 | ask (departments) | open |
 
-## Docling, parser, OCR and NER
+### Docling, parser, OCR and NER
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 60 | Docling: legacy LibreOffice timeout through backend options; `.docm` handling | `parser/design.md` §4, §19 | P2 (legacy Office) | test | open |
-| 62 | `DoclingDocument`: `content_layer` values, `SectionHeaderItem.level` on PDFs, `export_to_markdown(page_no)`, `self_ref`, cell fields, cross-page table merging. **Partly done (P0, PR #16, 2026-10-30):** `content_layer` values known (parser emits body and furniture); `SectionHeaderItem.level` on PDFs is unusable (Heron gives level 1 to every heading), so the worker re-levels; `self_ref` → `ref`; cell fields as designed; the parser builds its own Markdown with page markers. Cross-page table merging remains (P1 corpus) | `parser/design.md` §7.3, §8.2, §19 | P0 | test | open |
-| 63 | Excel backend `data_only`, hidden sheets, several tables per sheet; PPTX slide = page; DOCX `page_no`. **Moved to P1 (P0, PR #16, 2026-10-30):** P0 converts PDF only (`formats.supported` = `pdf`); checked with the P1 formats | `parser/design.md` §7.4, §19 | P1 | test | open |
 | 64 | `python-oxmsg` embedded messages and reference attachments | `parser/design.md` §5, §19 | P2 (e-mail) | test | open |
-| 65 | Docling pipeline caching per option set and its memory cost. **Measured (P0, PR #16):** about 0.5 GiB per cached option set; LRU of three peaks at 2.30 GiB on a 3.5 GiB slot. **Decided (user, 2026-10-30):** the cache size is set with the P1 RSS watchdog against `PARSER_SLOT_MAX_RSS_MB` and `ner-0`; three until then **Open (P1a item 5, PR #84, 2026-10-31):** the RSS-growth recycle (idle RSS > warm × 1.4) recycles a slot ≈ 8 s after a second option set is built (+0.5 GB), so the LRU of three holds one or two sets in practice; design values kept, decided with the P1 watchdog sizing measurement (`PARSER_SLOT_MAX_RSS_MB` 2 200 dev, 2 600 24 GB host) | `parser/design.md` §10.2, §19 | P0 | measure | open |
 | 67 | Docling `timings` granularity for per-page milliseconds | `ingestion-worker/design-processing.md` §21 | P2 (weakness review §1) | test | open |
-| 68 | LibreOffice `-nogui` package names and size on trixie; `--convert-to` filter names | `parser/design.md` §4, §19 | P2 (legacy Office) | source | open |
-| 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test | open |
-| 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test | open |
-| 71 | LibreOffice under `RLIMIT_AS` 1.5 GB for large spreadsheets | `parser/design.md` §19 | P2 (legacy Office) | test | open |
-| 72 | lxml ≥ 5 `resolve_entities`; openpyxl, python-docx and python-pptx external entities; openpyxl with `defusedxml`. **Moved to P1 (P0, PR #16, 2026-10-30):** no OOXML or ODF is parsed in P0 (the sniffer refuses them as `unsupported_format`); checked with the P1 formats and the XXE fixtures | `parser/design.md` §11, §19 | P1 | test | open |
-| 79 | KB NER model: labels returned (`PER`/`PRS`), `transformers` 5 tokenizer loading, quality on the fixtures, CPU fp32 vs int8. **Partly done (P1a item 5, PR #84, 2026-10-31):** the pinned model's labels have `PER` for persons and no `PRS` alone (only mixed labels, returned as `person_ambiguous`); `transformers` 5.20.2 builds a fast tokenizer from `vocab.txt` once `model_max_length=512` is passed; fp32 and int8 find the same persons on every fixture sentence, int8 with lower scores ("Annas" 0.81 vs 1.00). Quality on the PII corpus, and so whether `NerMinScore` 0.80 holds for int8, remains (processing §17, P1a item 7) | `ingestion-worker/design-processing.md` §21; `parser/design.md` §7.8, §12 | P1 | test | open |
-| 80 | Parser memory with the NER model loaded inside the 3.5g limit; latency of the gated `/v1/ner` call for Swedish names (≈ 0.3–1.0 s per page). **Memory done (P0, PR #9 and PR #16, 2026-10-30):** idle 0.86–1.03 GiB; a 20-page mixed PDF peaks at 2.05 GiB; each cached option set adds ≈ 0.5 GiB (row 65); with `ner-0` loaded the worst case is ≈ 3.0 GiB inside 3.5g. **Latency measured (P1a item 5, PR #84, 2026-10-31, development host, `NER_THREADS` 2, int8):** one 2,800-character page with 45 names p50 0.81 s, max 0.91 s; 20 sentence units in one request p50 0.86 s; `ner-0` warms at 1,026 MB, a convert slot peaks at 1.3 GB on a scanned page and 1.7–2.0 GB with a second option set, inside 3.5g. The test-host numbers (R1) remain | `platform/repo-and-deployment.md` §6.2; `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P0 (memory), P1/R1 (throughput) | measure | open |
-| 131 | Tesseract `swe` acceptance check: å/ä/ö recall ≥ 95 % on a 20-page Umeå sample (EasyOCR reconsidered only if it fails). **Partly done (P1a item 5, PR #84, 2026-10-31):** on the repository's synthetic 20-page print-scanned sample through Docling OCR with Tesseract `swe`, å/ä/ö recall 0.982 (lowest page 0.923), CER 0.052, ≈ 2 s/page at 2 threads; `scripts/ocr_check.py` and an image-build test (≥ 0.95). The real Umeå pages remain (live block, test host) | `archive/passes/simplification-pass.md` §1; `parser/design.md` §9; postponed P1 (closed) | P1 | measure | open |
-| 132 | pypdfium2 text-layer fast path in the parser: throughput (pages/s per slot) and the share of umea.se PDF pages it takes vs Docling layout and OCR. **Tool ready (P1a item 5, PR #84, 2026-10-31):** `scripts/compare_paths.py` sorts pages by processing §3.1 rules and compares the fast path with Docling; on the fixtures the fast path runs ≈ 55 pages/s per slot over HTTP (431 in-process) against Docling 0.7–0.8 pages/s, and a ruled table with 9 path objects (below rule 4's 40) reads worse on the fast path (similarity 0.643). The umea.se share remains (live block) | `archive/passes/simplification-pass.md` §9; `archive/passes/performance-pass.md` §3.8 | P1 | measure | open |
-| 150 | Parser `text-layer` fast path (pypdfium2): per-character font size through `FPDFText_GetFontSize`, line and paragraph grouping from character boxes, reading order on two-column pages and whether inspect needs a column signal, block shape, heading levels and furniture labels as the worker expects, agreement with Docling text on clean pages. **Partly done (P0, PR #16, 2026-10-30):** `FPDFText_GetFontSize` ignores the text matrix, so characters are sized by box height; line/paragraph grouping, heading levels by size rank and `page_footer` furniture as Docling labels them; body text agrees with Docling (similarity 1.0) on clean pages; a scanned page falls back with `text_layer_rejected`. Found: a small ruled table passes `path_objects < 40` and loses its structure. Two-column reading order, the table-dense threshold, real umea.se PDFs and p50/p95 remain (P1 corpus, `bench.py`) | `parser/design.md` §19; `ingestion-worker/design-processing.md` §4.2, §21 | P0 | test | open |
 
-## Entra ID and Keycloak
+### Entra ID and Keycloak
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
@@ -131,61 +239,38 @@ source, release notes or documentation at the pinned version), **measure** (benc
 | 87 | `private_key_jwt` client credentials from on-prem for the tool identity `ume-rag-tools` (in-process hub in `rag-api` and `rag-admin`); app-only tokens with `idtyp = app` + `Tools.Invoke`; Keycloak audience mapper for dev | `tools/design.md` §4.6, §8.1, §15 | P2 | test | open |
 | 88 | Graph: `driveItem` subscription maximum lifetime; unique-permission listing under `Sites.Selected`; delta after folder moves | `ingestion-worker/design-connectors.md` §14, §22 | P2 | test | open |
 
-## Platform and host
+### Platform and host
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 90 | cgroup v2 and the systemd driver on the host image (ingestion slice) | `platform/repo-and-deployment.md` §6.2 | P0 | test (test host) | open |
-| 91 | Syft as SBOM tool for the non-.NET images | `platform/repo-and-deployment.md` §8.2 | P0 | test | open |
-| 92 | Docker IPv6 on the `crawl` network and the IPv6 firewall rules | `ingestion-worker/design-connectors.md` §7, §22 | P1 | test | open |
 | 93 | `DOCKER-USER` rule and subnet per `mcp-<name>-egress` network of a hosted server that wraps systems (172.30.8.0/21 proposed) | `tools/design.md` §8.3, §15 | P2 | test | open |
-| 94 | About-page URL for the crawler's user agent; umea.se `robots.txt` allows it | `ingestion-worker/design-connectors.md` §22; postponed U1 | P1 (before the first production crawl) | ask (web editors) | open |
-| 145 | Backup target with IT (S3-compatible or share), encryption at rest, and where the offline key escrow lives | `platform/repo-and-deployment.md` §7.1, §7.4, §14; `archive/passes/simplification-pass.md` §4 | P0 | ask (IT operations) | open |
 | 153 | `rag-api` memory limit with the in-process tool hub and one hosted MCP server | `platform/repo-and-deployment.md` §6.2, §14 | P2 | measure | open |
-| 162 | In-process `IRateLimitStore` and query-embedding cache (`ISharedCache` in-memory) in the one-slot pilot: a `rag-api` restart or maintenance-window update resets rate-limit windows and empties the cache without errors; cache hit rate and query-embedding p95 just after a restart; memory within the cache's size cap | `archive/passes/simplification-pass.md` §14; `platform/data-model.md` §11; `knowledge-api/design.md` §5.4 | P1 | test + measure | open |
 
-## UI and accessibility
-
-| # | Item | Where | Phase | How | Status |
-|---|---|---|---|---|---|
-| 95 | Browser PDF viewers with `CSP default-src 'none'` and `#page=n` on download URLs | `knowledge-api/design.md` §3.5, §10.4 | P1 | test (Edge, Chrome, Firefox) | open |
-| 96 | DOS-lagen scope for an intranet admin app and its tillgänglighetsredogörelse | `admin/design.md` §10.1 | P1 | ask (municipal web/accessibility coordinator) | open (scope and statement accepted by the user 2026-11-06, B-4; the NVDA pass is still to run; results-b) |
-
-## Models and performance estimates
+### Models and performance estimates
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 98 | Embedding throughput of the gateway's on-prem BGE-M3 (tokens/s, batch size) and its effect on chat query embeddings | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P0 (checklist #22, weakness review §5; shortfall → register M2) | measure | open |
 | 99 | BGE-M3 without a query instruction prefix; on-prem query-embedding p95 on production hardware | `knowledge-api/design.md` §5.1, §11; `ingestion-worker/design-processing.md` §11, §21 | P0 (p95, checklist #22, weakness review §5); P1 (prefix, on the gold set) | measure | open |
-| 100 | Planning numbers: CPU and statements per page | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-connectors.md` §17, §22; `ingestion-worker/design-processing.md` §14.7, §16, §21 | P1 (R1) | measure | open |
-| 101 | Ingestion targets: 10k pages/h without moving chat p95 > 10 %; unchanged re-crawl runs no parse/embed; one parse per URL for two departments (caches; one fetch only with the shared frontier, P2, weakness review §1); restart loses no work | `archive/area-plans/ingestion-worker.md` §9 | P1 (R1) | measure | open |
-| 102 | Knowledge database part p95 < 100 ms at 100k chunks | `archive/area-plans/knowledge-api.md` §4; `knowledge-api/design.md` §11 | P1 | measure (load test) | open: accepted for the pilot (user, 2026-11-07; pilot collections are a few thousand chunks, within budget); re-measured in the R1 test (A-L6), optimised only if R1 shows it (frequent terms fixed; topic terms in 10–30 % of 100k chunks at 60–95 ms; results-b) |
-| 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure | open |
-| 104 | On-prem condense model latency p95 within the 600 ms timeout | `chat-api/design.md` §5, §16 | P0 (checklist #22, weakness review §5) | measure | open |
-| 136 | Condense skip heuristic (length, no anaphora): share of follow-ups skipped and wrongly skipped, and retrieval recall of skipped vs condensed follow-ups, on real pilot questions | `archive/passes/simplification-pass.md` §8; `chat-api/design.md` §5, §22 | P1 | measure (pilot data) | open |
-| 105 | `LanguageGuess` ≥ 97 % on real pilot questions | `chat-api/design.md` §10.3 | P1 | measure (pilot data) | open |
-| 106 | Admin API p95 budgets and the overview query at 100k run items | `admin/design.md` §10.2 | P1 (R1) | measure | open |
 | 107 | ≈ 100 tokens per catalogue entry, ÷ 3 for skill bodies; `Agent:StepTimeEstimate` 8 s | `tools/design.md` §3.4, §6.5 | P2 | measure | open |
 | 108 | Exact cosine over ≤ 2,000 decrypted attachment chunks within 5 ms | `chat-api/design.md` §15.2 | P2 | measure | open |
-| 154 | Conversational check: no false positives on real questions (a short question of stop words plus one content word is not conversational); the .NET Snowball stop lists match Postgres's | `chat-api/design.md` §6.2, §22 | P1 | test + measure (pilot data) | open |
 | 155 | Answer-level nightly run in `rag-admin`: agreement of the on-prem judge's faithfulness and citation-precision scores with human ratings on a sample (before editors see them); cost per assistant | `chat-api/design.md` §18.8, §22; `ingestion-worker/design-processing.md` §14.8, §21 | P2 (weakness review §1) | measure | open |
-| 167 | Owner-team scoping (P2): the `teamCodes` claim is filled for department staff in Entra (or the IdP) and matches `Teams.Code` from the gateway's organisation data; otherwise member groups on teams (a gateway change) | `identity/design.md`, `admin/design.md` §3.2, `platform/data-model.md` `DepartmentSettings` | P2 start | check the claim with test users | open |
 | 156 | Static skill budget: ≈ 4,000 tokens of skill bodies in the system prompt keeps tool choice and answer quality on the pilot models (static vs progressive on the Bygglov skill) | `tools/design.md` §3.9, §15 | P2 | measure | open |
 | 157 | Tool bulkhead values: `MaxConcurrentCalls` 8, circuit 5 failures / 30 s, in the R1 agent scenario | `tools/design.md` §2.2, §15 | P2 | measure | open |
 | 166 | Assistant tests: judge cost and duration of an `assistant-tests` run (≤ 30 questions, an answer and a judge call each) per publish across a department's assistants; the verdict against free-text expected behaviour agrees with editors on a sample | `chat-api/design.md` §18.8, §22; `platform/data-model.md` §2.2 | P2 (weakness review §1) | measure | open |
+| 167 | Owner-team scoping (P2): the `teamCodes` claim is filled for department staff in Entra (or the IdP) and matches `Teams.Code` from the gateway's organisation data; otherwise member groups on teams (a gateway change) | `identity/design.md`, `admin/design.md` §3.2, `platform/data-model.md` `DepartmentSettings` | P2 start | check the claim with test users | open |
 
-## Licences and external data
+### Licences and external data
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 109 | Model and library licences in the parser image: Docling layout and TableFormer models, `olefile`, pypdfium2 (pdfium built without V8/XFA). **Partly done (P0, PR #9, 2026-10-30):** model licences (Apache-2.0, CDLA-Permissive-2.0, MIT) and pdfium without V8/XFA; `LICENSES.md` and SUC 3.0 terms remain | `parser/design.md` §9.2, §11, §12, §19; postponed P2 | P0 | source | open |
-| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | open |
 | 111 | Skatteverket test personnummer/samordningsnummer data and SCB name statistics (gazetteer). **Test-number part done (P1a items 5/6, PR #139, 2026-10-31):** the fixtures come from Skatteverket's open datasets "Testpersonnummer" and "Testsamordningsnummer", CC0 1.0, used only in tests as the datasets require (source recorded in `tests/fixtures/pii/README.md`); other PII test values are generated from a fixed seed. **SCB part P2** with the gazetteer; details in `archive/p1/results-a.md` | `ingestion-worker/design-processing.md` §9.3, §21; postponed P2 | P1 | source | open |
 
-## Performance and scale
+### Performance and scale
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
+| 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `archive/passes/performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P0 (checklist #22, weakness review §5) | measure | open |
 | 114 | The chosen S3 server (municipal S3 service or SeaweedFS) passes the `IBlobStore` contract test with `AWSSDK.S3` (`WHEN_REQUIRED` checksums, path style, `UseChunkEncoding`/`DisablePayloadSigning`, `If-None-Match: *`, range GET, multipart) | `archive/passes/performance-pass.md` §3.13; postponed S2 | P1 | test | open |
 | 115 | `AWSSDK.S3` version at pin time (7-day rule; 4.0.104.6 read in the pass) and its `AWSSDK.Core` | `archive/passes/performance-pass.md` §3.13; `platform/repo-and-deployment.md` §2.2; postponed V1 | P1 | source | open |
 | 116 | Licence or service terms of the chosen object store for the municipality (SeaweedFS Apache-2.0, or the municipal S3 service's terms; MinIO excluded) | `archive/passes/performance-pass.md` §3.13; postponed S2, P2 | P2 | ask (legal) | open |
@@ -193,13 +278,9 @@ source, release notes or documentation at the pinned version), **measure** (benc
 | 119 | Npgsql binary `COPY` into `Chunks` with `Vector` and the generated `SearchVector`; HNSW insert cost at 10M chunks (extends #21). **Open (measurement); writing path chosen (P1a item 9, PR #108, 2026-10-31):** `unnest` with a text-to-`vector` cast, not binary `COPY` (#21); `SearchVector` is generated from `SearchText` on insert. The 10M-chunk insert cost remains | `archive/passes/performance-pass.md` §3.1, §4; `ingestion-worker/design-engine.md` §14 | P1/P2 | test + measure | open |
 | 120 | `NOTIFY` lock waits at ≈ 85 notifying commits/s with and without the debounce | `archive/passes/performance-pass.md` §3.4; `platform/data-model.md` §4.3 | P2 (scale test) | measure | open |
 | 121 | PgBouncer (1.24.1 trixie / 1.26 PGDG) with Npgsql 10 auto-prepare, `No Reset On Close`, TLS on both sides, SCRAM `auth_query` | `archive/passes/performance-pass.md` §3.1 | P3 (by trigger) | test | open |
-| 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `archive/passes/performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test | open |
-| 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `archive/passes/performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P0 (checklist #22, weakness review §5) | measure | open |
 | 126 | uvicorn client-certificate verification for the optional multi-endpoint parser mode (`PARSER_TLS_CLIENT_CA`) | `archive/passes/performance-pass.md` §3.8; `parser/design.md` §13.1 | P3 | test | open |
-| 140 | `rag-api` pool 12 with `Retrieval:MaxConcurrentSearches` 4 = ⌊(pool − 3) ÷ 2⌋ (each search may hold 2 connections while K and V overlap); admin 5, worker 10, `max_connections` 100: pool waits and 503s at 20 msg/s next to the chat writer and the stats flush. **Partly done (P0, PR #7, 2026-10-30):** connection caps hold (the 27th api connection is refused); pool waits at 20 msg/s remain for the R1 test (P1) | `archive/passes/simplification-pass.md` §9; `archive/passes/performance-pass.md` §3.1; `knowledge-api/design.md` §6.6, §20; `platform/data-model.md` §1.1, §14 | P0 (measure), P1 (R1) | measure | open |
-| 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version. **Test part done (P1a item 3, PR #93, 2026-10-31):** the `AssistantVersions` outbox triggers skip drafts (`WHEN … <> 'draft'`), so a draft save or a draft delete leaves `ConfigVersion` untouched; a publish in one transaction bumps it once; creating or discarding a draft bumps once through `Assistants.DraftVersionId`. The snapshot build time and memory with 300 versions remain (api config snapshot, P1 item 15); details in `archive/p1/results-b.md` | `platform/data-model.md` §5, §14; `archive/passes/simplification-pass.md` §15 | P1 | measure + test | open |
 
-## umea.se and site profiles
+### umea.se and site profiles
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
@@ -207,5 +288,3 @@ source, release notes or documentation at the pinned version), **measure** (benc
 | 158 | Sitevision fingerprint and the preset's session parameters (`sv.*` query parameters) on two or three other Sitevision municipal sites. **umea.se part done (P1a item 8, PR #104, 2026-10-31):** the fingerprint holds on all 20 pages; parameters seen `sv.target`, `sv.12.<portlet>.route`, `sv.url`, `state=create`, `open.12.<portlet>=true`; the preset drops `sv.*` and `open.*` (a trailing `*` in `ignoreQueryParams` is a prefix), the umea.se profile adds `state`, `profiling`, `contactPage`, `contactUserId`, `addToCart`; the node-id identity rule holds on three pages by equal `OutputHash`. **Other Sitevision sites open** (live block); details in `archive/p1/results-a.md` | `ingestion-worker/design-connectors.md` §22 | P1 | test | open |
 | 159 | Site-profile re-learn thresholds (empty-root rate, boilerplate share, text-yield change) on the umea.se corpus | `ingestion-worker/design-connectors.md` §22 | P2 (weakness review §1) | measure | open |
 | 160 | The worker's preview returns site-profile before/after text for a host without a profile within the 2-minute preview deadline | `admin/design.md` §15 | P2 (weakness review §1) | test | open |
-| 170 | umea.se `lastmod` sample (weakness review §3): 500 random sitemap URLs fetched, their noise-normalised content hashes recorded, re-fetched over several weeks and compared with `lastmod` (a content change without a newer `lastmod` counts against it); the site profile's `lastmodReliable` is set by hand only from this recorded result (passes when at most 2 % of the sampled URLs, re-fetched at least 7 days apart, changed their main content without a newer `lastmod`); until then the umea.se source runs full traversals without the `lastmod` skip **Before a host is marked reliable**: #435 (the reliable `lastmod` and HTTP `Last-Modified` never reach production chunk dates). | `ingestion-worker/design-connectors.md` §5.4, §5.6, §22 | P1 | measure | open |
-| 179 | Personal-data dry run on the **full** umea.se crawl before the pilot (only Kommun och politik has run: 43 pages reported, none with a personnummer); with `piiMode: report` a single e-mail outside `PiiOwnDomains` no longer holds a `public` document, so this measures the report's size and noise (added 2026-11-01, weakness review, lower-ranked finding 3) | `ingestion-worker/design-processing.md` §9.5 | P1b (live block) | measure | open |
