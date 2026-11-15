@@ -215,6 +215,13 @@ main session needs:
 - **Briefing implementors:** say which facts are assumptions. Two of the main session's own brief statements were wrong
   in session 40 ("a new database has no settings row"; the first "declared deployment" rule) and came back as built.
 
+- **A slow test project: compare one process with two before adding collections** (session 41, #775).
+  `Ume.Rag.AdminApi.Tests` took the same 4 minutes with four and with eight database collections; a class took 29 s
+  alone and 66 s beside three others; two processes side by side took 148 s. The collections of one process wait for
+  one another (not CPU, thread pool, `fsync` or GC), so CI runs the project as five processes
+  (`scripts/ci/backend-tests.sh`). Measure with the test executable itself: `-xml <file>` gives every test's time,
+  `-class`/`-class-` pick the classes; `UME_RAG_TEST_POSTGRES_TMPFS=1` doesn't start with the `:ci` Postgres image.
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update

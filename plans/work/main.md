@@ -95,7 +95,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   setup code from rag-admin's log; a test sign-in before saving, re-opened only with host access; the deployment's
   value wins; wizard values in the database, secrets encrypted; host names under one `UME_DOMAIN`; Open WebUI's wrapper
   fetches its sign-in settings; the crawler's ranges stay deploy-time; reload in place.
-- **Waits on:** nothing (agreed 2026-11-15); S8 waits on the gateway, and its issues WG1–WG4 on the user's word.
+- **Waits on:** stage 2 (S8's code) waits on the gateway's releases of thekim1/llmgateway#98–#100; stage 1 on nothing.
 - **Done when:** `stack.env.example` has no secret and 5 CHANGE values (stage 1), then 1 (stage 2); the release's
   boot test passes with no sign-in value set and `e2e.yml` passes through the wizard.
 - **Reviewed** 2026-11-15 by an independent agent; the findings are worked in (proposal §10).
@@ -109,8 +109,12 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   run in the real pinned image). S6 merged (#772: no defaults that lock fields, `stack.env.example` at 5 CHANGE
   values and no secret, the boot test through the wizard's API, the operators' docs). The UI follow-up merged (#773:
   the wizard's Open WebUI step, run end to end in a browser, and Home's reminder before a secret expires). S7 merged
-  (#774: the browser test, green in both phases of a manual `e2e.yml` run, 43762339453). **Stage 1 is built.** **Open:** the
-  next release dry run must show S6's boot-test assertions and the wrapper's TLS path to rag-api; the Compose host
+  (#774: the browser test, green in both phases of a manual `e2e.yml` run, 43762339453). **Stage 1 is built and shown** (session 41): the release dry run
+  from `main` is green ([43763822654](https://github.com/thekim1/ume-rag-platform/actions/runs/43763822654)), with
+  S6's boot-test assertions and the wrapper starting Open WebUI with sign-in fetched from the real rag-api over TLS.
+  **S8, the gateway's issues, are filed** (user, 2026-11-15): thekim1/llmgateway#98 (WG1), #99 (WG2), #100 (WG3),
+  #101 (WG4, optional). **Open:** Ume.Rag's side of each when the gateway releases it (the context's `oidc_authority`
+  as the wizard's default, `UME_DOMAIN` for all five names, `stack.env.example` at 1 CHANGE value); the Compose host
   firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up); S8 (the
   gateway, WG1–WG4, on the user's word). Stream b
   was told on #759.

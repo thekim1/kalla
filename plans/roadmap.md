@@ -73,8 +73,12 @@ Each becomes a queue item when the main session picks it up.
   public IT guides (2026-11-15). U1 is the largest loss: 18 % of the text is inside screenshots (19–76 % in
   step-by-step guides), none of it kept. U5 and U7 cost little. The same script (`scripts/upload-gaps/measure.py`)
   runs on DoIT's files at T6.
-- **CI:** one `WebApplicationFactory` per class in `Ume.Rag.AdminApi.Tests` (still `backend`'s long pole, #580 note to
-  stream b); re-measure queue waits with the four extra test databases before deciding the runner layout.
+- **CI:** `backend` takes 4 min 53 s on a pull request (was 7 min 40 s) since #775: `Ume.Rag.AdminApi.Tests` runs as
+  five processes, and a pull request with only admin UI or browser-test changes skips the job. Left: what the test
+  collections of one process wait for (not CPU, thread pool, disk or GC; a profiler would say), and one
+  `WebApplicationFactory` per class (#580 note to stream b).
+- **Setup wizard** (`work/main.md` M-20): stage 1 is on `main`, shown by a release dry run, unreleased (a deployer
+  types 5 values and no secret). Stage 2 (1 value) waits on the gateway: thekim1/llmgateway#98–#101.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
   only what a process can't start without; C0–C10 and C12 merged (C7 and C12 on the gateway's v0.10.2); C11 in review (#740); C13 left.
