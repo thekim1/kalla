@@ -106,9 +106,12 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   complete, re-open, events 6008–6012; an independent security review's findings fixed before the merge, proposal §10).
   S4 merged (#769: the wizard's pages; run end to end in a browser against the local Keycloak; #770 fixed a
   race in `complete` that made a test flaky). S5 merged (#771: Open WebUI's settings, the back-channel test, rag-api's internal route, the start wrapper,
-  which was run in the real pinned image). **In work, in parallel:** the UI follow-up (the wizard's Open WebUI step;
-  the Home reminder before a secret expires, with `GET /api/overview`'s `secretExpiry`) and S6 (deploy files without
-  defaults that lock fields, `stack.env.example` at 5 CHANGE values, the boot test through the wizard's API, the
-  operators' docs). Then S7 (the browser test) and S8 (the gateway). Stream b
+  run in the real pinned image). S6 merged (#772: no defaults that lock fields, `stack.env.example` at 5 CHANGE
+  values and no secret, the boot test through the wizard's API, the operators' docs). The UI follow-up merged (#773:
+  the wizard's Open WebUI step, run end to end in a browser, and Home's reminder before a secret expires). **In
+  work:** S7 (the browser test of the wizard in `e2e.yml`, on its own stack with `Setup:Try`). **Open after S7:** the
+  next release dry run must show S6's boot-test assertions and the wrapper's TLS path to rag-api; the Compose host
+  firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up); S8 (the
+  gateway, WG1–WG4, on the user's word). Stream b
   was told on #759.
 
