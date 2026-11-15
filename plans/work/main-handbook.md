@@ -97,9 +97,11 @@ Development and CI gotchas are in [`docs/local-development.md`](../../docs/local
 [`docs/ci-runner.md`](../../docs/ci-runner.md) (*Working with the workflows*), where stream agents read them too. What only the
 main session needs:
 
-- **Stacked PRs:** merging the base PR with `--delete-branch` *closed* the stacked PR (#579) instead of retargeting
-  it. Retarget first (`gh pr edit <n> --base main`), then merge the base. To recover, push the old base sha back to its
-  branch, reopen, retarget.
+- **Stacked PRs:** merging the base PR with `--delete-branch` *closes* the stacked PR instead of retargeting it (#579,
+  again #732 in session 38). **Before every merge, run `gh pr list --base <branch-being-merged>`**; retarget each hit
+  first (`gh pr edit <n> --base main`). To recover, push the old base sha back to its branch, reopen, retarget, or open
+  a replacement PR from the same branch (#740). Better: branch dependent work from the other branch but target `main`,
+  and rebase it after the first one is squash-merged (#712 on #738).
 - **After a GitHub outage** runs can sit `queued` with jobs that have a start time but no runner. Cancel and re-run
   them (the user allows cancelling stuck CI).
 - **Check a watcher's exit code before merging:** `gh run watch … --exit-status; echo exit=$?` printed `exit=1` and
