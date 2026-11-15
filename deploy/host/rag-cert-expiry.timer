@@ -1,0 +1,11 @@
+[Unit]
+Description=Ume Rag: check the internal certificates' expiry daily
+Documentation=file:@DEPLOY_DIR@/host/README.md
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -536,6 +536,25 @@ jobs:
         # owner and mode, is unchanged by the second run; the gateway credential keys follow the variable, else the
         # manifest's file.
         run: bash deploy/tests/portainer-rerun.sh
+      - name: Open WebUI's settings match in Compose and the Portainer stack
+        # #707: open-webui (compose.openwebui.yaml) and rag-openwebui (the generated compose.portainer.yaml) have the same
+        # environment keys and values, apart from the deployment-specific ones the script lists.
+        run: bash deploy/tests/openwebui-parity.sh
+      - name: The certificate expiry check warns 60 days ahead
+        # #705: deploy/host/cert-expiry.sh (rag-cert-expiry.timer) passes on fresh certificates, writes certs.prom, and
+        # fails naming the certificate that expires within 60 days.
+        run: |
+          c="$RUNNER_TEMP/cert-expiry"; mkdir -p "$c/postgres"
+          cert() { openssl req -x509 -newkey rsa:2048 -nodes -keyout "$c/$1.key" -out "$c/$1.$2" -days "$3" -subj /CN=ci >/dev/null 2>&1; }
+          cert ca pem 3650; cert postgres/postgres crt 825
+          bash deploy/host/cert-expiry.sh --certs-dir "$c" --state-dir "$c/state"
+          grep -q '^rag_cert_expiry_timestamp_seconds{file="postgres/postgres.crt"} [0-9]*$' "$c/state/certs.prom"
+          cert postgres/postgres crt 30
+          if out="$(bash deploy/host/cert-expiry.sh --certs-dir "$c" --state-dir "$c/state")"; then
+            echo "a certificate 30 days from expiry passed"; exit 1
+          fi
+          echo "$out"
+          grep -q '^warning: postgres/postgres.crt expires .* --renew-certs' <<< "$out"
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh deploy/portainer/*.sh deploy/kubernetes/*.sh
       - name: Host units pass systemd-analyze verify

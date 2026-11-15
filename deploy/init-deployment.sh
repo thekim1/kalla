@@ -680,6 +680,18 @@ clamav_note=""
 Malware scan: off (--clamav off), so no rag-clamav runs and files are stored without a malware scan; the admin UI
 marks them Not scanned for malware. Turning the scan on later (--clamav on) does not scan the files stored meanwhile
 (production-setup.md, Malware scan)."
+# Re-issued certificates (#705): `up -d` recreates no container whose configuration is unchanged; say what to restart.
+renew_note=""
+if [ "$renew_ca" = 1 ]; then
+  renew_note="
+Certificates: a new internal CA and every certificate it issued. The services read the CA only at start: restart the
+stack (docker compose --env-file deploy/.env up -d --force-recreate)."
+elif [ "$renew" = 1 ]; then
+  renew_note="
+Certificates: re-issued. postgres and rag-parser read theirs only at start: docker compose --env-file deploy/.env
+restart postgres rag-parser (Kestrel watches rag-api's, rag-admin's and rag-worker's; restart them too if a client still
+sees the old certificate)"
+fi
 owui_note=""
 if [ -n "$owui_host" ]; then
   owui_todo=""
@@ -713,7 +725,8 @@ $own_step
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
   2. As root, before the first up: $here/host/install.sh (the ingestion slice the containers' cgroup_parent
-     names, the firewall, and the backup, upload copy and restart-unhealthy timers; deploy/host/README.md).
+     names, the firewall, and the backup, upload copy, restart-unhealthy and certificate-expiry timers;
+     deploy/host/README.md).
   3. docker compose --env-file deploy/.env up -d --wait
   4. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
      Once per new database or repository (safe to repeat): WAL archiving fails until the stanza exists.$backup_note
@@ -721,7 +734,8 @@ $own_step
      ($secrets/keys/rag-blob-internal and $secrets/pgbackrest/cipher-pass). Back up $secrets/.pepper and
      $certs/data-protection.pfx separately from database backups: without them a restored database is unusable.
   6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
+     (rag-cert-expiry.timer of step 2 warns 60 days ahead).
   7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
-$proxy_note$rolling_note$gateway_note$clamav_note$render_note$owui_note
+$renew_note$proxy_note$rolling_note$gateway_note$clamav_note$render_note$owui_note
 EOF

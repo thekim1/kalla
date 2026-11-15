@@ -5,9 +5,10 @@
 # the api's keys, the worker's crawl key pepper, the renderer's WebSocket path and the blob master key in the rag-certs
 # and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent: existing secrets are never
 # overwritten (a new pepper, key or Data Protection certificate would break existing data); service certificates are
-# re-issued when they expire within 30 days or their host names change. Files that follow a variable (the gateway
-# credential keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written again on every
-# start, and removed when the variable is empty.
+# re-issued when they expire within 30 days or their host names change (the checklist at the end names the services to
+# restart, and every certificate that expires within 60 days). Files that follow a variable (the gateway credential
+# keys, also taken from the gateway's manifest secrets; the OIDC client secret) are written again on every start, and
+# removed when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
 # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -28,13 +29,16 @@ if [ ! -f "$C/ca.pem" ]; then
     -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
 fi
 
-# issue DIR SAN-LIST: (re)issue unless a valid certificate for exactly these names, from the current CA, exists
+# issue DIR SAN-LIST: (re)issue unless a valid certificate for exactly these names, from the current CA, exists. A
+# re-issued certificate (not a first one) is listed in $reissued, for the checklist.
+reissued=""
 issue() {
   svc="$1"; san="$2"; dir="$C/$svc"
   if [ -f "$dir/$svc.crt" ] && [ "$(cat "$dir/.san" 2>/dev/null)" = "$san" ] &&
      quiet openssl x509 -checkend 2592000 -noout -in "$dir/$svc.crt" && quiet openssl verify -CAfile "$C/ca.pem" "$dir/$svc.crt"; then
     return
   fi
+  [ ! -f "$dir/$svc.crt" ] || reissued="$reissued $svc"
   echo "rag-bootstrap: issuing certificate for $svc ($san)"
   quiet openssl req -newkey rsa:3072 -nodes -keyout "$dir/$svc.key" -out "/tmp/$svc.csr" -subj "/CN=$svc"
   printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' \
@@ -226,6 +230,20 @@ case "${UME_RAG_API_PUBLIC_URL:-}" in "") ;;
   https://*example.se*|https://*CHANGE*) note "UME_RAG_API_PUBLIC_URL is still an example value" ;;
   https://*) ;; *) note "UME_RAG_API_PUBLIC_URL must be the https URL users reach rag-api at (citation links use it)" ;; esac
 example "${UME_RAG_OIDC_CLIENT_SECRET:-}" && note "UME_RAG_OIDC_CLIENT_SECRET: sign-in to Ume.Rag's admin fails without it (restart rag-admin after setting it)"
+# Certificates (#705): rag-postgres and rag-parser read theirs only at start, and a stack update recreates neither when
+# its configuration is unchanged (Kestrel watches rag-api's, rag-admin's and rag-worker's files). Each certificate that expires within
+# 60 days is named on every run; the service certificates are re-issued below 30 days, the CA never.
+restart=""
+for svc in $reissued; do case "$svc" in postgres|parser) restart="$restart rag-$svc" ;; esac; done
+[ -z "$restart" ] || note "restart$restart (Containers, select, Restart): a re-issued certificate takes effect there only after a restart"
+for crt in "$C/ca.pem" "$C"/*/*.crt; do
+  quiet openssl x509 -checkend 5184000 -noout -in "$crt" && continue
+  end="$(openssl x509 -enddate -noout -in "$crt" | cut -d= -f2)"
+  case "$crt" in
+    "$C/ca.pem") note "RAG's internal CA expires $end, within 60 days: replace it (docs/portainer.md, Internal certificates)" ;;
+    *) note "the certificate of rag-$(basename "$(dirname "$crt")") expires $end, within 60 days: update the stack once fewer than 30 days remain, and rag-bootstrap re-issues it" ;;
+  esac
+done
 # The TLS proxy's host names (collected while its nginx.conf was written, above).
 old_ifs="$IFS"; IFS='|'
 for item in $proxy_todo; do [ -z "$item" ] || note "$item"; done

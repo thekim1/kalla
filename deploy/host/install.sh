@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Installs the host units of deploy/host/ (plans/platform/repo-and-deployment.md §6.1, §6.2, §7.4; README.md here):
-# the ingestion slice, the firewall, and the backup, backup-status, upload-copy and restart-unhealthy timers. Each unit
-# gets this deployment's directory in place of @DEPLOY_DIR@. Safe to re-run (after an upgrade or a change of
-# UME_RAG_HOST_MEMORY). Run it before the first `docker compose up`: the ingestion containers need the slice.
+# the ingestion slice, the firewall, and the backup, backup-status, upload-copy, restart-unhealthy and certificate-expiry
+# timers. Each unit gets this deployment's directory in place of @DEPLOY_DIR@. Safe to re-run (after an upgrade or a
+# change of UME_RAG_HOST_MEMORY). Run it before the first `docker compose up`: the ingestion containers need the slice.
 #
 #   sudo deploy/host/install.sh [--host-memory 16|24] [--no-enable]
 #
@@ -44,7 +44,7 @@ mkdir -p "$unit_dir"
 
 units=(rag-ingestion.slice rag-firewall.service rag-firewall.timer rag-backup.service rag-backup.timer
   rag-backup-status.service rag-backup-status.timer rag-upload-backup.service rag-upload-backup.timer
-  rag-restart-unhealthy.service rag-restart-unhealthy.timer)
+  rag-restart-unhealthy.service rag-restart-unhealthy.timer rag-cert-expiry.service rag-cert-expiry.timer)
 for u in "${units[@]}"; do
   sed "s|@DEPLOY_DIR@|$deploy_dir|g" "$here/$u" > "$unit_dir/$u.tmp"
   chmod 0644 "$unit_dir/$u.tmp"
@@ -69,7 +69,7 @@ if [ "$(docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null)
 zone (to-verify #90). Set \"exec-opts\": [\"native.cgroupdriver=systemd\"] in /etc/docker/daemon.json." >&2
 fi
 [ "$enable" = 1 ] || exit 0
-timers=(rag-firewall.timer rag-backup.timer rag-backup-status.timer rag-restart-unhealthy.timer)
+timers=(rag-firewall.timer rag-backup.timer rag-backup-status.timer rag-restart-unhealthy.timer rag-cert-expiry.timer)
 if [ -n "$(env_value UME_RAG_UPLOAD_BACKUP_DIR)" ]; then
   timers+=(rag-upload-backup.timer)
 else

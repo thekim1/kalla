@@ -536,10 +536,12 @@ the gateway's own, unchanged.
 **Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
 key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are never regenerated, service
-certificates are re-issued when they expire within 30 days or the host names change. The secrets that follow a
-variable (the gateway credential keys, the OIDC client secret) are written again on every deploy,
-and removed when the variable is emptied; they live in the stack's environment, so restrict who can view it. The
-services read them at start: after changing one, restart the service that uses it.
+certificates are re-issued when they expire within 30 days or the host names change (its checklist then says which
+services to restart, and names every certificate within 60 days of expiry:
+[portainer.md](portainer.md#internal-certificates)). The secrets that follow a variable (the gateway credential keys,
+the OIDC client secret) are written again on every deploy, and removed when the variable is emptied; they live in the
+stack's environment, so restrict who can view it. The services read them at start: after changing one, restart the
+service that uses it.
 
 **Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
 firewall 8543 and 9543 to your proxy yourself), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
@@ -768,9 +770,13 @@ badge (the gateway still refuses the calls).
 
 ## Secrets and certificates
 
-- **Internal certificates** last 825 days. Bring `ca.key` back to `deploy/certs/`, run
-  `sudo ./deploy/init-deployment.sh --renew-certs`, restart the stack, and move `ca.key` off the host again.
-  `--renew-ca` replaces the internal CA and re-issues its certificates.
+- **Internal certificates** last 825 days. `rag-cert-expiry.timer` (deploy/host/README.md) fails and names the
+  certificate from 60 days before it expires (`systemctl --failed`, `journalctl -u rag-cert-expiry`, or
+  `rag_cert_expiry_timestamp_seconds` in `certs.prom`). Bring `ca.key` back to `deploy/certs/`, run
+  `sudo ./deploy/init-deployment.sh --renew-certs`, restart `postgres` and `rag-parser` (they read their certificates
+  only at start; the script's closing note says so), and move `ca.key` off the host again. `--renew-ca` replaces the
+  internal CA and re-issues its certificates: then restart the whole stack. Portainer:
+  [portainer.md](portainer.md#internal-certificates).
 - **The Data Protection certificate and the pepper** are never regenerated: a new one makes the stored data
   unreadable (protected values, every key hash).
 - **The blob master key and the pgBackRest passphrase** are generated once and escrowed. There is no rotation

@@ -289,8 +289,8 @@ systemctl list-timers 'rag-*'
 sudo iptables -S UME-RAG-INPUT | head
 ```
 
-Expected: `rag-ingestion.slice`, `rag-firewall.service` and its timer, and the backup, backup-status, upload-copy and
-restart-unhealthy timers; `UME-RAG-INPUT` holds the gateway `RETURN` rules before the rejects. The firewall runs every
+Expected: `rag-ingestion.slice`, `rag-firewall.service` and its timer, and the backup, backup-status, upload-copy,
+restart-unhealthy and certificate-expiry timers; `UME-RAG-INPUT` holds the gateway `RETURN` rules before the rejects. The firewall runs every
 15 minutes and re-resolves host names.
 
 **8.2 Start**
