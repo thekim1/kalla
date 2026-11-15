@@ -105,6 +105,9 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
 
 ### Fixed
 
+- A publish refused for want of an AI gateway key now says so and where to choose one, instead of reading like a cost
+  note; the audit log's object links and *Only this object*, and a knowledge base's *Used by* links, have a 24 px target
+  (WCAG 2.5.8). The browser tests run again on every release candidate (#747).
 - A client's ceiling or history change re-checks the assistants it offers, and a published public assistant with
   general knowledge no longer blocks its audience and client saves (#700, #738).
 - Prompt texts save with the version they loaded, so another admin's concurrent change answers 409 instead of being
