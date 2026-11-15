@@ -17,11 +17,10 @@ export interface Operation {
   path: string
 }
 
+/** A row's non-CRUD action: one whose request has fields opens the form, any other is sent at once. */
 export interface RowAction extends Operation {
   id: string
   label: string
-  /** Asked before the call; actions whose request has fields open the form instead. */
-  confirm?: string
 }
 
 export interface ResourceColumn {

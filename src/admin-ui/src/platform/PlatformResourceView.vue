@@ -4,7 +4,6 @@ import { api } from '@/api'
 import { request } from '@/api/client'
 import type { GatewayModel } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -51,7 +50,6 @@ const formKey = ref(0)
 const opening = ref(false)
 const openError = ref<unknown>(null)
 const secret = ref<string | null>(null)
-const confirming = ref<RowAction | null>(null)
 
 const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
 const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : []))
@@ -146,10 +144,7 @@ async function runAction(action: RowAction): Promise<void> {
   const doc = await loadOpenApi()
   if (fieldsOf(doc, schemaOf(doc, action, urlOf(action.path, row, r.key))).length > 0) {
     await show(action.label, action.label, action, row, () => ({}))
-  } else if (action.confirm && confirming.value !== action) {
-    confirming.value = action
   } else {
-    confirming.value = null
     try {
       saved(await request(action.method.toUpperCase() as 'POST' | 'PUT', urlOf(action.path, row, r.key)))
     } catch (e) {
@@ -244,9 +239,5 @@ watch(() => props.resource, () => {
         />
       </template>
     </UiDrawer>
-    <ConfirmDialog
-      v-if="confirming" :open="!!confirming" :title="confirming.label" :consequence="confirming.confirm" :confirm-label="confirming.label" danger
-      @confirm="runAction(confirming)" @update:open="confirming = null"
-    />
   </template>
 </template>
