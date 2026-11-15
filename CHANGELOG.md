@@ -5,8 +5,33 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.6.0 (2026-11-15)
+
+A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys,
+and the organisation's name, the Integration API's address, the residency ceiling, role groups, the embedding profile
+and Open WebUI's client and feedback key come from the gateway, the admin UI or the stack itself. Also: apps and keys
+connected in one go (M-16), the admin UI review (M-19), a stricter general-knowledge level per chat request (#726),
+Kubernetes NetworkPolicies on by default, and the fixes of the 2026-11-14 review (#694). Pins the gateway's v0.10.2.
+**Rolling update: no** from 0.5.x (`RemoveWorkerConcurrency`: stop the old rag-admin before `rag-migrate`); some steps
+come **before** the update (rag-api's and rag-admin's keys get `OnPrem` and `Eu`). See `docs/upgrade-guide.md`.
+
 ### Changed
 
+- **The gateway creates Ume.Rag's credential keys** (M-17 C7): the Portainer stack pins the gateway's v0.10.2, whose
+  migrations create the integration `Ume.Rag` and the keys `rag-api`, `rag-admin` and `rag-worker` from
+  `UME_INTEGRATION_MANIFEST` (create-only, secrets on their own volume); rag-bootstrap gives each service its key, and a
+  set `UME_RAG_*_GATEWAY_KEY` still wins. rag-admin joins the gateway's `edge` network for the Integration API (#727).
+- **`admin-console` is seeded in every deployment** (#712): the migration service creates the test panel's client (or
+  adopts a hand-made one) as managed by the deployment; managed clients are unique per kind and name, their name and
+  keys can't be changed in the admin UI.
+- **Kubernetes NetworkPolicies are on by default** (#706): default-deny in `base` with every flow the stack needs; the
+  worker's and freshclam's 80/443 egress reaches public addresses only. The Ingress controller's rule is the component
+  `components/ingress-controller`, and a gateway at a private address needs an overlay rule (upgrade guide).
+- **Admin config writes call the gateway before the config lock** (#696): model lists are fetched once per request,
+  outside the lock, with a 5 s timeout, so a slow gateway no longer blocks every other admin save; key reveal skips the
+  lock.
+- The worker reads each embedding answer in one pass (#703), prices estimated calls from a one-minute cache (#711),
+  and the Costs page asks for monthly figures and keeps the chosen granularity for the CSV (#710).
 - **Clients and keys have a page of their own** (*Platform → Clients*): the type picked from cards, only that type's
   fields, the first key made with the client (for Open WebUI with the two stack lines to copy), and the client's keys and
   assistants in its drawer; keys get pickers instead of JSON. `POST /api/clients` takes `firstKey` and answers
@@ -34,6 +59,15 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ### Added
 
+- **A chat request may ask for a stricter general-knowledge level** (`ume.general_knowledge`, #726): `off`,
+  `supplement`, `fallback` or `open`; the turn runs at the stricter of it and the assistant's own, so a request never
+  loosens it. The admin test panel has the same level picker.
+- **Internal certificate expiry is watched** (#705): rag-bootstrap's checklist names certificates within 60 days of
+  expiry and the services to restart after a re-issue; Compose hosts get a daily `rag-cert-expiry` timer with a
+  `certs.prom` metric; `--renew-certs` ends with the restart command.
+- CI: the Portainer stack's rag-bootstrap is run twice and must keep every secret, owner and mode (#697), Open WebUI's
+  settings must match between Compose and Portainer (#707), and `deploy/portainer` and `deploy/kubernetes` get
+  shellcheck.
 - **Apps and keys: connect an app in one go** (M-16): *Add app* picks its assistants and ends in *How to connect*; the
   app's drawer sets its assistants and lists its keys with their last use (rag-api records a key's last use at most every
   five minutes per key); a new key asks only for its name, the rest under *Restrictions* (#668–#672).
@@ -71,6 +105,19 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
 
 ### Fixed
 
+- A client's ceiling or history change re-checks the assistants it offers, and a published public assistant with
+  general knowledge no longer blocks its audience and client saves (#700, #738).
+- Prompt texts save with the version they loaded, so another admin's concurrent change answers 409 instead of being
+  overwritten (#708). The Files list keeps every loaded row and the selection when it refreshes (#709); a slower,
+  older answer no longer overwrites a newer one on any page (#710).
+- The client drawers read every assistant and knowledge base instead of the first 200, and fetch them once (#711);
+  the upload list shows counts and at most 50 rows (#712).
+- A key that allows a model the gateway runs only at another residency is now explained as such, naming the knowledge
+  base's embedding model (#720).
+- `init-deployment.sh --renew-certs` reads `deploy/.env` instead of running it, and a bad proxy host name in the
+  Portainer stack leaves that block out instead of stopping rag-bootstrap (#711).
+- An embedding profile that comes into use during a save answers `concurrent_change`; `ChunkSets` has an index on its
+  profile (#712).
 - A non-streamed answer (API `stream:false`, the admin test panel) is bounded by `Chat:MaxAnswerDurationSeconds`
   instead of the 15 s headers timeout, which cut longer answers off with `503 upstream_unavailable` (#695, #713).
 - The Integration API client no longer retries refused calls and has a 10 s timeout, so a failed read-back answers
@@ -82,6 +129,11 @@ for each): `UME_RAG_OPENWEBUI_API_KEY` and `UME_RAG_OPENWEBUI_CLIENT_ID` (C4); `
 
 ### Security
 
+- LibreOffice's output passes the same zip-bomb check as an upload, and LibreOffice runs under 3 GiB of address
+  space and a 512 MiB file limit (#702).
+- rag-admin sends its credential key to the Integration API only over `https` (C11, #740); shown-once key secrets are
+  cleared when their drawer closes (#711); a gateway admin link is made only from an `http(s)` address (#712); the
+  deployment's own keys can't be edited (#712).
 - Every admin request type with validation attributes is validated: the test panel's question and history lengths,
   `topK`, key scopes (#699, #714).
 - Open WebUI's message-id headers are taken only as UUIDs, a reused id no longer breaks the conversation writer, and the

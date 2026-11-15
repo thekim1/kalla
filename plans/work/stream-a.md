@@ -28,19 +28,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** A-20.
 - **Read:** #507; AGENTS.md "7-day package rule".
 
-### [x] A-41 The Integration API read-back on the platform's Gateway view; the cost runbook after #642 (#654)
-- **Do:** the platform's *Gateway models* view (A-38) shows the read-back from `GET /api/organisation/sync`'s
-  `integration` (`IntegrationReadback` in `src/admin-ui/src/api/types.ts`): not configured, working, or the last
-  refusal's reason (`401`, `403` scope missing, `429`, a failure), as admin §4.5 and §8.6 have the *Gateway* page do;
-  the texts in `labels.ts`/`messages.ts` (stream b's paths: a `main-session/` branch, or ask stream b). The cost
-  runbook's "as built for now" lines (A-32, #641) follow #653: the shared-key note shows only when more than one
-  assistant or knowledge base holds the key, and the read-back's reason is on the Gateway view.
-- **Paths:** `src/admin-ui/src/platform/**`, `docs/runbook.md`; `src/admin-ui/src/utils/labels.ts`, `messages.ts`.
-- **Done when:** the three states show on the view (a Vitest spec each), checked in the browser on the local stack;
-  the runbook matches; `verify.yml` green.
-- **Waits on:** nothing (#653 is merged).
-- **Read:** admin §4.5, §8.6; #654; #653's body.
-
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
