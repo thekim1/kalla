@@ -769,7 +769,7 @@ missing one stops the run. The script's header (`--help`) is the option list and
 | `--domain DOMAIN` | `UME_DOMAIN` | the host names default to `rag.`, `rag-admin.` and `chat.` under it |
 | `--api-host HOST`, `--admin-host HOST` | `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` | a name of its own instead; without the domain, rag-admin's name defaults to rag-api's. The names go into the two services' certificates |
 | `--gateway-url URL` | `UME_RAG_GATEWAY_URL` | required, an `https://` URL |
-| `--gateway-ca-dir DIR` | `UME_RAG_GATEWAY_CA_DIR` | a directory with the gateway's `ca.pem` (a gateway on this host: its certificate directory); not needed for a gateway with a public certificate |
+| `--gateway-ca-file FILE` | `UME_RAG_GATEWAY_CA_DIR` (`deploy/gateway-ca`) | the gateway's CA certificate (a gateway on this host: `deploy/certs/ca.pem` of its directory), copied alone to `deploy/gateway-ca/ca.pem`; a file that holds a private key is refused, and the gateway's certificate directory, which holds its keys, is never mounted. Not needed for a gateway with a public certificate |
 | `--gateway-secrets-dir DIR` | `UME_RAG_GATEWAY_SECRETS_DIR` | a gateway on the same host: the directory its migration writes a manifest's keys to (`deploy/portainer/integration-manifest.json`), read as `DIR/Ume.Rag/rag-{api,admin,worker}` |
 | `--gateway-credential-key-file SERVICE=FILE` (`api`, `admin`, `worker`) | `UME_RAG_<SERVICE>_GATEWAY_KEY` | a credential key issued by a gateway admin (gateway-changes §5.1); it wins over the manifest's |
 | `--profiles LIST` | `COMPOSE_PROFILES` | `clamav`, `render`, `openwebui`, `proxy`; a first run writes `clamav` (§5.5) |
@@ -781,7 +781,7 @@ missing one stops the run. The script's header (`--help`) is the option list and
 | `--proxy-address LIST` | `UME_RAG_PROXY_SOURCES` | the reverse proxy's IPv4 addresses or CIDRs, which the host firewall alone admits to the published ports (#453) |
 | `--rolling` | adds `compose.rolling.yaml` | second slots on 8544 and 9544 (§7.3) |
 | `--overlays LIST` | `COMPOSE_FILE` exactly | `backup`, `hardened`, `host-24g`, `clamav-conf`, `rolling`; empty: none |
-| `--set NAME=VALUE`, `--set-file NAME=FILE` | any other variable | for example `UME_RAG_CRAWL_ALLOW` (the firewall's input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard`, connectors design §7), `UME_RAG_API_PUBLIC_URL`, the `*_BIND` and `*_PORT` variables, `UME_RAG_TRUST_DIR`, `UME_RAG_PKI_DIR`, `UME_RAG_OIDC_CLIENT_SECRET`; `--set-file` takes the file's first line. `COMPOSE_FILE` and a retired variable (Decisions "Deployment values across releases") are refused |
+| `--set NAME=VALUE`, `--set-file NAME=FILE` | any other variable | an empty value removes the line, except `UME_RAG_INGESTION_SLICE`, whose empty value is kept (a host without the slice); for example `UME_RAG_CRAWL_ALLOW` (the firewall's input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard`, connectors design §7), `UME_RAG_API_PUBLIC_URL`, the `*_BIND` and `*_PORT` variables, `UME_RAG_TRUST_DIR`, `UME_RAG_PKI_DIR`, `UME_RAG_OIDC_CLIENT_SECRET`; `--set-file` takes the file's first line. `COMPOSE_FILE` and a retired variable (Decisions "Deployment values across releases") are refused |
 | `--yes` | – | no questions |
 
 It checks the host names, the two URLs, the profiles, the overlays and the proxy addresses before writing, and the
@@ -821,7 +821,8 @@ cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Securit
   `UME_RAG_PROXY_CERTS_DIR`, mounted into `rag-proxy`. In the Portainer stack the gateway's CA and manifest keys come
   from the gateway's volumes instead.
 - **A checklist** at the end of its log says what is still missing (a gateway key, an example value, a certificate
-  near expiry, a retired variable), then names the setup wizard's address.
+  near expiry, a retired variable), then names the setup wizard's address. Its words follow the form: a Compose host is
+  pointed at `docs/production-setup.md` and `docker compose` commands, the Portainer stack at `docs/portainer.md`.
 
 **Open WebUI's secrets only with the profile `openwebui`** (not every installation has a chat): its user-JWT secret
 (also rag-api's `OpenWebUi__JwtSecret`), its session key, its key for rag-api, the feedback service account's password

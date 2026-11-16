@@ -34,8 +34,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   profile, the 193-line `init-deployment.sh`; the Portainer stack renders as before; booted in dry run 43941252174).
   Also merged: #806 (S9, the deploy part: Open WebUI out of the example's default profiles, nothing of it generated
   without the profile); the design follows the new files (`repo-and-deployment.md` §1, §3, §5 to §10, Decisions
-  "Pilot containers" and "Deployment values across releases"). Open: step 5's operator guides (in work), S9's guides,
-  and S9's admin UI part (#807, stream b's paths).
+  "Pilot containers" and "Deployment values across releases"); #808 (step 5: the operator guides; `--gateway-ca-file`
+  copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
+  form). **S1 is done.** Open: S9's guide part (the first-install paths finish without Open WebUI, one section *Adding
+  Open WebUI*) and its admin UI part (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order; S2, S5, S7
+  wait for the user.
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.

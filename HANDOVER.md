@@ -55,15 +55,22 @@ the queue item is `plans/work/main.md` **M-22**, whose status line says what is 
   sentence (none of the three exists), §5.4's "`compose.host-24g.yaml` may raise them" for the renderer, §6.1's "1 MB
   body limit" (the nginx files give rag-api 2m), §6.4's `connection-budget.sh` and §7.3's `rolling-update.sh --role`
   (P2, not built). History rows that now mislead, left alone: §11 row 14, §12 rows 8, 11 and 15, §14 row 2.
-- **Next:** the operator guides (step 5; stale since #800: `docs/compose-quick-start.md`, `production-setup.md`,
-  `runbook.md`, `network-and-ports.md`, `zero-downtime-updates.md`, `local-development.md`, `test-host.md`,
-  `p1a-local-run.md`), then S9's guide part (the first-install paths finish without Open WebUI, one section *Adding
-  Open WebUI*). Script texts still to fix: `bootstrap.sh`'s header calls itself the Portainer counterpart of
-  `init-deployment.sh`, and its checklist says `docs/portainer.md` and *(Containers, select, Restart)* on a Compose
-  host too.
+- **Merged last: #808 (step 5), so S1 is done.** The operator guides describe the new files (an agent's rewrite
+  against `deploy/`; the main session read the quick start in full). With it: `init-deployment.sh --gateway-ca-file`
+  copies the gateway's CA certificate to `deploy/gateway-ca` (the directory option it replaces would have mounted the
+  gateway's private keys into `rag-bootstrap`), the bootstrap's checklist names the Compose guide and commands on a
+  Compose host, and an empty `UME_RAG_INGESTION_SLICE` survives a re-run. Boot-only run 43949491788 green.
+- **Next:** S9's guide part (`compose-quick-start.md` and `portainer.md` *First deploy* finish without Open WebUI, one
+  section *Adding Open WebUI* for a new and a running installation), then the proposal's order: S4b and S4c, S6, S8.
+- **No way any more, told to the user, no answer yet:** forcing a certificate re-issue before its last 30 days (the
+  old `--renew-certs`), Open WebUI on a VM of its own, a stack without the ingestion services.
+- **Stated in the guides, not verified:** `up -d` runs the exited `rag-bootstrap` again (the smoke test exercised it
+  once), `docker compose create` makes the volumes before a first `up` (*Restoring onto another host*), Docker creates
+  a missing backup directory at the first `up`.
 - **For the user to confirm:** Compose's published ports of rag-api, rag-admin and `rag-proxy` now bind `0.0.0.0` as
   Portainer's (before: loopback; Open WebUI's stays `127.0.0.1`); with
-  `--hardened` the firewall admits only the proxy's addresses. Told on 2026-11-16, no answer yet.
+  `--hardened` the firewall admits only the proxy's addresses. Told on 2026-11-16, no answer yet. Also the user's: S2, whether
+  hardening becomes an optional later step (the quick start still takes `--hardened` as its path).
 - **Not run anywhere:** the hardened overlay on a host (the smoke test boots without it), `compose-rolling-e2e.sh`,
   root's `chown` on an NFS backup share, and the upgrade guide's carry-over of an old Compose installation.
 - **S9, checked in the code so far:** `stack.env.example` presets `COMPOSE_PROFILES=clamav,openwebui`; the proxy's
