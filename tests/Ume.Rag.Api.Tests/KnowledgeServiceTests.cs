@@ -191,6 +191,10 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             ["ConnectionStrings:ragdb"] = Connection(Api), ["Security:KeyPepper"] = KeyPepper, ["Security:CacheKeyPepper"] = new string('c', 32),
             ["Security:DownloadGrantKeys:k1"] = GrantKey, ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Key"] = FakeGatewayFactory.ApiCredentialKey,
             ["BlobStore:Root"] = BlobRoot, ["Rag:Roles"] = "knowledge",
+            // Generous limits (#781, as #584 for the service hosts): the first call through a fresh host on a busy runner can pass
+            // the 2 s default, and the answer is then "search unavailable" instead of the one a test expects. The time-out
+            // itself is tested on the embedder alone.
+            ["Retrieval:AttemptTimeout"] = "00:00:30", ["Retrieval:TotalTimeout"] = "00:00:30",
         })
         {
             web.UseSetting(key, value);
@@ -790,7 +794,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         }
     }
 
-    private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler, QueryEmbeddingOptions? options = null)
+    private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler, QueryEmbeddingOptions? options = null, ILogger<GatewayQueryEmbedder>? logger = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey)]);
@@ -798,7 +802,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         builder.Services.UseGatewayCredentialCeiling();
         var host = builder.Build();
         return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
-            NullLogger<GatewayQueryEmbedder>.Instance), host);
+            logger ?? NullLogger<GatewayQueryEmbedder>.Instance), host);
     }
 
     [Fact]
@@ -948,6 +952,27 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov anslutning", null, Ct));
 
         scripted.Calls.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_failed_call_says_why_in_the_log_without_the_query()
+    {
+        // #781: a time-out, like every other failure of the call, used to leave nothing in the log.
+        using var logs = new CapturingLoggerProvider();
+        using var factory = LoggerFactory.Create(l => l.AddProvider(logs));
+        var hanging = new Scripted(_ => throw new TaskCanceledException("the attempt's limit"));
+        var (embedder, host) = Build(hanging, logger: factory.CreateLogger<GatewayQueryEmbedder>());
+        using var _ = host;
+        using var __ = embedder;
+
+        var failure = await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov anslutning", null, Ct));
+
+        failure.Reason.ShouldBe(RetrievalDegradation.EmbeddingUnavailable);
+        var entry = logs.Entries.Single(e => e.Level == LogLevel.Warning);
+        entry.Message.ShouldContain("embedding_unavailable");
+        entry.Message.ShouldContain("timed out");
+        entry.Message.ShouldContain(nameof(TaskCanceledException));
+        logs.Text.ShouldNotContain("bygglov");
     }
 
     private sealed class Scripted(Func<int, HttpResponseMessage> answer) : HttpMessageHandler

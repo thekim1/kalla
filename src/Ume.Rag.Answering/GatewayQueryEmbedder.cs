@@ -48,7 +48,8 @@ public sealed record QueryEmbedding(ReadOnlyMemory<float> Vector, GatewayCallUsa
 /// a connection failure, a 502/504 (<c>all_providers_failed</c>, with the same ceiling, #390) or a 503 without
 /// <c>Retry-After</c>; after 5 failures in 30 s the circuit skips the call for 15 s,
 /// then one call decides. Every failure is a <see cref="QueryEmbeddingUnavailableException"/> whose reason is the
-/// <c>degraded</c> value (§5.5). The query text is never logged. A call's usage (step <c>query-embed</c>, its input tokens
+/// <c>degraded</c> value (§5.5), and every failed call logs a warning with that reason and what happened (a time-out, the
+/// gateway's status). The query text is never logged. A call's usage (step <c>query-embed</c>, its input tokens
 /// and the gateway's <c>x-ume-cost-usd</c>; chat design §8.3) goes to the request whose miss made the call: a cache hit, or a
 /// request that joined another's call, gets none, so each call is recorded once.
 /// </summary>
@@ -156,11 +157,15 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         {
             // A refusal of the object's key or a failed echo says nothing about the gateway's health (§5.3): this request
             // degrades, the circuit does not count it; a probe that met one leaves the decision to the next request.
+            LogUnavailable(_logger, profile.Name, ex.Reason, ex.Message, ex.InnerException?.GetType().Name ?? "-");
             ReleaseProbe();
             throw;
         }
-        catch (QueryEmbeddingUnavailableException)
+        catch (QueryEmbeddingUnavailableException ex)
         {
+            // Every failed call says why (#781): a time-out or an unexpected answer was silent, and the search then went
+            // keyword-only with nothing in the log to explain it. The message is one of this class's fixed texts.
+            LogUnavailable(_logger, profile.Name, ex.Reason, ex.Message, ex.InnerException?.GetType().Name ?? "-");
             RecordFailure();
             throw;
         }
@@ -347,6 +352,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
 
     [LoggerMessage(LogLevel.Error, "This service holds no gateway key for the ceiling of profile {Profile}")]
     private static partial void LogNoKey(ILogger logger, string profile);
+
+    [LoggerMessage(LogLevel.Warning, "The query embedding of profile {Profile} is unavailable ({Reason}): {Detail} ({Cause})")]
+    private static partial void LogUnavailable(ILogger logger, string profile, string reason, string detail, string cause);
 
     [LoggerMessage(LogLevel.Warning, "Query embedding failed repeatedly; hybrid searches go keyword-only for {Seconds} s")]
     private static partial void LogCircuitOpen(ILogger logger, double seconds);
