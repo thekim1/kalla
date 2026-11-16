@@ -159,8 +159,9 @@ public sealed class GatewayFeatures
 
 /// <summary>
 /// Reads this service's own <c>GET /v1/ume/context</c> with its credential key at start and every
-/// <see cref="GatewayOptions.ContextInterval"/>, with <c>If-None-Match</c>, into <see cref="GatewayFeatures"/> (identity §4.7).
-/// Off without a gateway or a key. A failed read keeps the last features.
+/// <see cref="GatewayOptions.ContextInterval"/>, with <c>If-None-Match</c>, into <see cref="GatewayFeatures"/> (identity §4.7), and
+/// ahead of the interval when a caller asks (<see cref="EnsureFirstReadAsync"/>, <see cref="RefreshAsync"/>). Off without a gateway
+/// or a key. A failed read keeps the last features.
 /// </summary>
 public sealed partial class GatewayContextReader(
     IHttpClientFactory clients, GatewayFeatures features, IOptionsMonitor<GatewayOptions> options, TimeProvider time, ILogger<GatewayContextReader> logger) : BackgroundService
@@ -170,11 +171,15 @@ public sealed partial class GatewayContextReader(
     /// <summary>How often a service without its credential key checks for one (the secret files reload on change).</summary>
     public static readonly TimeSpan KeyWait = TimeSpan.FromSeconds(15);
 
+    /// <summary>The shortest time between two reads asked for ahead of the interval (<see cref="RefreshAsync"/>), per instance.</summary>
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private readonly SemaphoreSlim _reading = new(1, 1);
     private string? _etag;
     private long _lastFirstReadAt = long.MinValue;
+    private long _lastRefreshAt = long.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -242,6 +247,60 @@ public sealed partial class GatewayContextReader(
         {
             _reading.Release();
         }
+    }
+
+    /// <summary>
+    /// Reads the context now, ahead of the interval, for a caller whose answer depends on a value the gateway may have changed since
+    /// the last read (the setup wizard's suggested authority, identity design §19): one read for all waiting callers, at most once per
+    /// <see cref="RefreshInterval"/>, and bounded by <paramref name="wait"/>, after which the caller goes on with the features as they
+    /// are. A failed or cut-off read keeps the last features. Off without a gateway or a key.
+    /// </summary>
+    public async Task RefreshAsync(TimeSpan wait, CancellationToken cancellationToken)
+    {
+        var gateway = options.CurrentValue;
+        if (string.IsNullOrWhiteSpace(gateway.BaseUrl) || string.IsNullOrEmpty(gateway.Key) || !RefreshDue(time.GetTimestamp()))
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(wait, time);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        try
+        {
+            await _reading.WaitAsync(bounded.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            // A caller that waited behind another's refresh finds it done and does not read again.
+            var now = time.GetTimestamp();
+            if (RefreshDue(now))
+            {
+                Interlocked.Exchange(ref _lastRefreshAt, now);
+                try
+                {
+                    await ReadCoreAsync(bounded.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // The wait ran out: the caller goes on with the last features; the next refresh is due after the interval.
+                }
+            }
+        }
+        finally
+        {
+            _reading.Release();
+        }
+    }
+
+    private bool RefreshDue(long now)
+    {
+        var last = Interlocked.Read(ref _lastRefreshAt);
+        return last == long.MinValue || time.GetElapsedTime(last, now) >= RefreshInterval;
     }
 
     /// <summary>One read; never throws except on shutdown. Returns whether the features are current.</summary>

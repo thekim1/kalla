@@ -68,19 +68,21 @@ public static class SetupModeEndpoints
 
         session.MapGet("/state", async (HttpContext http, SignInSettings signIn, OpenWebUiSignInSettings openWebUi, SetupTestSignIn tests,
             SetupOpenWebUiTest openWebUiTests, IOptionsMonitor<OpenIdConnectOptions> oidc, IOptions<OidcOptions> deployment, IOptions<AdminOptions> admin,
-            IConfiguration configuration, GatewayFeatures gateway, OrganisationSync organisation, TimeProvider time, Ume.Rag.Infrastructure.Persistence.RagDbContext db,
-            CancellationToken ct) =>
+            IConfiguration configuration, GatewayFeatures gateway, GatewayContextReader context, OrganisationSync organisation, TimeProvider time,
+            Ume.Rag.Infrastructure.Persistence.RagDbContext db, CancellationToken ct) =>
         {
             var status = SetupGateMiddleware.StatusOf(http);
             var current = SetupSessionFilter.SessionOf(http);
             var options = oidc.Get(OpenIdConnectDefaults.AuthenticationScheme);
+            var effective = await signIn.ReadAsync(ct);
+            await SetupGatewaySignIn.RefreshAsync(gateway, context, effective, ct);
             var latest = await LatestTestAsync(db, current, SetupTargets.RagAdmin, ct);
             var latestOpenWebUi = await LatestTestAsync(db, current, SetupTargets.OpenWebUi, ct);
             string[] platformAdminGroups = deployment.Value.RoleGroups.TryGetValue(RagRoles.PlatformAdmin, out var groups)
                 ? groups.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
             var shown = await openWebUi.ShowAsync(await openWebUiTests.SessionAuthorityAsync(current, ct), ct);
             return new SetupStateDto(
-                status.Kind, status.EndsAt!.Value, current.ExpiresAt, SignInSettingsDto.Of(await signIn.ReadAsync(ct)),
+                status.Kind, status.EndsAt!.Value, current.ExpiresAt, SignInSettingsDto.Of(effective),
                 new SetupRedirectUris(SetupTestSignIn.RedirectUri(http, options.CallbackPath), SetupTestSignIn.RedirectUri(http, options.SignedOutCallbackPath)),
                 new SetupDeploymentFacts(Blank(configuration["Gateway:BaseUrl"]), Blank(admin.Value.ApiPublicUrl), platformAdminGroups),
                 SetupGatewaySignIn.Of(gateway, organisation),
@@ -402,6 +404,26 @@ public sealed record SetupDeploymentFacts(string? GatewayBaseUrl, string? ApiPub
 /// </summary>
 public sealed record SetupGatewaySignIn(string? SuggestedAuthority, string? AdminUrl)
 {
+    /// <summary>How long the setup state waits for a context read of its own (<see cref="RefreshAsync"/>) before it answers with what it has.</summary>
+    public static readonly TimeSpan ContextWait = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Reads the gateway's context again before the state is built while it would suggest no address but one would be used: the
+    /// gateway's own wizard may have saved one since the last read (the deployer finishes it first, M-20 S8), or rag-admin started
+    /// before the gateway answered. Not while the deployment or the wizard sets rag-admin's authority, as the suggestion is unused
+    /// then. Bounded by <see cref="ContextWait"/> and <see cref="GatewayContextReader.RefreshInterval"/>; a failed read changes nothing.
+    /// </summary>
+    public static async Task RefreshAsync(GatewayFeatures gateway, GatewayContextReader context, EffectiveSignIn signIn, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(gateway);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(signIn);
+        if (gateway.OidcAuthority is null && signIn.Authority.Source == SignInValueSources.Default)
+        {
+            await context.RefreshAsync(ContextWait, ct);
+        }
+    }
+
     /// <summary>Null while the gateway lacks the feature <c>oidc-authority</c> (an older gateway, or before the first context answer).</summary>
     public static SetupGatewaySignIn? Of(GatewayFeatures gateway, OrganisationSync organisation)
     {
