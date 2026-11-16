@@ -37,11 +37,8 @@ public static class SetupModeEndpoints
             var status = SetupGateMiddleware.StatusOf(http);
             var security = SecurityEvents.CreateLogger(loggers);
             var address = AdminActor.AddressOf(http);
-            if (!throttle.TryAcquire(out var retryAfter))
-            {
-                return TooManyAttempts(http, retryAfter, errors.Value);
-            }
-
+            // The code is compared first: the right one always gives a session, so a flood of wrong codes cannot keep the
+            // deployer out. Only wrong codes count towards the throttle.
             var result = await sessions.StartAsync(status, request.Code, ct);
             switch (result.Outcome)
             {
@@ -50,6 +47,11 @@ public static class SetupModeEndpoints
                     SecurityEvents.SetupSessionStarted(security, SetupSessions.EventId(result.Session), address, result.Session.ExpiresAt);
                     return Results.Ok(new SetupSessionDto(result.Session.ExpiresAt, status.EndsAt!.Value));
                 case SetupCodeOutcome.Wrong:
+                    if (!throttle.TryAcquire(out var retryAfter))
+                    {
+                        return TooManyAttempts(http, retryAfter, errors.Value);
+                    }
+
                     if (sampler.ShouldLog(WrongCodeEvent, out var count))
                     {
                         SecurityEvents.SetupCodeRefused(security, address, count);
@@ -110,6 +112,9 @@ public static class SetupModeEndpoints
                 : test.Passed != true || result is null ? "not_passed"
                 : !result.IsPlatformAdmin ? "not_platform_admin"
                 : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(test.Target, values)) ? "values_changed"
+                // What is about to be in force must be what the test ran against: the deployment's values are read again here,
+                // and they may differ from the instance and moment the test started on (a rolling change of Oidc:Authority).
+                : !TestedProviderIsInForce(configuration, payload, values) ? "values_changed"
                 : null;
             if (refusal is not null)
             {
@@ -206,6 +211,14 @@ public static class SetupModeEndpoints
     };
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>Whether the authority and client the test signed in with are the ones <paramref name="values"/> give with this instance's deployment values.</summary>
+    private static bool TestedProviderIsInForce(IConfiguration configuration, SetupTestPayload payload, OidcWizardValues values)
+    {
+        var effective = SignInSettings.Resolve(configuration, values, () => StoredSecretValue.NotSet, null, 0, null);
+        return string.Equals(effective.Authority.Value?.Trim(), payload.Authority.Trim(), StringComparison.Ordinal) &&
+               string.Equals(effective.ClientId.Value.Trim(), payload.ClientId.Trim(), StringComparison.Ordinal);
+    }
 
     private static IResult TooManyAttempts(HttpContext http, TimeSpan retryAfter, ApiExceptionOptions errors)
     {

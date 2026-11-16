@@ -318,8 +318,9 @@ public sealed class SetupMode(RagDbContext db, IConfiguration configuration, Tim
 }
 
 /// <summary>
-/// The throttle on setup code checks (identity design §19): at most <see cref="Limit"/> per minute in this process, a fixed window.
-/// Nothing is persistent and nothing voids the code: once the window allows, the right code works again. The per-address limiter
+/// The throttle on wrong setup codes (identity design §19): at most <see cref="Limit"/> per minute in this process, a fixed window;
+/// further wrong codes in the window answer 429. The code is compared before the throttle is asked, so the right code always gives a
+/// session and a guesser cannot keep the deployer out. Nothing is persistent and nothing voids the code. The per-address limiter
 /// stays on the route as well.
 /// </summary>
 public sealed class SetupCodeThrottle(TimeProvider time)

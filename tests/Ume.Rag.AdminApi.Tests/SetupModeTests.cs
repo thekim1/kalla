@@ -151,13 +151,19 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
         // A wrong code writes nothing: the settings row (and so the config version) is untouched.
         (await SettingsVersionAsync()).ShouldBe(version);
 
-        // Over 20 checks in the minute: 429 with the seconds to the window's end, for the right code too.
+        // Over 20 wrong codes in the minute: 429 with the seconds to the window's end.
         time.Advance(TimeSpan.FromSeconds(20));
-        using (var flooded = await PostAsync(client, "/bff/setup/session", new { code }))
+        using (var flooded = await PostAsync(client, "/bff/setup/session", new { code = wrong }))
         {
             flooded.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
             (await CodeOf(flooded)).ShouldBe(AdminErrorCodes.SetupAttemptsExhausted.Code);
             int.Parse(flooded.Headers.RetryAfter!.ToString(), System.Globalization.CultureInfo.InvariantCulture).ShouldBeInRange(39, 40);
+        }
+
+        // The right code is never throttled: a flood of wrong codes cannot keep the deployer out (the code is compared first).
+        using (var inTheFlood = await PostAsync(client, "/bff/setup/session", new { code }))
+        {
+            inTheFlood.StatusCode.ShouldBe(HttpStatusCode.OK, await inTheFlood.Content.ReadAsStringAsync(Ct));
         }
 
         // Sampled: the first wrong code at once, the other 19 in the next event after 10 seconds.
