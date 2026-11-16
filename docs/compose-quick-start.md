@@ -12,13 +12,14 @@ credential keys through a directory on the host.
 
 ## 1. Before you start
 
-**The host:** Linux with systemd, Docker 28 or later, Compose 2.24 or later, `openssl`, root. For both products on one
+**The host:** Linux with systemd, Docker 28 or later, Compose 2.33.1 or later (the Compose files use
+`gw_priority`), `openssl`, root. For both products on one
 host count 8 cores and 20 GB of memory or more: Ume.Rag's smaller profile caps its containers at about 12 GB
 ([sizing](production-setup.md#sizing)), and the gateway takes about 2 cores and 4 GB.
 
 ```bash
 docker version --format '{{.Server.Version}}'                  # 28 or later
-docker compose version --short                                 # 2.24 or later
+docker compose version --short                                 # 2.33.1 or later
 docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}'    # systemd 2
 docker network ls -q | xargs docker network inspect --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
 ss -ltn | grep -E ':(8443|9443|8543|9543)\b' || echo "the four ports are free"
@@ -55,15 +56,18 @@ The commands below are the second case. With a proxy, replace `--bind 0.0.0.0` w
 ```bash
 curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
 tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
-sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0
+sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0 --yes
 sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ```
 
-The script asks once for the provider's address; leave it empty to type it in the wizard.
+`<host>` is the host's DNS name, not an IP address: the certificates are issued for the name. With `--yes` the script
+asks nothing and leaves sign-in to the setup wizard. Without it, it asks for the provider's address (an address typed
+there declares the sign-in, and the wizard below never opens) and whether a reverse proxy is in front.
 
 **The gateway's setup wizard:**
 
-1. Read the setup code (valid for an hour; a restart of `adminapi` prints a new one while setup was never finished):
+1. Read the setup code (valid for an hour; once the hour has passed, a restart of `adminapi` opens a new hour with a
+   new code while setup was never finished):
    `sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env logs adminapi | grep 'Setup code'`
 2. Open `https://<host>:9443/setup` and enter the code.
 3. Register the two redirect URIs the wizard shows on the client `ume-admin`, type the provider's address and the
@@ -78,10 +82,13 @@ two residencies.
 
 Ume.Rag calls the gateway with three credential keys, one each for rag-api, rag-admin and rag-worker. The gateway
 creates them from a manifest that ships with Ume.Rag, and writes their secrets to a directory that Ume.Rag's setup
-script reads. Unpack Ume.Rag's release first (private images: `docker login ghcr.io` with a token holding
-`read:packages`):
+script reads. Download and unpack Ume.Rag's release first, next to the gateway's directory. Its images are private: log in as root,
+which is who pulls them (`sudo docker login ghcr.io`, a GitHub user and a token holding `read:packages`).
 
 ```bash
+cd ..
+curl -fsSLO https://github.com/thekim1/ume-rag-platform/releases/download/vX.Y.Z/ume-rag-X.Y.Z.tar.gz
+curl -fsSLO https://github.com/thekim1/ume-rag-platform/releases/download/vX.Y.Z/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 tar -xzf ume-rag-X.Y.Z.tar.gz
 sudo install -m 644 ume-rag-X.Y.Z/deploy/portainer/integration-manifest.json \
@@ -164,9 +171,9 @@ The script ends with the list of what it generated and what is left, including a
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | `up` fails with "Pool overlaps with other one on this address space" | a Docker network already uses `172.30.x.x` | step 1; recreate that network after setting `default-address-pools` |
-| `up --wait` times out on `rag-worker`, `rag-parser` or `rag-clamav` | the slice is not installed, or the cgroup driver is not `systemd` | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
+| `up --wait` times out on `rag-worker`, `rag-parser` or `rag-clamav` | the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
 | `rag-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file deploy/.env logs rag-clamav`; `--freshclam-proxy` behind an egress proxy |
-| `init-deployment.sh`: *no credential key …/rag-worker* | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again; its `migrations` log names a manifest it refused |
+| `init-deployment.sh`: *no credential key …/rag-api* (or `rag-admin`, `rag-worker`) | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again; its `migrations` log names a manifest it refused |
 | The wizard: *rag-admin could not reach the provider address* | the host firewall does not know the provider | re-run `init-deployment.sh` with your options and `--oidc-authority`, then `sudo systemctl start rag-firewall.service` |
 | *Models* is empty, or the organisation sync is *degraded* | Ume.Rag's containers do not reach the gateway, or do not trust its certificate | the check below; `--ca-file` with the gateway's CA; `docker compose --env-file deploy/.env logs rag-admin` |
 | 403 `model_not_allowed` or `max_residency_not_met` in a log | the model is not hosted at `OnPrem` or `Eu`, or a key lists other models | the provider's residency and the three keys, in the gateway's admin |

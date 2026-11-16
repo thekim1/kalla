@@ -51,7 +51,7 @@ cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav
   escrow-keys.sh "$dest/"
 # redis/ is P2, proxy/ and otel/ come with their items: copied once they exist. openwebui/ holds compose.openwebui.yaml's
 # feedback-key-setup.py (M-17 C6).
-for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui; do
+for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
 # The integration manifest a gateway on the same host creates Ume.Rag's credential keys from (init-deployment.sh
@@ -65,7 +65,9 @@ cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/
 cp "$repo/images/renderer/seccomp.json" "$stage/$name/images/renderer/"
 # The operator documents (platform plan §10: the upgrade guide ships with the release).
 cp "$repo/docs/production-setup.md" "$repo/docs/runbook.md" "$repo/docs/upgrade-guide.md" "$repo/docs/test-host.md" \
-  "$repo/docs/zero-downtime-updates.md" "$repo/docs/compose-quick-start.md" "$stage/$name/docs/"
+  "$repo/docs/zero-downtime-updates.md" "$repo/docs/compose-quick-start.md" "$repo/docs/portainer.md" \
+  "$repo/docs/kubernetes.md" "$repo/docs/keycloak.md" "$repo/docs/network-and-ports.md" \
+  "$repo/docs/security-events.md" "$stage/$name/docs/"
 
 cd "$dest"
 # Line endings matter: these files are mounted into Linux containers or run by bash.

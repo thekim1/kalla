@@ -5,27 +5,30 @@ RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top 
 orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGENTS.md`](AGENTS.md) and
 [`HANDOVER.md`](HANDOVER.md).
 
-**Status: P1 (pilot), code first.** P0 is done and released as
-[`v0.1.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.1.0) (2026-10-31). P1 is built on FakeGateway,
-fixtures and the dev Keycloak first; the live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold
-set, the pilot member, the test host) come as one block at the end. Built so far:
-- ingestion end to end: URL lists, crawls (one frontier per source, robots, sitemaps, freshness and removal checks) and
-  uploads (ClamAV, fail closed) through parse, clean, chunk, personal data, embed and the index writer;
+**Status: P1 (pilot), built and released; the live block is ahead.** The last release is
+[`v0.7.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.7.0) (2026-11-16), on the gateway's `v0.11.0`;
+[`CHANGELOG.md`](CHANGELOG.md) has every release. P1 was built on FakeGateway, fixtures and the dev Keycloak first; the
+live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold set, the pilot member, the test host)
+come as one block at the end. Built:
+- ingestion end to end: URL lists, crawls (one frontier per source, robots, sitemaps, freshness and removal checks,
+  JavaScript pages through the renderer) and uploads (ClamAV, fail closed, or off by the deployment's choice) through
+  parse, clean, chunk, personal data, embed and the index writer;
 - the parser for PDF, Office/ODF, images and scans (Docling, OCR), the Sitevision preset and the umea.se profile;
 - the engine: runs and finalizer, scheduler, drift sweep, `reprocess`/`retry-failed` with an optional cache bypass,
   source settings-change effects, preview and preflight, publish with per-document swap and rollback within 14 days;
 - evaluation: on-demand three-way runs, publish reports, nightly runs with the recall@10 alert, generated question sets;
-- retrieval core (hybrid Swedish keyword + vector search) and the start of the knowledge API;
-- the pilot stack: production Compose, test-host run book, Open WebUI with its feedback service account, backups,
+- retrieval (hybrid Swedish keyword + vector search, optional rerank), the knowledge API and the chat API
+  (OpenAI-compatible, for Open WebUI and other clients);
+- the admin UI: knowledge bases, sources, assistants, apps and keys, costs, settings, and the setup wizard for sign-in;
+- deployment: production Compose, one Portainer stack together with the gateway, Kubernetes manifests, backups,
   point-in-time restore and key escrow.
 
-Next: the gateway client, the admin set-up endpoints, the chat API for Open WebUI and the Keycloak realm additions.
-Overview for stakeholders (Swedish): [`docs/phase1-guide.html`](docs/phase1-guide.html). Progress:
-[`plans/archive/progress.md`](plans/archive/progress.md).
+The plan ahead: [`plans/roadmap.md`](plans/roadmap.md). Overview for stakeholders (Swedish):
+[`docs/phase1-guide.html`](docs/phase1-guide.html).
 
 ## Requirements
 
-.NET SDK 10.0.1xx or later (CI uses 10.0.401), Docker 28+, Node 24.15+ (admin UI) and uv (parser).
+.NET SDK 10.0.1xx or later (CI uses 10.0.401), Docker 28+, Node 22 or later (admin UI; CI uses 24) and uv (parser).
 
 ## Build and test
 
@@ -38,14 +41,17 @@ dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Cat
 tests start the pinned pgvector image with Testcontainers, so Docker must be running. `UME_RAG_TEST_POSTGRES_IMAGE`
 runs them against another image (CI: the built `ume-rag/postgres`).
 
-The worker's container tests need locally built ClamAV and parser images (Testcontainers wants a dot in a local
-registry name):
+The container tests skip unless their image is named. Build the images locally (Testcontainers wants a dot in a local
+registry name): the worker's tests use ClamAV and the renderer, the contract tests the parser.
 
 ```bash
 docker build -t ume-rag.local/clamav:dev images/clamav
-docker build -t ume-rag.local/parser:ci src/parser
-UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
+docker build -t ume-rag.local/renderer:dev images/renderer
+UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:dev \
   dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build
+docker build -t ume-rag.local/parser:ci src/parser
+UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
+  dotnet test --project tests/Ume.Rag.ContractTests -c Release --no-build
 ```
 
 The pre-commit hook runs the admin UI lint and the parser's ruff check on staged changes. Enable it once per clone:
@@ -61,10 +67,11 @@ aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
 ```
 
 The Aspire dashboard opens at `https://localhost:17470`. The AppHost starts postgres (stock pgvector image), keycloak,
-the fake gateway, the parser and ClamAV (built from their Dockerfiles), the migration service, api, worker, adminapi
-and the admin UI (`https://localhost:5174`). The resource graph and its switches (`Parser:Mode`,
-`ClamAv:Mode`, `FakeGateway:Enabled`, `Ollama:Enabled`, `Redis:Enabled`, `Oidc:Authority`) are in
-[`plans/platform/repo-and-deployment.md`](plans/platform/repo-and-deployment.md) §4.1. Set them as AppHost user secrets:
+the fake gateway, the parser, ClamAV and the renderer (built from their Dockerfiles), the migration service, api,
+worker, adminapi, the admin UI (`https://localhost:5174`) and Open WebUI (`http://localhost:7410`). Its switches
+(`Parser:Mode`, `ClamAv:Mode`, `Render:Mode`, `OpenWebUi:Enabled`, `FakeGateway:Enabled`, `Ollama:Enabled`,
+`Redis:Enabled`, `Oidc:Authority`, `Setup:Try`) are in [`docs/local-development.md`](docs/local-development.md). Set
+them as AppHost user secrets:
 
 ```bash
 dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
@@ -75,8 +82,7 @@ Addresses and keys go only in user secrets or secret files, never in the reposit
 
 On Linux or WSL, `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj` runs the same stack in the
 background (`aspire describe`, `aspire logs <resource>`, `aspire stop`); `Seed__Enabled=false` in the environment starts
-it without demo data. Milestone 1, ingestion and `/v1/retrieve` against the interim gateway, passed on 2026-11-01
-([`docs/p1a-local-run.md`](docs/p1a-local-run.md) §4).
+it without demo data.
 
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
 against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
@@ -85,9 +91,10 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 - [`docs/local-development.md`](docs/local-development.md): the dev stack in detail and the start scripts.
 - [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
-- [`docs/production-setup.md`](docs/production-setup.md): host sizing, `init-deployment.sh`, Compose files.
-- [`docs/portainer.md`](docs/portainer.md): the gateway and Ume.Rag as one Portainer stack, a first deploy and the upgrade to 0.5.0.
 - [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Ume.Rag on one host with Docker Compose, the short path.
+- [`docs/production-setup.md`](docs/production-setup.md): the Compose reference: host sizing, `init-deployment.sh`, sign-in, backups, Open WebUI.
+- [`docs/portainer.md`](docs/portainer.md): the gateway and Ume.Rag as one Portainer stack, a first deploy and each upgrade.
+- [`docs/kubernetes.md`](docs/kubernetes.md): the same services as Kustomize manifests.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
 - [`docs/network-and-ports.md`](docs/network-and-ports.md): listeners, outbound destinations and firewall/proxy rules per setup.
 - [`docs/test-host.md`](docs/test-host.md): the pilot test host, its caps, backups and the restore drill.
@@ -97,29 +104,25 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 ## CI
 
-`verify.yml` runs on every pull request and push to `main`:
-- `ownership` (stream paths);
-- `backend` (build and tests);
-- `images`;
-- `deploy-checks` (Compose and host scripts);
+`verify.yml` runs on every pull request that is not a draft (on open, each push, and when it leaves draft) and by
+hand; nothing runs on a push to `main`. Its jobs are filtered by the paths a pull request changes:
+- `ownership` (stream paths) and `doc-refs` (links and section references in the documents);
+- `backend` (build and tests) and `evaluation-smoke`;
+- `images`, `renderer` and `deploy-checks` (Compose files, `init-deployment.sh`, the host scripts, the release bundle);
 - `admin-ui`.
 
 `parser.yml` runs the `parser`, `parser-image` and `contract` jobs only when the parser or its contract changed.
+`audit.yml` checks the dependencies of `main` for known vulnerabilities every night, the one workflow on a schedule.
+`release.yml` builds, tests, pins and publishes a release on a `v*.*.*` tag (dispatch: a dry run that pushes nothing).
+`e2e.yml` runs the browser tests, by hand or from `release.yml` when asked. `perf.yml` (the R1 release test) and
+`evaluation.yml` (the evaluation on the test deployment) run by hand; their schedules are off.
 `entra.yml` plans the Entra registrations.
-`release.yml` builds, pins and publishes a release on a `v*.*.*` tag (dispatch: a dry run that pushes nothing).
-`perf.yml` runs the R1 release test (weekly, dispatch; a dry run on FakeGateway on GitHub's runner, the real run on the
-test host). `evaluation.yml` runs the nightly evaluation on the test deployment. `e2e.yml` runs the browser tests
-(nightly, and before a release).
 
-**CI runs on the self-hosted runner `ume-rag`** (Decisions table, "CI on the self-hosted runner for every pull
-request"): `verify.yml` and `parser.yml` run on every pull request that is not a draft (on open, each push, and when it
-leaves draft), with no label. GitHub-hosted minutes are used up, so nothing runs on GitHub's runners, and the schedules
-of `perf.yml`, `evaluation.yml` and `e2e.yml` stay off until the test host exists. GitHub can't enforce required checks
-on this repository, so merge only on a green run (`gh pr checks <number>`).
+**CI runs on self-hosted runners** (Decisions "CI on the self-hosted runner for every pull request";
+[`docs/ci-runner.md`](docs/ci-runner.md)): GitHub-hosted minutes are used up, so nothing runs on GitHub's runners.
+GitHub can't enforce required checks on this repository, so merge only on a green run (`gh pr checks <number>`).
 
-The main session also verifies each pull request locally after merging `origin/main` into the branch: the build,
-`Ume.Rag.Worker.Tests` twice (it surfaces order-dependent failures), `Ume.Rag.Pipelines.Tests`, `Ume.Rag.ContractTests`
-and the ownership check, with the output in the pull request body:
+Before a pull request, run the test projects the change touches (`AGENTS.md`, *Tests*) and the ownership check:
 
 ```bash
 git diff --name-only origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>

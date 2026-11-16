@@ -10,7 +10,7 @@ There are two ways to run the stack locally:
 
 | | The AppHost ([local-development.md](local-development.md)) | The pilot stack (production Compose) |
 |---|---|---|
-| What runs | the services from source, the dev Keycloak (realm `ume` from `dev/keycloak/`), FakeGateway, Open WebUI once stream B registers its `open-webui` resource (item 15, J9) | the images, hardened, as on the pilot host: `compose.prod.yaml`, `compose.ingestion.yaml`, and `compose.openwebui.yaml` as a project of its own |
+| What runs | the services from source, the dev Keycloak (realm `ume` from `dev/keycloak/`), FakeGateway, Open WebUI (`http://localhost:7410`) | the images, hardened, as on the pilot host: `compose.prod.yaml`, `compose.ingestion.yaml`, and `compose.openwebui.yaml` as a project of its own |
 | Sign-in and model calls now | yes: dev Keycloak test users, FakeGateway | no: Compose has no Keycloak and no FakeGateway, so sign-in and answers wait for the live block |
 | Use it for | the demo: sign-in, set-up through Scalar, a cited answer in Open WebUI | checking the production shape: every container healthy, secrets as files, the networks |
 
@@ -21,10 +21,10 @@ There are two ways to run the stack locally:
 ```
 
 The AppHost starts Postgres, the dev Keycloak, FakeGateway (1024-dimension embeddings, a dev credential key per
-service), the parser, ClamAV, the api, the worker and the admin API. Sign in to the admin with a test user from
-[local-development.md](local-development.md#keycloak-test-realm) (password: the `dev-user-password` parameter). Open
-WebUI joins once stream B adds it to the AppHost (`OpenWebUi:Enabled`, the dev realm's client `open-webui-dev`, the
-seeded dev key; repo-and-deployment §4.1).
+service), the parser, ClamAV, the renderer, the api, the worker, the admin API, the admin UI and Open WebUI
+(`OpenWebUi:Enabled`, the dev realm's client `open-webui-dev`, the seeded dev key; repo-and-deployment §4.1). Sign in
+to the admin with a test user from [local-development.md](local-development.md#keycloak-test-realm) (password: the
+`dev-user-password` parameter).
 
 ## 2. Now: the pilot stack on your machine
 
@@ -74,8 +74,8 @@ Nothing in the repository changes. You set values in one of two places:
 | Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
 | The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/ume/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
-| The shared Keycloak for Open WebUI | stream B's `open-webui` resource (J9) | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
-| Open WebUI's client in rag-api | created by the AppHost seed (with J9) | nothing: `init-deployment.sh` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
+| The shared Keycloak for Open WebUI | the AppHost's `open-webui` resource | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
+| Open WebUI's client in rag-api | created by the AppHost seed | nothing: `init-deployment.sh` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
 
 Keep the key and secret files outside the repository (for example in `~/rag-p1a-secrets/`, mode 0600) and delete them
 once `init-deployment.sh` has copied them. Re-run `init-deployment.sh` with all the options of the first run plus the
@@ -100,7 +100,7 @@ WebUI (identity design §5.3, open question 5 of §16).
 The first run of the AppHost against the user's interim gateway (Decisions table: "Interim gateway for P1a", "Pilot
 embedding model, U-b"): a handful of public umea.se pages ingested with `text-embedding-3-large` at 1024 dimensions,
 then a retrieval query. Every step is marked **now** (works on `main` today) or **after #NNN** (waits for that PR or
-issue). Until the admin's set-up endpoints (J7) exist, the source comes from a dev seed script.
+issue). The run used a dev seed script for the source; the admin UI creates it today.
 
 **Passed 2026-11-01** (session 13, on Linux/WSL): 5 pages fetched, 4 added (one hub page `parse.empty`), 17 chunks at
 1024 dimensions, the canary recorded at `Eu`, and `/v1/retrieve` answered in under 1 s with the right chunk first. Until

@@ -25,6 +25,16 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   reach only that provider, and without it the setup wizard's test sign-in failed. The wizard's message for a provider
   it cannot reach now says so. New: [`docs/compose-quick-start.md`](docs/compose-quick-start.md), the gateway and
   Ume.Rag on one host in six steps; it replaces `docs/gateway-host-setup.md`.
+- **The install and upgrade guides were checked line by line against the scripts, the stack files and the releases**,
+  and corrected. What an operator would have tripped on: Docker Compose must be 2.33.1 or later (the guides said 2.24;
+  the Compose files use `gw_priority`); an upgrade with Portainer over several releases takes each release's own
+  `compose.portainer.yaml` in turn (the `v0.6.0` file for 0.5.x to 0.6.0, then the `v0.7.0` file), which
+  `docs/portainer.md` now says at each step; the single-slot procedure says to stop the old services first for a
+  release marked *Rolling update: no*; the 0.6.0 stack pins the gateway's `v0.10.3`, not `v0.10.2`. The release bundle
+  now carries the Portainer, Kubernetes, Keycloak, network and security-event pages and `deploy/keycloak/`, which its
+  guides link to.
+- **`restore-pitr.sh` stops the second slots too** (`rag-api-b`, `rag-admin-b` with `--rolling`): before, they kept
+  running through a restore.
 
 ## 0.7.0 (2026-11-16)
 

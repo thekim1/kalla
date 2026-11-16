@@ -14,6 +14,7 @@ lands or an input arrives.
 | `v0.3.0` (2026-11-10) | Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, the #499–#513 review fixes |
 | `v0.4.0` (2026-11-11) | Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics in the worker, lower idle cost |
 | `v0.5.0` (2026-11-13) | **Gateway integration phases 1–3** (#580): one credential key per service, a gateway key per assistant and knowledge base that every call runs as, organisation and models from the gateway's context (no Data API), **cost attribution** stages 1 and 2 (built; stage 2's live done-when waits on step 0 below) with the gateway's cost and budgets beside Ume.Rag's, refusals in chat and admin, content retention, malware scan optional |
+| `v0.5.1` (2026-11-13) | Easier deploys with Portainer: the gateway and Ume.Rag as one stack with every image pinned, Open WebUI in it, a variables file, a checklist of what is still missing, gateway keys that apply without restarts |
 | `v0.6.0` (2026-11-15) | A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys, the rest comes from the gateway, the admin UI or the stack; apps and keys connected in one go (M-16); the admin UI review (M-19); the fixes of the 2026-11-14 review (#694) |
 | `v0.7.0` (2026-11-16) | **The setup wizard** (M-20): sign-in set in the browser with a setup code and a test sign-in; a new Portainer stack needs one typed value, `UME_DOMAIN`, and no secret, with the gateway's wizard first (gateway `v0.11.0`); retired deployment variables named (M-21); three hot paths of #764 |
 
@@ -84,7 +85,7 @@ Each becomes a queue item when the main session picks it up.
   browser tests; not tried in Portainer itself, nor with both wizards completed against a real provider in one stack.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
-  only what a process can't start without; C0–C10 and C12 merged (C7 and C12 on the gateway's v0.10.2); C11 in review (#740); C13 left.
+  only what a process can't start without; C0–C12 merged (C7 and C12 on the gateway's v0.10.2, C11 in 0.6.0); C13 left.
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 

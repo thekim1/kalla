@@ -137,7 +137,7 @@ the last refusal with its time), and is logged:
 dc logs --since 1h rag-admin | grep "Integration API"   # "refused or failed (HTTP 403, scope_missing); no read-back this time"
 ```
 
-A platform admin also sees it in `integration.lastError` of `GET /api/gateway/status` (the admin UI does not show it yet).
+A platform admin also sees it in `integration.lastError` of `GET /api/gateway/status`; the admin UI's *AI gateway* card on *Models* shows it too.
 
 ### Why the totals differ
 
@@ -336,7 +336,8 @@ would open the wizard again for an hour. The client secrets the wizard stored ne
    It then:
    1. closes the current WAL segment and waits up to 60 s until it is archived, so the restore can reach the newest
       commits;
-   2. stops `rag-api`, `rag-admin` and `rag-worker` (those that run), then postgres;
+   2. stops `rag-api`, `rag-admin` and `rag-worker` (those that run, the second slots of `--rolling` included), then
+      postgres;
    3. runs `pgbackrest restore --type=time --delta` in a one-off container of the postgres service (same image, user,
       volumes and repository settings) on the `postgres-data` volume;
    4. starts postgres, which recovers to the target and pauses there, and prints the last transaction it replayed;
@@ -355,8 +356,8 @@ would open the wizard again for an hour. The client secrets the wizard stored ne
 
 5. **Blobs.** Blobs are write-once and purged only after the backup retention, so the restored database finds every
    blob it references. The worker's orphan audit (§7.4 rule 2) then reports blobs without a referencing row (left to
-   the purge) and documents whose derived blob is missing (fetched or parsed again on the next sync). The audit comes
-   with the ingestion pipeline (P1; not built in P0). A missing **upload** is restored from the upload copy
+   the purge) and documents whose derived blob is missing (fetched or parsed again on the next sync). The audit is
+   not built yet. A missing **upload** is restored from the upload copy
    (*Upload copy*).
 
 **Timings.** The local drill (PR #40; a 30 MB database, local repository) took **23.0 s** end to end: archive and stop
@@ -400,7 +401,6 @@ Record the date, the achieved RPO and RTO, and anything that went wrong.
    - a search query returns results with citations;
    - a document preview opens (an `internal` document: this reads a blob with the escrowed key);
    - a chat history read: metadata only while the pilot runs history mode `none`.
-   The search, preview and history checks apply once those features exist (P1).
 5. **Take a full backup** on the restored host if it stays in use; otherwise remove it and its copy.
 6. **Record** the RPO (target time minus the newest change that survived, against 5 minutes) and the RTO (against 4
    hours) in the operations log.
@@ -452,7 +452,7 @@ journalctl -u rag-upload-backup.service --since today
 
 ### Restoring a missing upload
 
-The upload copy holds every file below `uploads/` of the blob store, under the same key (`<backup target>/uploads/`,
+The upload copy holds every file below `uploads/` of the blob store, under the same key (`<backup target>/uploads/uploads/`,
 or `deploy/upload-backup/uploads/` with a `local` target). Keys are write-once, so copying back only what is missing is
 always safe. With the stack running:
 
@@ -468,7 +468,7 @@ docker run --rm --network none --user 1654:1654 --read-only \
 ```
 
 Use the deployment's `POSTGRES_IMAGE` if it is pinned (any image with a POSIX shell works). This step has not been
-drilled yet: uploads arrive with the admin UI (P1).
+drilled yet.
 
 ## Updates and restarts
 
@@ -556,20 +556,22 @@ certificates are re-issued when they expire within 30 days or the host names cha
 services to restart, and names every certificate within 60 days of expiry:
 [portainer.md](portainer.md#internal-certificates)). The secrets that follow a variable (the gateway credential keys,
 a declared OIDC client secret) are written again on every deploy, and removed when the variable is emptied; they live in
-the stack's environment, so restrict who can view it. The services read them at start: after changing one, restart the
-service that uses it.
+the stack's environment, so restrict who can view it. Update the stack after changing one: the services pick up a
+changed gateway key or client secret within seconds, without a restart.
 
 **Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
-firewall 8543 and 9543 to your proxy yourself), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
+firewall 8543 and 9543 to your proxy yourself, or use the stack's own TLS proxy, the profile `proxy`:
+[portainer.md](portainer.md#tls-proxy)), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
 up `rag-postgres` with `pg_dump` or volume snapshots. The renderer is off by default: Portainer cannot load its
 seccomp profile from a file, so with `render` on it runs without Docker's seccomp filter (Chromium's own sandbox stays
-on); without it the crawler indexes pages as served. PKI-issued certificates are not supported by this variant.
+on); without it the crawler indexes pages as served. Certificates from your PKI go on the stack's TLS proxy; the services' own
+listeners keep the internal CA.
 
 - **Back up** `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and `rag-certs/data-protection.pfx` with the
   database (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A database restored without
   them is unusable.
-- **Upgrade.** Read the [upgrade guide](upgrade-guide.md), regenerate the file for the new release (or set the
-  `RAG_*_IMAGE` variables to its images, all on the same version: the migrations image must match the services), and
+- **Upgrade.** Read the [upgrade guide](upgrade-guide.md), paste the new release's `compose.portainer.yaml` asset over
+  the stack's file (one release at a time: [portainer.md](portainer.md)), and
   *Update the stack* with *Re-pull image and redeploy*. `rag-migrate` runs before the services.
 - **Generated file.** Edit `deploy/portainer/compose.rag.template.yaml` or `deploy/portainer/bootstrap.sh`, then run
   `deploy/portainer/build-stack.sh`: it takes the gateway's current `compose.portainer.yaml` (from GitHub, or a path
@@ -720,7 +722,7 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 
 | Symptom | Meaning | Fix |
 |---|---|---|
-| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; the *Gateway* page's acting check says `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-ume-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
+| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-ume-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
 | Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
 | Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
 | Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
@@ -741,7 +743,7 @@ badge (the gateway still refuses the calls).
 | `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
 | `unauthorized` (401) | rag-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
 | `not_found` (404) | The key is not one of the integration *Ume.Rag*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
-| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` takes the URL's host and port when `rag-firewall.service` runs), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the URL in `deploy/.env`, `sudo systemctl start rag-firewall.service`, and `--ca-file` for the Admin API's CA |
+| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the gateway's `UME_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `--ca-file` for the Admin API's CA |
 | `failed` | Any other answer (a `5xx`, a `400`) | rag-admin's log has the status; ask the gateway team |
 
 ## Sign-in and the setup wizard
@@ -765,8 +767,9 @@ open it again; the next re-open needs another new value.
   and update the stack (Portainer); rag-admin follows the file at the next sign-in.
 - **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate rag-admin no longer trusts): re-open
   and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`
-  and `--oidc-client-secret-file` with a re-run of `init-deployment.sh`; Portainer: the variables) and restart
-  rag-admin: a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
+  and `--oidc-client-secret-file` with a re-run of `init-deployment.sh`, then `docker compose --env-file deploy/.env
+  up -d rag-admin` and `sudo systemctl start rag-firewall.service`, since a restart alone does not read a changed
+  `deploy/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
   stored secret rag-admin can't read.
 - **Restoring a database:** empty the re-open value first (*Restore*, above), or the restored database may open the
   wizard again for an hour. The secrets the wizard stored are encrypted with Data Protection: they can be read only

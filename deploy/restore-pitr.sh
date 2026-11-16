@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Point-in-time restore of ragdb from the pgBackRest repository (plans/platform/repo-and-deployment.md §7.4):
 #   1. archives the current WAL segment, if postgres is running, so the newest changes are in the repository;
-#   2. stops rag-api, rag-admin and rag-worker, then postgres;
+#   2. stops rag-api, rag-admin (their second slots too, with --rolling) and rag-worker, then postgres;
 #   3. `pgbackrest restore --type=time --delta` in a one-off container of the postgres service (`docker compose run
 #      --rm`, so the same image, user, volumes and repository settings) on the postgres-data volume;
 #   4. starts Postgres, which recovers to the target and pauses there; prints the last transaction it replayed;
@@ -59,7 +59,7 @@ project="$(dc config | sed -n 's/^name: //p')"
 mapfile -t defined < <(dc config --services)
 running="$(dc ps --services --status running)"
 services=()
-for s in rag-api rag-admin rag-worker; do
+for s in rag-api rag-api-b rag-admin rag-admin-b rag-worker; do
   if printf '%s\n' "${defined[@]}" | grep -qx "$s" && grep -qx "$s" <<<"$running"; then services+=("$s"); fi
 done
 

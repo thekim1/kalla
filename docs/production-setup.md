@@ -2,7 +2,7 @@
 
 The pilot runs on one Linux host with Docker Compose: six long-running containers (`postgres` with pgBackRest inside,
 `rag-api`, `rag-admin`, `rag-worker`, `rag-parser` and, unless `--clamav off`, `rag-clamav`: *Malware scan*, below), with
-`--render` a seventh (`rag-renderer`, below), and the one-shot `rag-migrate`, all in the Compose project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and
+`--render` a seventh (`rag-renderer`, below), and the one-shots `rag-migrate` and `rag-blobs-init`, all in the Compose project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and
 control zone, `deploy/compose.ingestion.yaml` the ingestion zone; `init-deployment.sh` lists both (and the overlays your options need) in `COMPOSE_FILE` in `deploy/.env`,
 so every command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory
 that holds `deploy/`.
@@ -16,7 +16,7 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
 
 ## Host prerequisites
 
-- **Linux with systemd**, Docker 28+ and Compose v2.24+ (the 24 GB overlay uses `!override`), `openssl` (for
+- **Linux with systemd**, Docker 28+ and Compose v2.33.1+ (the Compose files use `gw_priority`, the 24 GB overlay `!override`), `openssl` (for
   `init-deployment.sh`), and root for the host units.
 - **cgroup v2 and Docker's systemd cgroup driver.** The ingestion containers run below `rag-ingestion.slice`
   (`cgroup_parent`), which caps the whole zone; with the `cgroupfs` driver the slice caps nothing. `docker info` must
@@ -92,8 +92,9 @@ sha256sum -c --ignore-missing SHA256SUMS
 tar -xzf ume-rag-X.Y.Z.tar.gz && cd ume-rag-X.Y.Z
 ```
 
-The release also carries an SPDX SBOM per image. The bundle holds `deploy/`, the operator docs (this guide, the
-runbook, the upgrade guide) and `images/renderer/seccomp.json`, the renderer's seccomp profile, at the path the Compose
+The release also carries an SPDX SBOM per image. The bundle holds `deploy/` (with the ClamAV confs in
+`deploy/clamav/` and the gateway manifest in `deploy/portainer/`), the operator docs (the quick start, this guide, the
+runbook, the upgrade guide, the Portainer, Kubernetes, Keycloak, network and test-host pages) and `images/renderer/seccomp.json`, the renderer's seccomp profile, at the path the Compose
 file names.
 
 **From a clone (between releases, or to build the images yourself):** check out the commit and build the images on the
@@ -209,7 +210,7 @@ Give the admin's client the two redirect URIs the script prints (code + PKCE):
 **The setup wizard** (identity design §19) sets the rest after the first start (*5. Start*):
 
 1. Read the setup code: `docker compose --env-file deploy/.env logs rag-admin | grep 'Setup code'`. It is valid for
-   one hour; while setup was never finished, `dc restart rag-admin` prints a new one. Treat it like a password: whoever
+   one hour; while setup was never finished, `docker compose --env-file deploy/.env restart rag-admin` prints a new one. Treat it like a password: whoever
    holds it chooses the sign-in provider while setup is open.
 2. Open `https://<admin host>[:<admin port>]/setup` at the address users will use (the redirect URIs are built from
    it), and enter the code.
@@ -536,13 +537,13 @@ Keycloak of RAG's own, or Entra ID directly: see [Keycloak](keycloak.md).
 No shell access on the host? `deploy/portainer/compose.portainer.yaml` is the gateway's own Portainer stack with Ume
 Rag added, configured only through environment variables: paste it over the gateway's stack, keep the stack name, and
 set the RAG variables listed at the top of the file. See the runbook, *Portainer and other hosts without shell access*,
-and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 step by step.
+and [portainer.md](portainer.md) for a first deploy and each upgrade step by step.
 
 **On a new VM** (Docker and Portainer installed, nothing else):
 
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
-   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.10.1` for Ume.Rag
-   `0.5.0`) and Ume.Rag's by digest, so no image variable is needed.
+   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.11.0` for Ume.Rag
+   `0.7.0`) and Ume.Rag's by digest, so no image variable is needed.
 2. **Registry:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private: add `ghcr.io` as a registry in Portainer
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
@@ -638,11 +639,11 @@ it to `secrets/openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api reads w
 run `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d` again. If the store had users before
 the account was created (Open WebUI started before `init-deployment.sh` wrote it), the job stops because the account
 is not admin: create it as an existing admin with `POST /api/v1/auths/add` (name, the email and password from
-`secrets/openwebui.env`, role `admin`), then run `up` again. The importer's own
-settings in `compose.prod.yaml` are added with the importer (P1b item 17, after stream B's L6).
+`secrets/openwebui.env`, role `admin`), then run `up` again. rag-api's importer finds Open WebUI through
+`UME_RAG_OPENWEBUI_BASE_URL`, which `--openwebui-host` sets.
 
-It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, issued in the admin
-UI; its JWT secret is generated once and shared with rag-api's `OpenWebUi__JwtSecret`), signs in only through its own
+It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, generated by
+`init-deployment.sh`; its JWT secret is generated once and shared with rag-api's `OpenWebUi__JwtSecret`), signs in only through its own
 OIDC client (`open-webui` on the shared Keycloak in the pilot; Entra's `ume-rag-open-webui` from P2 with
 `--openwebui-oidc-client-id` and `--openwebui-oidc-provider-url`), and listens on plain HTTP on port 3000 of the listeners' bind
 address (loopback unless `--proxy`), so the reverse proxy terminates TLS. Its settings come from the Compose file on
