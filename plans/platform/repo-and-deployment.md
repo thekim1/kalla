@@ -362,7 +362,8 @@ Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted
 Keycloak shared with the gateway (Decisions table "P1 pilot sign-in"), defined and run from the gateway repo. Next to the
 dev realm, RAG keeps a **realm-additions file** in `deploy/keycloak/` (stream B, P1 item 16): RAG's clients
 `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` realm roles, full scope allowed off on every RAG client,
-pilot hosts, no test users. How it is imported into realm `ume` is open (identity §16, P1 question 2).
+pilot hosts, no test users. It is imported into realm `ume` by the gateway's Keycloak project (keycloak-config-cli, every resource type with
+`no-delete`; Decisions "P1 pilot sign-in", [`deploy/keycloak/README.md`](../../deploy/keycloak/README.md)).
 
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
 
@@ -922,7 +923,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 
 ### 8.2 What runs on every PR (`verify.yml`, `parser.yml`)
 
-Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/`, `deploy/`, the admin UI's sources (`src/admin-ui/`) and the browser tests (`tests/e2e/`), where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `images` runs only when `images/postgres/`, `images/clamav/` or `backend` runs its tests through `scripts/ci/backend-tests.sh`: every test project as a process of its own, all at once, and `Ume.Rag.AdminApi.Tests` as five processes (the classes of its database collections `admin-db-N` by collection, the rest in a fifth), because its collections wait for one another inside one process (measured 2026-11-15: 234–259 s as one process, 148 s as two).
+Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/`, `deploy/`, the admin UI's sources (`src/admin-ui/`) and the browser tests (`tests/e2e/`), where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `backend` runs its tests through `scripts/ci/backend-tests.sh`: every test project as a process of its own, all at once, and `Ume.Rag.AdminApi.Tests` as five processes (the classes of its database collections `admin-db-N` by collection, the rest in a fifth), because its collections wait for one another inside one process (measured 2026-11-15: 234–259 s as one process, 148 s as two); `images` runs only when `images/postgres/`, `images/clamav/` or
 `deploy/postgres/` changed, `evaluation-smoke` only when the code on its path (worker, retrieval, answering, api,
 infrastructure, pipelines, domain), `tests/evaluation/`, the Postgres image or the package and build files changed, and
 the parser jobs only when the parser changed; `e2e` runs only by hand (dispatch) or from `release.yml` when asked

@@ -173,8 +173,10 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
 - **Release:** `v0.7.0` published 2026-11-16 ([run 43865015500](https://github.com/thekim1/ume-rag-platform/actions/runs/43865015500)),
   tag at `7a04001a`. `deploy/portainer/` on `main` pins its images (#789) and is the release asset's content.
 - **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 1 at 0.7.0 (`UME_DOMAIN`, no secret).
-- **On `main`, unreleased** (#790, #791): the warning for a failed query embedding; schedules validated with the
-  scheduler's parser; chat's 413 as `request_too_large`; tests only otherwise. No migration, no new variable.
+- **On `main`, unreleased** (#790, #791, #794 and the guides' check): the warning for a failed query embedding;
+  schedules validated with the scheduler's parser; chat's 413 as `request_too_large`; `init-deployment.sh
+  --gateway-secrets-dir` and its prompt for the sign-in provider; `docs/compose-quick-start.md`; `restore-pitr.sh` stops
+  the second slots; the install and upgrade guides corrected against the code. No migration, no new variable.
 - **New in 0.7.0:** migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings` (additive); security
   events 6008–6013 and 5001 `callback_failed`; `GET /api/settings/sign-in`, `GET/PUT /api/settings/openwebui`,
   `/bff/setup/*`, rag-api's `GET /internal/openwebui/sign-in`; `/bff/user` gains `signIn.configured` and `setup.open`;

@@ -22,7 +22,8 @@ In every setup:
   `UME_RAG_ADMIN_PUBLIC_HOST`. `rag-additions.local.json` adds localhost URIs and never goes into production.
 - **The client secret** must be the same in Keycloak and in RAG: entered in rag-admin's setup wizard, or declared by
   the deployment (`--oidc-client-secret-file`, or `UME_RAG_OIDC_CLIENT_SECRET` in the Portainer stack).
-- **Roles** come from the `rag-*` realm roles or from groups mapped by `UME_RAG_OIDC_GROUPS_*` (`Oidc:RoleGroups`); one
+- **Roles** come from the `rag-*` realm roles or from groups mapped under *Settings → Role groups* in the admin UI (and the break-glass
+  `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`); one
   group can grant a role in both products (README, *One group for both products*;
   [`examples/site-groups.json`](../deploy/keycloak/examples/site-groups.json)).
 - **Two-factor sign-in** is not enforced by RAG's realm files: it is the gateway Keycloak's setting (its guide,

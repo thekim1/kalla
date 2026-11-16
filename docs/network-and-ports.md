@@ -89,7 +89,7 @@ flowchart LR
 
 ## 2. Inbound to the RAG host
 
-Only three ports are published (`deploy/compose.prod.yaml`, `deploy/compose.openwebui.yaml`; repo-and-deployment
+Only three ports are published, five with `--rolling` (8544 and 9544) (`deploy/compose.prod.yaml`, `deploy/compose.openwebui.yaml`; repo-and-deployment
 §6.1: "Nothing else is published").
 
 | Listener | Host port (default) | Container port | Protocol | Who connects | Purpose | Required | Configured by |
@@ -97,7 +97,7 @@ Only three ports are published (`deploy/compose.prod.yaml`, `deploy/compose.open
 | `rag-api` | `${UME_RAG_API_BIND}:${UME_RAG_API_PORT}`, `127.0.0.1:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI with `--api-cert`/`--api-key`) | the reverse proxy only, on behalf of: Open WebUI, API and MCP clients with `ume-rag-sk-` keys, staff browsers following citation download links | chat, retrieval, MCP (`Rag__Roles: knowledge,chat,mcp`), health | yes | `--api-port`, `--bind`, `--proxy` (`deploy/init-deployment.sh`) |
 | `rag-admin` | `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_PORT}`, `127.0.0.1:9543` | 8443 | HTTPS (as above, `--admin-cert`/`--admin-key`) | the reverse proxy only, on behalf of admins' browsers | admin UI and its BFF, OIDC redirects `/signin-oidc` and `/signout-callback-oidc`, uploads, health | yes | `--admin-port`, `--bind`, `--proxy` |
 | `rag-api-b`, `rag-admin-b` (only with `--rolling`) | `${UME_RAG_API_BIND}:${UME_RAG_API_B_PORT}`, `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_B_PORT}`, `127.0.0.1:8544` and `:9544` | 8443 | as rag-api and rag-admin | the reverse proxy only | the second slots of [updates without downtime](zero-downtime-updates.md) | yes | `--rolling` |
-| `open-webui` | `${UME_RAG_OPENWEBUI_BIND}:${UME_RAG_OPENWEBUI_PORT}`, `127.0.0.1:3000` | 8080 | **plain HTTP**: the proxy terminates TLS | the reverse proxy only, on behalf of staff browsers and rag-api's feedback import | the chat UI, OIDC callback `/oauth/oidc/callback` | optional | `UME_RAG_OPENWEBUI_PORT` in `deploy/.env` (written as 3000), bind as the listeners' |
+| `open-webui` | `${UME_RAG_OPENWEBUI_BIND}:${UME_RAG_OPENWEBUI_PORT}`, `127.0.0.1:3000` | 8080 | **plain HTTP**: the proxy terminates TLS | the reverse proxy only, on behalf of staff browsers and rag-api's feedback import | the chat UI, OIDC callback `/oauth/oidc/login/callback` | optional | `UME_RAG_OPENWEBUI_PORT` in `deploy/.env` (written as 3000), bind as the listeners' |
 
 **Binding.** By default all three bind to `127.0.0.1`, so nothing is reachable from off the host. With `--proxy` they
 bind to `0.0.0.0` (`deploy/init-deployment.sh`: "binds the listeners to 0.0.0.0 (firewall them to the proxy)"), and
@@ -124,7 +124,8 @@ a pilot host yet.
 
 **Proxy routes.** `init-deployment.sh --proxy` prints them: `https://<api host>` to `https://<upstream host>:8543` and
 `https://<admin host>` to `https://<upstream host>:9543`, keeping the `Host` header; `client_max_body_size 60m` and
-`proxy_request_buffering off` on `PUT /api/upload-batches/{batchId}/files/{n}` of the admin host, 1 MB elsewhere. The
+`proxy_request_buffering off` on `PUT /api/upload-batches/{batchId}/files/{n}` of the admin host, 2 MB on the api host (the chat route takes the
+whole conversation), 1 MB elsewhere. The
 proxy must trust the listeners' certificates (`deploy/certs/ca.pem`, or your PKI), and set `X-Forwarded-For`; add its
 addresses to the trusted proxies in the admin UI (Settings, *Network*) so key IP allow-lists and security events see
 the client's address ([production-setup.md](production-setup.md#reverse-proxy-and-pki)). Which rag-api paths the proxy
@@ -345,7 +346,7 @@ Listeners on `0.0.0.0:8543` and `0.0.0.0:9543`, restricted to the proxy (§2); i
 
 ### 5.8 Local development
 
-The Aspire AppHost's ports (services `7401`–`7404`, containers `7410`–`7416`, admin UI `5174`, dashboard `17470`) are
+The Aspire AppHost's ports (services `7401`–`7404`, containers `7410`–`7417`, admin UI `5174`, dashboard `17470`) are
 for developers on their own machines and are never opened on a server firewall. See
 [local-development.md](local-development.md).
 
@@ -363,7 +364,7 @@ Inbound to <rag host>
   [ ] published ports restricted to <proxy> in DOCKER-USER or a network firewall (not INPUT/ufw)
 
 Reverse proxy
-  [ ] https://<api host>   -> https://<rag host>:8543  (Host header kept, X-Forwarded-For set, 1 MB body limit)
+  [ ] https://<api host>   -> https://<rag host>:8543  (Host header kept, X-Forwarded-For set, 2 MB body limit)
         staff network: GET /v1/documents/* and /v1/documents/*/content only
         <owui host> and agreed integration clients: all paths
   [ ] https://<admin host> -> https://<rag host>:9543  (60m and no request buffering on PUT /api/upload-batches/{batchId}/files/{n})
