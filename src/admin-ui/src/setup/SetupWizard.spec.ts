@@ -333,6 +333,31 @@ describe('setup wizard: the provider address from the gateway (identity design Â
     wrapper.unmount()
   })
 
+  it('reads the state again when the tab is shown again, and fills in an address the gateway has by then', async () => {
+    const adminUrl = 'https://llm-admin.example.org'
+    const state = vi.spyOn(api.setup, 'state').mockResolvedValue(setupState({ gateway: { suggestedAuthority: null, adminUrl } }))
+    const wrapper = await mountWizard()
+    await goTo(wrapper, 'signIn')
+    expect(wrapper.find('[data-test=gateway-sign-in-missing]').exists()).toBe(true)
+
+    // The person finishes the gateway's wizard in the other tab and comes back.
+    state.mockResolvedValue(setupState({ gateway: { suggestedAuthority: GATEWAY_AUTHORITY, adminUrl } }))
+    const calls = state.mock.calls.length
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(state.mock.calls.length).toBe(calls + 1)
+    expect(authorityInput(wrapper).value).toBe(GATEWAY_AUTHORITY)
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.authorityFromGateway)
+    expect(wrapper.find('[data-test=gateway-sign-in-missing]').exists()).toBe(false)
+
+    // A typed address is the person's own: a later read leaves it.
+    await wrapper.get('#setup-authority').setValue(AUTHORITY)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(authorityInput(wrapper).value).toBe(AUTHORITY)
+    wrapper.unmount()
+  })
+
   it('changes nothing for a gateway without the feature', async () => {
     const wrapper = await resume(setupState({ gateway: null }))
     await goTo(wrapper, 'signIn')

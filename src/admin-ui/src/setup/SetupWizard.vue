@@ -18,7 +18,8 @@ import SetupOpenWebUiStep from './SetupOpenWebUiStep.vue'
 import SetupSignInStep from './SetupSignInStep.vue'
 import SetupSummaryStep from './SetupSummaryStep.vue'
 import {
-  canFinish, completeRequestOf, isLocked, isOpenWebUiStale, isStale, newForm, newOpenWebUiForm, openWebUiAllLocked, presetOf, testRequestOf, valuesOf,
+  canFinish, completeRequestOf, isLocked, isOpenWebUiStale, isStale, newForm, newOpenWebUiForm, openWebUiAllLocked, presetOf, suggestsAuthority, testRequestOf,
+  valuesOf,
   type OpenWebUiForm, type OpenWebUiOutcome, type ProviderPreset, type SetupForm,
 } from './setupValues'
 import { listenForTestDone, openTestWindow } from './testWindow'
@@ -159,6 +160,9 @@ function apply(next: SetupState): void {
   if (!form.value) {
     form.value = newForm(next.signIn, next.latestTest, next.gateway?.suggestedAuthority ?? null)
     preset.value = presetOf(form.value)
+  } else if (!form.value.authority.trim() && !next.latestTest && suggestsAuthority(next.signIn, next.gateway?.suggestedAuthority)) {
+    // The gateway's wizard was finished while this one was open (the link on the sign-in step): its address, into a field still empty.
+    form.value.authority = next.gateway.suggestedAuthority
   }
   openWebUiForm.value ??= newOpenWebUiForm(next.openWebUi.signIn, next.openWebUi.latestTest)
 }
@@ -201,6 +205,11 @@ watch(() => phase.value === 'wizard' && test.value?.status === 'pending', (pendi
   if (pending) poll = setInterval(() => void refresh(), 2000)
 }, { immediate: true })
 const stopListening = listenForTestDone(() => void refresh())
+// Back on this tab, for example from the gateway's wizard in the tab the sign-in step's link opened.
+function onVisible(): void {
+  if (document.visibilityState === 'visible' && phase.value === 'wizard') void refresh()
+}
+document.addEventListener('visibilitychange', onVisible)
 
 watch(() => [form.value?.clientSecret, form.value?.removeSecret] as const, (next, previous) => {
   if (next[0] !== undefined && previous[0] !== undefined) secretEdited.value = true
@@ -234,6 +243,7 @@ onBeforeUnmount(() => {
   clearInterval(clock)
   clearInterval(poll)
   stopListening()
+  document.removeEventListener('visibilitychange', onVisible)
   closePopup()
 })
 
