@@ -19,7 +19,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// payloads match the worker's contracts (<c>contracts/jobs/v1</c>).
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
+public sealed class DocumentEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -140,7 +140,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task The_list_filters_pages_and_keeps_to_the_caller_s_departments()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
 
@@ -173,7 +173,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task A_document_shows_its_sets_pii_counts_and_run_items_and_its_chunks_need_edit_or_edit_pipelines()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         using var pipelines = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PipelineEditor, seed.Code);
@@ -203,7 +203,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task Clearing_pii_needs_manage_a_reason_of_ten_and_a_flagged_document_and_enqueues_clear_pii_flag()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         var reason = new { reason = "Kontaktuppgifterna är publicerade avsiktligt." };
@@ -238,7 +238,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task Reprocess_and_release_hold_enqueue_their_commands()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
 
@@ -260,7 +260,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task Deletion_decisions_need_the_waiting_run_and_the_count_seen_and_the_csv_is_safe()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
 
@@ -301,7 +301,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     public async Task A_rejected_deletion_enqueues_reject_deletion()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         (await admin.PostAsJsonAsync($"/api/runs/{seed.Awaiting}/deletions/reject", new { proposedCount = 2 }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);

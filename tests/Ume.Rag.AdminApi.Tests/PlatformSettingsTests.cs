@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// version before it writes.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
+public sealed class PlatformSettingsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -35,7 +35,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_section_saves_with_its_version_is_audited_and_a_stale_version_is_refused()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var current = await Json(await admin.GetAsync("/api/settings/deletion-guard", Ct));
         var version = current.GetProperty("version").GetString();
@@ -59,7 +59,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Field_rules_refuse_out_of_range_values_and_everything_proxies()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var version = (await Json(await admin.GetAsync("/api/settings/network", Ct))).GetProperty("version").GetString();
 
@@ -118,7 +118,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var evaluation = await Json(await admin.GetAsync("/api/settings/evaluation", Ct));
         var version = evaluation.GetProperty("version").GetString();
@@ -147,7 +147,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     public async Task The_chat_section_takes_an_answer_ceiling_from_256_to_1000000_tokens()
     {
         // Decisions "Answer length from the model" (chat §6.3, admin §4.5): Settings.Chat.MaxAnswerTokens, unset by default.
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = await Json(await admin.GetAsync("/api/settings/chat", Ct));
         var original = System.Text.Json.Nodes.JsonNode.Parse(before.GetProperty("value").GetRawText())!.AsObject();
@@ -179,7 +179,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task V37_refuses_a_host_politeness_profile_outside_its_ranges_or_ceilings_and_saves_a_valid_one_audited()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = await Json(await admin.GetAsync("/api/settings/crawl", Ct));
         var version = before.GetProperty("version").GetString();
@@ -267,7 +267,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Settings_are_platform_admin_only()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var department = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin);
         (await department.GetAsync("/api/settings/network", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
@@ -275,7 +275,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Data_protection_lists_every_level_and_enforces_v29()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer);
 
@@ -312,7 +312,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Templates_are_listed_with_their_parameter_schema()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer);
 
         var list = await Json(await viewer.GetAsync("/api/templates", Ct));
@@ -330,7 +330,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task OpenApi_and_scalar_are_for_platform_admins()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         using var department = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin);
 

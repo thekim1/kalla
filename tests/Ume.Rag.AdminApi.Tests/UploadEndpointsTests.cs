@@ -20,38 +20,39 @@ namespace Ume.Rag.AdminApi.Tests;
 /// body limit (to-verify #32: 60 MB for a file, 1 MB for everything else).
 /// </summary>
 [Collection(AdminDatabaseGroup8.Name)]
-public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDisposable
+public sealed class UploadEndpointsTests(AdminDatabaseFixture database, UploadEndpointsTests.Host host) : IClassFixture<UploadEndpointsTests.Host>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-    private readonly string _blobs = Directory.CreateTempSubdirectory("ume-rag-admin-blobs-").FullName;
 
-    public void Dispose()
+    /// <summary>The class's admin host on a blob store and a key directory of its own, deleted after the class.</summary>
+    public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
     {
-        Directory.Delete(_blobs, recursive: true);
-        if (_keys is not null)
+        public string Blobs { get; } = Directory.CreateTempSubdirectory("ume-rag-admin-blobs-").FullName;
+
+        private string Keys => Path.Combine(Path.GetDirectoryName(Blobs)!, Path.GetFileName(Blobs) + "-keys");
+
+        protected override WebApplicationFactory<Program> Configure(WebApplicationFactory<Program> host)
         {
-            Directory.Delete(_keys, recursive: true);
+            Directory.CreateDirectory(Keys);
+            File.WriteAllText(Path.Combine(Keys, "rag-blob-internal"), Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) + "\n");
+            return host.WithWebHostBuilder(web =>
+            {
+                web.UseSetting("BlobStore:Root", Blobs);
+                web.UseSetting("KeyProvider:Directory", Keys);
+            });
+        }
+
+        protected override ValueTask CleanupAsync()
+        {
+            Directory.Delete(Blobs, recursive: true);
+            if (Directory.Exists(Keys))
+            {
+                Directory.Delete(Keys, recursive: true);
+            }
+
+            return default;
         }
     }
-
-    private WebApplicationFactory<Program> Factory()
-    {
-        var keys = Directory.CreateDirectory(Path.Combine(_blobs, "..", Path.GetFileName(_blobs) + "-keys")).FullName;
-        var keyFile = Path.Combine(keys, "rag-blob-internal");
-        if (!File.Exists(keyFile))
-        {
-            File.WriteAllText(keyFile, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) + "\n");
-        }
-
-        _keys = keys;
-        return database.HeaderFactory().WithWebHostBuilder(web =>
-        {
-            web.UseSetting("BlobStore:Root", _blobs);
-            web.UseSetting("KeyProvider:Directory", keys);
-        });
-    }
-
-    private string? _keys;
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) => await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
 
@@ -106,7 +107,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     public async Task A_batch_stages_files_commits_the_manifest_and_the_upload_sync()
     {
         var (sourceId, code) = await UploadSourceAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
 
         using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
@@ -148,7 +149,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         }
 
         // The manifest the worker reads (contracts/jobs/v1/upload-batch.manifest.schema.json) and the promoted file.
-        var manifestPath = Path.Combine(_blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json");
+        var manifestPath = Path.Combine(host.Blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json");
         using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(manifestPath, Ct));
         var entry = manifest.RootElement.GetProperty("entries").EnumerateArray().ShouldHaveSingleItem();
         entry.GetProperty("operation").GetString().ShouldBe("add");
@@ -156,7 +157,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         var slot = entry.GetProperty("uploadId").GetGuid();
         var sha = entry.GetProperty("sha256").GetString()!;
         // The source is internal: the stored blob is URB2 (#181) and decrypts to exactly the upload; its key ends in the plaintext's SHA-256.
-        var stored = await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), slot.ToString("D"), sha), Ct);
+        var stored = await File.ReadAllBytesAsync(Path.Combine(host.Blobs, "uploads", sourceId.ToString("D"), slot.ToString("D"), sha), Ct);
         stored[..4].ShouldBe("URB2"u8.ToArray());
         var envelope = factory.Services.GetRequiredService<Ume.Rag.Infrastructure.Blobs.IBlobEnvelope>();
         var plain = (await envelope.OpenReadAsync(new BlobKey($"uploads/{sourceId:D}/{slot:D}/{sha}"), Classification.Internal, Ct)).ShouldNotBeNull();
@@ -167,7 +168,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             buffer.ToArray().ShouldBe(pdf);
         }
 
-        Directory.Exists(Path.Combine(_blobs, "tmp", "upload-batches", batch.ToString("D"), "data")).ShouldBeFalse();
+        Directory.Exists(Path.Combine(host.Blobs, "tmp", "upload-batches", batch.ToString("D"), "data")).ShouldBeFalse();
         ContractSchemaCheck(manifest.RootElement);
 
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -201,7 +202,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         (await PutFileAsync(admin, discarded, 2, "y.pdf", "%PDF-1.7 annan"u8.ToArray())).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await admin.DeleteAsync($"/api/upload-batches/{discarded}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await admin.PostAsJsonAsync($"/api/upload-batches/{discarded}/commit", new { files = new[] { 1 } }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        Directory.Exists(Path.Combine(_blobs, "tmp", "upload-batches", discarded.ToString("D"))).ShouldBeFalse();
+        Directory.Exists(Path.Combine(host.Blobs, "tmp", "upload-batches", discarded.ToString("D"))).ShouldBeFalse();
     }
 
     private static void ContractSchemaCheck(JsonElement manifest) =>
@@ -212,7 +213,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     {
         // to-verify #32: Kestrel's MaxRequestBodySize stays 1 MB for the admin; the upload file endpoint alone declares 60 MB
         // (IRequestSizeLimitMetadata, applied by the endpoint middleware before the body is read).
-        await using var factory = Factory();
+        var factory = host.Factory;
         factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>>()
             .Value.Limits.MaxRequestBodySize.ShouldBe(1024 * 1024);
         var limits = factory.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints
@@ -243,7 +244,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         // A first commit wrote the manifest and failed after it (config lock, a conflict); a second with another list must not
         // go on, or the worker would sync the first list.
         var (sourceId, code) = await UploadSourceAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
         var batch = (await Json(create)).GetProperty("batchId").GetGuid();
@@ -286,7 +287,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "9" + code[1..]);
 
@@ -317,7 +318,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     {
         // admin design §4.5, §5.5.7: X-File-Name is a relative path, stored (normalised) as the slot's file name.
         var (sourceId, code) = await UploadSourceAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
         var batch = (await Json(create)).GetProperty("batchId").GetGuid();
@@ -363,7 +364,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             commit.StatusCode.ShouldBe(HttpStatusCode.OK, await commit.Content.ReadAsStringAsync(Ct));
         }
 
-        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
+        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(host.Blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
         manifest.RootElement.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("fileName").GetString())
             .ShouldBe(["HR/Policys/semester.pdf", "HR/Rutiner/Introduktion.pdf"]);
     }
@@ -404,7 +405,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     public async Task The_files_list_searches_filters_by_state_and_pages_by_name_or_newest()
     {
         var (sourceId, code, _, document) = await FilesAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         async Task<JsonElement> Get(string query)
         {
@@ -475,7 +476,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     public async Task The_files_summary_counts_live_files_by_state()
     {
         var (sourceId, code, now, _) = await FilesAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "9" + code[1..]);
 
@@ -511,7 +512,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         var summary = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files/summary", Ct));
         (summary.GetProperty("total").GetInt32(), summary.GetProperty("processing").GetInt32(), summary.GetProperty("indexed").GetInt32()).ShouldBe((3, 1, 2));
@@ -545,10 +546,10 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = Factory();
+        var factory = host.Factory;
         foreach (var kept in new[] { recent, old, live }) // the upload blobs are tombstoned, not deleted, until the purge; "gone"'s is purged
         {
-            var path = Path.Combine(_blobs, "uploads", sourceId.ToString("D"), kept.Id.ToString("D"), Convert.ToHexStringLower(kept.Sha256));
+            var path = Path.Combine(host.Blobs, "uploads", sourceId.ToString("D"), kept.Id.ToString("D"), Convert.ToHexStringLower(kept.Sha256));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllBytesAsync(path, "URB2"u8.ToArray(), Ct);
         }
@@ -576,7 +577,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
             batch = body.GetProperty("batchId").GetGuid();
         }
 
-        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
+        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(host.Blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
         ContractSchemaCheck(manifest.RootElement);
         var entry = manifest.RootElement.GetProperty("entries").EnumerateArray().ShouldHaveSingleItem();
         (entry.GetProperty("operation").GetString(), entry.GetProperty("uploadId").GetGuid(), entry.GetProperty("fileName").GetString(),

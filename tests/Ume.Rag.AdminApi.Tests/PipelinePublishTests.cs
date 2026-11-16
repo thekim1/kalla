@@ -17,7 +17,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// with one reprocess sync per source, and rollback.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class PipelinePublishTests(AdminDatabaseFixture database)
+public sealed class PipelinePublishTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -90,7 +90,7 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
         db.Add(source);
         await db.SaveChangesAsync(Ct);
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
         var version = (await admin.GetFromJsonAsync<JsonElement>($"/api/pipelines/{platform.Id}", Ct)).GetProperty("version").GetString();
@@ -246,7 +246,7 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
         pipeline.PublishedVersionId = published.Id;
         await db.SaveChangesAsync(Ct);
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         var path = $"/api/pipelines/{pipeline.Id}/preview";

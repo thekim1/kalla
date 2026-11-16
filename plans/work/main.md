@@ -118,7 +118,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   context's `oidc_authority` as the wizard's suggestion is merged (#779). **Open:** Ume.Rag's side of the rest when the
   gateway releases it (`UME_DOMAIN` for all five names, `stack.env.example` at 1 CHANGE value); the Compose host
   firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up). Stream b was
-  told on #759.
+  told on #759. **Ume.Rag's side of stage 2 is built** (session 44, draft #786: 1 CHANGE value, the
+  manifest as the stack file's default, the gateway's wizard first in the boot test, the docs); it is finished on the
+  gateway's release (HANDOVER has the steps).
 
 ### [x] M-21 Deployment values across releases: retired variables named, a notice on Home (user, 2026-11-16)
 - **Do:** Decisions "Deployment values across releases" and admin §5.5.1 (*Deployment notices*), on a

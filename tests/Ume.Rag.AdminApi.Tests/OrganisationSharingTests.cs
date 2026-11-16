@@ -18,7 +18,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// create. Another department sees a shared collection's summary and topics and gets 404 on its sources and documents.
 /// </summary>
 [Collection(AdminDatabaseGroup7.Name)]
-public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
+public sealed class OrganisationSharingTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private const string Model = "ume/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -135,7 +135,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     public async Task A_shared_collection_shows_its_summary_and_topics_to_another_department_and_its_sources_and_documents_stay_404()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         using var user = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.UserCode);
 
@@ -225,7 +225,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     public async Task Narrowing_the_sharing_is_refused_while_another_departments_published_assistant_links_it_v35()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         (await ShareAsync(owner, seed.Collection, CollectionSharingLevels.Municipality)).StatusCode.ShouldBe(HttpStatusCode.OK);
         var linking = await AssistantAsync(seed.User, seed.Collection, ["bygglov"]);
@@ -273,7 +273,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     public async Task An_assistant_links_a_shared_collection_with_topics_and_v11_warns_on_an_unshared_one_or_a_bad_topic()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         using var user = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.UserCode);
         using var created = await user.PostAsJsonAsync("/api/assistants", new
@@ -354,7 +354,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
         }
 
         var first = await TeamIdAsync(teamCode + "a");
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var user = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.UserCode);
         user.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.TeamHeader, $"{teamCode}b,{teamCode}a");
 
@@ -402,7 +402,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     public async Task The_map_has_a_row_per_department_knowledge_base_assistant_and_audience_path()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         (await ShareAsync(owner, seed.Collection, CollectionSharingLevels.Municipality)).StatusCode.ShouldBe(HttpStatusCode.OK);
         var permits = await AssistantAsync(seed.User, seed.Collection, ["bygglov"]);
@@ -459,7 +459,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     public async Task An_archived_assistant_is_off_the_map_and_archived_in_used_by()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         (await ShareAsync(owner, seed.Collection, CollectionSharingLevels.Municipality)).StatusCode.ShouldBe(HttpStatusCode.OK);
         var active = await AssistantAsync(seed.User, seed.Collection, ["bygglov"]);
@@ -500,7 +500,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
             await db.Documents.Where(d => d.Id == seed.Document).ExecuteUpdateAsync(u => u.SetProperty(d => d.LiveChunkSetId, (Guid?)null), Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         var row = (await owner.GetFromJsonAsync<JsonElement>("/api/collections?pageSize=200", Ct)).GetProperty("items").EnumerateArray()
             .Single(i => i.GetProperty("id").GetGuid() == seed.Collection);
@@ -519,7 +519,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
             await db.Departments.Where(d => d.Id == seed.Third).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsActive, false), Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
         var names = (await owner.GetFromJsonAsync<JsonElement>("/api/organisation/departments/names", Ct)).EnumerateArray().ToList();
         var ids = names.Select(n => n.GetProperty("id").GetGuid()).ToList();
@@ -532,7 +532,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     [Fact]
     public async Task The_organisation_routes_carry_the_policies_the_permission_matrix_tests_check()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .GroupBy(e => $"{e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods[0]} {e.RoutePattern.RawText?.TrimEnd('/')}")
             .ToDictionary(g => g.Key, g => g.SelectMany(e => e.Metadata.GetOrderedMetadata<IAuthorizeData>()).Select(a => a.Policy).OfType<string>().ToHashSet());
