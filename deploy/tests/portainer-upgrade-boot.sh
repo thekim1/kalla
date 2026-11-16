@@ -134,7 +134,8 @@ kept_files() {
     docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029 -c \
     'for f in /c/ca.pem /c/data-protection.pfx /s/.pepper; do [ -e "$f" ] && sha256sum "$f"; done; true'
 }
-migration() { dc logs --no-color --no-log-prefix rag-migrate 2>/dev/null | sed -n 's/.*Database schema is at migration \([0-9A-Za-z_]*\).*/\1/p' | tail -n 1; }
+# migration: the migration rag-migrate's last "Database schema is at migration ..." line names (a JSON log line).
+migration() { dc logs --no-color --no-log-prefix rag-migrate 2>/dev/null | grep -F 'Database schema is at migration' | grep -o '"Migration":"[^"]*"' | tail -n 1 | cut -d'"' -f4; }
 
 dc down -v --remove-orphans >/dev/null 2>&1 || true
 
