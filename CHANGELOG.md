@@ -5,6 +5,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+- **A failed query embedding says why in the log** (#781): every failed call logs a warning with the profile, the
+  `degraded` reason and what happened (a time-out, the gateway's status, an unexpected answer), never the query. Before,
+  a time-out left nothing in the log while the search went keyword-only. The test hosts of rag-api get generous
+  embedding limits, as the service hosts have since #584: a first call on a busy runner passed the 2 s default and
+  turned an expected answer into "search unavailable" (it failed the first attempt of the 0.7.0 release run).
+
 ## 0.7.0 (2026-11-16)
 
 **The setup wizard (M-20):** sign-in is set up in the browser instead of in the deployment's variables. rag-admin
