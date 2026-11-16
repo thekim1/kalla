@@ -19,17 +19,20 @@ writes the rendered units (CI runs `systemd-analyze verify` on them).
 |---|---|---|
 | `rag-ingestion.slice` | Caps the ingestion zone (rag-worker, rag-parser, rag-clamav, rag-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
 | `rag-firewall.service` + `.timer` | `docker-user-firewall.sh`: egress per Compose network in `DOCKER-USER`, no new connections from the networks to the host | After Docker starts or restarts, then every 15 minutes (host names resolved again) |
-| `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
+| `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the rag-postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.service` + `.timer` | `backup-postgres.sh --status-only`: backup age and WAL archive age from `pgbackrest info` and `pg_stat_archiver` | Every 2 minutes |
 | `rag-upload-backup.service` + `.timer` | `backup-uploads.sh`: new files below `uploads/` to the upload copy, never overwriting | Every 10 minutes (not enabled with an S3 backup target) |
-| `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `ume-rag.restart-unhealthy=true` that are unhealthy (rag-clamav) | Every minute |
+| `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `ume-rag.restart-unhealthy=true` that are unhealthy (rag-clamav and rag-renderer, with `compose.hardened.yaml`) | Every minute |
 | `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates in the `rag-certs` volume; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
 
 ## Requirements
 
+With `compose.hardened.yaml`:
+
 - **cgroup v2 with Docker's systemd cgroup driver** (`docker info` shows `Cgroup Driver: systemd`, `Cgroup Version: 2`;
   to-verify #90). Without it the slice caps nothing. Where the slice is not installed (a developer machine), set
-  `UME_RAG_INGESTION_SLICE=` (empty) in `deploy/.env`.
+  `UME_RAG_INGESTION_SLICE=` (empty) in `deploy/.env`, by hand: a re-run of `init-deployment.sh` drops empty
+  values, so add it again after each run.
 - **Docker's iptables integration** (the default), so `DOCKER-USER` exists. The firewall uses the `iptables` that
   Docker uses (`iptables-nft` on current distributions). IPv4 only: the Compose networks have no IPv6.
 - `172.30.0.0/16` stays out of Docker's `default-address-pools` (the Compose networks use fixed subnets there).

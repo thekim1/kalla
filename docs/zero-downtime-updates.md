@@ -9,7 +9,7 @@ for an installation that does not ask for it. The design is [`repo-and-deploymen
 
 | You deploy with | Single instance (default) | Without downtime |
 |---|---|---|
-| Docker Compose (`compose.prod.yaml`) | `dc up -d --wait` ([upgrade guide](upgrade-guide.md)) | `init-deployment.sh --rolling` and `rolling-update.sh` (below) |
+| Docker Compose (`compose.rag.yaml`) | `dc up -d --wait` ([upgrade guide](upgrade-guide.md)) | `init-deployment.sh --rolling` and `rolling-update.sh` (below) |
 | Portainer (`deploy/portainer/compose.portainer.yaml`) | Update the stack | Not supported: Portainer recreates every container at once |
 | Kubernetes | – | Built in: see [Kubernetes](kubernetes.md) |
 
@@ -48,8 +48,9 @@ is lost). Ingestion pauses for that minute; questions and the admin UI do not.
 ## Docker Compose
 
 The overlay `deploy/compose.rolling.yaml` adds `rag-api-b` and `rag-admin-b` with the same image and settings, on the
-next host ports up (8544 and 9544 by default). The reverse proxy lists both ports of each service: something has to
-choose the instance, so clients that reach rag-api without the proxy cannot use this. The database roles' connection
+next host ports up (8544 and 9544 by default). A reverse proxy of your own lists both ports of each service: something has to
+choose the instance, so clients that reach rag-api without the proxy cannot use this. The stack's own TLS proxy (the
+profile `proxy`) knows one slot of each, so it cannot be used for this. The database roles' connection
 limits already have room for both slots (`ume_rag_api` 26 for 2 × 12, `ume_rag_admin` 12 for 2 × 5). The two slots add
 1.5 GB to the memory limits: on the 16 GB host profile check the headroom (production setup, *Sizing*).
 
@@ -58,16 +59,20 @@ limits already have room for both slots (`ume_rag_api` 26 for 2 × 12, `ume_rag_
 New installation:
 
 ```bash
-./deploy/init-deployment.sh ... --proxy --rolling   # COMPOSE_FILE gets compose.rolling.yaml; nginx.conf lists both slots
-sudo deploy/host/install.sh                          # the firewall then also admits the proxy to 8544 and 9544
+./deploy/init-deployment.sh ... --rolling --proxy-address <your proxy's IPv4 address>   # COMPOSE_FILE gets compose.rolling.yaml
+sudo deploy/host/install.sh          # with --hardened: the firewall then also admits the proxy to 8544 and 9544
 dc up -d --wait
 ```
 
-Existing installation: re-run `init-deployment.sh` with the same options plus `--rolling` (it keeps your secrets and
-certificates and saves the old `.env` as `.env.bak`), restart the firewall (`sudo systemctl restart rag-firewall`),
-`dc up -d --wait`, and add the second slots to the proxy.
+`--proxy-address` matters only with `--hardened`, where the host firewall admits only that address to the published
+ports; without it the ports are open to whoever reaches the host (they bind `0.0.0.0` unless `UME_RAG_API_BIND` and
+`UME_RAG_ADMIN_BIND` say otherwise).
 
-**nginx** (`deploy/proxy/nginx.conf.example`, filled in by `init-deployment.sh --proxy --rolling`):
+Existing installation: re-run `init-deployment.sh` with only `--rolling` (it keeps every other line of `deploy/.env`;
+the certificates and secrets are in the volumes), restart the firewall where it is installed
+(`sudo systemctl restart rag-firewall`), `dc up -d --wait`, and add the second slots to the proxy.
+
+**nginx** (`deploy/proxy/nginx.conf.example`: fill in its placeholders and enable the lines marked `#rolling`):
 
 ```nginx
 upstream ume_rag_api {
@@ -113,15 +118,16 @@ Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of i
 ./deploy/rolling-update.sh            # --pull to pull the images first
 ```
 
-It checks that all four slots are healthy, runs `rag-migrate`, then replaces `rag-api`, `rag-api-b`, `rag-admin` and
+It checks that all four slots are healthy, runs `rag-bootstrap` and `rag-migrate`, then replaces `rag-api`, `rag-api-b`, `rag-admin` and
 `rag-admin-b` one after the other. It waits until each new slot is healthy, plus `UME_RAG_ROLLING_SETTLE_SECONDS` (15)
 so the proxy takes it back into rotation, before stopping the next, and refuses to stop a slot while its partner is
 unhealthy. Then it updates the worker (stop, then start), the parser, ClamAV and the renderer (the last two where their
 profiles are on), each only if it changed.
-A slot whose image did not change is left alone; `--force` recreates it anyway, for example after `--renew-certs`.
+A slot whose image did not change is left alone; `--force` recreates it anyway, for example after `rag-bootstrap` has
+re-issued its certificate.
 
-A new `POSTGRES_IMAGE` restarts the database, which is never rolling: the script stops with an error unless you pass
-`--with-postgres`, which replaces postgres (a short outage of every service; announce it), runs
+A new `RAG_POSTGRES_IMAGE` restarts the database, which is never rolling: the script stops with an error unless you pass
+`--with-postgres`, which replaces `rag-postgres` (a short outage of every service; announce it), runs
 `ALTER EXTENSION vector UPDATE` and then continues as above. Other superuser steps the release lists still run by hand
 first (upgrade guide, *Superuser steps*).
 
@@ -150,13 +156,14 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 
 ## Tested
 
-`deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (`ume-rag/*:latest` built
-locally, or a release's through `API_IMAGE`, `ADMIN_IMAGE`, `MIGRATIONS_IMAGE` and `POSTGRES_IMAGE`). It starts
-`compose.prod.yaml` + `compose.rolling.yaml` with the files `init-deployment.sh --proxy --rolling` writes, puts nginx
-with the generated `nginx.conf` in front, replaces every slot with `rolling-update.sh --force` while clients send POST
-and GET requests to rag-api and load the admin UI, and fails on a single lost request. The proxy runs on the stack's
-`edge` network and reaches the slots by name: Docker Desktop's port forwarder accepts connections to a restarting
-container's published port and then resets them, which a Linux host does not do.
+`deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (`compose.rag.yaml`'s pinned
+images, or others through `RAG_API_IMAGE`, `RAG_ADMIN_IMAGE`, `RAG_MIGRATIONS_IMAGE` and `RAG_POSTGRES_IMAGE`, such as
+`ume-rag/*:latest` built locally). It starts `compose.rag.yaml` + `compose.rolling.yaml` with the `deploy/.env` that
+`init-deployment.sh --rolling` writes, puts nginx with `deploy/proxy/nginx.conf.example` (both slots of each service)
+in front, replaces every slot with `rolling-update.sh --force` while clients send POST and GET requests to rag-api and
+load the admin UI, and fails on a single lost request. The proxy runs on the stack's `rag-edge` network and reaches the
+slots by name: Docker Desktop's port forwarder accepts connections to a restarting container's published port and then
+resets them, which a Linux host does not do.
 
 | Run (2026-11-10, Docker Desktop on WSL 2, images built from `main`) | Requests during the update | Lost |
 |---|---|---|

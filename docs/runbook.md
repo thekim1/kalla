@@ -32,10 +32,16 @@ dc stop                                  # stop everything, keep the volumes
 dc up -d --wait                          # start (or apply a changed .env or image)
 ```
 
-Never run `dc down --volumes` on a deployment: it deletes `postgres-data`, `rag-blobs`, the signatures and, with a
-`local` backup target, the backup repository. A plain `dc down` keeps the volumes. Every .NET service answers
-`/health/live`, `/health/ready` and `/version`; the published ones are on `https://localhost:8543` (api) and `:9543`
-(admin), with the internal CA in `deploy/certs/ca.pem`.
+Never run `dc down --volumes` on a deployment: it deletes `rag-postgres-data`, `rag-blobs`, the certificates and
+secrets (`rag-certs`, `rag-secrets`), the signatures and, with a `local` backup target, the backup repository. A plain
+`dc down` keeps the volumes. Every .NET service answers `/health/live`, `/health/ready` and `/version`; the published
+ones are on `https://localhost:8543` (api) and `:9543` (admin), with the internal CA in the `rag-certs` volume. Read it
+out once, as `rag-ca.pem`, for the checks below:
+
+```bash
+docker run --rm --network none -v ume-rag_rag-certs:/c:ro --entrypoint cat \
+  "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" /c/ca.pem > rag-ca.pem
+```
 
 ## Daily checks
 
@@ -47,9 +53,9 @@ systemctl list-timers 'rag-*'                   # every timer has a next run; th
 systemctl list-units --failed 'rag-*'           # no failed unit
 cat /var/lib/ume-rag/backup.prom /var/lib/ume-rag/upload-backup.prom
 dc ps                                           # every service healthy (rag-migrate exited 0)
-sudo curl --cacert deploy/certs/ca.pem https://localhost:8543/health/ready
-sudo curl --cacert deploy/certs/ca.pem https://localhost:9543/health/ready
-dc exec -T postgres pgbackrest --stanza=ragdb info
+curl --cacert rag-ca.pem https://localhost:8543/health/ready
+curl --cacert rag-ca.pem https://localhost:9543/health/ready
+dc exec -T rag-postgres pgbackrest --stanza=ragdb info
 ```
 
 In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_status 0`,
@@ -247,21 +253,22 @@ the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a
 
 | Unit | Runs | When |
 |---|---|---|
-| `rag-backup.timer` | `backup-postgres.sh --type auto`: a pgBackRest backup inside the postgres container; full on Sundays or when the newest full is 7 days old (or there is none), else differential; expiry follows each backup | daily at 01:30 (up to 15 minutes later), caught up after downtime |
+| `rag-backup.timer` | `backup-postgres.sh --type auto`: a pgBackRest backup inside the rag-postgres container; full on Sundays or when the newest full is 7 days old (or there is none), else differential; expiry follows each backup | daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.timer` | `backup-postgres.sh --status-only`: the metrics below, from `pgbackrest info` and `pg_stat_archiver` | every 2 minutes |
 | `rag-upload-backup.timer` | `backup-uploads.sh`: new files below `uploads/` of the blob store to the upload copy, never overwriting | every 10 minutes (not with an S3 target) |
-| `archive_command` in postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
+| `archive_command` in rag-postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
 
 Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. The pepper
-(`deploy/secrets/.pepper`), `deploy/certs/data-protection.pfx` and the rest of `deploy/secrets/` are backed up
-separately, through the municipality's secret store; the blob master key and the pgBackRest passphrase are also
-escrowed (*Key escrow*). Open WebUI's data directory (`UME_RAG_OPENWEBUI_DATA_DIR`) is **not backed up by any script
-in P0** (*Public-records requests*).
+(`rag-secrets/.pepper`) and `rag-certs/data-protection.pfx` are backed up separately, through the municipality's
+secret store (production-setup.md, *5. Start*, reads them out of the volumes); the blob master key and the pgBackRest
+passphrase are also escrowed (*Key escrow*). The other files in `rag-secrets` and `rag-certs` are generated again by
+`rag-bootstrap` when they are missing. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
+script in P0** (*Public-records requests*).
 
 ```bash
 systemctl list-timers 'rag-*'
 journalctl -u rag-backup.service --since yesterday
-dc exec -T postgres pgbackrest --stanza=ragdb info      # backup sets and the archived WAL range
+dc exec -T rag-postgres pgbackrest --stanza=ragdb info  # backup sets and the archived WAL range
 ```
 
 ### `backup-postgres.sh`
@@ -311,13 +318,14 @@ Proposed alerts (§7.4 rule 5):
 `deploy/restore-pitr.sh` restores ragdb **in place** to a moment you choose. It replaces the current database:
 everything archived before it starts stays restorable, nothing written after its first step is.
 
-**First, the setup wizard's re-open value:** empty `UME_RAG_SETUP_REOPEN` in `deploy/.env` (Kubernetes: the
+**First, the setup wizard's re-open value:** remove `UME_RAG_SETUP_REOPEN` from `deploy/.env`
+(`./deploy/init-deployment.sh --set UME_RAG_SETUP_REOPEN=`, then `dc up -d`; Kubernetes: the
 `Setup__Reopen` literal; Portainer: the variable). The restored database may have consumed an older value, and rag-admin
 would open the wizard again for an hour. The client secrets the wizard stored need the same `data-protection.pfx`
 (*Sign-in and the setup wizard*).
 
 1. **Choose the time.** Find the last good moment (an incident report, the audit log). Check that it lies inside the
-   archived range with `dc exec -T postgres pgbackrest --stanza=ragdb info`. Write it with a UTC offset; without one the
+   archived range with `dc exec -T rag-postgres pgbackrest --stanza=ragdb info`. Write it with a UTC offset; without one the
    host's time zone applies. Transactions committed up to and including that time are kept.
 2. **Preview.** Without `--confirm` the script prints what it would do and stops:
 
@@ -337,10 +345,10 @@ would open the wizard again for an hour. The client secrets the wizard stored ne
    1. closes the current WAL segment and waits up to 60 s until it is archived, so the restore can reach the newest
       commits;
    2. stops `rag-api`, `rag-admin` and `rag-worker` (those that run, the second slots of `--rolling` included), then
-      postgres;
-   3. runs `pgbackrest restore --type=time --delta` in a one-off container of the postgres service (same image, user,
-      volumes and repository settings) on the `postgres-data` volume;
-   4. starts postgres, which recovers to the target and pauses there, and prints the last transaction it replayed;
+      `rag-postgres`;
+   3. runs `pgbackrest restore --type=time --delta` in a one-off container of the `rag-postgres` service (same image,
+      user, volumes and repository settings) on the `rag-postgres-data` volume;
+   4. starts `rag-postgres`, which recovers to the target and pauses there, and prints the last transaction it replayed;
    5. promotes it to a new timeline (the old one stays in the repository) and runs `pgbackrest check`;
    6. starts the services it stopped, waits until they are healthy, and prints the time of each step and the total
       (the achieved RTO).
@@ -367,15 +375,30 @@ backup, and a share or S3 target is slower than a local volume: the test-host dr
 
 ### Restoring onto another host
 
-Not drilled yet; the test-host drill confirms it. The order matters, because `init-deployment.sh` never overwrites
-existing files:
+Not drilled yet; the test-host drill confirms it. The order matters, because `rag-bootstrap` never overwrites an
+existing secret but creates a new one where none is, at the first `up`:
 
-1. Before running `init-deployment.sh` on the new host, put back from the escrow and the secret store:
-   `secrets/pgbackrest/cipher-pass` (owner 999, mode 0600), `secrets/keys/rag-blob-internal` (owner 1654, mode 0400),
-   `secrets/.pepper` and `certs/data-protection.pfx`. The escrow set's `MANIFEST` says where each key goes.
-2. Run `init-deployment.sh` with the same `--backup-target`, then the install steps of production-setup.md up to
-   `up --wait` (no `stanza-create`: the stanza exists).
-3. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
+1. Run `init-deployment.sh` on the new host with the same `--backup-target`, then the install steps of
+   production-setup.md up to, not including, the first `up`.
+2. Create the project's volumes without starting anything (`dc create`), and put back into them from the escrow and the
+   secret store: `pgbackrest/cipher-pass` (mode 0600) and `keys/rag-blob-internal` (mode 0400) into `rag-secrets`,
+   `.pepper` into `rag-secrets` and `data-protection.pfx` into `rag-certs`. The escrow set's `MANIFEST` says where
+   each key goes; `rag-bootstrap` gives them to their users. For example, with the escrow set at `/media/escrow-a/<set>`
+   and the two secret-store files in `/root/restore`:
+
+   ```bash
+   dc create
+   docker run --rm --network none -v ume-rag_rag-secrets:/s -v ume-rag_rag-certs:/c \
+     -v /media/escrow-a/<set>:/e:ro -v /root/restore:/k:ro --entrypoint sh \
+     "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" -c '
+       mkdir -p /s/keys /s/pgbackrest
+       cp /e/keys/rag-blob-internal /s/keys/ && chmod 0400 /s/keys/rag-blob-internal
+       cp /e/pgbackrest/cipher-pass /s/pgbackrest/ && chmod 0600 /s/pgbackrest/cipher-pass
+       cp /k/.pepper /s/.pepper && cp /k/data-protection.pfx /c/data-protection.pfx'
+   ```
+
+3. `dc up -d --wait` (no `stanza-create`: the stanza exists), then `escrow-keys.sh --verify` against the set.
+4. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
 
 For a drill (not a real loss of the production host), give the drill host a **copy** of the repository, not the
 production repository itself: after the restore it archives WAL and its backup timer takes backups, which must not
@@ -410,9 +433,9 @@ Record the date, the achieved RPO and RTO, and anything that went wrong.
 `deploy/escrow-keys.sh` exports the keys no backup can replace to escrow media and reads them back. Escrowed in P0
 and P1:
 
-- `secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
-  `internal` blobs cannot be decrypted.
-- `secrets/pgbackrest/cipher-pass`: the repository passphrase. Without it no backup can be read.
+- `keys/rag-blob-*` in `rag-secrets`: the blob master keys of the file key provider (`rag-blob-internal`). Without
+  them the `internal` blobs cannot be decrypted.
+- `pgbackrest/cipher-pass` in `rag-secrets`: the repository passphrase. Without it no backup can be read.
 
 Chat master keys (`rag-chat-<level>`) join only once stored chat content is allowed (register A1); there are none in
 P0 and P1. The pepper and `data-protection.pfx` go to the secret store, not to this escrow.
@@ -423,9 +446,11 @@ sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, 
 ```
 
 The export writes the keys with `SHA256SUMS` and a `MANIFEST` (what each key is and where it goes back), read-only for
-the owner. `--verify` checks the checksums and the key formats, and that every key equals this deployment's current
-one (and the passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `PASS` and exits 0, or names each
-`FAIL`. `--env-file FILE` or `--secrets-dir DIR` points it at another deployment.
+the owner. It reads the keys out of the deployment's `rag-secrets` volume, read-only, with `rag-bootstrap`'s image.
+`--verify` checks the checksums and the key formats, and that every key equals this deployment's current one (and the
+passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `PASS` and exits 0, or names each `FAIL`.
+`--env-file FILE` or `--secrets-dir DIR` (a directory instead of the volume, such as Kubernetes' `deploy/secrets`)
+points it at another deployment.
 
 - **Run it** after the first deployment (production-setup.md) and **after every rotation**, then verify: `--verify`
   fails with "differs from the deployment's key" until the new key is escrowed. The upgrade guide verifies the escrow
@@ -439,8 +464,9 @@ one (and the passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `P
 ## Upload copy
 
 `rag-upload-backup.timer` runs `deploy/backup-uploads.sh` every 10 minutes, so an upload is off the host within 15. It
-runs the profiled Compose service `rag-upload-backup` (the postgres image's shell as uid 1654, the blob volume
-read-only, no network) with `UME_RAG_UPLOAD_BACKUP_DIR` mounted as the target. Each new file is written under a
+runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (a shell in `rag-bootstrap`'s image
+as uid 1654, the blob volume read-only, no network) with `UME_RAG_UPLOAD_BACKUP_DIR` (or, with a `local` target, the
+volume `rag-upload-copy`) mounted as the target. Each new file is written under a
 temporary name and renamed; a file already in the copy is skipped. Deletions are not propagated: prune the copy with
 the backup retention (35 days). With an S3 target there is no upload copy yet (not built in P0).
 
@@ -453,29 +479,29 @@ journalctl -u rag-upload-backup.service --since today
 ### Restoring a missing upload
 
 The upload copy holds every file below `uploads/` of the blob store, under the same key (`<backup target>/uploads/uploads/`,
-or `deploy/upload-backup/uploads/` with a `local` target). Keys are write-once, so copying back only what is missing is
-always safe. With the stack running:
+or `uploads/` in the volume `rag-upload-copy` with a `local` target). Keys are write-once, so copying back only what
+is missing is always safe. With the stack running:
 
 ```bash
-dir="$(sed -n 's/^UME_RAG_UPLOAD_BACKUP_DIR=//p' deploy/.env)"
+dir="$(sed -n "s/^UME_RAG_UPLOAD_BACKUP_DIR='\(.*\)'$/\1/p" deploy/.env)"
 docker run --rm --network none --user 1654:1654 --read-only \
-  -v ume-rag_rag-blobs:/data/blobs -v "$dir/uploads:/backup/uploads:ro" \
-  --entrypoint sh ume-rag/postgres:latest -c '
+  -v ume-rag_rag-blobs:/data/blobs -v "${dir:-ume-rag_rag-upload-copy}:/backup:ro" \
+  --entrypoint sh "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" -c '
     cd /backup/uploads && find . -type f ! -name "*.partial" | while IFS= read -r f; do
       [ -e "/data/blobs/rag/uploads/$f" ] && continue
       mkdir -p "/data/blobs/rag/uploads/$(dirname "$f")" && cp -p "$f" "/data/blobs/rag/uploads/$f"
     done'
 ```
 
-Use the deployment's `POSTGRES_IMAGE` if it is pinned (any image with a POSIX shell works). This step has not been
+Any image with a POSIX shell works; `rag-bootstrap`'s is the one `rag-upload-backup` uses. This step has not been
 drilled yet.
 
 ## Updates and restarts
 
 Upgrades follow the [upgrade guide](upgrade-guide.md): announce the window, take a full backup and verify the escrow,
 replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `rag-migrate`
-first. With one slot each (the default) `rag-api` and `rag-admin` are replaced together in one announced window. With
-`init-deployment.sh --rolling` there are two of each behind the proxy, and `deploy/rolling-update.sh` replaces them one
+first (after `rag-bootstrap`). With one slot each (the default) `rag-api` and `rag-admin` are replaced together in
+one announced window. With `init-deployment.sh --rolling` there are two of each behind your own proxy, and `deploy/rolling-update.sh` replaces them one
 at a time for releases marked *Rolling update: yes* ([Updates without downtime](zero-downtime-updates.md)).
 
 **The worker is stop-then-start, never overlapping.** Two `rag-worker` processes at once would exceed its role's
@@ -513,9 +539,9 @@ journalctl -u rag-restart-unhealthy.service --since today
 ## Portainer and other hosts without shell access
 
 `deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
-through environment variables, for hosts where `init-deployment.sh` cannot run. It is the gateway's
+through environment variables, for hosts without shell access. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged but for the default of its `UME_INTEGRATION_MANIFEST` (below), plus RAG's
-services (all named `rag-…`): rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker, rag-parser and,
+services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `rag-…`): rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker, rag-parser and,
 with their profiles, rag-clamav (`clamav`) and rag-renderer (`render`) and rag-openwebui (`openwebui`, #657). Step by
 step for a new VM or an upgrade: [portainer.md](portainer.md).
 
@@ -559,7 +585,8 @@ a declared OIDC client secret) are written again on every deploy, and removed wh
 the stack's environment, so restrict who can view it. Update the stack after changing one: the services pick up a
 changed gateway key or client secret within seconds, without a restart.
 
-**Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
+**Differences from a Compose host with `--hardened` and a backup target.** No fixed subnets and no host firewall
+(*Host firewall* does not apply;
 firewall 8543 and 9543 to your proxy yourself, or use the stack's own TLS proxy, the profile `proxy`:
 [portainer.md](portainer.md#tls-proxy)), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
 up `rag-postgres` with `pg_dump` or volume snapshots. The renderer is off by default: Portainer cannot load its
@@ -573,28 +600,30 @@ listeners keep the internal CA.
 - **Upgrade.** Read the [upgrade guide](upgrade-guide.md), paste the new release's `compose.portainer.yaml` asset over
   the stack's file (one release at a time: [portainer.md](portainer.md)), and
   *Update the stack* with *Re-pull image and redeploy*. `rag-migrate` runs before the services.
-- **Generated file.** Edit `deploy/portainer/compose.rag.template.yaml` or `deploy/portainer/bootstrap.sh`, then run
-  `deploy/portainer/build-stack.sh`: it takes the gateway's current `compose.portainer.yaml` (from GitHub, or a path
-  argument), adds RAG's sections and inlines the postgres config files. Run it again after a gateway release too.
+- **Generated file.** Edit `deploy/compose.rag.yaml`, `deploy/portainer/bootstrap.sh` or
+  `deploy/portainer/stack-header.txt`, then run `deploy/portainer/build-stack.sh`: it takes the gateway's
+  `compose.portainer.yaml` (a release's asset from GitHub, or a path argument), adds RAG's services and inlines the
+  config files. Run it again after a gateway release too.
 
 ## Host firewall
 
+With `--hardened` (`compose.hardened.yaml`'s fixed subnets, and `deploy/host/install.sh`),
 `deploy/host/docker-user-firewall.sh` gives each Compose network its egress rules in the `DOCKER-USER` chain
 (`UME-RAG-EGRESS`) and rejects new connections from the networks to the host itself (`UME-RAG-INPUT`).
 `rag-firewall.service` applies it when Docker starts or restarts; its timer applies it again every 15 minutes, because
-the allow-lists are host names, resolved when it runs.
+the allow-lists are host names, resolved when it runs. Without `--hardened` none of this section applies.
 
 | Network | May reach |
 |---|---|
-| `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
-| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: empty, the setup wizard can't reach any provider), the Open WebUI host, the OTLP endpoint, DNS |
-| `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
-| `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused with `--clamav off` |
-| `backup` (postgres) | the S3 endpoint, DNS; nothing with a mounted share |
-| `openwebui` | `rag-api`'s public URL and the OIDC provider, DNS (when `UME_RAG_OPENWEBUI_HOST` is set) |
+| `rag-data`, `rag-ingestion`, `rag-parser`, `rag-render` | nothing; `rag-render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
+| `rag-edge` (api, admin, Open WebUI, rag-proxy) | Open WebUI's OIDC provider and DNS, with the profile `openwebui`; else nothing (it carries the published ports and the traffic between its members) |
+| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: empty, the setup wizard can't reach any provider), the OTLP endpoint, DNS |
+| `rag-crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
+| `rag-mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused without the profile `clamav` |
+| `backup` (rag-postgres) | the S3 endpoint, DNS; nothing with a mounted share |
 
 A container sends all its egress through the network that holds its default route; Compose pins that with
-`gw_priority` (api and admin: `llm`, worker: `crawl`).
+`gw_priority` (api and admin: `llm`, worker: `rag-crawl`).
 
 ```bash
 deploy/host/docker-user-firewall.sh --dry-run                    # the rules it would apply (no root needed)
@@ -604,7 +633,7 @@ sudo iptables -S UME-RAG-EGRESS
 sudo deploy/host/docker-user-firewall.sh --remove                # take the chains and jumps out
 ```
 
-Other options: `--env-file FILE`, `--subnet NAME=CIDR` (when a network's subnet differs from the Compose files),
+Other options: `--env-file FILE`, `--subnet NAME=CIDR` (when a network's subnet differs from `compose.hardened.yaml`),
 `--allow NAME=HOST[:PORT]` (one more destination; port 443 when omitted) and `--dns IP` (instead of the resolvers in
 `/etc/resolv.conf`). The timer runs the script without them, so an option given by hand lasts only until the next
 run. To keep one, override the service's command with `sudo systemctl edit rag-firewall.service`:
@@ -612,7 +641,7 @@ run. To keep one, override the service's command with `sudo systemctl edit rag-f
 ```ini
 [Service]
 ExecStart=
-ExecStart=/opt/ume-rag/deploy/host/docker-user-firewall.sh --env-file /opt/ume-rag/deploy/.env --allow crawl=intranet.umea.se
+ExecStart=/opt/ume-rag/deploy/host/docker-user-firewall.sh --env-file /opt/ume-rag/deploy/.env --allow rag-crawl=intranet.umea.se
 ```
 
 (with your deployment's path). `install.sh` leaves that override in place.
@@ -651,7 +680,7 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
 
 **Status: open; there is no admin procedure yet.** In the pilot our database holds no chat content (history mode
 `none`), so a request for a conversation is answered from Open WebUI's own copy, the primary copy (weakness review §4,
-plan §8). With the pilot settings in `deploy/compose.openwebui.yaml` (`ENABLE_ADMIN_CHAT_ACCESS=false`,
+plan §8). With the pilot settings in `deploy/compose.rag.yaml` (`ENABLE_ADMIN_CHAT_ACCESS=false`,
 `ENABLE_ADMIN_EXPORT=false`) **no Open WebUI admin can find, open or export another user's conversation**. The only
 route that works today is the user's own export. Which route the registrar uses is decided in the DPIA (register G1,
 with W2; to-verify #173) before go-live; direct SQL against Open WebUI's database is ruled out. This section gets the
@@ -701,8 +730,8 @@ chosen one and drops the others.
 Also for G1 and W2:
 
 - *Feedback snapshots* cover only rated conversations, as of the rating.
-- *Backups of Open WebUI's data directory*: none in P0, so a deleted conversation cannot be recovered.
-- The Open WebUI stack is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
+- *Backups of Open WebUI's data (the volume `rag-openwebui-data`)*: none in P0, so a deleted conversation cannot be recovered.
+- Open WebUI (the profile `openwebui`) is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
 
 ## Gateway keys, budgets and the read-back
 
@@ -725,8 +754,8 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 | Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-ume-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
 | Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
 | Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
-| Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
-| A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, restart that service |
+| Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T rag-postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
+| A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service |
 | rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no `internal` client managed by the deployment (`admin-console`), so test-panel cost is not recorded (the panel still answers) | rag-migrate creates it on every run (production-setup.md, *The admin test panel's client*): check that `rag-migrate` completed (`dc logs rag-migrate`: "The admin test panel's client admin-console: …"), and run it again. Turns made before it are not recovered |
 
 **The read-back's reasons.** When the gateway names its Integration API (`integration_api_url`), rag-admin reads the gateway's cost and
@@ -743,7 +772,7 @@ badge (the gateway still refuses the calls).
 | `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
 | `unauthorized` (401) | rag-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
 | `not_found` (404) | The key is not one of the integration *Ume.Rag*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
-| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the gateway's `UME_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `--ca-file` for the Admin API's CA |
+| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the gateway's `UME_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `UME_RAG_TRUST_DIR` for the Admin API's CA |
 | `failed` | Any other answer (a `5xx`, a `400`) | rag-admin's log has the status; ask the gateway team |
 
 ## Sign-in and the setup wizard
@@ -751,7 +780,7 @@ badge (the gateway still refuses the calls).
 rag-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
 first setup: [production-setup.md](production-setup.md), *3. Sign-in*, or [portainer.md](portainer.md), *First deploy*
 step 5). After setup they change only in the wizard after a re-open, never from an admin session. A value the
-deployment sets (`deploy/.env`, the secret files, the Portainer variables, the Kubernetes literals) wins and is locked
+deployment sets (`deploy/.env`, the Portainer variables, the Kubernetes literals and secret files) wins and is locked
 there.
 
 **Re-open:** give `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and
@@ -763,13 +792,14 @@ open it again; the next re-open needs another new value.
 - **Rotating a client secret:** create the new secret at the provider (keep the old one valid), re-open, type the new
   secret and its expiry date, test and finish, then remove the old one at the provider. Home reminds platform admins from 30 days
   before the expiry date typed there. A declared secret is rotated where it is declared instead:
-  `init-deployment.sh --oidc-client-secret-file` (Kubernetes: `create-secrets.sh` with the same option), or `UME_RAG_OIDC_CLIENT_SECRET`
-  and update the stack (Portainer); rag-admin follows the file at the next sign-in.
+  `init-deployment.sh --set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` and `dc up -d` (`rag-bootstrap` rewrites the file;
+  Kubernetes: `create-secrets.sh --oidc-client-secret-file`), or `UME_RAG_OIDC_CLIENT_SECRET` and update the stack
+  (Portainer); rag-admin follows the file at the next sign-in.
 - **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate rag-admin no longer trusts): re-open
   and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`
-  and `--oidc-client-secret-file` with a re-run of `init-deployment.sh`, then `docker compose --env-file deploy/.env
-  up -d rag-admin` and `sudo systemctl start rag-firewall.service`, since a restart alone does not read a changed
-  `deploy/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
+  and `--set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` with a re-run of `init-deployment.sh`, then
+  `docker compose --env-file deploy/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`,
+  since a restart alone does not read a changed `deploy/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
   stored secret rag-admin can't read.
 - **Restoring a database:** empty the re-open value first (*Restore*, above), or the restored database may open the
   wizard again for an hour. The secrets the wizard stored are encrypted with Data Protection: they can be read only
@@ -804,26 +834,26 @@ open it again; the next re-open needs another new value.
 
 | Symptom | Where to look and what to do |
 |---|---|
-| Postgres log: archive command failed, pgBackRest error `[103]`; `rag_backup_wal_archive_failed_total` rising | The stanza does not exist yet: `dc exec -T postgres pgbackrest --stanza=ragdb stanza-create` (once per new database or repository) |
-| `rag_backup_repo_status` 99 | pgBackRest cannot read the repository: is the share mounted (`UME_RAG_BACKUP_DIR`), are the S3 endpoint and credentials right, does the firewall's `backup` rule have the endpoint? `dc exec -T postgres pgbackrest --stanza=ragdb info` shows the error |
-| `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T postgres psql -U postgres -d ragdb` |
+| Postgres log: archive command failed, pgBackRest error `[103]`; `rag_backup_wal_archive_failed_total` rising | The stanza does not exist yet: `dc exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create` (once per new database or repository) |
+| `rag_backup_repo_status` 99 | pgBackRest cannot read the repository: is the share mounted (`UME_RAG_BACKUP_DIR`), are the S3 endpoint and credentials right, does the firewall's `backup` rule have the endpoint? `dc exec -T rag-postgres pgbackrest --stanza=ragdb info` shows the error |
+| `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m rag-postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T rag-postgres psql -U postgres -d ragdb` |
 | `rag-backup.service` failed | `journalctl -u rag-backup.service`; a failed run leaves the previous backups intact. Run it again by hand once the cause is fixed |
 | Upload copy: "the upload copy's directory … does not exist (is the backup share mounted?)" | Mount the share; the next run catches up |
 | `rag-clamav` unhealthy after a signature update | On a 16 GB host a failed reload leaves clamd without an engine (it still answers PING; every scan fails). The restart timer restarts it within a few minutes; meanwhile nothing can be scanned (the worker's scan step, P1, fails closed). `journalctl -u rag-restart-unhealthy.service`, `dc logs rag-clamav`. On a 24 GB host clamd keeps its old engine during a reload |
 | Admin API answers 503 `config_busy` | Another config change held the config version lock for more than 5 s. Retry; if it persists, look for a long transaction holding the lock on `config."ConfigVersion"` in `pg_stat_activity` |
 | `rag-migrate` exited non-zero; api, admin and worker do not start | `dc logs rag-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
-| A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files belong to the wrong user: run the `chown` commands `init-deployment.sh` printed (or re-run it as root) |
-| One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `secrets/<service>/Gateway__Key` (`init-deployment.sh` lists the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE` and restart that service (production-setup.md, *Gateway credential keys*) |
+| A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files in the volumes belong to the wrong user: `rag-bootstrap` gives them to their users at every start, so `dc up -d --wait` again and read `dc logs rag-bootstrap` |
+| One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `rag-secrets/<service>/Gateway__Key` (the end of `dc logs rag-bootstrap` names the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service (production-setup.md, *Gateway credential keys*) |
 | `rag-firewall.service` failed: "cannot resolve HOST" | DNS for an allow-listed name failed; the previous rules stay in place. Check the name in `deploy/.env` |
 | `rag-firewall.service` failed: "no DOCKER-USER chain" | Docker is not running, or runs without its iptables integration |
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
-| `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
-| `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `secrets/renderer.env` is missing: re-run `init-deployment.sh` (it keeps every other secret) |
-| Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `rag-clamav` | The worker's malware scan is `on` (`UME_RAG_CLAMAV_MODE` in `deploy/.env`, or no such line) but `COMPOSE_PROFILES` lacks `clamav`, as in a deployment updated without re-running `init-deployment.sh` (upgrade guide): re-run it with your options (it writes the profile; add `--clamav off` only to store files unscanned), then `dc up -d --wait` |
-| Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; files show *Not scanned for malware* | The deployment runs with `--clamav off` (`UME_RAG_CLAMAV_MODE=off`): intended there, or re-run `init-deployment.sh` with your options plus `--clamav on`, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
-| Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh` with your options plus `--render`, then `dc up -d --wait` and `dc restart rag-worker` |
-| Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `secrets/worker/Render__Endpoint` but `COMPOSE_PROFILES` in `deploy/.env` lacks `render`: re-run `init-deployment.sh` with or without `--render`, so the two match, then `dc up -d --wait` and `dc restart rag-worker` |
+| `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: with `--hardened`, the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
+| `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `rag-secrets/renderer/ws-path` is missing or empty: `dc up -d --wait`, so `rag-bootstrap` writes it again (it keeps every other secret), then `dc logs rag-bootstrap` |
+| Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `rag-clamav` | The worker's malware scan is `on` but `rag-clamav` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `rag-clamav` while the profile `clamav` is on, and otherwise recreates the worker with the mode that follows the profiles (`rag-bootstrap` writes it); to store files unscanned, take `clamav` out (`init-deployment.sh --profiles`) |
+| Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; files show *Not scanned for malware* | `COMPOSE_PROFILES` lacks `clamav`: intended there, or re-run `init-deployment.sh --profiles` with `clamav` in the list, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
+| Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh --profiles` with `render` in the list, then `dc up -d --wait` |
+| Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `rag-secrets/worker/Render__Endpoint` but `rag-renderer` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `rag-renderer` while the profile `render` is on, and otherwise recreates the worker without the endpoint |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
 | Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, *Models*). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 
@@ -831,26 +861,29 @@ open it again; the next re-open needs another new value.
 
 - **Internal certificates** last 825 days. `rag-cert-expiry.timer` (deploy/host/README.md) fails and names the
   certificate from 60 days before it expires (`systemctl --failed`, `journalctl -u rag-cert-expiry`, or
-  `rag_cert_expiry_timestamp_seconds` in `certs.prom`). Bring `ca.key` back to `deploy/certs/`, run
-  `sudo ./deploy/init-deployment.sh --renew-certs`, restart `postgres` and `rag-parser` (they read their certificates
-  only at start; the script's closing note says so), and move `ca.key` off the host again. `--renew-ca` replaces the
-  internal CA and re-issues its certificates: then restart the whole stack. Portainer:
-  [portainer.md](portainer.md#internal-certificates).
+  `rag_cert_expiry_timestamp_seconds` in `certs.prom`). Once fewer than 30 days remain, `dc up -d`: `rag-bootstrap`
+  re-issues it (it needs `ca.key` in `rag-certs`) and the end of its log names what to restart, `rag-postgres` and
+  `rag-parser` (`dc restart rag-postgres rag-parser`: they read their certificates only at start). A certificate of
+  your PKI (`UME_RAG_PKI_DIR`) is renewed there: put the new pair in the directory and `dc up -d`. **A new internal
+  CA:** delete `ca.pem` and `ca.key` in `rag-certs` and `dc up -d --wait`; `rag-bootstrap` creates a new CA and
+  re-issues every service certificate. Then restart the whole stack (`dc restart`), since the services read the CA only
+  at start (production-setup.md, *Internal TLS*; Portainer: [portainer.md](portainer.md#internal-certificates)).
 - **The Data Protection certificate and the pepper** are never regenerated: a new one makes the stored data
   unreadable (protected values, every key hash).
 - **The blob master key and the pgBackRest passphrase** are generated once and escrowed. There is no rotation
   procedure yet (key provider decision K1).
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
-- **The gateway credential keys** (`secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway integration
-  *Ume.Rag*): a gateway admin issues and rotates them; rotate one with the gateway's 24-hour grace period, re-run
-  `init-deployment.sh` with `--gateway-credential-key-file SERVICE=FILE`, and restart that service
+- **The gateway credential keys** (`rag-secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway
+  integration *Ume.Rag*, from `UME_RAG_*_GATEWAY_KEY` or the gateway's manifest keys): a gateway admin issues and
+  rotates them; rotate one with the gateway's 24-hour grace period, re-run
+  `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d`, and restart that service
   ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway
   `401` answers in one service's log mean its key expired, was revoked or the rotation's grace period ended first.
 - **The OIDC client secrets** of rag-admin and Open WebUI: rotated through a re-open of the setup wizard, or where they
-  are declared (*Sign-in and the setup wizard*). `secrets/admin/Setup__Secret` only derives setup codes: it needs no
-  backup or rotation.
-- **The feedback service account's Open WebUI key** (`secrets/openwebui-feedback/OpenWebUi__AdminApiKey`; Portainer:
-  `rag-secrets/openwebui-feedback/`): delete the file and run Open WebUI's `up` again (Portainer: update the stack);
-  `open-webui-setup` mints a new one, the old one stops working at once, and rag-api reads the new one without a restart.
-  Its password stays in `secrets/openwebui.env` and is never used: password sign-in is off.
+  are declared (*Sign-in and the setup wizard*). `rag-secrets/admin/Setup__Secret` only derives setup codes: it needs
+  no backup or rotation.
+- **The feedback service account's Open WebUI key** (`rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey`): delete
+  the file and `dc up -d` (Portainer: update the stack); `rag-openwebui-setup` mints a new one, the old one stops
+  working at once, and rag-api reads the new one without a restart. Its password stays in
+  `rag-secrets/openwebui/admin-password` and is never used: password sign-in is off.

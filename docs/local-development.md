@@ -270,8 +270,9 @@ commit `contracts/parser/v1/`; CI fails when they differ.
 ## Production Compose on your machine
 
 To try the production files locally, build the images, then run `init-deployment.sh` in a scratch copy of `deploy/`
-and the renderer's seccomp profile (not in the clone: it writes `.env`, `certs/`, `secrets/` and, with
-`--backup-target local`, `upload-backup/` next to itself) with a local backup target:
+(not in the clone: it writes `deploy/.env` next to itself). The certificates and secrets go into the project's Docker
+volumes (`rag-bootstrap` creates them at the first `up`). The image defaults in `compose.rag.yaml` are the released
+pins, so name the local builds with `--set`:
 
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
@@ -279,18 +280,22 @@ docker build -t ume-rag/clamav:latest images/clamav
 docker build -t ume-rag/parser:latest src/parser
 docker build -t ume-rag/renderer:latest images/renderer
 for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
-# The layout of a release bundle: compose.ingestion.yaml names the renderer's seccomp profile ../images/renderer/seccomp.json.
-mkdir -p ~/rag-deploy-test/images/renderer
-cp -r deploy ~/rag-deploy-test/ && cp images/renderer/seccomp.json ~/rag-deploy-test/images/renderer/
-~/rag-deploy-test/deploy/init-deployment.sh --backup-target local --allow-file-keys \
-  --oidc-authority https://<keycloak host>/realms/ume --gateway-url https://<a gateway> --api-host localhost --yes
-echo 'UME_RAG_INGESTION_SLICE=' >> ~/rag-deploy-test/deploy/.env    # no rag-ingestion.slice on a developer machine
+mkdir -p ~/rag-deploy-test && cp -r deploy ~/rag-deploy-test/
+images=()
+for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=ume-rag/$s:latest"); done
+~/rag-deploy-test/deploy/init-deployment.sh --api-host localhost --gateway-url https://<a gateway> \
+  --backup-target local "${images[@]}" --yes
 docker compose --env-file ~/rag-deploy-test/deploy/.env up -d --wait
+docker compose --env-file ~/rag-deploy-test/deploy/.env logs rag-admin | grep 'Setup code'
 ```
 
-Run the `chown` commands the script prints first, unless it ran as root. The .NET images are tagged
-`ume-rag/<service>:latest` (`ContainerImageTag` in `Directory.Build.props`), which is what the Compose files use by
-default. See [production-setup.md](production-setup.md) for what the script generates, and
+Sign-in is then set in the setup wizard at `https://localhost:9543/setup`, with the setup code from rag-admin's log. A
+gateway whose certificate comes from its own CA needs `--gateway-ca-dir` (a directory with its `ca.pem`). With
+`--hardened` (the host firewall's subnets, the ingestion slice, the renderer's seccomp profile) the copy also needs
+`images/renderer/seccomp.json` at `~/rag-deploy-test/images/renderer/` (the layout of a release bundle) and, without
+the slice installed, the line `UME_RAG_INGESTION_SLICE=` in `deploy/.env`. `--set` cannot write it (an empty value
+removes the variable, and a re-run of the script drops it again), so add it by hand after each run. The .NET images are tagged `ume-rag/<service>:latest` (`ContainerImageTag` in
+`Directory.Build.props`). See [production-setup.md](production-setup.md) for what `rag-bootstrap` generates, and
 [p1a-local-run.md](p1a-local-run.md) for the local P1a run (now on the dev Keycloak and FakeGateway, then the live
 block's shared Keycloak and gateway).
 
@@ -360,7 +365,7 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
 | Problem | Cause and fix |
 |---|---|
 | On WSL, the first `aspire` command asks to trust the development certificate in the Windows certificate store | Trust it once with `dotnet dev-certs https --trust`; the dashboard and the services' HTTPS endpoints use that certificate |
-| `docker compose up` of the production files fails with "Pool overlaps with other one on this network" | The Compose networks use fixed subnets in `172.30.0.0/16`, and another Docker network on your machine already uses one. List them with `docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'`; remove the network that collides, or keep `172.30.0.0/16` out of Docker's `default-address-pools` |
+| `docker compose up` of the production files fails with "Pool overlaps with other one on this network" | With `compose.hardened.yaml` the Compose networks use fixed subnets in `172.30.0.0/16`, and another Docker network on your machine already uses one. List them with `docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'`; remove the network that collides, or keep `172.30.0.0/16` out of Docker's `default-address-pools` |
 | Integration tests pull `mirror.gcr.io/ume-rag/...` and fail | A local image without a registry part while `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` is set: name it `ume-rag.local/...` |
 | The parser stays unhealthy for minutes after a start | It warms up its slots (Docling, the models) and runs a self-test first; set `Parser:Mode=off` when you do not need it |
 | ClamAV is slow to become healthy on the first start | freshclam downloads the signatures into the `ume-rag-clamav-db` volume first; later starts reuse them. `ClamAv:Mode=off` skips it |
