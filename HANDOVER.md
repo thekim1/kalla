@@ -70,14 +70,16 @@ merge** (this session's merge was stopped by the permission check), then a gatew
   else holds ports 5000 and 5173 here: the gateway's IntegrationTests need `ASPNETCORE_URLS=http://127.0.0.1:0`, and
   its admin UI is on the port `aspire logs admin-ui` names.
 
-**Next for the wizard: Ume.Rag's side of stage 2, when the gateway releases each issue** (M-20, S8):
-- WG2: the context's `oidc_authority` as the wizard's default for the authority (a source below the deployment's and
-  the wizard's value; `src/Ume.Rag.AdminApi/SignInSettings.cs`, the FakeGateway's context), and a link to the
-  gateway's wizard when it is empty.
-- WG1 and WG3: the combined stack takes the gateway's template; `stack.env.example` drops the gateway's four CHANGE
-  values and has one, `UME_DOMAIN`; the boot test and `docs/portainer.md` follow.
-- WG4: the manifest as a default in the stack file.
-Nothing of this is built ahead: the field's name and the gateway's variables are the gateway's to settle.
+**Ume.Rag's side of stage 2:**
+- **Done (#779):** the wizard offers the gateway's provider address (`gateway.oidc_authority`, feature `oidc-authority`)
+  for rag-admin's authority, as a suggestion in `GET /bff/setup/state` (`gateway.suggestedAuthority`), and links to the
+  gateway's wizard when the gateway has none. `contracts/gateway/integrations.json` is the gateway's **unreleased** file
+  (llmgateway `7c945d1`): replace it with the release's copy.
+- **Left, when the gateway releases #102 and #103:** the combined stack on that release (`deploy/portainer/build-stack.sh
+  <version>`); `stack.env.example` loses the gateway's four CHANGE values and has one, `UME_DOMAIN`; the boot test
+  (`portainer-boot.sh`: the gateway's wizard first, then Ume.Rag's with the suggested address), `portainer-upgrade.sh`'s
+  fixture for the new release, and `docs/portainer.md` (first deploy and *Upgrade from 0.6.0* gain the gateway's steps,
+  which its own upgrade guide has). WG4 (the manifest as a default) only if the gateway builds #101.
 
 **Known gaps, documented, not fixed:**
 - **Compose's host firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it the wizard's
