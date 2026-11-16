@@ -14,6 +14,8 @@ export default defineConfig({
   projects: [
     { name: 'pilot', testMatch: /pilot\.spec\.ts/ },
     { name: 'accessibility', testMatch: /accessibility\.spec\.ts/, dependencies: ['pilot'] },
+    // Open WebUI against rag-api (to-verify 47, 50, 134, 165): chats with an assistant the pilot journey publishes.
+    { name: 'openwebui', testMatch: /openwebui\.spec\.ts/, dependencies: ['pilot'] },
     {
       name: 'setup',
       testMatch: /setup\.spec\.ts/,
