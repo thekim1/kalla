@@ -435,6 +435,17 @@ export const OVERVIEW = {
     hide: 'Hide',
     hideFor: (client: string) => `Hide the reminder for ${client}`,
   },
+  // Home's deployment notices (admin design §5.5.1), per code of `DeploymentNotice`.
+  deployment: {
+    retired_variables: {
+      title: (n: number) =>
+        n === 1 ? 'The deployment sets a variable that this version no longer reads' : `The deployment sets ${n} variables that this version no longer reads`,
+      text:
+        'They have no effect, so nothing is wrong. Ask the person who runs the deployment to remove them from its variables: the rag-bootstrap log and the upgrade guide say what replaced each.',
+      hideFor: 'Hide the notice about variables that are no longer read',
+    },
+    hide: 'Hide',
+  },
 } as const
 
 export const ORGANISATION = {

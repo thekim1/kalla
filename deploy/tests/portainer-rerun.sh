@@ -13,6 +13,8 @@
 #   - the TLS proxy (profile proxy): a URL where a host name belongs leaves that block out of nginx.conf and names it on
 #     the checklist, instead of stopping rag-bootstrap (#711); the blocks of rag-api, rag-admin and Open WebUI carry
 #     the names derived from UME_DOMAIN
+#   - retired variables (Decisions "Deployment values across releases"): one the stack still sets is on the checklist
+#     with what replaced it and in admin/Deployment__RetiredVariables for rag-admin; an empty one and none are not
 #
 # No image but rag-bootstrap's (alpine/openssl) is pulled and nothing else starts: the gateway's ume-certs volume is
 # faked with a CA certificate only, and integration-secrets with one key file.
@@ -130,3 +132,24 @@ grep -q 'server_name rag-admin.example.se;' <<< "$conf" || fail "the proxy has n
 grep -q 'server_name chat.example.se;' <<< "$conf" || fail "the proxy has no Open WebUI block under UME_DOMAIN"
 grep -q 'llm.example.se\|@GATEWAY_HOST@' <<< "$conf" && fail "nginx.conf still has a gateway block"
 ok "a URL as UME_GATEWAY_HOST leaves the gateway block out and is on the checklist; rag-bootstrap completes"
+
+echo "== retired variables"
+retired_file() { in_helper -v "${project}_rag-secrets:/s:ro" "$helper" -c 'cat /s/admin/Deployment__RetiredVariables 2>/dev/null || echo "<none>"'; }
+# The example sets none: nothing on the checklist, no file for rag-admin.
+grep -q 'no longer read' "$work/bootstrap-3.log" && fail "the checklist names a retired variable the example does not set"
+[ "$(retired_file)" = '<none>' ] || fail "rag-admin has a retired-variables file without one set: $(retired_file)"
+# A stack upgraded from 0.5.x that kept two of them (an empty one does not count).
+{ echo "UME_RAG_CLAMAV_MODE=on"; echo "UME_RAG_EMBEDDING_MODEL=text-embedding-3-large"; echo "UME_ORGANISATION_NAME="; } >> "$work/stack.env"
+run_bootstrap 4
+grep -q 'UME_RAG_CLAMAV_MODE is set and no longer read (the malware scan follows the clamav profile)' "$work/bootstrap-4.log" \
+  || fail "the checklist does not name the retired UME_RAG_CLAMAV_MODE"
+grep -q 'UME_RAG_EMBEDDING_MODEL is set and no longer read' "$work/bootstrap-4.log" || fail "the checklist does not name the retired UME_RAG_EMBEDDING_MODEL"
+grep -q 'UME_ORGANISATION_NAME' "$work/bootstrap-4.log" && fail "the checklist names a retired variable that is empty"
+[ "$(retired_file)" = 'UME_RAG_CLAMAV_MODE,UME_RAG_EMBEDDING_MODEL' ] || fail "rag-admin's retired variables are '$(retired_file)'"
+[ "$(in_helper -v "${project}_rag-secrets:/s:ro" "$helper" -c 'stat -c "%a %u:%g" /s/admin/Deployment__RetiredVariables')" = "600 1654:1654" ] \
+  || fail "rag-admin cannot read its retired-variables file"
+# Removed from the stack again: the file goes with them.
+sed -i '/^UME_RAG_CLAMAV_MODE=/d; /^UME_RAG_EMBEDDING_MODEL=/d' "$work/stack.env"
+run_bootstrap 5
+[ "$(retired_file)" = '<none>' ] || fail "the retired-variables file stays after the variables are removed"
+ok "a retired variable the stack still sets is on the checklist and in rag-admin's file; without one there is neither"

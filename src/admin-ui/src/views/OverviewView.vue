@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Department, Overview, Role, SyncHealth } from '@/api/types'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
+import DeploymentNotices from '@/components/overview/DeploymentNotices.vue'
 import SecretExpiryNotices from '@/components/overview/SecretExpiryNotices.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -16,7 +17,8 @@ import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP, type Tone }
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
 // Home (admin design §5.5.1, "P1's Home"), top to bottom: for a platform admin, a reminder per client secret stored by the setup
-// wizard that expires within 30 days (§5.11), each hideable in this browser; the platform's first-run step for a platform admin, the
+// wizard that expires within 30 days (§5.11) and the deployment notices (retired variables the stack still sets), each hideable in
+// this browser; the platform's first-run step for a platform admin, the
 // embedding profile, until it exists (Decisions "Deploy configuration"); Live, a card per published assistant over the
 // last 7 days linking to its Statistics tab; Health, the runs of the last 24 hours per department, the job queue and the
 // organisation and model syncs; Get started, the empty state with Create knowledge base or a checklist per collection not
@@ -82,6 +84,7 @@ function showHidden(): void {
   <PageHeader :title="name ? OVERVIEW.welcome(name) : PAGE.overview.title" :description="OVERVIEW.lead" />
   <template v-if="overview.data.value">
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
+    <DeploymentNotices v-if="auth.isPlatformAdmin && overview.data.value.deploymentNotices.length" :notices="overview.data.value.deploymentNotices" class="mb-6" />
     <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">
       <p class="mb-4">{{ OVERVIEW.profileText }}</p>
       <UiButton variant="primary" icon="add" data-test="create-profile" @click="router.push({ name: 'platform-models' })">{{ OVERVIEW.profileAction }}</UiButton>

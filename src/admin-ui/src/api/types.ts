@@ -1429,6 +1429,15 @@ export interface Overview {
   health: OverviewHealth
   /** A platform admin's reminder (admin design §5.11): the wizard-stored client secrets that expire within 30 days, expired ones included. */
   secretExpiry: SecretExpiry[]
+  /** A platform admin's deployment notices (admin design §5.5.1): what the person who runs the deployment should tidy. */
+  deploymentNotices: DeploymentNotice[]
+}
+
+/** A deployment notice on Home (`DeploymentNotice`); a code this UI doesn't know is not shown. */
+export interface DeploymentNotice {
+  /** `retired_variables`: deployment variables the stack still sets and this version no longer reads. */
+  code: string
+  names: string[]
 }
 
 /** A client secret stored by the setup wizard that expires soon or has expired (`SecretExpiry`). */
