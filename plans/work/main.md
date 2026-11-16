@@ -24,7 +24,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   lists its five steps, one pull request each), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for
   and invisible when off) and S4a (delete the upgrade paths older than the VM's version). Upgrades may break, but each
   breaking change gets an upgrade path where one is feasible (user, 2026-11-16). The setup wizard works the same in
-  every form. M-17's C13 is absorbed by S1's step 3. S2, S5 and S7 wait for the user's decision.
+  every form. M-17's C13 is absorbed by S1's step 3. S2, S5 and S7 were left to the main session (user, 2026-11-16).
 - **Paths:** `deploy/**`, `docs/**`, `.github/workflows/**` (stream a's: `main-session/<slug>` branches, no open `a/`
   work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
 - **Status (2026-11-16, session 46):** S1's four points decided. Merged: #798 (S1 steps 1 and 4: `bootstrap.sh` takes
@@ -37,8 +37,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   "Pilot containers" and "Deployment values across releases"); #808 (step 5: the operator guides; `--gateway-ca-file`
   copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
   form). **S1 is done.** #809 (S9's guides: the Portainer first deploy finishes without Open WebUI, *Adding Open
-  WebUI*). Open: S9's admin UI part (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order; S2, S5, S7
-  wait for the user.
+  WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Open: S9's admin UI part
+  (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order. S5 and S7 are proposals in the gateway's
+  repository (thekim1/llmgateway#108, #109).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.

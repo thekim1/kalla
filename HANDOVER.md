@@ -2,7 +2,8 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.7.0`** (2026-11-16, the setup wizard; on the gateway's `v0.11.0`). `main` is 0.7.0 plus what
-sessions 44 and 45 merged after it (*Unreleased* in `CHANGELOG.md`). The user's VM runs 0.5.0. Repo `~/research/rag` on this
+sessions 44 to 46 merged after it (*Unreleased* in `CHANGELOG.md`), the deploy simplification among it. The user's VM
+runs 0.5.0. Repo `~/research/rag` on this
 machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -26,58 +27,58 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here: the deploy simplification (M-22), what is left
+## Start here (session 47)
 
-The user asked for it on 2026-11-16: [`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md);
-the queue item is `plans/work/main.md` **M-22**, whose status line says what is merged.
+Nothing is in work. Session 46 built the deploy simplification the user asked for on 2026-11-16
+([`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md), `plans/work/main.md`
+**M-22**), and the user ended it with "we'll continue next session". Ask what comes first; what can be taken
+without asking is below.
 
-- **Decided in session 46** (Decisions "One deployment bootstrap"): Compose keeps its certificates and secrets in
-  Docker volumes as Portainer; `init-deployment.sh` writes only `deploy/.env`; one Ume.Rag service file with the
-  `rag-` names plus overlays, merged with the gateway's for Portainer; Kubernetes runs the same `bootstrap.sh`.
-- **Two more rules from the user that day:** a breaking deploy change comes with an **upgrade path where one is
-  feasible** (a step in the upgrade guide or a migration in the bootstrap; *install again* only when no reasonable
-  path exists, and tell the user when that is the VM's case), and **the setup wizard works the same in every form**
-  (no sign-in value asked for at install, except the provider's address with the host firewall overlay).
-- **Merged:** #798 (`bootstrap.sh` takes its paths and inputs as variables; `create-secrets.sh` runs it), #799 (S4a:
-  upgrade sections older than 0.5.x removed, with a pointer to the `v0.7.0` guide) and **#800 (S1 steps 2 and 3, with
-  S3):** `deploy/compose.rag.yaml` is the one service file, Compose runs it with `rag-bootstrap` and the volumes,
-  overlays `compose.backup.yaml`, `compose.hardened.yaml`, `compose.host-24g.yaml`, `compose.clamav-conf.yaml` and
-  `compose.rolling.yaml`, Open WebUI as the profile `openwebui`, and `init-deployment.sh` writes only `deploy/.env`.
-  The regenerated Portainer stack renders identically to the one before (services, volumes, networks, variables), so
-  the user's VM keeps upgrading. Release dry run 43941252174 booted both forms (*Smoke test the bundle*, *Boot the
-  Portainer stack*).
-- **Also merged: #806 (S9, the deploy part):** `stack.env.example` has `COMPOSE_PROFILES=clamav`; without the
-  `openwebui` profile `rag-bootstrap` generates nothing for Open WebUI. Boot-only run 43944782113 (profile on) green.
-  The admin UI part is **#807** (stream b's paths; the main session offered to take it).
-- **The design follows the new files:** `repo-and-deployment.md` §1, §3, §5 to §10 and the Decisions "Pilot
-  containers" and "Deployment values across releases" (an agent's rewrite, checked against `deploy/`; its report left
-  these as unverified and unchanged: §6.3's `compose.hardening.yaml` / `aspire publish` / `Test-Deployment.ps1`
-  sentence (none of the three exists), §5.4's "`compose.host-24g.yaml` may raise them" for the renderer, §6.1's "1 MB
-  body limit" (the nginx files give rag-api 2m), §6.4's `connection-budget.sh` and §7.3's `rolling-update.sh --role`
-  (P2, not built). History rows that now mislead, left alone: §11 row 14, §12 rows 8, 11 and 15, §14 row 2.
-- **Merged last: #808 (step 5), so S1 is done.** The operator guides describe the new files (an agent's rewrite
-  against `deploy/`; the main session read the quick start in full). With it: `init-deployment.sh --gateway-ca-file`
-  copies the gateway's CA certificate to `deploy/gateway-ca` (the directory option it replaces would have mounted the
-  gateway's private keys into `rag-bootstrap`), the bootstrap's checklist names the Compose guide and commands on a
-  Compose host, and an empty `UME_RAG_INGESTION_SLICE` survives a re-run. Boot-only run 43949491788 green.
-- **S9's guides merged too (#809):** `docs/portainer.md` *First deploy* finishes without Open WebUI (step numbers
-  kept), and *Adding Open WebUI* has the steps for a new and a running installation. Adding the profile to a running
-  stack is written from the files, not run.
-- **Left of M-22:** S9's admin UI part (**#807**, stream b's paths; the main session offered to take it on a
-  `main-session/` branch), then the proposal's order: S4b and S4c (upgrades that need no manual stop and may skip a
-  release), S6 (one escrow set), S8 (operator pages without project vocabulary, as each is touched). S2, S5 and S7
-  wait for the user.
-- **Stated in the guides, not verified:** `up -d` runs the exited `rag-bootstrap` again (the smoke test exercised it
-  once), `docker compose create` makes the volumes before a first `up` (*Restoring onto another host*), Docker creates
-  a missing backup directory at the first `up`.
-- **Confirmed by the user (2026-11-16):** the `0.0.0.0` bind default, and that the three things without a
-  replacement stay gone. S2, S5 and S7 were left to the main session: S2 is taken (hardening as an optional step;
-  Decisions "One deployment bootstrap"), S5 and S7 are proposals in the gateway's repository.
-- **Not run anywhere:** the hardened overlay on a host (the smoke test boots without it), `compose-rolling-e2e.sh`,
-  root's `chown` on an NFS backup share, and the upgrade guide's carry-over of an old Compose installation.
-S2 (the host firewall and slice as optional hardening), S5 (one wizard hand-off from the gateway) and S7 (the manifest
-names the owner and a first assigned key) wait for the user's decision: S2 changes the security design, S5 and S7 the
-gateway.
+### The deploy simplification (M-22): what is, and what is left
+
+**What is** (Decisions "One deployment bootstrap"; detail `repo-and-deployment.md` §6 and §7.1):
+
+- **One service file, `deploy/compose.rag.yaml`,** with the `rag-` names. Compose runs it directly;
+  `deploy/portainer/build-stack.sh` merges it with the gateway's file into `compose.portainer.yaml` (line marks
+  `#@joined` and `#@alone`). Overlays for a Compose host: `compose.backup.yaml`, `compose.hardened.yaml`,
+  `compose.host-24g.yaml`, `compose.clamav-conf.yaml`, `compose.rolling.yaml`.
+- **One bootstrap, `deploy/portainer/bootstrap.sh`:** the `rag-bootstrap` service in Compose and Portainer (volumes
+  `rag-certs`, `rag-secrets`, `rag-config`), and run locally by Kubernetes' `create-secrets.sh`.
+- **`deploy/init-deployment.sh` writes only `deploy/.env`** (about 200 lines; its header is the option list).
+- **Open WebUI is off unless asked for** (the profile `openwebui`); without it nothing of it is generated.
+- **Host hardening is an optional step on a Compose host** (`--hardened`; the quick start's step 7). Published ports
+  bind `0.0.0.0` in every form (Open WebUI `127.0.0.1`).
+- **The user's rules (2026-11-16):** a breaking deploy change comes with an **upgrade path where one is feasible**
+  (also in `AGENTS.md`), and **the setup wizard works the same in every form** (no sign-in value at install; the
+  provider's address only with `--hardened`). The Portainer stack's names stay: the regenerated stack rendered
+  identically to the one before, so the VM keeps upgrading. A Compose installation made with the old files is
+  installed again (none exists outside tests; `docs/upgrade-guide.md`, *Unreleased*).
+- **Merged:** #798, #800, #808 (S1), #799 (S4a), #806 and #809 (S9, deploy and guides), #810 (S2). The queue's status
+  line has one sentence on each.
+
+**Left:**
+
+1. **S9's admin UI part, #807** (stream b's paths; the main session offered to take it on a `main-session/` branch):
+   the last step of *Get started* and the Open WebUI settings and feedback pages when `OpenWebUi:Enabled` is absent.
+2. **S4b and S4c:** the migration step stops what it must itself, and an upgrade that skips a release is tested, so an
+   upgrade is one paste. Then **S6** (one command that writes one escrow set, the same in both forms) and **S8**
+   (operator pages without project vocabulary, as each is touched).
+3. **S5 and S7 are proposals in the gateway's repository,** thekim1/llmgateway#108 (one wizard hand-off) and #109 (a
+   manifest may create a first assigned key): the gateway's owner decides. Nothing here waits on them.
+4. **Connectors design §5.2** needs one sentence once #802 is merged (a leading `http(s)://` on a glob is ignored).
+
+**Not run anywhere** (say so when it matters): the hardened overlay on a host, and moving a running stack to it with
+`down` and `up` (quick start step 7); `compose-rolling-e2e.sh`; a boot without the `openwebui` profile after #806, and
+adding the profile to a running stack; root's `chown` on an NFS backup share; the upgrade guide's carry-over of an old
+Compose installation; `create-secrets.sh`'s upload to a cluster. **Stated in the guides, not verified:** `up -d` runs
+the exited `rag-bootstrap` again (the smoke test did it once), `docker compose create` makes the volumes before a
+first `up` (*Restoring onto another host*), Docker creates a missing backup directory at the first `up`.
+
+**Left as it is in the design,** because the rewrite could not verify it (`repo-and-deployment.md`): §6.3's sentence on
+`compose.hardening.yaml`, `aspire publish` and `Test-Deployment.ps1` (none of the three exists), §5.4's
+"`compose.host-24g.yaml` may raise them" for the renderer, §6.1's "1 MB body limit" (the nginx files give rag-api 2m),
+§6.4's `connection-budget.sh` and §7.3's `rolling-update.sh --role` (P2, not built). History rows that now mislead:
+§11 row 14, §12 rows 8, 11 and 15, §14 row 2.
 
 ### What else the main session can take without input
 
@@ -126,13 +127,16 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   (the 2 s limit passed on a busy runner) rests on elimination and on #584's precedent, **not on a reproduction**.
   The issue stays open until 2026-11-30. If it recurs, the job's log has *The query embedding of profile … is
   unavailable (…)*, which names the cause.
-- **Run `e2e.yml` before the next release.** It did not run on the 0.7.0 tag (green in dry run 43857593918 on the same
-  code), and #790 and #791 came after.
+- **Before the next release: a full dry run with `e2e=true`.** The browser tests did not run on the 0.7.0 tag (green
+  in dry run 43857593918 on that code) nor since, and the Compose files are new. Dry run 43941252174 (#800's branch,
+  without the browser tests) booted both forms.
+- **#805:** `Worker.Tests.HealthEndpointTests` failed once in its teardown (`JobDispatcher.StopAsync` on a disposed
+  `CancellationTokenSource`), in that dry run; stream a's path. Re-run the job if it shows again.
 
 ## What session 46 did (2026-11-16)
 
 - **M-22, the deploy simplification:** S1's four points put to the user and decided, then built: #798, #800, #808
-  (S1), #799 (S4a), #806 and #809 (S9's deploy part and guides); the design and `AGENTS.md` follow. Detail above and
+  (S1), #799 (S4a), #806 and #809 (S9's deploy part and guides), #810 (S2); the design and `AGENTS.md` follow. Detail above and
   in `plans/work/main.md`.
 - **How it was done:** the two large steps (#800, and the guides of #808) were built by implementor agents in their
   own worktrees from a written brief, and the design rewrite by a third. Each report was treated as a claim: the main
@@ -142,6 +146,10 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
 - **Two CI failures were in tests, not in the change:** a file comparison that depended on the runner's locale
   (`kubernetes-secrets.sh`) and `config --images | grep -m1` under `pipefail` (`portainer-rerun.sh`). Both causes are
   inferred from the fix holding on the runner, not reproduced locally.
+- **Decided at the end** (user: "1. sounds good, 2. ok, 3. do what you think is best"): the `0.0.0.0` bind default;
+  nothing replaces forcing a certificate re-issue before its last 30 days, Open WebUI on a VM of its own, or a stack
+  without the ingestion services; S2, S5 and S7 left to the main session, which took S2 (#810) and put S5 and S7 to
+  the gateway as proposals.
 - **From the other machine:** #802 (globs with a leading `https://`) read and commented, theirs to merge; connectors
   design §5.2 needs one sentence once it is in (a leading `http(s)://` on a glob is ignored). #801, #803, #804 are
   their crawl feature issues. **#805:** a flaky teardown in `Worker.Tests.HealthEndpointTests`, seen once.
@@ -159,13 +167,13 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   unused credential keys unless the variable is set empty first (`docs/portainer.md`, *Upgrade from 0.6.0*).
 - **The boot test shows no Open WebUI with OIDC** (no provider anywhere, so it starts without sign-in); `e2e.yml`
   shows it (accepted by the user).
-- **Compose's host firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it the wizard's
-  test can't reach a provider. `init-deployment.sh` asks for it in an interactive run, and the wizard's message says
-  so; a run with `--yes` and no authority still ends there (its closing notes warn). A provider typed only in the
-  wizard would need the firewall to open rag-admin's egress, which is the user's call.
-- **The Compose quick start (`docs/compose-quick-start.md`) is read, not run:** `--gateway-secrets-dir` is tested with
-  placeholder files, the gateway's manifest path only in the Portainer boot test, and the same-host flow end to end
-  (the gateway on `--bind 0.0.0.0`, Ume.Rag's firewall letting its networks through) nowhere.
+- **A hardened Compose host's firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it
+  the wizard's test can't reach a provider there. `init-deployment.sh --hardened` asks for it in an interactive run,
+  and its closing lines say when it is missing. A host without the hardening has no such limit.
+- **The Compose quick start (`docs/compose-quick-start.md`) is read, not run** end to end: the gateway's manifest path
+  is exercised only in the Portainer boot test, and the same-host flow (the gateway on `--bind 0.0.0.0`, Ume.Rag
+  reading its keys and CA from the gateway's directory) nowhere. The release smoke test boots `compose.rag.yaml` with
+  the backup overlay against the fake gateway.
 - **The gateway's Data API does not follow its wizard:** a gateway whose sign-in is set there sets
   `UME_DATA_AUTHORITY` for access tokens. On Kubernetes a gateway that declares `Oidc__Authority` must set
   `Gateway__OidcAuthority` too (documented).
@@ -217,8 +225,8 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
 - **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 1 at 0.7.0 (`UME_DOMAIN`, no secret).
 - **On `main`, unreleased:** #790, #791, #794 and the guides' check (the warning for a failed query embedding;
   schedules validated with the scheduler's parser; chat's 413 as `request_too_large`; `restore-pitr.sh` stops the second
-  slots), and **M-22** (#798 to #800, #806, #808, #809): one service file and one bootstrap for every form, the short
-  `init-deployment.sh`, Open WebUI off unless asked for. No migration. Portainer and Kubernetes upgrade as before; a
+  slots), and **M-22** (#798 to #800, #806, #808 to #810): one service file and one bootstrap for every form, the
+  short `init-deployment.sh`, Open WebUI off unless asked for, hardening as an optional step. No migration. Portainer and Kubernetes upgrade as before; a
   Compose installation made with the old files is installed again (`docs/upgrade-guide.md`, *Unreleased*). **The next
   release needs a full dry run with `e2e=true`:** the Compose files are new and the browser tests have not run since
   0.7.0's dry run.
@@ -227,7 +235,8 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   `/bff/setup/*`, rag-api's `GET /internal/openwebui/sign-in`; `/bff/user` gains `signIn.configured` and `setup.open`;
   `GET /api/overview` gains `secretExpiry` and `deploymentNotices`; `UME_DOMAIN`, `UME_RAG_SETUP_REOPEN`,
   `Setup__Secret`; Open WebUI starts through `deploy/openwebui/start-with-sign-in.py`.
-- **Open issues that matter:** #781 (watch), #792, #793, #667 (M-16 and C13), #506, #507, #333 (the exact-scan and
+- **Open issues that matter:** #781 (watch), #805 (a flaky worker test teardown), #807 (S9's admin UI), #792, #793,
+  #797, #667 (M-16; C13 is done with #800), #506, #507, #333 (the exact-scan and
   recall checks on the test host).
 - **Ume.Rag on this machine:** the local stack is stopped; two agent worktrees under `.claude/worktrees/` (`agent-a959…`, `agent-ad14…`) hold merged branches and can go (`git worktree remove`, then delete their local branches); volumes
   `ume-rag-m1-postgres` (the dev data), `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept. Session 44's scratch

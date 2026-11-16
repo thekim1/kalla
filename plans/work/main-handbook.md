@@ -226,6 +226,21 @@ main session needs:
   (`scripts/ci/backend-tests.sh`). Measure with the test executable itself: `-xml <file>` gives every test's time,
   `-class`/`-class-` pick the classes; `UME_RAG_TEST_POSTGRES_TMPFS=1` doesn't start with the `:ci` Postgres image.
 
+- **Shell tests that pass here and fail on the runner** (session 46, twice): `join` and `sort` pair names by the
+  locale's collation (one that ignores punctuation took `secrets/.openwebui-jwt-secret` and
+  `secrets/openwebui/jwt-secret` for the same file): compare by exact name in `awk`, or set `LC_ALL=C`. And
+  `producer | grep -m1` under `pipefail` fails when grep closes the pipe before the producer is done: read the output
+  into a variable first.
+- **A stack-file refactor is shown by rendering, not by reading** (session 46, #800): render the committed and the
+  regenerated `compose.portainer.yaml` with `docker compose config --format json` (the example's variables, every
+  profile) and compare the JSON; only the embedded bootstrap script may differ.
+- **A second agent's reading finds what the first one built wrong** (session 46): the guides agent, told to verify
+  every command against the scripts, reported that #800's `--gateway-ca-dir` mounted the gateway's key directory.
+  Ask a documenting agent for "wrong messages and side effects you noticed" in its report.
+- **A `cd` into an agent's worktree moves the session there for good** (the harness then refuses a `cd` back): work
+  on `main` with `git -C ~/research/rag` and absolute paths, and reuse the worktree for the next branch
+  (`git checkout -B <branch> origin/main`).
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update

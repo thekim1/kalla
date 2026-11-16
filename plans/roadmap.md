@@ -89,8 +89,8 @@ Each becomes a queue item when the main session picks it up.
 - **Deploy simplification** (user, 2026-11-16, `work/main.md` M-22, [`proposals/deploy-simplification.md`](proposals/deploy-simplification.md)):
   one bootstrap and one service file for Compose, Portainer and Kubernetes (built: #798, #800, #808), Open WebUI off
   unless asked for (#806, #809; the admin UI's part is #807), the upgrade paths older than 0.5.x deleted (#799). Left:
-  upgrades without a manual stop and across a release, one escrow set, and the three points that wait for the user
-  (hardening as an optional step, one wizard hand-off from the gateway, the manifest's owner and first assigned key).
+  upgrades without a manual stop and across a release, and one escrow set. Host hardening is an optional step (#810);
+  one wizard hand-off and a first assigned key from the manifest are proposals to the gateway (llmgateway#108, #109).
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 
