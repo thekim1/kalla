@@ -417,7 +417,7 @@ public sealed record WorkerSettings(decimal DegradedFailureRatio, int ScheduleJi
     private static JsonObject Parse(string text) => JsonNode.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text) as JsonObject ?? [];
 }
 
-public sealed record WorkerSettingsRequest : SettingsRequest
+public sealed record WorkerSettingsRequest : SettingsRequest, IValidatableObject
 {
     [Range(0.0, 1.0)]
     public decimal DegradedFailureRatio { get; init; } = 0.05m;
@@ -430,6 +430,18 @@ public sealed record WorkerSettingsRequest : SettingsRequest
 
     [Required]
     public JsonObject DefaultSchedules { get; init; } = [];
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        // The worker reads the object as source type → cron string and skips a schedule that does not parse.
+        foreach (var (type, value) in DefaultSchedules)
+        {
+            if (value is not JsonValue schedule || !schedule.TryGetValue<string>(out var cron) || !CronSchedules.IsValid(cron))
+            {
+                yield return new ValidationResult(CronSchedules.Invalid, [$"{nameof(DefaultSchedules)}.{type}"]);
+            }
+        }
+    }
 }
 
 /// <summary>

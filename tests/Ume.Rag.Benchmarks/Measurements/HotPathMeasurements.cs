@@ -15,6 +15,8 @@ using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Access;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
@@ -24,7 +26,7 @@ namespace Ume.Rag.Benchmarks.Measurements;
 
 /// <summary>
 /// One-off measurements of the hot-path findings of 2026-11-15, current code against a candidate where the candidate fits in
-/// the harness: <c>dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure slots|vector|jobs|vectortext|hydrate|stream</c>.
+/// the harness: <c>dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure slots|vector|jobs|vectortext|hydrate|stream|vectorinsert|snapshot</c>.
 /// Stopwatch medians, not BenchmarkDotNet: several count outcomes (503s, recall, rows) as well as time. The Postgres ones need Docker.
 /// </summary>
 public static class HotPathMeasurements
@@ -39,6 +41,7 @@ public static class HotPathMeasurements
         if (which is "hydrate" or "all") { await HydrateAsync(); }
         if (which is "jobs" or "all") { await JobsAsync(); }
         if (which is "vectorinsert" or "all") { await VectorInsertAsync(); }
+        if (which is "snapshot" or "all") { await SnapshotAsync(); }
         return 0;
     }
 
@@ -677,6 +680,117 @@ public static class HotPathMeasurements
         }
 
         await database.DisposeAsync();
+    }
+
+    // ---------------------------------------------------------------- 7: config snapshot reload
+
+    /// <summary>
+    /// to-verify #164 (data-model §5, §14): rag-api's whole-snapshot reload (<see cref="PolicySnapshotStore.LoadAsync"/>, as
+    /// <c>ume_rag_api</c>) with N published assistant versions whose instructions are 20 KB each (three collection links, two
+    /// audiences per assistant). 50 reloads after 5 warm-ups; allocated bytes per reload over all threads, and the instruction
+    /// text one snapshot keeps alive. The design moves to reloading by outbox EntityId when a reload takes more than 50 ms.
+    /// </summary>
+    private static async Task SnapshotAsync()
+    {
+        Console.WriteLine("## 7 Config snapshot reload (PolicySnapshotStore.LoadAsync as ume_rag_api), 20 KB instructions per published version");
+        Console.WriteLine("| published assistants | instructions MB in the database | reload p50 ms | p95 ms | max ms | allocated MB per reload | instructions held by the snapshot MB (UTF-16) |");
+        Console.WriteLine("|---:|---:|---:|---:|---:|---:|---:|");
+        var database = new RagDatabase();
+        await database.InitializeAsync();
+        await using var api = NpgsqlDataSource.Create(database.Connection(RagDatabase.Api));
+        var store = new PolicySnapshotStore(api,
+            new ConfigVersionState(Microsoft.Extensions.Options.Options.Create(new ConfigOptions()), TimeProvider.System,
+                new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = "Development" },
+                Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicySnapshotStore>.Instance);
+        // About 20 KB of Swedish instructions (UTF-8, å/ä/ö included), different per assistant so no string is shared.
+        const string Sentence = "Du är kommunens assistent för bygglov och svarar på svenska med hänvisning till källorna. ";
+        var seeded = 0;
+        foreach (var target in new[] { 1, 300, 1_000 })
+        {
+            await SeedAssistantsAsync(database, seeded, target - seeded, Sentence);
+            seeded = target;
+            for (var i = 0; i < 5; i++)
+            {
+                await store.LoadAsync(i, CancellationToken.None);
+            }
+
+            var times = new List<double>();
+            var allocated = new List<double>();
+            for (var i = 0; i < 50; i++)
+            {
+                var before = GC.GetTotalAllocatedBytes(precise: true);
+                var t = Stopwatch.GetTimestamp();
+                var snapshot = await store.LoadAsync(i, CancellationToken.None);
+                times.Add(Stopwatch.GetElapsedTime(t).TotalMilliseconds);
+                allocated.Add(GC.GetTotalAllocatedBytes(precise: true) - before);
+                if (snapshot.Assistants.Count != target || snapshot.Assistants.Values.Any(a => a.Published is null))
+                {
+                    throw new InvalidOperationException($"The snapshot holds {snapshot.Assistants.Count} assistants, not {target} published ones.");
+                }
+            }
+
+            // What a snapshot keeps alive is mostly its instructions: counted exactly (UTF-16) rather than by heap deltas,
+            // which the server GC's many heaps make unreliable here.
+            var instructions = (await store.LoadAsync(0, CancellationToken.None)).Assistants.Values.Sum(a => (long)a.Published!.SystemPrompt.Length * sizeof(char));
+            long databaseBytes;
+            await using (var admin = new NpgsqlConnection(database.Connection(RagDatabase.Admin)))
+            {
+                await admin.OpenAsync();
+                await using var size = new NpgsqlCommand("""SELECT coalesce(sum(octet_length("SystemPrompt")), 0)::bigint FROM config."AssistantVersions" """, admin);
+                databaseBytes = (long)(await size.ExecuteScalarAsync())!;
+            }
+
+            var sorted = times.Order().ToArray();
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"| {target} | {databaseBytes / 1e6:F1} | {Pct(sorted, 0.5):F1} | {Pct(sorted, 0.95):F1} | {sorted[^1]:F1} | {Median(allocated) / 1e6:F1} | {instructions / 1e6:F1} |"));
+        }
+
+        await database.DisposeAsync();
+    }
+
+    /// <summary><paramref name="count"/> more assistants, each with one published version, as the admin's publish leaves them.</summary>
+    private static async Task SeedAssistantsAsync(RagDatabase database, int offset, int count, string sentence)
+    {
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        var now = DateTimeOffset.UtcNow;
+        var department = Guid.NewGuid();
+        Guid[] collections = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        var assistants = Enumerable.Range(offset, count).Select(n => new Assistant
+        {
+            Slug = $"assistent-{n}", Name = $"Assistent {n}", DepartmentId = department, Classification = Classification.Internal, UpdatedAt = now,
+            Description = "Svarar om bygglov.", ContactName = "Bygglov", ContactEmail = "bygglov@umea.se",
+        }).ToList();
+        db.Assistants.AddRange(assistants);
+        await db.SaveChangesAsync();
+        var versions = assistants.Select((a, n) =>
+        {
+            var prompt = new StringBuilder("Instruktion ").Append((offset + n).ToString(CultureInfo.InvariantCulture)).Append(". ");
+            while (Encoding.UTF8.GetByteCount(prompt.ToString()) + Encoding.UTF8.GetByteCount(sentence) <= 20 * 1024)
+            {
+                prompt.Append(sentence);
+            }
+
+            return new AssistantVersion
+            {
+                AssistantId = a.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = prompt.ToString(), NotFound = """{"sv":"Inget svar i källorna."}""",
+                CollectionLinks = [.. collections.Select(CollectionLink.Whole)], CreatedAt = now, UpdatedAt = now,
+            };
+        }).ToList();
+        db.AssistantVersions.AddRange(versions);
+        await db.SaveChangesAsync();
+        for (var i = 0; i < assistants.Count; i++)
+        {
+            versions[i].State = AssistantVersionStates.Published;
+            versions[i].PublishedAt = now;
+            versions[i].PublishedBy = "measure";
+            assistants[i].PublishedVersionId = versions[i].Id;
+            db.AssistantAudiences.AddRange(
+                new AssistantAudience { AssistantId = assistants[i].Id, SubjectId = Guid.NewGuid() },
+                new AssistantAudience { AssistantId = assistants[i].Id, SubjectId = Guid.NewGuid() });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static double Median(IEnumerable<double> values)

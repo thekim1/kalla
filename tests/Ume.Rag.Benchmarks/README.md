@@ -53,6 +53,7 @@ dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure vectortext  
 dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure vector        # statement V: exact, exact on halfvec, HNSW, with recall
 dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure hydrate       # hydration at neighbour radius 0 to 8
 dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure stream        # flush per token, the Open WebUI user JWT (no Docker)
+dotnet run -c Release --project tests/Ume.Rag.Benchmarks -- measure snapshot      # rag-api's config snapshot reload, 1 to 1,000 published assistants (to-verify #164)
 ```
 
 Without a name every measurement runs (about 10 minutes). The results of 2026-11-15 are in issue #764.

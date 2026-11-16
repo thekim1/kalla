@@ -533,6 +533,11 @@ public record SourceFields : AdminRequest, IValidatableObject
         {
             yield return new ValidationResult($"The level must be one of {string.Join(", ", Domain.Classification.All)}.", [nameof(Classification)]);
         }
+
+        if (!string.IsNullOrWhiteSpace(Schedule) && !CronSchedules.IsValid(Schedule.Trim()))
+        {
+            yield return new ValidationResult(CronSchedules.Invalid, [nameof(Schedule)]);
+        }
     }
 }
 

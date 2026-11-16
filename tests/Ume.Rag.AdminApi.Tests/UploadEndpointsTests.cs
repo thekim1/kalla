@@ -239,6 +239,86 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database, UploadEn
     }
 
     [Fact]
+    public async Task On_Kestrel_the_file_request_takes_60_mb_and_every_other_request_1_mb()
+    {
+        // to-verify #32 on real Kestrel (the TestServer above enforces no limit). An oversized body is sent with
+        // Expect: 100-continue, so Kestrel refuses it from the Content-Length before the client sends it.
+        var (sourceId, code) = await UploadSourceAsync();
+        async Task MaxFileSizeAsync(int mb)
+        {
+            await using var db = TestPostgres.Context(database.Connection(null));
+            (await db.Sources.SingleAsync(s => s.Id == sourceId, Ct)).Settings = $$"""{"maxFileSizeMb":{{mb}}}""";
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await MaxFileSizeAsync(50);
+        await using var kestrel = new KestrelHost<Program>(host.Factory);
+        using var admin = kestrel.CreateClient();
+        admin.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.RoleHeader, RagRoles.DepartmentAdmin);
+        admin.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.DepartmentHeader, code);
+        await admin.WithXsrfTokenAsync();
+        using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
+        var batch = (await Json(create)).GetProperty("batchId").GetGuid();
+
+        async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, byte[] body, string contentType)
+        {
+            using var request = new HttpRequestMessage(method, path) { Content = new ByteArrayContent(body) };
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            request.Headers.Add("X-File-Name", "stor.pdf");
+            request.Headers.ExpectContinue = true;
+            return await admin.SendAsync(request, Ct);
+        }
+
+        // The file route: a 50 MB file (the platform cap) passes. A larger body meets the source's own limit first, from the
+        // Content-Length before the body is read (413 upload_too_large).
+        using (var at = await SendAsync(HttpMethod.Put, $"/api/upload-batches/{batch}/files/1", new byte[50 * 1024 * 1024], "application/pdf"))
+        {
+            at.StatusCode.ShouldBe(HttpStatusCode.OK, await at.Content.ReadAsStringAsync(Ct));
+        }
+
+        using (var source = await SendAsync(HttpMethod.Put, $"/api/upload-batches/{batch}/files/2", new byte[UploadEndpoints.FileRequestLimit + 1], "application/pdf"))
+        {
+            source.StatusCode.ShouldBe(HttpStatusCode.RequestEntityTooLarge);
+            (await Json(source)).GetProperty("code").GetString().ShouldBe("upload_too_large");
+        }
+
+        // Kestrel's 60 MB is the backstop behind it: with a source limit above the cap (the admin refuses one; set here in
+        // the database) exactly 60 MB passes and one byte more is Kestrel's 413.
+        await MaxFileSizeAsync(100);
+        using (var at = await SendAsync(HttpMethod.Put, $"/api/upload-batches/{batch}/files/2", new byte[UploadEndpoints.FileRequestLimit], "application/pdf"))
+        {
+            at.StatusCode.ShouldBe(HttpStatusCode.OK, await at.Content.ReadAsStringAsync(Ct));
+        }
+
+        using (var over = await SendAsync(HttpMethod.Put, $"/api/upload-batches/{batch}/files/3", new byte[UploadEndpoints.FileRequestLimit + 1], "application/pdf"))
+        {
+            await KestrelRefusedAsync(over);
+        }
+
+        // Any other route: the commit's JSON padded with spaces to 1 MB + 1 is 413, to exactly 1 MB it is answered.
+        static byte[] Commit(int bytes) => System.Text.Encoding.UTF8.GetBytes("""{"files":[1]""" + new string(' ', bytes - 13) + "}");
+        Commit(1024 * 1024).Length.ShouldBe(1024 * 1024);
+        using (var over = await SendAsync(HttpMethod.Post, $"/api/upload-batches/{batch}/commit", Commit(1024 * 1024 + 1), "application/json"))
+        {
+            await KestrelRefusedAsync(over);
+        }
+
+        using var commit = await SendAsync(HttpMethod.Post, $"/api/upload-batches/{batch}/commit", Commit(1024 * 1024), "application/json");
+        commit.StatusCode.ShouldBe(HttpStatusCode.OK, await commit.Content.ReadAsStringAsync(Ct));
+    }
+
+    /// <summary>
+    /// Kestrel's 413: problem details without the admin's own <c>code</c> (its 413s, such as <c>upload_too_large</c>, carry one).
+    /// The pair of requests around it (the limit passes, one byte more is refused) shows which limit applied.
+    /// </summary>
+    private static async Task KestrelRefusedAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.RequestEntityTooLarge, body);
+        JsonDocument.Parse(body).RootElement.TryGetProperty("code", out _).ShouldBeFalse(body);
+    }
+
+    [Fact]
     public async Task A_manifest_left_by_a_failed_commit_with_other_entries_is_refused()
     {
         // A first commit wrote the manifest and failed after it (config lock, a conflict); a second with another list must not

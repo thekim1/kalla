@@ -84,6 +84,34 @@ public sealed class AdminRequestValidationTests(AdminHost host) : IClassFixture<
         errors.ShouldContainKey("collectionLinks[1].tags");
     }
 
+    [Theory]
+    [InlineData("0 30 2 * * *")] // 6 fields
+    [InlineData("60 2 * * *")]
+    [InlineData("H 2 * * *")] // Cronos's jitter character needs a seed the scheduler does not pass
+    public async Task A_source_refuses_a_schedule_the_scheduler_cannot_parse(string schedule)
+    {
+        // to-verify #16: the worker's scheduler skips a schedule Cronos does not parse (5 fields) without a word.
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        var errors = await RefusedAsync(await admin.PutAsJsonAsync($"/api/sources/{Guid.NewGuid()}",
+            new { name = "Prov", classification = "public", schedule, version = "1" }, Ct));
+
+        errors.Keys.ShouldBe(["schedule"]);
+    }
+
+    [Fact]
+    public async Task The_default_schedules_refuse_a_value_the_scheduler_cannot_parse()
+    {
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+        var errors = await RefusedAsync(await admin.PutAsJsonAsync("/api/settings/worker",
+            new { defaultSchedules = new Dictionary<string, object> { ["url-list"] = "0 2 * * *", ["crawl"] = "0 1 * * 6 *", ["upload"] = 5 } }, Ct));
+
+        errors.Keys.Order(StringComparer.Ordinal).ShouldBe(["defaultSchedules.crawl", "defaultSchedules.upload"]);
+    }
+
     private static async Task<Dictionary<string, string[]>> RefusedAsync(HttpResponseMessage response)
     {
         using (response)
