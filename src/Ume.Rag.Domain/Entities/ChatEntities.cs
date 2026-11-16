@@ -130,8 +130,6 @@ public sealed class Message
     /// <summary>The Open WebUI message id (chat design §11.4); regenerations dedup on it.</summary>
     public string? ExternalMessageId { get; set; }
 
-    public Guid? ParentMessageId { get; set; }
-
     /// <summary>The published version that answered; no foreign key.</summary>
     public Guid? AssistantVersionId { get; set; }
 

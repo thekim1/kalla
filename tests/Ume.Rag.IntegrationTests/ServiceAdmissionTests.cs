@@ -20,9 +20,12 @@ namespace Ume.Rag.IntegrationTests;
 /// </summary>
 public sealed class ServiceAdmissionTests
 {
-    /// <summary>The migration before <c>RemoveWorkerConcurrency</c>, which stops the admin (0.6.0).</summary>
+    /// <summary>
+    /// The migration before <c>RemoveWorkerConcurrency</c>, which stops the admin (0.6.0). The last migration after it that
+    /// stops a role is <c>DropMessageParentId</c> (the api and the admin), so that is the fence of both.
+    /// </summary>
     private const string BeforeFence = "20261114021122_ClientManagedByDeployment";
-    private const string Fence = "20261114133334_RemoveWorkerConcurrency";
+    private const string Fence = "20261116231057_DropMessageParentId";
     private const string ReadSettings = """SELECT count(*) FROM config."Settings" """;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -54,7 +57,7 @@ public sealed class ServiceAdmissionTests
         await using var database = await DatabaseBeforeFenceAsync();
         await using (var db = TestPostgres.Context(database.Connection(Migrator)))
         {
-            (await RagDatabaseMigrator.MigrateAsync(db, RolesSqlPath, Ct)).ShouldBe([new ServiceFence(Admin, Fence)]);
+            (await RagDatabaseMigrator.MigrateAsync(db, RolesSqlPath, Ct)).ShouldBe([new ServiceFence(Admin, Fence), new ServiceFence(Api, Fence)]);
         }
 
         var build = CurrentBuild(database);
@@ -62,7 +65,7 @@ public sealed class ServiceAdmissionTests
         denied.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
         denied.MessageText.ShouldBe("permission denied for schema config");
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """SELECT count(*) FROM content."Jobs" """);
-        await Sql.ExecuteAsync(database.Connection(Api), ReadSettings);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), ReadSettings);
         await Sql.ExecuteAsync(database.Connection(Worker), ReadSettings);
         // What admission gives back: the schemas app-roles.sql granted the admin.
         (await Sql.ListAsync(database.Connection(Migrator), "SELECT unnest(schemas) FROM public.ume_rag_service_fences WHERE role = 'ume_rag_admin'"))
@@ -78,6 +81,7 @@ public sealed class ServiceAdmissionTests
 
         // A role admits only itself (session_user), and no service role reads or writes the fences.
         await Sql.ExecuteAsync(database.Connection(Api), $"SELECT public.ume_rag_admit('{build}')");
+        await Sql.ExecuteAsync(database.Connection(Api), ReadSettings);
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), ReadSettings);
         foreach (var role in new[] { Api, Admin, Worker })
         {

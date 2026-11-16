@@ -69,6 +69,9 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   skip releases: the release boots 0.5.1's Portainer stack and applies the new file over it
   (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
   stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
+- **`chat."Messages"."ParentMessageId"` is dropped** (#792): nothing wrote or read it. Migration `DropMessageParentId`;
+  **Rolling update: no** (the previous rag-api and rag-admin map the column), which `rag-migrate` handles itself on
+  one slot.
 
 ## 0.7.0 (2026-11-16)
 

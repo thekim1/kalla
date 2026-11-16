@@ -983,7 +983,7 @@ by one statement per message.
 | Open WebUI action | What arrives | Stored |
 |---|---|---|
 | New message | history + new user message (`USER_MESSAGE_ID` new) | user message + assistant message |
-| Regenerate | same history and user message (`USER_MESSAGE_ID` unchanged), new `MESSAGE_ID` (`ow/main.py:1842-1847`) | user message **not duplicated** (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING`); new assistant message with `ParentMessageId` = that user message |
+| Regenerate | same history and user message (`USER_MESSAGE_ID` unchanged), new `MESSAGE_ID` (`ow/main.py:1842-1847`) | user message **not duplicated** (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING`); a new assistant message (its user message is the request's `USER_MESSAGE_ID`; no parent link is stored, #792) |
 | Edit an earlier message | the edited branch; new `USER_MESSAGE_ID` | new user + assistant messages; the old branch stays in our record |
 | Continue response | last message `assistant` | refused (400 `continue_not_supported`), P1 |
 
