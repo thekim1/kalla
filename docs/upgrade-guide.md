@@ -12,6 +12,19 @@ exception, with its own steps.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.0
+
+- **Rolling update: yes** from 0.6.0. Migrations `IdentityOidcSettings`, `SetupMode` and `OpenWebUiSignInSettings` only
+  add; Open WebUI is recreated once. The Portainer stack moves the gateway to `v0.11.0`, also rolling.
+- **Before the update:** nothing must be added or changed. A deployment that sets its authority and
+  `UME_RAG_OIDC_CLIENT_SECRET` never sees a setup wizard. Only a Portainer stack **without**
+  `UME_INTEGRATION_MANIFEST` (keys issued by hand) decides first whether the gateway may create three new credential
+  keys from the stack file's default, or sets the variable empty (below, and `docs/portainer.md`, *Upgrade from 0.6.0*).
+- **After the update:** read the end of `rag-bootstrap`'s log (a retired variable the stack still sets is named
+  there), and check that you sign in as before.
+
 - **The Portainer stack pins the gateway's `v0.10.3`.** Rolling update, no migration, no new variable: the only
   change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
   allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
