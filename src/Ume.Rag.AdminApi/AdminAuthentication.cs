@@ -279,7 +279,7 @@ public static partial class AdminAuthentication
             return Results.Challenge(new AuthenticationProperties { RedirectUri = destination }, [OpenIdConnectDefaults.AuthenticationScheme]);
         });
         app.MapGet(UserPath, async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin, GatewayFeatures gateway,
-            AdminSignIn signIn, TimeProvider time) =>
+            AdminSignIn signIn, TimeProvider time, IConfiguration configuration) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append(AdminCookies.XsrfToken, tokens.RequestToken!, new CookieOptions
@@ -308,6 +308,8 @@ public static partial class AdminAuthentication
                 signIn = new { configured = signIn.Current.IsConfigured },
                 // From the same read: whether setup mode is open, so the admin UI goes to /setup (identity design §19).
                 setup = new { open = SetupMode.IsOpen(signIn.Current.Values, time.GetUtcNow()) },
+                // Whether the deployment runs Open WebUI (OpenWebUi:Enabled, as setup's state reads it), so the admin UI leaves it out when not.
+                openWebUi = new { enabled = OpenWebUiSignIn.Enabled(configuration) },
             });
         });
         app.MapPost(LogoutPath, (HttpContext http, ILoggerFactory loggers) =>
