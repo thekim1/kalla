@@ -1,7 +1,7 @@
 # Deploying and upgrading with Portainer (0.6.x)
 
-How to run Ume.Rag with the LLM gateway `v0.10.3` as one Portainer stack: a first deploy on a new VM, the upgrade of
-a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
+How to run Ume.Rag with the LLM gateway `GATEWAY_NEXT` as one Portainer stack: a first deploy on a new VM, the upgrade
+of a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
 [*Portainer and other hosts without shell access*](runbook.md#portainer-and-other-hosts-without-shell-access), and
@@ -15,8 +15,10 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 
 Use the **`compose.portainer.yaml` asset of the `v0.6.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.10.2` in the `v0.6.0` asset, `v0.10.3` in the repository since) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
-no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand.
+(`v0.10.2` in the `v0.6.0` asset, `GATEWAY_NEXT` in the repository since) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand. The one typed
+value, the two setup wizards and the default integration manifest of *First deploy* need a file built from the
+gateway's `GATEWAY_NEXT` or later: the `v0.6.0` asset has none of them.
 
 ## What you need
 
@@ -26,9 +28,10 @@ no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE
   registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
   (`ume-admin`), Ume.Rag's admin (`ume-rag-admin`) and, for the chat, Open WebUI (`open-webui`). The clients must exist
-  before you set up sign-in. Their redirect URIs: `https://rag-admin.<domain>/signin-oidc` and
-  `/signout-callback-oidc` for `ume-rag-admin`, `https://chat.<domain>/oauth/oidc/login/callback` for `open-webui` (the
-  setup wizard shows them, ready to copy). Ume.Rag's client secrets are entered in the setup wizard, not in the stack.
+  before you set up sign-in. Their redirect URIs: `https://llm-admin.<domain>/signin-oidc` and
+  `/signout-callback-oidc` for `ume-admin`, `https://rag-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
+  `ume-rag-admin`, `https://chat.<domain>/oauth/oidc/login/callback` for `open-webui` (the two setup wizards show them,
+  ready to copy). The client secrets are entered in the setup wizards, not in the stack.
 - **Host names** and **real certificates** for the gateway API, the gateway admin, rag-api, Ume.Rag's admin and Open
   WebUI. The services serve certificates from their own internal CAs (Open WebUI plain HTTP), so something in front
   terminates TLS: your own reverse proxy (routes and body sizes:
@@ -45,12 +48,13 @@ to the services and verifies them against their internal CAs, so nothing else ne
 1. On the host, put one certificate for all five names (SAN or wildcard) in a directory, as `tls.crt` (with its chain)
    and `tls.key`, readable by uid 101 (`chown 101 tls.key && chmod 0400 tls.key`), and set
    `UME_RAG_PROXY_CERTS_DIR` to it (default `/etc/ume-rag/proxy-certs`). Without it `rag-proxy` doesn't start.
-2. Give each service a host name of its own: `UME_GATEWAY_HOST` and `UME_ADMIN_HOST` for the gateway, and for
-   Ume.Rag `UME_DOMAIN`, which names rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI
-   `chat.<domain>` (`UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST`, `UME_RAG_OPENWEBUI_HOST` override one each). A name shared
-   with another service gets no route, and
-   `rag-bootstrap`'s checklist says which. The public URLs are then plain `https://<host>` (`UME_GATEWAY_PUBLIC_URL`,
-   the OIDC redirect URIs without a port).
+2. Give each service a host name of its own. `UME_DOMAIN` names all five: the gateway API `llm.<domain>`, the
+   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI
+   `chat.<domain>` (`UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and
+   `UME_RAG_OPENWEBUI_HOST` override one each). A name shared with another service gets no route, and `rag-bootstrap`'s
+   checklist says which. The public URLs are then plain `https://<host>`, which is their default: leave
+   `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_PUBLIC_URL` and `UME_RAG_API_PUBLIC_URL` unset (the OIDC redirect URIs have no
+   port).
 3. Bind the other published ports to loopback (`UME_GATEWAY_BIND`, `UME_ADMIN_BIND`, `UME_RAG_API_BIND`,
    `UME_RAG_ADMIN_BIND` = `127.0.0.1`), so only the proxy is reachable.
 4. After the first deploy, list the proxy as a trusted proxy in both admins (the gateway's *Settings → Trusted proxies*,
@@ -90,45 +94,67 @@ read the CA only at start.
 1. **Create the stack.** *Stacks → Add stack*, a name you will keep (the volumes are found by it), *Web editor*: paste
    the file. Pick the `ghcr.io` registry.
 2. **Variables:** *Environment variables → Load variables from .env file* with
-   [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace the five values its
-   comments mark CHANGE. None of them is a secret of Ume.Rag or Open WebUI:
+   [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace the one value its
+   comments mark CHANGE, your domain. It is not a secret:
 
    ```text
-   # The gateway
-   UME_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume
-   UME_GATEWAY_HOST=llm.example.se
-   UME_GATEWAY_PUBLIC_URL=https://llm.example.se
-   UME_ADMIN_HOST=llm-admin.example.se
-   # Ume.Rag
-   UME_DOMAIN=example.se                                  # rag.example.se, rag-admin.example.se, chat.example.se
+   UME_DOMAIN=example.se        # llm., llm-admin., rag., rag-admin. and chat.example.se
    ```
 
-   Optional, for the gateway: `UME_ADMIN_PUBLIC_URL` (links from Ume.Rag's admin to the gateway's) and
-   `UME_OIDC_CLIENT_SECRET` (only if `ume-admin` is a confidential client). `COMPOSE_PROFILES=clamav,openwebui` is
-   already in the file.
+   `UME_DOMAIN` gives all five host names: the gateway API `llm.<domain>` (its public URL `https://llm.<domain>`), the
+   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>` (its public URL `https://rag.<domain>`), Ume.Rag's
+   admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another name for one, set `UME_GATEWAY_HOST`,
+   `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` or `UME_RAG_OPENWEBUI_HOST`; for a public address with a
+   port, `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_PUBLIC_URL` (Ume.Rag's admin links to the gateway's admin there) or
+   `UME_RAG_API_PUBLIC_URL`. The file lists each, commented out. A stack that sets the names and no `UME_DOMAIN` works
+   as before: it needs `UME_GATEWAY_HOST` and `UME_RAG_API_HOST` then, and Ume.Rag's admin shares rag-api's name unless
+   `UME_RAG_ADMIN_HOST` is set. `COMPOSE_PROFILES=clamav,openwebui` is already in the file.
 
-   `UME_DOMAIN` gives Ume.Rag's three host names: rag-api `rag.<domain>` (its public URL `https://rag.<domain>`;
-   `UME_RAG_API_PUBLIC_URL` for a port), its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another
-   name for one, set `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` or `UME_RAG_OPENWEBUI_HOST`. A stack that sets the names
-   and no `UME_DOMAIN` works as before (the admin then shares rag-api's name unless `UME_RAG_ADMIN_HOST` is set).
+   Leave `UME_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `UME_INTEGRATION_API_URL` as the file
+   has it. The stack file then gives the gateway its default manifest,
+   [`deploy/portainer/integration-manifest.json`](../deploy/portainer/integration-manifest.json): the gateway creates
+   the integration `Ume.Rag` and its three credential keys, and hands rag-admin the Integration API's address (M-17 C7,
+   C11). The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
+   named `Ume.Rag` with the code `ume-rag` (a team that already has the code `ume-rag` is used instead). You move it to
+   your own team in step 7. Two other choices:
+   - **Your own team at once:** set `UME_INTEGRATION_MANIFEST` to the default manifest on one line, with an `"owner"`
+     in `"integration"`: `{"teamCode":…,"teamName":…,"departmentCode":…,"departmentName":…}`. The team is found by
+     `teamCode`; when it doesn't exist, it is created in the department whose cost centre code is `departmentCode`
+     (created too when absent).
+   - **No integration from the stack:** set `UME_INTEGRATION_MANIFEST` with an empty value. Nothing is created; issue
+     the keys by hand (step 8).
 
-   Keep `UME_INTEGRATION_MANIFEST` and `UME_INTEGRATION_API_URL` as the file has them: the gateway creates the
-   integration `Ume.Rag` and its three credential keys from the manifest, and hands rag-admin the Integration API's
-   address (M-17 C7, C11). If the team `ume-rag` doesn't exist in the gateway yet, it is created in the department whose
-   cost centre code is the manifest's `departmentCode`: change that to yours (and `departmentName`), or create the team
-   first. The other optional variables (ports, binds, groups, the gateway's settings) are in the file's header.
-
-   Sign-in is not a variable: you set it up in step 4. To set it in the stack instead, see *Declaring sign-in instead*
-   below.
+   The other optional variables (ports, binds, groups, the gateway's settings) are in the file's header. Sign-in is not
+   a variable: you set it up in steps 4 and 5. To set it in the stack instead, see *Declaring sign-in instead* below.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `rag-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
    creates the integration `Ume.Rag` and its keys `rag-api`, `rag-admin` and `rag-worker` from the manifest and writes
    their secrets to the volume `<stack>_integration-secrets`, from which `rag-bootstrap` gives each service its key; the
-   services start. **The end of `rag-bootstrap`'s log lists what is still missing** (example values left in, Open
+   services start. With the default manifest, `migrations`' log has the warning
+   `Integration 'Ume.Rag' names no owner in the manifest, so it is placed in the team 'Ume.Rag' (code 'ume-rag') …`
+   (step 7 moves it). **The end of `rag-bootstrap`'s log lists what is still missing** (example values left in, Open
    WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place. Its last
    lines point at the setup wizard on every deploy, since `rag-bootstrap` can't see whether setup is done: skip that
-   when you can already sign in.
-4. **Set up sign-in.** rag-admin opens its setup wizard on the first start and prints a setup code.
+   when you can already sign in. The end of the gateway's `bootstrap` log does the same for the gateway's wizard:
+   `bootstrap: sign-in to the admin console is set in the setup wizard: https://llm-admin.example.se:9443/setup …`.
+4. **Set up the gateway's sign-in first.** With no `UME_OIDC_AUTHORITY` in the stack, the gateway's admin opens its own
+   setup wizard on its first start and prints a setup code. Do it before Ume.Rag's: rag-admin's wizard then offers the
+   provider address you save here.
+   - **Find the code:** *Containers → adminapi → Logs*, the line
+     `adminapi: setup mode is open until 2026-11-20 14:05 UTC. Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. It is valid
+     for one hour and is worth a gateway admin while setup is open: its holder chooses the gateway's sign-in provider.
+     If the hour ends before you finish, restart adminapi: a setup that was never finished opens again with a new code.
+   - **Open** `https://llm-admin.<domain>/setup` (with `:9443` when no proxy is in front) and enter the code.
+   - **The wizard** shows the redirect URI and the post-logout redirect URI to register on the `ume-admin` client, then
+     takes the provider address, the client ID (default `ume-admin`), the client secret (none for a public client) and,
+     under *Claims and scopes*, the claim names. **Test sign-in** opens the provider in a window of its own: sign in
+     there. **Save and close setup** is offered only after a passed test by someone who comes out as `gateway-admin`
+     (the role in the token, or a group in `UME_OIDC_GROUPS_GATEWAY_ADMIN`).
+
+   The gateway's own steps and failure cases:
+   [its runbook](https://github.com/thekim1/llmgateway/blob/main/docs/runbook.md#first-start-without-an-authority-the-setup-wizard),
+   *First start without an authority: the setup wizard*.
+5. **Set up Ume.Rag's sign-in.** rag-admin opens its setup wizard on the first start and prints a setup code.
    - **Find the code:** *Containers → rag-admin → Logs*, the line
      `rag-admin: setup mode is open until 2026-11-20 14:05 UTC. Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. The code
      is valid for one hour. Treat it like a password: whoever holds it chooses the sign-in provider while setup is open.
@@ -141,9 +167,10 @@ read the CA only at start.
      2. *Addresses*: the redirect URI and the post-logout redirect URI. Register both on the `ume-rag-admin` client at
         the provider now. The page also shows what the stack sets (the gateway's address, rag-api's public address, the
         platform admin groups).
-     3. *Sign-in*: the provider address is locked (*Set by the deployment*: the stack's `UME_OIDC_AUTHORITY`). Where
-        the stack does not set it, the wizard fills in the gateway's provider address when the gateway knows one
-        (*From the AI gateway*; you can change it), so the address is typed once for both. The
+     3. *Sign-in*: the wizard fills in the provider address saved in the gateway's wizard (*From the AI gateway*; you
+        can change it), so the address is typed once for both. While the gateway has none, the wizard says so and links
+        to the gateway's wizard: finish step 4 first. Where the stack sets `UME_OIDC_AUTHORITY` (or
+        `UME_RAG_OIDC_AUTHORITY`), the address is locked instead (*Set by the deployment*). The
         client ID defaults to `ume-rag-admin`; type the client secret and, if you like, the date it expires. *Advanced*
         holds the claim names, with a preset for Keycloak and for Entra ID (the tenant ID). **Test sign-in** opens the
         provider in a new window: sign in there as yourself. The result shows who signed in, the roles, groups and
@@ -157,7 +184,7 @@ read the CA only at start.
 
    After *Finish* setup is closed: the setup API answers 404 and the code is void. The sign-in provider, client and
    secret change only after a re-open (*Opening the setup wizard again*), never from an admin session.
-5. **Open WebUI's sign-in** (profile `openwebui`): Open WebUI asks rag-api for its sign-in settings when it starts, and
+6. **Open WebUI's sign-in** (profile `openwebui`): Open WebUI asks rag-api for its sign-in settings when it starts, and
    restarts by itself within a minute when they change. Its provider defaults to rag-admin's authority's
    `/.well-known/openid-configuration` and its client to `open-webui`; register its redirect URI
    `https://chat.<domain>/oauth/oidc/login/callback` on that client (the wizard shows it with a copy button). The
@@ -168,39 +195,44 @@ read the CA only at start.
    signs in as a public client (PKCE). Its log says what it started with:
    `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`. To declare the values instead, set
    `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` (and the other `UME_RAG_OPENWEBUI_OIDC_*` lines) in the stack.
-6. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
-   has every field): under *Access → Integrations → Ume.Rag*, check the three credential keys (residencies `OnPrem`
-   and `Eu`: Ume.Rag's ceiling, register M2), then create the **assigned keys** the assistants and knowledge bases
-   will run on, one or more per department, in the integration with role *Assigned*. The manifest never changes a key
-   that exists: change one here. **Rotate** a credential key here (with a grace period), then delete its file
-   `Ume.Rag/rag-<service>` in `<stack>_integration-secrets` and update the stack; the gateway writes the new secret and
-   the service picks it up within seconds.
-7. **Keys issued by hand instead** (no manifest, or the gateway runs elsewhere): create the integration `Ume.Rag` and
-   the three credential keys as production-setup.md says, set `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`
-   and `UME_RAG_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and update the stack. The services
-   pick them up within seconds. **Address list** of a credential key: the services reach the gateway over the stack's
-   internal network `llm`, whose subnet Docker chose (`docker network inspect <stack>_llm`); allow that subnet, or
-   leave the list empty.
-8. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
+7. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
+   has every field): **move the integration to your own team** (skip it if your manifest names an owner): *Access →
+   Integrations → Ume.Rag*, *Edit*, the owner team. The team must be active, in an active department. Every credential
+   key of the integration that is not revoked moves with it; usage already recorded stays with the team `ume-rag`, and
+   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Ume.Rag*, check the
+   three credential keys (residencies `OnPrem` and `Eu`: Ume.Rag's ceiling, register M2), then create the **assigned
+   keys** the assistants and knowledge bases will run on, one or more per department, in the integration with role
+   *Assigned*. The manifest never changes a key that exists: change one here. **Rotate** a credential key here (with a
+   grace period), then delete its file `Ume.Rag/rag-<service>` in `<stack>_integration-secrets` and update the stack;
+   the gateway writes the new secret and the service picks it up within seconds.
+8. **Keys issued by hand instead** (`UME_INTEGRATION_MANIFEST` set empty, or the gateway runs elsewhere): create the
+   integration `Ume.Rag` and the three credential keys as production-setup.md says, set `UME_RAG_API_GATEWAY_KEY`,
+   `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and
+   update the stack. The services pick them up within seconds. **Address list** of a credential key: the services reach
+   the gateway over the stack's internal network `llm`, whose subnet Docker chose
+   (`docker network inspect <stack>_llm`); allow that subnet, or leave the list empty.
+9. **Check** in Ume.Rag's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
    embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
    `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
    must allow the model. The first profile is the default, which new knowledge bases use.
-9. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
-   the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
-   there to choose the assistants it offers (an assistant's *Who can use it* works too).
+10. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
+    the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
+    there to choose the assistants it offers (an assistant's *Who can use it* works too).
 
-   Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag) needs
-   nothing either: the one-shot `rag-openwebui-setup` mints the feedback service account's key once Open WebUI runs
-   (password sign-in stays off) and keeps it while it works, and rag-api finds Open WebUI in the stack by itself. Its log
-   says *minted* or *kept*. A new key: delete `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and update the
-   stack.
-10. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
+    Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag)
+    needs nothing either: the one-shot `rag-openwebui-setup` mints the feedback service account's key once Open WebUI
+    runs (password sign-in stays off) and keeps it while it works, and rag-api finds Open WebUI in the stack by itself.
+    Its log says *minted* or *kept*. A new key: delete `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and
+    update the stack.
+11. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
     `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
     database restored without them is unusable, and the client secrets the wizard stored can only be read with the same
-    `data-protection.pfx`. The stack has no WAL archiving: use `pg_dump` or volume snapshots.
+    `data-protection.pfx`. The gateway's two are `ume-secrets/.pepper` and `ume-certs/data-protection.pfx`, which
+    protects the client secret its wizard stored the same way. The stack has no WAL archiving: use `pg_dump` or volume
+    snapshots.
 
 Then the knowledge bases and assistants: each gets one of its department's assigned keys (V39); a published assistant
 must have one once the gateway acts as keys.
@@ -208,9 +240,17 @@ must have one once the gateway acts as keys.
 ### Declaring sign-in instead
 
 A value set in the stack is the deployment's: it wins, and the wizard shows it locked (*Set by the deployment*). An
-empty variable counts as unset. With an authority and a client secret in the stack, rag-admin counts setup as done at
-its first start and never opens the wizard; a re-open shows those values locked.
+empty variable counts as unset. The gateway counts its setup as done at its first start when the stack sets
+`UME_OIDC_AUTHORITY`; rag-admin, when the stack sets an authority and a client secret. Then that wizard never opens,
+and a re-open shows those values locked.
 
+- **The gateway:** `UME_OIDC_AUTHORITY` declares the provider of the gateway's admin and keeps the gateway's wizard
+  closed. It is rag-admin's provider too, locked in both wizards, unless `UME_RAG_OIDC_AUTHORITY` names another one for
+  rag-admin. Optionally `UME_OIDC_CLIENT_ID` (default `ume-admin`) and, for a confidential client,
+  `UME_OIDC_CLIENT_SECRET`: the gateway's `bootstrap` writes the secret only together with the authority, and without
+  one its log says `bootstrap: UME_OIDC_CLIENT_SECRET is left out: it is used only with UME_OIDC_AUTHORITY. …`. The
+  claim names (`UME_OIDC_ROLE_CLAIM` and the others in the file's header) lock their fields in the gateway's wizard
+  when set.
 - **rag-admin:** `UME_OIDC_AUTHORITY` (or `UME_RAG_OIDC_AUTHORITY` for another provider than the gateway's) and
   `UME_RAG_OIDC_CLIENT_SECRET`; optionally `UME_RAG_OIDC_CLIENT_ID` (default `ume-rag-admin`) and the token's shape:
   `UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`, `_EXTRA_SCOPE`, `_TENANT_ID` (Entra ID)
@@ -219,60 +259,113 @@ its first start and never opens the wizard; a re-open shows those values locked.
 - **Open WebUI:** `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, and only to change the defaults
   `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID`, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` and `UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME`.
 
-The stack's variables are readable by everyone who may edit the stack; the wizard keeps the secrets encrypted in the
-database instead.
+The stack's variables are readable by everyone who may edit the stack; the wizards keep the secrets encrypted in the
+databases instead.
 
 ## Upgrade from 0.6.0
 
-To the release after 0.6.0, the one with the setup wizard. **A rolling update:** its migrations only add columns and a
-table, so nothing is stopped first; Open WebUI restarts once. The gateway moves to `v0.10.3` (rolling, no migration).
-**Your stack keeps its variables and never sees the wizard:** with the authority and `UME_RAG_OIDC_CLIENT_SECRET` in
-the stack, rag-admin counts setup as done at its first start. Every change and why:
-[upgrade-guide.md](upgrade-guide.md#unreleased). From 0.5.x, do *Upgrade from 0.5.x to 0.6.0* first.
+To the release after 0.6.0, the one with the setup wizards. **A rolling update:** Ume.Rag's migrations only add columns
+and a table, and the gateway's (it moves to `GATEWAY_NEXT`: `SignInSettings` and `SetupMode`) only add tables, columns
+and grants, so nothing is stopped first; Open WebUI restarts once. **Your stack keeps its variables and sees neither
+wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
+`UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Nothing has to be added. Every change and why:
+[upgrade-guide.md](upgrade-guide.md#unreleased), and the gateway's
+[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md). From 0.5.x, do *Upgrade from
+0.5.x to 0.6.0* first.
 
 **Before the update**
 
-1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 10.
+1. **Back up** both databases, the three Ume.Rag files of *First deploy* step 11 and the gateway's two
+   (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`).
 2. **Look through the stack's variables:**
+   - `UME_OIDC_AUTHORITY` holds your provider's address, as it must in a working 0.6.0 stack: it keeps the gateway's
+     sign-in declared and is rag-admin's provider. Keep it and every other `UME_OIDC_*` you set;
    - `UME_RAG_OIDC_CLIENT_SECRET` and `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` must hold the real secrets, as they do in
      a working 0.6.0 stack. A leftover `CHANGE` declares a wrong secret and keeps the wizard closed;
    - a token-shape variable you changed (`UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`,
      `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS`, `_CLIENT_ID`): keep the line. The new file passes each only when
-     it is set; unset, the code's default applies, which is the old file's default.
+     it is set; unset, the code's default applies, which is the old file's default;
+   - **`UME_INTEGRATION_MANIFEST` set** (a stack made from 0.6.0's `stack.env.example`, with an `owner`): keep it. A set
+     value wins over the new stack file's default, and the integration and keys it made exist, so nothing is created
+     or changed;
+   - **`UME_INTEGRATION_MANIFEST` not set** (a stack upgraded from 0.5.x that kept its keys issued by hand): the new
+     stack file's default manifest applies from this update on. The gateway looks for the integration by its name,
+     `Ume.Rag`, and for each credential key by its name within it, creates what is missing and never changes what
+     exists. Keys issued by hand under other names (0.5.0's `Ume.Rag api`, …) don't count, so the gateway creates
+     three new credential keys `rag-api`, `rag-admin` and `rag-worker` in your integration `Ume.Rag` and writes their
+     secrets to `<stack>_integration-secrets`; if your integration has another name, it also creates a second
+     integration `Ume.Rag`, in a new team and department `ume-rag`. Your services keep their keys: a
+     `UME_RAG_*_GATEWAY_KEY` that is set wins over the manifest's. The new keys stay unused. **To create nothing,** add
+     `UME_INTEGRATION_MANIFEST` with an empty value now: set and empty, the default doesn't apply. Or let them be
+     created and revoke them afterwards (*After the update*, step 8).
 
 **The update**
 
 3. **Edit the stack:** paste the new file over the old one (keep the stack name). **No variable has to be added or
-   changed.** The host names stay as they are: `UME_DOMAIN` is only for new stacks, or to replace the three
-   `UME_RAG_*_HOST` lines later (set it and remove the lines whose value is its default: `rag.`, `rag-admin.` and
-   `chat.<domain>`).
-4. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `migrations`; `rag-bootstrap`, which
-   writes `admin/Setup__Secret` and Open WebUI's client secret as files for rag-api and rag-admin; `rag-migrate`
-   (migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings`); then the services. Open WebUI now
-   starts through a wrapper that asks rag-api for its sign-in settings.
+   changed** (the empty `UME_INTEGRATION_MANIFEST` of step 2 is your choice). The host names stay as they are:
+   `UME_DOMAIN` is for new stacks, or for the one-value form later (*Optional, afterwards*, below).
+4. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `bootstrap`, which now also writes
+   `adminapi/Setup__Secret`; the gateway's `migrations` (migrations `SignInSettings` and `SetupMode`, then the
+   integration manifest); `rag-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files
+   for rag-api and rag-admin; `rag-migrate` (migrations `IdentityOidcSettings`, `SetupMode`,
+   `OpenWebUiSignInSettings`); then the services. Open WebUI now starts through a wrapper that asks rag-api for its
+   sign-in settings.
 
 **After the update**
 
 5. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing, and says *sign-in to Ume.Rag's admin is
    declared by the stack's variables …, so the setup wizard stays closed*.
-6. **Check:**
+6. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
+   stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and no line
+   `bootstrap: UME_OIDC_CLIENT_SECRET is left out: …` after it.
+7. **Check:**
+   - `adminapi`'s log has, once, the record
+     `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (in the JSON line's
+     `Message`), and **no** line with `Setup code`; you sign in to the gateway's admin as before;
    - rag-admin's log has *The deployment declares the sign-in* once, and **no** line with *Setup code*;
    - you sign in to Ume.Rag's admin as before;
+   - `migrations`' log has `… 'Ume.Rag' applied, 0 of 3 credential keys created` when your keys came from a manifest
+     (`3 of 3` for a stack of step 2 without one; no such line with an empty value);
    - `rag-openwebui`'s log has *starting with OIDC sign-in from rag-api's sign-in settings*, Open WebUI's sign-in page
      shows the button, and a test user signs in and gets an answer;
    - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them.
+8. **Only if step 2 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Ume.Rag*,
+   revoke `rag-api`, `rag-admin` and `rag-worker` (the manifest never creates a revoked key again). Or move to them
+   instead: give them the settings of your keys (models, address list), remove the three `UME_RAG_*_GATEWAY_KEY`
+   variables and update the stack, so `rag-bootstrap` hands each service its new key from the volume; once *Models*
+   shows a recent organisation sync again, revoke your old keys.
 
 **If rag-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
-`UME_RAG_OIDC_CLIENT_SECRET` is missing or empty. Either add it and update the stack, or use the wizard (*First
-deploy*, from the setup code on): both end in a working sign-in.
+`UME_RAG_OIDC_CLIENT_SECRET` is missing or empty. Either add it and update the stack, or use the wizard (*First deploy*
+step 5, from the setup code on): both end in a working sign-in. **If `adminapi` prints one,** `UME_OIDC_AUTHORITY` is
+missing or empty and the gateway's sign-in is not configured until it is fixed: set it and update the stack (the code is
+then void), or use the gateway's wizard (*First deploy* step 4).
 
-**Optional, afterwards: move the client secrets out of the stack's variables** and into the wizard, where they are
-stored encrypted. In one go, because sign-in is incomplete in between:
+**Optional, afterwards: the one-value form.** Set `UME_DOMAIN` to your domain and remove each of these lines whose
+value is exactly its default under it: `UME_GATEWAY_HOST` (`llm.<domain>`), `UME_ADMIN_HOST` (`llm-admin.<domain>`),
+`UME_GATEWAY_PUBLIC_URL` (`https://llm.<domain>`, no port), `UME_RAG_API_HOST` (`rag.<domain>`), `UME_RAG_ADMIN_HOST`
+(`rag-admin.<domain>`), `UME_RAG_OPENWEBUI_HOST` (`chat.<domain>`) and `UME_RAG_API_PUBLIC_URL`
+(`https://rag.<domain>`). Keep a line whose value differs (another name, a port). `UME_INTEGRATION_MANIFEST` may go
+too: the default names the same integration and keys, which exist, so nothing is created, and a manifest without an
+owner leaves the integration's team as it is. Update the stack. `rag-bootstrap`'s log has no `issuing certificate` for
+rag-api or rag-admin unless a name changed.
+
+**Optional, afterwards: move the client secrets out of the stack's variables** and into the wizards, where they are
+stored encrypted. In one go per product, because sign-in is incomplete in between:
 
 1. Remove `UME_RAG_OIDC_CLIENT_SECRET` (and `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`), set `UME_RAG_SETUP_REOPEN` to a
    new value (for example today's date) and update the stack.
 2. Open `https://<admin host>/setup` with the setup code from rag-admin's log, type the secrets, test the sign-in and
    finish. Keep `UME_OIDC_AUTHORITY`: the gateway shares it, and it stays locked in the wizard.
+3. The gateway's (a confidential `ume-admin` only): remove `UME_OIDC_CLIENT_SECRET`, set `UME_SETUP_REOPEN` to a new
+   value and update the stack. Open `https://<gateway admin host>/setup` with the setup code from `adminapi`'s log,
+   type the secret, test the sign-in and save. The provider stays declared and locked.
+
+The gateway's upgrade guide also describes moving its provider into its wizard (*Optional, afterwards: move sign-in
+into the wizard*, *Everything*: remove `UME_OIDC_AUTHORITY` and every `UME_OIDC_*` but the role groups, with a new
+`UME_SETUP_REOPEN`). In this stack `UME_OIDC_AUTHORITY` is rag-admin's provider too: set `UME_RAG_OIDC_AUTHORITY` to
+the same address in the same change, or rag-admin is left without one. With the `data` profile, the Data API then
+accepts only Data API keys unless you set `UME_DATA_AUTHORITY` to the old address.
 
 ## Upgrade from 0.5.x to 0.6.0
 
@@ -282,7 +375,7 @@ migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md
 
 **Before the update**
 
-1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 10.
+1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 11.
 2. **In the gateway's admin**, give `rag-api`'s and `rag-admin`'s credential keys the residencies **`OnPrem` and `Eu`
    only** (the worker's already are). From 0.6.0 each service's ceiling is its key's residencies; a key that allows
    every residency would let a public assistant answer at `External`.
@@ -336,7 +429,7 @@ and rag-admin stop before the migration. Plan a short window. The gateway's own 
 rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgrade-guide.md#050).
 
 1. **Back up** both databases (`pg_dump` from `postgres` and `rag-postgres`) and the three Ume.Rag files of *First
-   deploy* step 10.
+   deploy* step 11.
 2. **Stop** `rag-api` and `rag-admin` (*Containers*, select, *Stop*).
 3. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
    - remove the per-level keys `UME_RAG_*GATEWAY_KEY_<level>` and the Data API's `UME_RAG_ORG_SYNC_KEY` and
@@ -351,10 +444,10 @@ rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgr
    `GatewayModelLimitsSource`, `DailyUsage`, `ObjectGatewayKeys`, `DailyTotalsWithoutCost`, `ContentRetentionStep`) and
    the grants, then `rag-api` and `rag-admin` start on the new
    schema. `rag-bootstrap` deletes the old per-level key files and the Data API key file and logs it.
-5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 6–7; update the stack
+5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 7–8; update the stack
    (`0.5.0`'s images: then restart `rag-api`, `rag-admin` and `rag-worker`). Until then their model calls are refused.
 6. **Revoke** the old per-level keys and the Data API key in the gateway's admin.
-7. **Check** as in *First deploy* step 8, then give each existing assistant and knowledge base one of its department's
+7. **Check** as in *First deploy* step 9, then give each existing assistant and knowledge base one of its department's
    assigned keys (they have none after the upgrade, and a published assistant can't be republished without one).
 8. Optional, once: files uploaded before `UploadScannedAt` have no scan date though they were scanned; set it with
    `UPDATE content."Uploads" SET "ScannedAt" = "UploadedAt" WHERE "ScannedAt" IS NULL AND "State" IN ('clean',
@@ -390,6 +483,12 @@ and sign-in fails until you re-open and type them again.
 The code is derived from `rag-secrets/admin/Setup__Secret`, which `rag-bootstrap` generates once; it needs no backup (a
 new one only changes future codes).
 
+**The gateway's wizard** re-opens the same way with its own variable: set `UME_SETUP_REOPEN` to a new value and update
+the stack; `adminapi` prints a new setup code in its log, valid for an hour, for `https://llm-admin.<domain>/setup`.
+The gateway's current sign-in keeps working meanwhile, and values the stack sets stay locked. Empty `UME_SETUP_REOPEN`
+before restoring the gateway's database. `UME_RAG_SETUP_REOPEN` opens only Ume.Rag's wizard, `UME_SETUP_REOPEN` only
+the gateway's.
+
 ## When something fails
 
 | Symptom | Look at |
@@ -402,6 +501,8 @@ new one only changes future codes).
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |
 | `rag-openwebui` restarts | its log: the wrapper's two files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
 | Open WebUI lists no models | *Apps and keys*: the Open WebUI app managed by the deployment offers assistants, and they are published; `rag-migrate`'s log names the client |
+| No setup code in `adminapi`'s log | The stack sets `UME_OIDC_AUTHORITY` (the gateway's `bootstrap` log says sign-in *is declared by the stack's variables*), or the gateway's setup is done already (to change it, a new `UME_SETUP_REOPEN` value) |
+| Ume.Rag's wizard suggests no provider address and links to the gateway's wizard | The gateway's setup isn't finished (*First deploy* step 4), or rag-admin hasn't read the gateway's context since: it reads it with its credential key, so check `rag-bootstrap`'s checklist for a missing key. Or type the address |
 | No setup code in rag-admin's log | Setup is done already (sign in; to change sign-in, re-open). Or the stack declares an authority and `UME_RAG_OIDC_CLIENT_SECRET` (the log says *The deployment declares the sign-in*), or a placeholder such as `CHANGE` is left in that variable (`rag-bootstrap`'s checklist names it). Or the log says *the setup secret (Setup__Secret …) is missing*: update the stack, so `rag-bootstrap` writes it, then restart rag-admin. *The settings row is missing*: `rag-migrate` didn't complete (its log) |
 | The wizard says *Too many attempts* | More than 20 wrong codes a minute reached rag-admin. The right code still works at once: paste it again, exactly. If it wasn't you, someone is guessing: security event 6009 has the address ([security-events.md](security-events.md)) |
 | *The setup window has ended* | The hour is over. Setup never finished: restart rag-admin for a new code. After a finished setup: a new `UME_RAG_SETUP_REOPEN` value |

@@ -10,7 +10,7 @@ does not run its own. The realm files and their placeholders are described in
 | Your setup | What to do |
 |---|---|
 | **The gateway's Keycloak, shared realm `ume`** (the pilot, Decisions "Gateway release 1 and shared Keycloak as built") | Copy `deploy/keycloak/rag-additions.json` from the Ume Rag release into the gateway's Keycloak additions directory, set its placeholders, and run the gateway's Keycloak `up` again (README, *Shared realm*). Then `init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ...` |
-| **Gateway and RAG in one Portainer stack** | The same additions file in the gateway's Keycloak; in the stack, `UME_RAG_OIDC_AUTHORITY` defaults to the gateway's `UME_OIDC_AUTHORITY` (runbook, *Portainer and other hosts without shell access*) |
+| **Gateway and RAG in one Portainer stack** | The same additions file in the gateway's Keycloak; in the stack, `UME_RAG_OIDC_AUTHORITY` defaults to the gateway's `UME_OIDC_AUTHORITY`, and without either rag-admin's setup wizard suggests the realm saved in the gateway's wizard (runbook, *Portainer and other hosts without shell access*) |
 | **A Keycloak of RAG's own** (standalone) | `deploy/keycloak/standalone/10-rag-realm.json` in place of the gateway's base realm file, then `rag-additions.json`, applied with keycloak-config-cli (README, *Standalone*). Run Keycloak with the gateway's `deploy/keycloak` project |
 | **Entra ID or AD FS directly**, no Keycloak | Register `ume-rag-admin` there and pass its authority to `init-deployment.sh`; Entra needs `UME_RAG_OIDC_TENANT_ID` (production setup, *Sign-in*) |
 | **Kubernetes** | Any of the above; the overlay's `Oidc__Authority` names the realm (Kubernetes guide) |

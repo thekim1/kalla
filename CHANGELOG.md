@@ -55,6 +55,18 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   A callback with a setup test's state answers 404 without a read while setup is closed and is limited to 20 a minute
   per client address while it is open (429). Completing setup also compares what the test's result rested on (claim
   names, tenant, guest rule, the deployment's role groups) with what is in force (`values_changed`).
+- **One typed value in the Portainer stack, `UME_DOMAIN`** (setup wizard S8, the stack): `build-stack.sh` gives the
+  gateway's `UME_INTEGRATION_MANIFEST` a default, `deploy/portainer/integration-manifest.json` (the integration
+  `Ume.Rag` and its three credential keys, no owner, so the gateway places it in a team and department `ume-rag` that
+  a gateway admin can move), used only while the variable is unset: set, the stack's own manifest wins; set and empty,
+  nothing is provisioned. The proxy's gateway host names default under `UME_DOMAIN` (`llm.` and `llm-admin.<domain>`),
+  and rag-admin gets the gateway admin's address for its links as `Admin__GatewayAdminUrl` (`UME_ADMIN_PUBLIC_URL`,
+  else `https://<gateway admin host>`). `stack.env.example` has one CHANGE value; the gateway's `UME_OIDC_AUTHORITY`,
+  host names and public URL are commented overrides, so a new stack sets sign-in in the gateway's setup wizard and then
+  in rag-admin's, which suggests the provider saved in the gateway's. A stack that sets `UME_OIDC_AUTHORITY` and its
+  own manifest changes nothing; one without a manifest gets the default (new keys beside hand-made ones: upgrade
+  guide). The stack is built from the gateway's release with setup mode and manifests without an owner.
+  `docs/portainer.md`, the upgrade guide, the runbook, `production-setup.md` and `keycloak.md` follow.
 
 ## 0.6.0 (2026-11-15)
 
