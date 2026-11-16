@@ -6,8 +6,8 @@ it leaves out (sizing, a reverse proxy, your own PKI, Open WebUI, the renderer, 
 [production-setup.md](production-setup.md); a host without shell access uses [portainer.md](portainer.md) instead, and
 ports and firewall rules per setup are in [network-and-ports.md](network-and-ports.md).
 
-What you type, in all: the host names, the gateway's address, the sign-in provider's address (once per product, in
-the setup wizards; Ume.Rag's also for its host firewall) and the two client secrets. Every certificate, password and
+What you type, in all: the host names, the gateway's address, the sign-in provider's address (once, in the gateway's
+setup wizard; Ume.Rag's wizard suggests it) and the two client secrets. Every certificate, password and
 key is generated, and the gateway hands Ume.Rag its three credential keys through a directory on the host.
 
 ## 1. Before you start
@@ -20,16 +20,9 @@ host count 8 cores and 20 GB of memory or more: Ume.Rag's smaller profile caps i
 ```bash
 docker version --format '{{.Server.Version}}'                  # 28 or later
 docker compose version --short                                 # 2.33.1 or later
-docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}'    # systemd 2
-docker network ls -q | xargs docker network inspect --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
 ss -ltn | grep -E ':(8443|9443|8543|9543)\b' || echo "the four ports are free"
 ```
 
-- **The cgroup driver must be `systemd` on cgroup v2**, and **no Docker network may use `172.30.0.0/16`**: with
-  `--hardened` (below) Ume.Rag's networks have fixed subnets there, so its host firewall can give each its own rule,
-  and its ingestion containers run in a slice. If either check differs, set both in `/etc/docker/daemon.json` as
-  [production-setup.md](production-setup.md#host-prerequisites) shows, before the gateway is installed: a restart of
-  Docker stops every container on the host, and a network that already holds `172.30.x.x` has to be recreated.
 - **Ports:** the gateway listens on 8443 (API) and 9443 (admin), Ume.Rag on 8543 (rag-api) and 9543 (rag-admin).
   Another port: `--gateway-port` and `--admin-port` (the gateway's script), `--set UME_RAG_API_PORT=N` and
   `--set UME_RAG_ADMIN_PORT=N` (Ume.Rag's).
@@ -118,12 +111,11 @@ sudo ./deploy/init-deployment.sh --api-host <host> --admin-host <host> \
   --gateway-url https://<host>:8443 --gateway-ca-file ../ume-llm-gateway-X.Y.Z/deploy/certs/ca.pem \
   --gateway-secrets-dir ../ume-llm-gateway-X.Y.Z/deploy/integration-secrets \
   --set UME_RAG_API_PUBLIC_URL=https://<host>:8543 \
-  --hardened --oidc-authority https://<provider>/realms/ume \
   --backup-target local
-sudo deploy/host/install.sh
 sudo docker compose --env-file deploy/.env up -d --wait
 sudo docker compose --env-file deploy/.env logs rag-bootstrap
 sudo docker compose --env-file deploy/.env exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create
+sudo deploy/host/install.sh
 sudo systemctl start rag-backup.service
 ```
 
@@ -133,24 +125,18 @@ sudo systemctl start rag-backup.service
 - **`--gateway-ca-file` is the gateway's CA certificate**, which the script copies to `deploy/gateway-ca` (only the
   certificate: the gateway's directory also holds its private keys): Ume.Rag's services then
   trust the gateway's internal CA.
-- **`--hardened`** adds the host firewall, the slice the ingestion containers run in and the renderer's seccomp
-  profile (*1. Before you start*). Without it Ume.Rag asks for no sign-in value at all and none of the host's checks of
-  step 1 apply; `deploy/host/install.sh` then installs only the backup and certificate timers.
-- **`--oidc-authority` is the provider's address** (Keycloak: `https://<host>/realms/<realm>`; Entra ID:
-  `https://login.microsoftonline.com/<tenant>/v2.0`). With `--hardened` the host firewall lets rag-admin reach only
-  this provider, so the wizard's test sign-in needs it. A run without `--yes` asks for it when the option is missing.
+- **No sign-in value is asked for:** sign-in is set in the setup wizard below, which suggests the provider saved in
+  the gateway's wizard.
 - **`UME_RAG_API_PUBLIC_URL`** is rag-api's address with its port, for the citation links; behind a proxy it is
   `https://<api host>`, the default, and the line goes.
-- **`--gateway-url` is an address the containers reach:** the host's name, never `localhost`. The firewall lets
-  Ume.Rag's networks through to a gateway that this host serves.
+- **`--gateway-url` is an address the containers reach:** the host's name, never `localhost`.
 - **`--backup-target local`** keeps the database backups in a Docker volume on the same disk, which is no backup of
   the host: fine for a test, and for production name the share or the bucket
   ([Backup target](production-setup.md#backup-target)).
-- **`deploy/host/install.sh` comes before the first `up`** with `--hardened`: it installs the slice the ingestion
-  containers run in, the host firewall and the backup timers. `up --wait` returns when every service is healthy; the
-  first start of `rag-clamav` downloads its signatures and can take ten minutes.
-- **rag-api and rag-admin are published on `0.0.0.0`**, ports 8543 and 9543. With `--hardened` and `--proxy-address`
-  the host firewall admits only the proxy to them; otherwise restrict them in a network firewall.
+- **`deploy/host/install.sh`** installs the backup and certificate timers. `up --wait` returns when every service is
+  healthy; the first start of `rag-clamav` downloads its signatures and can take ten minutes.
+- **rag-api and rag-admin are published on `0.0.0.0`**, ports 8543 and 9543. Restrict them in a network firewall, or
+  harden the host (step 7), whose firewall admits only your proxy.
 
 The script ends with the next steps, the setup wizard's address among them.
 
@@ -186,27 +172,56 @@ The script ends with the next steps, the setup wizard's address among them.
 - **Open WebUI** for staff chat: [production-setup.md](production-setup.md#open-webui-optional).
 - **Upgrades:** the [upgrade guide](upgrade-guide.md); day-to-day operation: the [runbook](runbook.md).
 
+## 7. Harden the host (production)
+
+A first install runs as the Portainer stack does: Docker's own network isolation, the services' own egress guard, no
+host firewall. A production host adds the hardening once the installation works. It gives each of Ume.Rag's networks
+a fixed subnet and an egress rule of its own (the crawler reaches the Internet, the other services only what they
+call), caps the ingestion containers as a group, and gives the renderer its seccomp profile.
+
+```bash
+docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}'    # systemd 2
+docker network ls -q | xargs docker network inspect --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
+sudo ./deploy/init-deployment.sh --hardened --oidc-authority https://<provider>/realms/ume [--proxy-address <proxy>]
+sudo docker compose --env-file deploy/.env down
+sudo deploy/host/install.sh
+sudo docker compose --env-file deploy/.env up -d --wait
+```
+
+- **The cgroup driver must be `systemd` on cgroup v2**, and **no Docker network may use `172.30.0.0/16`**: with
+  `--hardened` Ume.Rag's networks have fixed subnets there, so its host firewall can give each its own rule,
+  and its ingestion containers run in a slice. If either check differs, set both in `/etc/docker/daemon.json` as
+  [production-setup.md](production-setup.md#host-prerequisites) shows: a restart of
+  Docker stops every container on the host, the gateway's too, and a network that already holds `172.30.x.x` has to be recreated.
+- **`--oidc-authority` is the provider's address** (Keycloak: `https://<host>/realms/<realm>`; Entra ID:
+  `https://login.microsoftonline.com/<tenant>/v2.0`): the firewall lets rag-admin reach only this provider, which a
+  later re-open of the setup wizard needs. A run without `--yes` asks for it when the option is missing.
+- **`down` before `up`:** the networks get their fixed subnets only when they are created again. The volumes, and so
+  the database and every secret, stay. `install.sh` installs the slice and the firewall before the services start.
+- **`--proxy-address`** names your reverse proxy's addresses, which the firewall then alone admits to ports 8543 and
+  9543. The firewall lets Ume.Rag's networks through to a gateway that this host serves.
+
 ## When something fails
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| `up` fails with "Pool overlaps with other one on this address space" | a Docker network already uses `172.30.x.x` | step 1; recreate that network after setting `default-address-pools` |
-| `up --wait` times out on `rag-worker`, `rag-parser` or `rag-clamav` | the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
+| `up` fails with "Pool overlaps with other one on this address space" | on a hardened host, a Docker network already uses `172.30.x.x` | step 7; recreate that network after setting `default-address-pools` |
+| `up --wait` times out on `rag-worker`, `rag-parser` or `rag-clamav` | on a hardened host, the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
 | `rag-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file deploy/.env logs rag-clamav`; `--freshclam-proxy` behind an egress proxy |
 | The end of `rag-bootstrap`'s log: *UME_RAG_API_GATEWAY_KEY: no key for rag-api* (or `rag-admin`, `rag-worker`) | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again (its `migrations` log names a manifest it refused), then Ume.Rag's `up -d` |
-| The wizard: *rag-admin could not reach the provider address* | the host firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file deploy/.env up -d` and `sudo systemctl start rag-firewall.service` |
+| The wizard: *rag-admin could not reach the provider address* | on a hardened host, the firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file deploy/.env up -d` and `sudo systemctl start rag-firewall.service` |
 | *Models* is empty, or the organisation sync is *degraded* | Ume.Rag's containers do not reach the gateway, or do not trust its certificate | the check below; `--gateway-ca-file` with the gateway's `deploy/certs/ca.pem`; `docker compose --env-file deploy/.env logs rag-admin` |
 | 403 `model_not_allowed` or `max_residency_not_met` in a log | the model is not hosted at `OnPrem` or `Eu`, or a key lists other models | the provider's residency and the three keys, in the gateway's admin |
 
-**Do Ume.Rag's containers reach the gateway?** A throwaway container on the `llm` network gets the same firewall rules
-as rag-api and rag-admin:
+**Do Ume.Rag's containers reach the gateway?** A throwaway container on the `llm` network takes the same way out as
+rag-api and rag-admin (and, on a hardened host, gets the same firewall rules):
 
 ```bash
 sudo docker run --rm --network ume-rag_llm curlimages/curl:8.11.1 -k -sS -o /dev/null -w 'HTTP %{http_code}\n' \
   https://<host>:8443/v1/models
 ```
 
-`HTTP 401` is the right answer (no key was sent). A time-out means the firewall blocks it: compare
+`HTTP 401` is the right answer (no key was sent). A time-out on a hardened host means the firewall blocks it: compare
 `sudo iptables -S UME-RAG-INPUT` with the address the gateway's name resolves to, and run
 `sudo systemctl start rag-firewall.service` again. When the gateway's name resolves to this host, the firewall's
 `UME-RAG-INPUT` and `--ctorigdst` rules are what let Ume.Rag's networks through
