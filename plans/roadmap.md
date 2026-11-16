@@ -87,8 +87,10 @@ Each becomes a queue item when the main session picks it up.
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
   only what a process can't start without; C0–C12 merged (C7 and C12 on the gateway's v0.10.2, C11 in 0.6.0); C13 left.
 - **Deploy simplification** (user, 2026-11-16, `work/main.md` M-22, [`proposals/deploy-simplification.md`](proposals/deploy-simplification.md)):
-  one bootstrap for Compose and Portainer, Open WebUI off unless asked for, the upgrade paths nobody runs deleted; the
-  first install was already shortened in #794 and the guides checked against the code in #795 and #796.
+  one bootstrap and one service file for Compose, Portainer and Kubernetes (built: #798, #800, #808), Open WebUI off
+  unless asked for (#806, #809; the admin UI's part is #807), the upgrade paths older than 0.5.x deleted (#799). Left:
+  upgrades without a manual stop and across a release, one escrow set, and the three points that wait for the user
+  (hardening as an optional step, one wizard hand-off from the gateway, the manifest's owner and first assigned key).
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 
