@@ -61,6 +61,11 @@ public static class ChatEndpoints
                 {
                     throw new ChatException(400, "invalid_request", "The body is not valid JSON.");
                 }
+                catch (BadHttpRequestException tooLarge) when (tooLarge.StatusCode == StatusCodes.Status413PayloadTooLarge)
+                {
+                    // Kestrel's body limit (BodyLimit, from the endpoint's metadata): §3.6's code in the OpenAI shape.
+                    throw new ChatException(413, "request_too_large", "The body is too large.");
+                }
 
                 // The parsed request holds only copies (strings, numbers), so the document and its pooled buffers go now (#712).
                 ParsedChat parsed;

@@ -129,47 +129,47 @@ a queue item when a stream or the main session picks it up.
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 16 | `Cronos`: version, 5-field syntax, DST behaviour. Version done (Stage 0, 2026-10-30): 0.13.0 (2026-04-29, MIT); the syntax and DST tests are stream A's, with the scheduler | `platform/repo-and-deployment.md` §2.2; `ingestion-worker/design-engine.md` §23 | P0 | source + test | open |
-| 32 | Kestrel per-endpoint request body limits when roles share a host (knowledge routes; chat 2 MB; admin uploads 60 MB while the rest keeps 1 MB); nginx `proxy_request_buffering off` | `knowledge-api/design.md` §3.6; `chat-api/design.md` §3.2; `admin/design.md` §2.2 | P1 | test | open |
+| 16 | `Cronos`: version, 5-field syntax, DST behaviour. Version done (Stage 0, 2026-10-30): 0.13.0 (2026-04-29, MIT); the syntax and DST tests are stream A's, with the scheduler | `platform/repo-and-deployment.md` §2.2; `ingestion-worker/design-engine.md` §23 | P0 | source + test | done 2026-11-16, a defect fixed (#791, results-main) |
+| 32 | Kestrel per-endpoint request body limits when roles share a host (knowledge routes; chat 2 MB; admin uploads 60 MB while the rest keeps 1 MB); nginx `proxy_request_buffering off` | `knowledge-api/design.md` §3.6; `chat-api/design.md` §3.2; `admin/design.md` §2.2 | P1 | test | done 2026-11-16, a defect fixed (#791, results-main) |
 
 ### Open WebUI
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 47 | Stop button closes the upstream stream; a `source` event before the content chunk renders the chip; `metadata.external` + `#page=` with text-fragment links | `chat-api/design.md` §9.3 | P1 | test | open |
-| 50 | `{{MESSAGE_ID}}` non-empty for every completion and regeneration | `chat-api/design.md` §11.4 | P1 | test | open |
-| 134 | Open WebUI v0.12.5 settings that switch off title, tag and follow-up generation (none of them reaches the RAG assistants). **Partly done (P0, PR #31, 2026-10-30):** at v0.12.3 the `ENABLE_*_GENERATION` settings and the other chat design §4.3 settings exist under the same names and the environment wins with `ENABLE_PERSISTENT_CONFIG=false`; the stack starts with login form and sign-up off. That no task request reaches a model remains (chat API, P1) | `archive/passes/simplification-pass.md` §1 | P0 | source + test | open |
-| 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `archive/passes/simplification-pass.md` §15 | P1 | source + test | open |
+| 47 | Stop button closes the upstream stream; a `source` event before the content chunk renders the chip; `metadata.external` + `#page=` with text-fragment links | `chat-api/design.md` §9.3 | P1 | test | done 2026-11-16, two upstream findings (#791, results-main) |
+| 50 | `{{MESSAGE_ID}}` non-empty for every completion and regeneration | `chat-api/design.md` §11.4 | P1 | test | done 2026-11-16; `ParentMessageId` is never written (#792; results-main) |
+| 134 | Open WebUI v0.12.5 settings that switch off title, tag and follow-up generation (none of them reaches the RAG assistants). **Partly done (P0, PR #31, 2026-10-30):** at v0.12.3 the `ENABLE_*_GENERATION` settings and the other chat design §4.3 settings exist under the same names and the environment wins with `ENABLE_PERSISTENT_CONFIG=false`; the stack starts with login form and sign-up off. That no task request reaches a model remains (chat API, P1) | `archive/passes/simplification-pass.md` §1 | P0 | source + test | done 2026-11-16, no negative control (#791, results-main) |
+| 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `archive/passes/simplification-pass.md` §15 | P1 | source + test | done 2026-11-16; a workspace override replaces the description (#791, results-main) |
 
 ### Docling, parser, OCR and NER
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 79 | KB NER model: labels returned (`PER`/`PRS`), `transformers` 5 tokenizer loading, quality on the fixtures, CPU fp32 vs int8. **Partly done (P1a item 5, PR #84, 2026-10-31):** the pinned model's labels have `PER` for persons and no `PRS` alone (only mixed labels, returned as `person_ambiguous`); `transformers` 5.20.2 builds a fast tokenizer from `vocab.txt` once `model_max_length=512` is passed; fp32 and int8 find the same persons on every fixture sentence, int8 with lower scores ("Annas" 0.81 vs 1.00). Quality on the PII corpus, and so whether `NerMinScore` 0.80 holds for int8, remains (processing §17, P1a item 7) | `ingestion-worker/design-processing.md` §21; `parser/design.md` §7.8, §12 | P1 | test | open |
-| 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test | open |
-| 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test | open |
+| 79 | KB NER model: labels returned (`PER`/`PRS`), `transformers` 5 tokenizer loading, quality on the fixtures, CPU fp32 vs int8. **Partly done (P1a item 5, PR #84, 2026-10-31):** the pinned model's labels have `PER` for persons and no `PRS` alone (only mixed labels, returned as `person_ambiguous`); `transformers` 5.20.2 builds a fast tokenizer from `vocab.txt` once `model_max_length=512` is passed; fp32 and int8 find the same persons on every fixture sentence, int8 with lower scores ("Annas" 0.81 vs 1.00). Quality on the PII corpus, and so whether `NerMinScore` 0.80 holds for int8, remains (processing §17, P1a item 7) | `ingestion-worker/design-processing.md` §21; `parser/design.md` §7.8, §12 | P1 | test | done 2026-11-16; int8 misses 1 of 66 names at 0.80, the threshold stays (results-main) |
+| 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test | done 2026-11-16 (#791, results-main) |
+| 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test | done 2026-11-16; OLE links and `INCLUDEPICTURE` not covered (#791, results-main) |
 | 71 | LibreOffice under `RLIMIT_AS` for large spreadsheets | `parser/design.md` §4, §19 | P2 (legacy Office) | test | done (#702, results-a): 1.5 GB is too low, 3 GiB converts a 64 MB XLS; real municipal legacy files stay a live-block check |
 
 ### UI and accessibility
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 95 | Browser PDF viewers with `CSP default-src 'none'` and `#page=n` on download URLs | `knowledge-api/design.md` §3.5, §10.4 | P1 | test (Edge, Chrome, Firefox) | open |
+| 95 | Browser PDF viewers with `CSP default-src 'none'` and `#page=n` on download URLs | `knowledge-api/design.md` §3.5, §10.4 | P1 | test (Edge, Chrome, Firefox) | done 2026-11-16; Edge by inference from Chromium (results-main) |
 | 96 | DOS-lagen scope for an intranet admin app and its tillgänglighetsredogörelse | `admin/design.md` §10.1 | P1 | ask (municipal web/accessibility coordinator) | open (scope and statement accepted by the user 2026-11-06, B-4; the NVDA pass is still to run; results-b) |
 
 ### Licences and external data
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 109 | Model and library licences in the parser image: Docling layout and TableFormer models, `olefile`, pypdfium2 (pdfium built without V8/XFA). **Partly done (P0, PR #9, 2026-10-30):** model licences (Apache-2.0, CDLA-Permissive-2.0, MIT) and pdfium without V8/XFA; `LICENSES.md` and SUC 3.0 terms remain | `parser/design.md` §9.2, §11, §12, §19; postponed P2 | P0 | source | open |
-| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | open |
+| 109 | Model and library licences in the parser image: Docling layout and TableFormer models, `olefile`, pypdfium2 (pdfium built without V8/XFA). **Partly done (P0, PR #9, 2026-10-30):** model licences (Apache-2.0, CDLA-Permissive-2.0, MIT) and pdfium without V8/XFA; `LICENSES.md` and SUC 3.0 terms remain | `parser/design.md` §9.2, §11, §12, §19; postponed P2 | P0 | source | done 2026-11-16; LibreOffice section and written offer: #793 (results-main) |
+| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | done for the pilot 2026-11-16; a written question to KB is the user's call (results-main) |
 
 ### Performance and scale
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version. **Test part done (P1a item 3, PR #93, 2026-10-31):** the `AssistantVersions` outbox triggers skip drafts (`WHEN … <> 'draft'`), so a draft save or a draft delete leaves `ConfigVersion` untouched; a publish in one transaction bumps it once; creating or discarding a draft bumps once through `Assistants.DraftVersionId`. The snapshot build time and memory with 300 versions remain (api config snapshot, P1 item 15); details in `archive/p1/results-b.md` | `platform/data-model.md` §5, §14; `archive/passes/simplification-pass.md` §15 | P1 | measure + test | open |
-| 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `archive/passes/performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test | open |
+| 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version. **Test part done (P1a item 3, PR #93, 2026-10-31):** the `AssistantVersions` outbox triggers skip drafts (`WHEN … <> 'draft'`), so a draft save or a draft delete leaves `ConfigVersion` untouched; a publish in one transaction bumps it once; creating or discarding a draft bumps once through `Assistants.DraftVersionId`. The snapshot build time and memory with 300 versions remain (api config snapshot, P1 item 15); details in `archive/p1/results-b.md` | `platform/data-model.md` §5, §14; `archive/passes/simplification-pass.md` §15 | P1 | measure + test | done 2026-11-16: p50 16–25 ms at 300 versions, no change (#791, results-main) |
+| 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `archive/passes/performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test | done 2026-11-16; data-model §1.1 corrected (results-main) |
 
 ## P2 and later
 

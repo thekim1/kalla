@@ -628,7 +628,11 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 1-minute tick does the work (gateway `ModelListSync.cs:148-153` pattern).
 
 - **Cron** (`Sources.Schedule`, 5 fields, Cronos *to verify*) evaluated in Europe/Stockholm; DST gaps run once at the
-  next valid minute, overlaps once.
+  next valid minute, overlaps once. As Cronos 0.13.0 does it (to-verify 16, `CronScheduleTests`): `30 2 * * *` runs at
+  03:00 on the spring-forward night, and once, at the first 02:30, on the fall-back night; an interval expression
+  (`*/30 * * * *`) runs at both offsets of the repeated hour. An expression that does not parse as 5 fields (6 fields, a
+  value out of range, the jitter `H`) is never run, so the admin refuses it when a source's schedule or
+  `Settings.DefaultSchedules` is saved.
 - **Defaults** (answered 7), set by the admin when a source is created: URL list `0 2 * * *` (nightly 02:00), crawl
   `0 1 * * 6` (Saturday 01:00; a host whose site profile marks `lastmod` reliable runs incrementally every night, 6b;
   the flag is set only after a 500-URL sample, so umea.se starts with weekly full traversals, weakness review §3),
