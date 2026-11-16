@@ -23,7 +23,7 @@ namespaces and assembly names `Ume.Rag.*`, image repositories `ume-rag/<service>
 .editorconfig  .gitattributes  .gitignore  global.json  Directory.Build.props  Directory.Build.targets
 Directory.Packages.props  dotnet-tools.json  aspire.config.json  UmeRag.slnx  README.md  CHANGELOG.md
 .githooks/pre-commit                 admin UI lint (copy) + parser ruff check (new)
-.github/workflows/                   P0: verify.yml parser.yml release.yml entra.yml; P1: perf.yml evaluation.yml audit.yml; P2: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
+.github/workflows/                   verify.yml parser.yml release.yml entra.yml perf.yml evaluation.yml audit.yml e2e.yml; P2, not built: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
 src/
   Ume.Rag.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, IJobQueue, IReranker)
   Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list shipped as files, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
@@ -73,24 +73,27 @@ deploy/
   compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
   compose.host-24g.yaml              overlay for the 24 GB host profile (§6.2)
   compose.clamav-conf.yaml           overlay that mounts the ClamAV confs init-deployment writes (§5.5)
-  compose.ingestion-remote.yaml      overlay for a separate ingestion host
-  compose.rolling.yaml               P2: b slots for rag-api and rag-admin
-  compose.hardening.yaml             overlay for `aspire publish` output (deploy/generated/)
+  compose.ingestion-remote.yaml      P2, not built: overlay for a separate ingestion host
+  compose.rolling.yaml               b slots for rag-api and rag-admin (`init-deployment.sh --rolling`)
   compose.openwebui.yaml             optional Open WebUI pilot stack: env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
-  compose.mcp.yaml                   P2: hosted MCP servers (one container each, zone `tools-hosted`; tools design §8.3)
-  init-deployment.sh  rolling-update.sh  build-release-bundle.sh  Test-Deployment.ps1
-  backup-postgres.sh  restore-pitr.sh  backup-uploads.sh  restore-blobs.sh  escrow-keys.sh
-  postgres/                          init.sql, app-roles.sql, pg_hba.conf, postgresql.conf, upgrade-extensions.sql, test.sh (image test)
+  compose.mcp.yaml                   P2, not built: hosted MCP servers (one container each, zone `tools-hosted`; tools design §8.3)
+  init-deployment.sh  rolling-update.sh  build-release-bundle.sh
+  backup-postgres.sh  restore-pitr.sh  backup-uploads.sh  escrow-keys.sh
+  postgres/                          init.sql, app-roles.sql, pg_hba.conf, postgresql.conf, test.sh (image test)
   pgbackrest/                        pgbackrest.conf (copied into `ume-rag/postgres`), repo.conf.example (repository settings, written by init-deployment; §7.4)
-  redis/                             redis.conf, users.acl.example (P2, first multi-host deployment)
-  proxy/nginx.conf.example           reverse proxy (one slot; two slots each from P2)
-  otel/                              collector-siem.example.yaml (security category), dashboards/*.json
+  redis/                             P2, not built: redis.conf, users.acl.example (first multi-host deployment)
+  proxy/nginx.conf.example           reverse proxy (one slot, or both with `--rolling`); `init-deployment.sh --proxy` writes nginx.conf from it
+  otel/                              collector-siem.example.yaml (security category)
   host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5), cert-expiry.sh + rag-cert-expiry.service/.timer (internal certificates within 60 days, #705)
-  kubernetes/                        later (§10)
-  tests/                             compose-rolling-e2e.sh, verify-data.sh, spa-smoke.mjs (copy + adapt); openwebui-parity.sh (#707)
+  kubernetes/                        base/, components/, example/, create-secrets.sh, deploy.sh, sync-config.sh (§10)
+  keycloak/                          RAG's realm additions for the shared Keycloak, the standalone realm, examples (§4.2)
+  openwebui/                         start-with-sign-in.py (Open WebUI's entrypoint), feedback-key-setup.py
+  portainer/                         the one-stack variant with the gateway: template, bootstrap.sh, build-stack.sh, compose.portainer.yaml, integration-manifest.json (§7.1)
+  tests/                             compose-rolling-e2e.sh, release-smoke.sh, pilot-stack.sh, portainer-{boot,upgrade,rerun,hosts}.sh, openwebui-parity.sh (#707)
 dev/keycloak/ume-realm.json          realm `ume` with the gateway's claims + rag-* roles
-docs/                                local-development, production-setup, runbook, upgrade-guide, zero-downtime-updates,
-                                     kubernetes, security-and-compliance, security-events, architecture, adr
+docs/                                local-development, p1a-local-run, compose-quick-start, production-setup, portainer,
+                                     kubernetes, keycloak, runbook, upgrade-guide, zero-downtime-updates, network-and-ports,
+                                     test-host, ci-runner, security-events, accessibility-statement
 scripts/Start-Dev.ps1  scripts/Start-E2E.ps1
 ```
 
