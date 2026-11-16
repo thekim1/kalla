@@ -3,6 +3,7 @@
 # bootstrap"): the Kubernetes installation's certificates and secrets come from deploy/portainer/bootstrap.sh, run on
 # the operator's machine. No cluster and no kubectl; it needs bash and openssl only. Checks:
 #
+#   - nothing of Open WebUI is generated without the openwebui profile
 #   - a first run writes what the manifests' secrets hold: the connection strings to the host `postgres` (and to
 #     --postgres-host), certificates for the host names under --domain, the credential key of a service, the declared
 #     client secret, the S3 repository settings, the worker's Render__Endpoint only with --renderer
@@ -57,6 +58,9 @@ for svc in api admin worker migrations; do
   grep -qF "$(sed -n 2p "$t/other-ca.pem")" "$c/$svc/ca.pem" || fail "$svc does not trust the CA of --ca-file"
 done
 ! grep -qF "$(sed -n 2p "$t/other-ca.pem")" "$c/parser/ca.pem" || fail "the parser trusts the CA of --ca-file"
+# Without the openwebui profile (Kubernetes has no Open WebUI) nothing of Open WebUI is generated.
+[ ! -e "$s/.openwebui-jwt-secret" ] && [ ! -e "$s/.openwebui-rag-api-key" ] && [ ! -e "$s/api/OpenWebUi__JwtSecret" ] \
+  && [ -z "$(ls -A "$s/openwebui")" ] || fail "an Open WebUI secret was generated without the openwebui profile"
 ok "the first run wrote the connection strings, the certificates, the key, the declared sign-in, the repository and the trust"
 sums "$t/k" > "$t/sums1"
 

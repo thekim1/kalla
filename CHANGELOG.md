@@ -42,6 +42,10 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   guides link to.
 - **`restore-pitr.sh` stops the second slots too** (`rag-api-b`, `rag-admin-b` with `--rolling`): before, they kept
   running through a restore.
+- **Open WebUI is easy to leave out** (not every installation needs a chat; some only serve the API). The Portainer
+  example's default profiles no longer include `openwebui` (Compose's never did), and without the profile
+  `rag-bootstrap` generates none of Open WebUI's secrets or its key for rag-api, and rag-api gets no key for Open
+  WebUI's user tokens. With the profile everything is as before; a stack that sets it keeps it.
 - **Docker Compose runs the Portainer stack's services and bootstrap** (Decisions "One deployment bootstrap", M-22 S1
   steps 2 and 3). `deploy/compose.rag.yaml` is the one Ume.Rag service file: Compose runs it directly (the project
   `ume-rag`), and `deploy/portainer/build-stack.sh` merges it with the gateway's file into `compose.portainer.yaml`,

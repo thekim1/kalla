@@ -148,17 +148,7 @@ for d in migrations api admin; do tr -d '\n' < "$S/.pepper" > "$S/$d/Security__K
 # rag-admin's setup secret (identity design §19): the setup code is derived from it. Kept, but not worth backing up: a
 # new one only changes the setup codes printed from then on.
 [ -f "$S/admin/Setup__Secret" ] || rand > "$S/admin/Setup__Secret"
-# Open WebUI's user JWT secret: unused without Open WebUI, but rag-api expects the file (identity design §5.2).
-[ -f "$S/.openwebui-jwt-secret" ] || rand > "$S/.openwebui-jwt-secret"
-tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/api/OpenWebUi__JwtSecret"
-# Open WebUI's own files (profile openwebui; harmless without it): the same user-JWT secret, its session key, the
-# feedback service account's password, and a CA bundle with the public CAs (its OIDC provider), RAG's (rag-api) and the
-# gateway's.
-tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/openwebui/jwt-secret"
-[ -f "$S/openwebui/webui_secret_key" ] || rand > "$S/openwebui/webui_secret_key"
-[ -f "$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$S/openwebui/admin-password"
-# (the public CAs are the image's; outside a container the bundle may be elsewhere, and Open WebUI is not run from there)
-{ [ ! -r /etc/ssl/certs/ca-certificates.crt ] || cat /etc/ssl/certs/ca-certificates.crt; cat "$W/trust.pem"; } > "$S/openwebui/ca.pem"
+# Open WebUI's own secrets are generated in its block below, only with the openwebui profile.
 [ -f "$S/worker/Security__CrawlKeyPepper" ] || rand | tr -d '\n' > "$S/worker/Security__CrawlKeyPepper"
 # The renderer's secret WebSocket path (connectors design §8.3): the worker gets the endpoint only while the render
 # profile is on, so without the renderer it refuses rendering instead of waiting for a browser that never starts.
@@ -174,20 +164,33 @@ case ",${COMPOSE_PROFILES:-}," in
   *,clamav,*) printf on > "$S/worker/ClamAv__Mode" ;;
   *) printf off > "$S/worker/ClamAv__Mode" ;;
 esac
-# Open WebUI's address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui while the openwebui
-# profile is on. The import also needs the feedback key, which rag-openwebui-setup mints (openwebui-feedback, below).
-# Open WebUI's key for rag-api (M-17 C4, identity design §5.2): generated once; Open WebUI's start-up wrapper exports it
-# as OPENAI_API_KEYS, and rag-migrate registers it as the deployment's own Open WebUI client while the profile is on. A
-# new key: delete .openwebui-rag-api-key in the volume and update the stack (rag-migrate revokes the old one).
-[ -f "$S/.openwebui-rag-api-key" ] || printf 'ume-rag-sk-%s' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$S/.openwebui-rag-api-key"
-cp "$S/.openwebui-rag-api-key" "$S/openwebui/rag-api-key"
-# rag-admin's setup wizard offers Open WebUI's sign-in step only while it runs (OpenWebUi__Enabled, identity design §19).
+# Open WebUI, only with the openwebui profile (not every installation has a chat): without it nothing of it is
+# generated and rag-api, rag-admin and rag-migrate get no Open WebUI file, so rag-api accepts no Open WebUI user, the
+# setup wizard has no Open WebUI step (OpenWebUi__Enabled, identity design §19) and rag-migrate registers no client.
+# Turning the profile off later keeps what was generated (the same keys when it is turned on again) and removes only
+# the services' files. With it:
+#   - the user-JWT secret Open WebUI signs with and rag-api checks (identity design §5.2), its session key, the feedback
+#     service account's password, and a CA bundle with the public CAs (its OIDC provider), RAG's and the trusted ones;
+#   - its key for rag-api (M-17 C4), generated once: its start-up wrapper exports it as OPENAI_API_KEYS and rag-migrate
+#     registers it as the deployment's own Open WebUI client. A new key: delete .openwebui-rag-api-key in the volume
+#     and update the stack (rag-migrate revokes the old one);
+#   - its address for rag-api's feedback import (M-17 C2): the stack's own rag-openwebui. The import also needs the
+#     feedback key, which rag-openwebui-setup mints (openwebui-feedback, below).
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
+    [ -f "$S/.openwebui-jwt-secret" ] || rand > "$S/.openwebui-jwt-secret"
+    tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/api/OpenWebUi__JwtSecret"
+    tr -d '\n' < "$S/.openwebui-jwt-secret" > "$S/openwebui/jwt-secret"
+    [ -f "$S/openwebui/webui_secret_key" ] || rand > "$S/openwebui/webui_secret_key"
+    [ -f "$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$S/openwebui/admin-password"
+    # (the public CAs are the image's; outside a container the bundle may be elsewhere, and Open WebUI is not run from there)
+    { [ ! -r /etc/ssl/certs/ca-certificates.crt ] || cat /etc/ssl/certs/ca-certificates.crt; cat "$W/trust.pem"; } > "$S/openwebui/ca.pem"
+    [ -f "$S/.openwebui-rag-api-key" ] || printf 'ume-rag-sk-%s' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$S/.openwebui-rag-api-key"
+    cp "$S/.openwebui-rag-api-key" "$S/openwebui/rag-api-key"
     printf 'http://rag-openwebui:8080' > "$S/api/OpenWebUi__BaseUrl"
     printf true > "$S/admin/OpenWebUi__Enabled"
     cp "$S/.openwebui-rag-api-key" "$S/migrations/OpenWebUi__ApiKey" ;;
-  *) rm -f "$S/api/OpenWebUi__BaseUrl" "$S/admin/OpenWebUi__Enabled" "$S/migrations/OpenWebUi__ApiKey" ;;
+  *) rm -f "$S/api/OpenWebUi__JwtSecret" "$S/api/OpenWebUi__BaseUrl" "$S/admin/OpenWebUi__Enabled" "$S/migrations/OpenWebUi__ApiKey" ;;
 esac
 # Blob master key of the file key provider (plan §8a): without it the `internal` blobs cannot be read. Back it up.
 if [ ! -f "$S/keys/rag-blob-internal" ]; then
