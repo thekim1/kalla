@@ -1,848 +1,193 @@
 #!/usr/bin/env bash
-# First-run setup for the production Compose files (plans/platform/repo-and-deployment.md §6, §7.1): generates an
-# internal CA, service certificates, the Data Protection certificate, the database passwords, the key pepper, the api's
-# keys, rag-admin's setup secret, the worker's crawl key pepper, the renderer's WebSocket path, the blob master key, the
-# pgBackRest repository settings and deploy/.env. Safe to re-run: existing secrets are never overwritten (a new pepper,
-# key, passphrase or Data Protection certificate would break existing data or backups); connection strings and other
-# derived files are written again. A re-run keeps UME_RAG_SETUP_REOPEN from deploy/.env: give it any new value there
-# (for example today's date) and run `docker compose --env-file deploy/.env up -d` to open the setup wizard once, for
-# an hour, with a new setup code in rag-admin's log (identity design §19).
+# Writes deploy/.env for Docker Compose: the variables of deploy/compose.rag.yaml (the Portainer stack's names) and
+# COMPOSE_FILE with the overlays in use. It generates no certificate or secret: rag-bootstrap does, in the volumes, at
+# the first `up`, and ends its log with what is still missing and the setup wizard's address. Sign-in is set in the
+# setup wizard (https://<admin host>/setup, the setup code in rag-admin's log); only with --hardened is the provider's
+# address asked for, since the host firewall lets rag-admin reach that provider alone. A re-run changes what its
+# options name and keeps every other line. A secret it is given (a key file, S3 credentials) is kept in deploy/.env,
+# mode 600, as Portainer keeps it in the stack's variables.
 #
-#   ./deploy/init-deployment.sh                      # prompts for what it needs
-#   ./deploy/init-deployment.sh --domain intern.umea.se \
-#       --gateway-url https://<gateway host> --gateway-credential-key-file api=rag-api.key \
-#       --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key \
-#       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
-#   ./deploy/init-deployment.sh --domain intern.umea.se --oidc-authority https://<provider>/realms/ume \
-#       --gateway-url https://<gateway host>:8443 --ca-file <gateway>/deploy/certs/ca.pem \
-#       --gateway-secrets-dir <gateway>/deploy/integration-secrets --backup-target local --allow-file-keys --yes
-#                                                    # next to a gateway on this host (docs/compose-quick-start.md)
-#   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
-#   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
+#   deploy/init-deployment.sh                       # asks for the domain and the gateway's address
+#   deploy/init-deployment.sh --domain example.se --gateway-url https://llm.example.se --backup-target /mnt/backup --yes
+#   docker compose --env-file deploy/.env up -d --wait
 #
-# Sign-in is set in rag-admin's setup wizard (identity design §19): after the first `up`, read the setup code with
-# `docker compose --env-file deploy/.env logs rag-admin` and open https://<admin host>/setup. The wizard shows the
-# redirect URIs to register, takes the client secrets and tests each sign-in before saving. To declare sign-in here
-# instead, pass the --oidc-* options: each one given locks its field in the wizard, and --oidc-authority with
-# --oidc-client-secret-file keeps the wizard closed. P1 uses the Keycloak shared with the gateway (realm ume, RAG's
-# clients from deploy/keycloak/); P2 (Entra) https://login.microsoftonline.com/<tenant>/v2.0 with the registrations
-# ume-rag-admin and ume-rag-open-webui.
-#
-# Options (defaults in brackets):
-#   --oidc-authority URL, --oidc-client-id ID [ume-rag-admin], --oidc-client-secret-file FILE
-#                           optional: the admin BFF's own OIDC client (never the gateway's) as deployment values; each
-#                           one left out is the setup wizard's. A re-run without --oidc-authority or --oidc-client-id
-#                           keeps the value in deploy/.env (empty the line there to hand it to the wizard), and the
-#                           client secret file stays until you delete it. With the host firewall (deploy/host/),
-#                           rag-admin reaches only the provider of --oidc-authority, so the wizard's test sign-in
-#                           needs it: an interactive run asks for it once (the others are never prompted)
-#   --oidc-refuse-guests true|false
-#                           refusing guests (identity design §1.7) as a deployment value:
-#                           secrets/admin/Oidc__RefuseGuests (kept on a re-run without it); unset, the wizard's choice,
-#                           else true
-#   --domain DOMAIN         the base domain: --api-host, --admin-host and --openwebui-host default to rag.DOMAIN,
-#                           rag-admin.DOMAIN and chat.DOMAIN (the last only when another --openwebui-* option asks
-#                           for Open WebUI); each option given wins, and neither host is prompted for
-#   --api-host HOST, --admin-host HOST, --api-port N [8543], --admin-port N [9543], --bind ADDR [127.0.0.1]
-#   --gateway-url URL       the LLM gateway (HTTPS); --ca-file FILE adds its CA (and your PKI chain) to the services'
-#                           trust store
+# Options (each sets the variable it names):
+#   --domain DOMAIN          UME_DOMAIN: rag-api, rag-admin and Open WebUI are rag., rag-admin. and chat.DOMAIN
+#   --api-host HOST, --admin-host HOST
+#                            UME_RAG_API_HOST, UME_RAG_ADMIN_HOST: a name of its own instead
+#   --gateway-url URL        UME_RAG_GATEWAY_URL: the gateway's https URL (required)
+#   --gateway-ca-dir DIR     UME_RAG_GATEWAY_CA_DIR: a directory with the gateway's ca.pem (a gateway on this host: its
+#                            certificate directory); not needed for a gateway with a public certificate
+#   --gateway-secrets-dir DIR  UME_RAG_GATEWAY_SECRETS_DIR: the credential keys a gateway on this host wrote from
+#                            Ume.Rag's manifest (deploy/portainer/integration-manifest.json): DIR/Ume.Rag/rag-api,
+#                            rag-admin and rag-worker
 #   --gateway-credential-key-file SERVICE=FILE
-#                           SERVICE's credential key of the gateway integration Ume.Rag (SERVICE api, admin or worker;
-#                           repeat the option, one key per service, issued by a gateway admin):
-#                           secrets/SERVICE/Gateway__Key. The admin's key also needs the scope organisation.read: its
-#                           organisation and model syncs read the gateway's /v1/ume/context and /v1/models with it
-#   --gateway-secrets-dir DIR
-#                           the three keys from a gateway on this host instead: the directory its migration writes an
-#                           integration manifest's keys to (<gateway>/deploy/integration-secrets, with Ume.Rag/rag-api,
-#                           rag-admin and rag-worker in it, from deploy/portainer/integration-manifest.json in the
-#                           gateway's deploy/integration-manifests; docs/compose-quick-start.md). It belongs to the
-#                           gateway's migration service, so run as root. A --gateway-credential-key-file wins for its
-#                           service; after a rotation at the gateway, re-run with the option
-#   --key-provider file [file] --allow-file-keys
-#                           the file key provider (pilot and test hosts, postponed decision K1) needs --allow-file-keys
-#   --backup-target DIR|s3://ENDPOINT/BUCKET[/PATH]|local
-#                           pgBackRest repo1 and the upload copy: the backup share mounted on this host (DIR/pgbackrest
-#                           and DIR/uploads), an S3-compatible store (with --backup-s3-credentials-file FILE: access key
-#                           and secret key on two lines, and --backup-s3-region R [us-east-1]; the upload copy to S3 is
-#                           not built yet), or `local` (a Docker volume and deploy/upload-backup: test hosts only)
-#   --crawl-allow CIDR[,CIDR]  private ranges the crawler may fetch (municipal hosts)
-#   --host-memory 16|24 [16]  the host profile of §6.2 (24 adds compose.host-24g.yaml and the ClamAV 24 GB confs)
-#   --freshclam-proxy HOST:PORT  freshclam reaches database.clamav.net through this HTTP proxy
-#   --clamav on|off [on]    the malware scan (the worker's ClamAv:Mode, UME_RAG_CLAMAV_MODE): on runs rag-clamav (the
-#                           Compose profile clamav); off runs none, writes no ClamAV confs, and the worker stores files
-#                           without a malware scan. A re-run without it, and --renew-certs, keep what deploy/.env says
-#   --render                rag-renderer for sources with fetch mode browser (COMPOSE_PROFILES=render and the worker's
-#                           Render__Endpoint); without it those sources wait with render.not_configured. --renew-certs
-#                           keeps what deploy/.env says
-#   --openwebui-host HOST   the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store, and
-#                           the feedback service account (its API key: open-webui-setup in that file)
-#     --openwebui-oidc-client-id ID [open-webui], --openwebui-oidc-client-secret-file FILE,
-#     --openwebui-oidc-provider-url URL [the OIDC authority's /.well-known/openid-configuration],
-#     --openwebui-oidc-provider-name NAME [Umeå kommun]
-#                           Open WebUI's own OIDC client (P1: Keycloak client open-webui; P2: Entra ume-rag-open-webui)
-#                           and the name on its sign-in button, optional and never prompted: deployment values of
-#                           rag-api, which serves them to Open WebUI's start (identity design §19); each one left out is
-#                           the setup wizard's (its Open WebUI step), else the default in brackets. The secret goes to
-#                           secrets/api and secrets/admin
-#                           Open WebUI's ume-rag-sk- key for rag-api is generated here, and rag-migrate registers it as
-#                           the deployment's own Open WebUI client (identity design §5.2): nothing to create by hand
-#     --openwebui-data-dir DIR [deploy/openwebui-data]
-#   --role all [all]        multi-host roles (data, ingestion, ...) come with P2
-#   --proxy                 a reverse proxy terminates public TLS and re-encrypts to this host; needs distinct
-#                           hostnames and binds the listeners to 0.0.0.0 (firewall them to the proxy)
-#   --upstream-host HOST    address the proxy uses to reach this host [hostname]
-#   --proxy-address ADDR[,ADDR]
-#                           the reverse proxy's source addresses (IPv4 or CIDR): the host firewall then accepts new
-#                           connections to the published ports (rag-api, rag-admin, Open WebUI) only from these (#453)
-#   --rolling               a second rag-api and rag-admin (compose.rolling.yaml, on the next ports up) for updates
-#                           without downtime with deploy/rolling-update.sh (docs/zero-downtime-updates.md); with
-#                           --proxy the nginx configuration lists both slots
-#   --api-cert/--api-key/--admin-cert/--admin-key FILE
-#                           certificates from your PKI for the public listeners instead of the internal CA
-#   --certs-dir DIR [deploy/certs], --secrets-dir DIR [deploy/secrets]
-#   --no-chown              leave the files owned by you
-#   --yes                   no prompts: every value comes from an option or its default
+#                            UME_RAG_<SERVICE>_GATEWAY_KEY: a key issued by hand for api, admin or worker; wins
+#   --profiles LIST          COMPOSE_PROFILES [clamav]: clamav, render, openwebui and proxy, comma-separated
+#   --backup-target TARGET   UME_RAG_BACKUP_TARGET, with compose.backup.yaml: a directory on the backup share
+#                            (DIR/pgbackrest and DIR/uploads), s3://ENDPOINT/BUCKET[/PATH], or local (two volumes: test
+#                            hosts only)
+#   --backup-s3-credentials-file FILE  the access key and the secret key on two lines; --backup-s3-region REGION
+#   --host-memory 16|24      UME_RAG_HOST_MEMORY; 24 adds compose.host-24g.yaml and compose.clamav-conf.yaml
+#   --freshclam-proxy HOST:PORT  UME_RAG_FRESHCLAM_PROXY, with compose.clamav-conf.yaml
+#   --hardened               compose.hardened.yaml: the host firewall, the ingestion slice (deploy/host/install.sh)
+#   --oidc-authority URL     UME_RAG_OIDC_AUTHORITY: the sign-in provider (asked for with --hardened)
+#   --proxy-address LIST     UME_RAG_PROXY_SOURCES: your reverse proxy's IPv4 addresses or CIDRs, which the host firewall
+#                            alone admits to the published ports
+#   --rolling                compose.rolling.yaml: a second rag-api and rag-admin (deploy/rolling-update.sh)
+#   --overlays LIST          the overlays exactly: backup, hardened, host-24g, clamav-conf, rolling (empty: none)
+#   --set NAME=VALUE         any other variable (deploy/portainer/stack.env.example lists them); empty removes it
+#   --set-file NAME=FILE     the same with FILE's first line as the value, for a secret (UME_RAG_OIDC_CLIENT_SECRET)
+#   --yes                    no questions: a missing required value stops the run
 set -euo pipefail
 umask 077
-
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
-oidc_authority=""; oidc_client=""; oidc_secret_file=""; oidc_refuse_guests=""; domain=""; api_host=""; admin_host=""
-api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; gateway_secrets_dir=""
-key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
-crawl_allow=""; host_memory=16; freshclam_proxy=""; clamav=""; role="all"; render=0
-owui_host=""; owui_client=""; owui_secret_file=""; owui_provider=""; owui_provider_name=""
-owui_data=""; owui_asked=0
-proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
-yes=0; renew=0; renew_ca=0; chown=1; rolling=0
-credential_keys=()
-
-# The comment block at the top of this file.
+env_file="$here/.env"; yes=0; overlays_given=""; add=(); sets=()
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
+readable() { [ -r "$1" ] && [ -f "$1" ] || die "cannot read $1"; }
+dir_of() { [ -d "$1" ] || die "no directory $1"; }
+
+declare -A val=(); order=()
+put() { [ -n "${val[$1]+x}" ] || order+=("$1"); val[$1]="$2"; }
+get() { echo "${val[$1]:-}"; }
+# The current deploy/.env, read (never sourced: it is Compose's file, not a shell script), quotes removed.
+if [ -f "$env_file" ]; then
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]] || continue
+    n="${BASH_REMATCH[1]}"; v="${BASH_REMATCH[2]}"
+    if [[ "$v" =~ ^\'(.*)\'$ || "$v" =~ ^\"(.*)\"$ ]]; then v="${BASH_REMATCH[1]}"; fi
+    put "$n" "$v"
+  done < "$env_file"
+fi
+# The overlays deploy/.env uses already.
+overlays=" $(get COMPOSE_FILE | tr ':' '\n' | sed -n 's#.*/compose\.\(.*\)\.yaml$#\1#p' | sed '/^rag$/d' | tr '\n' ' ')"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --oidc-authority) oidc_authority="$2"; shift 2;;
-    --oidc-client-id) oidc_client="$2"; shift 2;;
-    --oidc-client-secret-file) oidc_secret_file="$2"; shift 2;;
-    --oidc-refuse-guests) oidc_refuse_guests="$2"; shift 2;;
-    --domain) domain="$2"; shift 2;;
-    --api-host) api_host="$2"; shift 2;;
-    --admin-host) admin_host="$2"; shift 2;;
-    --api-port) api_port="$2"; shift 2;;
-    --admin-port) admin_port="$2"; shift 2;;
-    --bind) bind="$2"; shift 2;;
-    --gateway-url) gateway_url="$2"; shift 2;;
-    --ca-file) ca_file="$2"; shift 2;;
-    --gateway-credential-key-file) credential_keys+=("$2"); shift 2;;
-    --gateway-secrets-dir) gateway_secrets_dir="$2"; shift 2;;
-    --org-sync-url|--org-sync-key-file)
-      die "$1 is gone: the admin syncs the organisation and the models with its gateway credential key";;
-    --key-provider) key_provider="$2"; shift 2;;
-    --allow-file-keys) allow_file_keys=1; shift;;
-    --backup-target) backup_target="$2"; shift 2;;
-    --backup-s3-credentials-file) s3_credentials="$2"; shift 2;;
-    --backup-s3-region) s3_region="$2"; shift 2;;
-    --crawl-allow) crawl_allow="$2"; shift 2;;
-    --host-memory) host_memory="$2"; shift 2;;
-    --freshclam-proxy) freshclam_proxy="$2"; shift 2;;
-    --clamav) clamav="$2"; shift 2;;
-    --render) render=1; shift;;
-    --openwebui-host) owui_host="$2"; shift 2;;
-    --openwebui-oidc-client-id) owui_asked=1; owui_client="$2"; shift 2;;
-    --openwebui-oidc-client-secret-file) owui_asked=1; owui_secret_file="$2"; shift 2;;
-    --openwebui-oidc-provider-url) owui_asked=1; owui_provider="$2"; shift 2;;
-    --openwebui-oidc-provider-name) owui_asked=1; owui_provider_name="$2"; shift 2;;
-    --openwebui-data-dir) owui_asked=1; owui_data="$2"; shift 2;;
-    --role) role="$2"; shift 2;;
-    --proxy) proxy=1; shift;;
-    --rolling) rolling=1; shift;;
-    --upstream-host) upstream_host="$2"; shift 2;;
-    --proxy-address) proxy_sources="$2"; shift 2;;
-    --api-cert) api_cert="$2"; shift 2;;
-    --api-key) api_key="$2"; shift 2;;
-    --admin-cert) adm_cert="$2"; shift 2;;
-    --admin-key) adm_key="$2"; shift 2;;
-    --certs-dir) certs="$2"; shift 2;;
-    --secrets-dir) secrets="$2"; shift 2;;
-    --no-chown) chown=0; shift;;
-    --renew-certs) renew=1; shift;;
-    --renew-ca) renew=1; renew_ca=1; shift;;
-    --yes|-y) yes=1; shift;;
+    --hardened|--rolling) add+=("${1#--}"); shift; continue;;
+    --yes|-y) yes=1; shift; continue;;
     -h|--help) usage 0;;
+    -*) [ $# -ge 2 ] || die "$1 needs a value";;
+  esac
+  case "$1" in
+    --domain) sets+=("UME_DOMAIN=$2");; --api-host) sets+=("UME_RAG_API_HOST=$2");;
+    --admin-host) sets+=("UME_RAG_ADMIN_HOST=$2");; --gateway-url) sets+=("UME_RAG_GATEWAY_URL=${2%/}");;
+    --gateway-ca-dir) dir_of "$2"; sets+=("UME_RAG_GATEWAY_CA_DIR=$(cd "$2" && pwd)");;
+    --gateway-secrets-dir) dir_of "$2"; sets+=("UME_RAG_GATEWAY_SECRETS_DIR=$(cd "$2" && pwd)");;
+    --gateway-credential-key-file)
+      svc="${2%%=*}"; case "$svc" in api|admin|worker) ;; *) die "$1 SERVICE=FILE: SERVICE is api, admin or worker";; esac
+      readable "${2#*=}"; sets+=("UME_RAG_${svc^^}_GATEWAY_KEY=$(sed -n 1p "${2#*=}" | tr -d '\r')");;
+    --profiles) sets+=("COMPOSE_PROFILES=$2");;
+    --backup-target) sets+=("UME_RAG_BACKUP_TARGET=${2%/}"); add+=(backup);;
+    --backup-s3-credentials-file)
+      readable "$2"
+      sets+=("UME_RAG_BACKUP_S3_KEY=$(sed -n 1p "$2" | tr -d '\r')" "UME_RAG_BACKUP_S3_KEY_SECRET=$(sed -n 2p "$2" | tr -d '\r')");;
+    --backup-s3-region) sets+=("UME_RAG_BACKUP_S3_REGION=$2");;
+    --host-memory) sets+=("UME_RAG_HOST_MEMORY=$2");;
+    --freshclam-proxy) sets+=("UME_RAG_FRESHCLAM_PROXY=$2"); add+=(clamav-conf);;
+    --oidc-authority) sets+=("UME_RAG_OIDC_AUTHORITY=$2");; --proxy-address) sets+=("UME_RAG_PROXY_SOURCES=$2");;
+    --overlays) overlays_given=1; overlays=" ${2//,/ } ";;
+    --set) sets+=("$2");;
+    --set-file) readable "${2#*=}"; sets+=("${2%%=*}=$(sed -n 1p "${2#*=}" | tr -d '\r')");;
     *) echo "unknown option: $1" >&2; usage 1;;
   esac
+  shift 2
 done
-command -v openssl >/dev/null || die "openssl is required"
-[ "$role" = all ] || die "--role $role: multi-host roles come with P2 (repo-and-deployment §6.4); use --role all"
-case "$host_memory" in 16|24) ;; *) die "--host-memory must be 16 or 24";; esac
-case "$key_provider" in
-  file) ;;
-  *) die "--key-provider $key_provider: only the file key provider exists until postponed decision K1 is made";;
+
+# Retired variables (Decisions "Deployment values across releases"): the names in compose.rag.yaml's UME_RAG_RETIRED_SET.
+retired=" $(grep -oE '\$\{[A-Z0-9_]+:\+[A-Z0-9_]+\}' "$here/compose.rag.yaml" | sed -nE 's/^\$\{([A-Z0-9_]+):\+\1\}$/\1/p' | tr '\n' ' ') "
+for s in ${sets[@]+"${sets[@]}"}; do
+  name="${s%%=*}"; v="${s#*=}"
+  [[ "$s" == *=* && "$name" =~ ^[A-Z][A-Z0-9_]*$ ]] || die "--set takes NAME=VALUE, not $s"
+  [ "$name" != COMPOSE_FILE ] || die "COMPOSE_FILE follows the overlays: use --overlays"
+  [[ "$retired" != *" $name "* ]] || die "$name is no longer read (docs/upgrade-guide.md says what replaced it)"
+  case "$v" in *"'"*|*$'\n'*) die "the value of $name contains ' or a line break";; esac
+  put "$name" "$v"
+done
+# A first run's profiles: the malware scan. Set and empty (--profiles ''), none.
+[ -n "${val[COMPOSE_PROFILES]+x}" ] || put COMPOSE_PROFILES clamav
+
+ask() { # ask NAME PROMPT: NAME from the terminal unless it has a value; required with --yes
+  [ -z "$(get "$1")" ] || return 0
+  [ "$yes" = 0 ] && [ -t 0 ] || die "$2 is required (see --help)"
+  local reply; read -r -p "$2: " reply; put "$1" "${reply%/}"
+}
+if [ -z "$(get UME_DOMAIN)" ] && [ -z "$(get UME_RAG_API_HOST)" ]; then ask UME_DOMAIN "The domain (rag.<domain> is rag-api's name)"; fi
+ask UME_RAG_GATEWAY_URL "The gateway's URL (https://...)"
+
+for o in ${add[@]+"${add[@]}"}; do [[ "$overlays" == *" $o "* ]] || overlays="$overlays $o "; done
+case "$(get UME_RAG_HOST_MEMORY)" in
+  ""|16) overlays="${overlays// host-24g / }"; [ -n "$(get UME_RAG_FRESHCLAM_PROXY)" ] || [ -n "$overlays_given" ] || overlays="${overlays// clamav-conf / }";;
+  24) for o in host-24g clamav-conf; do [[ "$overlays" == *" $o "* ]] || overlays="$overlays $o "; done;;
+  *) die "--host-memory is 16 or 24";;
 esac
-case "$freshclam_proxy" in ""|*:[0-9]*) ;; *) die "--freshclam-proxy must be HOST:PORT";; esac
-case "$clamav" in ""|on|off) ;; *) die "--clamav must be on or off";; esac
-case "$oidc_refuse_guests" in ""|true|false) ;; *) die "--oidc-refuse-guests must be true or false";; esac
-# Without --clamav a re-run keeps the malware scan's mode from deploy/.env; a first run, or a deploy/.env without the
-# line, gets the default, on.
-if [ -z "$clamav" ] && [ -f "$env_file" ]; then
-  clamav="$(sed -n 's/^UME_RAG_CLAMAV_MODE=//p' "$env_file" | tail -n 1)"
-  case "$clamav" in ""|on|off) ;; *) die "UME_RAG_CLAMAV_MODE in $env_file must be on or off: pass --clamav on|off";; esac
+if [[ "$overlays" == *" hardened "* ]] && [ -z "$(get UME_RAG_OIDC_AUTHORITY)" ] && [ "$yes" = 0 ] && [ -t 0 ]; then
+  echo "With the host firewall rag-admin reaches only the sign-in provider named here, and the setup wizard's test sign-in"
+  echo "needs it. Keycloak: https://<host>/realms/<realm>; Entra ID: https://login.microsoftonline.com/<tenant>/v2.0."
+  read -r -p "The sign-in provider's address (empty: none for now): " reply; put UME_RAG_OIDC_AUTHORITY "$reply"
 fi
-clamav="${clamav:-on}"
-# Without --oidc-authority or --oidc-client-id a re-run keeps the value in deploy/.env: a declared sign-in doesn't move to
-# the setup wizard because a re-run left an option out (setup opens only on a first run or a re-open, identity design §19).
-if [ -f "$env_file" ]; then
-  [ -n "$oidc_authority" ] || oidc_authority="$(sed -n 's/^UME_RAG_OIDC_AUTHORITY=//p' "$env_file" | tail -n 1)"
-  [ -n "$oidc_client" ] || oidc_client="$(sed -n 's/^UME_RAG_OIDC_CLIENT_ID=//p' "$env_file" | tail -n 1)"
-fi
-case "$oidc_authority" in ""|https://*) ;; *) die "--oidc-authority must be an https:// URL";; esac
-# --domain: the host names not given default under it (Decisions "Setup wizard"; the Portainer stack's UME_DOMAIN).
-if [ -n "$domain" ]; then
-  [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--domain takes a domain name such as example.se: $domain"
-  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-rag-admin.$domain}"
-  # Open WebUI stays optional: its name defaults only when another --openwebui-* option asks for it.
-  [ "$owui_asked" = 0 ] || owui_host="${owui_host:-chat.$domain}"
-fi
-for a in ${proxy_sources//,/ }; do
+
+# Checks, then what follows from the values.
+[ -n "$(get UME_DOMAIN)$(get UME_RAG_API_HOST)" ] || die "--domain or --api-host is required"
+for n in UME_DOMAIN UME_RAG_API_HOST UME_RAG_ADMIN_HOST UME_RAG_OPENWEBUI_HOST; do
+  v="$(get "$n")"; [ -z "$v" ] || [[ "$v" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "$n takes a host or domain name, not $v"
+done
+case "$(get UME_RAG_GATEWAY_URL)" in https://*) ;; *) die "the gateway's URL is an https:// URL";; esac
+case "$(get UME_RAG_OIDC_AUTHORITY)" in ""|https://*) ;; *) die "the sign-in provider's address is an https:// URL";; esac
+for p in $(get COMPOSE_PROFILES | tr ',' ' '); do
+  case "$p" in clamav|render|openwebui|proxy) ;; *) die "unknown profile $p: clamav, render, openwebui or proxy";; esac
+done
+for o in $overlays; do
+  case "$o" in backup|hardened|host-24g|clamav-conf|rolling) ;; *) die "unknown overlay $o";; esac
+done
+for a in $(get UME_RAG_PROXY_SOURCES | tr ',' ' '); do
   [[ "$a" =~ ^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$ ]] || die "--proxy-address takes IPv4 addresses or CIDRs, comma-separated: $a"
 done
-
-ask() { # ask VAR "prompt" [default]
-  local var="$1" prompt="$2" default="${3:-}" reply
-  [ -n "${!var}" ] && return
-  if [ "$yes" = 1 ] || [ ! -t 0 ]; then
-    [ -n "$default" ] || die "$prompt is required (pass the matching option)"
-    printf -v "$var" '%s' "$default"; return
-  fi
-  read -r -p "$prompt${default:+ [$default]}: " reply
-  reply="${reply:-$default}"; [ -n "$reply" ] || die "$prompt is required"
-  printf -v "$var" '%s' "$reply"
-}
-
-if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
-  echo "Ume Rag production setup"
-  [ "$allow_file_keys" = 1 ] || die "the file key provider keeps the blob master key in a file on this host; pass \
---allow-file-keys to accept that (pilot and test hosts, postponed decision K1)"
-  ask gateway_url "LLM gateway URL (https://...)"
-  case "$gateway_url" in https://*) ;; *) die "the gateway URL must be an https:// URL";; esac
-  gateway_url="${gateway_url%/}"
-  # The one sign-in value asked for: the host firewall takes the provider's address from it, so a wizard left to find
-  # the provider by itself could not reach it (identity design §19; deploy/host/docker-user-firewall.sh).
-  if [ -z "$oidc_authority" ] && [ "$yes" = 0 ] && [ -t 0 ]; then
-    echo "Sign-in provider: with the host firewall (deploy/host), rag-admin reaches only the provider named here, and the"
-    echo "setup wizard's test sign-in needs to reach it. Keycloak: https://<host>/realms/<realm>; Entra ID:"
-    echo "https://login.microsoftonline.com/<tenant>/v2.0. The wizard takes the rest (the client and its secret)."
-    read -r -p "OIDC authority URL (https://...; empty: none, the wizard's test can't reach a provider): " oidc_authority
-    case "$oidc_authority" in ""|https://*) ;; *) die "the OIDC authority must be an https:// URL";; esac
-  fi
-  ask api_host "Public hostname for rag-api" "$(hostname -f 2>/dev/null || hostname)"
-  if [ "$proxy" = 1 ]; then
-    ask admin_host "Public hostname for the admin UI (must differ from rag-api's)"
-    [ "$admin_host" != "$api_host" ] || die "proxy mode needs two distinct hostnames (the proxy routes by name)"
-    ask upstream_host "Address the proxy uses to reach this host" "$(hostname -f 2>/dev/null || hostname)"
-  else
-    ask admin_host "Public hostname for the admin UI" "$api_host"
-  fi
-  ask backup_target "pgBackRest repository (a mounted share's path, s3://endpoint/bucket[/path], or local)"
-fi
-for f in "$oidc_secret_file" "$ca_file" "$s3_credentials" "$owui_secret_file"; do
-  [ -z "$f" ] || [ -r "$f" ] || die "cannot read $f"
+[ -z "$(get UME_RAG_FRESHCLAM_PROXY)" ] || [[ "$(get UME_RAG_FRESHCLAM_PROXY)" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]] || die "--freshclam-proxy is HOST:PORT"
+target="$(get UME_RAG_BACKUP_TARGET)"
+case "$target" in
+  "") [[ "$overlays" != *" backup "* ]] || die "the backup overlay needs --backup-target";;
+  s3://*/?*) [ -n "$(get UME_RAG_BACKUP_S3_KEY)" ] && [ -n "$(get UME_RAG_BACKUP_S3_KEY_SECRET)" ] \
+      || die "an s3:// backup target needs --backup-s3-credentials-file"
+    t="${target#s3://}"; put UME_RAG_BACKUP_ENDPOINT "${t%%/*}"; put UME_RAG_BACKUP_DIR ""; put UME_RAG_UPLOAD_BACKUP_DIR "";;
+  local) put UME_RAG_BACKUP_ENDPOINT ""; put UME_RAG_BACKUP_DIR ""; put UME_RAG_UPLOAD_BACKUP_DIR "";;
+  /*) put UME_RAG_BACKUP_ENDPOINT ""; put UME_RAG_BACKUP_DIR "$target/pgbackrest"; put UME_RAG_UPLOAD_BACKUP_DIR "$target/uploads";;
+  *) die "--backup-target is an absolute path, s3://ENDPOINT/BUCKET[/PATH] or local";;
+esac
+compose_file="$here/compose.rag.yaml"
+for o in backup hardened host-24g clamav-conf rolling; do
+  [[ "$overlays" != *" $o "* ]] || compose_file="$compose_file:$here/compose.$o.yaml"
 done
-for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do
-  [ "${spec#*=}" != "$spec" ] || die "--gateway-credential-key-file takes SERVICE=FILE, not $spec"
-  case "${spec%%=*}" in
-    api|admin|worker) ;;
-    *) die "--gateway-credential-key-file SERVICE=FILE: SERVICE is api, admin or worker, not ${spec%%=*}";;
-  esac
-  [ -r "${spec#*=}" ] || die "cannot read ${spec#*=}"
-done
-# --gateway-secrets-dir: the keys a gateway on this host wrote for the manifest's integration Ume.Rag (the gateway's
-# docs/integrations.md, "Provisioning from a manifest"): <dir>/Ume.Rag/rag-<service>, or the integration's directory itself.
-if [ -n "$gateway_secrets_dir" ]; then
-  key_dir="$gateway_secrets_dir"; [ ! -d "$key_dir/Ume.Rag" ] || key_dir="$key_dir/Ume.Rag"
-  if [ ! -d "$key_dir" ] || [ ! -r "$key_dir" ] || [ ! -x "$key_dir" ]; then
-    die "cannot read --gateway-secrets-dir $gateway_secrets_dir: no such directory, or not readable (it belongs to the \
-gateway's migration service, so run as root)"
-  fi
-  for svc in api admin worker; do
-    given=0
-    for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do [ "${spec%%=*}" != "$svc" ] || given=1; done
-    [ "$given" = 0 ] || continue
-    if [ ! -s "$key_dir/rag-$svc" ] || [ ! -r "$key_dir/rag-$svc" ]; then
-      die "no credential key $key_dir/rag-$svc: the gateway writes it when its migration applies the Ume.Rag manifest. \
-Copy $here/portainer/integration-manifest.json to the gateway's deploy/integration-manifests/ume-rag.json (mode 644), \
-run the gateway's 'up -d --wait' again, then this script (docs/compose-quick-start.md)"
-    fi
-    credential_keys+=("$svc=$key_dir/rag-$svc")
+[[ "$compose_file" != *"'"* ]] || die "the path $here contains '"
+
+tmp="$(mktemp "$env_file.XXXXXX")"
+{
+  echo "# Written by deploy/init-deployment.sh (its --help lists the options); edit it with a re-run, or by hand."
+  printf "COMPOSE_FILE='%s'\n" "$compose_file"
+  for n in "${order[@]}"; do
+    # An empty value is left out, but an empty COMPOSE_PROFILES stays: none, not a first run's default.
+    if [ "$n" != COMPOSE_FILE ] && { [ -n "${val[$n]}" ] || [ "$n" = COMPOSE_PROFILES ]; }; then printf "%s='%s'\n" "$n" "${val[$n]}"; fi
   done
-fi
-if [ -n "$owui_host" ]; then
-  case "$owui_provider_name" in *"'"*|*$'\n'*) die "--openwebui-oidc-provider-name: a name without ' or a line break";; esac
-  case "$owui_client" in *"'"*|*$'\n'*|*" "*) die "--openwebui-oidc-client-id: an id without spaces, ' or a line break";; esac
-  case "$owui_provider" in ""|https://*) ;; *) die "--openwebui-oidc-provider-url must be an https:// URL";; esac
-fi
-pki=0
-if [ -n "$api_cert$api_key$adm_cert$adm_key" ]; then
-  pki=1
-  for f in "$api_cert" "$api_key" "$adm_cert" "$adm_key"; do
-    if [ -z "$f" ] || [ ! -r "$f" ]; then die "PKI mode needs readable --api-cert, --api-key, --admin-cert and --admin-key"; fi
-  done
-fi
-if [ -z "$bind" ]; then bind="127.0.0.1"; [ "$proxy" = 1 ] && bind="0.0.0.0"; fi
-if [ "$proxy" = 1 ]; then public_api=""; public_admin=""; else public_api=":$api_port"; public_admin=":$admin_port"; fi
+} > "$tmp"
+chmod 600 "$tmp"; mv -f "$tmp" "$env_file"
 
-new_file() { # new_file PATH — true (and creates parent) if PATH does not exist yet
-  [ -e "$1" ] && return 1
-  mkdir -p "$(dirname "$1")"; return 0
-}
-rand() { openssl rand -hex 32; }
-
-mkdir -p "$certs" "$secrets"
-# After the first run the files belong to the containers' users: a file this script cannot see would look missing and
-# be generated again, so stop instead.
-for d in "$certs"/*/ "$secrets"/*/; do
-  if [ -d "$d" ] && { [ ! -r "$d" ] || [ ! -x "$d" ]; }; then
-    die "cannot read $d: run as root (or with sudo) to re-run on this deployment"
-  fi
-done
-
-# --- Internal CA (trusted only by the services themselves) ----------------------
-# keyUsage makes it RFC 5280-conformant; strict clients (Python 3.13, newer Go and Java) refuse a CA without it.
-if [ "$renew_ca" = 1 ] && [ -e "$certs/ca.pem" ]; then
-  mv "$certs/ca.pem" "$certs/ca.pem.old"; rm -f "$certs/ca.key"
+admin="$(get UME_RAG_ADMIN_HOST)"; [ -n "$admin" ] || admin="${val[UME_DOMAIN]:+rag-admin.$(get UME_DOMAIN)}"
+admin="${admin:-$(get UME_RAG_API_HOST)}"
+dc="docker compose --env-file $env_file"
+echo "Wrote $env_file (mode 600). Next:"
+[[ "$overlays" != *" hardened "* ]] || echo "  sudo $here/host/install.sh    # before the first up: the slice, the firewall, the timers"
+echo "  $dc up -d --wait"
+echo "  $dc logs rag-bootstrap    # its last lines: what is still missing, and the setup wizard's address"
+echo "  $dc logs rag-admin | grep 'Setup code'    # for https://$admin/setup"
+if [[ "$overlays" == *" backup "* ]]; then
+  echo "  $dc exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create    # once per database or repository"
+  [[ "$overlays" == *" hardened "* ]] || echo "  sudo $here/host/install.sh    # the backup and certificate timers"
 fi
-if new_file "$certs/ca.pem"; then
-  openssl req -x509 -newkey rsa:3072 -nodes -keyout "$certs/ca.key" -out "$certs/ca.pem" \
-    -days 3650 -subj "/CN=ume-rag-internal-ca" \
-    -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+echo "  $here/escrow-keys.sh /media/<escrow>    # the blob key and the backup passphrase; back up the rest of"
+echo "    rag-secrets/.pepper and rag-certs/data-protection.pfx with the database: without them it is unusable"
+[[ ",$(get COMPOSE_PROFILES)," == *,proxy,* ]] || [ -n "$(get UME_RAG_PROXY_SOURCES)" ] || [ -n "$(get UME_RAG_API_PUBLIC_URL)" ] \
+  || echo "Without a TLS proxy (the profile proxy, or yours) rag-api is https://<its name>:8543: --set UME_RAG_API_PUBLIC_URL=..."
+if [[ "$overlays" == *" hardened "* ]] && [ -z "$(get UME_RAG_OIDC_AUTHORITY)" ]; then
+  echo "The host firewall lets rag-admin reach no sign-in provider yet: run again with --oidc-authority URL."
 fi
-
-# --- Service certificates ---------------------------------------------------------
-issue() { # issue DIR SAN... — DIR/DIR.crt and DIR/DIR.key, valid for each DNS name given
-  local svc="$1"; shift; local san="DNS:localhost" h tmp
-  [ -r "$certs/ca.key" ] || die "$certs/ca.key is needed to issue certificates: copy it back from where you keep it offline"
-  for h in "$@"; do [ -n "$h" ] && san="$san,DNS:$h"; done
-  mkdir -p "$certs/$svc"; tmp="$(mktemp -d)"
-  openssl req -newkey rsa:3072 -nodes -keyout "$certs/$svc/$svc.key" -out "$tmp/leaf.csr" -subj "/CN=$svc" >/dev/null 2>&1
-  printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' \
-    "$san" > "$tmp/leaf.ext"
-  openssl x509 -req -in "$tmp/leaf.csr" -CA "$certs/ca.pem" -CAkey "$certs/ca.key" -CAcreateserial \
-    -CAserial "$tmp/ca.srl" -out "$certs/$svc/$svc.crt" -days 825 -extfile "$tmp/leaf.ext" >/dev/null 2>&1
-  rm -rf "$tmp"; : > "$certs/$svc/.internal"
-}
-# env_value KEY: KEY's last value in deploy/.env, surrounding quotes removed. The file is Compose's .env, not a shell
-# script (a value such as a name with a space or a ;-separated list would run as a command), so it is read, never sourced.
-env_value() {
-  sed -n "s/^$1=//p" "$env_file" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
-}
-if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
-  api_host="$(env_value UME_RAG_API_PUBLIC_URL)"; api_host="${api_host#https://}"; api_host="${api_host%%[:/]*}"
-  admin_host="$(env_value UME_RAG_ADMIN_PUBLIC_HOST)"; admin_host="${admin_host:-$api_host}"
-  # The kept deploy/.env decides whether the renderer runs, so its endpoint follows the profile; and the malware scan's
-  # mode, for the closing notes.
-  render=0
-  case ",$(env_value COMPOSE_PROFILES)," in *,render,*) render=1;; esac
-  clamav="$(env_value UME_RAG_CLAMAV_MODE)"; clamav="${clamav:-on}"
-fi
-# Internal names only: rag-worker's listener serves its health probe, rag-parser's the worker, postgres every service.
-if [ "$renew" = 1 ] || new_file "$certs/postgres/postgres.crt"; then issue postgres postgres; fi
-if [ "$renew" = 1 ] || new_file "$certs/worker/worker.crt"; then issue worker rag-worker; fi
-if [ "$renew" = 1 ] || new_file "$certs/parser/parser.crt"; then issue parser rag-parser; fi
-use_pki() { # use_pki DIR CERT KEY — install operator-supplied PKI files
-  mkdir -p "$certs/$1"; cp "$2" "$certs/$1/$1.crt"; cp "$3" "$certs/$1/$1.key"; rm -f "$certs/$1/.internal"
-}
-if [ "$pki" = 1 ]; then
-  use_pki api "$api_cert" "$api_key"; use_pki admin "$adm_cert" "$adm_key"
-else
-  # On renewal only re-issue what this script issued (PKI-supplied certificates have no marker).
-  if { [ "$renew" = 1 ] && [ -e "$certs/api/.internal" ]; } || new_file "$certs/api/api.crt"; then issue api rag-api "$api_host"; fi
-  if { [ "$renew" = 1 ] && [ -e "$certs/admin/.internal" ]; } || new_file "$certs/admin/admin.crt"; then issue admin rag-admin "$admin_host"; fi
-fi
-
-# --- Data Protection certificate (stable: never regenerate once data exists) --------
-dp="$certs/data-protection.pfx"
-if new_file "$dp"; then
-  tmp="$(mktemp -d)"
-  openssl req -x509 -newkey rsa:3072 -nodes -keyout "$tmp/dp.key" -out "$tmp/dp.crt" -days 3650 \
-    -subj "/CN=ume-rag-data-protection" >/dev/null 2>&1
-  openssl pkcs12 -export -inkey "$tmp/dp.key" -in "$tmp/dp.crt" -out "$dp" -passout pass: >/dev/null 2>&1
-  rm -rf "$tmp"
-fi
-for svc in api admin migrations; do
-  mkdir -p "$certs/$svc"
-  cp "$dp" "$certs/$svc/data-protection.pfx"
-done
-for svc in postgres api admin worker parser migrations; do cp "$certs/ca.pem" "$certs/$svc/ca.pem"; done
-# The services that call out (gateway, OIDC authority, the PKI listeners) trust the internal CA plus, when given, the
-# gateway's CA and your PKI chain: SSL_CERT_FILE is their trust store.
-if [ -n "$ca_file" ]; then
-  for svc in api admin worker; do cat "$ca_file" >> "$certs/$svc/ca.pem"; done
-fi
-
-# --- Secrets ----------------------------------------------------------------------
-mkdir -p "$secrets"/{postgres,pgbackrest,migrations,api,admin,worker,keys}
-for role in bootstrap migrator api admin worker; do
-  new_file "$secrets/postgres/${role}_password" && rand > "$secrets/postgres/${role}_password"
-done
-new_file "$secrets/.pepper" && openssl rand -hex 48 > "$secrets/.pepper"
-connection() { # connection ROLE POOL — ragdb over TLS, verified against the internal CA
-  printf 'Host=postgres;Database=ragdb;Username=ume_rag_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable;Maximum Pool Size=%s' \
-    "$1" "$(tr -d '\r\n' < "$secrets/postgres/${1}_password")" "$2"
-}
-# Pools per instance (data-model §1.1): api 12, admin 5, worker 10, migrator 2.
-connection migrator 2 > "$secrets/migrations/ConnectionStrings__ragdb"
-connection api 12 > "$secrets/api/ConnectionStrings__ragdb"
-connection admin 5 > "$secrets/admin/ConnectionStrings__ragdb"
-connection worker 10 > "$secrets/worker/ConnectionStrings__ragdb"
-for svc in migrations api admin; do tr -d '\n' < "$secrets/.pepper" > "$secrets/$svc/Security__KeyPepper"; done
-
-# The api's own keys (knowledge design §4.6, §5.4; chat design §11.1); a rotation adds a new kid next to k1.
-new_file "$secrets/api/Security__DownloadGrantKeys__k1" && rand > "$secrets/api/Security__DownloadGrantKeys__k1"
-new_file "$secrets/api/Security__CacheKeyPepper" && rand > "$secrets/api/Security__CacheKeyPepper"
-new_file "$secrets/api/Security__ConversationIdKeys__k1" && rand > "$secrets/api/Security__ConversationIdKeys__k1"
-# rag-admin's setup secret (identity design §19): the setup code is derived from it. Kept, but not worth backing up: a
-# new one only changes the setup codes printed from then on.
-new_file "$secrets/admin/Setup__Secret" && rand > "$secrets/admin/Setup__Secret"
-# Shared with Open WebUI (FORWARD_USER_INFO_HEADER_JWT_SECRET), which signs the user JWT with it (identity design §5.2).
-new_file "$secrets/.openwebui-jwt-secret" && rand > "$secrets/.openwebui-jwt-secret"
-tr -d '\n' < "$secrets/.openwebui-jwt-secret" > "$secrets/api/OpenWebUi__JwtSecret"
-# The worker's HMAC key for host names (HostHash of security event 5101, docs/security-events.md; from P2 also the Redis
-# crawl leases, performance pass §3.6): 32 random bytes, hex.
-if new_file "$secrets/worker/Security__CrawlKeyPepper"; then
-  openssl rand -hex 32 | tr -d '\n' > "$secrets/worker/Security__CrawlKeyPepper"
-fi
-# The renderer's secret WebSocket path (connectors design §8.3): a page's own WebSocket could otherwise reach
-# launch-server's port. The worker gets the whole endpoint as a secret file; the renderer reads the path only from its
-# environment, so renderer.env is read by `docker compose` and stays owned by you. Delete .render-ws-path to rotate it.
-# The worker gets the endpoint only with --render (the render profile in deploy/.env), so without the renderer it
-# refuses rendering (render.not_configured) instead of waiting for a browser that never starts.
-new_file "$secrets/.render-ws-path" && rand > "$secrets/.render-ws-path"
-render_path="/$(tr -d '\r\n' < "$secrets/.render-ws-path")"
-if [ "$render" = 1 ]; then
-  printf 'ws://rag-renderer:3000%s' "$render_path" > "$secrets/worker/Render__Endpoint"
-else
-  rm -f "$secrets/worker/Render__Endpoint"
-fi
-printf 'UME_RAG_RENDER_WS_PATH=%s\n' "$render_path" > "$secrets/renderer.env"
-
-# Each service's credential key of the gateway integration Ume.Rag (identity design §4.7, gateway-changes §5.1): one
-# key for every call, capped at the gateway at the residencies that service serves (the worker's at OnPrem and Eu).
-for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do
-  tr -d '\r\n' < "${spec#*=}" > "$secrets/${spec%%=*}/Gateway__Key"
-done
-# The per-level keys the credential keys replace are revoked at the gateway, and no service reads them: delete them.
-removed_keys=""
-for f in "$secrets"/{api,admin,worker}/Gateway__Keys__*; do
-  [ -e "$f" ] || continue
-  rm -f "$f"; removed_keys="$removed_keys ${f#"$secrets"/}"
-done
-if [ -n "$oidc_secret_file" ]; then tr -d '\r\n' < "$oidc_secret_file" > "$secrets/admin/Oidc__ClientSecret"; fi
-# Refusing guests as a file, not in rag-admin's environment, where an empty boolean would stop it at start.
-if [ -n "$oidc_refuse_guests" ]; then printf '%s' "$oidc_refuse_guests" > "$secrets/admin/Oidc__RefuseGuests"; fi
-# The Data API key of the admin's former org sync: the admin syncs with its credential key now, so delete it too.
-removed_data_key=""
-if [ -e "$secrets/admin/OrgSync__DataApiKey" ]; then rm -f "$secrets/admin/OrgSync__DataApiKey"; removed_data_key=1; fi
-
-# Blob master key of the file key provider (plan §8a): 32 random bytes, base64. Escrowed by escrow-keys.sh; without it
-# the `internal` blobs cannot be read.
-if new_file "$secrets/keys/rag-blob-internal"; then
-  openssl rand -base64 32 > "$secrets/keys/rag-blob-internal"
-  chmod 0400 "$secrets/keys/rag-blob-internal"
-fi
-
-# pgBackRest repository (§7.4). The passphrase is generated once and escrowed; repo.conf is rewritten from it.
-new_file "$secrets/pgbackrest/cipher-pass" && openssl rand -base64 48 | tr -d '\n' > "$secrets/pgbackrest/cipher-pass"
-backup_dir=""; upload_dir=""; backup_endpoint=""
-if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
-  {
-    echo "# Written by init-deployment.sh (repo-and-deployment §7.4); the passphrase is pgbackrest/cipher-pass."
-    echo "[global]"
-    echo "repo1-cipher-type=aes-256-cbc"
-    echo "repo1-cipher-pass=$(cat "$secrets/pgbackrest/cipher-pass")"
-    case "$backup_target" in
-      s3://*)
-        [ -n "$s3_credentials" ] || die "an s3:// backup target needs --backup-s3-credentials-file"
-        location="${backup_target#s3://}"; endpoint="${location%%/*}"; bucket_path="${location#*/}"
-        if [ "$bucket_path" = "$location" ] || [ -z "$bucket_path" ]; then die "--backup-target s3://ENDPOINT/BUCKET[/PATH]"; fi
-        bucket="${bucket_path%%/*}"; path="${bucket_path#"$bucket"}"; path="${path#/}"; path="${path%/}"
-        backup_endpoint="$endpoint"
-        echo "repo1-type=s3"
-        echo "repo1-path=/${path:-ume-rag}"
-        echo "repo1-s3-endpoint=$endpoint"
-        echo "repo1-s3-bucket=$bucket"
-        echo "repo1-s3-region=$s3_region"
-        echo "repo1-s3-key=$(sed -n 1p "$s3_credentials" | tr -d '\r')"
-        echo "repo1-s3-key-secret=$(sed -n 2p "$s3_credentials" | tr -d '\r')"
-        echo "repo1-s3-uri-style=path"
-        ;;
-      local)
-        echo "repo1-type=posix"
-        echo "repo1-path=/var/lib/pgbackrest"
-        upload_dir="$here/upload-backup"
-        ;;
-      /*)
-        echo "repo1-type=posix"
-        echo "repo1-path=/var/lib/pgbackrest"
-        backup_target="${backup_target%/}"; backup_dir="$backup_target/pgbackrest"; upload_dir="$backup_target/uploads"
-        ;;
-      *) die "--backup-target is an absolute path, s3://ENDPOINT/BUCKET[/PATH] or local";;
-    esac
-  } > "$secrets/pgbackrest/repo.conf"
-  for d in "$backup_dir" "$upload_dir"; do [ -z "$d" ] || mkdir -p "$d"; done
-fi
-
-# --- ClamAV confs (compose.clamav-conf.yaml): copies of the image's, written only when a setting differs -------------
-# Left as they are by --renew-certs; none with --clamav off, which runs no rag-clamav.
-clamav_conf=0
-if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
-  :
-elif [ "$clamav" = on ] && { [ "$host_memory" = 24 ] || [ -n "$freshclam_proxy" ]; }; then
-  clamav_conf=1
-  src=""
-  for d in "$here/clamav" "$here/../images/clamav"; do
-    [ -r "$d/clamd.conf" ] && [ -r "$d/freshclam.conf" ] && { src="$d"; break; }
-  done
-  [ -n "$src" ] || die "the ClamAV image's clamd.conf and freshclam.conf are needed (deploy/clamav/ in the release \
-bundle, images/clamav/ in the repository)"
-  mkdir -p "$secrets/clamav"
-  cp "$src/clamd.conf" "$secrets/clamav/clamd.conf"
-  cp "$src/freshclam.conf" "$secrets/clamav/freshclam.conf"
-  if [ "$host_memory" = 24 ]; then
-    # 24 GB host (mem_limit 3g, §5.5): keep the old engine during a reload, and test-load updates before using them.
-    sed -i 's/^ConcurrentDatabaseReload no$/ConcurrentDatabaseReload yes/' "$secrets/clamav/clamd.conf"
-    sed -i 's/^TestDatabases no$/TestDatabases yes/' "$secrets/clamav/freshclam.conf"
-    if ! grep -qx 'ConcurrentDatabaseReload yes' "$secrets/clamav/clamd.conf" \
-      || ! grep -qx 'TestDatabases yes' "$secrets/clamav/freshclam.conf"; then
-      die "the ClamAV confs in $src no longer have the lines this script changes"
-    fi
-  fi
-  if [ -n "$freshclam_proxy" ]; then
-    printf '\n# Egress through a proxy (init-deployment.sh --freshclam-proxy).\nHTTPProxyServer %s\nHTTPProxyPort %s\n' \
-      "${freshclam_proxy%:*}" "${freshclam_proxy##*:}" >> "$secrets/clamav/freshclam.conf"
-  fi
-else
-  rm -rf "$secrets/clamav"
-fi
-
-# --- Open WebUI (optional, compose.openwebui.yaml) ---------------------------------
-# set_env_line FILE KEY VALUE — KEY='VALUE' in FILE, replacing an existing KEY= line (single quotes: Compose takes the
-# value literally, without interpolating $).
-set_env_line() {
-  local tmp
-  case "$3" in ""|*"'"*|*$'\n'*) die "the value for $2 is empty or contains ' or a line break";; esac
-  tmp="$(mktemp "$1.XXXXXX")"
-  K="$2" V="$3" awk 'BEGIN { line = ENVIRON["K"] "=\047" ENVIRON["V"] "\047" }
-    index($0, ENVIRON["K"] "=") == 1 { if (!done) print line; done = 1; next }
-    { print }
-    END { if (!done) print line }' "$1" > "$tmp"
-  mv "$tmp" "$1"
-}
-if [ -n "$owui_host" ]; then
-  mkdir -p "$secrets/openwebui"
-  owui_data="${owui_data:-$here/openwebui-data}"; mkdir -p "$owui_data"
-  new_file "$secrets/openwebui/webui_secret_key" && rand > "$secrets/openwebui/webui_secret_key"
-  # Read by `docker compose` (Open WebUI takes these only from its environment), so it stays owned by you. Written once;
-  # a re-run changes only the values passed as options, never the JWT secret.
-  if new_file "$secrets/openwebui.env"; then
-    cat > "$secrets/openwebui.env" <<EOF
-FORWARD_USER_INFO_HEADER_JWT_SECRET=$(cat "$secrets/.openwebui-jwt-secret")
-# The ume-rag-sk- key of the deployment's own Open WebUI client in rag-api (generated by init-deployment.sh).
-OPENAI_API_KEYS=
-EOF
-  fi
-  # The feedback service account (chat design §14.2): Open WebUI creates it as its first user, and so its only admin,
-  # when it starts on an empty store. Generated once; nobody signs in with the password (password sign-in is off), and
-  # compose.openwebui.yaml's open-webui-setup mints the account's API key.
-  if ! grep -q '^WEBUI_ADMIN_EMAIL=' "$secrets/openwebui.env"; then
-    printf '# The feedback service account (open-webui-setup mints its key); never a person.\n' >> "$secrets/openwebui.env"
-    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_EMAIL feedback-import@localhost
-    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_NAME "Feedback import"
-    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_PASSWORD "$(rand)"
-  fi
-  # Open WebUI's key for rag-api (M-17 C4, identity design §5.2): generated once; rag-migrate registers it as the
-  # deployment's own Open WebUI client. A new key: delete $secrets/.openwebui-rag-api-key and re-run (the old one is
-  # revoked when rag-migrate runs).
-  new_file "$secrets/.openwebui-rag-api-key" \
-    && printf 'ume-rag-sk-%s' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$secrets/.openwebui-rag-api-key"
-  set_env_line "$secrets/openwebui.env" OPENAI_API_KEYS "$(cat "$secrets/.openwebui-rag-api-key")"
-  mkdir -p "$secrets/migrations"
-  cp "$secrets/.openwebui-rag-api-key" "$secrets/migrations/OpenWebUi__ApiKey"
-  # The secret of Open WebUI's own OIDC client (P1: Keycloak client open-webui) is a deployment value of rag-api, which
-  # serves it to Open WebUI's start wrapper, and of rag-admin, which shows that it is set (identity design §19).
-  # Without the option a stored one stays; without any, the setup wizard's applies.
-  if [ -n "$owui_secret_file" ]; then
-    for svc in api admin; do tr -d '\r\n' < "$owui_secret_file" > "$secrets/$svc/OpenWebUi__Oidc__ClientSecret"; done
-  fi
-fi
-
-# --- Ownership: container UIDs must be able to read their own files -------------------
-own() { # own UID PATH... (needs root; falls back to a printed command)
-  local id="$1"; shift
-  [ "$chown" = 1 ] || return 0
-  if [ "$(id -u)" = 0 ]; then chown -R "$id:$id" "$@"; return; fi
-  if command -v sudo >/dev/null && sudo -n chown -R "$id:$id" "$@" 2>/dev/null; then return; fi
-  chown_todo+=("chown -R $id:$id $*")
-}
-chown_todo=()
-own 999 "$certs/postgres" "$secrets/postgres" "$secrets/pgbackrest"
-[ -z "$backup_dir" ] || own 999 "$backup_dir"
-[ -z "$upload_dir" ] || own 1654 "$upload_dir"
-own 1654 "$certs/api" "$certs/admin" "$certs/worker" "$certs/migrations" \
-  "$secrets/api" "$secrets/admin" "$secrets/worker" "$secrets/migrations" "$secrets/keys"
-own 10001 "$certs/parser"
-[ "$clamav_conf" = 0 ] || own 1000 "$secrets/clamav"
-[ -z "$owui_host" ] || own 1000 "$secrets/openwebui" "$owui_data"
-# The Open WebUI feedback key's directory (M-17 C6): always, since rag-api mounts it; written by open-webui-setup
-# (Open WebUI's uid 1000), read by rag-api's group 1654 (setgid keeps the group on the new file). The hand-made key that
-# rag-api read from its own directory before goes.
-mkdir -p "$secrets/openwebui-feedback"
-if [ -e "$secrets/api/OpenWebUi__AdminApiKey" ]; then
-  rm -f "$secrets/api/OpenWebUi__AdminApiKey" 2>/dev/null || sudo -n rm -f "$secrets/api/OpenWebUi__AdminApiKey" 2>/dev/null \
-    || chown_todo+=("rm -f $secrets/api/OpenWebUi__AdminApiKey")
-fi
-if [ "$chown" = 1 ]; then
-  feedback_own=(chown 1000:1654 "$secrets/openwebui-feedback")
-  feedback_mode=(chmod 2750 "$secrets/openwebui-feedback")
-  if [ "$(id -u)" = 0 ]; then "${feedback_own[@]}"; "${feedback_mode[@]}"
-  elif command -v sudo >/dev/null && sudo -n "${feedback_own[@]}" 2>/dev/null && sudo -n "${feedback_mode[@]}" 2>/dev/null; then :
-  else chown_todo+=("${feedback_own[*]}" "${feedback_mode[*]}"); fi
-fi
-chmod 755 "$certs" "$secrets" 2>/dev/null || true
-
-# --- deploy/.env (non-secret settings only) ------------------------------------------
-compose_files="$here/compose.prod.yaml:$here/compose.ingestion.yaml"
-[ "$host_memory" = 24 ] && compose_files="$compose_files:$here/compose.host-24g.yaml"
-[ "$clamav_conf" = 1 ] && compose_files="$compose_files:$here/compose.clamav-conf.yaml"
-[ "$rolling" = 1 ] && compose_files="$compose_files:$here/compose.rolling.yaml"
-profiles=""
-[ "$clamav" = on ] && profiles="clamav"
-[ "$render" = 1 ] && profiles="${profiles:+$profiles,}render"
-if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
-  # The deployer's re-open value (rag-admin's Setup:Reopen) survives a re-run: it is set by hand, never by an option.
-  setup_reopen=""
-  [ ! -f "$env_file" ] || setup_reopen="$(env_value UME_RAG_SETUP_REOPEN)"
-  if [ -e "$env_file" ]; then
-    mv "$env_file" "$env_file.bak"; echo "Existing .env saved as $(basename "$env_file").bak"
-  fi
-  cat > "$env_file" <<EOF
-# Non-secret settings for the production Compose files. Secrets live in UME_RAG_SECRETS_DIR.
-# The files of this deployment: \`docker compose --env-file deploy/.env ...\` uses them without -f.
-COMPOSE_FILE=$compose_files
-# Optional services: clamav starts rag-clamav, the malware scan (init-deployment.sh --clamav on, with
-# UME_RAG_CLAMAV_MODE=on below); render starts rag-renderer for browser sources (init-deployment.sh --render, which
-# also gives the worker its endpoint). Change each only together with its counterpart: re-run init-deployment.sh.
-COMPOSE_PROFILES=$profiles
-# The worker's ClamAv:Mode: on scans every upload and fetched file, fail-closed (needs the clamav profile); off stores
-# them without a malware scan (production-setup.md, Malware scan).
-UME_RAG_CLAMAV_MODE=$clamav
-UME_RAG_HOST_MEMORY=$host_memory
-UME_RAG_CERTS_DIR=$certs
-UME_RAG_SECRETS_DIR=$secrets
-# Sign-in (identity design §19): empty is unset, so the setup wizard's value applies, else the code's default (client
-# ume-rag-admin). A value set here is the deployment's and is locked in the wizard; with the authority and the secret
-# file secrets/admin/Oidc__ClientSecret the wizard stays closed. The host firewall allows rag-admin only this provider.
-UME_RAG_OIDC_AUTHORITY=$oidc_authority
-UME_RAG_OIDC_CLIENT_ID=$oidc_client
-# The break-glass group(s) for the first platform admin (';'-separated; a rag- name or an Entra object id, #413), for an
-# identity provider whose tokens carry groups instead of the role; every other role's groups are set in RAG's admin
-# (Settings, Role groups; M-17 C10). The token's shape is the wizard's (Advanced) unless set here: the claim names
-# default to roles, groups, departmentCodes and teamCodes (UME_RAG_OIDC_ROLE_CLAIM, _GROUP_CLAIM, _DEPARTMENT_CLAIM,
-# _TEAM_CLAIM), as the gateway's UME_OIDC_* do, and UME_RAG_OIDC_EXTRA_SCOPE adds a scope.
-# UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN=
-# With Entra ID directly (P2): UME_RAG_OIDC_TENANT_ID=<tenant id>
-# Empty. Any new value (for example today's date), then \`docker compose --env-file deploy/.env up -d\`, opens the setup
-# wizard once, for an hour, with a new setup code in rag-admin's log; remove it before restoring a database.
-UME_RAG_SETUP_REOPEN=$setup_reopen
-UME_RAG_GATEWAY_URL=$gateway_url
-UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
-UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
-# Listeners default to loopback (0.0.0.0 with --proxy: the host firewall admits only UME_RAG_PROXY_SOURCES to them).
-UME_RAG_PROXY_SOURCES=$proxy_sources
-UME_RAG_API_BIND=$bind
-UME_RAG_API_PORT=$api_port
-UME_RAG_ADMIN_BIND=$bind
-UME_RAG_ADMIN_PORT=$admin_port
-# The second slots of compose.rolling.yaml (--rolling; unused without it).
-UME_RAG_API_B_PORT=$((api_port + 1))
-UME_RAG_ADMIN_B_PORT=$((admin_port + 1))
-# pgBackRest posix repository on the host (empty: the pgbackrest-repo volume, or unused with S3), the S3 endpoint
-# (host firewall), and the upload copy's directory (deploy/backup-uploads.sh).
-UME_RAG_BACKUP_DIR=$backup_dir
-UME_RAG_BACKUP_ENDPOINT=$backup_endpoint
-UME_RAG_UPLOAD_BACKUP_DIR=$upload_dir
-UME_RAG_CRAWL_ALLOW=$crawl_allow
-# freshclam's HTTP proxy (host firewall: the mirror network reaches only this).
-UME_RAG_FRESHCLAM_PROXY=$freshclam_proxy
-# UME_RAG_OTEL_ENDPOINT=
-# The share of requests traced (default parentbased_traceidratio at 0.1; always_on traces every request):
-# UME_RAG_OTEL_TRACES_SAMPLER=parentbased_traceidratio
-# UME_RAG_OTEL_TRACES_SAMPLER_ARG=0.1
-# Empty where deploy/host/rag-ingestion.slice is not installed (a developer machine):
-# UME_RAG_INGESTION_SLICE=
-# Pin images by digest once pushed to your registry (the release bundle does this), for example:
-# API_IMAGE=ghcr.io/<owner>/ume-rag/api@sha256:...
-EOF
-  if [ -n "$owui_host" ]; then
-    cat >> "$env_file" <<EOF
-# Optional Open WebUI stack (compose.openwebui.yaml, a project of its own). Its OIDC client: P1 the shared Keycloak's
-# open-webui (realm ume), P2 Entra's ume-rag-open-webui.
-UME_RAG_OPENWEBUI_HOST=$owui_host
-# rag-api's feedback importer reads Open WebUI here (OpenWebUi:BaseUrl); empty turns the import off.
-UME_RAG_OPENWEBUI_BASE_URL=https://$owui_host
-UME_RAG_OPENWEBUI_BIND=$bind
-UME_RAG_OPENWEBUI_PORT=3000
-# Its sign-in settings as deployment values of rag-api and rag-admin (identity design §19); empty is unset: the setup
-# wizard's value, else the default (client open-webui, rag-admin's authority's discovery document, Umeå kommun).
-UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=$owui_client
-UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=$owui_provider
-UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME='$owui_provider_name'
-UME_RAG_OPENWEBUI_DATA_DIR=$owui_data
-EOF
-  fi
-fi
-
-own_step="  0. File ownership is set."
-[ "$chown" = 1 ] || own_step="  0. Files stay owned by you (--no-chown): the containers' users must be able to read theirs."
-if [ ${#chown_todo[@]} -gt 0 ]; then
-  own_step="  0. Run as root first (containers run as other users and must read their files):"
-  for c in "${chown_todo[@]}"; do own_step="$own_step
-       $c"; done
-fi
-backup_note=""
-[ "$backup_target" = local ] && backup_note="
-     The backup repository is a Docker volume and the upload copy $here/upload-backup, both on this host
-     (--backup-target local): not a backup off the host."
-proxy_note=""
-if [ "$proxy" = 1 ]; then
-  # proxy/nginx.conf from the example, as the gateway's init-deployment.sh writes its own (#468).
-  sed -e "s/@API_HOST@/$api_host/g" -e "s/@ADMIN_HOST@/$admin_host/g" -e "s/@UPSTREAM@/$upstream_host/g" \
-      -e "s/@API_PORT@/$api_port/g" -e "s/@ADMIN_PORT@/$admin_port/g" \
-      -e "s/@API_B_PORT@/$((api_port + 1))/g" -e "s/@ADMIN_B_PORT@/$((admin_port + 1))/g" \
-      -e "s/@OPENWEBUI_HOST@/$owui_host/g" -e "s/@OPENWEBUI_PORT@/3000/g" \
-      "$here/proxy/nginx.conf.example" > "$here/proxy/nginx.conf"
-  [ -z "$owui_host" ] || sed -i 's/^#owui \{0,1\}//' "$here/proxy/nginx.conf"
-  [ "$rolling" = 0 ] || sed -i 's/#rolling //' "$here/proxy/nginx.conf"
-  proxy_note="
-Reverse proxy: $here/proxy/nginx.conf is ready for nginx (add your certificates). For another proxy: forward
-https://$api_host to https://$upstream_host:$api_port and https://$admin_host to https://$upstream_host:$admin_port,
-preserving the Host header; client_max_body_size 60m and proxy_request_buffering off on
-PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), 2 MB on the api host (chat history,
-and on Open WebUI's), 1 MB elsewhere.
-Restrict those ports to the proxy with the host firewall."
-  [ "$rolling" = 0 ] || proxy_note="$proxy_note
-With --rolling, also list the second slots: $upstream_host:$((api_port + 1)) (rag-api) and
-$upstream_host:$((admin_port + 1)) (admin), retrying on the other slot; proxy/nginx.conf already does."
-  if [ -z "$proxy_sources" ]; then
-    proxy_note="$proxy_note
-The listeners bind to $bind and nothing on this host limits who reaches them: pass --proxy-address with the
-proxy's source addresses (the host firewall then admits only those), or restrict them in a network firewall."
-  else
-    proxy_note="$proxy_note Installed by deploy/host/install.sh: only $proxy_sources may connect."
-  fi
-fi
-rolling_note=""
-if [ "$rolling" = 1 ]; then
-  rolling_note="
-Updates without downtime: later, ./deploy/rolling-update.sh (docs/zero-downtime-updates.md). The second slots listen
-on ports $((api_port + 1)) and $((admin_port + 1))."
-  [ "$proxy" = 1 ] || rolling_note="$rolling_note Put a proxy in front that uses both ports of each service."
-fi
-gateway_note=""
-missing=""
-for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Key" ] || missing="$missing $svc"; done
-if [ -n "$missing" ]; then
-  gateway_note="$gateway_note
-Gateway: no credential key for${missing}; a service without one has its model calls refused. Re-run with
---gateway-secrets-dir DIR (a gateway on this host: compose-quick-start.md) or --gateway-credential-key-file
-SERVICE=FILE, one per service (production-setup.md, Gateway credential keys)."
-fi
-[ -z "$removed_keys" ] || gateway_note="$gateway_note
-Gateway: deleted the per-level key files${removed_keys}; ask the gateway admin to revoke those keys."
-[ -z "$removed_data_key" ] || gateway_note="$gateway_note
-Gateway: deleted the Data API key file admin/OrgSync__DataApiKey (the admin syncs with its credential key, scope
-organisation.read); ask the gateway admin to revoke that Data API key."
-render_note=""
-[ "$render" = 1 ] || render_note="
-Renderer: off, so sources with fetch mode browser wait with render.not_configured. Re-run with --render to start
-rag-renderer (production-setup.md, Renderer)."
-clamav_note=""
-[ "$clamav" = on ] || clamav_note="
-Malware scan: off (--clamav off), so no rag-clamav runs and files are stored without a malware scan; the admin UI
-marks them Not scanned for malware. Turning the scan on later (--clamav on) does not scan the files stored meanwhile
-(production-setup.md, Malware scan)."
-# Re-issued certificates (#705): `up -d` recreates no container whose configuration is unchanged; say what to restart.
-renew_note=""
-if [ "$renew_ca" = 1 ]; then
-  renew_note="
-Certificates: a new internal CA and every certificate it issued. The services read the CA only at start: restart the
-stack (docker compose --env-file deploy/.env up -d --force-recreate)."
-elif [ "$renew" = 1 ]; then
-  renew_note="
-Certificates: re-issued. postgres and rag-parser read theirs only at start: docker compose --env-file deploy/.env
-restart postgres rag-parser (Kestrel watches rag-api's, rag-admin's and rag-worker's; restart them too if a client still
-sees the old certificate)"
-fi
-owui_note=""
-if [ -n "$owui_host" ]; then
-  owui_todo=""
-  [ -s "$secrets/api/OpenWebUi__Oidc__ClientSecret" ] || owui_todo="
-Its OIDC client's secret is not set here: enter it in rag-admin's setup wizard (its Open WebUI step), or declare it
-with --openwebui-oidc-client-secret-file FILE (a re-run). Without one, Open WebUI signs in as a public client (PKCE)."
-  owui_proxy=""
-  [ "$proxy" = 1 ] || owui_proxy="
-Without --proxy, Open WebUI can't reach rag-api: its connection uses rag-api's public URL https://$api_host$public_api,
-which this host serves on $bind only, and https://$owui_host needs the reverse proxy too. Use --proxy for a working
-Open WebUI; without it, these files only render."
-  owui_note="$owui_proxy
-Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/login/callback (identity design
-§5.3) on its OIDC client '${owui_client:-open-webui}'.$owui_todo
-Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
-(its open-webui-setup mints the feedback service account's API key for rag-api; nothing to do by hand)."
-fi
-# Sign-in (identity design §19): declared by the options, or set in the setup wizard after the first up.
-if [ -n "$oidc_authority" ] && [ -s "$secrets/admin/Oidc__ClientSecret" ]; then
-  signin_step="  4. Sign-in is declared here (UME_RAG_OIDC_AUTHORITY and secrets/admin/Oidc__ClientSecret), so the setup
-     wizard stays closed: sign in at https://$admin_host$public_admin/."
-else
-  signin_step="  4. Set up sign-in in the setup wizard. Read the setup code (valid for an hour; while setup was never
-     finished, a restart of rag-admin prints a new one):
-       docker compose --env-file deploy/.env logs rag-admin | grep 'Setup code'
-     and open https://$admin_host$public_admin/setup. The wizard takes the client secret and tests the sign-in; whoever
-     tests needs the role rag-platform-admin."
-  [ -n "$oidc_authority" ] || signin_step="$signin_step
-     The host firewall of step 2 lets rag-admin reach only the provider in UME_RAG_OIDC_AUTHORITY, which is empty:
-     re-run with --oidc-authority URL first, and the wizard asks only for the client secret."
-fi
-
-cat <<EOF
-
-Done. Generated:
-  $env_file
-  $certs   (internal CA, service certificates, Data Protection certificate)
-  $secrets (database passwords, keys, connection strings, pgBackRest repository settings)
-
-Next steps:
-$own_step
-  1. Register these redirect URIs on the OIDC client '${oidc_client:-ume-rag-admin}' (code + PKCE; P1: the shared
-     Keycloak's realm ume, from RAG's realm additions in deploy/keycloak/; P2: the Entra registration); the setup
-     wizard shows them too:
-       https://$admin_host$public_admin/signin-oidc
-       https://$admin_host$public_admin/signout-callback-oidc
-  2. As root, before the first up: $here/host/install.sh (the ingestion slice the containers' cgroup_parent
-     names, the firewall, and the backup, upload copy, restart-unhealthy and certificate-expiry timers;
-     deploy/host/README.md).
-  3. docker compose --env-file deploy/.env up -d --wait
-$signin_step
-  5. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
-     Once per new database or repository (safe to repeat): WAL archiving fails until the stanza exists.$backup_note
-  6. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
-     ($secrets/keys/rag-blob-internal and $secrets/pgbackrest/cipher-pass). Back up $secrets/.pepper and
-     $certs/data-protection.pfx separately from database backups: without them a restored database is unusable.
-  7. Internal certificates last 825 days; re-issue with: $0 --renew-certs
-     (rag-cert-expiry.timer of step 2 warns 60 days ahead).
-  8. Move $certs/ca.key off this host (with the backups in step 6). Anyone who can read it can
-     issue certificates the services trust; it is only needed again for --renew-certs.
-$renew_note$proxy_note$rolling_note$gateway_note$clamav_note$render_note$owui_note
-EOF

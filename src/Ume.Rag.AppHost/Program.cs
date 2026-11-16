@@ -482,7 +482,7 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
 // #236) the key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, a whole
 // ume-rag-sk- key), which rag-migrate registers as that client (OpenWebUi__ApiKey). rag-api trusts the managed client's users.
 // It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
-// over OIDC through deploy/compose.openwebui.yaml (item 18). Same pin as the Compose file; update both together.
+// over OIDC through rag-openwebui in deploy/compose.rag.yaml (item 18). Same pin as that file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
 const string OpenWebUiTag = "v0.12.5";
 const string OpenWebUiDigest = "03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded";
@@ -513,7 +513,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
         .WithEnvironment("WEBUI_SECRET_KEY", openWebUiSecretKey)
         .WithEnvironment("ENABLE_PERSISTENT_CONFIG", "false")
-        // No model downloads and no retrieval of Open WebUI's own: rag-api does the RAG (as deploy/compose.openwebui.yaml).
+        // No model downloads and no retrieval of Open WebUI's own: rag-api does the RAG (as rag-openwebui in deploy/compose.rag.yaml).
         .WithEnvironment("OFFLINE_MODE", "true")
         .WithEnvironment("BYPASS_EMBEDDING_AND_RETRIEVAL", "true")
         .WithEnvironment("ENABLE_OLLAMA_API", "false")
@@ -546,7 +546,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("USER_PERMISSIONS_CHAT_PARAMS", "false")
         .WithEnvironment("ENABLE_ADMIN_CHAT_ACCESS", "false")
         .WithEnvironment("ENABLE_ADMIN_EXPORT", "false")
-        // As deploy/compose.openwebui.yaml: API keys only for the feedback routes the importer uses (chat design §14.2).
+        // As rag-openwebui in deploy/compose.rag.yaml: API keys only for the feedback routes the importer uses (chat design §14.2).
         .WithEnvironment("ENABLE_API_KEYS", "true")
         .WithEnvironment("ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS", "true")
         .WithEnvironment("API_KEYS_ALLOWED_ENDPOINTS", "/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback")

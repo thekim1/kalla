@@ -1,66 +1,59 @@
 #!/usr/bin/env bash
 # End-to-end test of updates without downtime on Docker Compose (docs/zero-downtime-updates.md), adapted from the
-# gateway's: boots compose.prod.yaml + compose.rolling.yaml from a copy of deploy/, puts nginx in front with the
-# configuration init-deployment.sh --proxy --rolling writes, and replaces every slot with rolling-update.sh --force while
-# clients send POST and GET requests to rag-api and load the admin UI. Fails if a single request is lost.
+# gateway's: boots compose.rag.yaml + compose.rolling.yaml from a copy of deploy/, puts nginx in front with
+# deploy/proxy/nginx.conf.example (both slots of each service), and replaces every slot with rolling-update.sh --force
+# while clients send POST and GET requests to rag-api and load the admin UI. Fails if a single request is lost.
 #
-#   deploy/tests/compose-rolling-e2e.sh      # the local images (ume-rag/*:latest), or set API_IMAGE, ADMIN_IMAGE,
-#                                            # MIGRATIONS_IMAGE and POSTGRES_IMAGE (a release's, pinned by digest)
+#   deploy/tests/compose-rolling-e2e.sh      # compose.rag.yaml's pinned images, or set RAG_API_IMAGE, RAG_ADMIN_IMAGE,
+#                                            # RAG_MIGRATIONS_IMAGE and RAG_POSTGRES_IMAGE (local builds, for example)
 #
-# The ingestion zone is left out (COMPOSE_FILE without compose.ingestion.yaml): rolling-update.sh then has no worker,
-# parser, ClamAV or renderer to update, and the test needs no gateway, ClamAV signatures or cgroup slice.
-# Needs Docker (Linux host), python3 and openssl; no sudo: the files are given to the services' users (as
-# init-deployment.sh does as root) from a root container, which also removes them afterwards.
+# Only rag-api, rag-admin, their second slots and what they need start (rag-bootstrap, rag-postgres, rag-migrate):
+# rolling-update.sh then has no worker, parser, ClamAV or renderer running to update, and the test needs no gateway,
+# ClamAV signatures or cgroup slice. Needs Docker (Linux host), python3 and openssl; no sudo.
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"; project=ume-rag-rolling-e2e; edge=ume-rag-rolling-e2e-edge; port=18543
-# The proxy is an nginx container on the stack's edge network with the configuration init-deployment.sh --proxy
-# --rolling writes, its upstreams pointed at the slots' containers (re-resolved, as each slot gets a new address when it
-# is replaced). Not through the published ports: Docker Desktop's port forwarder accepts a connection to a port whose
-# container is restarting and then resets it, which a Linux host's DNAT never does, so the test would measure the
-# forwarder instead of the update.
+# The proxy is an nginx container on the stack's rag-edge network with the example's configuration, its upstreams
+# pointed at the slots' containers (re-resolved, as each slot gets a new address when it is replaced). Not through the
+# published ports: Docker Desktop's port forwarder accepts a connection to a port whose container is restarting and
+# then resets it, which a Linux host's DNAT never does, so the test would measure the forwarder instead of the update.
 upstream=docker-host
-cp -R "$repo/deploy" "$work/"
+cp -R "$repo/deploy" "$work/"; rm -f "$work/deploy/.env"
 cd "$work"
 compose=(docker compose -p "$project" --env-file deploy/.env)
 cleanup() {
   docker rm -f "$edge" >/dev/null 2>&1 || true
   "${compose[@]}" down -v >/dev/null 2>&1 || true
-  docker run --rm -v "$work:/w" docker.io/library/alpine:3.22 rm -r -f /w/deploy >/dev/null 2>&1 || true
   cd / && rm -r -f "$work"
 }
 trap cleanup EXIT
 
-./deploy/init-deployment.sh --no-chown --proxy --rolling --yes --oidc-authority https://login.microsoftonline.com/common/v2.0 \
-  --gateway-url https://llm.test --api-host rag.test --admin-host rag-admin.test --upstream-host "$upstream" \
-  --proxy-address 127.0.0.1 --backup-target local --allow-file-keys >/dev/null
-docker run --rm -v "$work/deploy:/d" docker.io/library/alpine:3.22 sh -c '
-  chown -R 999:999 /d/certs/postgres /d/secrets/postgres /d/secrets/pgbackrest
-  chown -R 1654:1654 /d/certs/api /d/certs/admin /d/certs/worker /d/certs/migrations \
-    /d/secrets/api /d/secrets/admin /d/secrets/worker /d/secrets/migrations /d/secrets/keys
-  chown -R 10001:10001 /d/certs/parser
-  chmod 755 /d/certs /d/secrets'
-sed -i -E 's#^COMPOSE_FILE=.*#COMPOSE_FILE='"$work"'/deploy/compose.prod.yaml:'"$work"'/deploy/compose.rolling.yaml#' deploy/.env
-for v in API_IMAGE ADMIN_IMAGE MIGRATIONS_IMAGE POSTGRES_IMAGE; do
-  [ -z "${!v:-}" ] || echo "$v=${!v}" >> deploy/.env
+images=()
+for v in RAG_API_IMAGE RAG_ADMIN_IMAGE RAG_MIGRATIONS_IMAGE RAG_POSTGRES_IMAGE; do
+  [ -z "${!v:-}" ] || images+=(--set "$v=${!v}")
 done
+./deploy/init-deployment.sh --rolling --profiles '' --domain test --api-host rag.test --admin-host rag-admin.test \
+  --gateway-url https://llm.test --oidc-authority https://login.microsoftonline.com/common/v2.0 \
+  ${images[@]+"${images[@]}"} --yes >/dev/null
 mkdir -p edge
 for h in rag.test rag-admin.test; do
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "edge/$h.key" -out "edge/$h.crt" -days 1 -subj "/CN=$h" \
     -addext "subjectAltName=DNS:$h" >/dev/null 2>&1
 done
-grep -q "server $upstream:8544;" deploy/proxy/nginx.conf || { echo "error: nginx.conf does not list the second rag-api slot" >&2; exit 1; }
-grep -q "server $upstream:9544;" deploy/proxy/nginx.conf || { echo "error: nginx.conf does not list the second admin slot" >&2; exit 1; }
+sed -e "s/@API_HOST@/rag.test/g" -e "s/@ADMIN_HOST@/rag-admin.test/g" -e "s/@UPSTREAM@/$upstream/g" \
+  -e "s/@API_PORT@/8543/g" -e "s/@ADMIN_PORT@/9543/g" -e "s/@API_B_PORT@/8544/g" -e "s/@ADMIN_B_PORT@/9544/g" \
+  -e 's/#rolling //' -e '/^#owui/d' deploy/proxy/nginx.conf.example > edge/example.conf
+grep -q "server $upstream:8544;" edge/example.conf || { echo "error: the example does not list the second rag-api slot" >&2; exit 1; }
+grep -q "server $upstream:9544;" edge/example.conf || { echo "error: the example does not list the second admin slot" >&2; exit 1; }
 { echo "resolver 127.0.0.11 valid=1s ipv6=off;"
   sed -e 's/# ssl_certificate/ssl_certificate/' -e "s/listen 443 ssl;/listen $port ssl;/" \
     -e "s/server $upstream:8543;/zone ume_rag_api 64k; server rag-api:8443 resolve;/" \
     -e "s/server $upstream:8544;/server rag-api-b:8443 resolve;/" \
     -e "s/server $upstream:9543;/zone ume_rag_admin 64k; server rag-admin:8443 resolve;/" \
-    -e "s/server $upstream:9544;/server rag-admin-b:8443 resolve;/" deploy/proxy/nginx.conf; } > edge/nginx.conf
+    -e "s/server $upstream:9544;/server rag-admin-b:8443 resolve;/" edge/example.conf; } > edge/nginx.conf
 
-# The slots listen on 0.0.0.0 (--proxy); this test host has no rag-firewall, which would admit only the proxy.
-"${compose[@]}" up -d --wait --wait-timeout 600
-docker run -d --name "$edge" -p "127.0.0.1:$port:$port" --network "${project}_edge" \
+"${compose[@]}" up -d --wait --wait-timeout 600 rag-api rag-api-b rag-admin rag-admin-b
+docker run -d --name "$edge" -p "127.0.0.1:$port:$port" --network "${project}_rag-edge" \
   -v "$work/edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro" -v "$work/edge:/etc/ssl:ro" \
   docker.io/library/nginx:1.29-alpine >/dev/null
 ready=0

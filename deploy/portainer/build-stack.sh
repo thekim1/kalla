@@ -1,6 +1,6 @@
 #!/bin/sh
 # Generates deploy/portainer/compose.portainer.yaml: the gateway's Portainer stack (its deploy/compose.portainer.yaml,
-# unchanged but for one line, below) plus RAG's services from compose.rag.template.yaml, as one stack to paste into
+# unchanged but for one line, below) plus Ume.Rag's services from deploy/compose.rag.yaml, as one stack to paste into
 # Portainer.
 #
 #   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
@@ -10,18 +10,22 @@
 #
 # Options, before the gateway:
 #   --check          write nothing: build from `current` and fail with the difference when the committed
-#                    compose.portainer.yaml is not what the template gives (verify.yml's deploy-checks)
-#   --images FILE    first pin the template's RAG_*_IMAGE defaults to FILE's lines (a release's images.env:
-#                    API_IMAGE=registry/repo:tag@sha256:..., one per image), then build; release.yml's pull request
-#                    after a release
+#                    compose.portainer.yaml is not what deploy/compose.rag.yaml gives (verify.yml's deploy-checks)
+#   --images FILE    first pin the RAG_*_IMAGE defaults of deploy/compose.rag.yaml to FILE's lines (a release's
+#                    images.env: RAG_API_IMAGE=registry/repo:tag@sha256:..., one per image), then build; release.yml's
+#                    pull request after a release
 #
 # A gateway release's asset pins the gateway's images by digest; its repository file does not (they are then required
 # variables), so build from a release unless testing an unreleased gateway change. A named release is downloaded with
 # curl (the gateway's repository is public); only the latest one is looked up with gh.
 #
-# Each "@SECTION name" block of the template goes into the same top-level section of the gateway's file (header: after
-# its comment, x: after its x- anchors), and "@INCLUDE path" lines (relative to deploy/) are inlined, indented, with $
-# escaped as $$, as the gateway's build-portainer-stack.sh does. Run again after a gateway or RAG change.
+# deploy/compose.rag.yaml is the one Ume.Rag service file, which Compose runs directly. Its marks are applied first: a
+# line "#@joined <line>" becomes <line>, and a line that ends in "#@alone" is left out (what a stack without the gateway
+# needs of its own: the network llm, the host directories, the x-hardened anchor, which the gateway's file has). Then
+# its x- anchors go after the gateway's, and its services, configs, networks and volumes at the end of the gateway's
+# same sections; each "file: path" config (relative to deploy/) becomes inline content, indented, with $ escaped as $$,
+# as the gateway's build-portainer-stack.sh does. stack-header.txt, the comment Portainer operators read, goes before
+# the gateway's name:. Run again after a gateway or Ume.Rag change.
 #
 # The one line of the gateway's part that is rewritten: its bootstrap's
 #   UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
@@ -36,7 +40,8 @@
 # the stack's volume subpaths are newer than that Compose too (not tried on an older one).
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
-template="$here/compose.rag.template.yaml"
+rag="$here/../compose.rag.yaml"
+header="$here/stack-header.txt"
 manifest="$here/integration-manifest.json"
 committed="$here/compose.portainer.yaml"
 check=0; images=""
@@ -58,10 +63,10 @@ if [ -n "$images" ]; then
   while IFS='=' read -r var ref; do
     [ -n "$var" ] || continue
     printf '%s' "$ref" | grep -Eq '^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$' || { echo "$var in $images is not pinned by digest: $ref" >&2; exit 1; }
-    grep -q "\${RAG_${var}:-" "$template" || { echo "the template has no \${RAG_${var}:-...}" >&2; exit 1; }
-    sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" "$template"
+    grep -q "\${${var}:-" "$rag" || { echo "deploy/compose.rag.yaml has no \${${var}:-...}" >&2; exit 1; }
+    sed -i -E "s#\\\$\\{${var}:-[^}]*\\}#\${${var}:-${ref}}#g" "$rag"
   done < "$images"
-  echo "Pinned the template's images to $images"
+  echo "Pinned the images of deploy/compose.rag.yaml to $images"
 fi
 
 if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
@@ -79,10 +84,11 @@ if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
   gateway="$tmp"
 fi
 out="$committed"; [ "$check" = 0 ] || out="$out_tmp"
-python3 - "$gateway" "$template" "$here/.." "$out" "$manifest" <<'EOF'
+python3 - "$gateway" "$rag" "$header" "$here/.." "$out" "$manifest" <<'EOF'
 import json, re, sys
-gateway_path, template_path, deploy_dir, out_path, manifest_path = sys.argv[1:]
-gw = open(gateway_path, encoding="utf-8").read().replace("\r\n", "\n").split("\n")
+gateway_path, rag_path, header_path, deploy_dir, out_path, manifest_path = sys.argv[1:]
+read = lambda path: open(path, encoding="utf-8").read().replace("\r\n", "\n")
+gw = read(gateway_path).split("\n")
 
 # The integration manifest as the default of the gateway's UME_INTEGRATION_MANIFEST (the header says why). On one line,
 # in a single-quoted YAML scalar; "$" would start a variable for Compose and "'" would end the scalar.
@@ -101,20 +107,43 @@ gw[at[0]:at[0] + 1] = [
     indent + "UME_INTEGRATION_MANIFEST: '${UME_INTEGRATION_MANIFEST-" + manifest + "}'",
 ]
 
-sections, current = {}, None
-for line in open(template_path, encoding="utf-8").read().replace("\r\n", "\n").split("\n"):
-    if line.startswith("@SECTION "):
-        current = line.split()[1]; sections[current] = []; continue
-    if current is None:
-        continue  # the template's own comment
-    m = re.match(r"^( *)@INCLUDE (.+)$", line)
-    if m:
-        indent, path = m.groups()
-        for inc in open(f"{deploy_dir}/{path}", encoding="utf-8").read().replace("\r\n", "\n").rstrip("\n").split("\n"):
-            inc = inc.replace("$", "$$")
-            sections[current].append(indent + inc if inc else "")
+# Ume.Rag's file as the joined stack has it: the marks applied, then its top-level blocks (the file's own comment, before
+# the first key, is dropped).
+joined = []
+for line in read(rag_path).split("\n"):
+    if re.search(r"(^|\s)#@alone$", line.rstrip()):
         continue
-    sections[current].append(line)
+    m = re.match(r"^( *)#@joined (.*)$", line)
+    joined.append(m.group(1) + m.group(2) if m else line)
+blocks = []  # [key, lines after the key's line]
+for line in joined:
+    m = re.match(r"^([A-Za-z_][\w-]*):", line)
+    if m:
+        blocks.append([m.group(1), [line]])
+    elif blocks:
+        blocks[-1][1].append(line)
+sections = {"x": []}
+for key, lines in blocks:
+    if key.startswith("x-"):
+        sections["x"] += lines
+    elif key in ("services", "configs", "networks", "volumes"):
+        sections[key] = lines[1:]
+    else:
+        sys.exit(f"{rag_path}: the top-level {key}: has no place in the joined stack (mark it #@alone)")
+# Each "file: path" config as inline content.
+configs = []
+for line in sections.get("configs", []):
+    m = re.match(r"^( *)file: (\S+)$", line)
+    if not m:
+        configs.append(line)
+        continue
+    indent, path = m.groups()
+    configs.append(indent + "content: |")
+    for inc in read(f"{deploy_dir}/{path.removeprefix('./')}").rstrip("\n").split("\n"):
+        inc = inc.replace("$", "$$")
+        configs.append(indent + "  " + inc if inc else "")
+sections["configs"] = configs
+sections["header"] = read(header_path).split("\n")
 for body in sections.values():
     while body and body[-1] == "":
         body.pop()
@@ -141,7 +170,7 @@ for key, body in sections.items():
 inserts.append((0, ["# GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it",
                     "# from the gateway's deploy/compose.portainer.yaml (below, unchanged but for the default of",
                     "# UME_INTEGRATION_MANIFEST)",
-                    "# and deploy/portainer/compose.rag.template.yaml.",
+                    "# and deploy/compose.rag.yaml, with deploy/portainer/stack-header.txt.",
                     "# Do not edit it by hand; the gateway's own note below refers to the gateway's part.", "#"]))
 out = list(gw)
 for index, lines in sorted(inserts, key=lambda p: p[0], reverse=True):
@@ -151,7 +180,7 @@ EOF
 if [ "$check" = 1 ]; then
   if ! diff -u "$committed" "$out" > "$tmp.diff"; then
     head -60 "$tmp.diff"; rm -f "$tmp.diff"
-    echo "deploy/portainer/compose.portainer.yaml is not what the template gives: run deploy/portainer/build-stack.sh current" >&2
+    echo "deploy/portainer/compose.portainer.yaml is not what deploy/compose.rag.yaml gives: run deploy/portainer/build-stack.sh current" >&2
     exit 1
   fi
   rm -f "$tmp.diff"

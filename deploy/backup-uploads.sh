@@ -8,10 +8,10 @@
 #
 #   deploy/backup-uploads.sh [--env-file FILE] [--state-dir DIR]
 #
-# It runs the rag-upload-backup service of compose.prod.yaml (profile backup: the postgres image's shell as uid 1654,
-# read-only blob volume, no network) with UME_RAG_UPLOAD_BACKUP_DIR from deploy/.env mounted as the target: a directory
-# on the backup share, or deploy/upload-backup with --backup-target local. An S3 target is not built yet: replicate the
-# bucket's uploads/ prefix (bucket replication or rclone) once the blob store moves to S3 (§6.4).
+# It runs the rag-upload-backup service of compose.backup.yaml (profile backup: a shell as uid 1654, read-only blob
+# volume, no network) with UME_RAG_UPLOAD_BACKUP_DIR from deploy/.env mounted as the target: a directory on the backup
+# share, or the volume rag-upload-copy with --backup-target local. An S3 target is not built yet: replicate the bucket's
+# uploads/ prefix (bucket replication or rclone) once the blob store moves to S3 (§6.4).
 #
 # Options:
 #   --env-file FILE    [deploy/.env] the deployment
@@ -36,9 +36,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -r "$env_file" ] || die "cannot read $env_file: run deploy/init-deployment.sh first, or pass --env-file"
-target="$(sed -n 's/^UME_RAG_UPLOAD_BACKUP_DIR=//p' "$env_file" | tail -n 1)"
-[ -n "$target" ] || die "UME_RAG_UPLOAD_BACKUP_DIR is empty in $env_file (an S3 backup target has no upload copy yet)"
-[ -d "$target" ] || die "the upload copy's directory $target does not exist (is the backup share mounted?)"
+# KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
+env_value() { sed -n "s/^$1=//p" "$env_file" | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
+case "$(env_value UME_RAG_BACKUP_TARGET)" in
+  "") die "UME_RAG_BACKUP_TARGET is empty in $env_file: no backup target, so no upload copy";;
+  s3://*) die "an S3 backup target has no upload copy yet";;
+esac
+target="$(env_value UME_RAG_UPLOAD_BACKUP_DIR)"
+[ -z "$target" ] || [ -d "$target" ] || die "the upload copy's directory $target does not exist (is the backup share mounted?)"
+target="${target:-the volume rag-upload-copy}"
 mkdir -p "$state_dir"
 
 # Inside the container: /data/blobs/rag is the blob store's root (BlobStore:Root), .staging/ holds writes in progress

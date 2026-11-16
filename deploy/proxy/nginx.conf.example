@@ -1,7 +1,8 @@
-# nginx in front of Ume.Rag (re-encrypting to the HTTPS listeners), in the shape of the gateway's deploy/proxy (#468).
-# deploy/init-deployment.sh --proxy fills in the @placeholders@ and writes proxy/nginx.conf; with --openwebui-host it
-# also enables the lines marked #owui. Add your own ssl_certificate / ssl_certificate_key (your PKI or Let's Encrypt).
-# Pass the Host header through unchanged: the admin UI builds its OIDC redirect URIs from it.
+# nginx of your own in front of Ume.Rag on a Compose host (re-encrypting to the HTTPS listeners), in the shape of the
+# gateway's deploy/proxy (#468); the stack's own TLS proxy is the profile proxy. Fill in the @placeholders@ (@UPSTREAM@:
+# the address this proxy reaches the Compose host at; the ports are deploy/.env's), and enable the lines marked #owui
+# with the profile openwebui and #rolling with compose.rolling.yaml. Add your own ssl_certificate / ssl_certificate_key
+# (your PKI or Let's Encrypt). Pass the Host header through unchanged: the admin UI builds its OIDC redirect URIs from it.
 # Restrict the published ports to this proxy: init-deployment.sh --proxy-address (the host firewall) or a network firewall.
 
 # WebSocket upgrade (Open WebUI's live connection); other requests keep the pooled keep-alive connection.
@@ -91,7 +92,7 @@ server {
     }
 }
 
-# Open WebUI (optional, compose.openwebui.yaml): plain HTTP on the host; this proxy terminates TLS.
+# Open WebUI (the profile openwebui): plain HTTP on the host; this proxy terminates TLS.
 #owui server {
 #owui     listen 443 ssl;
 #owui     http2 on;

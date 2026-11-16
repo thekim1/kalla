@@ -45,7 +45,10 @@ trap cleanup EXIT
   echo "UME_RAG_WORKER_GATEWAY_KEY=worker-key-from-variable"; } > "$work/stack.env"
 dc() { docker compose -p "$project" -f "$stack" --env-file "$work/stack.env" "$@"; }
 
-helper="$(dc config --images | grep -m1 '/alpine/openssl@')" || fail "no alpine/openssl image in $stack"
+# The list first, then the search: grep -m1 on the pipe closes it early, and with pipefail a `config` that is still
+# writing then fails the line (seen once on the CI runner).
+images="$(dc config --images)" || fail "docker compose config --images failed for $stack"
+helper="$(grep -m1 '/alpine/openssl@' <<< "$images")" || fail "no alpine/openssl image in $stack"
 in_helper() { docker run --rm --network none --entrypoint /bin/sh "$@"; }
 
 # The gateway's volumes as its bootstrap and migrations leave them: a CA certificate in ume-certs, and the manifest's

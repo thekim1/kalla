@@ -38,6 +38,15 @@
 #                                              UME_RAG_BACKUP_S3_REGION, default us-east-1), or anything else for a
 #                                              posix repository at /var/lib/pgbackrest. Unset (the Portainer stack):
 #                                              no repository settings
+# And what only a Compose host without the gateway in its stack has (deploy/compose.rag.yaml and its overlays); unset,
+# nothing of it happens:
+#   UME_RAG_BOOTSTRAP_PROXY_GATEWAY=no         the TLS proxy has no blocks for the gateway and its admin
+#   UME_RAG_HOST_MEMORY=24                     the 24 GB host's Postgres memory settings in rag-config's
+#                                              postgresql.conf, and ClamAV's 24 GB lines (below)
+#   clamd.conf and freshclam.conf in _CONFIG   the ClamAV image's confs, written to rag-config/clamav for rag-clamav,
+#                                              with UME_RAG_FRESHCLAM_PROXY=HOST:PORT as freshclam's HTTP proxy
+#   /backup/pgbackrest, /backup/uploads        the pgBackRest repository and the upload copy, when mounted: given to
+#                                              Postgres (999) and to the services' uid (1654)
 set -eu
 umask 077
 C="${UME_RAG_BOOTSTRAP_CERTS:-/certs}"
@@ -302,7 +311,37 @@ cp "$K"/start-with-sign-in.py "$F/openwebui/start-with-sign-in.py"
 cp "$K"/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp "$K"/pg_hba.conf "$F/postgres/pg_hba.conf"
 cp "$K"/postgresql.conf "$F/postgres/postgresql.conf"
+# A 24 GB host (repo-and-deployment §6.2): the memory settings postgresql.conf names in its comments.
+if [ "${UME_RAG_HOST_MEMORY:-16}" = 24 ]; then
+  sed -e 's/^shared_buffers = [0-9A-Za-z]*/shared_buffers = 1536MB/' -e 's/^effective_cache_size = [0-9A-Za-z]*/effective_cache_size = 3500MB/' \
+    -e 's/^maintenance_work_mem = [0-9A-Za-z]*/maintenance_work_mem = 1GB/' "$K/postgresql.conf" > "$F/postgres/postgresql.conf"
+  for s in shared_buffers=1536MB effective_cache_size=3500MB maintenance_work_mem=1GB; do
+    grep -q "^${s%%=*} = ${s#*=}" "$F/postgres/postgresql.conf" || { echo "rag-bootstrap: postgresql.conf has no ${s%%=*} line to set for a 24 GB host" >&2; exit 1; }
+  done
+fi
 cp "$K"/app-roles.sql "$F/migrations/app-roles.sql"
+# ClamAV's confs, only where the deployment gives the image's (repo-and-deployment §5.5): the image's unprivileged
+# entrypoint takes a setting only from a mounted file. A 24 GB host (rag-clamav's 3g) keeps the old engine during a
+# reload and test-loads updates before using them; a freshclam proxy is for a host whose egress goes through one.
+if [ -f "$K/clamd.conf" ] && [ -f "$K/freshclam.conf" ]; then
+  mkdir -p "$F/clamav"
+  cp "$K/clamd.conf" "$F/clamav/clamd.conf"; cp "$K/freshclam.conf" "$F/clamav/freshclam.conf"
+  if [ "${UME_RAG_HOST_MEMORY:-16}" = 24 ]; then
+    sed 's/^ConcurrentDatabaseReload no$/ConcurrentDatabaseReload yes/' "$K/clamd.conf" > "$F/clamav/clamd.conf"
+    sed 's/^TestDatabases no$/TestDatabases yes/' "$K/freshclam.conf" > "$F/clamav/freshclam.conf"
+    if ! grep -qx 'ConcurrentDatabaseReload yes' "$F/clamav/clamd.conf" || ! grep -qx 'TestDatabases yes' "$F/clamav/freshclam.conf"; then
+      echo "rag-bootstrap: the ClamAV confs no longer have the lines a 24 GB host changes" >&2; exit 1
+    fi
+  fi
+  fp="${UME_RAG_FRESHCLAM_PROXY:-}"
+  if [ -n "$fp" ]; then
+    printf '%s' "$fp" | grep -Eq '^[A-Za-z0-9.-]+:[0-9]+$' || { echo "rag-bootstrap: UME_RAG_FRESHCLAM_PROXY is HOST:PORT" >&2; exit 1; }
+    printf '\n# Egress through a proxy (UME_RAG_FRESHCLAM_PROXY).\nHTTPProxyServer %s\nHTTPProxyPort %s\n' "${fp%:*}" "${fp##*:}" \
+      >> "$F/clamav/freshclam.conf"
+  fi
+else
+  rm -rf "$F/clamav"
+fi
 # The TLS proxy's nginx.conf (profile proxy, M-17 C8): the template with the stack's host names. A host without a name
 # of its own (the gateway's admin on the gateway's name, rag-admin on rag-api's) gets no block, nor Open WebUI without
 # its profile; the checklist at the end says so.
@@ -314,11 +353,15 @@ case ",${COMPOSE_PROFILES:-}," in
     owui_host="${UME_RAG_OPENWEBUI_HOST:-}"
     # Every block has a marker and is written only for a valid host name, and only validated names reach sed (#711): a
     # URL or a typo leaves that block out and names it on the checklist instead of stopping rag-bootstrap.
-    if hostname_ok "$gw"; then enable="-e s/^#gateway//"
+    # Without the gateway in the stack (UME_RAG_BOOTSTRAP_PROXY_GATEWAY=no) neither gateway block, and nothing to note.
+    with_gateway="${UME_RAG_BOOTSTRAP_PROXY_GATEWAY:-yes}"
+    if [ "$with_gateway" = no ]; then gw=""; enable="-e /^#gateway/d"
+    elif hostname_ok "$gw"; then enable="-e s/^#gateway//"
     else gw=""; enable="-e /^#gateway/d"; proxy_todo="$proxy_todo|UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block"; fi
     if hostname_ok "$api"; then enable="$enable -e s/^#ragapi//"
     else api=""; enable="$enable -e /^#ragapi/d"; proxy_todo="$proxy_todo|UME_RAG_API_HOST is not a host name, so the proxy has no rag-api block"; fi
-    if hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="$enable -e s/^#gwadmin//"
+    if [ "$with_gateway" = no ]; then gw_admin=""; enable="$enable -e /^#gwadmin/d"
+    elif hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="$enable -e s/^#gwadmin//"
     else gw_admin=""; enable="$enable -e /^#gwadmin/d"
       proxy_todo="$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
     if hostname_ok "$rag_admin" && [ "$rag_admin" != "$api" ]; then enable="$enable -e s/^#ragadmin//"
@@ -359,6 +402,12 @@ chown 1000:1654 "$S/openwebui-feedback"
 chmod 2750 "$S/openwebui-feedback"
 chown -R 1654:1654 "$C/api" "$C/admin" "$C/worker" "$C/migrations" "$S/api" "$S/admin" "$S/worker" "$S/migrations" "$S/keys"
 chmod 755 "$C" "$S"
+# The pgBackRest repository and the upload copy where they are mounted (Compose's compose.backup.yaml): the directory
+# itself only, since a repository holds many files. A share that refuses root's chown is named on the checklist.
+for d in pgbackrest:999 uploads:1654; do
+  [ -d "/backup/${d%%:*}" ] || continue
+  chown "${d#*:}:${d#*:}" "/backup/${d%%:*}" 2>/dev/null || backup_todo="${backup_todo:-} /backup/${d%%:*}"
+done
 fi
 echo "rag-bootstrap: certificates and secrets ready"
 
@@ -406,6 +455,7 @@ IFS="$old_ifs"
 old_ifs="$IFS"; IFS='|'
 for item in $proxy_todo; do [ -z "$item" ] || note "$item"; done
 IFS="$old_ifs"
+[ -z "${backup_todo:-}" ] || note "could not give${backup_todo} to its user (uid 999 for pgbackrest, 1654 for uploads): chown it on the backup share"
 case ",${COMPOSE_PROFILES:-}," in
   *,openwebui,*)
     case "${UME_RAG_OPENWEBUI_HOST:-}" in "chat.${UME_DOMAIN:-}") ;;

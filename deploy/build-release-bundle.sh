@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
 # Builds the deployment bundle attached to a GitHub release (plans/platform/repo-and-deployment.md §7.2, as the
-# gateway's): the files a Docker host needs to run the production Compose files, with every image default pinned to
-# the released image by digest.
+# gateway's): the files a Docker host needs to run deploy/compose.rag.yaml and its overlays, with every image default
+# pinned to the released image by digest.
 #
-#   API_IMAGE=... ADMIN_IMAGE=... WORKER_IMAGE=... MIGRATIONS_IMAGE=... PARSER_IMAGE=... CLAMAV_IMAGE=... \
-#   RENDERER_IMAGE=... POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
+#   RAG_API_IMAGE=... RAG_ADMIN_IMAGE=... RAG_WORKER_IMAGE=... RAG_MIGRATIONS_IMAGE=... RAG_PARSER_IMAGE=... \
+#   RAG_CLAMAV_IMAGE=... RAG_RENDERER_IMAGE=... RAG_POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
 #
-# Each *_IMAGE is a full reference pinned by digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one
-# fails. Writes OUTPUT_DIR/ume-rag-VERSION.tar.gz: one top-level directory ume-rag-VERSION/ holding deploy/ (the Compose
-# files, the deployment scripts, postgres/, pgbackrest/, host/, the ClamAV confs init-deployment.sh copies, and redis/,
-# proxy/ and otel/ once they exist), docs/ (the operator documents) and images/renderer/seccomp.json (the renderer's
-# seccomp profile, at the path compose.ingestion.yaml names relative to deploy/), so the documented commands work
-# unchanged.
+# Each RAG_*_IMAGE (the variables of the Portainer stack and of a release's images.env) is a full reference pinned by
+# digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one fails. Writes OUTPUT_DIR/ume-rag-VERSION.tar.gz:
+# one top-level directory ume-rag-VERSION/ holding deploy/ (the Compose files, the deployment scripts, the bootstrap and
+# the static files compose.rag.yaml names, host/, kubernetes/ and the rest), docs/ (the operator documents) and the
+# files the overlays name relative to deploy/ (images/renderer/seccomp.json, images/clamav/clamd.conf and
+# freshclam.conf), so the documented commands work unchanged.
 #
 # Every ${X_IMAGE:-default} (or ${X_IMAGE:?message}) in the bundled Compose files becomes ${X_IMAGE:-<released image>},
 # so the variables still override the release. The bundle fails when a Compose file names an image variable that is
-# not listed here and whose default is not pinned by digest (OPENWEBUI_IMAGE is pinned in the repository), when an
-# image: line has neither a variable nor a digest, or when a listed variable is used by no Compose file.
+# not listed here and whose default is not pinned by digest (OPENWEBUI_IMAGE and RAG_PROXY_IMAGE are pinned in the
+# repository), when an image: line has neither a variable nor a digest, or when a listed variable is used by no Compose
+# file.
 set -euo pipefail
 
-usage="usage: build-release-bundle.sh VERSION OUTPUT_DIR (with API_IMAGE ... POSTGRES_IMAGE set)"
+usage="usage: build-release-bundle.sh VERSION OUTPUT_DIR (with RAG_API_IMAGE ... RAG_POSTGRES_IMAGE set)"
 version="${1:?$usage}"
 out="${2:?$usage}"
 die() { echo "error: $*" >&2; exit 1; }
 
-images=(API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE RENDERER_IMAGE POSTGRES_IMAGE)
+images=(RAG_API_IMAGE RAG_ADMIN_IMAGE RAG_WORKER_IMAGE RAG_MIGRATIONS_IMAGE RAG_PARSER_IMAGE RAG_CLAMAV_IMAGE
+  RAG_RENDERER_IMAGE RAG_POSTGRES_IMAGE)
 # A reference pinned by digest; the character set also keeps it safe in the sed replacement below.
 pinned='^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$'
 
@@ -43,27 +45,24 @@ out="$(cd "$out" && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 dest="$stage/$name/deploy"
-mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer"
+mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer" "$stage/$name/images/clamav"
 
 cd "$here"
-cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml compose.openwebui.yaml \
+cp compose.rag.yaml compose.backup.yaml compose.hardened.yaml compose.host-24g.yaml compose.clamav-conf.yaml \
   compose.rolling.yaml init-deployment.sh rolling-update.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh \
   escrow-keys.sh "$dest/"
-# redis/ is P2, proxy/ and otel/ come with their items: copied once they exist. openwebui/ holds compose.openwebui.yaml's
-# feedback-key-setup.py (M-17 C6).
-for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak; do
+# compose.rag.yaml's static files (postgres/, openwebui/, proxy/) and its default for the host directories (empty/);
+# redis/ is P2: copied once it exists.
+for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak empty; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
-# The integration manifest a gateway on the same host creates Ume.Rag's credential keys from (init-deployment.sh
-# --gateway-secrets-dir, docs/compose-quick-start.md), at its path in the repository.
+# The bootstrap (rag-bootstrap, and kubernetes/create-secrets.sh) and the integration manifest a gateway on the same
+# host creates Ume.Rag's credential keys from (init-deployment.sh --gateway-secrets-dir), at their paths in the
+# repository. The Portainer stack file carries its own copies.
 mkdir -p "$dest/portainer"
-cp portainer/integration-manifest.json "$dest/portainer/"
-# The bootstrap that kubernetes/create-secrets.sh runs (the Portainer stack file carries its own copy).
-cp portainer/bootstrap.sh "$dest/portainer/"
-# init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.
-mkdir -p "$dest/clamav"
-cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/clamav/"
-# compose.ingestion.yaml names the renderer's seccomp profile as ../images/renderer/seccomp.json.
+cp portainer/integration-manifest.json portainer/bootstrap.sh "$dest/portainer/"
+# compose.clamav-conf.yaml and compose.hardened.yaml name these relative to deploy/.
+cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$stage/$name/images/clamav/"
 cp "$repo/images/renderer/seccomp.json" "$stage/$name/images/renderer/"
 # The operator documents (platform plan §10: the upgrade guide ships with the release).
 cp "$repo/docs/production-setup.md" "$repo/docs/runbook.md" "$repo/docs/upgrade-guide.md" "$repo/docs/test-host.md" \
@@ -104,7 +103,7 @@ done < <(grep -HE '^\s*image:' "${compose_files[@]}" | grep -vF "\${" | grep -vE
 if [ -d kubernetes ]; then
   images_block="$(echo "images:"
     for var in "${images[@]}"; do
-      ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var%_IMAGE}"
+      ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var#RAG_}"; svc="${svc%_IMAGE}"
       echo "  - {name: ume-rag/${svc,,}, newName: $repo, digest: $digest}"
     done)"
   for k in kubernetes/base/kustomization.yaml kubernetes/components/*/kustomization.yaml; do
@@ -119,8 +118,8 @@ if [ -f "$portainer" ]; then
   sed 's/\r$//' "$portainer" > "$out/compose.portainer.yaml"
   for var in "${images[@]}"; do
     ref="${!var}"
-    grep -q "\${RAG_${var}:-" "$out/compose.portainer.yaml" || die "RAG_$var is not used in $portainer"
-    sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" "$out/compose.portainer.yaml"
+    grep -q "\${${var}:-" "$out/compose.portainer.yaml" || die "$var is not used in $portainer"
+    sed -i -E "s#\\\$\\{${var}:-[^}]*\\}#\${${var}:-${ref}}#g" "$out/compose.portainer.yaml"
   done
   echo "Wrote $out/compose.portainer.yaml"
 fi

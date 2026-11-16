@@ -1,7 +1,8 @@
 # Host units
 
 Systemd units and scripts for the pilot host (`plans/platform/repo-and-deployment.md` §6.1, §6.2 and §7.4). Install
-them as root after `deploy/init-deployment.sh` and **before** the first `docker compose up`:
+them as root after `deploy/init-deployment.sh` and, with `compose.hardened.yaml` (`--hardened`), **before** the first
+`docker compose up`:
 
 ```sh
 sudo deploy/host/install.sh            # reads UME_RAG_HOST_MEMORY from deploy/.env
@@ -9,19 +10,20 @@ systemctl list-timers 'rag-*'
 ```
 
 The install script copies the units to `/etc/systemd/system`, with the deployment's `deploy/` directory in place of
-`@DEPLOY_DIR@`, reloads systemd, enables `rag-firewall.service` and the timers, and warns when Docker does not use the
-systemd cgroup driver. Re-run it after an upgrade or after changing `--host-memory`. `--unit-dir DIR --no-enable` only
+`@DEPLOY_DIR@`, reloads systemd, enables what `COMPOSE_FILE` in `deploy/.env` uses (`rag-firewall.service` and the
+restart-unhealthy timer with `compose.hardened.yaml`, the backup timers with `compose.backup.yaml`, the certificate check
+always), and warns when Docker does not use the systemd cgroup driver. Re-run it after an upgrade or after changing `--host-memory`. `--unit-dir DIR --no-enable` only
 writes the rendered units (CI runs `systemd-analyze verify` on them).
 
 | Unit | What it does | When |
 |---|---|---|
-| `rag-ingestion.slice` | Caps the ingestion zone (rag-worker, rag-parser, rag-clamav, rag-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.ingestion.yaml`) |
+| `rag-ingestion.slice` | Caps the ingestion zone (rag-worker, rag-parser, rag-clamav, rag-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
 | `rag-firewall.service` + `.timer` | `docker-user-firewall.sh`: egress per Compose network in `DOCKER-USER`, no new connections from the networks to the host | After Docker starts or restarts, then every 15 minutes (host names resolved again) |
 | `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.service` + `.timer` | `backup-postgres.sh --status-only`: backup age and WAL archive age from `pgbackrest info` and `pg_stat_archiver` | Every 2 minutes |
 | `rag-upload-backup.service` + `.timer` | `backup-uploads.sh`: new files below `uploads/` to the upload copy, never overwriting | Every 10 minutes (not enabled with an S3 backup target) |
 | `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `ume-rag.restart-unhealthy=true` that are unhealthy (rag-clamav) | Every minute |
-| `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates under `UME_RAG_CERTS_DIR`; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
+| `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates in the `rag-certs` volume; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
 
 ## Requirements
 
@@ -43,7 +45,7 @@ sudo iptables -S UME-RAG-EGRESS
 ```
 
 A container sends all its egress through the network that holds its default route. Compose pins it with
-`gw_priority` (rag-api and rag-admin: `llm`; rag-worker: `crawl`), so `llm` allows the gateway, the OIDC authority, the Open WebUI host and the OTLP endpoint, and `crawl` the
+`gw_priority` (rag-api and rag-admin: `llm`; rag-worker: `rag-crawl`), so `llm` allows the gateway, the OIDC authority and the OTLP endpoint, `rag-edge` Open WebUI's OIDC provider, and `rag-crawl` the
 gateway, the OTLP endpoint, `UME_RAG_CRAWL_ALLOW` and the public Internet. The allow-lists name hosts, resolved when
 the script runs: a CDN-hosted name (`login.microsoftonline.com`, `database.clamav.net`) can move to addresses the rules
 do not have yet, until the next run. Where IT provides an egress proxy, send freshclam through it

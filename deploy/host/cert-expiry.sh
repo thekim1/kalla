@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Warns before an internal certificate expires (#705): the internal CA (ca.pem, 10 years) and each service certificate
-# (DIR/DIR.crt, 825 days) under the deployment's certificate directory. Nothing renews them on its own in a Compose
-# deployment, and Postgres's expired certificate fails every VerifyFull connection. rag-cert-expiry.timer runs this
-# daily; the service fails (systemctl --failed, the journal) while a certificate expires within the warning window.
+# (DIR/DIR.crt, 825 days) in the deployment's rag-certs volume. rag-bootstrap re-issues a service certificate only when
+# it runs and fewer than 30 days remain, and Postgres's expired certificate fails every VerifyFull connection.
+# rag-cert-expiry.timer runs this daily; the service fails (systemctl --failed, the journal) while a certificate
+# expires within the warning window.
 #
 #   deploy/host/cert-expiry.sh [--days N]
 #
 # Options:
 #   --days N            [60] warn when a certificate expires within N days
-#   --env-file FILE     [deploy/.env] the deployment: its UME_RAG_CERTS_DIR
-#   --certs-dir DIR     [UME_RAG_CERTS_DIR, else deploy/certs] the certificate directory (a Portainer host: the
-#                       rag-certs volume's directory, for example /var/lib/docker/volumes/<stack>_rag-certs/_data)
+#   --env-file FILE     [deploy/.env] the deployment: its rag-certs volume is read read-only through `docker run`
+#   --certs-dir DIR     a certificate directory instead (a copy of the volume, or a Portainer host's volume directory,
+#                       for example /var/lib/docker/volumes/<stack>_rag-certs/_data)
 #   --state-dir DIR     [$STATE_DIRECTORY, else /var/lib/ume-rag] where certs.prom goes
 #
 # Metrics (Prometheus text format in DIR/certs.prom, written atomically, next to backup.prom):
@@ -24,7 +25,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deploy_dir="$(dirname "$here")"
 env_file="$deploy_dir/.env"; certs=""; days=60; state_dir="${STATE_DIRECTORY:-/var/lib/ume-rag}"
 
-usage() { sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -38,12 +39,20 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$days" in ''|*[!0-9]*) die "--days must be a whole number";; esac
-[ -n "$certs" ] || certs="$(sed -n 's/^UME_RAG_CERTS_DIR=//p' "$env_file" 2>/dev/null | tail -n 1 || true)"
-certs="${certs:-$deploy_dir/certs}"
-[ -r "$certs/ca.pem" ] || die "cannot read $certs/ca.pem: run as root, or pass --certs-dir"
+if [ -z "$certs" ]; then
+  # The certificates (never the keys) out of the volume, read-only, with rag-bootstrap's image.
+  [ -r "$env_file" ] || die "cannot read $env_file: pass --env-file or --certs-dir"
+  dc() { docker compose --env-file "$env_file" "$@"; }
+  project="$(dc config | sed -n 's/^name: //p')"
+  image="$(dc config --images rag-bootstrap)"
+  [ -n "$project" ] && [ -n "$image" ] || die "cannot render the Compose project from $env_file"
+  certs="$(mktemp -d)"; trap 'rm -rf "$certs"' EXIT
+  docker run --rm --network none -v "${project}_rag-certs:/c:ro" --entrypoint /bin/sh "$image" -c \
+    'cd /c && find . \( -name "*.crt" -o -name ca.pem -o -name .san \) | tar -cf - -T -' | tar -xf - -C "$certs" \
+    || die "cannot read the volume ${project}_rag-certs"
+fi
+[ -r "$certs/ca.pem" ] || die "no readable $certs/ca.pem: run as root, or pass --certs-dir"
 
-# rag-bootstrap of the Portainer stack writes .san next to each certificate it issues, init-deployment.sh does not.
-portainer=0; [ -e "$certs/postgres/.san" ] && portainer=1
 now="$(date +%s)"; warn=0; metrics=""
 for crt in "$certs/ca.pem" "$certs"/*/*.crt; do
   [ -e "$crt" ] || continue
@@ -61,16 +70,13 @@ rag_cert_expiry_timestamp_seconds{file=\"$file\"} $end"
   fi
   warn=1
   svc="$(basename "$(dirname "$crt")")"
-  if [ "$portainer" = 1 ] && [ "$file" = ca.pem ]; then
-    how="replace the CA (docs/portainer.md, Internal certificates)"
-  elif [ "$portainer" = 1 ]; then
-    how="update the stack within 30 days of that date: rag-bootstrap re-issues it and says what to restart (docs/portainer.md)"
-  elif [ "$file" = ca.pem ]; then
-    how="init-deployment.sh --renew-ca with ca.key back on the host, then restart the stack (runbook, Secrets and certificates)"
-  elif [ -e "$certs/$svc/.internal" ] || [ "$svc" = postgres ] || [ "$svc" = worker ] || [ "$svc" = parser ]; then
-    how="init-deployment.sh --renew-certs with ca.key back on the host, then restart postgres and rag-parser (runbook, Secrets and certificates)"
+  # rag-bootstrap writes "operator" to .san for a certificate of yours (UME_RAG_PKI_DIR), the host names for its own.
+  if [ "$file" = ca.pem ]; then
+    how="replace the internal CA (docs/portainer.md, Internal certificates)"
+  elif [ "$(cat "$certs/$svc/.san" 2>/dev/null)" = operator ]; then
+    how="your PKI's certificate: put the new one in UME_RAG_PKI_DIR, then run rag-bootstrap again"
   else
-    how="your PKI's certificate: re-run init-deployment.sh with the new one (--api-cert/--admin-cert)"
+    how="run rag-bootstrap within 30 days of that date (Compose: docker compose --env-file deploy/.env up -d; Portainer: update the stack): it re-issues the certificate and says what to restart"
   fi
   echo "warning: $file expires $(date -u -d "@$end" +%F) ($left days): $how"
 done

@@ -237,7 +237,7 @@ fi
 ok "with no UME_INTEGRATION_MANIFEST set, the gateway's bootstrap got the stack file's default manifest"
 # The gateway's migrations created the integration Ume.Rag from it and wrote each key to the integration-secrets volume;
 # rag-bootstrap copied them to each service. The gateway accepts each one on its context.
-gw_helper="$(dc config --images | grep -m1 '/alpine/openssl@')"
+gw_helper="$(grep -m1 '/alpine/openssl@' <<< "$(dc config --images)")"
 docker run --rm --network none -v "${project}_ume-certs:/c:ro" --entrypoint cat "$gw_helper" /c/ca.pem > "$work/gateway-ca.pem" \
   || fail "could not read the gateway's CA from the volume ${project}_ume-certs"
 for svc in api admin worker; do
@@ -268,7 +268,7 @@ probe_admin https://adminapi:8443/health/live || fail "rag-admin could not reach
 ok "rag-admin reaches https://adminapi:8443 (the gateway's edge network)"
 
 echo "== rag-api"
-helper="$(dc config --images | grep -m1 '/alpine/openssl@')"
+helper="$(grep -m1 '/alpine/openssl@' <<< "$(dc config --images)")"
 docker run --rm --network none -v "${project}_rag-certs:/c:ro" --entrypoint cat "$helper" /c/ca.pem > "$work/ca.pem" \
   || fail "could not read rag-bootstrap's CA from the volume ${project}_rag-certs"
 https() { curl -sS --cacert "$work/ca.pem" --max-time 15 "$@"; }

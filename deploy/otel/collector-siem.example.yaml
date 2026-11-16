@@ -2,7 +2,7 @@
 # rag-admin and rag-worker to a SIEM. Copied from the gateway's deploy/otel/collector-siem.example.yaml, with RAG's
 # category and app name. See docs/security-events.md, "Getting them to the SIEM".
 #
-# Point the services at the collector: UME_RAG_OTEL_ENDPOINT=https://otel-collector.internal:4317 in deploy/.env
+# Point the services at the collector: UME_OTEL_ENDPOINT=https://otel-collector.internal:4317 in deploy/.env
 # (Compose; the host firewall then allows it), OTEL_EXPORTER_OTLP_ENDPOINT in a Kubernetes overlay. The gateway and
 # RAG can share one collector: add the gateway's category to the filter below.
 # Security events are the log records whose logger category (exported as the instrumentation scope) is

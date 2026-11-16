@@ -1,0 +1,63 @@
+# Overlay for a Compose host with backups (repo-and-deployment §7.4): WAL archiving with pgBackRest inside rag-postgres,
+# and the upload copy rag-upload-backup, which deploy/backup-uploads.sh runs from rag-upload-backup.timer
+# (deploy/host/). init-deployment.sh --backup-target adds it to COMPOSE_FILE. rag-bootstrap writes the repository's
+# settings to rag-secrets/pgbackrest/repo.conf from UME_RAG_BACKUP_TARGET, generating the passphrase once (escrow it:
+# deploy/escrow-keys.sh). Once per new database or repository, then WAL archiving works:
+#
+#   docker compose --env-file deploy/.env exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create
+#
+# UME_RAG_BACKUP_TARGET: s3://ENDPOINT/BUCKET[/PATH] (with UME_RAG_BACKUP_S3_KEY and UME_RAG_BACKUP_S3_KEY_SECRET; the
+# upload copy to S3 is not built yet), or a posix repository: UME_RAG_BACKUP_DIR, a directory on the backup share, and
+# UME_RAG_UPLOAD_BACKUP_DIR for the upload copy; without them two Docker volumes (test hosts only: not off the host).
+
+services:
+  rag-bootstrap:
+    environment:
+      UME_RAG_BACKUP_TARGET: ${UME_RAG_BACKUP_TARGET:?Set UME_RAG_BACKUP_TARGET in deploy/.env, or leave out compose.backup.yaml}
+      UME_RAG_BACKUP_S3_KEY: ${UME_RAG_BACKUP_S3_KEY:-}
+      UME_RAG_BACKUP_S3_KEY_SECRET: ${UME_RAG_BACKUP_S3_KEY_SECRET:-}
+      UME_RAG_BACKUP_S3_REGION: ${UME_RAG_BACKUP_S3_REGION:-}
+    # rag-bootstrap gives the repository to Postgres and the upload copy to the services' uid.
+    volumes:
+      - ${UME_RAG_BACKUP_DIR:-rag-pgbackrest-repo}:/backup/pgbackrest
+      - ${UME_RAG_UPLOAD_BACKUP_DIR:-rag-upload-copy}:/backup/uploads
+
+  rag-postgres:
+    # postgresql.conf as it is: archive_mode on, archive_command pgbackrest archive-push.
+    command: !override [postgres, -c, config_file=/run/config/postgresql.conf]
+    volumes:
+      # The repository settings and passphrase, which pgBackRest appends to the image's /etc/pgbackrest/pgbackrest.conf.
+      - {type: volume, source: rag-secrets, target: /etc/pgbackrest/conf.d, read_only: true, volume: {subpath: pgbackrest}}
+      # A posix repository; unused with S3.
+      - ${UME_RAG_BACKUP_DIR:-rag-pgbackrest-repo}:/var/lib/pgbackrest
+    # backup: archive-push and the timer's backups reach the backup target (the host firewall allows only that).
+    networks: [backup]
+
+  # The upload copy (§7.4): new files below uploads/ to the copy, never overwriting one (blob keys are write-once). The
+  # profile keeps `up` from starting it; rag-bootstrap's image is used for its shell and coreutils only.
+  rag-upload-backup:
+    image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
+    profiles: [backup]
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    restart: "no"
+    entrypoint: [/bin/sh]
+    cpus: 0.5
+    cpu_shares: 128
+    mem_limit: 256m
+    pids_limit: 64
+    volumes:
+      - {type: volume, source: rag-blobs, target: /data/blobs, read_only: true}
+      - ${UME_RAG_UPLOAD_BACKUP_DIR:-rag-upload-copy}:/backup
+    # No network: the copy is a host directory or a volume.
+    network_mode: none
+
+networks:
+  backup: {driver: bridge}
+
+volumes:
+  rag-pgbackrest-repo:
+  rag-upload-copy:

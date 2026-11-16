@@ -12,7 +12,7 @@ exception, with its own steps.
 
 ## Unreleased
 
-- **Rolling update: yes.** No migration, no new variable, nothing to do.
+- **Rolling update: yes** for Portainer and Kubernetes. No migration, no new variable, nothing to do.
 - **Compose:** an interactive re-run of `init-deployment.sh` (no `--yes`) now asks for the sign-in provider's address
   when neither `--oidc-authority` nor `deploy/.env` gives one: leave it empty to keep the provider in the setup wizard,
   or type it so the host firewall lets rag-admin reach it. New and optional: `--gateway-secrets-dir`, which reads the
@@ -27,6 +27,20 @@ exception, with its own steps.
   connection strings.
 - **The prerequisite was stated too low:** the Compose files need Docker Compose 2.33.1 or later (`gw_priority`), as
   they have since they pinned each service's default route; the guides said 2.24.
+- **Portainer: nothing changes.** The stack file is generated from `deploy/compose.rag.yaml` now, with the same
+  services, volumes, networks and variables; update the stack as for any release.
+- **Compose: no in-place upgrade; install again.** Compose runs `deploy/compose.rag.yaml` with the Portainer stack's
+  names (`rag-postgres`, the volumes `rag-postgres-data`, `rag-certs`, `rag-secrets`, `rag-config`, the `RAG_*_IMAGE`
+  variables), and `rag-bootstrap` keeps the certificates and secrets in volumes instead of `deploy/certs` and
+  `deploy/secrets`. No Compose installation exists outside tests, so there is no migration. To carry an installation's
+  data over, keep before the new install: the database volume `ume-rag_postgres-data` with the role passwords that
+  open it (`deploy/secrets/postgres/*_password`), `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal`
+  and `deploy/certs/data-protection.pfx` (without these three the database is unusable), and the `ume-rag_rag-blobs`
+  volume. Then run the new `init-deployment.sh` (`--help`) and, before the first `up`, copy the old database volume's
+  contents into `ume-rag_rag-postgres-data` and the kept files to the same paths in the `rag-secrets` volume
+  (`.pepper`, `postgres/`, `keys/`) and the `rag-certs` volume (`data-protection.pfx`), owned as `rag-bootstrap` leaves
+  them; `up` then runs `rag-bootstrap`, which keeps them and copies them to each service. **This carry-over
+  is written from how `rag-bootstrap` treats existing files and has not been run**: try it on a copy first.
 
 ## 0.7.0
 

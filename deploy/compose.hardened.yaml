@@ -1,0 +1,57 @@
+# Overlay for a hardened Compose host (repo-and-deployment §6.1, §6.2), with the units of deploy/host/ installed before
+# the first `up` (deploy/host/install.sh): init-deployment.sh --hardened adds it to COMPOSE_FILE.
+#   - fixed subnets in 172.30.0.0/16, so deploy/host/docker-user-firewall.sh gives each network its egress rule (keep
+#     the range out of Docker's default-address-pools; the firewall's --print-subnets lists the same ones);
+#   - the ingestion zone (rag-worker, rag-parser, rag-clamav, rag-renderer) in rag-ingestion.slice, which caps it as a
+#     whole (cgroup v2 with Docker's systemd cgroup driver; empty UME_RAG_INGESTION_SLICE where it is not installed);
+#   - the CPU weights of the resource zones (§6.2);
+#   - the restart-unhealthy label: Docker restarts a container only when its main process exits, and ClamAV's and the
+#     renderer's do not when they hang, so rag-restart-unhealthy.timer restarts them;
+#   - the renderer with Moby's default seccomp profile plus what Chromium's sandbox needs (images/renderer/seccomp.json;
+#     the release bundle carries it at the same relative path), instead of no seccomp filter.
+# With the firewall, rag-admin reaches only the sign-in provider named in UME_RAG_OIDC_AUTHORITY (init-deployment.sh
+# asks for it), so the setup wizard's test sign-in needs it.
+
+x-ingestion-slice: &ingestion-slice ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
+
+services:
+  rag-postgres:
+    cpu_shares: 1024
+  rag-migrate:
+    cpu_shares: 512
+  rag-api:
+    cpu_shares: 1024
+  rag-admin:
+    cpu_shares: 512
+  rag-worker:
+    cgroup_parent: *ingestion-slice
+    cpu_shares: 256
+  rag-parser:
+    cgroup_parent: *ingestion-slice
+    cpu_shares: 128
+  rag-clamav:
+    cgroup_parent: *ingestion-slice
+    cpu_shares: 128
+    labels:
+      ume-rag.restart-unhealthy: "true"
+  rag-renderer:
+    cgroup_parent: *ingestion-slice
+    cpu_shares: 128
+    security_opt: !override
+      - no-new-privileges:true
+      - seccomp=../images/renderer/seccomp.json
+    labels:
+      ume-rag.restart-unhealthy: "true"
+
+# The subnets deploy/host/docker-user-firewall.sh knows (CI compares them). backup is compose.backup.yaml's; llm and
+# rag-edge hold the default routes of rag-api and rag-admin (llm) and of Open WebUI (rag-edge), rag-crawl the worker's.
+networks:
+  rag-edge: {ipam: {config: [{subnet: 172.30.1.0/24}]}}
+  rag-data: {ipam: {config: [{subnet: 172.30.2.0/24}]}}
+  llm: {ipam: {config: [{subnet: 172.30.3.0/24}]}}
+  rag-ingestion: {ipam: {config: [{subnet: 172.30.4.0/24}]}}
+  rag-parser: {ipam: {config: [{subnet: 172.30.5.0/24}]}}
+  rag-crawl: {ipam: {config: [{subnet: 172.30.6.0/24}]}}
+  rag-mirror: {ipam: {config: [{subnet: 172.30.7.0/24}]}}
+  backup: {ipam: {config: [{subnet: 172.30.16.0/24}]}}
+  rag-render: {ipam: {config: [{subnet: 172.30.18.0/24}]}}
