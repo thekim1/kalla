@@ -27,7 +27,10 @@
 # as the gateway's build-portainer-stack.sh does. stack-header.txt, the comment Portainer operators read, goes before
 # the gateway's name:. Run again after a gateway or Ume.Rag change.
 #
-# The one line of the gateway's part that is rewritten: its bootstrap's
+# Two lines of the gateway's part are rewritten. Its adminapi's
+#   Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
+# gets https://adminapi:8443/integration/v1 as its default (unset only), the address rag-admin reaches it at in this
+# stack, so the cost and budget read-back needs no variable. And its bootstrap's
 #   UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
 # gets integration-manifest.json (beside this script, written on one line) as its default, so the gateway creates the
 # integration Ume.Rag and its three credential keys with nothing typed (M-20 S8). The default applies only when the
@@ -107,6 +110,19 @@ gw[at[0]:at[0] + 1] = [
     indent + "UME_INTEGRATION_MANIFEST: '${UME_INTEGRATION_MANIFEST-" + manifest + "}'",
 ]
 
+# The Integration API's address as the default of the gateway's UME_INTEGRATION_API_URL: in this stack rag-admin
+# shares the edge network with adminapi, so the address is always the same and nobody has to type it.
+passed = "Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}"
+at = [i for i, l in enumerate(gw) if l.strip() == passed]
+if len(at) != 1:
+    sys.exit(f"the gateway's file has {len(at)} lines '{passed}', expected 1: see this script's header")
+indent = gw[at[0]][: len(gw[at[0]]) - len(gw[at[0]].lstrip())]
+gw[at[0]:at[0] + 1] = [
+    indent + "# Rewritten by the RAG repository's build-stack.sh: adminapi's own address in this stack as the default, used",
+    indent + "# only while the variable is unset. Set and empty, the gateway announces no Integration API.",
+    indent + "Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL-https://adminapi:8443/integration/v1}",
+]
+
 # Ume.Rag's file as the joined stack has it: the marks applied, then its top-level blocks (the file's own comment, before
 # the first key, is dropped).
 joined = []
@@ -169,7 +185,7 @@ for key, body in sections.items():
 
 inserts.append((0, ["# GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it",
                     "# from the gateway's deploy/compose.portainer.yaml (below, unchanged but for the default of",
-                    "# UME_INTEGRATION_MANIFEST)",
+                    "# UME_INTEGRATION_MANIFEST and of UME_INTEGRATION_API_URL)",
                     "# and deploy/compose.rag.yaml, with deploy/portainer/stack-header.txt.",
                     "# Do not edit it by hand; the gateway's own note below refers to the gateway's part.", "#"]))
 out = list(gw)

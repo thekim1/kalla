@@ -18,6 +18,9 @@
 # is unset: the 0.6.0 variables without their manifest line get it (compared as JSON), and with UME_INTEGRATION_MANIFEST=
 # (set, empty) the gateway's bootstrap gets an empty value and provisions nothing.
 #
+# fixtures/stack-0.5.0.env, a 0.5.x stack's variables (keys issued by hand, retired variables still there): it renders
+# too, stays declared, hands a hand-issued key to rag-bootstrap and needs no UME_INTEGRATION_API_URL.
+#
 # And fixtures/stack-stage1.env, the variables of stack.env.example before M-20 S8 (five CHANGE values, among them
 # UME_DOMAIN, and the manifest with an owner): the stack's own authority, gateway names, public URL and manifest win over
 # UME_DOMAIN's defaults, and Ume.Rag's names come from the domain.
@@ -122,6 +125,26 @@ if [ "$(manifest)" = "$(fixture_value "$stage1" UME_INTEGRATION_MANIFEST)" ] && 
   ok "stage 1: the gateway's bootstrap gets the stack's own manifest, with its owner"
 else
   fail "stage 1: the gateway's bootstrap's UME_INTEGRATION_MANIFEST is not the stack's own: $(manifest)"
+fi
+
+# A 0.5.x stack (docs/portainer.md, "Upgrade": one step from 0.5.x): its variables, with keys issued by hand.
+old5="$here/fixtures/stack-0.5.0.env"
+sed -e 's/^UME_RAG_API_GATEWAY_KEY=$/UME_RAG_API_GATEWAY_KEY=hand-issued-api-key/' "$old5" > "$work/0.5.env"
+render "$work/0.5.env" "0.5.x's variables"
+ok "the stack renders with 0.5.x's variables and nothing added (retired ones are ignored)"
+authority=https://keycloak.example.se/realms/ume
+is rag-admin Oidc__Authority "$authority" "0.5.x: rag-admin's authority is the stack's (declared, no setup wizard)"
+is rag-bootstrap UME_RAG_OIDC_CLIENT_SECRET a-value "0.5.x: rag-bootstrap gets rag-admin's client secret (declared)"
+is adminapi Oidc__Authority "$authority" "0.5.x: the gateway's admin keeps its authority"
+is rag-bootstrap UME_RAG_API_GATEWAY_KEY hand-issued-api-key "0.5.x: a key issued by hand reaches rag-bootstrap, where it wins over the manifest's"
+is rag-api Knowledge__PublicBaseUrl https://rag.example.se "0.5.x: rag-api's public URL is the stack's UME_RAG_API_PUBLIC_URL"
+is rag-bootstrap UME_RAG_API_HOST rag.example.se "0.5.x: rag-api's host name is unchanged"
+is rag-bootstrap UME_RAG_OPENWEBUI_HOST chat.example.se "0.5.x: Open WebUI's host name is unchanged"
+is gateway Gateway__IntegrationApiUrl https://adminapi:8443/integration/v1 "0.5.x: no UME_INTEGRATION_API_URL is needed (the gateway announces adminapi's address in the stack by default)"
+if [ "$(jq -S -c . <<< "$(manifest)" 2>/dev/null)" = "$(jq -S -c . "$default_manifest")" ]; then
+  ok "0.5.x: without UME_INTEGRATION_MANIFEST the gateway's bootstrap gets the default manifest"
+else
+  fail "0.5.x: the gateway's bootstrap gets '$(manifest)', not integration-manifest.json"
 fi
 
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s) failed"; exit 1; fi
