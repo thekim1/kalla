@@ -11,8 +11,6 @@
 #   - a second run with none of the value options keeps every secret and every value: the keys, the client secret, the
 #     repository settings, the certificates
 #   - a missing host name, and --datastores without a repository, stop with one line
-#   - the upgrade: on directories that init-deployment.sh made, every secret is kept and only the service certificates
-#     are issued again, from the same CA (this part goes when init-deployment.sh no longer generates secrets)
 #
 #   deploy/tests/kubernetes-secrets.sh
 set -euo pipefail
@@ -89,24 +87,3 @@ grep -q -- '--domain or --api-host is required' <<< "$out" || fail "no host name
 out="$(bash "$deploy/kubernetes/create-secrets.sh" --generate-only --certs-dir "$t/n/certs" --secrets-dir "$t/n/secrets" --api-host a.example.se --datastores 2>&1)" && fail "--datastores without a repository was accepted"
 grep -q -- '--datastores needs a pgBackRest repository' <<< "$out" || fail "--datastores without a repository: $out"
 ok "no host name, and --datastores without a repository, stop with one line"
-
-echo "== an installation made with init-deployment.sh"
-mkdir -p "$t/up"; cp -R "$deploy" "$t/up/deploy"; rm -rf "$t/up/deploy/certs" "$t/up/deploy/secrets" "$t/up/deploy/.env"
-bash "$t/up/deploy/init-deployment.sh" --no-chown --yes --api-host rag.example.se --admin-host rag-admin.example.se \
-  --gateway-url https://llm.example.se --gateway-credential-key-file worker="$t/worker.key" \
-  --oidc-client-secret-file "$t/oidc.secret" --backup-target s3://s3.example.se/bucket \
-  --backup-s3-credentials-file "$t/s3.cred" --allow-file-keys --render > "$t/init.log" 2>&1 || { tail -20 "$t/init.log"; fail "init-deployment.sh failed"; }
-sums "$t/up/deploy" > "$t/up1"
-bash "$t/up/deploy/kubernetes/create-secrets.sh" --generate-only --api-host rag.example.se --admin-host rag-admin.example.se \
-  --datastores --renderer > "$t/up.log" 2>&1 || { cat "$t/up.log"; fail "create-secrets.sh failed on init-deployment.sh's directories"; }
-sums "$t/up/deploy" > "$t/up2"
-# Every file init-deployment.sh wrote is unchanged, except the five service certificates and their keys.
-# (Compared by exact name in awk: join pairs names by the locale's collation, and one that ignores punctuation took
-# secrets/.openwebui-jwt-secret and the new secrets/openwebui/jwt-secret for the same file on the CI runner.)
-changed="$(awk 'NR == FNR { before[$2] = $1; next } ($2 in before) && before[$2] != $1 { print $2 }' "$t/up1" "$t/up2" | LC_ALL=C sort | tr '\n' ' ')"
-expected="certs/admin/admin.crt certs/admin/admin.key certs/api/api.crt certs/api/api.key certs/parser/parser.crt certs/parser/parser.key certs/postgres/postgres.crt certs/postgres/postgres.key certs/worker/worker.crt certs/worker/worker.key "
-[ "$changed" = "$expected" ] || fail "the upgrade changed: $changed"
-for svc in api admin worker parser postgres; do
-  openssl verify -CAfile "$t/up/deploy/certs/ca.pem" "$t/up/deploy/certs/$svc/$svc.crt" >/dev/null 2>&1 || fail "$svc's new certificate is not from the kept CA"
-done
-ok "on init-deployment.sh's directories every secret is kept; only the service certificates are new, from the same CA"

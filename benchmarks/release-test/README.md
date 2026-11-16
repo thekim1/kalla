@@ -22,7 +22,7 @@ or by hand on the test host. Modelled on the gateway's `benchmarks/compare` (`k6
 
 Chat p95 time to first token in phase 2 ≤ 1.10 × phase 1, no error responses (status, error event, stream without
 `data: [DONE]` or without answer text, connection failures; k6's dropped iterations count too), no Postgres connection
-refusals (`too many clients already`, reserved slots, role limit, or SQLSTATE 53300 in the logs of `postgres`,
+refusals (`too many clients already`, reserved slots, role limit, or SQLSTATE 53300 in the logs of `rag-postgres`,
 `rag-api`, `rag-admin`, `rag-worker` during the phase), and the background load still running when phase 2 ends.
 
 Load: `--rate` 5 streamed messages/s in total for 10 minutes per phase, of which the stream probe sends `--probe-rate`

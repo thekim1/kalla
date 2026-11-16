@@ -1,112 +1,32 @@
-# The RAG part of compose.portainer.yaml. deploy/portainer/build-stack.sh adds each section below to the same section of
-# the gateway's deploy/compose.portainer.yaml (taken unchanged) and inlines the "@INCLUDE path" lines, so the gateway
-# and RAG run as one Portainer stack. Every RAG name starts with rag- (services, networks, volumes, configs): nothing
-# of the gateway's is renamed, and its volumes keep their names. rag-api, rag-admin and rag-worker join the gateway's
-# llm network to reach https://gateway:8443, trusting the gateway's CA. rag-admin's organisation and model syncs call
-# the gateway there too (/v1/ume/context and /v1/models, with its credential key).
+# Ume.Rag's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
+# runs this file directly, as the project ume-rag:
 #
-# Differences from compose.prod.yaml + compose.ingestion.yaml, for a host without deploy/host/ and init-deployment.sh:
-# no fixed subnets and no host firewall, no ingestion slice (cgroup_parent), no pgBackRest (archive_mode off: back up
-# with pg_dump or volume snapshots), and the renderer behind the render profile (it needs a seccomp profile Portainer
-# cannot read from a file; see rag-renderer).
+#   deploy/init-deployment.sh ...                       # deploy/.env: the domain, the gateway, the optional parts
+#   docker compose --env-file deploy/.env up -d --wait  # its COMPOSE_FILE names this file and the overlays
+#
+# The one-shot rag-bootstrap (deploy/portainer/bootstrap.sh) creates the certificates and secrets in the volumes
+# rag-certs and rag-secrets on the first start and the static configuration in rag-config on every start; the end of
+# its log lists what is still missing and points at the setup wizard (https://<admin host>/setup, with the setup code in
+# rag-admin's log). Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx
+# with the database (deploy/escrow-keys.sh). The overlays, for a Compose host only:
+#   compose.backup.yaml       WAL archiving and pgBackRest (UME_RAG_BACKUP_TARGET), the upload copy rag-upload-backup
+#   compose.hardened.yaml     fixed subnets for the host firewall, the ingestion slice, the restart-unhealthy labels,
+#                             the renderer's seccomp profile and the CPU weights (deploy/host/)
+#   compose.host-24g.yaml     the 24 GB host's limits
+#   compose.clamav-conf.yaml  ClamAV's confs for the 24 GB host and freshclam's proxy
+#   compose.rolling.yaml      a second rag-api and rag-admin for updates without downtime (deploy/rolling-update.sh)
+#
+# deploy/portainer/build-stack.sh merges this file with the gateway's Portainer stack into
+# deploy/portainer/compose.portainer.yaml (its header: deploy/portainer/stack-header.txt), and these marks say what
+# differs there, as the blocks of deploy/proxy/nginx.portainer.conf.template are marked: a line that exists only in
+# the joined stack is a comment "#@joined <line>" (the gateway's bootstrap, migrations, CA and manifest keys), and a
+# line that exists only here ends in "#@alone" (the network llm, the host directories, rag-bootstrap's settings for a
+# stack without the gateway). Each file: config becomes inline content there. Everything else is the same in both.
+#
+# Required: UME_DOMAIN (or UME_RAG_API_HOST) and UME_RAG_GATEWAY_URL, the gateway's https URL. The variables are the
+# Portainer stack's (deploy/portainer/stack.env.example; init-deployment.sh --help).
+name: ume-rag  #@alone
 
-@SECTION header
-#
-# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
-# The same stack also runs Ume Rag: rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker,
-# rag-parser and, with their profiles in COMPOSE_PROFILES, rag-clamav (clamav) and rag-renderer (render). Its one-shot
-# rag-bootstrap creates RAG's certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first
-# start. Keep the stack name: the gateway's volumes are found by it.
-#
-# Start from deploy/portainer/stack.env.example (Portainer: "Load variables from .env file"); after each deploy the end
-# of rag-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
-# them (built from a gateway release). Steps: docs/portainer.md.
-#
-# Required variable: one, the gateway's too
-#   UME_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
-#                             llm-admin.<domain> (the gateway's), rag.<domain> (rag-api), rag-admin.<domain>
-#                             (rag-admin) and chat.<domain> (Open WebUI). Each UME_RAG_*_HOST (Optional, below)
-#                             overrides its name; without UME_DOMAIN, UME_GATEWAY_HOST and UME_RAG_API_HOST are
-#                             required instead
-# Set by the stack file or stack.env.example, nothing to type
-#   UME_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
-#                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
-#                             its own (ume-rag) that a gateway admin can move. The gateway's migrations create what is
-#                             missing (never change what exists) and write each new key to the volume
-#                             <stack>_integration-secrets, from which rag-bootstrap gives each service its key (M-17
-#                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
-#                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
-#   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
-#                             manifest's. Without a key the stack starts but that service's model calls are refused. To
-#                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
-#                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
-#   UME_INTEGRATION_API_URL   (the gateway's) https://adminapi:8443/integration/v1: the Integration API's address the
-#                             gateway hands rag-admin in its context, for the cost and budget read-back (rag-admin
-#                             joins the gateway's edge network to reach adminapi)
-# Recommended
-#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
-#                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
-# Sign-in is set in two setup wizards, the gateway's first: https://<UME_ADMIN_HOST>/setup with the setup code from
-# adminapi's log (the gateway's part above), then https://<UME_RAG_ADMIN_HOST>/setup with the setup code from
-# rag-admin's log. Each shows the redirect URIs to register, takes its client secret and tests a sign-in. rag-admin's
-# wizard suggests the provider saved in the gateway's. A stack that sets UME_OIDC_AUTHORITY declares the provider for
-# both instead (locked in both wizards; UME_RAG_OIDC_AUTHORITY gives rag-admin another).
-# Optional
-#   UME_RAG_OIDC_CLIENT_SECRET  declares RAG admin's own OIDC client's secret instead of the wizard (client
-#                             UME_RAG_OIDC_CLIENT_ID, default ume-rag-admin): with the authority, the wizard never opens.
-#                             The token's shape, each optional and the wizard's otherwise: UME_RAG_OIDC_ROLE_CLAIM,
-#                             _DEPARTMENT_CLAIM, _TEAM_CLAIM, _GROUP_CLAIM, _EXTRA_SCOPE, _TENANT_ID (Entra ID) and
-#                             _REFUSE_GUESTS (true or false); a variable set locks its field in the wizard
-#   UME_RAG_API_PUBLIC_URL    rag-api's public URL when it is not https://<UME_RAG_API_HOST> (a port:
-#                             https://rag.example.se:8543); citation links are absolute
-#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN  the break-glass group(s) for the first platform admin (';'-separated), for an
-#                             identity provider whose tokens carry groups instead of the role rag-platform-admin in the
-#                             roles claim; the other roles' groups are set in RAG's admin (Settings, Role groups)
-#   UME_RAG_API_HOST (rag.<domain>), UME_RAG_ADMIN_HOST (rag-admin.<domain>; without UME_DOMAIN, rag-api's name)
-#   UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
-#   UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
-#                             residencies in the gateway (register M2: OnPrem and Eu)
-#   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
-#   COMPOSE_PROFILES=clamav,openwebui  also rag-openwebui, Open WebUI as the chat for users, on plain HTTP at
-#                             UME_RAG_OPENWEBUI_BIND (127.0.0.1):UME_RAG_OPENWEBUI_PORT (3000) for a TLS proxy in front
-#                             (it sets Secure cookies, so users reach it over HTTPS only). It calls rag-api inside the
-#                             stack. Set with it:
-#     UME_RAG_OPENWEBUI_HOST      its public hostname (default chat.<domain>)
-#     Its sign-in is the setup wizard's Open WebUI step (redirect URI
-#                             https://<UME_RAG_OPENWEBUI_HOST>/oauth/oidc/login/callback; until the admin UI has that
-#                             step, declare a confidential client's secret). To declare it instead:
-#                             UME_RAG_OPENWEBUI_OIDC_CLIENT_ID (open-webui), UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET,
-#                             UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL (default rag-admin's authority's
-#                             /.well-known/openid-configuration) and the button's label
-#                             UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME (Umeå kommun); each one set wins and locks its field.
-#                             rag-api serves them to Open WebUI's start (deploy/openwebui/start-with-sign-in.py), which
-#                             restarts Open WebUI within a minute of a change; without a provider, Open WebUI starts
-#                             without sign-in
-#                             Open WebUI's key for rag-api is generated by rag-bootstrap, and rag-migrate registers it as
-#                             the deployment's own Open WebUI client in RAG's admin (Apps and keys); nothing to paste
-#                             The feedback import needs nothing either: Open WebUI's first user is the service account
-#                             feedback-import@localhost, and the one-shot rag-openwebui-setup mints its API key after
-#                             Open WebUI starts (password sign-in stays off) and keeps it while it works. A new key: delete
-#                             <stack>_rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
-#   UME_RAG_SETUP_REOPEN      empty; any new value (for example today's date) opens the setup wizard once, for an hour,
-#                             with a new setup code in rag-admin's log (remove it before restoring a database)
-#   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
-#                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
-#                             Portainer if the packages are private)
-#   COMPOSE_PROFILES=proxy    rag-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
-#                             gateway (UME_GATEWAY_HOST), its admin (UME_ADMIN_HOST), rag-api (UME_RAG_API_HOST),
-#                             rag-admin (UME_RAG_ADMIN_HOST) and Open WebUI (UME_RAG_OPENWEBUI_HOST), each a name of its
-#                             own, on UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT (0.0.0.0:443). UME_RAG_PROXY_CERTS_DIR
-#                             (/etc/ume-rag/proxy-certs) is a host directory with tls.crt (full chain) and tls.key for
-#                             every name (SAN or wildcard), readable by uid 101; renewing it: replace both files and
-#                             restart rag-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
-#                             variables) and list the proxy as a trusted proxy in both admins (docs/portainer.md)
-# Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
-# without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
-# with pg_dump or volume snapshots.
-
-@SECTION x
 x-rag-certs: &rag-certs-mount
   type: volume
   source: rag-certs
@@ -125,7 +45,14 @@ x-rag-secrets: &rag-secrets-mount
   target: /run/app-secrets
   read_only: true
 
-@SECTION services
+# The gateway's anchor in the Portainer stack.  #@alone
+x-hardened: &hardened  #@alone
+  read_only: true  #@alone
+  cap_drop: [ALL]  #@alone
+  security_opt: [no-new-privileges:true]  #@alone
+  tmpfs: [/tmp]  #@alone
+
+services:
   rag-bootstrap:
     image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
     restart: "no"
@@ -138,9 +65,13 @@ x-rag-secrets: &rag-secrets-mount
       # versions evaluate it even when the outer variable is set).
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-${UME_DOMAIN:+rag-admin.}${UME_DOMAIN:-}}
-      # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
-      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
+      #@joined # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
+      #@joined UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
+      #@joined UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
+      # Without the gateway in the stack: its CA is optional (one with a public certificate needs none), and the TLS  #@alone
+      # proxy has no blocks for the gateway and its admin.  #@alone
+      UME_RAG_BOOTSTRAP_GATEWAY_CA: optional  #@alone
+      UME_RAG_BOOTSTRAP_PROXY_GATEWAY: "no"  #@alone
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
@@ -183,13 +114,21 @@ x-rag-secrets: &rag-secrets-mount
       - rag-config:/conf
       - rag-blobs:/blobs
       - rag-openwebui-data:/openwebui-data
-      - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
-      # The credential keys the gateway's migrations created from UME_INTEGRATION_MANIFEST (M-17 C7).
-      - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
-    depends_on:
-      bootstrap: {condition: service_completed_successfully}
-      # The gateway's migrations write the manifest's keys before rag-bootstrap copies them.
-      migrations: {condition: service_completed_successfully}
+      #@joined - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
+      #@joined # The credential keys the gateway's migrations created from UME_INTEGRATION_MANIFEST (M-17 C7).
+      #@joined - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
+      # Host directories, each deploy/empty while unset: the gateway's CA (its ca.pem), the credential keys a gateway  #@alone
+      # on this host wrote from Ume.Rag's manifest (Ume.Rag/rag-<service>), more CAs to trust (*.pem: a sign-in  #@alone
+      # provider's or a database's) and your own certificates for rag-api and rag-admin (api.crt and api.key,  #@alone
+      # admin.crt and admin.key), used instead of the internal CA's.  #@alone
+      - {type: bind, source: "${UME_RAG_GATEWAY_CA_DIR:-./empty}", target: /gateway-certs, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${UME_RAG_GATEWAY_SECRETS_DIR:-./empty}", target: /integration-secrets, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${UME_RAG_TRUST_DIR:-./empty}", target: /trust, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${UME_RAG_PKI_DIR:-./empty}", target: /pki, read_only: true, bind: {create_host_path: false}}  #@alone
+    #@joined depends_on:
+    #@joined   bootstrap: {condition: service_completed_successfully}
+    #@joined   # The gateway's migrations write the manifest's keys before rag-bootstrap copies them.
+    #@joined   migrations: {condition: service_completed_successfully}
     network_mode: none
 
   rag-postgres:
@@ -271,7 +210,8 @@ x-rag-secrets: &rag-secrets-mount
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
       Rag__Roles: knowledge,chat,mcp
       BlobStore__Root: /data/blobs/rag
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
       # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
@@ -301,7 +241,7 @@ x-rag-secrets: &rag-secrets-mount
     depends_on:
       rag-postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
-      gateway: {condition: service_started}
+      #@joined gateway: {condition: service_started}
     networks:
       rag-edge: {}
       rag-data: {}
@@ -358,7 +298,8 @@ x-rag-secrets: &rag-secrets-mount
       OpenWebUi__Oidc__ProviderName: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-}
       OpenWebUi__PublicUrl: https://${UME_RAG_OPENWEBUI_HOST:-${UME_DOMAIN:+chat.}${UME_DOMAIN:-localhost}}
       BlobStore__Root: /data/blobs/rag
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -385,8 +326,8 @@ x-rag-secrets: &rag-secrets-mount
       rag-edge: {}
       rag-data: {}
       llm: {gw_priority: 1}
-      # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
-      edge: {}
+      #@joined # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
+      #@joined edge: {}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
@@ -421,7 +362,8 @@ x-rag-secrets: &rag-secrets-mount
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
       TMPDIR: /data/blobs/spool
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
       Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
@@ -500,6 +442,7 @@ x-rag-secrets: &rag-secrets-mount
   # Chromium's sandbox needs user namespaces, which Docker's default seccomp profile blocks, and Portainer cannot read
   # images/renderer/seccomp.json from a file, so this service runs without Docker's seccomp filter (Chromium's own
   # sandbox stays on). Without it, the worker refuses rendering and indexes the pages' HTML as served.
+  # On a Compose host, compose.hardened.yaml gives it that seccomp profile instead.  #@alone
   rag-renderer:
     <<: *hardened
     profiles: [render]
@@ -522,7 +465,7 @@ x-rag-secrets: &rag-secrets-mount
     networks: [rag-render]
 
   rag-openwebui:
-    # Open WebUI as the users' chat (compose.openwebui.yaml in a Compose deployment; chat design §14), with the profile
+    # Open WebUI as the users' chat (chat design §14), with the profile
     # openwebui. Plain HTTP for a TLS proxy in front; it calls rag-api inside the stack, trusting RAG's CA through
     # openwebui/ca.pem (the public CAs, RAG's and the gateway's, from rag-bootstrap).
     <<: *hardened
@@ -637,11 +580,12 @@ x-rag-secrets: &rag-secrets-mount
         bind: {create_host_path: false}
     depends_on:
       rag-bootstrap: {condition: service_completed_successfully}
-      gateway: {condition: service_started}
-      adminapi: {condition: service_started}
+      #@joined gateway: {condition: service_started}
+      #@joined adminapi: {condition: service_started}
       rag-api: {condition: service_started}
       rag-admin: {condition: service_started}
-    networks: [edge, rag-edge]
+    #@joined networks: [edge, rag-edge]
+    networks: [rag-edge]  #@alone
 
   rag-openwebui-setup:
     # One-shot, profile openwebui (M-17 C6): the feedback service account's API key for rag-api's import, minted with a
@@ -668,33 +612,25 @@ x-rag-secrets: &rag-secrets-mount
       rag-openwebui: {condition: service_started}
     networks: [rag-edge]
 
-@SECTION configs
+configs:
   rag-bootstrap-script:
-    content: |
-      @INCLUDE portainer/bootstrap.sh
+    file: ./portainer/bootstrap.sh
   rag-postgres-init:
-    content: |
-      @INCLUDE postgres/init.sql
+    file: ./postgres/init.sql
   rag-postgres-hba:
-    content: |
-      @INCLUDE postgres/pg_hba.conf
+    file: ./postgres/pg_hba.conf
   rag-postgres-conf:
-    content: |
-      @INCLUDE postgres/postgresql.conf
+    file: ./postgres/postgresql.conf
   rag-app-roles:
-    content: |
-      @INCLUDE postgres/app-roles.sql
+    file: ./postgres/app-roles.sql
   rag-openwebui-setup-script:
-    content: |
-      @INCLUDE openwebui/feedback-key-setup.py
+    file: ./openwebui/feedback-key-setup.py
   rag-openwebui-start-script:
-    content: |
-      @INCLUDE openwebui/start-with-sign-in.py
+    file: ./openwebui/start-with-sign-in.py
   rag-proxy-conf-template:
-    content: |
-      @INCLUDE proxy/nginx.portainer.conf.template
+    file: ./proxy/nginx.portainer.conf.template
 
-@SECTION networks
+networks:
   rag-edge: {driver: bridge}
   rag-data: {driver: bridge, internal: true}
   rag-ingestion: {driver: bridge, internal: true}
@@ -702,8 +638,11 @@ x-rag-secrets: &rag-secrets-mount
   rag-render: {driver: bridge, internal: true}
   rag-crawl: {driver: bridge}
   rag-mirror: {driver: bridge}
+  # The gateway's network in the Portainer stack; here Ume.Rag's own, which holds the default route of rag-api and  #@alone
+  # rag-admin: they reach the gateway (UME_RAG_GATEWAY_URL) and the sign-in provider through it.  #@alone
+  llm: {driver: bridge}  #@alone
 
-@SECTION volumes
+volumes:
   rag-postgres-data:
   rag-openwebui-data:
   rag-certs:

@@ -1,46 +1,41 @@
 #!/usr/bin/env bash
 # Pilot stack checks (plans/archive/p1b/README.md §3 item 17; plans/platform/repo-and-deployment.md §6.2; chat-api/design.md
-# §4.3, §14.2), offline with `docker compose config` against placeholder settings:
+# §4.3, §14.2), offline with `docker compose config` of deploy/compose.rag.yaml and its overlays, against placeholder
+# settings:
 #
-#   - the base files (compose.prod.yaml + compose.ingestion.yaml) keep every cpus cap at 2 or less (decisions table,
-#     "Low CPU during development") and carry the 16 GB limits of §6.2;
-#   - with compose.host-24g.yaml (and compose.clamav-conf.yaml, as init-deployment.sh --host-memory 24 lists them) every
-#     container has the pilot caps and the 24 GB limits of §6.2, the parser runs 2 slots x 2 threads and postgres the
-#     24 GB memory settings; deploy/host/install.sh --host-memory 24 writes the slice's MemoryMax=11G;
-#   - compose.openwebui.yaml: the §6.2 row for open-webui, API keys only for the feedback routes, the admin's chat
+#   - the base file with compose.hardened.yaml (its CPU weights) keeps every cpus cap at 2 or less (decisions table,
+#     "Low CPU during development") and carries the 16 GB limits of §6.2;
+#   - with compose.host-24g.yaml and compose.clamav-conf.yaml (as init-deployment.sh --host-memory 24 lists them) every
+#     container has the pilot caps and the 24 GB limits of §6.2, the parser runs 2 slots x 2 threads and rag-bootstrap
+#     writes the 24 GB Postgres settings (UME_RAG_HOST_MEMORY); deploy/host/install.sh --host-memory 24 writes the
+#     slice's MemoryMax=11G;
+#   - the openwebui profile: the §6.2 row for rag-openwebui, API keys only for the feedback routes, the admin's chat
 #     access and export off, password sign-in always off, OIDC users as role user, its OIDC settings from rag-api through
-#     start-with-sign-in.py (identity design §19); open-webui-setup (the feedback key,
-#     M-17 C6) as Open WebUI's user, read-only, without capabilities, writing only secrets/openwebui-feedback;
-#   - init-deployment.sh --openwebui-host writes the feedback service account once (a re-run keeps its password),
-#     secrets/openwebui-feedback exists for rag-api's mount, and Open WebUI's client secret goes to secrets/api and
-#     secrets/admin, not to openwebui.env.
+#     start-with-sign-in.py (identity design §19); rag-openwebui-setup (the feedback key, M-17 C6) as Open WebUI's user,
+#     read-only, without capabilities, writing only rag-secrets/openwebui-feedback and its store;
+#   - the backup overlay's upload copy as the services' uid, read-only, without a network.
 #
 #   deploy/tests/pilot-stack.sh
 #
-# Needs Docker with Compose v2, jq and openssl. Prints "ok: ..." per check and PASS, or "FAIL: ..." and exits 1.
+# Needs Docker with Compose v2 and jq. Prints "ok: ..." per check and PASS, or "FAIL: ..." and exits 1.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 d="$repo/deploy"
-for tool in docker jq openssl; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
+for tool in docker jq; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
-# Placeholder settings, as verify.yml's "Production Compose files are valid".
-export UME_RAG_CERTS_DIR=/certs UME_RAG_SECRETS_DIR="$work/secrets"
-export UME_RAG_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume UME_RAG_GATEWAY_URL=https://llm.example.se
-export UME_RAG_API_PUBLIC_URL=https://rag-api.example.se UME_RAG_OPENWEBUI_HOST=chat.example.se
-export UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui UME_RAG_OPENWEBUI_DATA_DIR=/openwebui-data
-export UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration
-unset UME_RAG_OPENWEBUI_PASSWORD_AUTH
-mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
+# The files and these placeholders are under test: an inherited variable would override them.
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME_|RAG_|COMPOSE_|OPENWEBUI_IMAGE$)' || true)
+export UME_DOMAIN=example.se UME_RAG_GATEWAY_URL=https://llm.example.se UME_RAG_BACKUP_TARGET=local
 
 failures=0
 ok() { echo "ok: $*"; }
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
-render() { # render FILE... — the merged configuration as JSON, with the clamav and render profiles on (their caps too)
+render() { # render FILE... — the merged configuration as JSON, with the clamav, render and openwebui profiles on
   local args=() f
-  for f in "$@"; do args+=(-f "$d/$f"); done
-  docker compose "${args[@]}" --profile clamav --profile render config --format json
+  for f in "$@"; do args+=(-f "$d/compose.$f.yaml"); done
+  docker compose "${args[@]}" --profile clamav --profile render --profile openwebui --profile backup config --format json
 }
 bytes() { # bytes SIZE — Compose's byte count for 1.5g, 384m, ...
   awk -v s="$1" 'BEGIN { n = s + 0; u = substr(s, length(s));
@@ -64,118 +59,77 @@ env_is() { # env_is JSON SERVICE KEY VALUE
   if [ "$got" = "$4" ]; then ok "$2: $3=$4"; else fail "$2: $3 is '$got', expected '$4'"; fi
 }
 
-# --- Base files: development caps, 16 GB limits ---------------------------------------------------------------------
-base="$(render compose.prod.yaml compose.ingestion.yaml)"
+# --- The base file and its CPU weights: development caps, 16 GB limits --------------------------------------------
+base="$(render rag hardened)"
 expect "$base" '
-postgres    2   1024 2g   3g   512
-rag-api     2   1024 384m 1g   512
-rag-admin   1   512  256m 512m 256
-rag-migrate 1   512  -    512m 128
-rag-worker  1.5 256  512m 1.5g 512
-rag-parser  2   128  2g   3.5g 256
-rag-clamav  1   128  1.2g 1.5g 128
-rag-renderer 2  128  256m 2g   512'
+rag-postgres  2   1024 2g   3g   512
+rag-api       2   1024 384m 1g   512
+rag-admin     1   512  256m 512m 256
+rag-migrate   1   512  -    512m 128
+rag-worker    1.5 256  512m 1.5g 512
+rag-parser    2   128  2g   3.5g 256
+rag-clamav    1   128  1.2g 1.5g 128
+rag-renderer  2   128  256m 2g   512
+rag-openwebui 1   512  512m 1.5g 256'
 over="$(jq -r '.services | to_entries[] | select((.value.cpus // 0) > 2) | .key' <<< "$base")"
-if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail "base files: cpus above 2: $over"; fi
+if [ -z "$over" ]; then ok "base file: every cpus cap is 2 or less"; else fail "base file: cpus above 2: $over"; fi
 env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
-env_is "$base" rag-api OpenWebUi__BaseUrl ""
+env_is "$base" rag-bootstrap UME_RAG_HOST_MEMORY '<unset>'
 
 # --- 24 GB pilot host: pilot caps and limits ------------------------------------------------------------------------
-pilot="$(render compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml)"
+pilot="$(render rag hardened host-24g clamav-conf)"
 expect "$pilot" '
-postgres    3   1024 2g   5g   512
-rag-api     2   1024 384m 1.5g 512
-rag-admin   1   512  256m 768m 256
-rag-migrate 1   512  -    512m 128
-rag-worker  1.5 256  512m 2g   512
-rag-parser  4   128  2g   6g   256
-rag-clamav  1   128  1.2g 3g   128
-rag-renderer 2  128  256m 2g   512'
+rag-postgres  3   1024 2g   5g   512
+rag-api       2   1024 384m 1.5g 512
+rag-admin     1   512  256m 768m 256
+rag-migrate   1   512  -    512m 128
+rag-worker    1.5 256  512m 2g   512
+rag-parser    4   128  2g   6g   256
+rag-clamav    1   128  1.2g 3g   128
+rag-renderer  2   128  256m 2g   512'
 env_is "$pilot" rag-parser PARSER_WORKERS 2
 env_is "$pilot" rag-parser PARSER_THREADS 2
 env_is "$pilot" rag-parser PARSER_SLOT_MAX_RSS_MB 2600
-for setting in shared_buffers=1536MB effective_cache_size=3500MB maintenance_work_mem=1GB; do
-  if jq -e --arg s "$setting" '.services.postgres.command | index($s)' <<< "$pilot" >/dev/null; then
-    ok "postgres: -c $setting"
-  else fail "postgres: -c $setting missing"; fi
-done
+env_is "$pilot" rag-bootstrap UME_RAG_HOST_MEMORY 24
+if jq -e '.services["rag-clamav"].volumes | map(select(.target == "/etc/clamav" and .volume.subpath == "clamav")) | length == 1' \
+  <<< "$pilot" >/dev/null; then ok "rag-clamav: its confs from rag-config/clamav"; else fail "rag-clamav: no confs from rag-config/clamav"; fi
 bash "$d/host/install.sh" --unit-dir "$work/units" --host-memory 24 --no-enable >/dev/null
 if grep -qx 'MemoryMax=11G' "$work/units/rag-ingestion.slice.d/50-host-memory.conf"; then
   ok "rag-ingestion.slice: MemoryMax=11G on a 24 GB host"
 else fail "rag-ingestion.slice: no MemoryMax=11G drop-in for a 24 GB host"; fi
 
-# --- Open WebUI -----------------------------------------------------------------------------------------------------
-owui="$(render compose.openwebui.yaml)"
-expect "$owui" 'open-webui 1 512 512m 1.5g 256'
-env_is "$owui" open-webui ENABLE_API_KEYS true
-env_is "$owui" open-webui ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS true
-env_is "$owui" open-webui API_KEYS_ALLOWED_ENDPOINTS /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
-env_is "$owui" open-webui USER_PERMISSIONS_FEATURES_API_KEYS false
-env_is "$owui" open-webui ENABLE_ADMIN_CHAT_ACCESS false
-env_is "$owui" open-webui ENABLE_ADMIN_EXPORT false
-env_is "$owui" open-webui ENABLE_LOGIN_FORM false
-env_is "$owui" open-webui ENABLE_PASSWORD_AUTH false
-env_is "$owui" open-webui DEFAULT_USER_ROLE user
-env_is "$owui" open-webui ENABLE_PERSISTENT_CONFIG false
-env_is "$owui" open-webui DEFAULT_MODEL_METADATA '{"capabilities":{"builtin_tools":false}}'
-env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" open-webui ENABLE_PASSWORD_AUTH false
-# Its OIDC settings come from rag-api through the start wrapper (identity design §19).
-env_is "$owui" open-webui UME_RAG_SIGN_IN_URL https://rag-api.example.se/internal/openwebui/sign-in
-if [ "$(jq -c '.services["open-webui"].entrypoint' <<< "$owui")" = '["python3","-I","/config/start-with-sign-in.py","--","bash","start.sh"]' ]; then
-  ok "open-webui: starts through start-with-sign-in.py"
-else fail "open-webui: entrypoint is $(jq -c '.services["open-webui"].entrypoint' <<< "$owui")"; fi
-setup_ok="$(jq -r '.services["open-webui-setup"] | [.user, (.read_only | tostring), (.cap_drop | join(",")),
+# --- Open WebUI (the openwebui profile) -----------------------------------------------------------------------------
+owui="$(render rag)"
+env_is "$owui" rag-openwebui ENABLE_API_KEYS true
+env_is "$owui" rag-openwebui ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS true
+env_is "$owui" rag-openwebui API_KEYS_ALLOWED_ENDPOINTS /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
+env_is "$owui" rag-openwebui USER_PERMISSIONS_FEATURES_API_KEYS false
+env_is "$owui" rag-openwebui ENABLE_ADMIN_CHAT_ACCESS false
+env_is "$owui" rag-openwebui ENABLE_ADMIN_EXPORT false
+env_is "$owui" rag-openwebui ENABLE_LOGIN_FORM false
+env_is "$owui" rag-openwebui ENABLE_PASSWORD_AUTH false
+env_is "$owui" rag-openwebui DEFAULT_USER_ROLE user
+env_is "$owui" rag-openwebui ENABLE_PERSISTENT_CONFIG false
+env_is "$owui" rag-openwebui DEFAULT_MODEL_METADATA '{"capabilities":{"builtin_tools":false}}'
+env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render rag)" rag-openwebui ENABLE_PASSWORD_AUTH false
+# Its OIDC settings come from rag-api through the start wrapper (identity design §19), inside the stack.
+env_is "$owui" rag-openwebui UME_RAG_SIGN_IN_URL https://rag-api:8443/internal/openwebui/sign-in
+env_is "$owui" rag-openwebui WEBUI_URL https://chat.example.se
+want='["python3","-I","/config/start-with-sign-in.py","--secrets-dir","/run/owui-secrets","--","bash","start.sh"]'
+if [ "$(jq -c '.services["rag-openwebui"].entrypoint' <<< "$owui")" = "$want" ]; then
+  ok "rag-openwebui: starts through start-with-sign-in.py"
+else fail "rag-openwebui: entrypoint is $(jq -c '.services["rag-openwebui"].entrypoint' <<< "$owui")"; fi
+setup_ok="$(jq -r '.services["rag-openwebui-setup"] | [.user, (.read_only | tostring), (.cap_drop | join(",")),
   ([.volumes[] | select(.read_only != true) | .target] | sort | join(","))] | join(" ")' <<< "$owui")"
 if [ "$setup_ok" = "1000:1000 true ALL /data,/run/feedback" ]; then
-  ok "open-webui-setup: uid 1000, read-only, no capabilities, writes only /data and /run/feedback"
-else fail "open-webui-setup: expected '1000:1000 true ALL /data,/run/feedback', got '$setup_ok'"; fi
+  ok "rag-openwebui-setup: uid 1000, read-only, no capabilities, writes only /data and /run/feedback"
+else fail "rag-openwebui-setup: expected '1000:1000 true ALL /data,/run/feedback', got '$setup_ok'"; fi
 
-# --- init-deployment.sh: the feedback service account ---------------------------------------------------------------
-# The 24 GB profile copies the ClamAV image's confs from ../images/clamav, as in the repository.
-i="$work/init"; mkdir -p "$i/keys" "$i/images"; cp -r "$d" "$i/deploy"; cp -r "$repo/images/clamav" "$i/images/"
-for k in api admin worker owui-secret; do printf '%s-placeholder\n' "$k" > "$i/keys/$k"; done
-init() {
-  bash "$i/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
-    --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
-    --gateway-credential-key-file api="$i/keys/api" --gateway-credential-key-file admin="$i/keys/admin" \
-    --gateway-credential-key-file worker="$i/keys/worker" --openwebui-host chat.example.se \
-    --openwebui-oidc-client-secret-file "$i/keys/owui-secret" \
-    --backup-target local --host-memory 24 --allow-file-keys --no-chown --yes > "$i/init.log"
-}
-account() { grep -E '^WEBUI_ADMIN_(EMAIL|NAME|PASSWORD)=' "$i/deploy/secrets/openwebui.env"; }
-init; account > "$i/first"
-init; account > "$i/second"
-if grep -qx "WEBUI_ADMIN_EMAIL='feedback-import@localhost'" "$i/first" &&
-   grep -qE "^WEBUI_ADMIN_PASSWORD='[0-9a-f]{64}'$" "$i/first"; then
-  ok "init-deployment.sh: the feedback service account is in secrets/openwebui.env"
-else fail "init-deployment.sh: no feedback service account in secrets/openwebui.env"; fi
-if diff -q "$i/first" "$i/second" >/dev/null; then ok "init-deployment.sh: a re-run keeps the service account"
-else fail "init-deployment.sh: a re-run changed the service account"; fi
-if [ -d "$i/deploy/secrets/openwebui-feedback" ]; then ok "init-deployment.sh: secrets/openwebui-feedback exists for rag-api's mount"
-else fail "init-deployment.sh: no secrets/openwebui-feedback"; fi
-# Open WebUI's client secret is a deployment value of rag-api and rag-admin (identity design §19), never Open WebUI's env.
-if [ "$(cat "$i/deploy/secrets/api/OpenWebUi__Oidc__ClientSecret")" = owui-secret-placeholder ] &&
-   [ "$(cat "$i/deploy/secrets/admin/OpenWebUi__Oidc__ClientSecret")" = owui-secret-placeholder ] &&
-   ! grep -q 'OAUTH_\|owui-secret-placeholder' "$i/deploy/secrets/openwebui.env"; then
-  ok "init-deployment.sh --openwebui-oidc-client-secret-file: the secret in secrets/api and secrets/admin, not in openwebui.env"
-else fail "init-deployment.sh --openwebui-oidc-client-secret-file: the secret is not where rag-api and rag-admin read it, or in openwebui.env"; fi
-if grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=' "$i/deploy/.env" && grep -qx 'UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=' "$i/deploy/.env"; then
-  ok "init-deployment.sh: without --openwebui-oidc-client-id and -provider-url, neither is a deployment value"
-else fail "init-deployment.sh: deploy/.env sets Open WebUI's client id or provider without the options"; fi
-if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
-  ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
-else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi
-if ! grep -q "UME_RAG_GATEWAY_MAX_RESIDENCY" "$i/deploy/.env"; then ok "init-deployment.sh: no residency variable (the credential keys' residencies, M-17 C9)"
-else fail "init-deployment.sh: deploy/.env still sets UME_RAG_GATEWAY_MAX_RESIDENCY"; fi
-if grep -q "compose.host-24g.yaml" "$i/deploy/.env"; then ok "init-deployment.sh --host-memory 24: COMPOSE_FILE has compose.host-24g.yaml"
-else fail "init-deployment.sh --host-memory 24: compose.host-24g.yaml not in COMPOSE_FILE"; fi
-if (
-  unset UME_RAG_CERTS_DIR UME_RAG_SECRETS_DIR UME_RAG_OIDC_AUTHORITY UME_RAG_GATEWAY_URL UME_RAG_API_PUBLIC_URL \
-    UME_RAG_OPENWEBUI_HOST UME_RAG_OPENWEBUI_OIDC_CLIENT_ID UME_RAG_OPENWEBUI_DATA_DIR UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL
-  docker compose -f "$i/deploy/compose.openwebui.yaml" --env-file "$i/deploy/.env" config --quiet
-  docker compose --env-file "$i/deploy/.env" config --quiet
-); then ok "the generated deploy/.env renders the main stack (24 GB) and Open WebUI"
-else fail "the generated deploy/.env does not render"; fi
+# --- The upload copy (compose.backup.yaml) --------------------------------------------------------------------------
+copy="$(render rag backup | jq -r '.services["rag-upload-backup"] | [.user, (.read_only | tostring), .network_mode,
+  ([.volumes[] | select(.target == "/data/blobs") | .read_only | tostring] | join(","))] | join(" ")')"
+if [ "$copy" = "1654:1654 true none true" ]; then ok "rag-upload-backup: uid 1654, read-only, no network, the blobs read-only"
+else fail "rag-upload-backup: expected '1654:1654 true none true', got '$copy'"; fi
 
 if [ "$failures" = 0 ]; then echo PASS; else echo "$failures check(s) failed"; exit 1; fi

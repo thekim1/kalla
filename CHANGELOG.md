@@ -42,6 +42,23 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   guides link to.
 - **`restore-pitr.sh` stops the second slots too** (`rag-api-b`, `rag-admin-b` with `--rolling`): before, they kept
   running through a restore.
+- **Docker Compose runs the Portainer stack's services and bootstrap** (Decisions "One deployment bootstrap", M-22 S1
+  steps 2 and 3). `deploy/compose.rag.yaml` is the one Ume.Rag service file: Compose runs it directly (the project
+  `ume-rag`), and `deploy/portainer/build-stack.sh` merges it with the gateway's file into `compose.portainer.yaml`,
+  whose services, volumes, networks and variables stay as they were. Its `rag-bootstrap` creates the certificates and
+  secrets in the volumes `rag-certs` and `rag-secrets` on a Compose host too, and its log ends at the setup wizard. What
+  only a Compose host has is in overlays: `compose.backup.yaml` (pgBackRest and the upload copy),
+  `compose.hardened.yaml` (the host firewall's subnets, the ingestion slice, the renderer's seccomp profile),
+  `compose.host-24g.yaml`, `compose.clamav-conf.yaml` and `compose.rolling.yaml`. Open WebUI is the profile `openwebui`
+  in Compose too. `init-deployment.sh` is a short script that writes only `deploy/.env` (`--help` lists its options),
+  with the Portainer stack's variable names (`RAG_*_IMAGE`, `UME_OTEL_*`, `UME_DOMAIN`, the profiles); it generates no
+  certificate or secret and asks for a sign-in value only with `--hardened`. Gone: `compose.prod.yaml`,
+  `compose.ingestion.yaml`, `compose.openwebui.yaml`, `rag-blobs-init`, `deploy/tests/openwebui-parity.sh`, and the
+  Compose-only variables (`UME_RAG_CERTS_DIR`, `UME_RAG_SECRETS_DIR`, `UME_RAG_CLAMAV_MODE`,
+  `UME_RAG_OPENWEBUI_BASE_URL`, `UME_RAG_OTEL_*`, `API_IMAGE` and the other unprefixed image variables, which the
+  release's `images.env` now names `RAG_*_IMAGE`). The host scripts (`escrow-keys.sh`, `cert-expiry.sh`, the backup
+  and restore scripts, `rolling-update.sh`, the host firewall) read the volumes and use the service `rag-postgres`. A
+  Compose installation made with the old files is installed again ([upgrade guide](docs/upgrade-guide.md)).
 
 ## 0.7.0 (2026-11-16)
 

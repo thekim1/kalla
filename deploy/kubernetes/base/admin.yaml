@@ -35,7 +35,7 @@ spec:
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-admin}
-      # The blob container's directory (Compose: rag-blobs-init). Under the restricted Pod Security Standard nothing runs
+      # The blob container's directory (Compose and Portainer: rag-bootstrap). Under the restricted Pod Security Standard nothing runs
       # as root, so the volume's root must be writable by the pods' group (fsGroup 1654; an NFS export: owned by
       # 1654:1654).
       initContainers:

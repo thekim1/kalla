@@ -106,9 +106,10 @@ jobs:
           bash benchmarks/release-test/site/serve.sh start "$site" --network "$SITE_NETWORK"
       - name: Run
         run: |
-          certs="$(sed -n 's/^UME_RAG_CERTS_DIR=//p' "$DEPLOY_ENV")"
+          # The internal CA from the deployment's rag-certs volume, through rag-bootstrap's container (it has it at /certs).
+          docker compose --env-file "$DEPLOY_ENV" run --rm --no-deps -T --entrypoint cat rag-bootstrap /certs/ca.pem > "$RUNNER_TEMP/rag-ca.pem"
           args=(--mode "$MODE" --base-url "$BASE_URL" --model "$MODEL" --key-file "$RUNNER_TEMP/r1-key"
-                --ca-file "$certs/ca.pem" --duration "$DURATION" --deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/perf")
+                --ca-file "$RUNNER_TEMP/rag-ca.pem" --duration "$DURATION" --deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/perf")
           if [ "$MODE" = r1 ]; then
             ingest="bash $GITHUB_WORKSPACE/benchmarks/release-test/ingest.sh --deploy-env $DEPLOY_ENV --crawl-source $CRAWL_SOURCE"
             [ -z "$UPLOAD_SOURCE" ] || ingest="$ingest --upload-source $UPLOAD_SOURCE --upload-batch $UPLOAD_BATCH"

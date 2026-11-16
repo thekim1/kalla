@@ -110,7 +110,7 @@ dc() { docker compose --env-file "$deploy_env" "$@"; }
 # Cumulative CPU time (ns) of the deployment's main containers, from the Docker API (as the gateway's lib.sh).
 cpu_snapshot() {
   local service id
-  for service in "$app_container" rag-worker rag-parser postgres; do
+  for service in "$app_container" rag-worker rag-parser rag-postgres; do
     id="$(dc ps -q "$service" 2>/dev/null || true)"
     [ -n "$id" ] || continue
     printf '%s ' "$service"
@@ -133,7 +133,7 @@ write_refusals() { # since out-file
   if [ -z "$deploy_env" ]; then
     echo '{"checked": false}' > "$2"; return
   fi
-  dc logs --no-color --since "$1" postgres rag-api rag-admin rag-worker 2>&1 |
+  dc logs --no-color --since "$1" rag-postgres rag-api rag-admin rag-worker 2>&1 |
     { grep -E 'too many clients already|remaining connection slots are reserved|too many connections for role|53300' || true; } |
     python3 -c '
 import json, sys

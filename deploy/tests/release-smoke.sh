@@ -1,45 +1,46 @@
 #!/usr/bin/env bash
 # Smoke test of a release bundle (plans/platform/repo-and-deployment.md §8.1, release.yml): unpacks the bundle, runs its
-# init-deployment.sh non-interactively with test-host options, starts the production Compose files with the images the
-# bundle pins (`up --wait`: every service with a health check healthy, rag-migrate completed), then checks:
+# init-deployment.sh non-interactively with test-host options (deploy/compose.rag.yaml with compose.backup.yaml, no
+# sign-in value), starts it with the images the bundle pins (`up --wait`: rag-bootstrap and rag-migrate completed,
+# every service with a health check healthy), then checks:
 #
-#   - api, admin and worker each have their gateway credential key (placeholders, secrets/<service>/Gateway__Key)
+#   - api, admin and worker each have their gateway credential key (placeholders, set as variables; rag-bootstrap
+#     writes them to rag-secrets/<service>/Gateway__Key)
 #   - every running container's image is pinned by digest (the bundle's defaults; *_IMAGE variables are unset first)
 #   - rag-api: /health/ready = 200, /version reports the bundle's version
-#   - rag-api: /v1/models = 401 without a key           (P1: rag-api has no /v1 routes yet; a 404 is reported as
-#                                                        not built, any other answer than 401 fails)
+#   - rag-api: /v1/models = 401 without a key           (a 404 is reported as not built, any other answer fails)
 #   - rag-admin: / = 200 with the admin UI's index.html
-#   - a Swedish compound query through the API          (P1: no query endpoint exists yet; reported, not run)
-#   - pgbackrest stanza-create and check in the postgres container
+#   - the setup wizard (Decisions "Setup wizard"), as deploy/tests/portainer-boot.sh checks it: rag-bootstrap's log
+#     points at https://rag-admin.smoke.test/setup, rag-admin's output has a setup code (never printed: masked in GitHub
+#     Actions and cut from the logs a failure prints), and /bff/user says sign-in is not configured and setup is open
+#   - a Swedish compound query through the API          (no query endpoint exists yet; reported, not run)
+#   - pgbackrest stanza-create and check in rag-postgres
+#   - the blob directories 1654:1654 0750 (rag-bootstrap), read by rag-upload-backup (uid 1654, read-only)
 #   - parser /v1/info from the worker container (the worker image's own probe pointed at the parser: HTTPS through the
 #     internal CA, 2xx; the image has no shell or curl)
-#   - the renderer: with --render, rag-renderer runs healthy (COMPOSE_PROFILES=render), and then switching it off as
-#     the upgrade guide says (no profile, no endpoint, rm rag-renderer, restart rag-worker) leaves a healthy stack
-#     without it; without --render it never runs (#505)
-#   - the malware scan: rag-clamav runs healthy by default (COMPOSE_PROFILES has clamav, UME_RAG_CLAMAV_MODE=on), and
-#     then switching it off as init-deployment.sh --clamav off does (no clamav profile, UME_RAG_CLAMAV_MODE=off, rm
-#     rag-clamav) leaves the worker healthy with ClamAv__Mode=off and no rag-clamav container (#535)
+#   - the renderer: with --render, rag-renderer runs healthy (the profile render), and then switching it off (the
+#     profile out, rm rag-renderer, up: rag-bootstrap removes the worker's endpoint and the worker is recreated) leaves
+#     a healthy stack without it; without --render it never runs (#505)
+#   - the malware scan: rag-clamav runs healthy by default (the profile clamav), and then switching it off the same way
+#     leaves the worker healthy with ClamAv__Mode off and no rag-clamav container (#535)
 #
 #   deploy/tests/release-smoke.sh BUNDLE.tar.gz [options]
 #
 # Options:
 #   --work-dir DIR          where the bundle is unpacked [a new temporary directory]; removed afterwards
-#   --compose-file FILE     an extra Compose file appended to the deployment's COMPOSE_FILE (repeatable), for example
-#                           other subnets where 172.30.0.0/16 is taken on a developer machine
+#   --compose-file FILE     an extra Compose file appended to the deployment's COMPOSE_FILE (repeatable)
 #   --api-port N, --admin-port N   host ports of the two listeners [8543, 9543]
 #   --wait-timeout SECONDS  for `up --wait` [900]: the parser warms up and freshclam downloads the signatures first
-#   --chown-with-docker     without root or passwordless sudo (a developer machine): init-deployment.sh's chown runs
-#                           as root in a throwaway container of the bundle's postgres image, and so does the clean-up
-#   --render                init-deployment.sh --render (the Compose profile `render`), then switched off again (#505)
+#   --render                the profile render, then switched off again (#505)
 #   --keep                  leave the stack running and the files in place
 #
-# Needs Docker with Compose v2, curl, jq and openssl; the containers read their secrets as their own users, so
-# init-deployment.sh needs root or passwordless sudo (GitHub runners have it) unless --chown-with-docker is given.
-# Exit 0 when every check that exists in this phase passed; the steps not built yet are listed at the end.
+# Needs Docker with Compose v2.33.1 or later, curl, jq and tar; no root (rag-bootstrap gives the files to the services'
+# users inside the volumes). Exit 0 when every check that exists in this phase passed; the steps not built yet are
+# listed at the end.
 set -euo pipefail
 
-bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; docker_chown=0; keep=0; render=""
-usage() { sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+bundle=""; work=""; extra_files=(); api_port=8543; admin_port=9543; wait_timeout=900; keep=0; render=""
+usage() { sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --work-dir) work="$2"; shift 2;;
@@ -47,7 +48,6 @@ while [ $# -gt 0 ]; do
     --api-port) api_port="$2"; shift 2;;
     --admin-port) admin_port="$2"; shift 2;;
     --wait-timeout) wait_timeout="$2"; shift 2;;
-    --chown-with-docker) docker_chown=1; shift;;
     --render) render=1; shift;;
     --keep) keep=1; shift;;
     -h|--help) usage 0;;
@@ -56,120 +56,83 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$bundle" ] || [ ! -r "$bundle" ]; then usage 1; fi
-for tool in docker curl jq openssl tar; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
+for tool in docker curl jq tar; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 
-# The bundle's pins are under test: an inherited *_IMAGE variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$' || true)
-
-if [ "$(id -u)" = 0 ]; then
-  as_root=()
-elif sudo -n true 2>/dev/null; then
-  as_root=(sudo -n)
-elif [ "$docker_chown" = 1 ]; then
-  as_root=(docker)
-else
-  echo "error: the containers read their files as their own users, so init-deployment.sh must chown them: run as root," \
-    "with passwordless sudo, or pass --chown-with-docker" >&2
-  exit 1
-fi
+# The bundle's pins and deploy/.env are under test: an inherited variable would override them.
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^UME_|^COMPOSE_' || true)
 
 name="$(tar -tzf "$bundle" | sed -n 1p)"; name="${name%%/*}"
 version="${name#ume-rag-}"
 [[ "$name" =~ ^ume-rag-[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "error: $bundle is not an ume-rag-X.Y.Z bundle" >&2; exit 1; }
 if [ -z "$work" ]; then work="$(mktemp -d)"; else mkdir -p "$work"; work="$(cd "$work" && pwd)"; fi
 tar -xzf "$bundle" -C "$work"
-root="$work/$name"
-deploy="$root/deploy"
+deploy="$work/$name/deploy"
 project="ume-rag-smoke"
-helper_image="$(grep -m1 -oE 'POSTGRES_IMAGE:-[^}]+' "$deploy/compose.prod.yaml")"
-helper_image="${helper_image#POSTGRES_IMAGE:-}"
 
 dc() { docker compose -p "$project" --env-file "$deploy/.env" "$@"; }
 pending=()
 ok() { echo "ok: $*"; }
+setup_code_seen=""
 fail() {
   echo "error: $*" >&2
   dc ps -a >&2 || true
-  dc logs --no-color --tail 100 >&2 || true
+  # The setup code is worth platform admin while setup is open: cut from the logs printed here.
+  dc logs --no-color --tail 100 2>&1 | sed -E -e 's/(Setup code: )[0-9A-Za-z-]+/\1(hidden)/' \
+    ${setup_code_seen:+-e "s/$setup_code_seen/(hidden)/g"} >&2 || true
   exit 1
 }
-
-init_path="$PATH"
-if [ "${as_root[*]}" = docker ]; then
-  # A stand-in for `sudo -n CMD ARGS` (the only form init-deployment.sh uses): CMD as root in a throwaway container
-  # with the work directory mounted at the same path. Test-only; never part of the bundle.
-  mkdir -p "$work/.bin"
-  cat > "$work/.bin/sudo" <<EOF
-#!/bin/sh
-[ "\$1" = -n ] && shift
-cmd="\$1"; shift
-exec docker run --rm --network none --user 0 -v "$work:$work" --entrypoint "\$cmd" "$helper_image" "\$@"
-EOF
-  chmod +x "$work/.bin/sudo"
-  as_root=("$work/.bin/sudo" -n)
-  init_path="$work/.bin:$PATH"
-fi
-
 cleanup() {
-  if [ "$keep" = 1 ]; then echo "Kept: $root (docker compose -p $project --env-file $deploy/.env ...)"; return; fi
+  if [ "$keep" = 1 ]; then echo "Kept: $work/$name (docker compose -p $project --env-file $deploy/.env ...)"; return; fi
   dc down -v --remove-orphans >/dev/null 2>&1 || true
-  "${as_root[@]}" rm -rf "$work" 2>/dev/null || rm -rf "$work" 2>/dev/null \
-    || echo "warning: could not remove $work" >&2
+  rm -rf "$work" 2>/dev/null || echo "warning: could not remove $work" >&2
 }
 trap cleanup EXIT
 
-# One placeholder credential key per service, as a gateway admin issues them (production-setup.md, Gateway credential
-# keys): the stack boots as a real one does. No check needs the gateway, which llm.smoke.test does not reach.
+# One placeholder credential key per service, as a gateway admin issues them: the stack boots as a real one does. No
+# check needs the gateway, which llm.smoke.test does not reach.
 mkdir -p "$work/keys"
 for svc in api admin worker; do printf 'smoke-%s-key\n' "$svc" > "$work/keys/$svc"; done
 
-# init-deployment.sh with the test host's options plus "$@", then this test's own .env lines, which a re-run (it rewrites
-# .env) needs again.
+# init-deployment.sh with the test host's options plus "$@"; the extra Compose files after its COMPOSE_FILE.
 init_deployment() {
-  PATH="$init_path" "$deploy/init-deployment.sh" \
-    --oidc-authority https://keycloak.smoke.test/realms/ume \
+  "$deploy/init-deployment.sh" --domain smoke.test --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
     --gateway-url https://llm.smoke.test \
     --gateway-credential-key-file api="$work/keys/api" --gateway-credential-key-file admin="$work/keys/admin" \
     --gateway-credential-key-file worker="$work/keys/worker" \
-    --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
-    --api-port "$api_port" --admin-port "$admin_port" \
-    --backup-target local --allow-file-keys "$@" --yes > "$work/init.log" \
-    || { cat "$work/init.log" >&2; fail "init-deployment.sh failed"; }
-  grep -q 'Run as root first' "$work/init.log" && { cat "$work/init.log" >&2; fail "init-deployment.sh could not chown"; }
-  {
-    # No rag-ingestion.slice on a test runner (deploy/host/install.sh is not run here).
-    echo "UME_RAG_INGESTION_SLICE="
-  } >> "$deploy/.env"
-  for f in ${extra_files[@]+"${extra_files[@]}"}; do sed -i "s#^COMPOSE_FILE=.*#&:$f#" "$deploy/.env"; done
+    --set UME_RAG_API_PORT="$api_port" --set UME_RAG_ADMIN_PORT="$admin_port" \
+    --set UME_RAG_API_BIND=127.0.0.1 --set UME_RAG_ADMIN_BIND=127.0.0.1 \
+    --backup-target local "$@" --yes > "$work/init.log" 2>&1 || { cat "$work/init.log" >&2; fail "init-deployment.sh failed"; }
+  for f in ${extra_files[@]+"${extra_files[@]}"}; do sed -i "s#^COMPOSE_FILE='\(.*\)'\$#COMPOSE_FILE='\1:$f'#" "$deploy/.env"; done
 }
+# volume_cat VOLUME PATH: a file of the stack's volume, read-only, with rag-bootstrap's image.
+volume_cat() { docker run --rm --network none -v "${project}_$1:/v:ro" --entrypoint cat "$(dc config --images rag-bootstrap)" "/v/$2"; }
 
 echo "== init-deployment.sh ($name)"
-init_deployment ${render:+--render}
-ok "init-deployment.sh wrote $(basename "$deploy")/.env, certs and secrets"
-# The files now belong to the containers' users, so read them as root.
-for svc in api admin worker; do
-  key="$("${as_root[@]}" cat "$deploy/secrets/$svc/Gateway__Key")" || fail "no secrets/$svc/Gateway__Key"
-  [ "$key" = "smoke-$svc-key" ] || fail "secrets/$svc/Gateway__Key is not $svc's credential key"
-done
-ok "one gateway credential key per service (secrets/{api,admin,worker}/Gateway__Key)"
+init_deployment --profiles "clamav${render:+,render}"
+grep -q "^COMPOSE_FILE='.*compose.backup.yaml" "$deploy/.env" || fail "init-deployment.sh did not list compose.backup.yaml"
+ok "init-deployment.sh wrote $(basename "$deploy")/.env (no certificate or secret)"
 
 echo "== images"
-unpinned="$(dc config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"
+unpinned="$(dc --profile backup config --images | grep -vE '@sha256:[0-9a-f]{64}$' || true)"
 [ -z "$unpinned" ] || fail "images not pinned by digest: $unpinned"
 dc config --images | sort -u | sed 's/^/  /'
 
 echo "== up --wait"
 start=$SECONDS
 dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy within ${wait_timeout}s"
-ok "every service healthy, rag-migrate completed ($((SECONDS - start)) s)"
-dc ps --format 'table {{.Service}}\t{{.Status}}' | sed 's/^/  /'
+ok "every service healthy, rag-bootstrap and rag-migrate completed ($((SECONDS - start)) s)"
+dc ps -a --format 'table {{.Service}}\t{{.Status}}' | sed 's/^/  /'
 while read -r container image; do
   [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || fail "$container runs $image, not a pinned image"
 done < <(dc ps -q | xargs docker inspect --format '{{.Name}} {{.Config.Image}}')
 ok "every running container uses a digest-pinned image"
+for svc in api admin worker; do
+  [ "$(volume_cat rag-secrets "$svc/Gateway__Key")" = "smoke-$svc-key" ] || fail "rag-secrets/$svc/Gateway__Key is not $svc's credential key"
+done
+ok "one gateway credential key per service (rag-secrets/{api,admin,worker}/Gateway__Key)"
 
 echo "== rag-api"
-ca="$deploy/certs/ca.pem"
+ca="$work/ca.pem"; volume_cat rag-certs ca.pem > "$ca" || fail "no ca.pem in rag-certs"
 https() { curl -sS --cacert "$ca" --max-time 15 "$@"; }
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/health/ready")"
 [ "$status" = 200 ] || fail "rag-api /health/ready answered $status"
@@ -179,10 +142,10 @@ case "$reported" in "$version"|"$version+"*) ok "rag-api /version = $reported";;
 status="$(https -o /dev/null -w '%{http_code}' "https://localhost:$api_port/v1/models")"
 case "$status" in
   401) ok "rag-api /v1/models = 401 without a key";;
-  404) pending+=("rag-api /v1/models = 401 without a key: the route does not exist yet (answered 404; P1 chat API)");;
+  404) pending+=("rag-api /v1/models = 401 without a key: the route does not exist yet (answered 404)");;
   *) fail "rag-api /v1/models answered $status without a key, expected 401";;
 esac
-pending+=("a Swedish compound query through the API: rag-api has no query endpoint yet (P1)")
+pending+=("a Swedish compound query through the API: rag-api has no query endpoint yet")
 
 echo "== rag-admin"
 status="$(https -o "$work/admin-index.html" -w '%{http_code}' "https://localhost:$admin_port/")"
@@ -190,70 +153,77 @@ status="$(https -o "$work/admin-index.html" -w '%{http_code}' "https://localhost
 grep -q '<div id="app">' "$work/admin-index.html" || fail "rag-admin / is not the admin UI's index.html"
 ok "rag-admin / = 200 (the admin UI)"
 
+echo "== the setup wizard (identity design §19)"
+dc logs --no-color --no-log-prefix rag-bootstrap \
+  | grep -q '^rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin\.smoke\.test/setup, ' \
+  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.smoke.test/setup"
+ok "rag-bootstrap points at the setup wizard (https://rag-admin.smoke.test/setup); no sign-in value was given"
+setup_code() {
+  dc logs --no-color --no-log-prefix rag-admin 2>/dev/null | sed -n 's/^rag-admin: setup mode is open until .*\. Setup code: //p' | tail -n 1
+}
+for _ in $(seq 60); do [ -z "$(setup_code)" ] || break; sleep 1; done
+setup_code_seen="$(setup_code)"
+if [ -n "$setup_code_seen" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::add-mask::$setup_code_seen"; fi
+[ -n "$setup_code_seen" ] || fail "rag-admin's output has no 'setup mode is open until … Setup code:' line"
+grep -qE '^[0-9A-Z]{5}(-[0-9A-Z]{5}){3}-[0-9A-Z]{6}$' <<< "$setup_code_seen" || fail "rag-admin's setup code is not in the form XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX"
+user="$(https --resolve "rag-admin.smoke.test:$admin_port:127.0.0.1" -H 'Accept: application/json' \
+  "https://rag-admin.smoke.test:$admin_port/bff/user")" || fail "rag-admin's /bff/user did not answer"
+jq -e '.isAuthenticated == false and .signIn.configured == false and .setup.open == true' >/dev/null <<< "$user" \
+  || fail "rag-admin's /bff/user is not signed out, sign-in not configured and setup open: $(jq -c '{isAuthenticated, signIn, setup}' <<< "$user")"
+ok "rag-admin's output has a setup code (not shown); /bff/user: sign-in not configured and setup open"
+
 echo "== pgbackrest"
-dc exec -T postgres pgbackrest --stanza=ragdb stanza-create >/dev/null || fail "pgbackrest stanza-create failed"
-dc exec -T postgres pgbackrest --stanza=ragdb check || fail "pgbackrest check failed"
-ok "pgbackrest stanza-create and check in the postgres container"
+dc exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create >/dev/null || fail "pgbackrest stanza-create failed"
+dc exec -T rag-postgres pgbackrest --stanza=ragdb check || fail "pgbackrest check failed"
+ok "pgbackrest stanza-create and check in rag-postgres"
 
 echo "== blob container (issue #41)"
-owner="$(dc run --rm --no-deps rag-upload-backup stat -c '%u:%g %a' /data/blobs/rag)" || fail "could not stat /data/blobs/rag"
-[ "$owner" = "1654:1654 750" ] || fail "/data/blobs/rag is $owner, expected 1654:1654 750"
-ok "rag-blobs-init made /data/blobs/rag 1654:1654 0750; rag-upload-backup (uid 1654, read-only) can read it"
-spool="$(dc run --rm --no-deps rag-upload-backup stat -c '%u:%g %a' /data/blobs/spool)" || fail "could not stat /data/blobs/spool"
-[ "$spool" = "1654:1654 750" ] || fail "/data/blobs/spool is $spool, expected 1654:1654 750"
-ok "rag-blobs-init made the worker's fetch spool /data/blobs/spool 1654:1654 0750 (TMPDIR, on disk)"
+for dir in rag spool; do
+  owner="$(dc run --rm --no-deps -T --entrypoint stat rag-upload-backup -c '%u:%g %a' "/data/blobs/$dir")" || fail "could not stat /data/blobs/$dir"
+  [ "$owner" = "1654:1654 750" ] || fail "/data/blobs/$dir is $owner, expected 1654:1654 750"
+done
+ok "rag-bootstrap made /data/blobs/rag and the worker's spool 1654:1654 0750; rag-upload-backup (uid 1654) reads them"
 
 echo "== parser from the worker"
 dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Ume.Rag.Worker.dll --health-check \
   || fail "the worker could not reach the parser's /v1/info"
 ok "parser /v1/info answered 2xx to the worker (HTTPS, internal CA)"
 
+# switch_off SERVICE PROFILES: take SERVICE's profile out as an operator does (init-deployment.sh --profiles), remove
+# its container, and `up` again: rag-bootstrap runs with the new profiles and the worker is recreated with them.
+switch_off() {
+  dc rm -sf "$1" >/dev/null
+  init_deployment --profiles "$2"
+  dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy again without $1"
+  [ -z "$(dc ps -a --format '{{.Service}}' | grep -x "$1" || true)" ] || fail "$1 still exists after switching it off"
+}
+
 echo "== renderer"
 renderer="$(dc ps --format '{{.Service}} {{.Health}}' | awk '$1 == "rag-renderer" {print $2}')"
 if [ -n "$render" ]; then
   [ "$renderer" = healthy ] || fail "rag-renderer is '${renderer:-not running}' with --render, expected healthy"
-  grep -qx 'COMPOSE_PROFILES=clamav,render' "$deploy/.env" || fail "--render did not set COMPOSE_PROFILES=clamav,render in .env"
-  ok "rag-renderer healthy with COMPOSE_PROFILES=clamav,render"
-
-  # The other half without a second boot: switch the renderer off as docs/upgrade-guide.md tells operators to. Its
-  # first step, init-deployment.sh again without --render, needs root here (the files now belong to the containers'
-  # users) and is checked on its own in verify.yml's deploy-checks; this applies its result (no profile, no endpoint)
-  # and checks that the stack runs without the renderer.
-  echo "== renderer off (no profile, no endpoint, rm rag-renderer, restart rag-worker)"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=clamav/' "$deploy/.env"
-  "${as_root[@]}" rm -f "$deploy/secrets/worker/Render__Endpoint"
-  dc rm -sf rag-renderer >/dev/null
-  dc restart rag-worker >/dev/null
-  dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy again without the renderer"
-  [ -z "$(dc ps --format '{{.Service}}' | grep -x rag-renderer || true)" ] || fail "rag-renderer still runs after switching it off"
-  ok "renderer switched off: no rag-renderer, every service healthy again (browser sources: render.not_configured)"
+  volume_cat rag-secrets worker/Render__Endpoint | grep -q '^ws://rag-renderer:3000/' || fail "the worker has no Render__Endpoint"
+  ok "rag-renderer healthy with the profile render, and the worker has its endpoint"
+  echo "== renderer off (the profile out, rm rag-renderer, up)"
+  switch_off rag-renderer clamav
+  if volume_cat rag-secrets worker/Render__Endpoint >/dev/null 2>&1; then fail "the worker still has Render__Endpoint"; fi
+  ok "renderer switched off: no rag-renderer, no endpoint, every service healthy again (browser sources: render.not_configured)"
 else
   [ -z "$renderer" ] || fail "rag-renderer runs without --render"
-  grep -qx 'COMPOSE_PROFILES=clamav' "$deploy/.env" || fail "COMPOSE_PROFILES is not just clamav in .env without --render"
   ok "no rag-renderer without --render (browser sources: render.not_configured)"
 fi
 
 echo "== malware scan"
 clamd="$(dc ps --format '{{.Service}} {{.Health}}' | awk '$1 == "rag-clamav" {print $2}')"
 [ "$clamd" = healthy ] || fail "rag-clamav is '${clamd:-not running}' by default, expected healthy"
-grep -qx 'UME_RAG_CLAMAV_MODE=on' "$deploy/.env" || fail "init-deployment.sh did not set UME_RAG_CLAMAV_MODE=on by default"
-ok "rag-clamav healthy by default (the clamav profile, UME_RAG_CLAMAV_MODE=on)"
-
-# The other mode without a second boot from scratch, as for the renderer: init-deployment.sh --clamav off needs root
-# here and is checked on its own in verify.yml's deploy-checks; this applies its result to deploy/.env (the clamav
-# profile out, UME_RAG_CLAMAV_MODE=off), removes rag-clamav and lets `up` recreate the worker with ClamAv__Mode=off.
-echo "== malware scan off (no clamav profile, UME_RAG_CLAMAV_MODE=off, rm rag-clamav)"
-sed -i -e '/^COMPOSE_PROFILES=/{s/=/=,/; s/,clamav\(,\|$\)/\1/; s/=,/=/}' \
-  -e 's/^UME_RAG_CLAMAV_MODE=.*/UME_RAG_CLAMAV_MODE=off/' "$deploy/.env"
-if grep -E '^COMPOSE_PROFILES=' "$deploy/.env" | grep -qw clamav; then fail "could not take clamav out of COMPOSE_PROFILES"; fi
-dc rm -sf rag-clamav >/dev/null
-dc up -d --quiet-pull --wait --wait-timeout "$wait_timeout" || fail "the stack did not become healthy with the malware scan off"
-[ -z "$(dc ps -a --format '{{.Service}}' | grep -x rag-clamav || true)" ] || fail "a rag-clamav container exists with the scan off"
+[ "$(volume_cat rag-secrets worker/ClamAv__Mode)" = on ] || fail "the worker's ClamAv__Mode is not on with the profile clamav"
+ok "rag-clamav healthy by default (the profile clamav, the worker's ClamAv__Mode on)"
+echo "== malware scan off (the profile out, rm rag-clamav, up)"
+switch_off rag-clamav ''
+[ "$(volume_cat rag-secrets worker/ClamAv__Mode)" = off ] || fail "the worker's ClamAv__Mode is not off without the profile"
 worker="$(dc ps -q rag-worker)"
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$worker")" = healthy ] || fail "rag-worker is not healthy with the scan off"
-docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$worker" | grep -qx 'ClamAv__Mode=off' \
-  || fail "rag-worker does not run with ClamAv__Mode=off"
-ok "malware scan off: no rag-clamav, rag-worker healthy with ClamAv__Mode=off (files stored unscanned)"
+ok "malware scan off: no rag-clamav, rag-worker healthy with ClamAv__Mode off (files stored unscanned)"
 
 echo
 echo "Smoke test passed for $name."

@@ -2,7 +2,9 @@
 # Installs the host units of deploy/host/ (plans/platform/repo-and-deployment.md §6.1, §6.2, §7.4; README.md here):
 # the ingestion slice, the firewall, and the backup, backup-status, upload-copy, restart-unhealthy and certificate-expiry
 # timers. Each unit gets this deployment's directory in place of @DEPLOY_DIR@. Safe to re-run (after an upgrade or a
-# change of UME_RAG_HOST_MEMORY). Run it before the first `docker compose up`: the ingestion containers need the slice.
+# change of UME_RAG_HOST_MEMORY). It enables what deploy/.env's COMPOSE_FILE uses: the slice, the firewall and the
+# restart-unhealthy timer with compose.hardened.yaml (run it before the first `docker compose up` then: the ingestion
+# containers need the slice), the backup timers with compose.backup.yaml, the certificate check always.
 #
 #   sudo deploy/host/install.sh [--host-memory 16|24] [--no-enable]
 #
@@ -31,7 +33,8 @@ while [ $# -gt 0 ]; do
 done
 deploy_dir="$(cd "$deploy_dir" && pwd)"
 env_file="$deploy_dir/.env"
-env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1; }
+# KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
+env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
 [ -n "$host_memory" ] || host_memory="$(env_value UME_RAG_HOST_MEMORY)"
 host_memory="${host_memory:-16}"
 case "$host_memory" in 16) memory_max=7G;; 24) memory_max=11G;; *) die "--host-memory must be 16 or 24";; esac
@@ -69,13 +72,23 @@ if [ "$(docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null)
 zone (to-verify #90). Set \"exec-opts\": [\"native.cgroupdriver=systemd\"] in /etc/docker/daemon.json." >&2
 fi
 [ "$enable" = 1 ] || exit 0
-timers=(rag-firewall.timer rag-backup.timer rag-backup-status.timer rag-restart-unhealthy.timer rag-cert-expiry.timer)
-if [ -n "$(env_value UME_RAG_UPLOAD_BACKUP_DIR)" ]; then
-  timers+=(rag-upload-backup.timer)
+compose_file="$(env_value COMPOSE_FILE)"
+timers=(rag-cert-expiry.timer)
+if [[ "$compose_file" == *compose.hardened.yaml* ]]; then
+  timers+=(rag-firewall.timer rag-restart-unhealthy.timer)
+  systemctl enable rag-firewall.service
+  systemctl start rag-firewall.service
 else
-  echo "rag-upload-backup.timer not enabled: UME_RAG_UPLOAD_BACKUP_DIR is empty (an S3 backup target)" >&2
+  echo "the firewall and rag-restart-unhealthy.timer not enabled: COMPOSE_FILE has no compose.hardened.yaml" >&2
 fi
-systemctl enable rag-firewall.service
-systemctl start rag-firewall.service
+if [[ "$compose_file" == *compose.backup.yaml* ]]; then
+  timers+=(rag-backup.timer rag-backup-status.timer)
+  case "$(env_value UME_RAG_BACKUP_TARGET)" in
+    s3://*) echo "rag-upload-backup.timer not enabled: an S3 backup target has no upload copy yet" >&2 ;;
+    *) timers+=(rag-upload-backup.timer) ;;
+  esac
+else
+  echo "the backup timers not enabled: COMPOSE_FILE has no compose.backup.yaml" >&2
+fi
 systemctl enable --now "${timers[@]}"
 systemctl list-timers 'rag-*' --no-pager

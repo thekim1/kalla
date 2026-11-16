@@ -232,76 +232,48 @@ jobs:
             --filter-class "Ume.Rag.Worker.Tests.Connectors.RendererContainerTests" --fail-skips on --minimum-expected-tests 1
 
   deploy-checks:
-    # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
-    # with `docker compose config` against placeholder settings, the image defaults stay the local :latest dev images
-    # (a release bundle pins the pushed ones by digest, §7.2, checked here with placeholder digests), the host firewall's
-    # subnets are the Compose networks', the Portainer stack's rag-bootstrap keeps its secrets on a re-run, the deployment
-    # scripts pass shellcheck and the host units pass systemd-analyze verify (deploy/host/).
+    # Production Compose (P0 checklist #14, repo-and-deployment §8.2): deploy/compose.rag.yaml with every supported
+    # combination of its overlays and profiles renders with `docker compose config` against placeholder settings, every
+    # image is pinned by digest (a release bundle pins the pushed ones, §7.2, checked here with placeholder digests),
+    # init-deployment.sh writes deploy/.env and the host firewall's subnets are compose.hardened.yaml's, rag-bootstrap
+    # keeps its secrets on a re-run in the Compose form and in the Portainer stack, the deployment scripts pass
+    # shellcheck and the host units pass systemd-analyze verify (deploy/host/).
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Local image defaults are untagged dev images
-        run: |
-          stale="$(grep -Hn 'ume-rag/[a-z]*:' deploy/compose*.yaml | grep -v ':latest}' || true)"
-          [ -z "$stale" ] || { echo "Local image defaults must stay ume-rag/<service>:latest:"; echo "$stale"; exit 1; }
-      - name: Production Compose files are valid
+      - name: Compose files are valid and pin every image
         env:
-          UME_RAG_CERTS_DIR: /certs
-          UME_RAG_SECRETS_DIR: ${{ runner.temp }}/secrets
-          UME_RAG_OIDC_AUTHORITY: https://keycloak.example.se/realms/ume
+          UME_DOMAIN: example.se
           UME_RAG_GATEWAY_URL: https://llm.example.se
-          UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
-          UME_RAG_OPENWEBUI_HOST: chat.example.se
-          UME_RAG_OPENWEBUI_OIDC_CLIENT_ID: open-webui
-          UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL: https://keycloak.example.se/realms/ume/.well-known/openid-configuration
-          UME_RAG_OPENWEBUI_DATA_DIR: /openwebui-data
+          UME_RAG_BACKUP_TARGET: local
         run: |
-          # compose.openwebui.yaml reads its env_file while rendering.
-          mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
-          for files in "compose.prod.yaml" \
-                       "compose.prod.yaml compose.ingestion.yaml" \
-                       "compose.prod.yaml compose.ingestion.yaml compose.clamav-conf.yaml" \
-                       "compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml" \
-                       "compose.prod.yaml compose.ingestion.yaml compose.rolling.yaml" \
-                       "compose.openwebui.yaml"; do
-            args=(); for f in $files; do args+=(-f "deploy/$f"); done
+          profiles=(--profile clamav --profile render --profile openwebui --profile proxy --profile backup)
+          for files in "rag" "rag backup" "rag hardened" "rag backup hardened" "rag host-24g clamav-conf" \
+                       "rag clamav-conf" "rag rolling" "rag backup hardened host-24g clamav-conf rolling"; do
+            args=(); for f in $files; do args+=(-f "deploy/compose.$f.yaml"); done
             echo "docker compose ${args[*]} config --quiet"
             docker compose "${args[@]}" config --quiet
+            docker compose "${args[@]}" "${profiles[@]}" config --quiet
           done
-          # The upload copy job (profile backup).
-          docker compose -f deploy/compose.prod.yaml --profile backup config --quiet
-          # The renderer only with its profile (#505); the worker's dependency on it is optional.
-          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile render config --quiet
-          if docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --services | grep -qx rag-renderer; then
-            echo "rag-renderer runs without the render profile"; exit 1
-          fi
-          # ClamAV only with its profile (#535; init-deployment.sh adds it unless --clamav off), alone, with the renderer
-          # and with the ClamAV overlays; the worker's dependency on it is optional and its mode follows UME_RAG_CLAMAV_MODE.
-          ingestion=(-f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml)
-          for profiles in "clamav" "clamav render"; do
-            args=(); for p in $profiles; do args+=(--profile "$p"); done
-            docker compose "${ingestion[@]}" "${args[@]}" config --services | grep -qx rag-clamav
+          all=(-f deploy/compose.rag.yaml -f deploy/compose.backup.yaml -f deploy/compose.hardened.yaml
+            -f deploy/compose.host-24g.yaml -f deploy/compose.clamav-conf.yaml -f deploy/compose.rolling.yaml)
+          images="$(docker compose "${all[@]}" "${profiles[@]}" config --images | sort -u)"
+          echo "$images"
+          if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "images not pinned by digest"; exit 1; fi
+          # Each optional service only with its profile (#505, #535, S3); the worker's dependency on ClamAV is optional.
+          base=(-f deploy/compose.rag.yaml)
+          for svc in rag-clamav rag-renderer rag-openwebui rag-openwebui-setup rag-proxy; do
+            if docker compose "${base[@]}" --profile backup config --services | grep -qx "$svc"; then
+              echo "$svc runs without its profile"; exit 1
+            fi
           done
-          docker compose "${ingestion[@]}" -f deploy/compose.host-24g.yaml -f deploy/compose.clamav-conf.yaml \
-            --profile clamav --profile render config --quiet
-          if docker compose "${ingestion[@]}" --profile render config --services | grep -qx rag-clamav; then
-            echo "rag-clamav runs without the clamav profile"; exit 1
-          fi
-          docker compose "${ingestion[@]}" config --format json | jq -e '.services["rag-worker"]
-            | .environment.ClamAv__Mode == "on" and .depends_on["rag-clamav"].required == false' >/dev/null
-          UME_RAG_CLAMAV_MODE=off docker compose "${ingestion[@]}" config --format json \
-            | jq -e '.services["rag-worker"].environment.ClamAv__Mode == "off"' >/dev/null
-          # deploy/host/docker-user-firewall.sh targets each network by its subnet (mirror is ClamAV's, so its profile on).
-          { docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile clamav config --format json
-            docker compose -f deploy/compose.openwebui.yaml config --format json; } \
-            | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
-          bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
+          docker compose "${base[@]}" config --format json | jq -e '.services["rag-worker"].depends_on["rag-clamav"].required == false' >/dev/null
           # The renderer is on the internal render network only, which it shares with the worker (§5.4, §6.1).
-          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --profile render config --format json | jq -e '
-            (.services["rag-renderer"].networks | keys) == ["render"] and .networks.render.internal == true
-            and ([.services | to_entries[] | select(.value.networks | has("render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
+          docker compose "${base[@]}" --profile render config --format json | jq -e '
+            (.services["rag-renderer"].networks | keys) == ["rag-render"] and .networks["rag-render"].internal == true
+            and ([.services | to_entries[] | select(.value.networks | has("rag-render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
       - name: Kubernetes manifests are up to date and render
         # docs/kubernetes.md: the config copies match deploy/postgres, and the base, the example overlay and the overlay
         # with every optional component render. The bundle step below checks they get pinned images.
@@ -365,36 +337,36 @@ jobs:
               END { for (j = 1; j <= i; j++) { if (!to[j] || web[j] && !(any[j] && meta[j])) bad = 1; if (web[j]) w = 1 }
                 exit bad || !w }' || { echo "$p: an egress rule has no destination, or 80/443 is not limited to public addresses"; exit 1; }
           done
-      - name: The Portainer stack is what its template gives
-        # deploy/portainer/compose.portainer.yaml is generated (build-stack.sh): a change to the template, to
-        # bootstrap.sh or to a file it includes that was not followed by a rebuild fails here, not at a deploy. Built
+      - name: The Portainer stack is what deploy/compose.rag.yaml gives
+        # deploy/portainer/compose.portainer.yaml is generated (build-stack.sh): a change to compose.rag.yaml, to
+        # bootstrap.sh or to a file it names that was not followed by a rebuild fails here, not at a deploy. Built
         # from the gateway release the committed file names (a download from the gateway's public repository).
         run: sh deploy/portainer/build-stack.sh --check
       - name: Release bundle pins every image
         # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
         # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
         env:
-          UME_RAG_CERTS_DIR: /certs
-          UME_RAG_SECRETS_DIR: /secrets
-          UME_RAG_OIDC_AUTHORITY: https://keycloak.example.se/realms/ume
+          UME_DOMAIN: example.se
           UME_RAG_GATEWAY_URL: https://llm.example.se
-          UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
+          UME_RAG_BACKUP_TARGET: local
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do
-            export "${v}_IMAGE=ghcr.io/example/ume-rag/${v,,}:0.0.0@$digest"
+            export "RAG_${v}_IMAGE=ghcr.io/example/ume-rag/${v,,}:0.0.0@$digest"
           done
-          if out="$(PARSER_IMAGE=ume-rag/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
+          if out="$(RAG_PARSER_IMAGE=ume-rag/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
             echo "an unpinned image was accepted"; exit 1
           fi
           echo "$out"
-          grep -q 'PARSER_IMAGE=ume-rag/parser:latest is not pinned' <<< "$out"
+          grep -q 'RAG_PARSER_IMAGE=ume-rag/parser:latest is not pinned' <<< "$out"
           bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/bundle"
           tar -xzf "$RUNNER_TEMP/bundle/ume-rag-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
-          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "${v}_IMAGE"; done
-          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" -f "$b/compose.rolling.yaml" --profile backup --profile clamav --profile render config --images)"
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "RAG_${v}_IMAGE"; done
+          images="$(docker compose -f "$b/compose.rag.yaml" -f "$b/compose.backup.yaml" -f "$b/compose.hardened.yaml" \
+            -f "$b/compose.host-24g.yaml" -f "$b/compose.clamav-conf.yaml" -f "$b/compose.rolling.yaml" \
+            --profile backup --profile clamav --profile render --profile openwebui --profile proxy config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
           # Kubernetes: every image of the example overlay with every component is pinned by digest.
@@ -408,244 +380,27 @@ jobs:
           grep -q "RAG_API_IMAGE:-ghcr.io/example/ume-rag/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
       - name: Kubernetes' create-secrets.sh generates with the stacks' bootstrap and keeps its secrets on a re-run
         # Decisions "One deployment bootstrap": create-secrets.sh runs deploy/portainer/bootstrap.sh on the operator's
-        # machine. No cluster: --generate-only, twice, then on directories that init-deployment.sh made (the upgrade).
+        # machine. No cluster: --generate-only, twice, then with options that change something.
         run: bash deploy/tests/kubernetes-secrets.sh
-      - name: init-deployment.sh keeps its secrets on a re-run
-        # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
-        # crawl key pepper, rag-admin's setup secret and the renderer's WebSocket path among them, is unchanged by the
-        # second run, and the deployer's UME_RAG_SETUP_REOPEN in deploy/.env is kept; the
-        # gateway credential keys land one per service (a per-level key file or the Data API key left from before is
-        # deleted, and the Data API options are refused); the Open WebUI files render with the generated deploy/.env;
-        # --render turns the renderer's profile and the worker's endpoint on together; --clamav on|off sets the malware
-        # scan's profile, mode and confs, and a re-run keeps it.
-        run: |
-          d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
-          for k in api admin worker owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
-          init() {
-            bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
-              --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
-              --gateway-credential-key-file api="$d/keys/api" --gateway-credential-key-file admin="$d/keys/admin" \
-              --gateway-credential-key-file worker="$d/keys/worker" --openwebui-host chat.example.se \
-              --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
-              --proxy-address 10.1.2.3 --backup-target local --allow-file-keys --no-chown --yes "$@"
-          }
-          generated() {
-            s="$d/deploy/secrets"
-            sha256sum "$s"/.pepper "$s"/.openwebui-jwt-secret "$s"/postgres/*_password "$s"/api/Security__* \
-              "$s"/admin/Setup__Secret "$s"/worker/Security__CrawlKeyPepper "$s"/.render-ws-path \
-              "$s"/worker/Render__Endpoint "$s"/renderer.env \
-              "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
-              "$s"/openwebui/webui_secret_key "$s"/.openwebui-rag-api-key "$d"/deploy/certs/data-protection.pfx
-          }
-          init --render > "$d/init.log"; generated > "$d/first"
-          init --render > "$d/init.log"; generated > "$d/second"
-          diff -u "$d/first" "$d/second"
-          s="$d/deploy/secrets"
-          [ "$(wc -c < "$s/worker/Security__CrawlKeyPepper")" = 64 ]
-          # rag-admin's setup secret (M-20 S3): 32 random bytes, hex, in rag-admin's directory only; a re-run keeps the
-          # deployer's re-open value, which reaches rag-admin as Setup__Reopen.
-          grep -qxE '[0-9a-f]{64}' "$s/admin/Setup__Secret"
-          [ -z "$(find "$s" -name Setup__Secret ! -path "$s/admin/*")" ]
-          grep -qx 'UME_RAG_SETUP_REOPEN=' "$d/deploy/.env"
-          sed -i 's/^UME_RAG_SETUP_REOPEN=.*/UME_RAG_SETUP_REOPEN=2026-11-15/' "$d/deploy/.env"
-          init --render > "$d/init.log"
-          grep -qx 'UME_RAG_SETUP_REOPEN=2026-11-15' "$d/deploy/.env"
-          docker compose --env-file "$d/deploy/.env" config --format json \
-            | jq -e '.services["rag-admin"].environment.Setup__Reopen == "2026-11-15"' >/dev/null
-          # The renderer's secret path: the same in the worker's endpoint and the renderer's environment.
-          grep -qxE 'UME_RAG_RENDER_WS_PATH=/[0-9a-f]{64}' "$s/renderer.env"
-          [ "$(cat "$s/worker/Render__Endpoint")" = "ws://rag-renderer:3000$(sed -n 's/^UME_RAG_RENDER_WS_PATH=//p' "$s/renderer.env")" ]
-          # One gateway credential key per service (#580); a per-level key file of before is deleted and named.
-          for svc in api admin worker; do [ "$(cat "$s/$svc/Gateway__Key")" = "$svc-placeholder" ]; done
-          printf 'old\n' > "$s/worker/Gateway__Keys__Eu"
-          init --render > "$d/init.log"
-          [ ! -e "$s/worker/Gateway__Keys__Eu" ]
-          grep -q 'deleted the per-level key files worker/Gateway__Keys__Eu' "$d/init.log"
-          # Open WebUI's key for rag-api (M-17 C4): generated once (kept above on a re-run), in Open WebUI's environment and
-          # in rag-migrate's secret file OpenWebUi__ApiKey, which registers it as the deployment's own client.
-          key="$(cat "$s/.openwebui-rag-api-key")"
-          grep -qxE 'ume-rag-sk-[A-Za-z0-9]{43}' <<< "$key"
-          grep -qx "OPENAI_API_KEYS='$key'" "$s/openwebui.env"
-          [ "$(cat "$s/migrations/OpenWebUi__ApiKey")" = "$key" ]
-          # Open WebUI's sign-in settings are rag-api's and rag-admin's deployment values (identity design §19): its client
-          # secret in their secret files, not in Open WebUI's env file; without --openwebui-oidc-provider-url the provider
-          # is no deployment value (rag-admin's authority's discovery document is the code's default).
-          [ "$(cat "$s/api/OpenWebUi__Oidc__ClientSecret")" = "$(tr -d '\r\n' < "$d/keys/owui-secret")" ]
-          [ "$(cat "$s/admin/OpenWebUi__Oidc__ClientSecret")" = "$(tr -d '\r\n' < "$d/keys/owui-secret")" ]
-          if grep -q '^OAUTH_' "$s/openwebui.env"; then echo "openwebui.env still holds OAuth settings"; exit 1; fi
-          grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=' "$d/deploy/.env"
-          if out="$(init --gateway-credential-key-file parser="$d/keys/api" 2>&1)"; then
-            echo "a credential key for parser was accepted"; exit 1
-          fi
-          grep -q 'SERVICE is api, admin or worker' <<< "$out"
-          # --gateway-secrets-dir: the keys a gateway on the same host wrote for the manifest (the directory, or its
-          # Ume.Rag); a key file given for a service wins, and a missing key stops the run and says how to get it.
-          mkdir -p "$d/gw/Ume.Rag"; for k in api admin worker; do printf 'dir-%s\n' "$k" > "$d/gw/Ume.Rag/rag-$k"; done
-          init --render --gateway-secrets-dir "$d/gw" > "$d/init.log"
-          [ "$(cat "$s/api/Gateway__Key")" = api-placeholder ]
-          bash "$d/deploy/init-deployment.sh" --gateway-url https://llm.example.se --api-host rag-api.example.se \
-            --admin-host rag-admin.example.se --gateway-secrets-dir "$d/gw/Ume.Rag" --render \
-            --gateway-credential-key-file admin="$d/keys/admin" \
-            --backup-target local --allow-file-keys --no-chown --yes > "$d/init.log"
-          [ "$(cat "$s/api/Gateway__Key")" = dir-api ] && [ "$(cat "$s/worker/Gateway__Key")" = dir-worker ]
-          [ "$(cat "$s/admin/Gateway__Key")" = admin-placeholder ]
-          rm "$d/gw/Ume.Rag/rag-worker"
-          if out="$(bash "$d/deploy/init-deployment.sh" --gateway-url https://llm.example.se --api-host rag-api.example.se \
-            --admin-host rag-admin.example.se --gateway-secrets-dir "$d/gw" --backup-target local --allow-file-keys \
-            --no-chown --yes 2>&1)"; then
-            echo "a secrets directory without the worker's key was accepted"; exit 1
-          fi
-          grep -q 'no credential key .*/rag-worker' <<< "$out"
-          init --render > "$d/init.log"
-          for svc in api admin worker; do [ "$(cat "$s/$svc/Gateway__Key")" = "$svc-placeholder" ]; done
-          # The Data API is gone (#580): the admin syncs with its credential key. A Data API key file of before is deleted
-          # and named, the old options are refused, and nothing in .env or the admin's environment points at it.
-          printf 'old\n' > "$s/admin/OrgSync__DataApiKey"
-          init --render > "$d/init.log"
-          [ ! -e "$s/admin/OrgSync__DataApiKey" ]
-          grep -q 'deleted the Data API key file admin/OrgSync__DataApiKey' "$d/init.log"
-          if out="$(init --org-sync-key-file "$d/keys/admin" 2>&1)"; then echo "--org-sync-key-file was accepted"; exit 1; fi
-          grep -q -- '--org-sync-key-file is gone' <<< "$out"
-          if grep -q ORG_SYNC "$d/deploy/.env"; then echo "deploy/.env still has a Data API setting"; exit 1; fi
-          docker compose --env-file "$d/deploy/.env" config --format json \
-            | jq -e '.services["rag-admin"].environment | has("OrgSync__BaseUrl") | not' >/dev/null
-          # The published ports admit only the proxy (#453): --proxy-address lands in .env, the firewall rejects the rest.
-          grep -qx 'UME_RAG_PROXY_SOURCES=10.1.2.3' "$d/deploy/.env"
-          if out="$(init --proxy-address proxy.example.se 2>&1)"; then echo "a host name was accepted as --proxy-address"; exit 1; fi
-          printf 'UME_RAG_API_PORT=8543\nUME_RAG_ADMIN_PORT=9543\nUME_RAG_PROXY_SOURCES=10.1.2.3\n' > "$d/proxy.env"
-          rules="$(bash deploy/host/docker-user-firewall.sh --dry-run --env-file "$d/proxy.env" --dns 192.0.2.53)"
-          grep -qF -- '-A UME-RAG-EGRESS -s 10.1.2.3 -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j RETURN' <<< "$rules"
-          grep -qF -- '-A UME-RAG-EGRESS -p tcp -m conntrack --ctstate DNAT --ctorigdstport 9543 -j REJECT' <<< "$rules"
-          # Item 3: Open WebUI without --proxy says it can't reach rag-api.
-          grep -q "Without --proxy, Open WebUI can't reach rag-api" "$d/init.log"
-          docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
-          docker compose --env-file "$d/deploy/.env" config --quiet
-          # The renderer (#505): with --render its profile is in deploy/.env and the worker has the endpoint; without, neither.
-          # The malware scan's profile clamav is on by default (#535), next to render.
-          grep -qx 'COMPOSE_PROFILES=clamav,render' "$d/deploy/.env"
-          grep -qx 'UME_RAG_CLAMAV_MODE=on' "$d/deploy/.env"
-          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer
-          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-clamav
-          init > "$d/init.log"
-          [ ! -e "$s/worker/Render__Endpoint" ]
-          grep -qx 'COMPOSE_PROFILES=clamav' "$d/deploy/.env"
-          grep -q 'Renderer: off' "$d/init.log"
-          if docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-renderer; then
-            echo "rag-renderer runs without --render"; exit 1
-          fi
-          if grep -q 'Malware scan' "$d/init.log"; then echo "the malware scan is named off by default"; exit 1; fi
-          # --clamav off (#535): UME_RAG_CLAMAV_MODE=off, no clamav profile (render stays as asked), no ClamAV confs or
-          # their overlay even with --host-memory 24 and --freshclam-proxy, and a note; a re-run without the option keeps
-          # off; --clamav on turns it on again. The 24 GB confs come from ../images/clamav, as in the repository.
-          mkdir -p "$d/images" && cp -r images/clamav "$d/images/"
-          init --host-memory 24 > "$d/init.log"
-          [ -e "$s/clamav/clamd.conf" ]
-          grep -q 'compose.clamav-conf.yaml' "$d/deploy/.env"
-          init --clamav off --render --host-memory 24 --freshclam-proxy proxy.example.se:3128 > "$d/init.log"
-          grep -qx 'UME_RAG_CLAMAV_MODE=off' "$d/deploy/.env"
-          grep -qx 'COMPOSE_PROFILES=render' "$d/deploy/.env"
-          [ ! -e "$s/clamav" ]
-          if grep -q 'compose.clamav-conf.yaml' "$d/deploy/.env"; then echo "the ClamAV overlay is listed with --clamav off"; exit 1; fi
-          grep -q 'Malware scan: off' "$d/init.log"
-          docker compose --env-file "$d/deploy/.env" config --format json | jq -e '(.services | has("rag-clamav") | not)
-            and .services["rag-worker"].environment.ClamAv__Mode == "off" and (.services | has("rag-renderer"))' >/dev/null
-          init > "$d/init.log"
-          grep -qx 'UME_RAG_CLAMAV_MODE=off' "$d/deploy/.env"
-          grep -qx 'COMPOSE_PROFILES=' "$d/deploy/.env"
-          grep -q 'Malware scan: off' "$d/init.log"
-          init --clamav on > "$d/init.log"
-          grep -qx 'UME_RAG_CLAMAV_MODE=on' "$d/deploy/.env"
-          grep -qx 'COMPOSE_PROFILES=clamav' "$d/deploy/.env"
-          docker compose --env-file "$d/deploy/.env" config --services | grep -qx rag-clamav
-          if out="$(init --clamav maybe 2>&1)"; then echo "--clamav maybe was accepted"; exit 1; fi
-          grep -q -- '--clamav must be on or off' <<< "$out"
-          # --renew-certs reads deploy/.env, never runs it (#711): a value with a space and a ;-list, valid in Compose's
-          # .env, don't stop the renewal, and rag-api's certificate keeps its public host name.
-          printf 'UME_RAG_EXAMPLE_NAME=Umeå kommun\nUME_RAG_EXAMPLE_GROUPS=a;b;c\n' >> "$d/deploy/.env"
-          bash "$d/deploy/init-deployment.sh" --renew-certs --yes > "$d/init.log"
-          openssl x509 -in "$d/deploy/certs/api/api.crt" -noout -ext subjectAltName | grep -q 'DNS:rag-api.example.se'
-      - name: init-deployment.sh --proxy writes an nginx config that nginx accepts
-        # deploy/proxy/nginx.conf.example in the gateway's shape (#468): rendered for rag-api, rag-admin and Open WebUI,
-        # then nginx -t with throwaway certificates (the pinned image of the AppHost's fixture site).
-        run: |
-          d="$RUNNER_TEMP/proxy"; mkdir -p "$d/keys" "$d/certs"; cp -r deploy "$d/deploy"; printf 'k\n' > "$d/keys/api"
-          bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume --gateway-url https://llm.example.se \
-            --api-host rag-api.example.se --admin-host rag-admin.example.se --upstream-host 127.0.0.1 --proxy \
-            --openwebui-host chat.example.se --gateway-credential-key-file api="$d/keys/api" --backup-target local --allow-file-keys --no-chown --yes > "$d/init.log"
-          conf="$d/deploy/proxy/nginx.conf"
-          if grep -n '@[A-Z_]*@' "$conf"; then echo "placeholders left in nginx.conf"; exit 1; fi
-          grep -q 'server_name chat.example.se;' "$conf"
-          openssl req -x509 -newkey rsa:2048 -nodes -keyout "$d/certs/k.pem" -out "$d/certs/c.pem" -days 1 -subj /CN=ci >/dev/null 2>&1
-          chmod 644 "$d/certs/k.pem"
-          sed -e 's|# ssl_certificate     /etc/ssl/[^;]*;|ssl_certificate /certs/c.pem;|' -e 's|# ssl_certificate_key /etc/ssl/[^;]*;|ssl_certificate_key /certs/k.pem;|' \
-            "$conf" > "$d/test.conf"
-          docker run --rm -v "$d/test.conf:/etc/nginx/conf.d/default.conf:ro" -v "$d/certs:/certs:ro" \
-            docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434 nginx -t
-      - name: init-deployment.sh --domain gives the host names their defaults
-        # Setup wizard S0: rag., rag-admin. and chat.<domain> in deploy/.env, the proxy's nginx.conf and rag-admin's
-        # certificate; a host option given wins; a name that is not a domain is refused.
-        run: |
-          d="$RUNNER_TEMP/domain"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"; printf 'k\n' > "$d/keys/api"
-          init() {
-            bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
-              --gateway-url https://llm.example.se --gateway-credential-key-file api="$d/keys/api" --backup-target local \
-              --allow-file-keys --no-chown --yes "$@" > "$d/init.log"
-          }
-          init --domain example.se
-          if grep -q '^UME_RAG_OPENWEBUI_HOST=.' "$d/deploy/.env"; then echo '--domain alone set up Open WebUI'; exit 1; fi
-          init --domain example.se --openwebui-oidc-client-id open-webui --proxy --upstream-host 127.0.0.1
-          grep -qx 'UME_RAG_API_PUBLIC_URL=https://rag.example.se' "$d/deploy/.env"
-          grep -qx 'UME_RAG_ADMIN_PUBLIC_HOST=rag-admin.example.se' "$d/deploy/.env"
-          grep -qx 'UME_RAG_OPENWEBUI_HOST=chat.example.se' "$d/deploy/.env"
-          for h in rag rag-admin chat; do grep -q "server_name $h.example.se;" "$d/deploy/proxy/nginx.conf"; done
-          openssl x509 -in "$d/deploy/certs/admin/admin.crt" -noout -ext subjectAltName | grep -q 'DNS:rag-admin.example.se'
-          init --domain example.se --admin-host admin.kommun.se
-          grep -qx 'UME_RAG_API_PUBLIC_URL=https://rag.example.se:8543' "$d/deploy/.env"
-          grep -qx 'UME_RAG_ADMIN_PUBLIC_HOST=admin.kommun.se' "$d/deploy/.env"
-          if out="$(init --domain .example.se 2>&1)"; then echo "--domain .example.se was accepted"; exit 1; fi
-          grep -q -- '--domain takes a domain name' <<< "$out"
-      - name: init-deployment.sh without sign-in options leaves sign-in to the setup wizard
-        # Setup wizard S6: no --oidc-* option is required or prompted. Without them nothing declares sign-in (no client
-        # secret file, an empty authority and client id) and rag-admin renders without a non-empty Oidc__* value, so the
-        # wizard's fields are free; the closing notes point at the wizard. --oidc-authority and --oidc-refuse-guests are
-        # kept by a later re-run without them.
-        run: |
-          d="$RUNNER_TEMP/wizard"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"; printf 'k\n' > "$d/keys/api"
-          s="$d/deploy/secrets/admin"
-          init() {
-            bash "$d/deploy/init-deployment.sh" --domain example.se --gateway-url https://llm.example.se \
-              --gateway-credential-key-file api="$d/keys/api" --backup-target local --allow-file-keys --no-chown "$@" \
-              < /dev/null > "$d/init.log"
-          }
-          init
-          [ ! -e "$s/Oidc__ClientSecret" ] && [ ! -e "$s/Oidc__RefuseGuests" ]
-          grep -qx 'UME_RAG_OIDC_AUTHORITY=' "$d/deploy/.env"
-          grep -qx 'UME_RAG_OIDC_CLIENT_ID=' "$d/deploy/.env"
-          grep -q 'Set up sign-in in the setup wizard' "$d/init.log"
-          grep -q "logs rag-admin | grep 'Setup code'" "$d/init.log"
-          docker compose --env-file "$d/deploy/.env" config --format json | jq -e '.services["rag-admin"].environment
-            | (has("Oidc__RefuseGuests") | not)
-              and ([to_entries[] | select((.key | startswith("Oidc__")) and (.value // "") != "")] | length == 0)' >/dev/null
-          init --yes --oidc-authority https://keycloak.example.se/realms/ume --oidc-refuse-guests false
-          init --yes
-          grep -qx 'UME_RAG_OIDC_AUTHORITY=https://keycloak.example.se/realms/ume' "$d/deploy/.env"
-          [ "$(cat "$s/Oidc__RefuseGuests")" = false ]
-          docker compose --env-file "$d/deploy/.env" config --format json \
-            | jq -e '.services["rag-admin"].environment.Oidc__Authority == "https://keycloak.example.se/realms/ume"' >/dev/null
-          if out="$(init --yes --oidc-refuse-guests maybe 2>&1)"; then echo "--oidc-refuse-guests maybe was accepted"; exit 1; fi
-          grep -q -- '--oidc-refuse-guests must be true or false' <<< "$out"
-      - name: Pilot caps, Open WebUI key restriction and the feedback service account
-        # Offline: docker compose config over the base files, the 24 GB overlay and the Open WebUI file (P1b item 17).
+      - name: init-deployment.sh writes deploy/.env, and a re-run keeps it
+        # Offline in a copy of deploy/: a first run, mode 600, the clamav profile and no sign-in value; a re-run keeps
+        # every line (UME_RAG_SETUP_REOPEN among them); the options and their overlays; the refusals; the host firewall's
+        # rules and subnets (deploy/tests/compose-init.sh).
+        run: bash deploy/tests/compose-init.sh
+      - name: rag-bootstrap in its Compose form keeps its secrets on a re-run
+        # deploy/.env from init-deployment.sh, then rag-bootstrap alone, twice, on throwaway volumes: the gateway's CA and
+        # keys from host directories, no gateway blocks in the proxy, the setup wizard's address, the overlays' inputs,
+        # and escrow-keys.sh and cert-expiry.sh reading the volumes (deploy/tests/compose-bootstrap.sh).
+        run: bash deploy/tests/compose-bootstrap.sh
+      - name: Pilot caps, Open WebUI key restriction and the upload copy
+        # Offline: docker compose config over compose.rag.yaml with the hardened, 24 GB and backup overlays and the
+        # openwebui profile (P1b item 17).
         run: bash deploy/tests/pilot-stack.sh
       - name: The Portainer stack's rag-bootstrap keeps its secrets on a re-run
         # rag-bootstrap alone, twice on the same throwaway volumes (#697): every secret existing data depends on, and every
         # owner and mode, is unchanged by the second run; the gateway credential keys follow the variable, else the
         # manifest's file.
         run: bash deploy/tests/portainer-rerun.sh
-      - name: Open WebUI's settings match in Compose and the Portainer stack
-        # #707: open-webui (compose.openwebui.yaml) and rag-openwebui (the generated compose.portainer.yaml) have the same
-        # environment keys and values, apart from the deployment-specific ones the script lists.
-        run: bash deploy/tests/openwebui-parity.sh
       - name: The Portainer stack's host names default under UME_DOMAIN
         # Setup wizard S0: offline, every place a host name is used renders rag., rag-admin. and chat.<domain> from
         # UME_DOMAIN, each UME_RAG_*_HOST overrides its own, the names alone work as before (never a name ending in a dot),
@@ -669,7 +424,7 @@ jobs:
             echo "a certificate 30 days from expiry passed"; exit 1
           fi
           echo "$out"
-          grep -q '^warning: postgres/postgres.crt expires .* --renew-certs' <<< "$out"
+          grep -q '^warning: postgres/postgres.crt expires .*: run rag-bootstrap within 30 days' <<< "$out"
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh deploy/portainer/*.sh deploy/kubernetes/*.sh
       - name: Host units pass systemd-analyze verify

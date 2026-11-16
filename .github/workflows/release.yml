@@ -101,13 +101,13 @@ jobs:
             ref="$prefix/$name:$VERSION"
             digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)" || true
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image $ref on ghcr.io"; exit 1; }
-            echo "${name^^}_IMAGE=$ref@$digest" | tee -a images.env
+            echo "RAG_${name^^}_IMAGE=$ref@$digest" | tee -a images.env
           done
           mkdir -p dist
           sed 's/\r$//' deploy/portainer/compose.portainer.yaml > dist/compose.portainer.yaml
           while IFS='=' read -r var ref; do
-            grep -qF "\${RAG_${var}:-" dist/compose.portainer.yaml || { echo "::error::RAG_$var is not used in the stack"; exit 1; }
-            sed -i -E "s#\\\$\\{RAG_${var}:-[^}]*\\}#\${RAG_${var}:-${ref}}#g" dist/compose.portainer.yaml
+            grep -qF "\${${var}:-" dist/compose.portainer.yaml || { echo "::error::$var is not used in the stack"; exit 1; }
+            sed -i -E "s#\\\$\\{${var}:-[^}]*\\}#\${${var}:-${ref}}#g" dist/compose.portainer.yaml
           done < images.env
           grep -oE 'ume-rag/[a-z]+:[^@]+@sha256:[0-9a-f]{12}' dist/compose.portainer.yaml | sort -u
       - name: Boot the Portainer stack
@@ -243,7 +243,7 @@ jobs:
               -p:ContainerRegistry="$REGISTRY_HOST" -p:ContainerRepository="$REPOSITORY/$name" -p:PublishRepositoryUrl=true
             ref="$REGISTRY_HOST/$REPOSITORY/$name:$VERSION"
             digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)"
-            echo "${name^^}_IMAGE=$ref@$digest" | tee -a images.env
+            echo "RAG_${name^^}_IMAGE=$ref@$digest" | tee -a images.env
             # The SBOM of exactly what the image holds: the files of the publish directory PublishContainer packed, and
             # the NuGet packages of the project and every project it references. The detector reads each project's own
             # obj/project.assets.json and does not follow project references, so those files are gathered first (-bc
@@ -340,7 +340,7 @@ jobs:
           syft_dir="$RUNNER_TEMP/syft"; mkdir -p "$syft_dir"; : > "$syft_dir/refs"
           for name in postgres clamav renderer parser; do
             digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
-            echo "${name^^}_IMAGE=$ref" | tee -a images.env
+            echo "RAG_${name^^}_IMAGE=$ref" | tee -a images.env
             echo "$name $ref" >> "$syft_dir/refs"
           done
           # The exit code goes to a file: a later step can't `wait` for a process this step started. Every stream of the
@@ -358,12 +358,11 @@ jobs:
           set -a; . ./images.env; set +a
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
       - name: Smoke test the bundle
-        # The self-hosted runner has no sudo (docs/ci-runner.md): init-deployment.sh's chown runs as root in a
-        # throwaway container of the bundle's postgres image. --render boots with the renderer, then switches it off as
-        # the upgrade guide says, so one boot covers both (#505).
+        # deploy/compose.rag.yaml with the backup overlay; no sudo needed (rag-bootstrap owns the files inside the
+        # volumes). --render boots with the renderer, then switches it off, so one boot covers both (#505).
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke" --chown-with-docker --render
+            --work-dir "$RUNNER_TEMP/smoke" --render
       - name: Boot the Portainer stack
         # The release's compose.portainer.yaml asset, started as Portainer starts it: the stack file and variables
         # only, the gateway's images from the release it pins, Ume.Rag's from this run, with clamav and openwebui
@@ -470,8 +469,9 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "Ume Rag $version" --notes-file notes.md $prerelease \
             release/dist/*
       - name: Open the pull request that pins the Portainer stack to this release
-        # deploy/portainer/ on main then names this release's images, as the release's compose.portainer.yaml asset
-        # does (build-stack.sh --images; the gateway release stays the one the committed file names). Never fails the
+        # deploy/compose.rag.yaml and deploy/portainer/ on main then name this release's images, as the release's
+        # compose.portainer.yaml asset and bundle do (build-stack.sh --images; the gateway release stays the one the
+        # committed file names), so Compose from the repository runs the latest release too. Never fails the
         # release: the asset is published either way, and the same command works by hand. Checks do not start on a pull
         # request opened with the workflow's token: close and reopen it to run them. Needs the repository setting
         # "Allow GitHub Actions to create and approve pull requests".
@@ -484,9 +484,9 @@ jobs:
           git fetch --depth 1 origin main
           git switch -c "$branch" FETCH_HEAD
           sh deploy/portainer/build-stack.sh --images release/images.env current
-          if git diff --quiet -- deploy/portainer; then echo "deploy/portainer/ already names $version"; exit 0; fi
+          if git diff --quiet -- deploy/compose.rag.yaml deploy/portainer; then echo "deploy/ already names $version"; exit 0; fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Portainer stack pinned to Ume.Rag $version's images" -- deploy/portainer
+            commit -q -m "Portainer stack pinned to Ume.Rag $version's images" -- deploy/compose.rag.yaml deploy/portainer
           git push origin "$branch"
           gh pr create --base main --head "$branch" --title "Portainer stack pinned to Ume.Rag $version's images" \
-            --body "Opened by the release of \`$GITHUB_REF_NAME\`: \`deploy/portainer/build-stack.sh --images images.env current\`, so the template and \`compose.portainer.yaml\` name the release's images, as the release's \`compose.portainer.yaml\` asset does. Close and reopen this pull request to start its checks."
+            --body "Opened by the release of \`$GITHUB_REF_NAME\`: \`deploy/portainer/build-stack.sh --images images.env current\`, so \`deploy/compose.rag.yaml\` and \`compose.portainer.yaml\` name the release's images, as the release's \`compose.portainer.yaml\` asset does. Close and reopen this pull request to start its checks."

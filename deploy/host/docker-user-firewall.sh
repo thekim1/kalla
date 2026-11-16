@@ -2,7 +2,7 @@
 # Host firewall for the Compose networks (plans/platform/repo-and-deployment.md §6.1): egress per network in Docker's
 # DOCKER-USER chain, no new connections from any of them to the host itself (except the allow-listed endpoints, when
 # the gateway or Keycloak runs on the same machine), and, with UME_RAG_PROXY_SOURCES set, the published ports (rag-api,
-# rag-admin, Open WebUI) only from the reverse proxy: Docker's DNAT bypasses INPUT rules (ufw, firewalld), so they are
+# rag-admin, Open WebUI) only from the reverse proxy. The subnets are compose.hardened.yaml's: Docker's DNAT bypasses INPUT rules (ufw, firewalld), so they are
 # matched here by their original port (#453). Idempotent: it rebuilds its own two
 # chains in one iptables-restore transaction and jumps to them from DOCKER-USER and INPUT once. rag-firewall.service
 # runs it after Docker starts and every 15 minutes (the allow-lists are host names, resolved when it runs).
@@ -11,28 +11,27 @@
 #   deploy/host/docker-user-firewall.sh --remove | --print-subnets
 #
 # A container sends all its egress through the network that holds its default route: Compose pins it with gw_priority
-# (rag-api and rag-admin: llm; rag-worker: crawl; postgres, rag-clamav and Open WebUI have one non-internal network),
-# so each allow-list below is everything the members of that network call.
-#   edge       none: it carries the published ports only (replies pass as established connections)
-#   data, ingestion, parser, render
-#              none (internal networks; dropped here as well). render holds the renderer's Chromium, which runs
+# (rag-api and rag-admin: llm; rag-worker: rag-crawl; rag-postgres, rag-clamav and Open WebUI have one non-internal
+# network), so each allow-list below is everything the members of that network call.
+#   rag-edge   the published ports, rag-proxy's upstreams and Open WebUI (profile openwebui in COMPOSE_PROFILES): its
+#              OIDC provider (UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL, else UME_RAG_OIDC_AUTHORITY) and DNS; else none
+#              (replies pass as established connections; rag-api is on the same network)
+#   rag-data, rag-ingestion, rag-parser, rag-render
+#              none (internal networks; dropped here as well). rag-render holds the renderer's Chromium, which runs
 #              untrusted page scripts, and its bridge gateway answers at the IP level: the INPUT rule rejects it there
 #   llm        the gateway (UME_RAG_GATEWAY_URL; the admin's organisation and model syncs call it too), the
-#              OIDC authority (UME_RAG_OIDC_AUTHORITY), Open WebUI as rag-api calls it (UME_RAG_OPENWEBUI_BASE_URL: the
-#              feedback import), the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
-#   crawl      the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
+#              OIDC authority (UME_RAG_OIDC_AUTHORITY), the OTLP endpoint (UME_OTEL_ENDPOINT), DNS
+#   rag-crawl  the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
 #              loopback, link-local, documentation, multicast and reserved ranges), the rest of the Internet allowed
-#   mirror     database.clamav.net:443, or only freshclam's proxy (UME_RAG_FRESHCLAM_PROXY); DNS
+#   rag-mirror database.clamav.net:443, or only freshclam's proxy (UME_RAG_FRESHCLAM_PROXY); DNS
 #   backup     the S3 endpoint (UME_RAG_BACKUP_ENDPOINT) and DNS; none with a mounted share
-#   openwebui  with UME_RAG_OPENWEBUI_HOST set: rag-api's public URL (UME_RAG_API_PUBLIC_URL, through the proxy), the
-#              OIDC provider (UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL, else UME_RAG_OIDC_AUTHORITY), DNS; else none
 # DNS: the upstream resolvers Docker's embedded DNS forwards to from the container (the non-loopback nameservers of
 # /etc/resolv.conf, or of /run/systemd/resolve/resolv.conf behind systemd-resolved); --dns IP replaces them.
 #
 # Options:
 #   --env-file FILE        [deploy/.env] the values above
 #   --dry-run              print the rules instead of applying them (no root needed)
-#   --subnet NAME=CIDR     another subnet for a network (they must match the Compose files; CI checks the defaults)
+#   --subnet NAME=CIDR     another subnet for a network (they must match compose.hardened.yaml; CI checks the defaults)
 #   --allow NAME=HOST[:PORT]  one more destination for a network (port 443 when omitted), e.g. llm=<gateway admin
 #                             host>:9443 for the admin's cost and budget read-back (the gateway names that address)
 #   --dns IP               a resolver (repeat the option)
@@ -48,13 +47,12 @@ dns_servers=(); extra=()
 chain=UME-RAG-EGRESS; input_chain=UME-RAG-INPUT
 reject=(-j REJECT --reject-with icmp-admin-prohibited)
 
-# Networks in the order the rules are written, with the subnets of compose.prod.yaml, compose.ingestion.yaml and
-# compose.openwebui.yaml.
-names=(edge data llm ingestion parser render crawl mirror backup openwebui)
+# Networks in the order the rules are written, with the subnets of compose.hardened.yaml.
+names=(rag-edge rag-data llm rag-ingestion rag-parser rag-render rag-crawl rag-mirror backup)
 declare -A subnet=(
-  [edge]=172.30.1.0/24 [data]=172.30.2.0/24 [llm]=172.30.3.0/24 [ingestion]=172.30.4.0/24 [parser]=172.30.5.0/24
-  [render]=172.30.18.0/24 [crawl]=172.30.6.0/24 [mirror]=172.30.7.0/24 [backup]=172.30.16.0/24
-  [openwebui]=172.30.17.0/24
+  [rag-edge]=172.30.1.0/24 [rag-data]=172.30.2.0/24 [llm]=172.30.3.0/24 [rag-ingestion]=172.30.4.0/24
+  [rag-parser]=172.30.5.0/24 [rag-render]=172.30.18.0/24 [rag-crawl]=172.30.6.0/24 [rag-mirror]=172.30.7.0/24
+  [backup]=172.30.16.0/24
 )
 private=(0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24
   192.168.0.0/16 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4)
@@ -107,7 +105,8 @@ if [ "$dry_run" = 0 ]; then
   iptables -n -L DOCKER-USER >/dev/null 2>&1 || die "no DOCKER-USER chain: start Docker (with its iptables integration) first"
 fi
 
-env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1; }
+# KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
+env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
 if [ ! -r "$env_file" ]; then echo "warning: cannot read $env_file; only --allow destinations are used" >&2; fi
 
 # endpoint URL-OR-HOST[:PORT] DEFAULT-PORT — prints "HOST PORT" (scheme, path and user info dropped).
@@ -139,19 +138,20 @@ add() { # add NETWORK URL-OR-HOST[:PORT] — nothing when the value is empty
   [ -n "$2" ] || return 0
   allows[$1]+="$(endpoint "$2" 443)"$'\n'
 }
-gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_RAG_OTEL_ENDPOINT)"
+gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_OTEL_ENDPOINT)"
 add llm "$gateway"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"
-add llm "$(env_value UME_RAG_OPENWEBUI_BASE_URL)"
 add llm "$otel"
-add crawl "$gateway"; add crawl "$otel"
+add rag-crawl "$gateway"; add rag-crawl "$otel"
 proxy="$(env_value UME_RAG_FRESHCLAM_PROXY)"
-if [ -n "$proxy" ]; then add mirror "$proxy"; else add mirror database.clamav.net; fi
+if [ -n "$proxy" ]; then add rag-mirror "$proxy"; else add rag-mirror database.clamav.net; fi
 add backup "$(env_value UME_RAG_BACKUP_ENDPOINT)"
-if [ -n "$(env_value UME_RAG_OPENWEBUI_HOST)" ]; then
-  # Its provider: the deployment's, else the default, rag-admin's authority (identity design §19). A provider set only in the
-  # setup wizard on another host needs --allow openwebui=HOST.
+openwebui=0
+case ",$(env_value COMPOSE_PROFILES)," in *,openwebui,*) openwebui=1;; esac
+if [ "$openwebui" = 1 ]; then
+  # Its provider: the deployment's, else the default, rag-admin's authority (identity design §19). A provider set only in
+  # the setup wizard on another host needs --allow rag-edge=HOST. It reaches rag-api inside the stack.
   owui_provider="$(env_value UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL)"
-  add openwebui "$(env_value UME_RAG_API_PUBLIC_URL)"; add openwebui "${owui_provider:-$(env_value UME_RAG_OIDC_AUTHORITY)}"
+  add rag-edge "${owui_provider:-$(env_value UME_RAG_OIDC_AUTHORITY)}"
 fi
 for spec in ${extra[@]+"${extra[@]}"}; do add "${spec%%=*}" "${spec#*=}"; done
 
@@ -163,11 +163,13 @@ out=("*filter" ":$chain - [0:0]" ":$input_chain - [0:0]" "-A $chain -m conntrack
 # destination port) from any other source is rejected. Container egress is never DNATed, so it doesn't match.
 proxy_sources="$(env_value UME_RAG_PROXY_SOURCES)"
 if [ -n "$proxy_sources" ]; then
-  published=("$(env_value UME_RAG_API_PORT)" "$(env_value UME_RAG_ADMIN_PORT)")
-  [ -z "$(env_value UME_RAG_OPENWEBUI_HOST)" ] || published+=("$(env_value UME_RAG_OPENWEBUI_PORT)")
+  # Each port as deploy/.env sets it, else compose.rag.yaml's default.
+  port_of() { local v; v="$(env_value "$1")"; echo "${v:-$2}"; }
+  published=("$(port_of UME_RAG_API_PORT 8543)" "$(port_of UME_RAG_ADMIN_PORT 9543)")
+  [ "$openwebui" = 0 ] || published+=("$(port_of UME_RAG_OPENWEBUI_PORT 3000)")
   # The second slots (compose.rolling.yaml), when COMPOSE_FILE lists it.
   if [[ "$(env_value COMPOSE_FILE)" == *compose.rolling.yaml* ]]; then
-    published+=("$(env_value UME_RAG_API_B_PORT)" "$(env_value UME_RAG_ADMIN_B_PORT)")
+    published+=("$(port_of UME_RAG_API_B_PORT 8544)" "$(port_of UME_RAG_ADMIN_B_PORT 9544)")
   fi
   out+=("# published ports: the reverse proxy only (UME_RAG_PROXY_SOURCES)")
   for port in "${published[@]}"; do
@@ -181,7 +183,7 @@ fi
 for n in "${names[@]}"; do
   s="${subnet[$n]}"
   out+=("# $n" "-A $chain -s $s -d $s -j RETURN")
-  if [ -n "${allows[$n]:-}" ] || [ "$n" = crawl ]; then
+  if [ -n "${allows[$n]:-}" ] || [ "$n" = rag-crawl ]; then
     for ip in ${dns_servers[@]+"${dns_servers[@]}"}; do
       out+=("-A $chain -s $s -d $ip -p udp --dport 53 -j RETURN" "-A $chain -s $s -d $ip -p tcp --dport 53 -j RETURN")
     done
@@ -197,7 +199,7 @@ for n in "${names[@]}"; do
       input_allows+=("-A $input_chain -s $s -d $ip -p tcp --dport $port -j RETURN")
     done
   done <<<"${allows[$n]:-}"
-  if [ "$n" = crawl ]; then
+  if [ "$n" = rag-crawl ]; then
     for cidr in $(env_value UME_RAG_CRAWL_ALLOW | tr ',' ' '); do out+=("-A $chain -s $s -d $cidr -j RETURN"); done
     for cidr in "${private[@]}"; do out+=("-A $chain -s $s -d $cidr ${reject[*]}"); done
     out+=("-A $chain -s $s -j RETURN")

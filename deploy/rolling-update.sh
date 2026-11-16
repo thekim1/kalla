@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # Updates a stack started with compose.rolling.yaml one slot at a time, so rag-api and the admin UI stay up
 # (docs/zero-downtime-updates.md, repo-and-deployment §7.3). Run it after setting the new image pins in deploy/.env
-# or unpacking a new release bundle over deploy/ (keep deploy/.env, deploy/certs and deploy/secrets).
+# or unpacking a new release bundle over deploy/ (keep deploy/.env; the certificates and secrets are in the volumes).
 #
-#   ./deploy/rolling-update.sh                  # migrate, then rag-api, rag-api-b, rag-admin, rag-admin-b, the rest
+#   ./deploy/rolling-update.sh                  # rag-bootstrap and the migration, then rag-api, rag-api-b, rag-admin,
+#                                               # rag-admin-b, the rest
 #   ./deploy/rolling-update.sh --pull           # pull the images first
 #   ./deploy/rolling-update.sh --force          # recreate every slot even if its image did not change (new certificates)
-#   ./deploy/rolling-update.sh --with-postgres  # also a new POSTGRES_IMAGE: restarts the database (an announced outage)
-#                                               # and runs ALTER EXTENSION vector UPDATE before migrating
+#   ./deploy/rolling-update.sh --with-postgres  # also a new RAG_POSTGRES_IMAGE: restarts the database (an announced
+#                                               # outage) and runs ALTER EXTENSION vector UPDATE before migrating
 #
 # Only for releases the upgrade guide marks "Rolling update: yes": the old version keeps running against the new
 # schema until its slot is replaced. The worker is stopped before its replacement starts (two would exceed its role's
 # connection limit; its job leases make the pause harmless); the parser, ClamAV and the renderer are recreated only if
-# their image changed (the worker retries what was in flight).
+# they run and their image changed (the worker retries what was in flight).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,7 +39,9 @@ grep -qx rag-api-b <<<"$services" || {
 }
 pairs=(rag-api:rag-api-b rag-admin:rag-admin-b)
 singles=()
-for s in rag-worker rag-parser rag-clamav rag-renderer; do grep -qx "$s" <<<"$services" && singles+=("$s"); done
+running="$("${compose[@]}" ps --services --status running)"
+# The ones that run: a single left stopped stays so.
+for s in rag-worker rag-parser rag-clamav rag-renderer; do grep -qx "$s" <<<"$running" && singles+=("$s"); done
 
 health() { # health SERVICE: the container's health status, or "missing"
   local id; id="$("${compose[@]}" ps -q "$1" 2>/dev/null || true)"
@@ -67,20 +70,25 @@ for pair in "${pairs[@]}"; do
 done
 
 if [ "$pull" = 1 ]; then
-  "${compose[@]}" pull postgres rag-migrate rag-api rag-api-b rag-admin rag-admin-b "${singles[@]}"
+  "${compose[@]}" pull rag-bootstrap rag-postgres rag-migrate rag-api rag-api-b rag-admin rag-admin-b "${singles[@]}"
 fi
 
+# The release's bootstrap first: it writes what the new version reads (secrets, certificates, rag-config) and touches
+# nothing that runs.
+echo "==> rag-bootstrap"
+"${compose[@]}" run --rm --no-deps rag-bootstrap
+
 # A new Postgres image restarts the database: never rolling (§7.3), so only on request.
-if image_changed postgres; then
+if image_changed rag-postgres; then
   [ "$with_postgres" = 1 ] || {
-    echo "error: POSTGRES_IMAGE changed. Replacing postgres restarts the database, a short outage of every service." >&2
+    echo "error: RAG_POSTGRES_IMAGE changed. Replacing rag-postgres restarts the database, a short outage of every service." >&2
     echo "  Announce it and run again with --with-postgres (upgrade guide, Superuser steps)." >&2
     exit 1
   }
-  echo "==> Replacing postgres (the database restarts)"
-  "${compose[@]}" up -d --no-deps --wait --wait-timeout 600 postgres
+  echo "==> Replacing rag-postgres (the database restarts)"
+  "${compose[@]}" up -d --no-deps --wait --wait-timeout 600 rag-postgres
   echo "==> Updating the vector extension"
-  "${compose[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c 'ALTER EXTENSION vector UPDATE;'
+  "${compose[@]}" exec -T rag-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c 'ALTER EXTENSION vector UPDATE;'
 fi
 
 echo "==> Migrating the database"
