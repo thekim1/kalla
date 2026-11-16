@@ -2,7 +2,7 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.7.0`** (2026-11-16, the setup wizard; on the gateway's `v0.11.0`). `main` is 0.7.0 plus what
-session 44 merged after it (*Unreleased* in `CHANGELOG.md`). The user's VM runs 0.5.0. Repo `~/research/rag` on this
+sessions 44 and 45 merged after it (*Unreleased* in `CHANGELOG.md`). The user's VM runs 0.5.0. Repo `~/research/rag` on this
 machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -26,37 +26,57 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 45): nothing is in work
+## Start here (session 46): the deploy simplification (M-22)
 
-Every code item that needs no input from people is done or filed. The critical path is the user's (roadmap): the VM's
-upgrade, the test chatbot (T2–T6, run by the user's team), the support-chatbot proposal.
+The user asked for it on 2026-11-16: [`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md)
+says where deployment is more complex than it needs to be and what to do first; the queue item is `plans/work/main.md`
+**M-22**. Read the proposal, then:
 
-### What the main session can take without input, in this order
+1. **S1, one bootstrap for Compose and Portainer.** It has four points to decide before any code (where the files live
+   in Compose, what stays in `init-deployment.sh`, one stack file or two, what Kubernetes does). Put them to the user
+   first, each as four alternatives with one recommendation. **C13** of M-17 (the script loses the options whose
+   values moved; `plans/proposals/deploy-configuration.md` §5) is S1's first step and needs no decision.
+2. **S3 with S9, Open WebUI as a profile in Compose and easy to skip** (the user's own point: not every installation
+   needs it). Off unless asked for in every form, and no trace of it when it is off: the stack example's default
+   profiles, the `chat.` host, the managed client, the last step of *Get started*, the first-install guides. S9's list
+   is from reading; check each point in the code first. The admin UI's texts are stream b's paths.
+3. **S4a, delete the upgrade paths nobody runs:** every per-version section but the newest.
 
-1. **C13** of M-17 (`plans/proposals/deploy-configuration.md` §5; `plans/work/main.md` M-17; announced on #667):
-   `init-deployment.sh` loses the options whose values moved to settings or the gateway, and the docs follow.
-   Done when `init-deployment.sh --help` lists only deploy-time options and `deploy-checks` is green. It was planned for
-   0.6.1 and is in no release. Mind Decisions "Deployment values across releases" (a retired option is named, and the
-   upgrade guide says so).
-2. **A-20 (#506)** GitHub Actions pinned by commit SHA, and **A-27 (#507)** base-image CVE scans with automated digest
+**Upgrades may break** (user, 2026-11-16: "assume no one is really using this yet"): a low-hanging simplification
+need not keep an existing stack upgradable, as long as the release says so; the proposal lists what that frees
+(*Allowed now that upgrades may break*). Tell the user when a change means the VM is reinstalled, not upgraded.
+
+S2 (the host firewall and slice as optional hardening), S5 (one wizard hand-off from the gateway) and S7 (the manifest
+names the owner and a first assigned key) wait for the user's decision: S2 changes the security design, S5 and S7 the
+gateway.
+
+### What else the main session can take without input
+
+1. **A-20 (#506)** GitHub Actions pinned by commit SHA, and **A-27 (#507)** base-image CVE scans with automated digest
    bumps: stream a's queue, both on the before-go-live list (roadmap step 7).
-3. **#792** (stream b's paths): `ParentMessageId` is never written, against chat design §11.4. Write it, or let the
+2. **#792** (stream b's paths): `ParentMessageId` is never written, against chat design §11.4. Write it, or let the
    design drop the column; ask on the issue first.
-4. **#793** (stream a's paths): `src/parser/LICENSES.md` has no LibreOffice section and its written offer names only
+3. **#793** (stream a's paths): `src/parser/LICENSES.md` has no LibreOffice section and its written offer names only
    GPL and LGPL. The issue holds a draft; its entries marked *from memory* must be checked against the image's
    `/usr/share/doc/*/copyright` files.
+4. **#797** (stream b's paths): `deploy/keycloak/README.md`'s standalone import command uses `http://keycloak:8080`,
+   and the gateway's Keycloak serves only HTTPS on 8443.
 
 Before a stream's paths: check for open `a/` or `b/` work and say so on the issue (handbook).
 
 ### Waiting on the user
 
-- **The VM:** 0.5.0 → 0.6.0 → 0.7.0 by `docs/portainer.md` (*Upgrade from 0.5.x to 0.6.0*, then *Upgrade from 0.6.0*).
+- **The VM:** 0.5.0 → 0.6.0 → 0.7.0 by `docs/portainer.md` (*Upgrade from 0.5.x to 0.6.0* **with the `v0.6.0`
+  release's stack file**, then *Upgrade from 0.6.0* with the `v0.7.0` file: #795 found that the guide said only "the
+  new file", and the 0.7.0 file at the first step would create three new credential keys).
   Before the first step, rag-api's and rag-admin's credential keys get `OnPrem` and `Eu`, and each published assistant
   needs a gateway key that reaches both its chat model and its embedding model. Pulls that say "denied":
   `docker logout ghcr.io`. **This is the first boot of an upgraded stack and the first use of the new stack file in
   Portainer itself: neither is tested anywhere.**
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): the user picks; the suggestion is
   F3, F4, F8 and F10.
+- **The roadmap's T0 row** (the gateway with the integration, keys and models) says *open* though T1, which depends on
+  it, is deployed: the user knows its state.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
 - **To-verify row 110, a question to KB** (the user's call; the earlier licence review judged it unnecessary for the
   pilot, the main session would send it before go-live): *"We intend to use KBLab/bert-base-swedish-cased-ner (revision
@@ -80,30 +100,22 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
 - **Run `e2e.yml` before the next release.** It did not run on the 0.7.0 tag (green in dry run 43857593918 on the same
   code), and #790 and #791 came after.
 
-## What session 44 did (2026-11-16)
+## What session 45 did (2026-11-16)
 
-- **The setup wizard's stage 2, #786 (M-20, ticked):** a new Portainer stack needs one typed value, `UME_DOMAIN`, and
-  no secret; sign-in is set in two wizards, the gateway's first.
-  - `build-stack.sh` rewrites the gateway's one `UME_INTEGRATION_MANIFEST` line to a default
-    (`deploy/portainer/integration-manifest.json`, no owner; for an unset variable only).
-  - All five host names come from `UME_DOMAIN`; rag-admin gets a default address of the gateway's admin.
-  - The setup state reads the gateway's context again when it would suggest no provider address, and the wizard page
-    reads the state again when its tab is shown again (identity §19).
-  - The user decided the three open points as built (Decisions "Setup wizard", the stage 2 points).
-- **The gateway:** #102, #103 and #104 merged, released as `v0.11.0` (its release preparation #107 approved by the
-  main session as `ume-nichlas`; merged and tagged by the user).
-- **Release 0.7.0** (#788 the preparation, #789 the image pins).
-- **#790:** #781's fix (above).
-- **#764 closed:** its three fixes shipped in 0.7.0; knowledge §6.6 and data-model §1.1 now say a search slot is one
-  statement's connection; the exact-scan finding is on to-verify row 6.
-- **#791, the *Before go-live* checks:** 14 rows of `plans/to-verify.md` done, each with its evidence in
-  `plans/work/results-main.md`. Two defects fixed: the admin saved schedules that the scheduler then skipped for good
-  (`60 2 * * *`), and a chat request over 2 MB answered 413 in the wrong shape. Designs corrected: engine §9.6 (cron
-  over the daylight-saving changes), parser §4 (LibreOffice's defaults; Writer's schema text for link update is
-  inverted against the code), data-model §1.1 (the monitor role needs both databases and a limit of 4).
-- **How it was built:** agents in parallel on disjoint work, each in its own worktree; every report checked against
-  its diff and its tests re-run before it went on a branch. The one exception: the Open WebUI browser spec of #791
-  was type-checked and listed, not re-run.
+- **A first install with Compose is shorter, #794:** `init-deployment.sh --gateway-secrets-dir` reads the three
+  credential keys a gateway on the same host creates from Ume.Rag's manifest (now in the release bundle); an
+  interactive run asks for the sign-in provider's address, which the host firewall needs for the wizard's test;
+  `docs/compose-quick-start.md` replaces `docs/gateway-host-setup.md`.
+- **The install and upgrade guides, the plans and the README checked against the code, #795 and #796:** six read-only
+  audits, one per group of documents, every finding checked in the files before it was applied (about 80 statements).
+  What mattered: Compose 2.33.1, not 2.24 (`gw_priority`); a Portainer upgrade over several releases takes each
+  release's own stack file; the single-slot procedure had no stop step for *Rolling update: no*; the 0.6.0 stack pins
+  the gateway's `v0.10.3`. `restore-pitr.sh` now stops the second slots too (not run: no rolling stack here). The
+  release bundle carries the pages and `deploy/keycloak/` its guides link to.
+- **The deploy simplification proposal** (above), from the user's question what could be simpler.
+- **How it was done:** the audits ran as parallel read-only agents with a brief per document group; their reports were
+  claims, and two findings were left for their owner or the user (#797, the roadmap's T0).
+- **Session 44** (the setup wizard's stage 2, release 0.7.0, #790, #791): `git show 4d80080c:HANDOVER.md`.
 
 ## Known gaps, documented, not fixed
 

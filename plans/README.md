@@ -37,6 +37,8 @@ nobody needs to read them end to end.
   automatic setup and the gateway; decisions D1–D10, gateway changes G1–G5, steps C0–C13 (2026-11-13).
 - [`admin-ui-review.md`](proposals/admin-ui-review.md): a browser review of the admin UI; decisions UI1–UI4 (Home,
   lists, audit log, assistant page) and small fixes (2026-11-15).
+- [`deploy-simplification.md`](proposals/deploy-simplification.md): where deployment is more complex than it needs
+  to be (three bootstraps, the host firewall, Open WebUI as a must, fragile upgrades) and what to do first; `work/main.md` M-22.
 - [`setup-wizard.md`](proposals/setup-wizard.md): a first-run wizard for sign-in and the last deploy values;
   decisions W1–W10 (answered), gateway changes WG1–WG4, steps S0–S8 (2026-11-15, agreed).
 

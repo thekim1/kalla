@@ -86,6 +86,9 @@ Each becomes a queue item when the main session picks it up.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
   only what a process can't start without; C0–C12 merged (C7 and C12 on the gateway's v0.10.2, C11 in 0.6.0); C13 left.
+- **Deploy simplification** (user, 2026-11-16, `work/main.md` M-22, [`proposals/deploy-simplification.md`](proposals/deploy-simplification.md)):
+  one bootstrap for Compose and Portainer, Open WebUI off unless asked for, the upgrade paths nobody runs deleted; the
+  first install was already shortened in #794 and the guides checked against the code in #795 and #796.
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).
 

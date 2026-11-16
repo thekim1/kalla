@@ -18,6 +18,19 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   grading use `scripts/grading/` (README there).
 - **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
 
+### [ ] M-22 Deploy simplification (user, 2026-11-16)
+- **Do:** [`../proposals/deploy-simplification.md`](../proposals/deploy-simplification.md), starting with S1 (one
+  bootstrap for Compose and Portainer; its four points go to the user first, each as four alternatives with a
+  recommendation), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for and invisible when off) and
+  S4a (delete the upgrade paths nobody runs). Upgrades may break (user, 2026-11-16): the proposal lists what that
+  frees. M-17's C13 is the first step of S1. S2, S5 and S7 wait
+  for the user's decision.
+- **Paths:** `deploy/**`, `docs/**`, `.github/workflows/**` (stream a's: `main-session/<slug>` branches, no open `a/`
+  work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
+- **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
+  exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
+  (`deploy-checks`, the boot test) and, for a stack-file change, a boot.
+
 ### [ ] M-16 Connect an app in one go; the platform menu; the Settings page (user, 2026-11-13)
 - **Owner:** the session on stream b's machine (GitHub `thekim1`), by the user; it crosses both streams' paths, so
   each step is a PR on a `main-session/<slug>` branch, announced in the issue first (handbook, *How we work*).
