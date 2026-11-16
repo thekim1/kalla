@@ -46,13 +46,23 @@ the queue item is `plans/work/main.md` **M-22**, whose status line says what is 
   The regenerated Portainer stack renders identically to the one before (services, volumes, networks, variables), so
   the user's VM keeps upgrading. Release dry run 43941252174 booted both forms (*Smoke test the bundle*, *Boot the
   Portainer stack*).
-- **Next: step 5, the guides and the design.** Stale since #800: `docs/compose-quick-start.md`,
-  `production-setup.md`, `runbook.md`, `network-and-ports.md`, `zero-downtime-updates.md`, `local-development.md`;
-  `repo-and-deployment.md` §1, §6, §7 and §10; Decisions "Pilot containers" (names `rag-blobs-init`) and "Deployment
-  values across releases" (its last sentence on Compose and `init-deployment.sh`). #800's *Design deviations* lists
-  eight points to settle in the design. rag-bootstrap's checklist says `docs/portainer.md` on a Compose host too. Then
-  **S9** (Open WebUI easy to skip).
-- **For the user to confirm:** Compose's published ports now bind `0.0.0.0` as Portainer's (before: loopback); with
+- **Also merged: #806 (S9, the deploy part):** `stack.env.example` has `COMPOSE_PROFILES=clamav`; without the
+  `openwebui` profile `rag-bootstrap` generates nothing for Open WebUI. Boot-only run 43944782113 (profile on) green.
+  The admin UI part is **#807** (stream b's paths; the main session offered to take it).
+- **The design follows the new files:** `repo-and-deployment.md` §1, §3, §5 to §10 and the Decisions "Pilot
+  containers" and "Deployment values across releases" (an agent's rewrite, checked against `deploy/`; its report left
+  these as unverified and unchanged: §6.3's `compose.hardening.yaml` / `aspire publish` / `Test-Deployment.ps1`
+  sentence (none of the three exists), §5.4's "`compose.host-24g.yaml` may raise them" for the renderer, §6.1's "1 MB
+  body limit" (the nginx files give rag-api 2m), §6.4's `connection-budget.sh` and §7.3's `rolling-update.sh --role`
+  (P2, not built). History rows that now mislead, left alone: §11 row 14, §12 rows 8, 11 and 15, §14 row 2.
+- **Next:** the operator guides (step 5; stale since #800: `docs/compose-quick-start.md`, `production-setup.md`,
+  `runbook.md`, `network-and-ports.md`, `zero-downtime-updates.md`, `local-development.md`, `test-host.md`,
+  `p1a-local-run.md`), then S9's guide part (the first-install paths finish without Open WebUI, one section *Adding
+  Open WebUI*). Script texts still to fix: `bootstrap.sh`'s header calls itself the Portainer counterpart of
+  `init-deployment.sh`, and its checklist says `docs/portainer.md` and *(Containers, select, Restart)* on a Compose
+  host too.
+- **For the user to confirm:** Compose's published ports of rag-api, rag-admin and `rag-proxy` now bind `0.0.0.0` as
+  Portainer's (before: loopback; Open WebUI's stays `127.0.0.1`); with
   `--hardened` the firewall admits only the proxy's addresses. Told on 2026-11-16, no answer yet.
 - **Not run anywhere:** the hardened overlay on a host (the smoke test boots without it), `compose-rolling-e2e.sh`,
   root's `chown` on an NFS backup share, and the upgrade guide's carry-over of an old Compose installation.

@@ -32,7 +32,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   secrets), #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide) and #800 (S1 steps
   2 and 3 with S3: `deploy/compose.rag.yaml` and its overlays, Compose on `rag-bootstrap` and volumes, Open WebUI as a
   profile, the 193-line `init-deployment.sh`; the Portainer stack renders as before; booted in dry run 43941252174).
-  Next: step 5 (the guides and the design, which #800's *Design deviations* and *Hand-offs* list) and S9.
+  Also merged: #806 (S9, the deploy part: Open WebUI out of the example's default profiles, nothing of it generated
+  without the profile); the design follows the new files (`repo-and-deployment.md` §1, §3, §5 to §10, Decisions
+  "Pilot containers" and "Deployment values across releases"). Open: step 5's operator guides (in work), S9's guides,
+  and S9's admin UI part (#807, stream b's paths).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.

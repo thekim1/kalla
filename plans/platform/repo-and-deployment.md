@@ -69,27 +69,28 @@ tests/
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
 deploy/
-  compose.prod.yaml                  data plane + control zone (host A), incl. postgres (pgBackRest inside, §7.4)
-  compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
+  compose.rag.yaml                   the one Ume.Rag service file, with the `rag-` names: rag-bootstrap, rag-postgres, rag-migrate, the services and the profiles `clamav`, `render`, `openwebui` and `proxy`; Compose runs it directly and `portainer/build-stack.sh` merges it into the Portainer stack (§7.1). Open WebUI (profile `openwebui`): env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
+  compose.backup.yaml                overlay: WAL archiving and pgBackRest inside rag-postgres, the `backup` network, the upload copy `rag-upload-backup` (§7.4)
+  compose.hardened.yaml              overlay: fixed subnets for the host firewall, the ingestion slice, the CPU weights, the restart-unhealthy labels, the renderer's seccomp profile (§6.1, §6.2)
   compose.host-24g.yaml              overlay for the 24 GB host profile (§6.2)
-  compose.clamav-conf.yaml           overlay that mounts the ClamAV confs init-deployment writes (§5.5)
+  compose.clamav-conf.yaml           overlay that mounts the ClamAV confs rag-bootstrap writes (§5.5)
   compose.ingestion-remote.yaml      P2, not built: overlay for a separate ingestion host
-  compose.rolling.yaml               b slots for rag-api and rag-admin (`init-deployment.sh --rolling`)
-  compose.openwebui.yaml             optional Open WebUI pilot stack: env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
+  compose.rolling.yaml               overlay: b slots for rag-api and rag-admin (`init-deployment.sh --rolling`)
   compose.mcp.yaml                   P2, not built: hosted MCP servers (one container each, zone `tools-hosted`; tools design §8.3)
-  init-deployment.sh  rolling-update.sh  build-release-bundle.sh
+  init-deployment.sh  rolling-update.sh  build-release-bundle.sh       init-deployment.sh writes `deploy/.env` (§7.1)
   backup-postgres.sh  restore-pitr.sh  backup-uploads.sh  escrow-keys.sh
   postgres/                          init.sql, app-roles.sql, pg_hba.conf, postgresql.conf, test.sh (image test)
-  pgbackrest/                        pgbackrest.conf (copied into `ume-rag/postgres`), repo.conf.example (repository settings, written by init-deployment; §7.4)
+  pgbackrest/                        pgbackrest.conf (copied into `ume-rag/postgres`), repo.conf.example (the repository settings rag-bootstrap writes; §7.4)
   redis/                             P2, not built: redis.conf, users.acl.example (first multi-host deployment)
-  proxy/nginx.conf.example           reverse proxy (one slot, or both with `--rolling`); `init-deployment.sh --proxy` writes nginx.conf from it
+  proxy/                             nginx.conf.example (an operator's own reverse proxy: one slot, or both with the lines marked `#rolling`), nginx.portainer.conf.template (the nginx.conf of `rag-proxy`, profile `proxy`, which rag-bootstrap writes from it)
   otel/                              collector-siem.example.yaml (security category)
   host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5), cert-expiry.sh + rag-cert-expiry.service/.timer (internal certificates within 60 days, #705)
   kubernetes/                        base/, components/, example/, create-secrets.sh, deploy.sh, sync-config.sh (§10)
   keycloak/                          RAG's realm additions for the shared Keycloak, the standalone realm, examples (§4.2)
   openwebui/                         start-with-sign-in.py (Open WebUI's entrypoint), feedback-key-setup.py
-  portainer/                         the one-stack variant with the gateway: template, bootstrap.sh, build-stack.sh, compose.portainer.yaml, integration-manifest.json (§7.1)
-  tests/                             compose-rolling-e2e.sh, release-smoke.sh, pilot-stack.sh, portainer-{boot,upgrade,rerun,hosts}.sh, openwebui-parity.sh (#707)
+  empty/                             an empty directory: the default of compose.rag.yaml's optional host directories (§7.1)
+  portainer/                         bootstrap.sh (`rag-bootstrap`: the one bootstrap of every deployment form), build-stack.sh, stack-header.txt, compose.portainer.yaml (generated: the gateway and Ume.Rag as one stack), stack.env.example, integration-manifest.json (§7.1)
+  tests/                             compose-init.sh, compose-bootstrap.sh, kubernetes-secrets.sh, pilot-stack.sh, compose-rolling-e2e.sh, release-smoke.sh, portainer-{boot,upgrade,rerun,hosts}.sh
 dev/keycloak/ume-realm.json          realm `ume` with the gateway's claims + rag-* roles
 docs/                                local-development, p1a-local-run, compose-quick-start, production-setup, portainer,
                                      kubernetes, keycloak, runbook, upgrade-guide, zero-downtime-updates, network-and-ports,
@@ -242,7 +243,7 @@ directory another job writes, and takes only `OpenWebUi__AdminApiKey` from it), 
 
 | Setting | Values | Default | Effect |
 |---|---|---|---|
-| `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.prod.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
+| `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.rag.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
 | `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Ume.Rag.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `ume-rag-sk-` service key |
 | `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
 | `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:IdleWaitSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 30, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
@@ -263,7 +264,7 @@ the section's jsonb defines it), validated by the admin API (admin design §4.6 
 lives in exactly one of the two places; a document that needs it names it in that form.
 
 Knowledge-role settings (knowledge design §2.3, §3.5, §4.6, §5.3, §6, §9, §13): `Knowledge:OpenToClientKinds`
-(default `["internal"]` in P1), `Knowledge:PublicBaseUrl` (= `UME_RAG_API_PUBLIC_URL`, for download links),
+(default `["internal"]` in P1), `Knowledge:PublicBaseUrl` (= `UME_RAG_API_PUBLIC_URL`, else `https://` and rag-api's host name; for download links),
 `Knowledge:DownloadGrantLifetime` (7 days; `sensitive` 1 hour), `Knowledge:DownloadsPerMinutePerAddress` (120),
 `Knowledge:PublishApiReference` (default `true`, off in production until P2); `Retrieval:EmbeddingTimeout` (1,500 ms),
 `Retrieval:MaxConcurrentSearches` (4 = ⌊(pool 12 − 3) ÷ 2⌋, data-model §1.1), `Retrieval:ExpandNeighbourChunks` (8), `Retrieval:Index` (`postgres` \|
@@ -338,7 +339,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `mcp-kommun` | `AddProject<Ume.Mcp.Kommun>` (from `templates/mcp-server/`) | P2 | `ume-mcp-kommun`, first tool the mock fee calculator (tools design §8.5), reached by the api's in-process tool hub only |
 | `adminapi` | `AddProject<…AdminApi>("adminapi", "https")` | – | `Oidc__ClientId=ume-rag-admin`; `Oidc:*` passed through when external |
 | `admin-ui` | `AddViteApp("admin-ui", "../admin-ui")`, port **5174** (gateway: 5173), `PublishWithContainerFiles(adminUi, "wwwroot")` | – | both stacks can run side by side |
-| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default true in run mode; the resource also needs `Seed:Enabled`, since its key is the seeded client's) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.5** by digest (go-live pin review A-4, #457); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.openwebui.yaml`) |
+| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default true in run mode; the resource also needs `Seed:Enabled`, since its key is the seeded client's) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.5** by digest (go-live pin review A-4, #457); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.rag.yaml`, profile `openwebui`) |
 
 Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outside the gateway's (gateway admin
 7212, Vite 5173), so a developer can run the gateway's AppHost and ours at once (§4.4).
@@ -457,12 +458,13 @@ anchor). The renderer image (`images/renderer/`, Playwright server + Chromium, �
 
 - **Image**: `ume-rag/postgres`, derived from the stock `pgvector/pgvector` image for pgvector 0.8.7 on Postgres 17
   (`FROM` by digest) with only the PGDG `pgbackrest` package and `pgbackrest.conf` added (simplification pass §14);
-  pinned by digest in the release bundle (`POSTGRES_IMAGE`). No compile, no dictionary, no extension build. Supersedes
+  pinned by digest in the release bundle (`RAG_POSTGRES_IMAGE`). No compile, no dictionary, no extension build. Supersedes
   the "own container everywhere" decision (simplification pass §3). Managed Postgres is allowed where pgvector ≥ 0.8 and the settings of
   §6.2 are available.
-- **Init scripts are mounted, not baked**, as in the gateway: `deploy/postgres/init.sql` →
-  `/docker-entrypoint-initdb.d/10-roles.sql` (roles from `/run/postgres-secrets/*_password`, database `ragdb`,
-  `CREATE EXTENSION vector` as bootstrap superuser, data-model §1); `postgresql.conf` and `pg_hba.conf` mounted.
+- **Init scripts are mounted, not baked**, as in the gateway: rag-bootstrap copies `deploy/postgres/init.sql` into the
+  `rag-config` volume as `postgres-init/10-roles.sql`, mounted at `/docker-entrypoint-initdb.d` (roles from
+  `/run/postgres-secrets/*_password`, database `ragdb`, `CREATE EXTENSION vector` as bootstrap superuser, data-model
+  §1); `postgresql.conf` and `pg_hba.conf` are mounted from `rag-config` the same way, at `/run/config`.
 - **Image test** (CI job `images`, `deploy/postgres/test.sh`): start the pinned image, run `init.sql`; `SELECT
   extversion FROM pg_extension WHERE extname='vector'` equals the expected version; an HNSW index builds on 1024-dim
   vectors; `pg_stat_statements` loads; `wal_compression=lz4` is accepted; `pgbackrest` runs as uid 999 on the
@@ -497,16 +499,19 @@ Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8), ch
 build time from a lockfile (`npm ci`; the image carries no Playwright package, and `npx` would download at start,
 which fails without a network). It runs only `node …/cli.js launch-server --browser chromium --config <file>` with
 `{ chromiumSandbox: true, wsPath: <secret from the environment> }` (`run-server` launches with `--no-sandbox` and
-ignores the client's sandbox option); the path comes from `secrets/renderer.env` (`UME_RAG_RENDER_WS_PATH`, written by
-`init-deployment.sh`) through a Compose `env_file`, and without it the renderer refuses to start; WebRTC disabled by one
+ignores the client's sandbox option); the path is a secret that rag-bootstrap generates (`rag-secrets/renderer/ws-path`,
+mounted read-only): the service's entrypoint reads it into `UME_RAG_RENDER_WS_PATH` and starts the image's `start.sh`,
+and without it the renderer refuses to start; WebRTC disabled by one
 Chromium flag in the config (`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`). No other process, no
-logic, no volumes. User 10002, `read_only` with a sized `tmpfs` `/tmp` (no `shm_size`: Playwright passes
+logic, no volume but that secret. User 10002, `read_only` with a sized `tmpfs` `/tmp` (no `shm_size`: Playwright passes
 `--disable-dev-shm-usage`), `cap_drop: [ALL]`, `no-new-privileges`, and a **seccomp profile kept in
 `images/renderer/`: Moby's default plus `clone`, `unshare` and `chroot`**, so Chromium's own sandbox (user namespaces
-and its seccomp filter) works; Docker's default profile fails it. To check on the production Linux host: Ubuntu's
+and its seccomp filter) works; Docker's default profile fails it. `compose.hardened.yaml` applies that profile
+(`images/renderer/seccomp.json`); `compose.rag.yaml` alone, and with it the Portainer stack (Portainer cannot read the
+file), runs the renderer with `seccomp=unconfined`, Chromium's own sandbox still on. To check on the production Linux host: Ubuntu's
 `apparmor_restrict_unprivileged_userns` may block the user namespaces. Memory 2 GB and 2 CPUs by default
 (`compose.host-24g.yaml` may raise them; the spike peaked at 215 MB), `pids_limit`, a health check; one shared browser
-per container, so a restart is the recycle. Only on the internal `render` network (§6.1): Chromium has no route out
+per container, so a restart is the recycle. Only on the internal `rag-render` network (§6.1): Chromium has no route out
 and no external DNS; the worker fetches and fulfils every request.
 
 ### 5.5 ClamAV image (`images/clamav/Dockerfile`)
@@ -520,71 +525,81 @@ reports `degraded` after 48 h and `unhealthy` after 7 days, and then stops inges
 
 The base and user are in §5.1. The image's unprivileged entrypoint ignores the `CLAMD_CONF_*`/`FRESHCLAM_CONF_*` variables and passes
 `--checks=${FRESHCLAM_CHECKS}`, so the image sets `FRESHCLAM_CHECKS=4`, and a deployment changes a setting only by
-mounting a conf file: `init-deployment.sh` writes copies and adds `compose.clamav-conf.yaml` for the 24 GB profile
-(`ConcurrentDatabaseReload yes`, `TestDatabases yes`) or for `--freshclam-proxy HOST:PORT` (freshclam through IT's
+mounting a conf file: with the overlay `compose.clamav-conf.yaml`, rag-bootstrap writes copies of the image's two confs
+into `rag-config/clamav`, which rag-clamav mounts at `/etc/clamav`. `init-deployment.sh` adds the overlay for
+`--host-memory 24` (the 24 GB profile: `ConcurrentDatabaseReload yes`, `TestDatabases yes`) or for
+`--freshclam-proxy HOST:PORT` (freshclam through IT's
 egress proxy). Other settings: **`TestDatabases no`** on the 16 GB profile, because freshclam's test load of an update
 reaches 1.9–2.0 GiB, over the 1.5 GB limit (CVD signature verification still runs; accepted); **`AlertExceedsMax
 yes`**, so a limit hit comes back as `Heuristics.Limits.Exceeded.*` and is never reported clean (connectors design
 §11). The health check is a real scan, because with `ConcurrentDatabaseReload no` a failed reload leaves clamd
 answering PONG with no engine. An unhealthy container keeps running (the entrypoint ends in `tail -f`), so
 `rag-restart-unhealthy.timer` (every minute, `deploy/host/`) restarts containers labelled
-`ume-rag.restart-unhealthy=true`; no autoheal container and no Docker socket in a container. `images/clamav/test.sh`
+`ume-rag.restart-unhealthy=true`, a label `compose.hardened.yaml` sets on rag-clamav and rag-renderer; no autoheal
+container and no Docker socket in a container. `images/clamav/test.sh`
 re-runs these checks and runs in the `images` CI job (§8.2).
 
 **The scan is optional** (Decisions "Malware scan optional"; connectors design §11): the worker's `ClamAv:Mode` is
 `on` (default) or `off`.
 
-- **Compose:** `rag-clamav` runs only with the profile `clamav`, and the worker's dependency on it is not required.
-  The worker gets `ClamAv__Mode` from `UME_RAG_CLAMAV_MODE` in `deploy/.env` (`on` when the line is missing).
-- **`init-deployment.sh --clamav on|off`** (§7.1; default `on`, and a re-run without the option keeps the `.env`
-  value): `on` writes the profile into `COMPOSE_PROFILES`; `off` leaves it out, writes `UME_RAG_CLAMAV_MODE=off`,
-  skips the ClamAV confs and names the choice in its closing notes.
+- **Compose and Portainer** (one definition, `compose.rag.yaml`): `rag-clamav` runs only with the profile `clamav`,
+  and the worker's dependency on it is not required. The worker's `ClamAv__Mode` is a secret file that rag-bootstrap
+  writes on every run: `on` while `COMPOSE_PROFILES` has `clamav`, else `off`; a change of the profiles recreates
+  the worker.
+- **`init-deployment.sh`** (§7.1): a first run writes `COMPOSE_PROFILES=clamav`; `--profiles LIST` sets the list, and
+  one without `clamav` (an empty one too) leaves the scan off. A re-run without the option keeps the `.env` value.
 - **Kubernetes:** `rag-clamav` is its own component, `components/clamav`, in the example by default. Leaving it out
   goes together with `ClamAv__Mode=off` in the worker's configuration.
-- **Portainer:** `UME_RAG_CLAMAV_MODE` and the same profile.
 
-A worker asked for `on` with no clamd running fails closed as before: files wait with `clamav.unavailable`. That is
-also what an existing deployment gets if it updates without re-running `init-deployment.sh`, since its `.env` has
-no `clamav` profile yet (upgrade guide).
+A worker asked for `on` with no clamd running fails closed: files wait with `clamav.unavailable`.
 
 ## 6. Production Compose
 
 ### 6.1 Networks
 
-Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCKER-USER` chain) can target each one.
-`(+b)` = the P2 b slots; the pilot runs one slot.
+The networks are `compose.rag.yaml`'s. The overlay `compose.hardened.yaml` (`init-deployment.sh --hardened`) gives each
+a fixed subnet in 172.30.0.0/16, so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCKER-USER` chain) can
+target each one; `deploy/host/install.sh` enables the firewall only with that overlay, and without it Docker assigns
+the subnets and the Egress column below does not apply. `(+b)` = the P2 b slots (`compose.rolling.yaml`); the pilot
+runs one slot.
 
 A container sends **all** its egress through the network that holds its default route, so Compose pins that route
-with `gw_priority`: rag-api and rag-admin leave through `llm`, rag-worker through `crawl` (measured: without it
-rag-api's default route went via `edge`). Each network's allow-list is therefore everything its members call, and
+with `gw_priority`: rag-api and rag-admin leave through `llm`, rag-worker through `rag-crawl` (measured: without it
+rag-api's default route went via `rag-edge`). Each network's allow-list is therefore everything its members call, and
 networks with an allow-list may also reach the host's upstream DNS resolvers. New connections from every Compose
 subnet to the host itself are rejected (`INPUT`). `rag-firewall.service` applies the rules after Docker starts and
 `rag-firewall.timer` re-applies them every 15 minutes, because the allow-lists name hosts. When the gateway and
-Keycloak run on the same host (the interim gateway of Decisions "Interim gateway for P1a"), an allow-listed endpoint (gateway, OIDC authority, Open
-WebUI host, OTLP, the ClamAV mirror) that resolves to this host is an exception to the `INPUT` reject for the subnets
+Keycloak run on the same host (the interim gateway of Decisions "Interim gateway for P1a"), an allow-listed endpoint (gateway, OIDC authority,
+OTLP, the ClamAV mirror, the backup endpoint) that resolves to this host is an exception to the `INPUT` reject for the subnets
 allowed to reach it, and the egress chain matches such endpoints by their original destination
 (`--ctorigdst`/`--ctorigdstport`), since a proxy container on the host is reached through DNAT.
 
-| Network | Subnet | `internal` | Members | Egress |
+`llm` is the gateway's network in the Portainer stack, where rag-admin and rag-proxy also join the gateway's `edge`
+network (§7.1). A stack without the gateway defines `llm` itself and has no `edge` network.
+
+| Network | Subnet (`compose.hardened.yaml`) | `internal` | Members | Egress |
 |---|---|---|---|---|
-| `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | none: inbound only (the published ports; replies pass as established connections) |
-| `data` | 172.30.2.0/24 | **yes** | postgres, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
-| `backup` | 172.30.16.0/24 | no | postgres (pgBackRest `archive-push` and backups, §7.4) | firewall: only the S3 endpoint of the backup target (`UME_RAG_BACKUP_ENDPOINT`); none with a mounted share (§7.4) |
-| `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: the gateway's address and port (gateway's `llm` name); for api and admin, whose default route it holds, also the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: the shared Keycloak in the pilot, `login.microsoftonline.com` with Entra from P2; from P2 Graph for the admin's member-group lookup and the api's JWKS, Graph and OBO, identity design §7–§9), the Open WebUI host (the api's feedback import, chat design §14.2) and the OTLP endpoint |
-| `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav | none |
-| `render` | 172.30.18.0/24 | **yes** | rag-worker, rag-renderer (connectors design §8.3) | none: the renderer has no other network, so Chromium reaches nothing but the worker; the host's `INPUT` rule rejects the subnet (the bridge gateway answers at the IP level, A-9) |
-| `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
-| `crawl` | 172.30.6.0/24 | no | rag-worker (default route; the renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: the gateway and the OTLP endpoint (the worker's calls leave here), the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts), then nothing private (RFC 1918, CGNAT, loopback, link-local, documentation, multicast, reserved), the rest of the Internet; app-level `IEgressGuard` in addition |
-| `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net:443` (decided: no internal mirror), or only freshclam's proxy (`UME_RAG_FRESHCLAM_PROXY`) |
-| `openwebui` | 172.30.17.0/24 | no | open-webui (optional, `compose.openwebui.yaml`) | firewall: rag-api's public URL (through the proxy) and the OIDC provider; none without `UME_RAG_OPENWEBUI_HOST` |
+| `rag-edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b); with their profiles rag-openwebui, rag-openwebui-setup (`openwebui`) and rag-proxy (`proxy`) | none: inbound only (the published ports; replies pass as established connections). With the profile `openwebui`, whose default route it holds: Open WebUI's OIDC provider (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL`, else `UME_RAG_OIDC_AUTHORITY`); Open WebUI calls rag-api inside the network |
+| `rag-data` | 172.30.2.0/24 | **yes** | rag-postgres, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
+| `backup` (`compose.backup.yaml`) | 172.30.16.0/24 | no | rag-postgres (pgBackRest `archive-push` and backups, §7.4) | firewall: only the S3 endpoint of the backup target (`UME_RAG_BACKUP_ENDPOINT`); none with a mounted share (§7.4) |
+| `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: the gateway's address and port (`UME_RAG_GATEWAY_URL`); for api and admin, whose default route it holds, also the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: the shared Keycloak in the pilot, `login.microsoftonline.com` with Entra from P2; from P2 Graph for the admin's member-group lookup and the api's JWKS, Graph and OBO, identity design §7–§9) and the OTLP endpoint (`UME_OTEL_ENDPOINT`); one more destination per `--allow llm=HOST[:PORT]` (the gateway's Integration API for the admin's cost and budget read-back) |
+| `rag-ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav | none |
+| `rag-render` | 172.30.18.0/24 | **yes** | rag-worker, rag-renderer (connectors design §8.3) | none: the renderer has no other network, so Chromium reaches nothing but the worker; the host's `INPUT` rule rejects the subnet (the bridge gateway answers at the IP level, A-9) |
+| `rag-parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
+| `rag-crawl` | 172.30.6.0/24 | no | rag-worker (default route; the renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: the gateway and the OTLP endpoint (the worker's calls leave here), the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts), then nothing private (RFC 1918, CGNAT, loopback, link-local, documentation, multicast, reserved), the rest of the Internet; app-level `IEgressGuard` in addition |
+| `rag-mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net:443` (decided: no internal mirror), or only freshclam's proxy (`UME_RAG_FRESHCLAM_PROXY`) |
 | `mcp` (P2) | *to allocate* | **yes** | rag-api(+b) and rag-admin(+b) (in-process tool hub; skill gate, discovery, drift polling), hosted MCP servers; never rag-worker | none |
 | `mcp-<name>-egress` (P2) | one per hosted server (172.30.8.0/21 proposed, tools design §15) | no | that MCP server | firewall: only its wrapped system's address and port |
 
-Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-admin` `127.0.0.1:9543` (with `--rolling`:
-`rag-api-b` `:8544`, `rag-admin-b` `:9544`) → container 8443. The municipal reverse proxy terminates public TLS and
-re-encrypts to these (gateway runbook *Reverse proxy and PKI*; `init-deployment.sh --proxy` writes `deploy/proxy/nginx.conf` and prints the
-routes for another proxy). The optional Open WebUI publishes `127.0.0.1:3000` → container 8080 in
-plain HTTP on loopback, the proxy terminating TLS. Nothing else is published. These networks are per host;
+Ports (`${UME_RAG_*_BIND:-0.0.0.0}`): `rag-api` `0.0.0.0:8543`, `rag-admin` `0.0.0.0:9543` (with `compose.rolling.yaml`:
+`rag-api-b` `:8544`, `rag-admin-b` `:9544`) → container 8443, and with the profile `proxy` `rag-proxy` `0.0.0.0:443` →
+container 8443. A reverse proxy terminates public TLS and re-encrypts to rag-api and rag-admin: the operator's own
+(gateway runbook *Reverse proxy and PKI*; `deploy/proxy/nginx.conf.example` has the routes) or the stack's `rag-proxy`
+with the operator's certificate (`UME_RAG_PROXY_CERTS_DIR`). Open WebUI (profile `openwebui`) publishes
+`127.0.0.1:3000` (`UME_RAG_OPENWEBUI_BIND`, `UME_RAG_OPENWEBUI_PORT`) → container 8080 in plain HTTP, a proxy
+terminating TLS. Nothing else is published. With `compose.hardened.yaml` and `UME_RAG_PROXY_SOURCES`
+(`--proxy-address`) the host firewall admits only those source addresses to the published ports of rag-api, rag-admin,
+their second slots and Open WebUI. These networks are per host;
 across hosts (§6.4) services talk over the routed LAN with TLS, never a Docker overlay network.
 The proxy keeps the gateway's 1 MB body limit except on the admin upload route
 (`PUT /api/upload-batches/{batchId}/files/{n}`): `client_max_body_size 60m` and `proxy_request_buffering off` there
@@ -592,26 +607,28 @@ The proxy keeps the gateway's 1 MB body limit except on the admin upload route
 
 ### 6.2 Resource zones on the pilot host (8 vCPU)
 
-Compose keys per service: `cpus`, `cpu_shares` (cgroup v2 maps it to `cpu.weight`), `mem_reservation`, `mem_limit`,
-`pids_limit`. The ingestion services also get `cgroup_parent: rag-ingestion.slice`, a systemd slice installed by
-`deploy/host/rag-ingestion.slice` that caps the **whole zone** (requires cgroup v2 with the systemd cgroup driver: *to
+Compose keys per service: `cpus`, `mem_reservation`, `mem_limit`, `pids_limit` (`compose.rag.yaml`; the 24 GB column is
+`compose.host-24g.yaml`) and, with `compose.hardened.yaml`, `cpu_shares` (cgroup v2 maps it to `cpu.weight`). With that
+overlay the ingestion services also get `cgroup_parent: rag-ingestion.slice` (`UME_RAG_INGESTION_SLICE`; empty where the
+slice is not installed), a systemd slice installed by `deploy/host/install.sh` from `deploy/host/rag-ingestion.slice`
+that caps the **whole zone** (requires cgroup v2 with the systemd cgroup driver: *to
 verify* on the host image).
 
 | Container | Zone | `cpus` | `cpu_shares` | `mem_reservation` | `mem_limit` 16 GB | `mem_limit` 24 GB | `pids_limit` | Notes |
 |---|---|---|---|---|---|---|---|---|
-| postgres | data | 3.0 (development: 2.0) | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below; limit sized from the P0 measurement, including `archive-push` and the scheduled `pgbackrest backup` running inside it (§7.4) |
+| rag-postgres | data | 3.0 (development: 2.0) | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below; limit sized from the P0 measurement, including `archive-push` and the scheduled `pgbackrest backup` running inside it (§7.4) |
 | rag-api (P2 + rag-api-b) | data | 2.0 each | 1024 | 384m | 1g each | 1.5g each | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-admin (P2 + rag-admin-b) | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-parser | ingestion | **4.0** (half the host; development: 2.0, 1 worker × 2 threads) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_*`; the NER process (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
-| rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | only with the Compose profile `clamav` (the default; `init-deployment.sh --clamav off` leaves it out, §5.5); `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
-| rag-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | only with the Compose profile `render` (`init-deployment.sh --render`, #505; without it `browser` sources fail with `render.not_configured`); one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
+| rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | only with the Compose profile `clamav` (a first `init-deployment.sh` run's default; `--profiles` without it leaves it out, §5.5); `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
+| rag-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | only with the Compose profile `render` (`init-deployment.sh --profiles`, #505; without it `browser` sources fail with `render.not_configured`); one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
-| open-webui (optional) | edge | 1.0 | 512 | 512m | not co-hosted | 1.5g | 256 | §12.8 |
+| rag-openwebui (profile `openwebui`) | edge | 1.0 | 512 (in `compose.rag.yaml`) | 512m | not co-hosted | 1.5g | 256 | §12.8 |
 | `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
 
-**During development** (user, 2026-10-31) the base Compose files keep every `cpus` cap at 2 or less, so the stack starts
+**During development** (user, 2026-10-31) `compose.rag.yaml` keeps every `cpus` cap at 2 or less, so the stack starts
 on any host with 2 cores or more (the CI runner included): postgres 2.0, parser 2.0 with `PARSER_THREADS=2`.
 `compose.host-24g.yaml` restores the pilot caps (postgres 3.0, parser 4.0). The pilot's CPU sizing is set again before
 go-live with the R1 release test (§8.3). Memory limits are unchanged.
@@ -627,19 +644,20 @@ reached at once); 24 GB host ≈ 18.75 GB, ≈ 20.25 GB with Open WebUI. P2 adds
 CPU contention the data plane (weight 1024) gets about 4× the CPU of each ingestion container; the slice keeps the ingestion zone at 5 cores even when every ingestion container is
 busy. The R1 release test (§8.3) confirms or corrects these numbers.
 
-**Postgres settings** (`deploy/postgres/postgresql.conf`, mounted and passed with `-c config_file=`; 16 GB / 24 GB):
+**Postgres settings** (`deploy/postgres/postgresql.conf`, copied into `rag-config` by rag-bootstrap, mounted and passed with `-c config_file=`; 16 GB / 24 GB):
 `max_connections=100` (data-model §1.1), `shared_buffers=768MB / 1536MB`, `effective_cache_size=2GB / 3500MB`,
 `work_mem=8MB`, `maintenance_work_mem=512MB / 1GB` (HNSW builds), `max_parallel_maintenance_workers=2`,
 `max_worker_processes=8`, `jit=off`, `random_page_cost=1.1`, `effective_io_concurrency=200` (SSD storage and
-short queries, #500; measured in results-a A-22), `wal_level=replica`, `archive_mode=on`,
+short queries, #500; measured in results-a A-22), `wal_level=replica`, `archive_mode=on` (in effect with `compose.backup.yaml`; `compose.rag.yaml` alone passes `-c archive_mode=off`, §7.4),
 `archive_command = 'pgbackrest --stanza=ragdb archive-push %p'` (synchronous, inside the container, §7.4), `archive_timeout=60`, `wal_compression=lz4` (the stock image
 is built `--with-lz4`, checked by `deploy/postgres/test.sh`), `ssl=on` with the internal CA, `log_statement=none` (gateway),
 (autovacuum stays at the server defaults; `autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` are
 storage parameters of `content."Jobs"` only, data-model §4.1, settled at the H2 sync point),
 `shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9). The file also sets `listen_addresses='*'`,
 `ssl_cert_file`/`ssl_key_file`/`ssl_ca_file` under `/run/certs/` and `hba_file='/run/config/pg_hba.conf'` (the gateway's
-mount paths); it holds the 16 GB profile with the 24 GB values as comments, and the 24 GB profile overrides the three
-memory settings with `-c` options in `compose.host-24g.yaml`, so there is one `postgresql.conf`
+mount paths); it holds the 16 GB profile with the 24 GB values as comments, and for a 24 GB host rag-bootstrap writes
+the three memory settings into `rag-config`'s copy (`UME_RAG_HOST_MEMORY=24`, which `compose.host-24g.yaml` sets on
+rag-bootstrap), so there is one `postgresql.conf`
 (`init-deployment.sh --host-memory 24` adds the overlay). `DOTNET_GCHeapHardLimitPercent=0x4B` (75 %) is set on
 **every** .NET container (api, worker, admin, migrations), not only the api ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §4).
 GC settings in the environment are **hexadecimal**: `75` would be read as 117 % and ignored (measured, to-verify #124).
@@ -662,52 +680,54 @@ recipe: performance pass §3.1).
 
 | Volume | Mounted in | Notes |
 |---|---|---|
-| `postgres-data` | postgres (rw; backups run inside it, a restore runs in a one-off container of the same image, §7.4) | LUKS-encrypted host disk (plan §8a baseline) |
-| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | one container `rag/`, write-once keys (data-model §9); single host only: beyond one host the S3-compatible object store (bucket `rag`) replaces this volume (§6.4). Master key files (file key provider, plan §8a): `rag-chat-<level>` only in rag-api and rag-admin, and only once A1 allows stored chat content (none in P1, weakness review §4); `rag-blob-internal` in rag-worker and rag-admin (uploads) and read-only in rag-api (downloads); `public` blobs are not encrypted. P2: rag-api also writes `chat-tmp/` (chat attachments, chat design §15.2), so its mount becomes read-only plus a writable `chat-tmp/` sub-mount |
-| `clamav-db` → `/var/lib/clamav` | rag-clamav | signatures |
-| `${UME_RAG_BACKUP_DIR}` (`DIR/pgbackrest`) → `/var/lib/pgbackrest` | postgres | posix pgBackRest repository on the backup share mounted on the host; the volume `pgbackrest-repo` instead only with `--backup-target local` (test hosts: not off the host); unused with S3 (§7.4) |
-| `${UME_RAG_UPLOAD_BACKUP_DIR}` (`DIR/uploads`) → `/backup` | rag-upload-backup (with `rag-blobs` read-only) | the upload copy (§7.4); `deploy/upload-backup` with `--backup-target local` |
-| `${UME_RAG_OPENWEBUI_DATA_DIR}` → `/data` | open-webui (`DATA_DIR=/data`, uid 1000) | a host directory: its own SQLite DB on an encrypted disk (§12.8) |
+| `rag-postgres-data` | rag-postgres (rw; backups run inside it, a restore runs in a one-off container of the same image, §7.4) | LUKS-encrypted host disk (plan §8a baseline) |
+| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | one container `rag/` and the worker's `spool/`, both created by rag-bootstrap (`1654:1654`, mode 0750); write-once keys (data-model §9); single host only: beyond one host the S3-compatible object store (bucket `rag`) replaces this volume (§6.4). Master key files (file key provider, plan §8a): `rag-chat-<level>` only in rag-api and rag-admin, and only once A1 allows stored chat content (none in P1, weakness review §4); `rag-blob-internal` in rag-worker and rag-admin (uploads) and read-only in rag-api (downloads); `public` blobs are not encrypted. P2: rag-api also writes `chat-tmp/` (chat attachments, chat design §15.2), so its mount becomes read-only plus a writable `chat-tmp/` sub-mount |
+| `rag-clamav-db` → `/var/lib/clamav` | rag-clamav | signatures |
+| `rag-certs`, `rag-secrets`, `rag-config` | written by rag-bootstrap (§7.1); every other service mounts only its own sub-path, read-only | certificates, secrets and static configuration (below); `rag-secrets/openwebui-feedback` is the one sub-path another service writes (rag-openwebui-setup) |
+| `${UME_RAG_BACKUP_DIR}` (`DIR/pgbackrest`) → `/var/lib/pgbackrest` | rag-postgres (`compose.backup.yaml`) | posix pgBackRest repository on the backup share mounted on the host; the volume `rag-pgbackrest-repo` instead only with `--backup-target local` (test hosts: not off the host); unused with S3 (§7.4) |
+| `${UME_RAG_UPLOAD_BACKUP_DIR}` (`DIR/uploads`) → `/backup` | rag-upload-backup (`compose.backup.yaml`; with `rag-blobs` read-only) | the upload copy (§7.4); the volume `rag-upload-copy` with `--backup-target local` |
+| `rag-openwebui-data` → `/data` | rag-openwebui (`DATA_DIR=/data`, uid 1000), rag-openwebui-setup | its own SQLite DB (§12.8) |
 
 Open WebUI runs on SQLite with one worker and task generation off. When its trigger fires (CPU > 80 % of its VM, or
 p95 overhead > 100 ms at peak; P2 onwards, on its own VM) it gets its own Postgres (never `ragdb`), `UVICORN_WORKERS` > 1
 and `WEBSOCKET_MANAGER=redis` with its own Redis.
 
-Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`); the client secrets typed in the setup wizard are settings encrypted with Data Protection instead (Decisions "Setup wizard", identity §19), and `Setup__Secret` (rag-admin; the setup code's key) is one more generated file: `${UME_RAG_SECRETS_DIR}/<service>`
+The services read their secrets and certificates as files, never from their environment (gateway `compose.prod.yaml`). rag-bootstrap generates them, or writes them from its own variables (a gateway key issued by hand, a declared client secret, the backup target's S3 credentials: values kept in `deploy/.env`, mode 600, as Portainer keeps them in the stack's variables), into the volumes `rag-secrets` and `rag-certs` (§7.1). The client secrets typed in the setup wizard are settings encrypted with Data Protection instead (Decisions "Setup wizard", identity §19), and `Setup__Secret` (rag-admin; the setup code's key) is one more generated file. Each service mounts its own sub-path, read-only: `rag-secrets/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis` (P2, multi-host only; without it the in-memory `IRateLimitStore`/`ISharedCache` are used), `Security__KeyPepper`,
-`Gateway__Key` (the service's credential key of the gateway integration *Ume.Rag*, gateway-changes §5.1; the worker's allows `OnPrem` and `Eu` only, and its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by `init-deployment.sh`; P2 also: HMAC of host names in the Redis crawl leases, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
-`Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` (api; chat design §11.1; the feedback import's `OpenWebUi__AdminApiKey` is in `secrets/openwebui-feedback`, below), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
-to the api's internal route, chat design §15.2; issued in the admin UI)), `${UME_RAG_CERTS_DIR}/<service>` →
+`Gateway__Key` (the service's credential key of the gateway integration *Ume.Rag*, gateway-changes §5.1; the worker's allows `OnPrem` and `Eu` only, and its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by rag-bootstrap; P2 also: HMAC of host names in the Redis crawl leases, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6), `ClamAv__Mode` and `Render__Endpoint` (worker; they follow the profiles, §5.5, §5.4), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `KeyProvider__*` (with a key service, K1),
+`Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` (api; chat design §11.1; the feedback import's `OpenWebUi__AdminApiKey` is in `rag-secrets/openwebui-feedback`, §7.1), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
+to the api's internal route, chat design §15.2; issued in the admin UI)), `rag-certs/<service>` →
 `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`; P2: the tool identity's Entra client-credentials certificate for
-hosted MCP servers, in api and admin only, never the worker, tools design §2.2, §4.6), Postgres secrets → `/run/postgres-secrets`, pgBackRest repository settings and passphrase
-(`${UME_RAG_SECRETS_DIR}/pgbackrest/repo.conf`) → `/etc/pgbackrest/conf.d/repo.conf` (postgres only, read-only). Hosted MCP servers get `${UME_RAG_SECRETS_DIR}/mcp-<name>` (tools
-design §8.3). The one exception is Open WebUI, which reads its secrets only from its environment: they come from an
-`env_file` (`${UME_RAG_SECRETS_DIR}/openwebui.env`), never from `deploy/.env`.
+hosted MCP servers, in api and admin only, never the worker, tools design §2.2, §4.6), `rag-secrets/keys` → `/run/keys` (the file key provider's master keys; api, admin and worker), `rag-secrets/postgres` → `/run/postgres-secrets`, and with `compose.backup.yaml` the pgBackRest repository settings and passphrase
+(`rag-secrets/pgbackrest`, with `repo.conf`) → `/etc/pgbackrest/conf.d` (rag-postgres only, read-only). Hosted MCP servers get a sub-path of their own, `rag-secrets/mcp-<name>` (P2, tools
+design §8.3). Two services take a secret only from their environment, and neither gets it from `deploy/.env`: Open
+WebUI's start wrapper (`deploy/openwebui/start-with-sign-in.py`) and the renderer's entrypoint read the files of their
+sub-paths (`rag-secrets/openwebui`, `rag-secrets/renderer`) and export them to the process they start.
 
-Hardening: every service uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
+Hardening: every service but the one-shot rag-bootstrap (no network; it gives the files to the services' users) uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
 `/tmp`), numeric `user`, `restart: unless-stopped`, `stop_grace_period` 60 s (api/admin; postgres, so the shutdown
 checkpoint is not cut short), 120 s (worker: running jobs get `Worker:StopGraceSeconds` 90 s to finish, then are
 released; the worker raises its host shutdown timeout to that grace + 15 s, so Compose must give it at least 105 s).
 `compose.hardening.yaml` is the
-overlay for `aspire publish` output in `deploy/generated/`, verified by `Test-Deployment.ps1`, exactly as in the gateway; `compose.prod.yaml` is self-contained and kept in sync.
+overlay for `aspire publish` output in `deploy/generated/`, verified by `Test-Deployment.ps1`, exactly as in the gateway; `compose.rag.yaml` is self-contained.
 
 ### 6.4 Moving the ingestion zone to its own host
 
-From day one the ingestion zone is a separate file: the pilot runs
-`docker compose -p ume-rag -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --env-file deploy/.env up -d --wait`.
-`init-deployment.sh` writes the deployment's file list (with the overlays it chose) as `COMPOSE_FILE` into `deploy/.env`,
-so `docker compose --env-file deploy/.env up -d --wait` is the same and the `-f` form is optional.
+On one host every zone is in `compose.rag.yaml`. `init-deployment.sh` writes the deployment's file list (that file and
+the overlays in use) as `COMPOSE_FILE` into `deploy/.env`, so the pilot runs
+`docker compose --env-file deploy/.env up -d --wait` (project `ume-rag`, the file's `name:`).
 
 | Step | Host A (data plane) | Host B (ingestion) |
 |---|---|---|
-| Compose | `compose.prod.yaml` only | `compose.ingestion.yaml -f compose.ingestion-remote.yaml` (P2: the remote overlay is not built) |
+| Compose | the data-plane and control services of `compose.rag.yaml` | its ingestion services (rag-worker, rag-parser, rag-clamav, rag-renderer) with `compose.ingestion-remote.yaml` (P2: neither the split nor the remote overlay is built) |
 | Postgres | publish `5432` on host A's LAN address; `pg_hba.conf` adds `hostssl ragdb ume_rag_worker <host B>/32 scram-sha-256` | worker connection string `Host=<host A>;SSL Mode=VerifyFull` |
 | Blobs | switch `IBlobStore` to S3 (`BlobStore:Kind=S3`, `AWSSDK.S3`; server: the municipality's S3-capable storage if IT offers one, else SeaweedFS, never MinIO built from archived source; postponed decision S2) or Azure Blob (plan §12.1) for admin uploads and worker; migrate `rag-blobs` with `rag-blob-migrate` command | – |
 | Gateway | – | worker on its own `llm` network to the gateway |
 | Sizes | ingestion rows removed; postgres gets 4 cpus / 6 GB | parser gets ≥ 6 cpus, 2–4 workers |
 
-`init-deployment.sh --role data|ingestion|all` writes the matching `.env` and only that host's secrets (host B gets
-the worker's secrets only). P0 builds only `--role all`; the other roles come with P2.
+P2: a role per host (`data`, `ingestion`, `all`) selects that host's services and gives it only its secrets (host B
+gets the worker's secrets only). Nothing of it is built: `init-deployment.sh` has no role option, and one host runs
+everything.
 
 **Three and five hosts** (Compose per host, roles per host, decided 2026-10-30; three hosts in P2, five in P3 when
 their triggers fire; host sizes and roles per topology: plan §2). Same images on every host; each host runs a chosen set of services and `Worker:Classes`; all share one Postgres, one
@@ -715,9 +735,9 @@ Redis and one object store (single node on its own encrypted disk) on the data h
 
 | Topic | Rule |
 |---|---|
-| Networks | routed LAN + host firewall + TLS, no Docker overlay; each host publishes only the ports its peers need on its LAN address (D: 5432, 6379 TLS, 443 S3); `deploy/host/docker-user-firewall.sh` gains a peer list per role; `pg_hba.conf` lists each peer host per role; every host with `fetch` gets the same `crawl` network, firewall script and `UME_RAG_CRAWL_ALLOW`, with its own egress canary |
-| Compose files | `compose.data.yaml`, `compose.api.yaml`, `compose.admin.yaml`, `compose.ingestion.yaml` (exists), `compose.parser.yaml`; `init-deployment.sh --role data\|api\|ingestion\|processing\|all` writes that host's `.env`, certificates and only its secrets |
-| Host-local only | parser (each parser host runs its own `parse` worker on its internal `parser` network), clamd and the renderer (one per fetch host): never published on the LAN |
+| Networks | routed LAN + host firewall + TLS, no Docker overlay; each host publishes only the ports its peers need on its LAN address (D: 5432, 6379 TLS, 443 S3); `deploy/host/docker-user-firewall.sh` gains a peer list per role; `pg_hba.conf` lists each peer host per role; every host with `fetch` gets the same `rag-crawl` network, firewall script and `UME_RAG_CRAWL_ALLOW`, with its own egress canary |
+| Compose files | a file per role (`compose.data.yaml`, `compose.api.yaml`, `compose.admin.yaml`, `compose.ingestion.yaml`, `compose.parser.yaml`; none is built: one host runs `compose.rag.yaml`), and a role per host (`data`, `api`, `ingestion`, `processing`, `all`) that gives it its `.env`, certificates and only its secrets |
+| Host-local only | parser (each parser host runs its own `parse` worker on its internal `rag-parser` network), clamd and the renderer (one per fetch host): never published on the LAN |
 | Blobs | the object store replaces the `rag-blobs` volume beyond one host; the upload copy (§7.4) by bucket replication or `rclone`/server tooling |
 | Must be single | Postgres primary (plus a streaming standby on another host, required before production beyond the pilot, §7.4), Redis, object store, migrations (one-shot), lease leaders |
 | Connections | Σ over instances of pool + LISTEN per role within the role's limit (data-model §1.1), checked at deploy time by `deploy/postgres/connection-budget.sh` |
@@ -727,104 +747,167 @@ Redis and one object store (single node on its own encrypted disk) on the data h
 
 ## 7. Release bundle and upgrades
 
-### 7.1 `init-deployment.sh` (adapted; same idempotency: never overwrites secrets)
+### 7.1 `init-deployment.sh` (writes `deploy/.env`; `rag-bootstrap` generates and never overwrites secrets)
 
-**P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): `--oidc-authority` and
-`--openwebui-oidc-provider-url` point at realm `ume` (`https://<keycloak host>/realms/ume`), and the redirect URIs are
-registered on the Keycloak clients `ume-rag-admin` and `open-webui` (realm additions, §4.2). The script's Entra example
-text (the `login.microsoftonline.com` authority in its usage, "own Entra registration" comments and the next step
-"Register these redirect URIs … in Entra") names Keycloak; Entra examples return with P2.
+**One bootstrap, one service file** (Decisions "One deployment bootstrap"). Every deployment form gets its
+certificates, secrets and derived files from `deploy/portainer/bootstrap.sh`: Compose and the Portainer stack run it
+as the one-shot `rag-bootstrap` into the volumes `rag-certs`, `rag-secrets` and `rag-config`, and Kubernetes'
+`create-secrets.sh` runs the same script on the operator's machine (§10). The services are defined once, in
+`deploy/compose.rag.yaml`, which Compose runs directly and the Portainer stack is built from (below).
+`init-deployment.sh` generates no certificate and no secret.
 
-Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. `deploy/.env` holds `COMPOSE_FILE`
-(§6.4), `UME_RAG_HOST_MEMORY`, `UME_RAG_BACKUP_DIR`, `UME_RAG_BACKUP_ENDPOINT`, `UME_RAG_UPLOAD_BACKUP_DIR` and
-`UME_RAG_FRESHCLAM_PROXY` besides the keys below.
+**The script writes only `deploy/.env`** (mode 600): `COMPOSE_FILE` (`compose.rag.yaml` and the overlays in use, §6.4)
+and the variables of `compose.rag.yaml`, which are the Portainer stack's (`deploy/portainer/stack.env.example` lists
+them). A re-run reads the file, changes what its options name and keeps every other line; a value set empty removes
+its line. A secret it is given (a key file, S3 credentials, `--set-file`) is kept in `deploy/.env`, as Portainer keeps
+it in the stack's variables, and `rag-bootstrap` writes it into `rag-secrets`. Required are the domain or rag-api's
+host name, and the gateway's URL: an interactive run asks for a missing one, and with `--yes` or without a terminal a
+missing one stops the run. The script's header (`--help`) is the option list and wins where this table differs.
 
-| Option | Default | Writes |
+| Option | Sets | Notes |
 |---|---|---|
-| `--oidc-authority URL` | the setup wizard's; an interactive run asks once (below) | `UME_RAG_OIDC_AUTHORITY` |
-| `--oidc-client-id ID` | `ume-rag-admin` (RAG's own client: in P1 the shared Keycloak's, from P2 the Entra registration; identity §1.6) | `UME_RAG_OIDC_CLIENT_ID` |
-| `--oidc-client-secret-file FILE` | – | `secrets/admin/Oidc__ClientSecret` (own credential, never the gateway's) |
-| `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
-| `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
-| `--gateway-credential-key-file SERVICE=FILE` (repeated for `api`, `admin`, `worker`) | – (credential keys issued by a gateway admin per service, gateway-changes §5.1) | `secrets/{api,admin,worker}/Gateway__Key` |
-| `--gateway-secrets-dir DIR` | – (a gateway on the same host: the directory its migration writes a manifest's keys to, `<gateway>/deploy/integration-secrets`, from `deploy/portainer/integration-manifest.json` in the gateway's `deploy/integration-manifests`) | the same three files, read from `DIR/Ume.Rag/rag-{api,admin,worker}`; a `--gateway-credential-key-file` wins for its service, and a missing key stops the run |
-| `--key-provider file` (the only provider built; `openbao` and `azure` and their options come with K1) | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key file `secrets/keys/rag-blob-internal` (mode 0400; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4), then a reminder to run `escrow-keys.sh` (§7.4) |
-| `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` in `secrets/pgbackrest/repo.conf` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target: a mounted share gives `DIR/pgbackrest` (`UME_RAG_BACKUP_DIR`) and `DIR/uploads` (`UME_RAG_UPLOAD_BACKUP_DIR`); S3 (`--backup-s3-credentials-file`, `--backup-s3-region`) sets `UME_RAG_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built in P0; `local` = a Docker volume and `deploy/upload-backup` (test hosts only: not off the host) |
-| `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
-| `--host-memory 16\|24` | `16` | the §6.2 profile: 24 adds `compose.host-24g.yaml` and the 24 GB ClamAV confs (§5.5) to `COMPOSE_FILE` |
-| `--freshclam-proxy HOST:PORT` | none | `UME_RAG_FRESHCLAM_PROXY` and the mounted `freshclam.conf` (§5.5); the `mirror` network then reaches only the proxy (§6.1) |
-| `--clamav on\|off` | `on`; a re-run keeps the value in `deploy/.env` | `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and the profile `clamav` in `COMPOSE_PROFILES`; `off` starts no `rag-clamav`, writes no ClamAV confs and says so in the closing notes (§5.5) |
-| `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-client-secret-file`, `--openwebui-oidc-provider-url`, `--openwebui-oidc-provider-name`, `--openwebui-data-dir` | no Open WebUI without the host; the setup wizard's values, else client `open-webui`, the authority's discovery document and *Umeå kommun*; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8). Its key for rag-api and its JWT secret are generated once and kept on a re-run; the OIDC client secret goes to `secrets/api` and `secrets/admin` (rag-api serves the sign-in settings to Open WebUI's start), never into `openwebui.env` |
-| `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets); P0 builds `all` only |
-| `--proxy`, `--upstream-host`, `--proxy-address`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway: `--proxy` writes `proxy/nginx.conf` from `nginx.conf.example` and prints the routes; `--proxy-address` gives the host firewall the proxy's source addresses (`UME_RAG_PROXY_SOURCES`, #453); `--rolling` adds `compose.rolling.yaml` (second slots on 8544 and 9544) |
-| `--domain`, `--api-port`, `--admin-port`, `--bind`, `--render`, `--oidc-refuse-guests`, `--certs-dir`, `--secrets-dir` | – | the rest of the script's options; its header (`--help`) is the full list and wins where this table differs |
+| `--domain DOMAIN` | `UME_DOMAIN` | the host names default to `rag.`, `rag-admin.` and `chat.` under it |
+| `--api-host HOST`, `--admin-host HOST` | `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` | a name of its own instead; without the domain, rag-admin's name defaults to rag-api's. The names go into the two services' certificates |
+| `--gateway-url URL` | `UME_RAG_GATEWAY_URL` | required, an `https://` URL |
+| `--gateway-ca-dir DIR` | `UME_RAG_GATEWAY_CA_DIR` | a directory with the gateway's `ca.pem` (a gateway on this host: its certificate directory); not needed for a gateway with a public certificate |
+| `--gateway-secrets-dir DIR` | `UME_RAG_GATEWAY_SECRETS_DIR` | a gateway on the same host: the directory its migration writes a manifest's keys to (`deploy/portainer/integration-manifest.json`), read as `DIR/Ume.Rag/rag-{api,admin,worker}` |
+| `--gateway-credential-key-file SERVICE=FILE` (`api`, `admin`, `worker`) | `UME_RAG_<SERVICE>_GATEWAY_KEY` | a credential key issued by a gateway admin (gateway-changes §5.1); it wins over the manifest's |
+| `--profiles LIST` | `COMPOSE_PROFILES` | `clamav`, `render`, `openwebui`, `proxy`; a first run writes `clamav` (§5.5) |
+| `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | `UME_RAG_BACKUP_TARGET`; adds `compose.backup.yaml` | IT's backup storage (S3-compatible or a mounted share; decided with IT). A mounted share gives `DIR/pgbackrest` (`UME_RAG_BACKUP_DIR`) and `DIR/uploads` (`UME_RAG_UPLOAD_BACKUP_DIR`); S3 needs `--backup-s3-credentials-file` (`UME_RAG_BACKUP_S3_KEY`, `UME_RAG_BACKUP_S3_KEY_SECRET`; `--backup-s3-region`) and sets `UME_RAG_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built; `local` = two Docker volumes (test hosts only: not off the host). rag-bootstrap writes pgBackRest's `repo1` settings from it (§7.4) |
+| `--host-memory 16\|24` | `UME_RAG_HOST_MEMORY` | the §6.2 profile: 24 adds `compose.host-24g.yaml` and `compose.clamav-conf.yaml` (§5.5) |
+| `--freshclam-proxy HOST:PORT` | `UME_RAG_FRESHCLAM_PROXY`; adds `compose.clamav-conf.yaml` | the mounted `freshclam.conf` (§5.5); the `rag-mirror` network then reaches only the proxy (§6.1) |
+| `--hardened` | adds `compose.hardened.yaml` | the host firewall, the ingestion slice and what else §6.1 and §6.2 name; `deploy/host/install.sh` runs before the first `up` |
+| `--oidc-authority URL` | `UME_RAG_OIDC_AUTHORITY` | the sign-in provider; asked for only with `--hardened` (below) |
+| `--proxy-address LIST` | `UME_RAG_PROXY_SOURCES` | the reverse proxy's IPv4 addresses or CIDRs, which the host firewall alone admits to the published ports (#453) |
+| `--rolling` | adds `compose.rolling.yaml` | second slots on 8544 and 9544 (§7.3) |
+| `--overlays LIST` | `COMPOSE_FILE` exactly | `backup`, `hardened`, `host-24g`, `clamav-conf`, `rolling`; empty: none |
+| `--set NAME=VALUE`, `--set-file NAME=FILE` | any other variable | for example `UME_RAG_CRAWL_ALLOW` (the firewall's input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard`, connectors design §7), `UME_RAG_API_PUBLIC_URL`, the `*_BIND` and `*_PORT` variables, `UME_RAG_TRUST_DIR`, `UME_RAG_PKI_DIR`, `UME_RAG_OIDC_CLIENT_SECRET`; `--set-file` takes the file's first line. `COMPOSE_FILE` and a retired variable (Decisions "Deployment values across releases") are refused |
+| `--yes` | – | no questions |
 
-It generates: the internal CA and service certificates (api, admin, worker, parser, postgres), the Data
-Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`, the pgBackRest repository passphrase (escrowed, §7.4), the key
+It checks the host names, the two URLs, the profiles, the overlays and the proxy addresses before writing, and the
+backup overlay needs a target. Its closing lines are the next steps: `deploy/host/install.sh` (before the first `up`
+with `--hardened`), `docker compose --env-file deploy/.env up -d --wait`, rag-bootstrap's log, the setup code in
+rag-admin's log, `stanza-create` with a backup target, and `escrow-keys.sh`. `UME_RAG_API_PUBLIC_URL` is not derived:
+rag-api's public address is `https://` and its host name, and where no TLS proxy is in front (neither the profile
+`proxy` nor `--proxy-address`) the script notes that the address is then on port 8543 and how to set it.
+
+**`rag-bootstrap`** (one-shot, `network_mode: none`) is the same service in Compose and in the Portainer
+stack. Existing secrets are never overwritten (re-run tests `deploy/tests/compose-bootstrap.sh` and
+`deploy/tests/portainer-rerun.sh`, #697). It generates: the internal CA and service certificates (api, admin, worker, parser, postgres), the Data
+Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker` and the connection strings from them, the pgBackRest repository passphrase (with a backup target; escrowed, §7.4), the key
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
-cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the crawl key pepper (`Security__CrawlKeyPepper`, worker, from P1a), the renderer WebSocket path secret (`renderer.env`, §5.4) and, with `--role data` on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker, and `deploy/.env` (non-secret settings only).
-The Open WebUI feedback key (`OpenWebUi__AdminApiKey`) is not generated here: `--openwebui-host` generates the service
-account's credentials once (`WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME`, `WEBUI_ADMIN_PASSWORD` in `secrets/openwebui.env`;
-Open WebUI creates it as its first user on an empty store), and always creates `secrets/openwebui-feedback`
-(`1000:1654`, mode 2750). `compose.openwebui.yaml`'s one-shot `open-webui-setup` mints the key into that directory, and
-rag-api mounts it read-only as `Security:ExtraSecretsDirectory` (chat design §4.3, §14.2). The Portainer stack does the
-same with `rag-openwebui-setup` and `rag-secrets/openwebui-feedback`. Nothing is done by hand.
-**Sign-in is set in the setup wizard** (Decisions "Setup wizard", identity §19): `--oidc-authority`,
-`--oidc-client-id`, `--oidc-client-secret-file` and the `--openwebui-oidc-*` options are optional and never prompted;
-given, they are the deployment's values and lock the wizard's fields. The one exception is `--oidc-authority`: an
-interactive run asks for it once when it is missing (empty leaves it to the wizard), because the host firewall (§6.1)
-lets rag-admin reach only that provider, so the wizard's test sign-in can't reach one the deployment doesn't name. `--domain` (`UME_DOMAIN`) gives the host names
-their defaults `rag.`, `rag-admin.` and `chat.` under it; without it `--api-host` and `--admin-host` are as before.
-The Portainer template and the Kubernetes base set no `Oidc__*` default. The script, `rag-bootstrap` and
-`create-secrets.sh` generate `secrets/admin/Setup__Secret`.
+cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), rag-admin's setup secret (`Setup__Secret`), the crawl key pepper (`Security__CrawlKeyPepper`, worker, from P1a), the renderer WebSocket path secret (`rag-secrets/renderer/ws-path`, §5.4) and the blob master key of the file key provider (`rag-secrets/keys/rag-blob-internal`, mode 0400; the only provider built, `openbao` and `azure` come with K1, plan §8a; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4). Not built: the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1) and, on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker.
+
+- **Certificates:** a service certificate is re-issued when it expires within 30 days or its host names change, the CA
+  never; there is no renew option. The end of the log names every certificate within 60 days of expiry and the
+  services to restart after a re-issue (#705); `deploy/host/cert-expiry.sh` reads the `rag-certs` volume daily.
+- **Files that follow a variable** are written again on every run and removed when the variable is empty: the
+  gateway credential keys (the variable, else the manifest's file; identity §4.7, M-17 C7), the declared client
+  secrets and `Oidc__RefuseGuests`, the worker's `ClamAv__Mode` and `Render__Endpoint` and Open WebUI's address and
+  client key (they follow `COMPOSE_PROFILES`), the pgBackRest `repo.conf` (`rag-secrets/pgbackrest`, §7.4), and the
+  names of the retired variables the deployment still sets (`UME_RAG_RETIRED_SET`).
+- **Static configuration** goes into `rag-config` on every run, since the services run read-only: Postgres' init
+  script, `pg_hba.conf` and `postgresql.conf` (with the 24 GB memory settings for `UME_RAG_HOST_MEMORY=24`, §6.2),
+  `app-roles.sql`, Open WebUI's two scripts, the ClamAV confs where `compose.clamav-conf.yaml` gives them (§5.5) and,
+  with the profile `proxy`, `rag-proxy`'s `nginx.conf`.
+- **Ownership:** it creates the blob directories and gives every directory to its service's user: 999 (postgres, the
+  pgBackRest repository; P2 redis), 1654 (.NET services, the upload copy), 10001 (parser), 10002 (renderer), 1000
+  (Open WebUI; `rag-secrets/openwebui-feedback` is `1000:1654`, mode 2750). ClamAV runs as 1000 and `rag-proxy` as 101.
+- **What an operator supplies as a file** is a host directory mounted read-only into rag-bootstrap, each defaulting to
+  the empty `deploy/empty`: the gateway's CA (`UME_RAG_GATEWAY_CA_DIR`; optional), the gateway's manifest keys
+  (`UME_RAG_GATEWAY_SECRETS_DIR`), more CAs to trust (`UME_RAG_TRUST_DIR`, `*.pem`: a sign-in provider's or a
+  database's) and PKI certificates for the two public listeners (`UME_RAG_PKI_DIR`: `api.crt` and `api.key`,
+  `admin.crt` and `admin.key`, used instead of the internal CA's). `rag-proxy`'s certificate is
+  `UME_RAG_PROXY_CERTS_DIR`, mounted into `rag-proxy`. In the Portainer stack the gateway's CA and manifest keys come
+  from the gateway's volumes instead.
+- **A checklist** at the end of its log says what is still missing (a gateway key, an example value, a certificate
+  near expiry, a retired variable), then names the setup wizard's address.
+
+**Open WebUI's secrets only with the profile `openwebui`** (not every installation has a chat): its user-JWT secret
+(also rag-api's `OpenWebUi__JwtSecret`), its session key, its key for rag-api, the feedback service account's password
+and its CA bundle. Without the profile none of them is generated, rag-api, rag-admin and `rag-migrate` get no Open
+WebUI file, and a profile turned off keeps what was generated for the next time.
+The Open WebUI feedback key (`OpenWebUi__AdminApiKey`) is not generated by the bootstrap: it generates the service
+account's password once (the account is `WEBUI_ADMIN_EMAIL`, `feedback-import@localhost`;
+Open WebUI creates it as its first user on an empty store), and always creates `rag-secrets/openwebui-feedback`
+(`1000:1654`, mode 2750). The one-shot `rag-openwebui-setup` (profile `openwebui`) mints the key into that directory, and
+rag-api mounts it read-only as `Security:ExtraSecretsDirectory` (chat design §4.3, §14.2). Nothing is done by hand.
+
+**Sign-in is set in the setup wizard** (Decisions "Setup wizard", identity §19), the same in every form: the script
+asks for no sign-in value, and its closing lines and rag-bootstrap's log point at the wizard
+(`https://<admin host>/setup`, with the setup code in rag-admin's log). The declared sign-in values are the stack's
+variables (`UME_RAG_OIDC_AUTHORITY`, `UME_RAG_OIDC_CLIENT_ID`, `UME_RAG_OIDC_CLIENT_SECRET`, the
+`UME_RAG_OPENWEBUI_OIDC_*` ones; `--set`, `--set-file`): given, they are the deployment's values and lock the wizard's
+fields, and with an authority and a client secret the wizard never opens. The one prompt is with `--hardened`: an
+interactive run asks once for the provider's address (`--oidc-authority`; empty leaves it for now, and the closing
+lines say that rag-admin reaches no provider yet), because the host firewall (§6.1)
+lets rag-admin reach only that provider, so the wizard's test sign-in can't reach one the deployment doesn't name.
+`compose.rag.yaml` and the Kubernetes base set no `Oidc__*` default.
+**P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): the provider's address is realm `ume`
+(`https://<keycloak host>/realms/ume`), and the redirect URIs are registered on the Keycloak clients `ume-rag-admin`
+and `open-webui` (realm additions, §4.2).
 The embedding profile has no deployment knobs: a platform admin creates it in the admin UI after the first sign-in
 (admin design §4.5, Decisions "Deploy configuration").
 **Gateway keys per deployable** (plan §6; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate query-embedding route/replica follows only when its trigger fires
 (query embedding p95 during ingestion > 2 × idle).
-Ownership: 999 (postgres; P2 redis), 1654 (.NET services, the upload copy), 10001 (parser), 10002 (renderer), 1000
-(clamav, Open WebUI).
 
 **The Portainer stack** (M-17, `deploy/portainer/`; operators' guide `docs/portainer.md`): the gateway and Ume.Rag as
-one stack, configured only through variables, for hosts where `init-deployment.sh` can't run.
-- **Built, not hand-edited:** `build-stack.sh` joins the gateway release's own `compose.portainer.yaml` (unchanged,
-  images pinned by digest) with `compose.rag.template.yaml` and inlines `bootstrap.sh` as `rag-bootstrap`'s script;
+one stack, configured only through variables, with no script run on the host.
+- **Built, not hand-edited:** `build-stack.sh` joins the gateway release's own `compose.portainer.yaml` (images pinned
+  by digest; unchanged but for one line, the default of its `UME_INTEGRATION_MANIFEST`, which becomes
+  `integration-manifest.json`) with `deploy/compose.rag.yaml`. It applies that file's line marks (a comment
+  `#@joined <line>` becomes the line, and a line that ends in `#@alone` is left out), turns each `file:` config into
+  inline `content:` (`bootstrap.sh` as `rag-bootstrap`'s script among them) and puts `stack-header.txt`, the comment
+  operators read, before the gateway's `name:`.
   `build-stack.sh --check` (deploy-checks) fails when the committed `compose.portainer.yaml` differs. `release.yml`
-  pins the template to the release's images and publishes the file as a release asset; its boot test
+  pins the stack's `RAG_*_IMAGE` defaults to the release's images and publishes the file as a release asset, and its
+  pull request afterwards pins `compose.rag.yaml` and the committed stack the same way (`build-stack.sh --images`); its boot test
   (`deploy/tests/portainer-boot.sh`) starts it as Portainer does: a plain `up -d`, then `--wait` on the long-running
   services only (a one-shot that exits counts as a failure under `--wait` unless a service waits for it, #751). A manual
   `release.yml` run with the input `portainer_boot: X.Y.Z` runs only this boot test, on that ref's stack file pinned to
   that version's images on ghcr.io (#752). `stack.env.example` is the variables file.
-- **`rag-bootstrap`** (one-shot, `network_mode: none`) is the counterpart of `init-deployment.sh`: RAG's CA and
+- **What the marks say:** joined with the gateway, `rag-bootstrap` waits for the gateway's `bootstrap` and
+  `migrations` and reads the gateway's CA and manifest keys from its volumes `ume-certs` and `integration-secrets`,
+  `Gateway__BaseUrl` defaults to `https://gateway:8443`, and `llm` and `edge` are the gateway's networks. Alone, the
+  file has its own project name, `x-hardened` anchor and `llm` network, the four host directories above,
+  `UME_RAG_GATEWAY_URL` as a required variable, the gateway's CA as optional and no gateway blocks in the TLS proxy.
+  Every other line is the same in both, so no test compares the two forms.
+- **`rag-bootstrap`** is the service described above: RAG's CA and
   certificates, the Data Protection certificate, passwords, peppers and keys in the `rag-certs`/`rag-secrets` volumes,
-  never overwritten (re-run test `deploy/tests/portainer-rerun.sh`, #697); the gateway credential keys from the
-  gateway's manifest (identity §4.7, M-17 C7); and a checklist at the end of its log of what is still missing,
-  including certificates within 60 days of expiry and services to restart after a re-issue (#705).
+  never overwritten; the gateway credential keys from the
+  gateway's manifest (identity §4.7, M-17 C7); and the checklist at the end of its log.
 - **Profiles:** the gateway's `data` (its Data API); `clamav` (the malware scan; without it `ClamAv__Mode` is `off`),
   `render` (the renderer), `openwebui` (Open WebUI with `rag-openwebui-setup`, which mints the feedback key, M-17 C6)
-  and `proxy` (`rag-proxy`, nginx with the operator's certificate in front of the five host names, re-resolving its
-  upstreams, M-17 C8, #692).
-- **Networks:** rag-admin joins the gateway's `edge` network to reach `adminapi` for the Integration API (C7, C11).
-- Open WebUI's settings are checked equal to `compose.openwebui.yaml`'s by `deploy/tests/openwebui-parity.sh` (#707).
+  and `proxy` (`rag-proxy`, nginx with the operator's certificate in front of the stack's host names, five with the
+  gateway, re-resolving its upstreams, M-17 C8, #692).
+- **Networks:** rag-admin joins the gateway's `edge` network to reach `adminapi` for the Integration API (C7, C11),
+  and `rag-proxy` joins it for the gateway's two services.
 
 ### 7.2 `build-release-bundle.sh`
 
-Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE
-POSTGRES_IMAGE` (`ume-rag/postgres`), `RENDERER_IMAGE`, each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
-script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (compose files, scripts,
-`postgres/`, `pgbackrest/`, `proxy/`, `otel/`, `host/`, `kubernetes/`, `openwebui/`, the ClamAV confs and
-`portainer/integration-manifest.json`), `docs/` (the operator guides) and `images/renderer/seccomp.json`. The Portainer
+Same as the gateway's: `RAG_API_IMAGE RAG_ADMIN_IMAGE RAG_WORKER_IMAGE RAG_MIGRATIONS_IMAGE RAG_PARSER_IMAGE
+RAG_CLAMAV_IMAGE RAG_RENDERER_IMAGE RAG_POSTGRES_IMAGE` (`ume-rag/postgres`), the Portainer stack's variables, each
+pinned by digest, are written into every `${X_IMAGE:-…}` default; the
+script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (`compose.rag.yaml` and its overlays,
+the scripts, `postgres/`, `pgbackrest/`, `proxy/`, `otel/`, `host/`, `kubernetes/`, `openwebui/`, `keycloak/`, `empty/`
+and `portainer/bootstrap.sh` with `portainer/integration-manifest.json`), `docs/` (the operator guides) and the files
+the overlays name relative to `deploy/`: `images/renderer/seccomp.json` and the ClamAV confs
+(`images/clamav/clamd.conf`, `freshclam.conf`). The Portainer
 stack is a release asset of its own (§7.1).
 
 ### 7.3 Updates (single slot in the pilot, rolling from P2)
 
 A single-slot stack updates with `docker compose --env-file deploy/.env up -d --wait` on the new release's files
-(`docs/upgrade-guide.md`). `rolling-update.sh` (adapted; it needs the second slots of `--rolling` and refuses to run
-without them; options `--pull`, `--force`, `--with-postgres`): pull → **extensions** (with `--with-postgres`:
+(`docs/upgrade-guide.md`). `rolling-update.sh` (adapted; it needs the second slots of `compose.rolling.yaml`
+(`init-deployment.sh --rolling`) and refuses to run
+without them; options `--pull`, `--force`, `--with-postgres`): pull → `run --rm rag-bootstrap` → **extensions** (with `--with-postgres`:
 `ALTER EXTENSION vector UPDATE`, as the
-bootstrap user through `docker compose exec postgres`, for a new pinned `POSTGRES_IMAGE`; the migrator
-cannot, since it is not superuser) → `run --rm migrations` → services. **Pilot (one slot)**: `rag-api` and `rag-admin`
+bootstrap user through `docker compose exec rag-postgres`, for a new pinned `RAG_POSTGRES_IMAGE`; the migrator
+cannot, since it is not superuser) → `run --rm rag-migrate` → services. The second slots need a reverse proxy of the
+operator's own that lists both ports of each service (`deploy/proxy/nginx.conf.example`, the lines marked `#rolling`):
+the stack's `rag-proxy` (profile `proxy`) knows one slot of each. **Pilot (one slot)**: `rag-api` and `rag-admin`
 are replaced together in a short announced maintenance window (`release.yml` ships them from the same release: the
 admin test panel and answer judge run the same `Ume.Rag.Answering` as the api). **From P2 (a/b slots)**: replace `rag-api`/`rag-api-b`, then
 `rag-admin`/`rag-admin-b`, each only while the other is healthy (gateway logic). Always: **worker stop-then-start** (no
@@ -849,12 +932,12 @@ Targets for the pilot: **RPO ≤ 5 min, RTO ≤ 4 h** (simplification pass §4).
 
 | What | Tool | Notes |
 |---|---|---|
-| Postgres | **pgBackRest** inside the `postgres` container (`ume-rag/postgres`, §5.2): continuous WAL archiving by `archive_command` (`archive-push`, synchronous, so no spool volume; `archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed). Scheduled backups: one host timer `rag-backup.timer` (daily 01:30) runs `backup-postgres.sh --type auto`, i.e. `docker compose exec -T postgres pgbackrest --stanza=ragdb --type=full\|diff backup`, full on Sundays or when the newest full is 7 days old or more, differential otherwise (expiry follows each backup); `rag-backup-status.timer` refreshes the health metrics every 2 minutes (rule 5); no long-running sidecar. The stanza is created once per database or repository after the first `up` (WAL archiving fails until it exists). `postgres` is on the `backup` network (§6.1) | **point-in-time restore** with `restore-pitr.sh --target-time … --confirm`: a WAL switch first (so the newest changes are archived), stops api, admin, worker and postgres; `pgbackrest restore --type=time --delta --target-action=pause` in place, in a one-off container of the `postgres` service on `postgres-data` (`docker compose run --rm`); starts Postgres, which recovers to the target and pauses; `pg_promote()` (a new timeline), `pgbackrest check`, then the services |
-| Open WebUI data (`openwebui-data`, `--openwebui-data-dir`) | **not built; decide with W2/G1** (2026-10-31) | in the pilot (history mode `none`) Open WebUI's store is the primary copy of chats and feedback comments (chat design §13.3), but no script backs it up; whether it is backed up, how and for how long is open with W2 and the DPIA (G1), postponed decisions |
-| Uploads | `backup-uploads.sh`, run by `rag-upload-backup.timer` every 10 minutes: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental, and it never overwrites. It runs the profiled Compose service `rag-upload-backup` (postgres image for its shell, uid 1654, `rag-blobs` read-only, `network_mode: none`: a posix target needs no network), not a member of `backup` | `rclone`/bucket replication beyond one host (§6.4); the S3 upload copy is not built in P0 |
+| Postgres | **pgBackRest** inside the `rag-postgres` container (`ume-rag/postgres`, §5.2), with the overlay `compose.backup.yaml` (`init-deployment.sh --backup-target`; `compose.rag.yaml` alone runs Postgres with `archive_mode=off` and has no repository): continuous WAL archiving by `archive_command` (`archive-push`, synchronous, so no spool volume; `archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed); rag-bootstrap writes the repository settings and generates the passphrase once (`rag-secrets/pgbackrest`). Scheduled backups: one host timer `rag-backup.timer` (daily 01:30) runs `backup-postgres.sh --type auto`, i.e. `docker compose exec -T rag-postgres pgbackrest --stanza=ragdb --type=full\|diff backup`, full on Sundays or when the newest full is 7 days old or more, differential otherwise (expiry follows each backup); `rag-backup-status.timer` refreshes the health metrics every 2 minutes (rule 5); no long-running sidecar. The stanza is created once per database or repository after the first `up` (WAL archiving fails until it exists). The overlay puts `rag-postgres` on the `backup` network (§6.1) | **point-in-time restore** with `restore-pitr.sh --target-time … --confirm`: a WAL switch first (so the newest changes are archived), stops api, admin, worker and postgres; `pgbackrest restore --type=time --delta --target-action=pause` in place, in a one-off container of the `rag-postgres` service on `rag-postgres-data` (`docker compose run --rm`); starts Postgres, which recovers to the target and pauses; `pg_promote()` (a new timeline), `pgbackrest check`, then the services |
+| Open WebUI data (the volume `rag-openwebui-data`) | **not built; decide with W2/G1** (2026-10-31) | in the pilot (history mode `none`) Open WebUI's store is the primary copy of chats and feedback comments (chat design §13.3), but no script backs it up; whether it is backed up, how and for how long is open with W2 and the DPIA (G1), postponed decisions |
+| Uploads | `backup-uploads.sh`, run by `rag-upload-backup.timer` every 10 minutes: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental, and it never overwrites. It runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (rag-bootstrap's image for its shell and coreutils, uid 1654, `rag-blobs` read-only, `network_mode: none`: a posix target needs no network), not a member of `backup` | `rclone`/bucket replication beyond one host (§6.4); the S3 upload copy is not built in P0 |
 | Derived blobs | raw fetches, parse and stage outputs | re-creatable: backed up nightly or not at all (a restore re-fetches and re-parses) |
-| Secrets | pepper, `data-protection.pfx`, `secrets/` | separately, through the secret manager (gateway runbook) |
-| Long-lived keys | `escrow-keys.sh`: blob master key `rag-blob-internal`, the pgBackRest passphrase (chat master keys `rag-chat-<level>` join once A1 allows stored chat content; none in P0/P1, weakness review §4), exported to the offline escrow (sealed media in two places, or the key service's own backup) | retention ≥ the data they protect; re-run after every rotation; restore drill reads them back |
+| Secrets | the pepper (`rag-secrets/.pepper`), `rag-certs/data-protection.pfx`, the rest of the `rag-secrets` volume | separately, through the secret manager (gateway runbook) |
+| Long-lived keys | `escrow-keys.sh` (reads the `rag-secrets` volume): blob master key `rag-blob-internal`, the pgBackRest passphrase (chat master keys `rag-chat-<level>` join once A1 allows stored chat content; none in P0/P1, weakness review §4), exported to the offline escrow (sealed media in two places, or the key service's own backup) | retention ≥ the data they protect; re-run after every rotation; restore drill reads them back |
 | Shred-class keys | per-month chat shred keys, only once `Settings.ChatShreddingEnabled` is on (after A1) | never escrowed beyond their shred date; key-service snapshots that hold them are kept no longer than the shred schedule, and a key-service restore is followed by `reconcile-shredded-keys` (re-destroys keys listed as destroyed in `audit."AuditLog"`) |
 
 Rules:
@@ -889,7 +972,7 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 
 | Change type | Procedure |
 |---|---|
-| pgvector minor | new pinned `POSTGRES_IMAGE`; extensions step (§7.3) |
+| pgvector minor | new pinned `RAG_POSTGRES_IMAGE`; extensions step (§7.3) |
 | Postgres major (17 → 18) | not rolling: `pg_upgrade` where possible (else `pg_dump`/`pg_restore` into a new volume), then a new pgBackRest stanza and full backup |
 | Word list or decompounder update | changes `SearchText`: the release ships a `reindex-fts` worker command (recomputes the column in batches); search quality is checked by the evaluation smoke set before and after |
 | Parser image (Docling, models) | the parse cache key includes the parser build, so old outputs stay valid; re-parsing is an opt-in publish plan |
@@ -914,7 +997,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 |---|---|---|---|---|
 | `verify.yml` | P0 | PR (not a draft), dispatch, `workflow_call`; nothing on a push to `main` | gateway `verify.yml` | §8.2 |
 | `parser.yml` | P0 | PR (not a draft), dispatch, `workflow_call`: always runs; its jobs skip unless the parser, `contracts/parser/`, the parser contract tests, `tests/fixtures/parser/`, the worker's parser client or the workflow changed (a skipped job counts as passed for a required check; a workflow left out by an `on.*.paths` filter never reports) | new | jobs `parser`, `parser-image`, `contract` (§8.2), out of `verify.yml` so only a parser change builds the 3 GB image |
-| `release.yml` | P0 | tag `v*.*.*` | gateway `release.yml` | `verify.yml` and `parser.yml` (both called, in full) beside the build, which doesn't wait for them; `e2e.yml` when asked, after all three; publish only when all are green. Build: the admin UI (`npm ci`, `npm run build`) and push all images to `ghcr.io/<owner>/ume-rag/<service>:X.Y.Z` (`latest` moves in publish, for non-pre-releases; the admin image is published with `-p:PublishAdminUi=true`, which adds the built UI as `wwwroot/`, the gateway's switch) → bundle pinned by digest → smoke test (init-deployment, `up --wait`, `/v1/models` = 401 without a key, admin `/` = 200, a Swedish compound query through the API, `pgbackrest check` in the postgres container, parser `/v1/info` from the worker container) → GitHub release with bundle, SBOM, `SHA256SUMS` |
+| `release.yml` | P0 | tag `v*.*.*` | gateway `release.yml` | `verify.yml` and `parser.yml` (both called, in full) beside the build, which doesn't wait for them; `e2e.yml` when asked, after all three; publish only when all are green. Build: the admin UI (`npm ci`, `npm run build`) and push all images to `ghcr.io/<owner>/ume-rag/<service>:X.Y.Z` (`latest` moves in publish, for non-pre-releases; the admin image is published with `-p:PublishAdminUi=true`, which adds the built UI as `wwwroot/`, the gateway's switch) → bundle pinned by digest → smoke test (`deploy/tests/release-smoke.sh`: `init-deployment.sh` with a backup target and no sign-in value, `up --wait`, `/v1/models` = 401 without a key, admin `/` = 200, the setup wizard open, a Swedish compound query through the API, `pgbackrest check` in the rag-postgres container, parser `/v1/info` from the worker container), then the Portainer stack's boot test (§7.1) → GitHub release with bundle, SBOM, `SHA256SUMS` |
 | `deploy-e2e.yml` | P2 (with a/b slots) | PR touching `deploy/**`, `images/**`, ServiceDefaults | gateway `deploy-e2e.yml` | rolling update under load behind nginx (`compose-rolling-e2e.sh`), fails on one lost request; kind cluster only once §10 exists |
 | `flake-hunt.yml` | P2 | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `parser-robustness.yml` | P2 | weekly, nightly once stable; dispatch | new | Atheris fuzzing of our own parser code (zip pre-check, sniffing, name sanitiser; the attachment splitter with email), 10 minutes each, and the mutation run against the container (parser design §15.4) |
@@ -936,7 +1019,7 @@ run every other job. Locally, a change runs the test projects it touches; the fu
 
 | Job | Steps | Source of the pattern |
 |---|---|---|
-| deploy-checks | image defaults stay `:latest` dev images; `docker compose … config --quiet` for prod, prod+ingestion, the ClamAV and 24 GB overlays, prod+rolling and Open WebUI; `init-deployment.sh`'s re-run, `--proxy`, `--domain` and wizard cases; the release bundle's pins; the Portainer stack's `rag-bootstrap` run twice on the same volumes keeps every secret, owner and mode (`deploy/tests/portainer-rerun.sh`, #697) | gateway |
+| deploy-checks | `docker compose … config --quiet` for `compose.rag.yaml` alone and with each supported combination of its overlays (backup, hardened, both, the 24 GB and ClamAV confs overlays, rolling, all of them), each also with every profile; every image pinned by digest; each optional service only with its profile; the Kubernetes manifests render; `build-stack.sh --check` (the committed Portainer stack is what `compose.rag.yaml` gives); the release bundle's pins; `deploy/tests/kubernetes-secrets.sh` (`create-secrets.sh` on the stacks' bootstrap, run twice); `deploy/tests/compose-init.sh` (`init-deployment.sh`: a first run, a re-run, the options and their overlays, the refusals, and the host firewall's rules and subnets against `compose.hardened.yaml`); `deploy/tests/compose-bootstrap.sh` (rag-bootstrap in its Compose form run twice on the same volumes keeps every secret, owner and mode; `escrow-keys.sh` and `cert-expiry.sh` read the volumes); `deploy/tests/pilot-stack.sh` (the caps and limits of §6.2, Open WebUI's restrictions, the upload copy); the Portainer stack's `rag-bootstrap` run twice (`deploy/tests/portainer-rerun.sh`, #697), its host names (`portainer-hosts.sh`) and the previous release's variables (`portainer-upgrade.sh`); the certificate expiry check; `shellcheck` on the deployment scripts and `systemd-analyze verify` on the host units | gateway |
 | images (when an image changed) | build `ume-rag/postgres` from `images/postgres/Dockerfile` and run `deploy/postgres/test.sh` (pgvector version, HNSW build, `pg_stat_statements`, `wal_compression=lz4`, `archive-push` from inside the image, §5.2); build `ume-rag/clamav` and run `images/clamav/test.sh` (§5.5). The parser image is built in `parser.yml` | new |
 | backend | `dotnet build UmeRag.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against `ume-rag/postgres` built from the commit** (the job builds `images/postgres/Dockerfile` as `ume-rag.local/postgres:ci` and sets `UME_RAG_TEST_POSTGRES_IMAGE`, read by `TestPostgres.Image`; it builds `ume-rag.local/clamav:ci` the same way for the ClamAV client test) and, for the P2 Redis implementations of `IRateLimitStore`/`ISharedCache`, Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
 | base-image scan | **not built** (A-27, #507): Trivy on the chiseled base, the `ume-rag/postgres`, parser and ClamAV images (`HIGH,CRITICAL`, `--ignore-unfixed`) | gateway (extended) |
@@ -974,7 +1057,7 @@ p50/p95/p99).
 
 - **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Ume.Rag")`, ASP.NET Core,
   HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Ume.Rag")`, health filtered, `url.query` removed);
-  JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`UME_RAG_OTEL_ENDPOINT`) is set.
+  JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`UME_OTEL_ENDPOINT`) is set.
   Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser writes JSON logs to
   stdout only in P1 (no OTel, no OTLP egress; Decisions "Parser telemetry is logs only in P1", #453); the worker's
   spans around the parse call carry its timing. From P2 the parser adds `opentelemetry-instrumentation-fastapi` with
@@ -1037,7 +1120,9 @@ p50/p95/p99).
 api, admin, the migrations Job, the blob volume claim and the NetworkPolicies; `components/` holds `datastores`
 (`ume-rag/postgres` as a StatefulSet, pgBackRest inside), `ingestion` (worker, parser), `clamav` (optional, §5.5),
 `renderer` and `ingress-controller`; `example/` is an overlay to copy; `create-secrets.sh`, `deploy.sh` and
-`sync-config.sh` are the scripts. Not built: Redis, PgBouncer, priority classes, resource quotas and an autoscaler,
+`sync-config.sh` are the scripts; `create-secrets.sh` runs `deploy/portainer/bootstrap.sh`, the bootstrap of the
+Compose and Portainer stacks (§7.1), on the operator's machine into `deploy/certs` and `deploy/secrets` and creates the
+Kubernetes secrets from those files. Not built: Redis, PgBouncer, priority classes, resource quotas and an autoscaler,
 which come only when a scaling trigger fires. What changes against Compose:
 
 | Compose | Kubernetes |
