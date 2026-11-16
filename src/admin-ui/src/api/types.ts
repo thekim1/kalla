@@ -281,6 +281,8 @@ export interface MoveRequest {
 export interface MoveImpact {
   shares: { collectionId: string; collection: string; departmentId: string; department: string }[]
   sourcesOnDepartmentPipelines: string[]
+  /** The owner team it gets: the one chosen, else the new department's only active team. */
+  ownerTeamId: string | null
   impactToken: string | null
 }
 

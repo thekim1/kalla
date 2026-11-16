@@ -194,6 +194,22 @@ public sealed class DepartmentMoveTests(AdminDatabaseFixture database, AdminHost
         (await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.Old, version }, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.User, ownerTeamId = seed.TargetTeam, version }, Ct))
             .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        // Owner team (main session's review on #811): none named takes the new department's only active team, none when it
+        // has no team; with several active teams the admin must choose one.
+        (await Json(await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.Target, version }, Ct)))
+            .GetProperty("ownerTeamId").GetGuid().ShouldBe(seed.TargetTeam);
+        (await Json(await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.User, version }, Ct)))
+            .GetProperty("ownerTeamId").ValueKind.ShouldBe(JsonValueKind.Null);
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            db.Teams.Add(new Team { Id = Guid.CreateVersion7(), Name = "Second " + seed.Target, DepartmentId = seed.Target, SyncedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var choose = await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.Target, version }, Ct);
+        choose.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await choose.Content.ReadAsStringAsync(Ct)).ShouldContain("ownerTeamId");
     }
 
     [Fact]
@@ -233,15 +249,18 @@ public sealed class DepartmentMoveTests(AdminDatabaseFixture database, AdminHost
             (await Json(refused)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.GatewayKeyInvalid.Code);
         }
 
-        var request = new { departmentId = seed.Target, ownerTeamId = seed.TargetTeam, version };
+        // No owner team named: the new department's only team.
+        var request = new { departmentId = seed.Target, version };
         var impact = await Json(await platform.PostAsJsonAsync($"{path}/move/impact", request, Ct));
+        impact.GetProperty("ownerTeamId").GetGuid().ShouldBe(seed.TargetTeam);
         var share = impact.GetProperty("shares").EnumerateArray().ShouldHaveSingleItem();
         (share.GetProperty("collectionId").GetGuid(), share.GetProperty("departmentId").GetGuid()).ShouldBe((seed.Collection, seed.Target));
         using (var moved = await platform.PostAsJsonAsync($"{path}/move",
-                   new { request.departmentId, request.ownerTeamId, version, impactToken = impact.GetProperty("impactToken").GetString() }, Ct))
+                   new { request.departmentId, version, impactToken = impact.GetProperty("impactToken").GetString() }, Ct))
         {
             moved.StatusCode.ShouldBe(HttpStatusCode.OK, await moved.Content.ReadAsStringAsync(Ct));
-            (await Json(moved)).GetProperty("departmentId").GetGuid().ShouldBe(seed.Target);
+            var body = await Json(moved);
+            (body.GetProperty("departmentId").GetGuid(), body.GetProperty("ownerTeamId").GetGuid()).ShouldBe((seed.Target, seed.TargetTeam));
         }
 
         await using (var db = TestPostgres.Context(database.Connection(null)))

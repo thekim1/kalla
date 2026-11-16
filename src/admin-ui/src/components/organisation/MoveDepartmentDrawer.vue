@@ -32,10 +32,13 @@ const refusalBox = ref<HTMLElement | null>(null)
 const targets = computed(() => departments.value.filter((d) => d.isActive && d.id !== props.departmentId))
 const target = computed(() => targets.value.find((d) => d.id === targetId.value) ?? null)
 const departmentOptions = computed(() => targets.value.map((d) => ({ value: d.id, label: d.name })))
-const teamOptions = computed(() => [
-  { value: '', label: MOVE_DEPARTMENT.noTeam },
-  ...(target.value?.teams ?? []).filter((t) => t.isActive !== false).map((t) => ({ value: t.id, label: t.name })),
-])
+// The owner team (main session's review on #811): one of the new department's active teams; its only team is preselected,
+// with several the admin chooses one; none only when it has no team.
+const teams = computed(() => (target.value?.teams ?? []).filter((t) => t.isActive))
+const teamOptions = computed(() =>
+  teams.value.length ? teams.value.map((t) => ({ value: t.id, label: t.name })) : [{ value: '', label: MOVE_DEPARTMENT.noTeam }],
+)
+const teamMissing = computed(() => teams.value.length > 1 && !ownerTeamId.value)
 
 watch(
   () => props.open,
@@ -51,7 +54,7 @@ watch(
   { immediate: true },
 )
 watch(targetId, () => {
-  ownerTeamId.value = ''
+  ownerTeamId.value = teams.value.length === 1 ? teams.value[0]!.id : ''
   gatewayKeyId.value = null
 })
 watch([targetId, ownerTeamId, gatewayKeyId], () => {
@@ -81,6 +84,8 @@ async function run(action: () => Promise<void>): Promise<void> {
 
 const check = () =>
   run(async () => {
+    // Enter submits the form too: the same guard as the button.
+    if (!target.value || teamMissing.value) return
     const calls = props.kind === 'collection' ? api.collections : api.assistants
     impact.value = await calls.moveImpact(props.id, body())
   })
@@ -105,7 +110,10 @@ const move = () =>
       <p class="text-small text-fg-2">{{ MOVE_DEPARTMENT.intro }}</p>
       <SelectField id="move-department-target" v-model="targetId" :label="MOVE_DEPARTMENT.department" :options="departmentOptions" :placeholder="MOVE_DEPARTMENT.choose" />
       <template v-if="target">
-        <SelectField id="move-department-team" v-model="ownerTeamId" :label="MOVE_DEPARTMENT.ownerTeam" :options="teamOptions" />
+        <SelectField
+          id="move-department-team" v-model="ownerTeamId" :label="MOVE_DEPARTMENT.ownerTeam" :options="teamOptions"
+          :placeholder="teams.length > 1 ? MOVE_DEPARTMENT.chooseTeam : undefined"
+        />
         <GatewayKeyPicker id="move-department-key" v-model="gatewayKeyId" :department-id="target.id" :hint="MOVE_DEPARTMENT.keyHint" />
       </template>
       <div v-if="impact" class="rounded-card border border-border p-3 text-small" role="status" data-test="impact">
@@ -128,7 +136,7 @@ const move = () =>
     </form>
     <template #footer>
       <UiButton v-if="impact?.impactToken" variant="primary" type="submit" form="move-department" :loading="busy" data-test="move">{{ MOVE_DEPARTMENT.move }}</UiButton>
-      <UiButton v-else variant="primary" type="submit" form="move-department" :loading="busy" :disabled="!target" data-test="check">{{ MOVE_DEPARTMENT.check }}</UiButton>
+      <UiButton v-else variant="primary" type="submit" form="move-department" :loading="busy" :disabled="!target || teamMissing" data-test="check">{{ MOVE_DEPARTMENT.check }}</UiButton>
       <UiButton variant="quiet" @click="emit('update:open', false)">{{ COMMON.cancel }}</UiButton>
     </template>
   </UiDrawer>

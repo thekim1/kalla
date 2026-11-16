@@ -26,9 +26,9 @@ public static class DepartmentMoves
         api.MapPost("/collections/{id:guid}/move/impact", async (Guid id, MoveRequest request, AdminContext admin, CancellationToken ct) =>
             {
                 var collection = await CollectionEndpoints.LoadAsync(admin, id, ct);
-                await CheckTargetAsync(admin, collection.DepartmentId, request, ct);
+                var team = await CheckTargetAsync(admin, collection.DepartmentId, request, ct);
                 var plan = await PlanCollectionAsync(admin, collection, request.DepartmentId, ct);
-                return Impact(plan, collection.Id, collection.Version, request);
+                return Impact(plan, collection.Id, collection.Version, request, team);
             })
             .RequireAuthorization(AdminPolicies.Admin).WithTags("Collections").WithName("CollectionMoveImpact")
             .WithSummary("What moving a collection to another department does: the shares it adds, the sources that block it, and the token the move needs");
@@ -46,7 +46,7 @@ public static class DepartmentMoves
                     var collection = await CollectionEndpoints.LoadAsync(admin, id, attempt);
                     admin.ExpectVersion(collection, request.Version);
                     var from = collection.DepartmentId;
-                    await CheckTargetAsync(admin, from, request, attempt);
+                    var team = await CheckTargetAsync(admin, from, request, attempt);
                     var plan = await PlanCollectionAsync(admin, collection, request.DepartmentId, attempt);
                     if (plan.BlockingSources.Count > 0)
                     {
@@ -54,10 +54,10 @@ public static class DepartmentMoves
                             new Dictionary<string, object?> { ["affected"] = plan.BlockingSources });
                     }
 
-                    Confirm(request, Token(collection.Id, collection.Version, request, plan.Shares));
+                    Confirm(request, Token(collection.Id, collection.Version, request, team, plan.Shares));
                     var before = MoveAudit.Of(collection.DepartmentId, collection.OwnerTeamId, collection.GatewayKeyId);
                     collection.DepartmentId = request.DepartmentId;
-                    collection.OwnerTeamId = request.OwnerTeamId;
+                    collection.OwnerTeamId = team;
                     collection.GatewayKeyId = request.GatewayKeyId;
                     collection.UpdatedAt = admin.Now;
                     collection.UpdatedBy = admin.Actor;
@@ -78,9 +78,9 @@ public static class DepartmentMoves
         api.MapPost("/assistants/{id:guid}/move/impact", async (Guid id, MoveRequest request, AdminContext admin, CancellationToken ct) =>
             {
                 var assistant = await AssistantEndpoints.LoadAsync(admin, id, ct, tracked: false);
-                await CheckTargetAsync(admin, assistant.DepartmentId, request, ct);
+                var team = await CheckTargetAsync(admin, assistant.DepartmentId, request, ct);
                 var plan = await PlanAssistantAsync(admin, assistant, request.DepartmentId, ct);
-                return Impact(plan, assistant.Id, assistant.Version, request);
+                return Impact(plan, assistant.Id, assistant.Version, request, team);
             })
             .RequireAuthorization(AdminPolicies.Admin).WithTags("Assistants").WithName("AssistantMoveImpact")
             .WithSummary("What moving an assistant to another department does: the shares it adds and the token the move needs");
@@ -96,12 +96,12 @@ public static class DepartmentMoves
                     var assistant = await AssistantEndpoints.LoadAsync(admin, id, attempt);
                     admin.ExpectVersion(assistant, request.Version);
                     var from = assistant.DepartmentId;
-                    await CheckTargetAsync(admin, from, request, attempt);
+                    var team = await CheckTargetAsync(admin, from, request, attempt);
                     var plan = await PlanAssistantAsync(admin, assistant, request.DepartmentId, attempt);
-                    Confirm(request, Token(assistant.Id, assistant.Version, request, plan.Shares));
+                    Confirm(request, Token(assistant.Id, assistant.Version, request, team, plan.Shares));
                     var before = MoveAudit.Of(assistant.DepartmentId, assistant.OwnerTeamId, assistant.GatewayKeyId);
                     assistant.DepartmentId = request.DepartmentId;
-                    assistant.OwnerTeamId = request.OwnerTeamId;
+                    assistant.OwnerTeamId = team;
                     assistant.GatewayKeyId = request.GatewayKeyId;
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
@@ -137,18 +137,30 @@ public static class DepartmentMoves
         return api;
     }
 
-    /// <summary>The target is an active department other than the current one; the owner team, when given, one of its teams.</summary>
-    private static async Task CheckTargetAsync(AdminContext admin, Guid current, MoveRequest request, CancellationToken ct)
+    /// <summary>
+    /// The target is an active department other than the current one. Returns the owner team (#811 review, main session):
+    /// the request's, one of the new department's active teams; without one, the department's only active team, none when
+    /// it has no team, and <c>invalid_value</c> on <c>ownerTeamId</c> when it has several (the admin chooses).
+    /// </summary>
+    private static async Task<Guid?> CheckTargetAsync(AdminContext admin, Guid current, MoveRequest request, CancellationToken ct)
     {
         if (request.DepartmentId == current || !await admin.Db.Departments.AnyAsync(d => d.Id == request.DepartmentId && d.IsActive, ct))
         {
             throw AdminFaults.Field("departmentId", AdminErrorCodes.InvalidValue);
         }
 
-        if (request.OwnerTeamId is { } team && !await admin.Db.Teams.AnyAsync(t => t.Id == team && t.DepartmentId == request.DepartmentId, ct))
+        var teams = await admin.Db.Teams.AsNoTracking().Where(t => t.DepartmentId == request.DepartmentId && t.IsActive).Select(t => t.Id).ToListAsync(ct);
+        if (request.OwnerTeamId is { } team)
         {
-            throw AdminFaults.Field("ownerTeamId", AdminErrorCodes.InvalidValue);
+            return teams.Contains(team) ? team : throw AdminFaults.Field("ownerTeamId", AdminErrorCodes.InvalidValue);
         }
+
+        return teams.Count switch
+        {
+            0 => null,
+            1 => teams[0],
+            _ => throw AdminFaults.Field("ownerTeamId", AdminErrorCodes.InvalidValue),
+        };
     }
 
     /// <summary>
@@ -203,8 +215,8 @@ public static class DepartmentMoves
             .OrderBy(s => s.Collection).ThenBy(s => s.DepartmentId)];
     }
 
-    private static MoveImpact Impact(MovePlan plan, Guid id, uint version, MoveRequest request) =>
-        new(plan.Shares, plan.BlockingSources, plan.BlockingSources.Count > 0 ? null : Token(id, version, request, plan.Shares));
+    private static MoveImpact Impact(MovePlan plan, Guid id, uint version, MoveRequest request, Guid? team) =>
+        new(plan.Shares, plan.BlockingSources, team, plan.BlockingSources.Count > 0 ? null : Token(id, version, request, team, plan.Shares));
 
     /// <summary>
     /// Adds the plan's shares (a collection at <c>department</c> level becomes <c>selected</c> with only them, after dropping
@@ -263,12 +275,12 @@ public static class DepartmentMoves
     }
 
     /// <summary>A hash of the object, its version, the request and the shares to add: valid for exactly the move the admin saw.</summary>
-    internal static string Token(Guid id, uint version, MoveRequest request, IReadOnlyList<MoveShare> shares)
+    internal static string Token(Guid id, uint version, MoveRequest request, Guid? team, IReadOnlyList<MoveShare> shares)
     {
         var text = new StringBuilder()
             .Append(id.ToString("N")).Append('\n').Append(version).Append('\n')
             .Append(request.DepartmentId.ToString("N")).Append('\n')
-            .Append(request.OwnerTeamId?.ToString("N")).Append('\n')
+            .Append(team?.ToString("N")).Append('\n')
             .Append(request.GatewayKeyId?.ToString("N")).Append('\n');
         foreach (var share in shares)
         {
@@ -306,5 +318,5 @@ public sealed record MoveRequest : AdminRequest
 /// <summary>A share the move adds so a link keeps working.</summary>
 public sealed record MoveShare(Guid CollectionId, string Collection, Guid DepartmentId, string Department);
 
-/// <summary>What a move does; <see cref="ImpactToken"/> is null while sources block it.</summary>
-public sealed record MoveImpact(IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> SourcesOnDepartmentPipelines, string? ImpactToken);
+/// <summary>What a move does: the shares, the blocking sources, the owner team it gets; <see cref="ImpactToken"/> is null while sources block it.</summary>
+public sealed record MoveImpact(IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> SourcesOnDepartmentPipelines, Guid? OwnerTeamId, string? ImpactToken);

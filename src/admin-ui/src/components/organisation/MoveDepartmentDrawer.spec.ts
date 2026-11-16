@@ -9,6 +9,30 @@ const department = (id: string, name: string, teams: Department['teams'] = []): 
   ({ id, name, costCenterCode: id, isActive: true, syncedAt: '', teams }) as Department
 
 describe('Change department (#811, admin design §3.2)', () => {
+  it('asks for an owner team when the new department has several, and offers none only when it has no team', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([
+      department('old', 'Fritid'),
+      department('two', 'Skola', [{ id: 'a', name: 'Grundskola', code: null, isActive: true }, { id: 'b', name: 'Gymnasium', code: null, isActive: true }]),
+      department('none', 'Kultur'),
+    ])
+    const wrapper = mount(MoveDepartmentDrawer, {
+      props: { open: true, kind: 'assistant', id: 'a1', departmentId: 'old', version: '3' },
+      global: { stubs: { GatewayKeyPicker: true, Teleport: true } },
+    })
+    await flushPromises()
+    await wrapper.get('#move-department-target').setValue('two')
+    await flushPromises()
+    expect(wrapper.get('[data-test=check]').attributes('aria-disabled')).toBe('true')
+    await wrapper.get('#move-department-team').setValue('b')
+    expect(wrapper.get('[data-test=check]').attributes('aria-disabled')).toBeUndefined()
+
+    await wrapper.get('#move-department-target').setValue('none')
+    await flushPromises()
+    expect(wrapper.get('#move-department-team').text()).toContain('No owner team')
+    expect(wrapper.get('[data-test=check]').attributes('aria-disabled')).toBeUndefined()
+  })
+
   it('checks the impact, lists the shares it adds, moves with the token and drops the impact when a field changes', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([
@@ -17,7 +41,7 @@ describe('Change department (#811, admin design §3.2)', () => {
       department('other', 'Skola'),
     ])
     const impact = vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({
-      shares: [{ collectionId: 'c1', collection: 'Vuxen', departmentId: 'old', department: 'Fritid' }], sourcesOnDepartmentPipelines: [], impactToken: 'tok',
+      shares: [{ collectionId: 'c1', collection: 'Vuxen', departmentId: 'old', department: 'Fritid' }], sourcesOnDepartmentPipelines: [], ownerTeamId: 't1', impactToken: 'tok',
     })
     const move = vi.spyOn(api.collections, 'move').mockResolvedValue({ id: 'c1', departmentId: 'new' } as Collection)
 
@@ -32,8 +56,10 @@ describe('Change department (#811, admin design §3.2)', () => {
     expect(targets).not.toContain('Fritid')
     expect(targets).toEqual(expect.arrayContaining(['Vuxenutbildning', 'Skola']))
 
+    // Its only team is preselected.
     await wrapper.get('#move-department-target').setValue('new')
-    await wrapper.get('#move-department-team').setValue('t1')
+    await flushPromises()
+    expect((wrapper.get('#move-department-team').element as HTMLSelectElement).value).toBe('t1')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(impact).toHaveBeenLastCalledWith('c1', { departmentId: 'new', ownerTeamId: 't1', gatewayKeyId: null, version: '7' })
@@ -50,7 +76,7 @@ describe('Change department (#811, admin design §3.2)', () => {
   it('shows the sources that block the move and offers no Move, and a changed field asks for a new check', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([department('old', 'Fritid'), department('new', 'Vuxenutbildning'), department('x', 'Skola')])
-    vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({ shares: [], sourcesOnDepartmentPipelines: ['umea.se vuxen (Fritids pipeline)'], impactToken: null })
+    vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({ shares: [], sourcesOnDepartmentPipelines: ['umea.se vuxen (Fritids pipeline)'], ownerTeamId: null, impactToken: null })
     const wrapper = mount(MoveDepartmentDrawer, {
       props: { open: true, kind: 'collection', id: 'c1', departmentId: 'old', version: '7' },
       global: { stubs: { GatewayKeyPicker: true, Teleport: true } },
