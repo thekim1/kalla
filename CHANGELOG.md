@@ -18,6 +18,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - **Tests:** the request body limits per route on real Kestrel, the cron behaviour over the daylight-saving changes,
   LibreOffice's shipped link and macro defaults and that no linked local file reaches a conversion's output, and a
   browser spec for Open WebUI against rag-api (`tests/e2e`, project `openwebui`, run by hand).
+- **A first install with Docker Compose is shorter.** `init-deployment.sh --gateway-secrets-dir DIR` reads the three
+  credential keys that a gateway on the same host created from Ume.Rag's manifest
+  (`deploy/portainer/integration-manifest.json`, now in the release bundle), so no key is copied by hand. A run without
+  `--yes` asks for the sign-in provider's address when `--oidc-authority` is missing: the host firewall lets rag-admin
+  reach only that provider, and without it the setup wizard's test sign-in failed. The wizard's message for a provider
+  it cannot reach now says so. New: [`docs/compose-quick-start.md`](docs/compose-quick-start.md), the gateway and
+  Ume.Rag on one host in six steps; it replaces `docs/gateway-host-setup.md`.
 
 ## 0.7.0 (2026-11-16)
 

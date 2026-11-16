@@ -5,7 +5,7 @@ rerank, rerankers on Azure AI Foundry, shared Keycloak; verified live, B-L4, #44
 shared Keycloak as built"); v0.9.2 (2026-11-07) adds Keycloak groups shared with Ume.Rag and changes nothing for the case. Ume.Rag needs no gateway change for the
 case: every need below is an existing gateway feature.
 
-If Ume.Rag is already deployed against the gateway for the pilot ([`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md)),
+If Ume.Rag is already deployed against the gateway for the pilot ([`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md)),
 §1–§3 are checks, not new work: the support assistant reuses the deployment's keys and embedding profile.
 
 ## 1. Models
@@ -64,7 +64,7 @@ shows a gain ([`04-assistant.md`](04-assistant.md) §5). The chat-model reranker
 
 | Key | Holder | Settings | Reference |
 |---|---|---|---|
-| One gateway credential key per RAG deployable: `api`, `admin`, `worker` | `init-deployment.sh --gateway-credential-key-file api=…` etc. | residencies capped per service; the worker's at `OnPrem` + `Eu`, never `External` | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md) "3. Inputs you need"; [`../../../docs/production-setup.md`](../../../docs/production-setup.md) "2. `init-deployment.sh`" |
+| One gateway credential key per RAG deployable: `api`, `admin`, `worker` | `init-deployment.sh --gateway-credential-key-file api=…` etc. | residencies capped per service; the worker's at `OnPrem` + `Eu`, never `External` | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md) step 3; [`../../../docs/production-setup.md`](../../../docs/production-setup.md) "2. `init-deployment.sh`" |
 | The scope `organisation.read` on `rag-admin`'s credential key (no Data API key) | the admin's organisation and model sync | – | same |
 
 The support assistant's chat traffic runs on the **api** key, shared with every other assistant on the deployment.
@@ -114,8 +114,8 @@ Trade-offs to bring to it:
 - [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker under the Foundry provider (kind Rerank, residency `Eu`;
       gateway v0.9.1); `Settings.Retrieval.gatewayRerankModel` set to its alias.
 - [ ] Optional: `requireMaxResidency` on the RAG keys.
-- [ ] Optional: the embedding deployment's `ContextWindow`. [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md)
-      says to leave it empty because the gateway checked whole batches; release 1 checks embeddings per input
+- [ ] Optional: the embedding deployment's `ContextWindow`. The first set-up guide
+      said to leave it empty because the gateway checked whole batches; release 1 checks embeddings per input
       (Decisions "Gateway release 1 …"), so this can be revisited (unverified on the deployed gateway).
 - [ ] Keycloak realm `ume`: a client for the frontend's own sign-in, made by the realm's administrator (the gateway
       operator for the pilot; Decisions "Gateway release 1 …" Q1/Q6). See [`05-frontend-integration.md`](05-frontend-integration.md) §1.

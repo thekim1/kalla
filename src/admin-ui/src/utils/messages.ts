@@ -432,7 +432,7 @@ export const SETUP_TEST_MESSAGES: Record<string, string> = {
   authority_invalid:
     'The provider address is not valid. Enter the full https address of the provider, without a query or #, for example https://login.example.org/realms/ume.',
   authority_unreachable:
-    'rag-admin could not reach the provider address. Check the address, and that rag-admin can reach the provider through the network and any proxy.',
+    'rag-admin could not reach the provider address. Check the address, and that rag-admin can reach the provider through the network and any proxy. On a Docker Compose host with the host firewall, rag-admin reaches only the provider the deployment names: run init-deployment.sh again with --oidc-authority and this address, then the host firewall.',
   tls: 'rag-admin does not trust the provider’s certificate. Add the provider’s certificate authority to rag-admin’s trusted certificates, or check the address.',
   redirected:
     'The provider address answered with a redirect, and rag-admin follows none. Enter the address the provider names as its issuer, exactly.',

@@ -87,6 +87,7 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 - [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
 - [`docs/production-setup.md`](docs/production-setup.md): host sizing, `init-deployment.sh`, Compose files.
 - [`docs/portainer.md`](docs/portainer.md): the gateway and Ume.Rag as one Portainer stack, a first deploy and the upgrade to 0.5.0.
+- [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Ume.Rag on one host with Docker Compose, the short path.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
 - [`docs/network-and-ports.md`](docs/network-and-ports.md): listeners, outbound destinations and firewall/proxy rules per setup.
 - [`docs/test-host.md`](docs/test-host.md): the pilot test host, its caps, backups and the restore drill.

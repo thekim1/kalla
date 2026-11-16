@@ -474,6 +474,26 @@ jobs:
             echo "a credential key for parser was accepted"; exit 1
           fi
           grep -q 'SERVICE is api, admin or worker' <<< "$out"
+          # --gateway-secrets-dir: the keys a gateway on the same host wrote for the manifest (the directory, or its
+          # Ume.Rag); a key file given for a service wins, and a missing key stops the run and says how to get it.
+          mkdir -p "$d/gw/Ume.Rag"; for k in api admin worker; do printf 'dir-%s\n' "$k" > "$d/gw/Ume.Rag/rag-$k"; done
+          init --render --gateway-secrets-dir "$d/gw" > "$d/init.log"
+          [ "$(cat "$s/api/Gateway__Key")" = api-placeholder ]
+          bash "$d/deploy/init-deployment.sh" --gateway-url https://llm.example.se --api-host rag-api.example.se \
+            --admin-host rag-admin.example.se --gateway-secrets-dir "$d/gw/Ume.Rag" --render \
+            --gateway-credential-key-file admin="$d/keys/admin" \
+            --backup-target local --allow-file-keys --no-chown --yes > "$d/init.log"
+          [ "$(cat "$s/api/Gateway__Key")" = dir-api ] && [ "$(cat "$s/worker/Gateway__Key")" = dir-worker ]
+          [ "$(cat "$s/admin/Gateway__Key")" = admin-placeholder ]
+          rm "$d/gw/Ume.Rag/rag-worker"
+          if out="$(bash "$d/deploy/init-deployment.sh" --gateway-url https://llm.example.se --api-host rag-api.example.se \
+            --admin-host rag-admin.example.se --gateway-secrets-dir "$d/gw" --backup-target local --allow-file-keys \
+            --no-chown --yes 2>&1)"; then
+            echo "a secrets directory without the worker's key was accepted"; exit 1
+          fi
+          grep -q 'no credential key .*/rag-worker' <<< "$out"
+          init --render > "$d/init.log"
+          for svc in api admin worker; do [ "$(cat "$s/$svc/Gateway__Key")" = "$svc-placeholder" ]; done
           # The Data API is gone (#580): the admin syncs with its credential key. A Data API key file of before is deleted
           # and named, the old options are refused, and nothing in .env or the admin's environment points at it.
           printf 'old\n' > "$s/admin/OrgSync__DataApiKey"

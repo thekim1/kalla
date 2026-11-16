@@ -28,7 +28,7 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 The gateway repository publishes its own services on loopback by default and serves them through its proxy:
 gateway `8443`, admin `9443`, Data API `10443` (gateway repo `deploy/compose.prod.yaml`), Keycloak `11443` (gateway repo
 `deploy/keycloak/compose.yaml`). RAG's listeners use `8543` and `9543` so both stacks fit on one host
-([gateway-host-setup.md](gateway-host-setup.md#4-preflight-checks-read-only), step 4.3). The ports RAG connects to
+([compose-quick-start.md](compose-quick-start.md#1-before-you-start)). The ports RAG connects to
 are the ones in the URLs it is given, not these.
 
 ```mermaid
@@ -259,10 +259,10 @@ host, realm `ume`, and RAG's clients come from `deploy/keycloak/rag-additions.js
   `openwebui` → `<keycloak host>:443` and the proxy (with Open WebUI). All derived by the firewall from `deploy/.env`.
 - Browsers: admins and staff → `<keycloak host>:443` and the proxy's RAG host names.
 - The gateway host's own inbound (its proxy, Keycloak's port `11443` on loopback) belongs to the gateway team.
-- **RAG on the gateway host itself** ([gateway-host-setup.md](gateway-host-setup.md)): the same rules; when the
+- **RAG on the gateway host itself** ([compose-quick-start.md](compose-quick-start.md)): the same rules; when the
   gateway's or Keycloak's name resolves to the host, the firewall's `UME-RAG-INPUT` and `--ctorigdst` exceptions let
-  the RAG networks reach them ([gateway-host-setup.md](gateway-host-setup.md#8-host-units-firewall-start), step
-  8.1). RAG's `8543`/`9543` don't clash with the gateway's `8443`/`9443`/`10443`/`11443`.
+  the RAG networks reach them ([compose-quick-start.md](compose-quick-start.md#when-something-fails) has the
+  check). RAG's `8543`/`9543` don't clash with the gateway's `8443`/`9443`/`10443`/`11443`.
 
 ### 5.2 Standalone Ume.Rag with its own Keycloak
 

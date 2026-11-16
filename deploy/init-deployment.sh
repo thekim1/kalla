@@ -13,6 +13,10 @@
 #       --gateway-url https://<gateway host> --gateway-credential-key-file api=rag-api.key \
 #       --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key \
 #       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
+#   ./deploy/init-deployment.sh --domain intern.umea.se --oidc-authority https://<provider>/realms/ume \
+#       --gateway-url https://<gateway host>:8443 --ca-file <gateway>/deploy/certs/ca.pem \
+#       --gateway-secrets-dir <gateway>/deploy/integration-secrets --backup-target local --allow-file-keys --yes
+#                                                    # next to a gateway on this host (docs/compose-quick-start.md)
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
 #
@@ -26,11 +30,12 @@
 #
 # Options (defaults in brackets):
 #   --oidc-authority URL, --oidc-client-id ID [ume-rag-admin], --oidc-client-secret-file FILE
-#                           optional, never prompted: the admin BFF's own OIDC client (never the gateway's) as deployment
-#                           values; each one left out is the setup wizard's. A re-run without --oidc-authority or
-#                           --oidc-client-id keeps the value in deploy/.env (empty the line there to hand it to the
-#                           wizard), and the client secret file stays until you delete it. With the host firewall
-#                           (deploy/host/), rag-admin reaches only the provider of --oidc-authority
+#                           optional: the admin BFF's own OIDC client (never the gateway's) as deployment values; each
+#                           one left out is the setup wizard's. A re-run without --oidc-authority or --oidc-client-id
+#                           keeps the value in deploy/.env (empty the line there to hand it to the wizard), and the
+#                           client secret file stays until you delete it. With the host firewall (deploy/host/),
+#                           rag-admin reaches only the provider of --oidc-authority, so the wizard's test sign-in
+#                           needs it: an interactive run asks for it once (the others are never prompted)
 #   --oidc-refuse-guests true|false
 #                           refusing guests (identity design §1.7) as a deployment value:
 #                           secrets/admin/Oidc__RefuseGuests (kept on a re-run without it); unset, the wizard's choice,
@@ -46,6 +51,13 @@
 #                           repeat the option, one key per service, issued by a gateway admin):
 #                           secrets/SERVICE/Gateway__Key. The admin's key also needs the scope organisation.read: its
 #                           organisation and model syncs read the gateway's /v1/ume/context and /v1/models with it
+#   --gateway-secrets-dir DIR
+#                           the three keys from a gateway on this host instead: the directory its migration writes an
+#                           integration manifest's keys to (<gateway>/deploy/integration-secrets, with Ume.Rag/rag-api,
+#                           rag-admin and rag-worker in it, from deploy/portainer/integration-manifest.json in the
+#                           gateway's deploy/integration-manifests; docs/compose-quick-start.md). It belongs to the
+#                           gateway's migration service, so run as root. A --gateway-credential-key-file wins for its
+#                           service; after a rotation at the gateway, re-run with the option
 #   --key-provider file [file] --allow-file-keys
 #                           the file key provider (pilot and test hosts, postponed decision K1) needs --allow-file-keys
 #   --backup-target DIR|s3://ENDPOINT/BUCKET[/PATH]|local
@@ -96,7 +108,7 @@ umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
 oidc_authority=""; oidc_client=""; oidc_secret_file=""; oidc_refuse_guests=""; domain=""; api_host=""; admin_host=""
-api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""
+api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; gateway_secrets_dir=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
 crawl_allow=""; host_memory=16; freshclam_proxy=""; clamav=""; role="all"; render=0
 owui_host=""; owui_client=""; owui_secret_file=""; owui_provider=""; owui_provider_name=""
@@ -124,6 +136,7 @@ while [ $# -gt 0 ]; do
     --gateway-url) gateway_url="$2"; shift 2;;
     --ca-file) ca_file="$2"; shift 2;;
     --gateway-credential-key-file) credential_keys+=("$2"); shift 2;;
+    --gateway-secrets-dir) gateway_secrets_dir="$2"; shift 2;;
     --org-sync-url|--org-sync-key-file)
       die "$1 is gone: the admin syncs the organisation and the models with its gateway credential key";;
     --key-provider) key_provider="$2"; shift 2;;
@@ -215,6 +228,15 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   ask gateway_url "LLM gateway URL (https://...)"
   case "$gateway_url" in https://*) ;; *) die "the gateway URL must be an https:// URL";; esac
   gateway_url="${gateway_url%/}"
+  # The one sign-in value asked for: the host firewall takes the provider's address from it, so a wizard left to find
+  # the provider by itself could not reach it (identity design §19; deploy/host/docker-user-firewall.sh).
+  if [ -z "$oidc_authority" ] && [ "$yes" = 0 ] && [ -t 0 ]; then
+    echo "Sign-in provider: with the host firewall (deploy/host), rag-admin reaches only the provider named here, and the"
+    echo "setup wizard's test sign-in needs to reach it. Keycloak: https://<host>/realms/<realm>; Entra ID:"
+    echo "https://login.microsoftonline.com/<tenant>/v2.0. The wizard takes the rest (the client and its secret)."
+    read -r -p "OIDC authority URL (https://...; empty: none, the wizard's test can't reach a provider): " oidc_authority
+    case "$oidc_authority" in ""|https://*) ;; *) die "the OIDC authority must be an https:// URL";; esac
+  fi
   ask api_host "Public hostname for rag-api" "$(hostname -f 2>/dev/null || hostname)"
   if [ "$proxy" = 1 ]; then
     ask admin_host "Public hostname for the admin UI (must differ from rag-api's)"
@@ -236,6 +258,26 @@ for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do
   esac
   [ -r "${spec#*=}" ] || die "cannot read ${spec#*=}"
 done
+# --gateway-secrets-dir: the keys a gateway on this host wrote for the manifest's integration Ume.Rag (the gateway's
+# docs/integrations.md, "Provisioning from a manifest"): <dir>/Ume.Rag/rag-<service>, or the integration's directory itself.
+if [ -n "$gateway_secrets_dir" ]; then
+  key_dir="$gateway_secrets_dir"; [ ! -d "$key_dir/Ume.Rag" ] || key_dir="$key_dir/Ume.Rag"
+  if [ ! -d "$key_dir" ] || [ ! -r "$key_dir" ] || [ ! -x "$key_dir" ]; then
+    die "cannot read --gateway-secrets-dir $gateway_secrets_dir: no such directory, or not readable (it belongs to the \
+gateway's migration service, so run as root)"
+  fi
+  for svc in api admin worker; do
+    given=0
+    for spec in ${credential_keys[@]+"${credential_keys[@]}"}; do [ "${spec%%=*}" != "$svc" ] || given=1; done
+    [ "$given" = 0 ] || continue
+    if [ ! -s "$key_dir/rag-$svc" ] || [ ! -r "$key_dir/rag-$svc" ]; then
+      die "no credential key $key_dir/rag-$svc: the gateway writes it when its migration applies the Ume.Rag manifest. \
+Copy $here/portainer/integration-manifest.json to the gateway's deploy/integration-manifests/ume-rag.json (mode 644), \
+run the gateway's 'up -d --wait' again, then this script (docs/compose-quick-start.md)"
+    fi
+    credential_keys+=("$svc=$key_dir/rag-$svc")
+  done
+fi
 if [ -n "$owui_host" ]; then
   case "$owui_provider_name" in *"'"*|*$'\n'*) die "--openwebui-oidc-provider-name: a name without ' or a line break";; esac
   case "$owui_client" in *"'"*|*$'\n'*|*" "*) die "--openwebui-oidc-client-id: an id without spaces, ' or a line break";; esac
@@ -713,7 +755,8 @@ for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Key" ] || missing="
 if [ -n "$missing" ]; then
   gateway_note="$gateway_note
 Gateway: no credential key for${missing}; a service without one has its model calls refused. Re-run with
---gateway-credential-key-file SERVICE=FILE, one per service (production-setup.md, Gateway credential keys)."
+--gateway-secrets-dir DIR (a gateway on this host: compose-quick-start.md) or --gateway-credential-key-file
+SERVICE=FILE, one per service (production-setup.md, Gateway credential keys)."
 fi
 [ -z "$removed_keys" ] || gateway_note="$gateway_note
 Gateway: deleted the per-level key files${removed_keys}; ask the gateway admin to revoke those keys."
