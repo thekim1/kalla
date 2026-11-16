@@ -153,6 +153,15 @@ Low-hanging fruit that an upgrade path was the only reason to keep. Check each i
 - renaming or merging variables and volumes where S1 is simpler with one layout for both forms;
 - the hand-issued key path (`UME_RAG_*_GATEWAY_KEY`) beside the manifest, if one way is enough.
 
+## S2, S5 and S7 (user, 2026-11-16: "do what you think is best")
+
+- **S2, taken:** host hardening is an optional step on a Compose host. `compose.hardened.yaml` already holds it (#800);
+  the quick start installs without it and ends with *Harden the host*, and `production-setup.md` keeps it as what a
+  production host adds. Decisions "One deployment bootstrap".
+- **S5 and S7, proposed to the gateway:** both are changes in the gateway's repository, whose merges and releases are
+  the user's, so each is an issue there with what Ume.Rag would do on its side. Nothing in this repository waits on
+  them.
+
 ## Order after that
 
 S4b and S4c (upgrades that need no manual stop and may skip a release), then S6 (one escrow set), then S8 as each page

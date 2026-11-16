@@ -284,6 +284,13 @@ Every deployment form gets its certificates, secrets and derived files from one 
   secret, ends its log with the wizard's address, and takes the declared sign-in values from the same variables;
   `init-deployment.sh` asks for no sign-in value, except the provider's address where the host firewall overlay is on
   (rag-admin reaches only the provider named there).
+- **Published ports bind `0.0.0.0` in every form** (rag-api, rag-admin and `rag-proxy`; Open WebUI `127.0.0.1`, for a
+  proxy on the host); the `*_BIND` variables change one.
+- **Host hardening is an optional step on a Compose host** (`compose.hardened.yaml` with `deploy/host/install.sh`: the
+  egress firewall, the ingestion slice, the renderer's seccomp profile). A first install runs without it, with the
+  Portainer stack's posture; a production Compose host adds it once the installation works, and the guides say so.
+- **Gone without a replacement:** forcing a certificate re-issue before its last 30 days, Open WebUI on a VM of its
+  own, and a stack without the ingestion services.
 - **Upgrades:** a deploy change may break an existing deployment (Decisions "No backward compatibility before
   production"), but it comes with an upgrade path wherever one is feasible: a step in the upgrade guide, or a
   migration in the bootstrap. *Install again* is the answer only when no reasonable path exists, and the release says
@@ -293,7 +300,8 @@ Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. De
 `platform/repo-and-deployment.md` §6 and §7.1.
 
 *From:* decided by user, 2026-11-16 (session 46, four points with four alternatives each; the wizard and the upgrade
-path the same day).
+path the same day; the bind default and what is gone confirmed, and hardening as an optional step chosen by the main
+session on the user's "do what you think is best", 2026-11-16).
 
 ### Deployment values across releases
 

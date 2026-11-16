@@ -67,15 +67,12 @@ the queue item is `plans/work/main.md` **M-22**, whose status line says what is 
   `main-session/` branch), then the proposal's order: S4b and S4c (upgrades that need no manual stop and may skip a
   release), S6 (one escrow set), S8 (operator pages without project vocabulary, as each is touched). S2, S5 and S7
   wait for the user.
-- **No way any more, told to the user, no answer yet:** forcing a certificate re-issue before its last 30 days (the
-  old `--renew-certs`), Open WebUI on a VM of its own, a stack without the ingestion services.
 - **Stated in the guides, not verified:** `up -d` runs the exited `rag-bootstrap` again (the smoke test exercised it
   once), `docker compose create` makes the volumes before a first `up` (*Restoring onto another host*), Docker creates
   a missing backup directory at the first `up`.
-- **For the user to confirm:** Compose's published ports of rag-api, rag-admin and `rag-proxy` now bind `0.0.0.0` as
-  Portainer's (before: loopback; Open WebUI's stays `127.0.0.1`); with
-  `--hardened` the firewall admits only the proxy's addresses. Told on 2026-11-16, no answer yet. Also the user's: S2, whether
-  hardening becomes an optional later step (the quick start still takes `--hardened` as its path).
+- **Confirmed by the user (2026-11-16):** the `0.0.0.0` bind default, and that the three things without a
+  replacement stay gone. S2, S5 and S7 were left to the main session: S2 is taken (hardening as an optional step;
+  Decisions "One deployment bootstrap"), S5 and S7 are proposals in the gateway's repository.
 - **Not run anywhere:** the hardened overlay on a host (the smoke test boots without it), `compose-rolling-e2e.sh`,
   root's `chown` on an NFS backup share, and the upgrade guide's carry-over of an old Compose installation.
 S2 (the host firewall and slice as optional hardening), S5 (one wizard hand-off from the gateway) and S7 (the manifest
