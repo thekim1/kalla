@@ -934,6 +934,22 @@ export interface RunSummary {
   costUsd: number
   startedAt: IsoDateTime
   finishedAt: IsoDateTime | null
+  /** Only while the run is `running` (#803); the counters above are then derived from its items so far. */
+  progress?: RunProgress | null
+}
+
+/**
+ * How far a running run has got (AdminApi `RunProgress`, #803): the documents handled so far and, for a crawl, its
+ * frontier (null for other source types).
+ */
+export interface RunProgress {
+  processed: number
+  admitted: number | null
+  maxPages: number | null
+  waiting: number | null
+  seeds: number | null
+  seedsFailed: number | null
+  limitHit: boolean | null
 }
 
 /**
