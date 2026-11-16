@@ -1,9 +1,8 @@
 # Handover
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.6.0`** (2026-11-15); the user's VM runs 0.5.0 and the user is to upgrade it to 0.6.0. `main` is well
-past 0.6.0: the whole setup wizard (M-20, both stages, on the gateway's `v0.11.0`) is on it, shown by a release dry
-run with the browser tests, unreleased. Repo `~/research/rag` on
+**Last release `v0.7.0`** (2026-11-16, the setup wizard; on the gateway's `v0.11.0`); the user's VM runs 0.5.0 and is
+to be upgraded through 0.6.0 to 0.7.0 by the guides. `main` is 0.7.0 plus the pin of its images (#789). Repo `~/research/rag` on
 this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -27,10 +26,20 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 45): the setup wizard is done; a release is the next step
+## Start here (session 45): 0.7.0 is released; nothing is in work
 
-**M-20 is ticked** (#786, 2026-11-16): a deployer types one value, `UME_DOMAIN`, and no secret, and sets sign-in in two
-setup wizards, the gateway's first. `main` carries it on the gateway's `v0.11.0`, unreleased.
+**M-20 is done and released** (#786, `v0.7.0`): a deployer types one value, `UME_DOMAIN`, and no secret, and sets
+sign-in in two setup wizards, the gateway's first. The next steps are the user's (roadmap): the VM's upgrade, the test
+chatbot, the support-chatbot proposal.
+
+- **The release** ([run 43865015500](https://github.com/thekim1/ume-rag-platform/actions/runs/43865015500)): the first
+  attempt failed in `verify / backend` on `ChatApiTests.A_public_assistant_runs_its_published_level_behind_the_caveat_line`
+  (the answer was the "search unavailable" fallback; no cause in the log; noted on #781, the same symptom in that
+  class). The failed job was re-run once and passed, and `publish` followed. **#781 is worth fixing before the next
+  release:** it has now cost a release attempt. The browser tests did not run on the tag (they were green in dry run
+  43857593918 on the same code).
+- **The pin pull request** was opened by `release.yml` itself this time (#789). A pull request opened by the workflow's
+  token starts no checks: close and reopen it, then merge (handbook, *Release dry runs*).
 
 ### 1. What stage 2 is, and what is not shown
 
@@ -50,8 +59,6 @@ setup wizards, the gateway's first. `main` carries it on the gateway's `v0.11.0`
 - **Known:** a default with braces needs Compose 2.24.7 or later (older ones cut the value without an error);
   Portainer pins a later one from 2.21 (read, not run). A stack without `UME_INTEGRATION_MANIFEST` (0.5.x style) gets
   the default: three unused keys unless the variable is set empty first (`docs/portainer.md`, *Upgrade from 0.6.0*).
-- **Next:** a release with the wizard (0.7.0) when the user wants it; `main` is ready for a tag (the dry run above was
-  on the merged content). Then the user's VM: from 0.5.0 through 0.6.0 by the guides.
 
 ### 2. The gateway's pull requests (the main session may not merge in the gateway's repository)
 
@@ -133,26 +140,20 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
 
 ### Also open (not this work)
 
-- **A release with the wizard** (0.7.0): both stages are on `main`; C13 (the M-16 session, #667) was planned for
-  0.6.1.
+- **C13** (the M-16 session, #667) was planned for 0.6.1 and is not in 0.7.0.
 - **The user's upgrade to 0.6.0** (`docs/portainer.md`, *Upgrade from 0.5.x to 0.6.0*). Before it, rag-api's and
   rag-admin's credential keys get `OnPrem` and `Eu`, and each published assistant needs a gateway key that reaches both
   its chat model and its embedding model. Pulls that say "denied": `docker logout ghcr.io`.
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): the user picks; the suggestion is
   F3, F4, F8 and F10.
-- **The next tag run checks for the first time:** `:latest` moves in `publish` (#756); verify and parser run in
-  full on a tag (#755).
-- **For the user:** *Allow GitHub Actions to create and approve pull requests* is still off (Settings → Actions →
-  General), so `release.yml` couldn't open the pin PR (#754 was opened by hand).
 - **Checks before go-live:** the 16 *Before go-live* rows of `plans/to-verify.md` need no input.
 
 ## State
 
-- **Release:** `v0.6.0` published 2026-11-15 ([run 43720085132](https://github.com/thekim1/ume-rag-platform/actions/runs/43720085132)),
-  tag at `d5029e29`; `deploy/portainer/` on `main` is ahead of it (the wizard's stack file: don't hand it to a 0.6.0
-  deployment; the `v0.6.0` release asset is the file for 0.6.0).
-- **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 1 on `main` (`UME_DOMAIN`, no secret).
-- **New on `main`, unreleased:** migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings` (additive);
+- **Release:** `v0.7.0` published 2026-11-16 ([run 43865015500](https://github.com/thekim1/ume-rag-platform/actions/runs/43865015500)),
+  tag at `7a04001a`; `deploy/portainer/` on `main` pins its images (#789) and is the release asset's content.
+- **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 1 at 0.7.0 (`UME_DOMAIN`, no secret).
+- **New in 0.7.0:** migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings` (additive);
   security events 6008–6013 and 5001 `callback_failed`; `GET /api/settings/sign-in`, `GET/PUT
   /api/settings/openwebui`, `/bff/setup/*` (its state now with `gateway`), rag-api's `GET
   /internal/openwebui/sign-in`; `/bff/user` gains `signIn.configured` and `setup.open`; `GET /api/overview` gains

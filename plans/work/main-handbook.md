@@ -152,6 +152,10 @@ main session needs:
     `gh workflow run release.yml --ref <branch> -f portainer_boot=X.Y.Z` boots `<branch>`'s stack against X.Y.Z's
     images on ghcr.io in about 2 minutes (a failed tag run has already pushed its images). 0.6.0's `--wait` fix went
     green this way on the first try, instead of a 30-minute dry run.
+  - **The pin pull request that `release.yml` opens starts no checks** (a pull request opened with the workflow's token
+    triggers no workflow): `gh pr close <n>` and `gh pr reopen <n>`, wait for `deploy-checks`, merge (#789, 0.7.0).
+  - **The boot-only run needs that version's Ume.Rag images on ghcr.io.** For a change that needs new images (the
+    wizard's stage 2 against 0.6.0's images), only a dry run from the branch shows the boot test (session 44).
   - `docker compose up --wait` fails on a one-shot that exits 0 unless a service waits for it
     (`service_completed_successfully`). The boot test waits only on the long-running services (#751).
 - **Playwright sign-in on the admin UI:** click `locator('a,button').filter({ hasText: 'Sign in' }).last()` and wait for
