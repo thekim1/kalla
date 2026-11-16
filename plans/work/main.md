@@ -36,8 +36,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   without the profile); the design follows the new files (`repo-and-deployment.md` §1, §3, §5 to §10, Decisions
   "Pilot containers" and "Deployment values across releases"); #808 (step 5: the operator guides; `--gateway-ca-file`
   copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
-  form). **S1 is done.** Open: S9's guide part (the first-install paths finish without Open WebUI, one section *Adding
-  Open WebUI*) and its admin UI part (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order; S2, S5, S7
+  form). **S1 is done.** #809 (S9's guides: the Portainer first deploy finishes without Open WebUI, *Adding Open
+  WebUI*). Open: S9's admin UI part (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order; S2, S5, S7
   wait for the user.
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
