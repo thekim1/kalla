@@ -65,7 +65,7 @@ public static class ServiceAdmission
     /// <summary>Records the fences, keeping a greater one; <c>admitted</c> stays as it is.</summary>
     private const string UpsertFencesSql = """
         INSERT INTO public.ume_rag_service_fences (role, fence)
-        SELECT f.role, f.fence FROM unnest(@roles, @fences) AS f(role, fence)
+        SELECT f.role, f.fence FROM unnest($1::text[], $2::text[]) AS f(role, fence)
         ON CONFLICT (role) DO UPDATE SET fence = greatest(ume_rag_service_fences.fence COLLATE "C", excluded.fence COLLATE "C")
         """;
 
@@ -158,8 +158,8 @@ public static class ServiceAdmission
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
             await using (var upsert = new NpgsqlCommand(UpsertFencesSql, connection, transaction))
             {
-                upsert.Parameters.Add(new NpgsqlParameter<string[]>("roles", [.. fences.Select(f => f.Role)]));
-                upsert.Parameters.Add(new NpgsqlParameter<string[]>("fences", [.. fences.Select(f => f.Migration)]));
+                upsert.Parameters.Add(new NpgsqlParameter<string[]> { TypedValue = [.. fences.Select(f => f.Role)] });
+                upsert.Parameters.Add(new NpgsqlParameter<string[]> { TypedValue = [.. fences.Select(f => f.Migration)] });
                 await upsert.ExecuteNonQueryAsync(cancellationToken);
             }
 
