@@ -2,7 +2,8 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.6.0`** (2026-11-15); the user's VM runs 0.5.0 and the user is to upgrade it to 0.6.0. `main` is well
-past 0.6.0: the setup wizard's stage 1 (M-20) is on it, shown by a release dry run, unreleased. Repo `~/research/rag` on
+past 0.6.0: the setup wizard's stage 1 (M-20) is on it, shown by a release dry run, unreleased; #783 and #784 came
+after that dry run. Repo `~/research/rag` on
 this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -26,118 +27,107 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 44): wait for the user's merges and a gateway release, then Ume.Rag's side of stage 2
+## Start here (session 44): Ume.Rag's side of stage 2, on a branch, before the gateway's release
 
 The setup wizard (M-20) has two stages. **Stage 1** (Ume.Rag and Open WebUI; a deployer types 5 values and no secret)
-is on `main` and shown by a release dry run. **Stage 2** (one typed value, `UME_DOMAIN`) needs the gateway's part,
-which sessions 42 and 43 built in the gateway's repository on the user's word ("build it", 2026-11-16): three pull
-requests, all waiting for the user.
+is on `main`, shown by a release dry run, unreleased. **Stage 2** (one typed value, `UME_DOMAIN`) needs the gateway's
+part: three pull requests in the gateway's repository (below), one merged, two waiting for the user, then a gateway
+release. The user asked (2026-11-16) to **start Ume.Rag's side now**, in a fresh session.
 
-### 1. WG4 is a pull request: thekim1/llmgateway#104 (closes #101)
+### 1. The work: Ume.Rag's side of stage 2 (M-20 S8)
 
-The integration manifest without an edit (the user asked for it after an explanation, "ok do it"). An integration
-cannot exist without an owner team, so "without an owner" is a **default owner that can be moved**:
-- `integration.owner` is optional in the manifest. Without it a new integration gets a team and a department named
-  after it, with a code slugged from the name ("Ume.Rag" → `ume-rag`); the migration log and the import preview say so
-  (`defaultOwner` in the result, and a warning). A manifest with an owner behaves as before.
-- `PUT /api/integrations/{id}` with another `ownerTeamId` no longer answers 409 while the integration has credential
-  keys: those not revoked move with it, each audited; revoked and assigned keys stay; recorded usage keeps its team.
-  A move to an inactive team, or a team in an inactive department, is refused (400 on `ownerTeamId`).
-- The Ume.Rag preset (`deploy/integration-presets/ume-rag.json`) no longer names an owner.
-
-Session 43 read the rest of the diff (one sentence in `docs/integrations.md` contradicted the 400 and is corrected),
-re-ran everything (Release build clean; AdminApi 376, Domain 599, DataApi 29, IntegrationTests 73, Gateway 487; the UI
-gate with 268 tests), committed (`a3f491a`), pushed and marked the pull request ready so that CI ran once: **green**
-(`verify`, `rolling-update`).
-**A flaky gateway test, not caused by WG4:** `ClientAddressTests.Forwarded_address_is_used_only_through_a_trusted_proxy`
-failed in 2 of 8 local runs of `Gateway.Tests`. It writes the shared settings row, which `AccountingTests` also writes;
-WG4 touches neither. Its rate on the gateway's `main` was not measured. If a later CI run fails on it, re-run the job.
-The pull request's `CHANGELOG.md` and `docs/upgrade-guide.md` *Unreleased* sections conflict with #102/#103 at merge:
-keep every entry.
-
-### 1b. The gateway pull requests were reviewed (thekim1, 2026-11-16) and answered
-
-- **#102:** approved, nothing to do.
-- **#104:** approved with two suggestions, both done in `d47c83c` (neutral example names; a doc note that an ownerless
-  integration named like a team's code joins that team). **The push dismissed the approval:** it needs a new one. CI
-  green on the new commit.
-- **#103** (still a draft): four findings, answered in `bc752b8` and a comment on the pull request. Fixed: the sign-in
-  start, callback and sign-out read the sign-in values at most once every 2 seconds per instance
-  (`AdminSignIn.SignInRefreshInterval`), a setup test's callback answers 404 without a read while setup is closed and is
-  limited to 20 a minute per address while open (`SetupCallbackThrottle`), and completing compares the claim mapping
-  the test ran with. Documented, not changed in code: on Kubernetes a deployment that declares `Oidc__Authority` sets
-  `Gateway__OidcAuthority` too (the reviewer may prefer clearing the stored authority; asked). Backend tests pass
-  (AdminApi 440, Domain 599, DataApi 29, IntegrationTests 64, Gateway 491); the browser test and the UI gate were not
-  re-run (no UI file changed). **Ume.Rag had the same flaw** (and `/bff/user` read on every call): fixed the same way
-  in #784, merged (identity design §19, *Reload* and *Anonymous callbacks of a setup test*). The browser tests were not
-  run on it: run `e2e.yml` before the next release, as planned.
-
-### 2. Waiting for the user (the main session may not merge in the gateway's repository)
-
-- **Merge thekim1/llmgateway#102** (WG1 `UME_DOMAIN` for the gateway's hosts, WG2 `gateway.oidc_authority` in
-  `/v1/ume/context`). Green.
-- **Mark thekim1/llmgateway#103 ready and merge it** (WG3, setup mode in the gateway's admin). A draft stacked on
-  #102's branch: no CI has run on it. Six commits: stored sign-in values (table `SignInSettings`, the client secret
-  encrypted), setup mode in the admin API, the security review's fixes, the wizard's pages, its browser test
-  (`tests/e2e/specs/setup.spec.ts`), every deploy form with the operators' docs and the upgrade guide. Checked locally:
-  Release build clean, 1,618 backend tests, the UI gate (316 tests), the wizard end to end in a browser against the
-  bundled Keycloak (5 of 5, with axe on every step), and a boot of the Portainer stack with only `UME_DOMAIN` (code
-  printed, a wrong one refused, the printed one accepted, setup closed once the authority is declared).
-  **A gateway deployment that sets `UME_OIDC_AUTHORITY` never sees the wizard and needs nothing new.**
-- **Then merge thekim1/llmgateway#104** (WG4, above; rebase it after #102 and #103, keeping every *Unreleased*
-  entry), and **a gateway release** with all of it.
-
-### 3. After the gateway release: Ume.Rag's side of stage 2 (M-20, S8)
+**It can be built and partly checked now, but not merged before the gateway's release:** the committed
+`deploy/portainer/compose.portainer.yaml` is built from a gateway release (`build-stack.sh --check` in CI builds from
+the release it names), and a manifest without an owner fails on gateway 0.10.3. So: a `main-session/m20-s8-<slug>`
+branch and a draft pull request, finished on the release.
 
 - **Done already (#779):** the wizard offers the gateway's provider address (`gateway.oidc_authority`, feature
   `oidc-authority`) for rag-admin's authority, as a suggestion in `GET /bff/setup/state`
   (`gateway.suggestedAuthority`, never a source of the effective values), and links to the gateway's wizard when the
   gateway has none.
 - **To do:**
-  - `contracts/gateway/integrations.json` is the gateway's **unreleased** file (llmgateway `7c945d1`): replace it with
-    the release's copy.
-  - The combined stack on the release (`deploy/portainer/build-stack.sh <version>`); `stack.env.example` loses the
-    gateway's four CHANGE values (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`,
-    `UME_ADMIN_HOST`) and has one, `UME_DOMAIN`.
-  - With WG4: the manifest as a default in the stack file, without an owner, and the variable out of
-    `stack.env.example`. **Mind upgraders:** a 0.6.0 stack has `UME_INTEGRATION_MANIFEST` with an owner (the variable
-    wins, nothing changes); a 0.5.x-style stack with hand-made keys and no manifest would get three new keys from a
-    default. Use `${UME_INTEGRATION_MANIFEST-default}` (unset only), so an explicit empty value switches it off, and
-    say so in the upgrade steps.
-  - The boot test (`deploy/tests/portainer-boot.sh`: the gateway's wizard first, then Ume.Rag's with the suggested
-    address), a new fixture for `deploy/tests/portainer-upgrade.sh`, and `docs/portainer.md` (*First deploy* and
-    *Upgrade from 0.6.0* gain the gateway's steps; the gateway's own `docs/upgrade-guide.md` has them per deploy form).
-  - M-20's done-when: `stack.env.example` has 1 CHANGE value, the release's boot test passes with no sign-in value
-    set, `e2e.yml` passes through the wizard. Then tick M-20.
+  1. **`stack.env.example`:** the gateway's four CHANGE values go (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`,
+     `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_HOST`; each stays readable and overrides its default), one stays,
+     `UME_DOMAIN`. `UME_INTEGRATION_MANIFEST` goes from the example too (next point).
+  2. **The manifest as a default, without an owner** (the gateway's #104). **Found in session 43:** the line that
+     passes it, `UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}`, is in the **gateway's** part of the stack
+     (its `bootstrap` service, which writes the value to the migrations' manifest directory when it is not empty), and
+     `build-stack.sh` copies that part unchanged. So `build-stack.sh` has to rewrite that one line (say so in its
+     header), or the gateway's own stack file has to offer a hook (another gateway change; ask the user before that).
+     A JSON default inside the braces works with Compose 5.0.2 on this machine: with
+     `${UME_INTEGRATION_MANIFEST-{"schemaVersion":1,...}}` unset gives the JSON, empty gives empty, set gives the
+     value (tried in a scratch file). **Not tried:** the runner's Compose and the one Portainer bundles, and #776 was
+     exactly a Compose-version difference in how defaults are evaluated, so check both before relying on it (the
+     boot-only run, handbook *Release dry runs*).
+     **Mind upgraders:** a 0.6.0 stack sets `UME_INTEGRATION_MANIFEST` with an owner (the variable wins, nothing
+     changes); a 0.5.x-style stack with hand-made keys and no manifest would get three new keys from the default.
+     Hence `-` and not `:-` (unset only): an explicit empty value switches it off, and the upgrade steps say so.
+  3. **The combined stack on the gateway's release** (`sh deploy/portainer/build-stack.sh <version>`; the file isn't
+     executable here). Before the release, build from a local file to try things: `build-stack.sh
+     <path to the gateway's deploy/compose.portainer.yaml>` from a checkout that has #103 and #104 (its images are then
+     required variables; local images `ume-llm-gateway/*:setup-test` are from #103 **before** its review fixes and
+     without #104).
+  4. **`contracts/gateway/integrations.json`** is the gateway's unreleased file (llmgateway `7c945d1`): replace it with
+     the release's copy.
+  5. **Tests:** `deploy/tests/portainer-boot.sh` (the gateway's wizard first, then Ume.Rag's with the suggested
+     address; live stack tests run on the runner, the local `gh` token can't read ghcr packages), a new fixture for
+     `deploy/tests/portainer-upgrade.sh` (a 0.6.0 stack's variables on the new file), `portainer-rerun.sh` if the
+     bootstrap changes.
+  6. **Docs:** `docs/portainer.md` (*First deploy* and *Upgrade from 0.6.0* gain the gateway's steps; the gateway's own
+     `docs/upgrade-guide.md` has them per deploy form), the upgrade guide and changelog *Unreleased*. The user's rule:
+     someone who runs Portainer or Compose today upgrades from the guides alone.
+  7. **Retired variables** (Decisions "Deployment values across releases", M-21): stage 2 stops reading none, so the
+     retired list gains nothing. If a step does stop reading one, add it to `UME_RAG_RETIRED_SET` and `retired_hint`.
+  8. **M-20's done-when:** `stack.env.example` has 1 CHANGE value, the release's boot test passes with no sign-in
+     value set, `e2e.yml` passes through the wizard. Then tick M-20.
 
-### What session 42 did (2026-11-16)
+### 2. The gateway's pull requests (the main session may not merge in the gateway's repository)
 
-- **Gateway, in `~/git/llmgateway` as `ume-nichlas`:** #102, #103 and the WG4 work above. Each step by an implementor
-  agent in a worktree; the main session read the diffs, re-ran the tests, committed (the agents may not commit) and
-  ran the wizard in a browser.
-- **An independent security review of the gateway's setup mode** found no way to a session without the code or to a
-  secret, and three things that were the same in Ume.Rag, fixed in both (#778 here): the throttle came before the
-  code's comparison, so a flood of wrong codes kept the right one out; a made-up callback ended a running test;
-  completion trusted that the deployment's values were those of the test. Accepted and documented: the setup code is an
-  admin credential for its hour; a code holder can make the admin API call an `https` address and learn whether it
-  answered; a restored or emptied database can open setup again on a deployment that doesn't declare its authority.
-- **Merged here:** #775 (CI: `AdminApi.Tests` as five processes, backend 7 min 40 s → about 4 min 30 s; a UI-only PR
-  skips `backend`), #776 (no `:?` inside a default in the Portainer stack: some Compose versions evaluate it even when
-  the outer variable is set, which refused a stack with only the host names), #777 (*Upgrade from 0.6.0* step by step
-  for Portainer and Compose, with `deploy/tests/portainer-upgrade.sh` rendering the new stack with 0.6.0's variables),
-  #778, #779. #768 (stream b's session, #764 item 3) is approved with two small notes; its author merges it.
-- **The user's rule for guides** (2026-11-16): someone who already runs Portainer or Compose must be able to upgrade to
-  the next release from the guides alone. Both repositories' guides have numbered steps per deploy form.
+Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewed by thekim1 on 2026-11-16.
 
-### Also done in session 43: deployment values across releases (M-21, #783)
+- **#102** (WG1 `UME_DOMAIN` for the gateway's hosts, WG2 `gateway.oidc_authority` in `/v1/ume/context`): **merged**
+  2026-11-16.
+- **#103** (WG3, setup mode in the gateway's admin): **a draft, waiting for the reviewer's word on the fixes and for
+  the user** to mark it ready (drafts run no CI; none has run on it) and merge. Retargeted to `main` and `main` merged
+  into it in session 43 (`c21863d`, mergeable). The review's four findings are answered in `bc752b8` and a comment:
+  the sign-in start, callback and sign-out read the sign-in values at most once every 2 seconds per instance; a setup
+  test's callback answers 404 without a read while setup is closed and is limited to 20 a minute per address while
+  open; completing compares the claim mapping the test ran with; one doc contradiction fixed. **Open with the
+  reviewer:** on Kubernetes a deployment that declares `Oidc__Authority` must set `Gateway__OidcAuthority` too
+  (documented), or the stored authority is cleared in code instead (not done; asked). Backend tests pass (AdminApi 440,
+  Domain 599, DataApi 29, IntegrationTests 64, Gateway 491); the browser test and the UI gate were not re-run after
+  the fixes. **A gateway deployment that sets `UME_OIDC_AUTHORITY` never sees the wizard and needs nothing new.**
+- **#104** (WG4, closes #101: `integration.owner` optional in a manifest, with a default owner team and department
+  made from the name; an integration moves to another team with its credential keys; the Ume.Rag preset names no
+  owner): approved, then the approval was dismissed by the pushes that followed (the two review suggestions in
+  `d47c83c`; thekim1's merge of `main`, `fad8a39`). **Needs a new approval, then the user's merge;** CI green. After
+  #103 merges it needs `main` merged in again: keep every *Unreleased* entry in `CHANGELOG.md` and
+  `docs/upgrade-guide.md`.
+- **Then a gateway release** with all three. Latest today: `v0.10.3`.
+- **A flaky gateway test, not caused by these:** `ClientAddressTests.Forwarded_address_is_used_only_through_a_trusted_proxy`
+  failed in 2 of 8 local runs of `Gateway.Tests` (it writes the shared settings row, as `AccountingTests` does). Its
+  rate on the gateway's `main` was not measured. If a CI run fails on it, re-run the job.
 
-The user asked what happens when deployment variables come and go. Decided (Decisions "Deployment values across
-releases"; `AGENTS.md`, *Conventions*): a new variable has a default, is generated, or is a setting; a required one
-without a default needs the user's approval; a variable that is no longer read goes on `rag-bootstrap`'s retired list
-(`retired_hint` in `deploy/portainer/bootstrap.sh`, and its name in `UME_RAG_RETIRED_SET` in the stack template).
-`rag-bootstrap` names a retired variable a stack still sets on its checklist, and Home shows platform admins a
-deployment notice (`GET /api/overview`, `deploymentNotices`). **Stage 2 retires the gateway's host variables for
-nobody** (they stay readable), so it adds nothing to the list. Not looked at in a browser.
+### What session 43 did (2026-11-16)
+
+- **Gateway:** WG4 checked and opened as #104; the reviews of #103 and #104 answered (above); #103 retargeted.
+- **#784, merged: rag-admin's sign-in paths are bounded for anonymous callers.** Ume.Rag had the flaw the gateway's
+  reviewer found, and `/bff/user` read the settings on every call too. Now `/bff/login`, `/bff/user`, `/bff/logout`
+  and the callback read the sign-in values at most once every 2 seconds per instance (`AdminSignIn.RefreshInterval`;
+  `complete` reads at once on its own instance), a setup test's callback has the same two limits as the gateway's, and
+  `complete` compares what the test's result rested on (identity design §19, *Reload* and *Anonymous callbacks of a
+  setup test*). **The browser tests were not run on it: run `e2e.yml` before the next release.** A test that changes
+  the sign-in values behind rag-admin's back and calls again needs a `FakeTimeProvider` moved on by that interval.
+- **#783, merged: deployment values across releases (M-21, ticked).** The user asked what happens when deployment
+  variables come and go. Decisions "Deployment values across releases" and `AGENTS.md`, *Conventions*: a new variable
+  has a default, is generated, or is a setting; a required one without a default needs the user's approval; a variable
+  that is no longer read goes on `rag-bootstrap`'s retired list (`retired_hint` in `deploy/portainer/bootstrap.sh`, its
+  name in `UME_RAG_RETIRED_SET` in the stack template). `rag-bootstrap` names a retired variable a stack still sets on
+  its checklist, and Home shows platform admins a deployment notice (`GET /api/overview`, `deploymentNotices`). The
+  notice was not looked at in a browser.
+- **Session 42** (same day): the gateway's WG1–WG3 as pull requests and WG4 built; an independent security review of
+  setup mode with its fixes in both repositories (#778); the upgrade guides step by step (#777); the wizard's
+  suggestion from the gateway (#779); #775, #776. Details: `git log -- HANDOVER.md`.
 
 ### Known gaps, documented, not fixed
 
@@ -202,9 +192,9 @@ nobody** (they stay readable), so it adds nothing to the list. Not looked at in 
   as a file (an empty boolean stops it at start); Open WebUI starts through `deploy/openwebui/start-with-sign-in.py`;
   `scripts/ci/backend-tests.sh`; `deploy/tests/portainer-upgrade.sh`.
 - **Gateway, on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; `Crotalus` is
-  read-only on the gateway). Worktrees: `~/git/llmgateway` (the branch of #102), `~/git/llmgateway-100` (the branch of
+  read-only on the gateway). Worktrees: `~/git/llmgateway` (the branch of #102, merged), `~/git/llmgateway-100` (the branch of
   #103, with `node_modules` in `src/admin-ui` and `tests/e2e`), `~/git/llmgateway-100-deploy` (merged into #103's
-  branch; can go), `~/git/llmgateway-101` (WG4, the branch of #104, pushed). Local images `ume-llm-gateway/*:setup-test`.
+  branch; can go), `~/git/llmgateway-101` (WG4, the branch of #104; behind its remote by thekim1's merge of `main`). Local images `ume-llm-gateway/*:setup-test`.
   Something else holds ports 5000 and 5173 here: the gateway's IntegrationTests need
   `ASPNETCORE_URLS=http://127.0.0.1:0`. The Aspire CLI is at
   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH). The gateway's own rules:
@@ -223,7 +213,6 @@ nobody** (they stay readable), so it adds nothing to the list. Not looked at in 
 
 - **41:** the release dry run for the wizard, green on the first run; the four gateway issues (#98–#101); CI time:
   five measurements of `Ume.Rag.AdminApi.Tests` (collections, thread pool, `fsync`, GC, two processes), then #775.
-- **43 (2026-11-16):** the gateway's WG4 checked, corrected in one doc sentence and opened as thekim1/llmgateway#104;
-  M-21 (#783).
 - **42:** the gateway's WG1–WG3 as pull requests and WG4 built; the security review and its fixes in both
   repositories; the upgrade guides; the wizard's suggestion from the gateway; #776–#779.
+- **43:** the gateway's #104 opened and both reviews answered; M-21 (#783); rag-admin's sign-in bounds (#784).
