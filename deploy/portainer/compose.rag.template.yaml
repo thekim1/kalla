@@ -368,8 +368,9 @@ x-rag-secrets: &rag-secrets-mount
       Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
       # The gateway admin console's address for rag-admin's links to it (the setup wizard's link to the gateway's wizard
       # among them), used while the gateway's context names none (UME_ADMIN_PUBLIC_URL sets it there): its host name on
-      # port 443, as behind the TLS proxy. On another port, set UME_ADMIN_PUBLIC_URL.
-      Admin__GatewayAdminUrl: ${UME_ADMIN_PUBLIC_URL:-https://${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}}
+      # port 443, as behind the TLS proxy. On another port, set UME_ADMIN_PUBLIC_URL. Empty (no links) when the admin has
+      # no name of its own: without UME_DOMAIN and UME_ADMIN_HOST it shares the gateway's name on another port.
+      Admin__GatewayAdminUrl: ${UME_ADMIN_PUBLIC_URL:-${UME_ADMIN_HOST:+https://}${UME_ADMIN_HOST:-${UME_DOMAIN:+https://llm-admin.}${UME_DOMAIN:-}}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:

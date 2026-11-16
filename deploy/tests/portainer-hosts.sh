@@ -111,17 +111,13 @@ expect_gateway "the gateway, both names and no domain" llm.kommun.se llm-admin.k
   UME_GATEWAY_HOST=llm.kommun.se UME_ADMIN_HOST=llm-admin.kommun.se UME_RAG_API_HOST=rag.kommun.se
 # Only the gateway's name and no domain, as before UME_DOMAIN: the admin's name stays empty, which the gateway's bootstrap
 # reads as the gateway's name (its certificate) and rag-bootstrap's proxy as "no block of its own". rag-admin's
-# Admin__GatewayAdminUrl has no name to build an address from; what it gets is shown, not judged here.
+# Admin__GatewayAdminUrl is then empty (no links): the admin is on the gateway's name at another port, which only
+# UME_ADMIN_PUBLIC_URL can say.
 name="the gateway, only UME_GATEWAY_HOST and no domain"
 if render UME_GATEWAY_HOST=llm.kommun.se UME_RAG_API_HOST=rag.kommun.se; then
   got="$(gateway_values)"
-  want='["llm.kommun.se","","llm.kommun.se","","https://llm.kommun.se"]'
-  if [ "$(jq -c '.[:5]' <<< "$got")" = "$want" ]; then
-    ok "$name: $(jq -c '.[:5]' <<< "$got")"
-    echo "note: $name: rag-admin's Admin__GatewayAdminUrl is '$(jq -r '.[5]' <<< "$got")'"
-  else
-    fail "$name: got $(jq -c '.[:5]' <<< "$got"), expected $want"
-  fi
+  want='["llm.kommun.se","","llm.kommun.se","","https://llm.kommun.se",""]'
+  if [ "$got" = "$want" ]; then ok "$name: $got"; else fail "$name: got $got, expected $want"; fi
 else
   fail "$name: the stack does not render: $(cat "$work/err")"
 fi
