@@ -68,8 +68,9 @@ keep every entry.
   the test ran with. Documented, not changed in code: on Kubernetes a deployment that declares `Oidc__Authority` sets
   `Gateway__OidcAuthority` too (the reviewer may prefer clearing the stored authority; asked). Backend tests pass
   (AdminApi 440, Domain 599, DataApi 29, IntegrationTests 64, Gateway 491); the browser test and the UI gate were not
-  re-run (no UI file changed). **Ume.Rag has the same shape** (rag-admin's sign-in refresh and setup callback, #762,
-  #767): check whether it reads the settings on every anonymous callback too, and bound it the same way.
+  re-run (no UI file changed). **Ume.Rag had the same flaw** (and `/bff/user` read on every call): fixed the same way
+  in #784, merged (identity design §19, *Reload* and *Anonymous callbacks of a setup test*). The browser tests were not
+  run on it: run `e2e.yml` before the next release, as planned.
 
 ### 2. Waiting for the user (the main session may not merge in the gateway's repository)
 

@@ -1515,15 +1515,25 @@ which the existing sign-in keeps working.
 
 **Reload.** rag-admin builds its `OpenIdConnectOptions` from the effective values through one configure step. Before
 authentication runs on `/bff/login`, `/bff/user`, `/bff/logout` and the callback it reads the effective values (one
-row) and compares a SHA-256 fingerprint of them, the secret included, with the one the live options were built from;
+row), at most once every 2 seconds per instance (`AdminSignIn.RefreshInterval`; anyone may call those paths, and
+requests arriving together share one read), and compares a SHA-256 fingerprint of them, the secret included, with the one the live options were built from;
 when they differ the options are evicted and built again. The fingerprint, not the settings version, is compared, so a
 reloaded secret file is followed and an unrelated settings save rebuilds nothing; it is never logged. Every sign-in
 starts at `/bff/login`: a challenge from another route is redirected there (`/api` answers 401). Existing sessions stay
-valid; replicas share nothing and each follows at its own next sign-in. If the row can't be read, the last values stay
+valid; replicas share nothing: the instance that completes setup reads the values at once, another follows at its
+own next sign-in, within those 2 seconds. If the row can't be read, the last values stay
 in use. Without a usable authority (none, not an absolute https URL, or a stored secret that can't be read)
 `/bff/user` answers `signIn.configured: false` and a sign-in is refused with `sign_in_not_configured` (409). A callback
 that can't be completed gives no session, security event 5001 `callback_failed` and a redirect to `/?signin=failed`.
-Built in M-20 S2 (#762).
+Built in M-20 S2 (#762); the bound in #784.
+
+**Anonymous callbacks of a setup test** (#784, from the review of thekim1/llmgateway#103). A request to the callback
+path with a setup test's `state` is answered before a test is looked up: 404 while setup is closed by the values last
+read (nothing more is read), and while it is open at most 20 a minute per client address reach the database, then 429
+(`SetupCallbackThrottle`, per instance; per address so a flood does not keep the deployer's own callback out). A passed
+test's fingerprint covers, besides the values, what its result rested on at the callback (the effective claim names,
+tenant and guest rule, and the deployment's role groups); `complete` compares it with what is in force and answers
+`values_changed` when it differs.
 
 **How the test sign-in runs** (S2's spike, read in the framework's source): not a second OpenID Connect scheme (two
 handlers share a callback path only with `SkipUnrecognizedRequests`, and a scheme's options are per process while
