@@ -30,6 +30,10 @@
 # variable is unset ("-", not ":-"): a stack that sets its own manifest keeps it, and an empty value creates nothing.
 # The manifest names no owner, which the gateway accepts from the release after 0.10.3. The build stops when the
 # gateway's file does not have exactly that line.
+# A default that contains "}" needs Compose 2.24.7 or later (compose-go 5ede864, "default values can contain curly
+# braces"); an older one ends the expression at the first "}" without an error, also when the variable is set (tried
+# with Compose 2.17.3 to 5.7.1, 2026-11-16). Portainer has a later one from 2.21 (its pinned versions, not run), and
+# the stack's volume subpaths are newer than that Compose too (not tried on an older one).
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 template="$here/compose.rag.template.yaml"
