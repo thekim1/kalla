@@ -9,7 +9,8 @@
 #   - only UME_RAG_API_HOST: as before the domain (rag-admin's name empty, so rag-bootstrap gives it rag-api's; Open
 #     WebUI's empty, its URLs on localhost); never a name ending in a dot
 #   - the three UME_RAG_*_HOST, no domain; the domain and one override
-#   - neither UME_DOMAIN nor UME_RAG_API_HOST: the stack does not render, and the message names both
+#   - neither UME_DOMAIN nor UME_RAG_API_HOST: rag-bootstrap gets an empty name and its script stops with a message
+#     that names both (no ":?" inside a default in the stack file, which some Compose versions evaluate even when the outer variable is set)
 #
 #   deploy/tests/portainer-hosts.sh [STACK.yaml]   [deploy/portainer/compose.portainer.yaml]
 #
@@ -61,16 +62,22 @@ expect "the domain and an admin override" rag.example.se admin.kommun.se chat.ex
 expect "the domain and a public URL" rag.example.se rag-admin.example.se chat.example.se https://rag.example.se:8543 \
   https://chat.example.se UME_DOMAIN=example.se UME_RAG_API_PUBLIC_URL=https://rag.example.se:8543
 
-# Unset, and set but empty (Portainer keeps a variable whose value was cleared).
+# Unset, and set but empty (Portainer keeps a variable whose value was cleared): the stack renders with an empty name,
+# and rag-bootstrap, which every service waits for, stops on it with a message that names both. The stack file has no
+# ":?" inside a default: some Compose versions evaluate it even when the outer variable is set (5.0.2 does not), which refuses a stack with
+# only UME_RAG_API_HOST (seen on GitHub's runner with the gateway's file, thekim1/llmgateway#102).
+grep -q ':?[^}]*}}' "$stack" && fail "the stack file has a required-variable form inside a default"
+grep -q 'UME_RAG_API_HOST:?Set UME_DOMAIN or UME_RAG_API_HOST' "$stack" \
+  || fail "rag-bootstrap's script does not stop on an empty UME_RAG_API_HOST with a message that names both"
 for vars in "" "UME_DOMAIN= UME_RAG_API_HOST="; do
   name="neither UME_DOMAIN nor UME_RAG_API_HOST${vars:+ (both empty)}"
   # shellcheck disable=SC2086 # $vars is a list of VAR=VALUE words
-  if render $vars; then
-    fail "$name: the stack renders"
-  elif grep -q 'Set UME_DOMAIN or UME_RAG_API_HOST' "$work/err"; then
-    ok "$name: the stack does not render ($(tr -d '\n' < "$work/err"))"
+  if ! render $vars; then
+    fail "$name: the stack does not render: $(cat "$work/err")"
+  elif [ "$(jq -r '.services["rag-bootstrap"].environment.UME_RAG_API_HOST' "$work/out.json")" = "" ]; then
+    ok "$name: rag-bootstrap gets an empty UME_RAG_API_HOST and stops on it"
   else
-    fail "$name: the message does not name both: $(cat "$work/err")"
+    fail "$name: rag-bootstrap's UME_RAG_API_HOST is not empty"
   fi
 done
 
