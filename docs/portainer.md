@@ -27,17 +27,20 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 - **Registry access:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private. In Portainer, *Registries → Add
   registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
-  (`ume-admin`), Ume.Rag's admin (`ume-rag-admin`) and, for the chat, Open WebUI (`open-webui`). The clients must exist
+  (`ume-admin`) and Ume.Rag's admin (`ume-rag-admin`). The clients must exist
   before you set up sign-in. Their redirect URIs: `https://llm-admin.<domain>/signin-oidc` and
   `/signout-callback-oidc` for `ume-admin`, `https://rag-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
-  `ume-rag-admin`, `https://chat.<domain>/oauth/oidc/login/callback` for `open-webui` (the two setup wizards show them,
+  `ume-rag-admin` (the two setup wizards show them,
   ready to copy). The client secrets are entered in the setup wizards, not in the stack.
-- **Host names** and **real certificates** for the gateway API, the gateway admin, rag-api, Ume.Rag's admin and Open
-  WebUI. The services serve certificates from their own internal CAs (Open WebUI plain HTTP), so something in front
+- **Host names** and **real certificates** for the gateway API, the gateway admin, rag-api and Ume.Rag's admin. The
+  services serve certificates from their own internal CAs, so something in front
   terminates TLS: your own reverse proxy (routes and body sizes:
   [production-setup.md](production-setup.md#reverse-proxy-and-pki)), or the stack's optional **proxy profile** (*TLS
   proxy* below).
 - The **embedding and chat models** on the gateway, EU-hosted for now.
+- **Open WebUI, the chat for users, is optional** and not part of the first deploy: an installation that only serves
+  its API to your own applications never needs it. It takes one more client, host name and profile: *Adding Open
+  WebUI*, below, at the first deploy or any time later.
 
 ## TLS proxy
 
@@ -45,12 +48,12 @@ With `proxy` in `COMPOSE_PROFILES` the stack runs `rag-proxy`: nginx on `UME_RAG
 (`0.0.0.0:443`) in front of all five host names, with the routes and body sizes of production-setup.md. It re-encrypts
 to the services and verifies them against their internal CAs, so nothing else needs to be published.
 
-1. On the host, put one certificate for all five names (SAN or wildcard) in a directory, as `tls.crt` (with its chain)
+1. On the host, put one certificate for every name (four; five with Open WebUI; SAN or wildcard) in a directory, as `tls.crt` (with its chain)
    and `tls.key`, readable by uid 101 (`chown 101 tls.key && chmod 0400 tls.key`), and set
    `UME_RAG_PROXY_CERTS_DIR` to it (default `/etc/ume-rag/proxy-certs`). Without it `rag-proxy` doesn't start.
-2. Give each service a host name of its own. `UME_DOMAIN` names all five: the gateway API `llm.<domain>`, the
-   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI
-   `chat.<domain>` (`UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and
+2. Give each service a host name of its own. `UME_DOMAIN` names them all: the gateway API `llm.<domain>`, the
+   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and, with the profile
+   `openwebui`, Open WebUI `chat.<domain>` (`UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and
    `UME_RAG_OPENWEBUI_HOST` override one each). A name shared with another service gets no route, and `rag-bootstrap`'s
    checklist says which. The public URLs are then plain `https://<host>`, which is their default: leave
    `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_PUBLIC_URL` and `UME_RAG_API_PUBLIC_URL` unset (the OIDC redirect URIs have no
@@ -98,17 +101,18 @@ read the CA only at start.
    comments mark CHANGE, your domain. It is not a secret:
 
    ```text
-   UME_DOMAIN=example.se        # llm., llm-admin., rag., rag-admin. and chat.example.se
+   UME_DOMAIN=example.se        # llm., llm-admin., rag. and rag-admin.example.se
    ```
 
-   `UME_DOMAIN` gives all five host names: the gateway API `llm.<domain>` (its public URL `https://llm.<domain>`), the
-   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>` (its public URL `https://rag.<domain>`), Ume.Rag's
-   admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`. To use another name for one, set `UME_GATEWAY_HOST`,
-   `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` or `UME_RAG_OPENWEBUI_HOST`; for a public address with a
+   `UME_DOMAIN` gives the host names: the gateway API `llm.<domain>` (its public URL `https://llm.<domain>`), the
+   gateway's admin `llm-admin.<domain>`, rag-api `rag.<domain>` (its public URL `https://rag.<domain>`) and Ume.Rag's
+   admin `rag-admin.<domain>`. To use another name for one, set `UME_GATEWAY_HOST`,
+   `UME_ADMIN_HOST`, `UME_RAG_API_HOST` or `UME_RAG_ADMIN_HOST`; for a public address with a
    port, `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_PUBLIC_URL` (Ume.Rag's admin links to the gateway's admin there) or
    `UME_RAG_API_PUBLIC_URL`. The file lists each, commented out. A stack that sets the names and no `UME_DOMAIN` works
    as before: it needs `UME_GATEWAY_HOST` and `UME_RAG_API_HOST` then, and Ume.Rag's admin shares rag-api's name unless
-   `UME_RAG_ADMIN_HOST` is set. `COMPOSE_PROFILES=clamav,openwebui` is already in the file.
+   `UME_RAG_ADMIN_HOST` is set. `COMPOSE_PROFILES=clamav` (the malware scan) is already in the file; Open WebUI is one
+   more profile (*Adding Open WebUI*).
 
    Leave `UME_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `UME_INTEGRATION_API_URL` as the file
    has it. The stack file then gives the gateway its default manifest,
@@ -175,7 +179,7 @@ read the CA only at start.
         holds the claim names, with a preset for Keycloak and for Entra ID (the tenant ID). **Test sign-in** opens the
         provider in a new window: sign in there as yourself. The result shows who signed in, the roles, groups and
         departments the token carried, and whether that person is a platform admin.
-     4. *Open WebUI* (step 6 below): its client secret, or **Skip for now**.
+     4. *Open WebUI*, shown only when the stack runs it (*Adding Open WebUI*): its client secret, or **Skip for now**.
      5. *Summary and finish*: the values to save and where each comes from. **Finish**, then **Sign in**.
    - **Who may finish:** only a test sign-in by a platform admin enables *Finish*: the role `rag-platform-admin` in the
      token's `roles` claim (Keycloak: that realm role, directly or through a group,
@@ -185,17 +189,7 @@ read the CA only at start.
 
    After *Finish* setup is closed: the setup API answers 404 and the code is void. The sign-in provider, client and
    secret change only after a re-open (*Opening the setup wizard again*), never from an admin session.
-6. **Open WebUI's sign-in** (profile `openwebui`): Open WebUI asks rag-api for its sign-in settings when it starts, and
-   restarts by itself within a minute when they change. Its provider defaults to rag-admin's authority's
-   `/.well-known/openid-configuration` and its client to `open-webui`; register its redirect URI
-   `https://chat.<domain>/oauth/oidc/login/callback` on that client (the wizard shows it with a copy button). The
-   wizard's **Open WebUI** step, after the sign-in test, takes the client secret (leave the provider address empty to
-   follow the admin's provider) and **Check** asks the provider whether it accepts the client: *accepted*, *refused*
-   (a wrong client id or secret), or *could not be verified* (then a wrong secret shows when the first user signs in;
-   saving is still allowed). **Save**, or **Skip for now** and open setup again later. Without a secret Open WebUI
-   signs in as a public client (PKCE). Its log says what it started with:
-   `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`. To declare the values instead, set
-   `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` (and the other `UME_RAG_OPENWEBUI_OIDC_*` lines) in the stack.
+6. **Open WebUI is not part of this path.** To give users the chat, now or later: *Adding Open WebUI*, below.
 7. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field): **move the integration to your own team** (skip it if your manifest names an owner): *Access →
    Integrations → Ume.Rag*, *Edit*, the owner team. The team must be active, in an active department. Every credential
@@ -219,15 +213,8 @@ read the CA only at start.
    embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
    `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
    must allow the model. The first profile is the default, which new knowledge bases use.
-10. **Open WebUI** connects by itself: `rag-bootstrap` generates its key for rag-api and `rag-migrate` registers it as
-    the deployment's own client, shown in Ume.Rag's admin under *Apps and keys* as *Managed by the deployment*. Open it
-    there to choose the assistants it offers (an assistant's *Who can use it* works too).
-
-    Users sign in through OIDC and get the role `user`. The **feedback import** (thumbs and comments into Ume.Rag)
-    needs nothing either: the one-shot `rag-openwebui-setup` mints the feedback service account's key once Open WebUI
-    runs (password sign-in stays off) and keeps it while it works, and rag-api finds Open WebUI in the stack by itself.
-    Its log says *minted* or *kept*. A new key: delete `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and
-    update the stack.
+10. **First content:** follow *Get started* on Ume.Rag's *Home* (a knowledge base, a source, the first fetch, test
+    questions, an assistant). Your applications call rag-api with an app and its key from *Apps and keys*.
 11. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
     `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
     database restored without them is unusable, and the client secrets the wizard stored can only be read with the same
@@ -262,6 +249,47 @@ and a re-open shows those values locked.
 
 The stack's variables are readable by everyone who may edit the stack; the wizards keep the secrets encrypted in the
 databases instead.
+
+## Adding Open WebUI
+
+Open WebUI is the chat for users. It is optional: without the profile `openwebui` the stack creates nothing for it (no
+secrets, no client in Ume.Rag's admin, no `chat.` host name in the TLS proxy) and Ume.Rag's admin has no Open WebUI
+step in its setup wizard. The steps are the same at a first deploy and on a running installation.
+
+1. **At the sign-in provider,** create the client `open-webui` (confidential, code + PKCE) with the redirect URI
+   `https://chat.<domain>/oauth/oidc/login/callback`.
+2. **A host name and its certificate:** `chat.<domain>` under `UME_DOMAIN`, or `UME_RAG_OPENWEBUI_HOST` for another
+   name. With the stack's TLS proxy the certificate in `UME_RAG_PROXY_CERTS_DIR` must cover that name too; with your
+   own proxy, route the name to `UME_RAG_OPENWEBUI_BIND` (`127.0.0.1`) `:` `UME_RAG_OPENWEBUI_PORT` (`3000`), plain
+   HTTP.
+3. **Add the profile:** `COMPOSE_PROFILES=clamav,openwebui` (keep the profiles you have), and update the stack.
+   `rag-bootstrap` generates Open WebUI's secrets and its key for rag-api, `rag-migrate` registers it as the
+   deployment's own client, and `rag-openwebui` starts. With the TLS proxy on, restart `rag-proxy` so it reads the new
+   block.
+4. **Its sign-in** is the setup wizard's *Open WebUI* step. At a first deploy it comes after the sign-in test. On a
+   running installation setup is closed: open it again (*Opening the setup wizard again*), or declare the secret in
+   the stack (`UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, *Declaring sign-in instead*).
+   Open WebUI asks rag-api for its sign-in settings when it starts, and
+   restarts by itself within a minute when they change. Its provider defaults to rag-admin's authority's
+   `/.well-known/openid-configuration` and its client to `open-webui` (the wizard shows the redirect URI with a copy
+   button). The step takes the client secret (leave the provider address empty to
+   follow the admin's provider) and **Check** asks the provider whether it accepts the client: *accepted*, *refused*
+   (a wrong client id or secret), or *could not be verified* (then a wrong secret shows when the first user signs in;
+   saving is still allowed). **Save**, or **Skip for now** and open setup again later. Without a secret Open WebUI
+   signs in as a public client (PKCE). Its log says what it started with:
+   `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`.
+5. **Choose its assistants:** Open WebUI connects by itself. Its client is shown in Ume.Rag's admin under *Apps and
+   keys* as *Managed by the deployment*; open it there to choose the assistants it offers (an assistant's *Who can use
+   it* works too). Users sign in through OIDC and get the role `user`.
+6. **The feedback import** (thumbs and comments into Ume.Rag) needs nothing: the one-shot `rag-openwebui-setup` mints
+   the feedback service account's key once Open WebUI runs (password sign-in stays off) and keeps it while it works,
+   and rag-api finds Open WebUI in the stack by itself. Its log says *minted* or *kept*. A new key: delete
+   `rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and update the stack.
+
+**Taking it out again:** remove `openwebui` from `COMPOSE_PROFILES`, update the stack and remove the stopped
+`rag-openwebui` container. Its store (the volume `rag-openwebui-data`) and its keys stay for the next time; the
+managed client stays in *Apps and keys* with its key, unused: `rag-migrate` touches it only while the profile is on,
+and rag-api accepts no Open WebUI user without the profile.
 
 ## Upgrade from 0.6.0
 
