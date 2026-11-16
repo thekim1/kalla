@@ -264,6 +264,37 @@ In the Portainer stack (stage 2, one typed value, `UME_DOMAIN`):
 *From:* decided by user, 2026-11-15 (session 40, W1–W10; agreed after an independent review); the stage 2 points
 2026-11-16 (session 44).
 
+### One deployment bootstrap
+
+Every deployment form gets its certificates, secrets and derived files from one script, `deploy/portainer/bootstrap.sh`
+(the `rag-bootstrap` service), and its services from one definition.
+
+- **Files live in Docker volumes in Compose too:** `rag-certs`, `rag-secrets` and `rag-config`, as in the Portainer
+  stack. Host scripts (key escrow, backups, certificate checks) read them from the volumes; what an operator supplies
+  as a file (the gateway's CA, PKI certificates, the TLS proxy's certificate) is a host path mounted read-only.
+- **`deploy/init-deployment.sh` writes only `deploy/.env`:** the domain, the gateway's address and where its keys are,
+  the backup target and the optional parts. It generates no certificate or secret, and its `--help` is the option
+  list.
+- **One Ume.Rag service file with the `rag-` names.** Compose runs it directly; `build-stack.sh` merges it with the
+  gateway's file for Portainer. What only a Compose host has (pgBackRest, the fixed subnets of the host firewall, the
+  ingestion slice, rolling slots, the 24 GB sizes) is in overlay files. The Portainer stack's service, volume and
+  variable names stay.
+- **Kubernetes:** `create-secrets.sh` runs the same `bootstrap.sh` into a local directory and uploads the result.
+- **The setup wizard is the same in every form** (Decisions "Setup wizard"): the bootstrap generates the setup
+  secret, ends its log with the wizard's address, and takes the declared sign-in values from the same variables;
+  `init-deployment.sh` asks for no sign-in value, except the provider's address where the host firewall overlay is on
+  (rag-admin reaches only the provider named there).
+- **Upgrades:** a deploy change may break an existing deployment (Decisions "No backward compatibility before
+  production"), but it comes with an upgrade path wherever one is feasible: a step in the upgrade guide, or a
+  migration in the bootstrap. *Install again* is the answer only when no reasonable path exists, and the release says
+  so.
+
+Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. Until M-22's steps are merged the code
+still has the two bootstraps.
+
+*From:* decided by user, 2026-11-16 (session 46, four points with four alternatives each; the wizard and the upgrade
+path the same day).
+
 ### Deployment values across releases
 
 A release may add, move or retire deployment variables without stopping a deployment that upgrades from the guides.

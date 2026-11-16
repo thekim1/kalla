@@ -20,11 +20,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 
 ### [ ] M-22 Deploy simplification (user, 2026-11-16)
 - **Do:** [`../proposals/deploy-simplification.md`](../proposals/deploy-simplification.md), starting with S1 (one
-  bootstrap for Compose and Portainer; its four points go to the user first, each as four alternatives with a
-  recommendation), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for and invisible when off) and
-  S4a (delete the upgrade paths nobody runs). Upgrades may break (user, 2026-11-16): the proposal lists what that
-  frees. M-17's C13 is the first step of S1. S2, S5 and S7 wait
-  for the user's decision.
+  bootstrap for Compose and Portainer; decided 2026-11-16, Decisions "One deployment bootstrap"; the proposal's S1
+  lists its five steps, one pull request each), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for
+  and invisible when off) and S4a (delete the upgrade paths older than the VM's version). Upgrades may break, but each
+  breaking change gets an upgrade path where one is feasible (user, 2026-11-16). The setup wizard works the same in
+  every form. M-17's C13 is absorbed by S1's step 3. S2, S5 and S7 wait for the user's decision.
 - **Paths:** `deploy/**`, `docs/**`, `.github/workflows/**` (stream a's: `main-session/<slug>` branches, no open `a/`
   work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic

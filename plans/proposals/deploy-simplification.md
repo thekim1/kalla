@@ -3,8 +3,8 @@
 **Status:** **proposal** (main session, session 45, 2026-11-16), from an analysis of a first install and of the install
 and upgrade guides (#794, #795, #796). The user asked for it to be written down and for the work to start in the next
 session (2026-11-16), and added S9 (Open WebUI easy to skip); the recommended start is S1, S3 with S9, and S4a. S2 and S5 change the security design or the gateway and
-wait for the user's decision. Nothing here binds until it is adopted in `decisions.md`; the work is `work/main.md`
-**M-22**.
+wait for the user's decision. **S1's four points are decided** (2026-11-16, session 46; Decisions "One deployment
+bootstrap"); the rest binds only when it is adopted in `decisions.md`. The work is `work/main.md` **M-22**.
 
 **Goal:** the same system deploys the same way in every form, and an operator does only what a person must do. Today
 the complexity is mostly duplication: the deployment is implemented three times, and the two products each bring
@@ -47,23 +47,36 @@ They remove the most code and documentation without changing what the system doe
   prints a checklist of what is missing. `init-deployment.sh` does the same into `deploy/certs` and `deploy/secrets` on
   the host from options, and also writes `deploy/.env`, the proxy configuration, the ClamAV confs and the pgBackRest
   repository settings.
-- **To decide first** (each as four alternatives with a recommendation, at the start of the work):
-  1. **Where the files live in Compose:** Docker volumes as in Portainer (then escrow, `--ca-file`, PKI certificates
-     and `create-secrets.sh` read from a volume), or bind-mounted host directories filled by the same container.
-  2. **What stays in the script:** only `deploy/.env` (host names, the gateway's address, the backup target, the
-     profiles), or nothing (a `stack.env` edited by hand, as in Portainer).
-  3. **Whether Compose and Portainer become one stack file** with profiles for what differs (pgBackRest, the host
-     firewall's subnets), or stay two files with one bootstrap.
-  4. **Kubernetes:** `create-secrets.sh` reads `init-deployment.sh --no-chown`'s output today; it either runs the
-     bootstrap container too or keeps a reduced script.
+- **Decided** (user, 2026-11-16, session 46; Decisions "One deployment bootstrap"):
+  1. **The files live in Docker volumes in Compose too** (`rag-certs`, `rag-secrets`, `rag-config`), so escrow, the
+     gateway's CA, PKI certificates and `create-secrets.sh` read from or mount into a volume.
+  2. **The script writes only `deploy/.env`** (host names, the gateway's address and keys, the backup target, the
+     optional parts). M-17's C13 is absorbed: the options whose values moved go with the rest.
+  3. **One Ume.Rag service file with the `rag-` names, plus overlays** for what only a Compose host has (pgBackRest,
+     the host firewall's subnets, the slice, rolling slots, the 24 GB sizes); `build-stack.sh` merges it with the
+     gateway's file for Portainer.
+  4. **Kubernetes:** `create-secrets.sh` runs the same `bootstrap.sh` locally and uploads the result.
+- **The setup wizard fits in the same way everywhere** (user, 2026-11-16): the base Compose install asks for no
+  sign-in value and ends at the wizard, as Portainer does; the declared sign-in values are the same variables in both
+  forms; the provider's address is asked for only with the host firewall overlay; the Compose boot test checks the
+  wizard's state as the Portainer boot test does.
 - **Constraints.** No Compose deployment exists outside tests (the user's VM is the Portainer stack), so Compose may
-  change in one step (AGENTS.md, *No backward compatibility before production*). **Upgrades may break too** (user,
-  2026-11-16: "assume no one is really using this yet", so a low-hanging simplification that breaks an upgrade is
-  fine): a change need not keep an existing stack's volumes, variables or stack file working, as long as the release
-  says so and says how to install again. Say it to the user when a change means the VM is reinstalled rather than
-  upgraded. Decisions "Deployment values
-  across releases" holds for every variable. M-17's C13 (the script loses the options whose values moved) is the first
-  step of this and is still open.
+  change in one step (AGENTS.md, *No backward compatibility before production*). **Upgrades may break, but keep a path
+  where one is feasible** (user, 2026-11-16: first "assume no one is really using this yet", then "if possible try to
+  have a path for upgrade even if you make breaking changes"): a change need not keep an existing stack's volumes,
+  variables or stack file working, but the release says what an existing deployment does, and *install again* is the
+  answer only when no reasonable path exists. The Portainer stack's names stay, so the VM keeps upgrading. Decisions
+  "Deployment values across releases" holds for every variable.
+- **Steps** (one pull request each, `main-session/` branches):
+  1. `bootstrap.sh` takes what Compose and Kubernetes need: its three paths, the gateway's CA as optional, PKI
+     certificates, the pgBackRest repository settings, the ClamAV confs, no ownership change on request. The generated
+     Portainer stack behaves as before.
+  2. The one service file and its overlays; `compose.prod.yaml`, `compose.ingestion.yaml` and
+     `compose.openwebui.yaml` go (S3 comes with it); the host scripts, the release bundle and the tests follow the
+     names and the volumes.
+  3. `init-deployment.sh` as the short `deploy/.env` writer; `verify.yml`'s script tests rewritten.
+  4. `create-secrets.sh` on `bootstrap.sh`.
+  5. The guides (`compose-quick-start.md`, `production-setup.md`, `kubernetes.md`, the upgrade guide).
 - **Read first:** `deploy/portainer/bootstrap.sh`, `deploy/portainer/compose.rag.template.yaml`,
   `deploy/portainer/build-stack.sh`, `deploy/init-deployment.sh`, `deploy/kubernetes/create-secrets.sh`,
   `deploy/tests/portainer-*.sh` and `pilot-stack.sh`, repo-and-deployment §7.1.
@@ -94,8 +107,8 @@ point in the code (the list above is from reading, not from a run without Open W
 ### S4a Delete the upgrade paths nobody runs
 
 The only deployment is the user's VM on 0.5.0. `docs/portainer.md`'s *Upgrade from 0.2.0–0.4.0* and the upgrade guide's
-sections for 0.2.0 to 0.4.0 can go (the changelog keeps the history). Since upgrades may break (below), every
-per-version section but the newest can go; tell the user if that leaves the VM's 0.5.x path without a guide.
+sections for 0.2.0 to 0.4.0 can go (the changelog keeps the history). The sections the VM still needs (0.5.x to
+0.6.0, 0.6.0 to 0.7.0) stay until it has moved (user, 2026-11-16: keep an upgrade path where possible).
 
 ## Allowed now that upgrades may break (user, 2026-11-16)
 
@@ -105,8 +118,8 @@ Low-hanging fruit that an upgrade path was the only reason to keep. Check each i
   list at the next release instead of 20 names carried along;
 - the clean-up branches in `init-deployment.sh` and `rag-bootstrap` for files of earlier releases (per-level gateway
   keys, the Data API key, refused old options);
-- every per-version upgrade section but the newest, in `docs/upgrade-guide.md` and `docs/portainer.md` (S4a without
-  waiting for the VM);
+- every per-version upgrade section older than the VM's version (0.5.x), in `docs/upgrade-guide.md` and
+  `docs/portainer.md`;
 - renaming or merging variables and volumes where S1 is simpler with one layout for both forms;
 - the hand-issued key path (`UME_RAG_*_GATEWAY_KEY`) beside the manifest, if one way is enough.
 
