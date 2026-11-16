@@ -113,7 +113,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   from `main` is green ([43763822654](https://github.com/thekim1/ume-rag-platform/actions/runs/43763822654)), with
   S6's boot-test assertions and the wrapper starting Open WebUI with sign-in fetched from the real rag-api over TLS.
   **S8, the gateway's issues, are filed** (user, 2026-11-15): thekim1/llmgateway#98 (WG1), #99 (WG2), #100 (WG3),
-  #101 (WG4, optional). **Open:** Ume.Rag's side of each when the gateway releases it (the context's `oidc_authority`
+  #101 (WG4, optional). **The gateway's WG1–WG3 are built by the main session** (user, 2026-11-16):
+  thekim1/llmgateway#102 and #103, waiting for the user's merge and a gateway release. **Open:** Ume.Rag's side of each when the gateway releases it (the context's `oidc_authority`
   as the wizard's default, `UME_DOMAIN` for all five names, `stack.env.example` at 1 CHANGE value); the Compose host
   firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up); S8 (the
   gateway, WG1–WG4, on the user's word). Stream b

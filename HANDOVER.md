@@ -24,7 +24,7 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 42): the setup wizard's stage 1 is done; the gateway's part of stage 2 is in work
+## Start here (session 42): the setup wizard's stage 1 is done; the gateway's part of stage 2 is built and waits for a merge and a release
 
 **What happened in session 41.** The user said to go on until the wizard is done, with the main session's
 recommendations for the open answers.
@@ -45,21 +45,30 @@ recommendations for the open answers.
   minutes the tests take now).
 - **A public client that declares everything** keeps today's rule (it gets the wizard once); nothing changed.
 
-**The gateway's part is being built by this session** (user, 2026-11-16: "build it"; nobody had picked the issues up),
-in `~/git/llmgateway` as `ume-nichlas` (which can push there; `Crotalus` cannot):
-- **WG1 and WG2:** thekim1/llmgateway#102, green, **ready for the user to merge** (this session's merge was stopped by
-  the permission check). `gateway.oidc_authority` is `Gateway:OidcAuthority` (set from `UME_OIDC_AUTHORITY` in the
-  deploy files), feature `oidc-authority`.
-- **WG3** on branch `feat/100-setup-mode` in the worktree `~/git/llmgateway-100`, stacked on #102's branch, not pushed:
-  G1 (commit `30bb288`: stored sign-in values in a table `SignInSettings`, the secret encrypted, effective values,
-  sign-in from them with reload, start without an authority; read in full, 1,579 tests re-run green) is done; G2 (setup
-  code, session, test sign-in, complete, re-open) is with an implementor agent; then G3 (the wizard's pages) and G4
-  (deploy files and docs). Each step: read the diff, re-run the tests (`ASPNETCORE_URLS=http://127.0.0.1:0` per test
-  project, because something on this machine holds port 5000). Rebase on `main` once #102 is merged.
+**The gateway's part is built by this session** (user, 2026-11-16: "build it"; nobody had picked the issues up), in
+`~/git/llmgateway` as `ume-nichlas` (which can push there; `Crotalus` cannot). **Both pull requests wait for the user's
+merge** (this session's merge was stopped by the permission check), then a gateway release:
+- **WG1 and WG2:** thekim1/llmgateway#102, green. `gateway.oidc_authority` is `Gateway:OidcAuthority` (set from
+  `UME_OIDC_AUTHORITY` in the deploy files), else the authority saved in the gateway's wizard; feature `oidc-authority`.
+- **WG3:** thekim1/llmgateway#103, a **draft stacked on #102** (no CI has run on it; mark it ready once #102 is merged
+  and it retargets to `main`). Six commits: stored sign-in values, setup mode in the admin API, the security review's
+  fixes, the wizard's pages, its browser test, every deploy form with the operators' docs and the upgrade guide. Checked
+  locally: Release build clean, 1,618 backend tests, the UI gate (316 tests), the wizard end to end in a browser against
+  the bundled Keycloak (5 of 5, with axe), and a boot of the Portainer stack with only `UME_DOMAIN` (code printed,
+  accepted, setup closed once the authority is declared). **A declared gateway deployment (one that sets the authority)
+  never sees the wizard.** Its upgrade guide has numbered steps for Portainer, Compose and Kubernetes.
 - **WG4** (optional) is not started.
-- **Found on the way** (#776, merged): a `:?` inside a default in a stack file is evaluated by some Compose versions
-  even when the outer variable is set (GitHub's hosted runner; not 5.0.2), which refused a stack with only the host
-  names. Neither repository's Portainer file has one now.
+- **Found on the way, fixed in both repositories:** a `:?` inside a default in a stack file is evaluated by some Compose
+  versions even when the outer variable is set (#776); the setup code's throttle came before the comparison, so a flood
+  of wrong codes kept the right one out, and two smaller findings of the gateway's independent security review (#778).
+- **Upgrade guides** (user, 2026-11-16: someone who already runs Portainer or Compose must be able to upgrade from the
+  guides): `docs/portainer.md` *Upgrade from 0.6.0* and the Compose steps in `docs/upgrade-guide.md` (#777), with
+  `deploy/tests/portainer-upgrade.sh` rendering the new stack with 0.6.0's variables. **Not tested: a boot of an upgraded
+  stack** (0.6.0's volumes under the new images), in either repository.
+- **Left on this machine:** the gateway worktrees `~/git/llmgateway-100` (the branch of #103) and
+  `~/git/llmgateway-100-deploy` (merged into it; can go), the local images `ume-llm-gateway/*:setup-test`. Something
+  else holds ports 5000 and 5173 here: the gateway's IntegrationTests need `ASPNETCORE_URLS=http://127.0.0.1:0`, and
+  its admin UI is on the port `aspire logs admin-ui` names.
 
 **Next for the wizard: Ume.Rag's side of stage 2, when the gateway releases each issue** (M-20, S8):
 - WG2: the context's `oidc_authority` as the wizard's default for the authority (a source below the deployment's and
