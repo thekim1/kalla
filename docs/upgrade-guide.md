@@ -432,7 +432,8 @@ exception, with its own steps.
 ### ClamAV 1.4.6
 
 - **Rolling update: yes.** No migration and no configuration change.
-- `images/clamav/Dockerfile` moves from `clamav/clamav-debian:1.4.5_base` to `1.4.6_base`, which fixes
+- Nothing to do when coming from `v0.1.0`, whose image already has this pin. `images/clamav/Dockerfile` moved from
+  `clamav/clamav-debian:1.4.5_base` to `1.4.6_base` before that release, which fixes
   CVE-2026-20339, CVE-2026-20345 and CVE-2026-20346. Its only image was pushed on 2026-10-26; it is pinned for
   `v0.1.0` (2026-10-31, #27; the 7-day rule does not apply during development). With 1.4.5 freshclam logged "Your ClamAV
   installation is OUTDATED".
