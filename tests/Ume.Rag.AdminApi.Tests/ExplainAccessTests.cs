@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// admins only for their own departments' assistants.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class ExplainAccessTests(AdminDatabaseFixture database)
+public sealed class ExplainAccessTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -72,7 +72,7 @@ public sealed class ExplainAccessTests(AdminDatabaseFixture database)
     public async Task An_audience_client_is_allowed_with_level_and_ceiling_and_others_get_their_failing_step()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         using var allowed = await admin.PostAsJsonAsync("/api/access/explain", Ask(seed.Audience, seed.Assistant), Ct);
@@ -97,7 +97,7 @@ public sealed class ExplainAccessTests(AdminDatabaseFixture database)
     public async Task Only_admins_of_the_assistant_s_department_may_ask_and_the_subject_kind_is_checked()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);

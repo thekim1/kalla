@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// refused; each listed entry names its object (current name, else the snapshot's, else none).
 /// </summary>
 [Collection(AdminDatabaseGroup3.Name)]
-public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
+public sealed class AuditEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -52,7 +52,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
     public async Task Platform_admins_see_every_entry_and_department_admins_their_departments_only()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         using var department = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
@@ -73,7 +73,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
     public async Task The_filters_and_the_keyset_narrow_the_list()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var basePath = $"/api/audit?action={seed.Action}";
 
@@ -162,7 +162,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database)
         db.AuditLog.AddRange(entries);
         await db.SaveChangesAsync(Ct);
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var items = (await platform.GetFromJsonAsync<JsonElement>($"/api/audit?action={action}", Ct)).GetProperty("items").EnumerateArray()
             .Select(i => (Name: i.GetProperty("entityName").GetString(), Exists: i.GetProperty("entityExists").ValueKind == JsonValueKind.Null ? (bool?)null : i.GetProperty("entityExists").GetBoolean()))

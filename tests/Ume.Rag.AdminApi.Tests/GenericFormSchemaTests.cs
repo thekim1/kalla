@@ -13,7 +13,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// object that comes back from the database as it was sent.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
+public sealed class GenericFormSchemaTests(AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -57,7 +57,7 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
     [Fact]
     public async Task The_request_schemas_carry_ranges_lengths_required_members_and_enums()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var document = await OpenApiAsync(admin);
 
@@ -127,7 +127,7 @@ public sealed class GenericFormSchemaTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_jsonb_member_comes_back_as_it_was_saved()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = (await admin.GetFromJsonAsync<JsonObject>("/api/settings/crawl", Ct)).ShouldNotBeNull();
         var value = JsonNode.Parse("""

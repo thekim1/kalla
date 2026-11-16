@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <c>decidedBy</c> (#116) with their dedup keys, and the versions are read back.
 /// </summary>
 [Collection(AdminDatabaseGroup6.Name)]
-public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
+public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database, AdminHost shared) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -40,7 +40,7 @@ public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
     {
         await EnsureDepartmentAsync();
         var host = $"www.p{Random.Shared.Next(100_000, 999_999)}.se";
-        await using var factory = database.HeaderFactory();
+        var factory = shared.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var broken = UmeaProfile();
@@ -100,7 +100,7 @@ public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = shared.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var listed = (await admin.GetFromJsonAsync<JsonElement[]>($"/api/site-profiles?host={host.ToUpperInvariant()}", Ct))!.ShouldHaveSingleItem();

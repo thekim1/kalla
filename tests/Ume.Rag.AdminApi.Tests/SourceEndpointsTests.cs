@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// and cancel-run.
 /// </summary>
 [Collection(AdminDatabaseGroup5.Name)]
-public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
+public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -86,7 +86,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
                 .ExecuteUpdateAsync(d => d.SetProperty(x => x.CostCenterCode, code + "B"), Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin, code);
         object Crawl(string host) => new { type = "crawl", name = host, classification = "internal", settings = new { startUrls = new[] { $"https://{host}/" } } };
         async Task<string> SettingsAsync(Guid id)
@@ -138,7 +138,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     public async Task Valid_css_selectors_are_accepted()
     {
         var (collection, code) = await CollectionAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
 
         using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources", new
@@ -158,7 +158,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     public async Task A_source_is_validated_against_the_contract_and_a_scope_change_needs_the_impact_token()
     {
         var (collection, code) = await CollectionAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         var path = $"/api/collections/{collection}/sources";
 
@@ -248,7 +248,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     public async Task A_fetch_mode_change_reports_refetch_on_the_impact_and_saves_without_a_token()
     {
         var (collection, code) = await CollectionAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
             new { type = "url-list", name = "Appen", classification = "internal", settings = UrlList("https://a.se/app") }, Ct);
@@ -289,7 +289,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     public async Task Sync_now_enqueues_once_answers_the_running_run_and_runs_are_listed_and_cancelled()
     {
         var (collection, code) = await CollectionAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "OTHER" + code);
         using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",

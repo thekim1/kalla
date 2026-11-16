@@ -21,8 +21,8 @@ namespace Ume.Rag.AdminApi.Tests;
 /// unsaved settings (V25 first, a URL list's first 20 URLs), the PII highlights (<c>stage-preview</c> to personal-data,
 /// audited <c>pii.view</c>), and a preview output read only from the job's own <c>previews/{jobId}/</c>.
 /// </summary>
-[Collection(AdminDatabaseGroup3.Name)]
-public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
+[Collection(AdminDatabaseGroup4.Name)]
+public sealed class PreviewEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -90,7 +90,7 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
     public async Task Preflight_checks_the_settings_first_samples_twenty_urls_and_the_job_is_polled_in_scope()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
@@ -131,7 +131,7 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
     public async Task Pii_preview_needs_manage_runs_to_the_personal_data_stage_with_spans_and_is_audited()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
 
