@@ -6,13 +6,16 @@ import InlineError from '@/components/ui/InlineError.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import { SETUP_WIZARD } from '@/utils/labels'
+import { gatewayHref } from '@/utils/gateway'
+import { COMMON, SETUP_WIZARD } from '@/utils/labels'
 import SetupSecretField from './SetupSecretField.vue'
 import SetupTestPanel from './SetupTestPanel.vue'
-import { applyPreset, isLocked, type ProviderPreset, type SetupForm, type SignInField, type TextFieldName } from './setupValues'
+import { applyPreset, isLocked, suggestsAuthority, type ProviderPreset, type SetupForm, type SignInField, type TextFieldName } from './setupValues'
 
 // Step 3 (admin design §5.11): the provider, the client and its secret, the Advanced token shape with a preset, and the test
-// sign-in. A value the deployment sets is shown locked. The secret field is never prefilled.
+// sign-in. A value the deployment sets is shown locked. The secret field is never prefilled. The provider address may come from
+// the gateway, which signs in at the same provider (identity design §19): the hint says so while the field holds it, and a gateway
+// that has the feature but no address yet gets a note with a link to its own setup.
 const props = defineProps<{
   state: SetupState
   test: SetupTest | null
@@ -36,6 +39,11 @@ function hintOf(field: TextFieldName, own?: string): string | undefined {
   const value = signIn.value[field]
   return value.source === 'default' && value.value ? L.defaultHint(value.value) : own
 }
+const gateway = computed(() => props.state.gateway)
+const fromGateway = computed(() => suggestsAuthority(signIn.value, gateway.value?.suggestedAuthority)
+  && form.value.authority.trim() === gateway.value?.suggestedAuthority)
+const gatewayWithoutAuthority = computed(() => !!gateway.value && !gateway.value.suggestedAuthority && !locked('authority'))
+const gatewaySetupHref = computed(() => gatewayHref(gateway.value?.adminUrl, '/setup'))
 const presetOptions = [
   { value: 'keycloak' as const, label: L.presets.keycloak },
   { value: 'entra' as const, label: L.presets.entra },
@@ -58,9 +66,15 @@ watch(() => props.errors.tenantId, (error) => {
 <template>
   <form class="grid gap-5" novalidate data-test="sign-in-step" @submit.prevent="emit('test')">
     <TextField
-      id="setup-authority" v-model="form.authority" :label="L.authority" :hint="hintOf('authority', L.authorityHint)" :error="errors.authority"
-      :disabled="locked('authority')" inputmode="url" mono
+      id="setup-authority" v-model="form.authority" :label="L.authority" :hint="fromGateway ? L.authorityFromGateway : hintOf('authority', L.authorityHint)"
+      :error="errors.authority" :disabled="locked('authority')" inputmode="url" mono
     />
+    <p v-if="gatewayWithoutAuthority" class="text-small text-fg-3" data-test="gateway-sign-in-missing">
+      {{ L.gatewayWithoutAuthority }}
+      <a v-if="gatewaySetupHref" :href="gatewaySetupHref" target="_blank" rel="noopener noreferrer" class="underline" data-test="gateway-setup-link">
+        {{ L.gatewaySetupLink }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
+      </a>
+    </p>
     <TextField id="setup-clientId" v-model="form.clientId" :label="L.clientId" :hint="hintOf('clientId')" :disabled="locked('clientId')" mono />
     <SetupSecretField v-model="form" :secret="signIn.clientSecret" id-prefix="setup" :removed-hint="L.secretRemoved" />
     <details :open="advancedOpen" class="rounded-card border border-border p-3" data-test="advanced" @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open">

@@ -186,6 +186,10 @@ export const SETUP_WIZARD = {
     authority: 'Provider address',
     authorityHint: 'The issuer address of the provider, for example https://login.example.org/realms/ume or https://login.microsoftonline.com/<tenant ID>/v2.0.',
     authorityRequired: 'Enter the provider address.',
+    /** The provider address was filled in from the AI gateway's sign-in (identity design §19). */
+    authorityFromGateway: 'From the AI gateway, which signs in at the same provider. You can change it.',
+    gatewayWithoutAuthority: 'The AI gateway’s sign-in is not set up yet, so it suggests no provider address. Set it up there first to type the address once for both, or type it here.',
+    gatewaySetupLink: 'Open the AI gateway’s setup',
     clientId: 'Client ID',
     defaultHint: (value: string) => `Leave empty for the default: ${value}.`,
     clientSecret: 'Client secret',

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.ServiceDefaults;
 
@@ -67,7 +68,8 @@ public static class SetupModeEndpoints
 
         session.MapGet("/state", async (HttpContext http, SignInSettings signIn, OpenWebUiSignInSettings openWebUi, SetupTestSignIn tests,
             SetupOpenWebUiTest openWebUiTests, IOptionsMonitor<OpenIdConnectOptions> oidc, IOptions<OidcOptions> deployment, IOptions<AdminOptions> admin,
-            IConfiguration configuration, TimeProvider time, Ume.Rag.Infrastructure.Persistence.RagDbContext db, CancellationToken ct) =>
+            IConfiguration configuration, GatewayFeatures gateway, OrganisationSync organisation, TimeProvider time, Ume.Rag.Infrastructure.Persistence.RagDbContext db,
+            CancellationToken ct) =>
         {
             var status = SetupGateMiddleware.StatusOf(http);
             var current = SetupSessionFilter.SessionOf(http);
@@ -81,6 +83,7 @@ public static class SetupModeEndpoints
                 status.Kind, status.EndsAt!.Value, current.ExpiresAt, SignInSettingsDto.Of(await signIn.ReadAsync(ct)),
                 new SetupRedirectUris(SetupTestSignIn.RedirectUri(http, options.CallbackPath), SetupTestSignIn.RedirectUri(http, options.SignedOutCallbackPath)),
                 new SetupDeploymentFacts(Blank(configuration["Gateway:BaseUrl"]), Blank(admin.Value.ApiPublicUrl), platformAdminGroups),
+                SetupGatewaySignIn.Of(gateway, organisation),
                 latest is null ? null : SetupTestDto.Of(latest, tests.PayloadOf(latest), time.GetUtcNow()),
                 new SetupOpenWebUiState(shown.Enabled, shown.SignIn, shown.RedirectUri,
                     latestOpenWebUi is null ? null : OpenWebUiTestDto.Of(latestOpenWebUi, openWebUiTests.PayloadOf(latestOpenWebUi))));
@@ -386,10 +389,32 @@ public sealed record SetupRedirectUris(string SignIn, string SignOutCallback);
 /// <summary>What rag-admin's own configuration says of the deployment (admin design §5.11 step 5, as far as rag-admin knows it).</summary>
 public sealed record SetupDeploymentFacts(string? GatewayBaseUrl, string? ApiPublicUrl, IReadOnlyList<string> PlatformAdminGroups);
 
-/// <summary><c>GET /bff/setup/state</c>: rag-admin's sign-in, its latest test, and Open WebUI's block.</summary>
+/// <summary>
+/// What the gateway's context says of its own sign-in (identity design §19, M-20 S8): <see cref="SuggestedAuthority"/> is the
+/// gateway's provider address (<see cref="GatewayFeatures.OidcAuthority"/>), which the wizard offers for rag-admin's authority while
+/// neither the deployment nor the wizard sets one; it is a suggestion only, never a sign-in value, and nothing uses it until a person
+/// tests and saves it as a typed value. Null when the gateway has no address. <see cref="AdminUrl"/> is the gateway admin console's
+/// address for the link to its own wizard (<see cref="OrganisationSync.AdminUrl"/>: the context's <c>admin_url</c>, else
+/// <c>Admin:GatewayAdminUrl</c>).
+/// </summary>
+public sealed record SetupGatewaySignIn(string? SuggestedAuthority, string? AdminUrl)
+{
+    /// <summary>Null while the gateway lacks the feature <c>oidc-authority</c> (an older gateway, or before the first context answer).</summary>
+    public static SetupGatewaySignIn? Of(GatewayFeatures gateway, OrganisationSync organisation)
+    {
+        ArgumentNullException.ThrowIfNull(gateway);
+        ArgumentNullException.ThrowIfNull(organisation);
+        return gateway.Current.Contains(GatewayFeatures.OidcAuthorityFeature) ? new(gateway.OidcAuthority, organisation.AdminUrl) : null;
+    }
+}
+
+/// <summary>
+/// <c>GET /bff/setup/state</c>: rag-admin's sign-in, the gateway's sign-in as a suggestion (null for a gateway without the feature),
+/// its latest test, and Open WebUI's block.
+/// </summary>
 public sealed record SetupStateDto(
     string Kind, DateTimeOffset EndsAt, DateTimeOffset SessionExpiresAt, SignInSettingsDto SignIn, SetupRedirectUris RedirectUris, SetupDeploymentFacts Deployment,
-    SetupTestDto? LatestTest, SetupOpenWebUiState OpenWebUi);
+    SetupGatewaySignIn? Gateway, SetupTestDto? LatestTest, SetupOpenWebUiState OpenWebUi);
 
 /// <summary>
 /// Open WebUI in <c>GET /bff/setup/state</c>: whether the deployment runs it, its sign-in values with their sources, the redirect URI to

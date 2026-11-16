@@ -139,7 +139,7 @@ export function openWebUiState(overrides: Partial<SetupOpenWebUiState> = {}): Se
   return { enabled: false, signIn: openWebUiSignIn(), redirectUri: 'https://chat.example.org/oauth/oidc/login/callback', latestTest: null, ...overrides }
 }
 
-/** `GET /bff/setup/state` of a first run: the window ends in 50 minutes, the session in 25. */
+/** `GET /bff/setup/state` of a first run: the window ends in 50 minutes, the session in 25; the gateway lacks the feature `oidc-authority`. */
 export function setupState(overrides: Partial<SetupState> = {}, now: number = Date.now()): SetupState {
   return {
     kind: 'first_run',
@@ -148,6 +148,7 @@ export function setupState(overrides: Partial<SetupState> = {}, now: number = Da
     signIn: signInSettings(),
     redirectUris: { signIn: 'https://rag-admin.example.org/signin-oidc', signOutCallback: 'https://rag-admin.example.org/signout-callback-oidc' },
     deployment: { gatewayBaseUrl: 'https://gateway.example.org', apiPublicUrl: null, platformAdminGroups: [] },
+    gateway: null,
     latestTest: null,
     openWebUi: openWebUiState(),
     ...overrides,

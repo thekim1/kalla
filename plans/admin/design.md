@@ -1602,6 +1602,11 @@ A section's form is built in two steps:
    *Set by the deployment*. **Test sign-in** opens the provider in a new window; the result shows who signed in, the
    roles, groups and departments the token carried, and whether that person is a platform admin, with the claim that
    was read. A failed step says which (address, discovery, secret, a refused claim check).
+   When neither the deployment nor the wizard sets the authority, the provider address field is filled in with the
+   gateway's address (identity §19), with the hint *From the AI gateway, which signs in at the same provider. You can
+   change it.*; the filled-in value is sent, tested and compared like a typed one. When the gateway has the feature but
+   no address yet and the field is not locked, a note says the gateway's sign-in is not set up yet, with a link to
+   `<gateway admin>/setup` when the admin address is known (new tab); with an older gateway the step is unchanged.
 4. **Open WebUI** (only when the deployment runs it): Open WebUI's redirect URI with a copy button; provider address
    (empty follows the sign-in provider), client id, client secret, optional expiry date, provider name. **Check** asks
    the provider, without a sign-in: the discovery document found, and the client *accepted*, *refused* or *could not

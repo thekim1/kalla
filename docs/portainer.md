@@ -137,7 +137,9 @@ read the CA only at start.
      2. *Addresses*: the redirect URI and the post-logout redirect URI. Register both on the `ume-rag-admin` client at
         the provider now. The page also shows what the stack sets (the gateway's address, rag-api's public address, the
         platform admin groups).
-     3. *Sign-in*: the provider address is locked (*Set by the deployment*: the stack's `UME_OIDC_AUTHORITY`); the
+     3. *Sign-in*: the provider address is locked (*Set by the deployment*: the stack's `UME_OIDC_AUTHORITY`). Where
+        the stack does not set it, the wizard fills in the gateway's provider address when the gateway knows one
+        (*From the AI gateway*; you can change it), so the address is typed once for both. The
         client ID defaults to `ume-rag-admin`; type the client secret and, if you like, the date it expires. *Advanced*
         holds the claim names, with a preset for Keycloak and for Entra ID (the tenant ID). **Test sign-in** opens the
         provider in a new window: sign in there as yourself. The result shows who signed in, the roles, groups and

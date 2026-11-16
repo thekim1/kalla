@@ -34,6 +34,14 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   boot test starts rag-admin without a client secret and checks the wizard up to a setup session. `docs/portainer.md`,
   `production-setup.md`, `kubernetes.md`, the runbook and the upgrade guide describe the wizard, declaring sign-in
   instead, re-opening, and the restore and lock-out cases.
+- **The setup wizard offers the gateway's provider address** (setup wizard S8, identity design §19): rag-admin reads
+  the context's `gateway.oidc_authority` (feature `oidc-authority`; only an absolute https address counts), and
+  `GET /bff/setup/state` carries it as `gateway.suggestedAuthority`, with `gateway.adminUrl` for a link to the gateway's
+  own setup (`gateway` is null for a gateway without the feature). The sign-in step fills it in when neither the
+  deployment nor the wizard sets an authority, says it came from the gateway, and sends it like a typed value; a gateway
+  without an address gets a note with that link. The effective sign-in values and their sources don't change. The
+  FakeGateway's context has `oidc_authority` (null unless `FakeGateway:Gateway:OidcAuthority` is set) and the feature,
+  and `contracts/gateway/integrations.json` is the gateway's unreleased copy with that field.
 
 ## 0.6.0 (2026-11-15)
 

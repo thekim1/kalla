@@ -91,15 +91,25 @@ export function isLocked<K extends string>(values: Record<K, { source: SignInVal
 }
 
 /**
- * The form for `signIn` (`GET /bff/setup/state`): a deployment's value is shown (locked), the wizard's own value is filled
- * in, a default is left empty. With a `tested` test (a reload), the values that test was made with are filled in instead, so
- * the test still counts.
+ * Whether the provider address field takes the gateway's address (`GET /bff/setup/state`'s `gateway.suggestedAuthority`, identity
+ * design §19): the gateway has one, and neither the deployment nor the wizard sets rag-admin's authority.
  */
-export function newForm(signIn: SignInSettings, tested: SetupTest | null = null): SetupForm {
+export function suggestsAuthority(signIn: SignInSettings, suggested: string | null | undefined): suggested is string {
+  return !!suggested && signIn.authority.source === 'default'
+}
+
+/**
+ * The form for `signIn` (`GET /bff/setup/state`): a deployment's value is shown (locked), the wizard's own value is filled
+ * in, a default is left empty, except the authority, which takes the gateway's `suggestedAuthority` when there is one
+ * (`suggestsAuthority`). It is then a typed value like any other: sent, tested and compared as the form holds it. With a `tested`
+ * test (a reload), the values that test was made with are filled in instead, so the test still counts.
+ */
+export function newForm(signIn: SignInSettings, tested: SetupTest | null = null, suggestedAuthority: string | null = null): SetupForm {
   const values = tested?.values ?? null
   const text = (field: TextFieldName): string => {
     if (isLocked(signIn, field)) return signIn[field].value ?? ''
     if (values) return values[field] ?? ''
+    if (field === 'authority' && suggestsAuthority(signIn, suggestedAuthority)) return suggestedAuthority
     return signIn[field].source === 'wizard' ? (signIn[field].value ?? '') : ''
   }
   const scopes = isLocked(signIn, 'extraScopes') ? signIn.extraScopes.value

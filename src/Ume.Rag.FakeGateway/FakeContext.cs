@@ -54,6 +54,7 @@ public static class FakeContext
                 ["admin_url"] = string.IsNullOrEmpty(options.Gateway.AdminUrl) ? null : options.Gateway.AdminUrl,
                 ["integration_api_url"] = (options.Gateway.IntegrationApiUrl ?? ownIntegrationApiUrl) is { Length: > 0 } integrationApi ? integrationApi : null,
                 ["organisation_name"] = string.IsNullOrEmpty(options.Gateway.OrganisationName) ? null : options.Gateway.OrganisationName,
+                ["oidc_authority"] = string.IsNullOrEmpty(options.Gateway.OidcAuthority) ? null : options.Gateway.OidcAuthority,
                 ["features"] = Strings(options.Gateway.Features),
             },
             ["key"] = new JsonObject
