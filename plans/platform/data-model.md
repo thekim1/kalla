@@ -61,9 +61,10 @@ over the local Unix socket, so it needs no network entry (repo-and-deployment §
 
 `max_connections = 100` (`deploy/postgres/postgresql.conf`). Pool sizes are **starting values measured in P0**
 (reasoning: simplification pass §9). The api pool of
-12 serves `Retrieval:MaxConcurrentSearches` **4** = ⌊(pool − 3) ÷ 2⌋ (a search may hold 2 connections while K and V
-overlap; 3 stay for chat writes and the stats flush; knowledge design §6.6); more searches come from more
-instances, not a larger pool. A start-up check of the value against the pool size is still to build (today
+12 serves `Retrieval:MaxConcurrentSearches` **4** = ⌊(pool − 3) ÷ 2⌋: the retrieval engine runs at most 2 × 4 = 8
+statements at once, each on a connection it holds only while the statement runs (a search runs two while K and V
+overlap, and none while it waits for the gateway; 3 stay for chat writes and the stats flush; knowledge design §6.6).
+More retrieval statements at once come from more instances, not a larger pool. A start-up check of the value against the pool size is still to build (today
 `RetrievalEngine` only refuses values below 1). Limits leave room for a second instance of
 api and admin (the P2 a/b slots) and for the worker's stop-then-start; the sum (3 + 26 + 12 + 12 + 3 reserved = 56)
 stays well under `max_connections`. **Budget rule** (P2, first multi-host deployment; reasoning and per-topology
