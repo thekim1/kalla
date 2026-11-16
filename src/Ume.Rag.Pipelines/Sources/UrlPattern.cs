@@ -10,7 +10,9 @@ namespace Ume.Rag.Pipelines.Sources;
 /// case-sensitive. <c>re:&lt;regex&gt;</c> is a .NET regular expression, non-backtracking. Matching has no timeout: the
 /// non-backtracking engine is linear in the input, and a timeout under CPU load used to count as "no match", so an
 /// <c>exclude</c> pattern could let an excluded page into the crawl (session 13). Shared by the crawler and retrieval's
-/// <c>demote</c> (<c>Sources.DemoteRules</c>), so both match alike (#102).
+/// <c>demote</c> (<c>Sources.DemoteRules</c>), so both match alike (#102). A glob written with a leading <c>http://</c> or
+/// <c>https://</c> (an address pasted from the browser) matches as the same glob without it (<see cref="Normalize"/>):
+/// the URL is matched without its scheme, so with the scheme kept the glob could match nothing.
 /// </summary>
 public sealed class UrlPattern
 {
@@ -31,6 +33,30 @@ public sealed class UrlPattern
     /// <summary>The compiled expression's match timeout (tests).</summary>
     internal TimeSpan Timeout => _regex.MatchTimeout;
 
+    /// <summary>
+    /// The glob <paramref name="pattern"/> matches as: trimmed and without a leading <c>http://</c> or <c>https://</c> (any
+    /// case). A <c>re:</c> pattern is returned unchanged.
+    /// </summary>
+    public static string Normalize(string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        if (pattern.StartsWith(RegexPrefix, StringComparison.Ordinal))
+        {
+            return pattern;
+        }
+
+        var glob = pattern.Trim();
+        foreach (var scheme in (ReadOnlySpan<string>)["https://", "http://"])
+        {
+            if (glob.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+            {
+                return glob[scheme.Length..];
+            }
+        }
+
+        return glob;
+    }
+
     /// <summary>Parses <paramref name="pattern"/>; a <c>re:</c> pattern that is not a valid expression throws <see cref="ArgumentException"/>.</summary>
     public static UrlPattern Parse(string pattern)
     {
@@ -40,9 +66,10 @@ public sealed class UrlPattern
             return new(pattern, new Regex(pattern[RegexPrefix.Length..], RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, MatchTimeout));
         }
 
-        var slash = pattern.IndexOf('/', StringComparison.Ordinal);
-        var host = slash < 0 ? pattern : pattern[..slash];
-        var rest = slash < 0 ? string.Empty : pattern[slash..];
+        var glob = Normalize(pattern);
+        var slash = glob.IndexOf('/', StringComparison.Ordinal);
+        var host = slash < 0 ? glob : glob[..slash];
+        var rest = slash < 0 ? string.Empty : glob[slash..];
         var expression = new StringBuilder("^(?i:");
         AppendGlob(expression, host);
         expression.Append(')');
