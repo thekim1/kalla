@@ -166,6 +166,7 @@ api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(Ad
 api.MapClients();
 api.MapCollections();
 api.MapCollectionSharing();
+api.MapDepartmentMoves();
 api.MapSetup();
 api.MapFeedback();
 api.MapEvaluation();

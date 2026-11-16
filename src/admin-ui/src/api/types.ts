@@ -268,6 +268,22 @@ export interface Team {
   isActive: boolean
 }
 
+/** A move to another department (#811, admin design §3.2): the impact's token is required by the move. */
+export interface MoveRequest {
+  departmentId: string
+  ownerTeamId: string | null
+  gatewayKeyId: string | null
+  version: string
+  impactToken?: string
+}
+
+/** What a move does: the shares it adds to keep links working, and the sources that block it (then no token). */
+export interface MoveImpact {
+  shares: { collectionId: string; collection: string; departmentId: string; department: string }[]
+  sourcesOnDepartmentPipelines: string[]
+  impactToken: string | null
+}
+
 export interface Department {
   id: string
   name: string

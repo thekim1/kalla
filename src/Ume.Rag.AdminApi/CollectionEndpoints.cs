@@ -347,7 +347,7 @@ public static class CollectionEndpoints
 
     /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
     /// <summary>V39 (admin design §4.6): the collection's gateway key against its models at its level's ceiling.</summary>
-    private static async Task CheckGatewayKeyAsync(AdminContext admin, Collection collection, GatewayModelCheck models, CancellationToken ct) =>
+    internal static async Task CheckGatewayKeyAsync(AdminContext admin, Collection collection, GatewayModelCheck models, CancellationToken ct) =>
         AssistantEndpoints.Refuse(await GatewayKeyRules.CheckAsync(admin, collection.GatewayKeyId, collection.DepartmentId,
             ResidencyCeiling.ForLevel(collection.Classification), await GatewayKeyRules.CollectionModelsAsync(admin, collection, ct), ct, models));
 

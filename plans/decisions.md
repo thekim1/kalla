@@ -885,6 +885,21 @@ changeable under ⋯. The Map is a table in P1b. Detail: `admin/design.md`
 *From:* log rows 62, 73, 86, 101; decided by user, 2026-11-05.
 *Also:* "M-2 open design calls", "Organisation: department-owned, municipality-shared knowledge bases with topics"
 
+### Moving to another department
+
+A platform admin can change the owner department of a knowledge base or an assistant, to correct one created under the
+wrong department; department admins cannot. The move keeps every link working: it shares the knowledge base with each
+department whose assistants would otherwise lose it (the old department when a knowledge base moves; the new one, for
+each linked knowledge base it cannot reach, when an assistant moves), and those shares stay until someone removes them
+under Sharing (V35 still guards that). The moved object takes an owner team and a gateway key of the new department, or
+none (V39 unchanged: a published assistant needs a key once the gateway acts as keys). A knowledge base whose sources use
+a pipeline of the old department is not moved until they use a platform pipeline or one of the new department. History
+stays where it was: cost and usage rows keep the department of their calls, and audit entries their department; the
+move itself is audited under both. The admin sees what the move changes and confirms it. Detail: `admin/design.md`
+§3.2, §4.5.
+
+*From:* decided by user, 2026-11-17 (#811).
+
 ### Level change in the edit drawer
 
 A level is changed in the item's edit drawer under `edit`; the API's checks run as before and their refusals show

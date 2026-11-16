@@ -173,6 +173,29 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
   collection's name, owning department, level, contact and topics (§4.5), never its sources, documents, settings or
   evaluation, and cannot edit or publish it. Narrowing the sharing is refused while another department's published
   assistant links the collection (V35).
+- **Changing the owner department** (Decisions "Moving to another department"; `Admin` only, #811): *Change
+  department* on a knowledge base or an assistant moves it, its sources, documents, runs, versions and test questions
+  with it. First `…/move/impact` says what the move does, then `…/move` does it with the impact's token (a hash of the
+  object's id, version, the request and the shares to add, so a change in between answers `move_not_confirmed`).
+  - **Links kept.** A knowledge base moving out: every department whose assistants (published version or draft, archived
+    ones too) link it, other than the new owner, must reach it afterwards; a department it doesn't reach gets a share
+    (level *only our department* becomes *selected departments* with just those shares, after dropping the stale rows
+    kept at that level). The new owner's own share row goes. An assistant moving: each knowledge base its published
+    version or draft links, owned by another department and not shared with the new one, gets a share for the new one.
+    The shares are listed in the impact and audited `share` on each knowledge base, with `reason: move`.
+  - **Owner team and key**: the request names an owner team of the new department (or none) and a gateway key of the
+    new department (or none); V39 checks the key as on save, and a published assistant without a key is refused once
+    the gateway acts as keys (`gateway_key_required`).
+  - **Pipelines**: a knowledge base with a live source on a pipeline of the old department is refused
+    (`move_pipeline_department`, listing the sources).
+  - **What stays**: cost and usage rows (`AssistantDailyUsage`, `AssistantDailyTotals`, `CollectionDailyUsage`) keep
+    the department of their calls, by day: the row of the move day is one per object and step, so an assistant's keeps
+    the department of its first call that day and a knowledge base's takes the department of its last; audit entries
+    keep theirs. Queued jobs keep their fairness department until they
+    run. Client keys scoped to a moved assistant keep their scope. Department parse rules follow the knowledge base's
+    department from the next parse.
+  - **Audit**: `move` on the object under the new department, with `fromDepartmentId`/`toDepartmentId`, and the same
+    entry under the old department, so both departments' admins see it.
 - **Topics**: the tags the sources' path rules put on chunks (processing §7). A link from an assistant to a collection
   may name topics; retrieval then keeps only that collection's chunks carrying one of them (knowledge §4.2, §6.2).
 - **Ownership of shared content**: content used across the municipality is owned by the department that runs it (umea.se:
@@ -350,6 +373,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
+| `POST /api/collections/{id}/move/impact`, `POST /api/collections/{id}/move` | Admin | §3.2 *Changing the owner department*: body `{ departmentId, ownerTeamId, gatewayKeyId, version }` (+ `impactToken` on the move); the impact answers `{ shares: [{ collectionId, collection, departmentId, department }], sourcesOnDepartmentPipelines: [...], impactToken }`; the move answers the collection's detail |
 | `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification, contact, optional `gatewayKeyId` (V39); profile = default; an empty owner team becomes the creator's first active team in the department by name (from the `teamCodes` claim), none when the creator has no team there; the owner's detail (`shared: false`) carries `sharedWith`, `sharedWithDepartmentIds` (with `selected`) and `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Affects the assistants: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); also refused while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first. A department the collection is shared with gets the shared summary of the list row (`shared: true`) from `GET …/{id}`, the read-only Overview of §5.5.2; every other route of the collection answers it 404 |
 | `GET /api/collections?view=mine\|shared\|all` | Read | `mine` (default): the caller's departments' collections; `shared`: collections of other departments shared with one of the caller's departments or with the municipality, as the shared summary (name, owning department, level, contact, document count, topics; no sources); `all`: both. The assistant's collection picker reads `all` |
 | `PUT /api/collections/{id}/sharing` `{ sharedWith, departmentIds, version }` | Manage | `sharedWith` = `department`/`selected`/`municipality`; `departmentIds` only with `selected`, at least one, active departments other than the owner (otherwise 400 `invalid_value`); at the other levels the share rows are kept but unused; narrowing is refused (V35) with the linking assistants and their departments; audited `collection.share`; the detail's `usedBy[]` lists other departments' assistants too |
@@ -433,6 +457,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
+| `POST /api/assistants/{id}/move/impact`, `POST /api/assistants/{id}/move` | Admin | §3.2 *Changing the owner department*, as for a collection; the move answers the assistant's detail |
 | `GET/POST /api/assistants`, `GET/PUT/DELETE /api/assistants/{id}` | Read / Edit / Manage (delete) | the assistant's own fields, saved directly under the V-rules: name, slug, owner team, `gatewayKeyId` (V39), classification (a change to `public` with general knowledge on takes `confirmGeneralKnowledge`, V36), **description** (≤ 500 characters) and **contact** (`ContactName`, `ContactEmail`); create takes an optional `templateId` (P2, weakness review §1) and starts with only a draft prefilled from the template (or `Settings.Chat` defaults), so `PublishedVersionId` is null and no client lists it; the detail carries `state` (`active`/`archived`), `publishedVersion`, `draft { number, updatedAt, baseChanged }`, `usesTools` (derived, never written: a linked skill's served version links a tool not excluded) and `lastUsedAt` |
 | `GET/PUT/DELETE /api/assistants/{id}/draft` | Read / Edit / Edit | the version fields: instructions, model, collection links (`collectionLinks: [{collectionId, tags[]}]`; one link per collection, the first wins; topics trimmed and de-duplicated, otherwise kept as typed, so a bad topic stays in the draft as a V11 `topic_invalid` warning), skills (with excluded tools), query steps, P2 agent limits, not-found texts and links. One draft per assistant (`DraftVersionId`), created on the first edit as a copy of the published version with `Number` + 1; saving applies field rules and returns the assistant V-rules as `warnings[]` (never refused, so work in progress can be saved); `DELETE` discards it |
 | `POST /api/assistants/{id}/publish` `{ draftVersion, version, confirmBaseChanged?, confirmGeneralKnowledge? }` | Edit | V34, then every assistant rule (V3–V17, V39) as refusals and V8's `/v1/models` call; one transaction (§4.4) marks the draft `published` and the previous one `superseded`, sets `PublishedVersionId` and clears `DraftVersionId` (data-model §2.1); starts the test run (§7.4; P2). A draft created before the current published version (a restore happened since; its `Number` is lower) answers 409 `draft_base_changed` (with the diff from P2) until confirmed |
