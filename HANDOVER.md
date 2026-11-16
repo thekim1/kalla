@@ -2,8 +2,8 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.6.0`** (2026-11-15); the user's VM runs 0.5.0 and the user is to upgrade it to 0.6.0. `main` is well
-past 0.6.0: the setup wizard's stage 1 (M-20) is on it, shown by a release dry run, unreleased; #783 and #784 came
-after that dry run. Repo `~/research/rag` on
+past 0.6.0: the whole setup wizard (M-20, both stages, on the gateway's `v0.11.0`) is on it, shown by a release dry
+run with the browser tests, unreleased. Repo `~/research/rag` on
 this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -27,43 +27,31 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 45): finish Ume.Rag's side of stage 2 on the gateway's release
+## Start here (session 45): the setup wizard is done; a release is the next step
 
-The setup wizard (M-20) has two stages. **Stage 1** (Ume.Rag and Open WebUI; a deployer types 5 values and no secret)
-is on `main`, shown by a release dry run, unreleased. **Stage 2** (one typed value, `UME_DOMAIN`) is **built on a
-branch, draft pull request #786** (`main-session/m20-s8-stage2`), and waits for the gateway's release with its three
-pull requests, **all merged 2026-11-16; the release is the user's to cut** (below).
+**M-20 is ticked** (#786, 2026-11-16): a deployer types one value, `UME_DOMAIN`, and no secret, and sets sign-in in two
+setup wizards, the gateway's first. `main` carries it on the gateway's `v0.11.0`, unreleased.
 
-### 1. What #786 holds, and what is left (M-20 S8)
+### 1. What stage 2 is, and what is not shown
 
-- **Built in session 44** (the pull request's body has each point and its evidence):
-  - `stack.env.example` has 1 CHANGE value; the gateway's four are commented overrides.
-  - `build-stack.sh` rewrites the gateway's one `UME_INTEGRATION_MANIFEST` line to a default
-    (`deploy/portainer/integration-manifest.json`, no owner; `-`, so unset only). All five host names come from
-    `UME_DOMAIN`; rag-admin gets `Admin__GatewayAdminUrl` (`UME_ADMIN_PUBLIC_URL`, else `https://<admin host>`, else
-    empty).
-  - The setup state reads the gateway's context again when it would suggest no address (5 s per instance, 2 s wait),
-    and the wizard page reads the state again when its tab is shown again (identity §19, on the branch).
-  - The deploy tests and the operators' docs.
-- **Left, in this order, when the gateway has released:**
-  1. Rebase on `main`, then `sh deploy/portainer/build-stack.sh <release>` and commit the stack (today it is built from
-     a local merge of the gateway's three pull requests, so `deploy-checks` fails on the branch).
-  2. Replace the token `GATEWAY_NEXT` (six places in `docs/portainer.md` and `docs/upgrade-guide.md`) and
-     `contracts/gateway/README.md`'s source line (the contract file already equals the merged gateway's).
-  3. **The boot-only run** (handbook *Release dry runs*): `portainer-boot.sh` was rewritten (only `UME_DOMAIN`; the
-     gateway's wizard first) and **has never run**. Expect a round or two of fixes.
-  4. `e2e.yml` through the wizard, mark #786 ready, merge, tick M-20.
-- **Decided by the user** (2026-11-16, Decisions "Setup wizard", the stage 2 points): the rewrite of the gateway's one
-  manifest line stays; rag-admin's default address of the gateway's admin stays; the boot test with no sign-in value
-  is accepted, Open WebUI's OIDC start being `e2e.yml`'s to show. #786's *Design deviations* can say "decided".
-- **Known from session 44:**
-  - A default with braces needs Compose 2.24.7 or later; older ones cut the value at the first `}` without an error,
-    also when the variable is set. Portainer pins a later one from 2.21 (read, not run). Not yet seen on the runner.
-  - A stack without `UME_INTEGRATION_MANIFEST` (0.5.x style) gets the default: three unused keys unless the variable is
-    set empty first (in the upgrade steps).
-  - The stack on #786 is byte for byte what the gateway's `main` (`70122b4`, all three merged) gives, and the contract
-    file equals `main`'s. Until the release, rebuild with `git -C ~/git/llmgateway show
-    origin/main:deploy/compose.portainer.yaml > <file>` and `build-stack.sh <file>`.
+- **Built in session 44:** `stack.env.example` has 1 CHANGE value; `build-stack.sh` rewrites the gateway's one
+  `UME_INTEGRATION_MANIFEST` line to a default (`deploy/portainer/integration-manifest.json`, no owner; unset only);
+  all five host names come from `UME_DOMAIN`; rag-admin's default address of the gateway's admin; the setup state reads
+  the gateway's context again when it would suggest no address, and the wizard page reads the state again when its tab
+  is shown again (identity §19); the deploy tests; the operators' docs. The three open points were decided by the user
+  (Decisions "Setup wizard", the stage 2 points).
+- **Shown:** release dry run [43857593918](https://github.com/thekim1/ume-rag-platform/actions/runs/43857593918) from
+  the branch with `e2e=true`, all green: the boot test with no sign-in value set (the gateway's wizard first; the JSON
+  default on the runner's Compose), `e2e.yml` through the wizard. The pull request's own checks were green (backend:
+  3696 tests).
+- **Not shown:** Portainer itself; both wizards completed in one deployed stack against a real provider (the boot test
+  has none, so it stops at each wizard's state; the suggestion's re-read is covered by unit tests and specs only); a
+  boot of an upgraded 0.6.0 stack; Open WebUI starting with OIDC in the Portainer stack (accepted: `e2e.yml` shows it).
+- **Known:** a default with braces needs Compose 2.24.7 or later (older ones cut the value without an error);
+  Portainer pins a later one from 2.21 (read, not run). A stack without `UME_INTEGRATION_MANIFEST` (0.5.x style) gets
+  the default: three unused keys unless the variable is set empty first (`docs/portainer.md`, *Upgrade from 0.6.0*).
+- **Next:** a release with the wizard (0.7.0) when the user wants it; `main` is ready for a tag (the dry run above was
+  on the merged content). Then the user's VM: from 0.5.0 through 0.6.0 by the guides.
 
 ### 2. The gateway's pull requests (the main session may not merge in the gateway's repository)
 
@@ -79,7 +67,8 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
 - **#104** (WG4, closes #101: `integration.owner` optional in a manifest, with a default owner team and department
   made from the name; an integration moves to another team with its credential keys; the Ume.Rag preset names no
   owner): **merged** 2026-11-16.
-- **Then a gateway release** with all three. Latest today: `v0.10.3`.
+- **Released as `v0.11.0`** (2026-11-16; release preparation #107, approved by the main session as `ume-nichlas`,
+  merged and tagged by the user).
 - **A flaky gateway test, not caused by these:** `ClientAddressTests.Forwarded_address_is_used_only_through_a_trusted_proxy`
   failed in 2 of 8 local runs of `Gateway.Tests` (it writes the shared settings row, as `AccountingTests` does). Its
   rate on the gateway's `main` was not measured. If a CI run fails on it, re-run the job.
@@ -144,8 +133,8 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
 
 ### Also open (not this work)
 
-- **A release with the wizard** (0.7.0): stage 1's dry run is green, so `main` can be tagged when the user wants it
-  (before or after stage 2); C13 (the M-16 session, #667) was planned for 0.6.1.
+- **A release with the wizard** (0.7.0): both stages are on `main`; C13 (the M-16 session, #667) was planned for
+  0.6.1.
 - **The user's upgrade to 0.6.0** (`docs/portainer.md`, *Upgrade from 0.5.x to 0.6.0*). Before it, rag-api's and
   rag-admin's credential keys get `OnPrem` and `Eu`, and each published assistant needs a gateway key that reaches both
   its chat model and its embedding model. Pulls that say "denied": `docker logout ghcr.io`.
@@ -162,9 +151,7 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
 - **Release:** `v0.6.0` published 2026-11-15 ([run 43720085132](https://github.com/thekim1/ume-rag-platform/actions/runs/43720085132)),
   tag at `d5029e29`; `deploy/portainer/` on `main` is ahead of it (the wizard's stack file: don't hand it to a 0.6.0
   deployment; the `v0.6.0` release asset is the file for 0.6.0).
-- **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 5 on `main` (no secret:
-  `UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`, `UME_ADMIN_HOST`, `UME_DOMAIN`) → 1 after the
-  gateway's release and Ume.Rag's stack on it.
+- **What a deployer types in Portainer:** 9 values at 0.6.0 (two secrets) → 1 on `main` (`UME_DOMAIN`, no secret).
 - **New on `main`, unreleased:** migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings` (additive);
   security events 6008–6013 and 5001 `callback_failed`; `GET /api/settings/sign-in`, `GET/PUT
   /api/settings/openwebui`, `/bff/setup/*` (its state now with `gateway`), rag-api's `GET

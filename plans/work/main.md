@@ -87,7 +87,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   (#740, replaces #732: `integration_api_url` from the context, key sent only over `https`). Left: C13. The M-16 session
   continues and announces each step on #667.
 
-### [ ] M-20 Setup wizard: sign-in and the last deploy values set in the browser (user, 2026-11-15)
+### [x] M-20 Setup wizard: sign-in and the last deploy values set in the browser (user, 2026-11-15)
 - **Do:** the steps S0–S8 of [`../proposals/setup-wizard.md`](../proposals/setup-wizard.md) §8 in their order, one PR
   per step, on `main-session/m20-<step>` branches: the main session builds all of it, stream b's paths included (user,
   2026-11-15; announced on an issue). The rules are Decisions "Setup wizard", identity §19 and admin §5.11.
@@ -121,6 +121,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   told on #759. **Ume.Rag's side of stage 2 is built** (session 44, draft #786: 1 CHANGE value, the
   manifest as the stack file's default, the gateway's wizard first in the boot test, the docs); it is finished on the
   gateway's release (HANDOVER has the steps).
+- **Done** 2026-11-16 (#786, on the gateway's `v0.11.0`): `stack.env.example` has 1 CHANGE value and no secret
+  (asserted by `deploy/tests/portainer-hosts.sh`); the release dry run from the branch with `e2e=true` is green
+  ([43857593918](https://github.com/thekim1/ume-rag-platform/actions/runs/43857593918)): the boot test passes with no
+  sign-in value set, the gateway's wizard first, and `e2e.yml` passes through the wizard (`setup.spec.ts`, 9 passed).
 
 ### [x] M-21 Deployment values across releases: retired variables named, a notice on Home (user, 2026-11-16)
 - **Do:** Decisions "Deployment values across releases" and admin §5.5.1 (*Deployment notices*), on a

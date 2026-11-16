@@ -77,8 +77,9 @@ Each becomes a queue item when the main session picks it up.
   five processes, and a pull request with only admin UI or browser-test changes skips the job. Left: what the test
   collections of one process wait for (not CPU, thread pool, disk or GC; a profiler would say), and one
   `WebApplicationFactory` per class (#580 note to stream b).
-- **Setup wizard** (`work/main.md` M-20): stage 1 is on `main`, shown by a release dry run, unreleased (a deployer
-  types 5 values and no secret). Stage 2 (1 value) waits on the gateway: thekim1/llmgateway#98–#101.
+- **Setup wizard** (`work/main.md` M-20): done on `main`, unreleased (#786, 2026-11-16): a deployer types 1 value,
+  `UME_DOMAIN`, and no secret, and sets sign-in in two setup wizards, the gateway's first (gateway `v0.11.0`). Shown by a
+  release dry run with the browser tests; not tried in Portainer itself.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
   only what a process can't start without; C0–C10 and C12 merged (C7 and C12 on the gateway's v0.10.2); C11 in review (#740); C13 left.
