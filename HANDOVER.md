@@ -93,9 +93,8 @@ directory at the first `up`. The design passages session 46 left as they are (`r
 2. **Dependabot's first pull requests** after #819: check that it can read the manifests at all (central package
    management, `.npmrc` with `min-release-age`, digests with tags). A bump also moves the pin where it is repeated
    (`.github/dependabot.yml`'s header lists the places).
-3. **#811** (labelled `main`): admins change the owner department of a knowledge base or an assistant. A design item:
-   the main session's recommended rules are in a comment on the issue, for the user to confirm; then admin design and
-   data-model, then a queue item for the streams.
+3. **#821** (the other machine's, for #811: platform admins move a knowledge base or an assistant to another
+   department). The main session's review was in work when the session ended: check the pull request for it.
 4. **M-22 S6.**
 
 Before a stream's paths: check for open `a/` or `b/` work and say so on the issue (handbook).
@@ -107,7 +106,6 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   *Upgrade* (steps 2 to 4 are the 0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups).
   Until then the two-step path of `v0.7.0`'s guide holds (0.6.0's file first). Pulls that say "denied":
   `docker logout ghcr.io`. Portainer's own *Update the stack* has still never been run on an upgraded stack.
-- **#811's rules** (above).
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): the user picks; the suggestion is
   F3, F4, F8 and F10.
 - **The roadmap's T0 row** says *open* though T1, which depends on it, is deployed: the user knows its state.
@@ -232,7 +230,7 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   `GET /api/overview` gains `secretExpiry` and `deploymentNotices`; `UME_DOMAIN`, `UME_RAG_SETUP_REOPEN`,
   `Setup__Secret`; Open WebUI starts through `deploy/openwebui/start-with-sign-in.py`.
 - **Open issues that matter:** #781 (watch), #805 (a flaky worker test teardown), #811 (move to another department,
-  a design item), #818 (the image scan's findings), #667 (M-16; C13 is done with #800), #333 (the exact-scan and
+  built in #821), #818 (the image scan's findings), #667 (M-16; C13 is done with #800), #333 (the exact-scan and
   recall checks on the test host); #506, #507, #792, #793, #797 and #807 close with their pull requests.
 - **Ume.Rag on this machine:** the local stack is stopped. Worktrees: `~/research/rag-small` (the main session's
   second checkout, on whatever branch was last worked on) and, under `.claude/worktrees/`, `agent-a17f…` (the fence,
