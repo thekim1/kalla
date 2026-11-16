@@ -216,13 +216,57 @@ its first start and never opens the wizard; a re-open shows those values locked.
 The stack's variables are readable by everyone who may edit the stack; the wizard keeps the secrets encrypted in the
 database instead.
 
-## Upgrade to the release with the setup wizard
+## Upgrade from 0.6.0
 
-A stack that has its authority and `UME_RAG_OIDC_CLIENT_SECRET` in its variables keeps working and never sees the
-wizard: paste the new file and update the stack. Open WebUI's variables keep working too; they now feed rag-api and
-rag-admin. If you changed a token-shape variable (`UME_RAG_OIDC_ROLE_CLAIM` and the others), keep it: the stack file no
-longer sets their defaults, so only the variables you set are passed. To move to the wizard, and the secrets out of the
-stack's variables: the [upgrade guide](upgrade-guide.md#unreleased) has the steps.
+To the release after 0.6.0, the one with the setup wizard. **A rolling update:** its migrations only add columns and a
+table, so nothing is stopped first; Open WebUI restarts once. The gateway moves to `v0.10.3` (rolling, no migration).
+**Your stack keeps its variables and never sees the wizard:** with the authority and `UME_RAG_OIDC_CLIENT_SECRET` in
+the stack, rag-admin counts setup as done at its first start. Every change and why:
+[upgrade-guide.md](upgrade-guide.md#unreleased). From 0.5.x, do *Upgrade from 0.5.x to 0.6.0* first.
+
+**Before the update**
+
+1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 10.
+2. **Look through the stack's variables:**
+   - `UME_RAG_OIDC_CLIENT_SECRET` and `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` must hold the real secrets, as they do in
+     a working 0.6.0 stack. A leftover `CHANGE` declares a wrong secret and keeps the wizard closed;
+   - a token-shape variable you changed (`UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`,
+     `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS`, `_CLIENT_ID`): keep the line. The new file passes each only when
+     it is set; unset, the code's default applies, which is the old file's default.
+
+**The update**
+
+3. **Edit the stack:** paste the new file over the old one (keep the stack name). **No variable has to be added or
+   changed.** The host names stay as they are: `UME_DOMAIN` is only for new stacks, or to replace the three
+   `UME_RAG_*_HOST` lines later (set it and remove the lines whose value is its default: `rag.`, `rag-admin.` and
+   `chat.<domain>`).
+4. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `migrations`; `rag-bootstrap`, which
+   writes `admin/Setup__Secret` and Open WebUI's client secret as files for rag-api and rag-admin; `rag-migrate`
+   (migrations `IdentityOidcSettings`, `SetupMode`, `OpenWebUiSignInSettings`); then the services. Open WebUI now
+   starts through a wrapper that asks rag-api for its sign-in settings.
+
+**After the update**
+
+5. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing, and says *sign-in to Ume.Rag's admin is
+   declared by the stack's variables …, so the setup wizard stays closed*.
+6. **Check:**
+   - rag-admin's log has *The deployment declares the sign-in* once, and **no** line with *Setup code*;
+   - you sign in to Ume.Rag's admin as before;
+   - `rag-openwebui`'s log has *starting with OIDC sign-in from rag-api's sign-in settings*, Open WebUI's sign-in page
+     shows the button, and a test user signs in and gets an answer;
+   - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them.
+
+**If rag-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
+`UME_RAG_OIDC_CLIENT_SECRET` is missing or empty. Either add it and update the stack, or use the wizard (*First
+deploy*, from the setup code on): both end in a working sign-in.
+
+**Optional, afterwards: move the client secrets out of the stack's variables** and into the wizard, where they are
+stored encrypted. In one go, because sign-in is incomplete in between:
+
+1. Remove `UME_RAG_OIDC_CLIENT_SECRET` (and `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`), set `UME_RAG_SETUP_REOPEN` to a
+   new value (for example today's date) and update the stack.
+2. Open `https://<admin host>/setup` with the setup code from rag-admin's log, type the secrets, test the sign-in and
+   finish. Keep `UME_OIDC_AUTHORITY`: the gateway shares it, and it stays locked in the wizard.
 
 ## Upgrade from 0.5.x to 0.6.0
 

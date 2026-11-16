@@ -627,6 +627,10 @@ jobs:
         # UME_DOMAIN, each UME_RAG_*_HOST overrides its own, the names alone work as before (never a name ending in a dot),
         # and with neither the stack refuses to render, naming both.
         run: bash deploy/tests/portainer-hosts.sh
+      - name: The Portainer stack renders with the previous release's variables
+        # docs/portainer.md, "Upgrade from 0.6.0": paste the new file, keep your variables. Offline: with v0.6.0's
+        # variables the stack renders, the sign-in stays declared (no setup wizard) and every name and URL is unchanged.
+        run: bash deploy/tests/portainer-upgrade.sh
       - name: The certificate expiry check warns 60 days ahead
         # #705: deploy/host/cert-expiry.sh (rag-cert-expiry.timer) passes on fresh certificates, writes certs.prom, and
         # fails naming the certificate that expires within 60 days.

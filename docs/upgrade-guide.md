@@ -45,18 +45,25 @@ exception, with its own steps.
     WebUI's start; they keep working as deployment values. `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui` may go (it is
     the default; set, it locks the wizard's field). Without a client secret Open WebUI signs in as a public client
     (PKCE). A confidential client's secret stays in the stack, or is entered in the wizard's Open WebUI step after a re-open.
-  - **Portainer apply:** paste the new `compose.portainer.yaml` and update the stack (`rag-bootstrap` writes
+  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade-from-060). In short: paste the new `compose.portainer.yaml` and update the stack (`rag-bootstrap` writes
     `admin/Setup__Secret`, and Open WebUI's secret to rag-api's and rag-admin's secret files). A leftover
     `UME_RAG_OIDC_CLIENT_SECRET=CHANGE` declares a wrong secret and keeps the wizard closed: `rag-bootstrap`'s checklist
     names it; remove it.
-  - **Compose apply:** re-run `init-deployment.sh` with your options and **`--openwebui-oidc-client-secret-file`
-    again** (the secret moved to `secrets/api` and `secrets/admin/OpenWebUi__Oidc__ClientSecret`; the old
-    `OAUTH_CLIENT_SECRET` line in `secrets/openwebui.env` is no longer read and may be deleted). Pass
-    `--openwebui-oidc-client-id` and `--openwebui-oidc-provider-url` only if they differ from the defaults. The
-    `--oidc-*` options are optional and never prompted; a re-run without `--oidc-authority` or `--oidc-client-id` keeps
-    the value in `deploy/.env`. With the host firewall, keep `--oidc-authority`: rag-admin reaches only that provider.
-    Then `dc up -d` and `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. A provider on
-    another host than the authority needs `--allow openwebui=HOST` for the host firewall.
+  - **Compose apply** (an existing 0.6.0 deployment; steps 1–3 and 7–8 of *Upgrade procedure* below stay as they are):
+    1. Replace `deploy/` with the release's, keeping `deploy/.env`, `deploy/certs` and `deploy/secrets`, and set the
+       image pins.
+    2. Re-run `init-deployment.sh` with your options. The `--oidc-*` options are optional and never prompted; a re-run
+       without `--oidc-authority` or `--oidc-client-id` keeps the value in `deploy/.env`, and the client secret file
+       in `secrets/admin` stays, so the sign-in stays declared and the wizard stays closed. It writes
+       `secrets/admin/Setup__Secret`. With the host firewall, keep `--oidc-authority`: rag-admin reaches only that
+       provider.
+    3. With Open WebUI: pass **`--openwebui-oidc-client-secret-file` again**. The secret moved to `secrets/api` and
+       `secrets/admin/OpenWebUi__Oidc__ClientSecret`; the old `OAUTH_CLIENT_SECRET` line in `secrets/openwebui.env` is
+       no longer read and may be deleted. Pass `--openwebui-oidc-client-id` and `--openwebui-oidc-provider-url` only
+       if they differ from the defaults. A provider on another host than the authority needs `--allow openwebui=HOST`
+       for the host firewall.
+    4. If you used `UME_RAG_OIDC_REFUSE_GUESTS` in `deploy/.env`: pass `--oidc-refuse-guests true|false` instead.
+    5. `dc up -d --wait`, then `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`.
   - **Kubernetes apply:** `create-secrets.sh` after the re-run of `init-deployment.sh` (it carries
     `admin/Setup__Secret`), then `deploy.sh`. The base no longer sets `Oidc__ClientId`, the claims, `Oidc__ExtraScopes__0`
     or `Oidc__RefuseGuests`: add to your overlay any of them you had changed.
