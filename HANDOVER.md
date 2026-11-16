@@ -55,6 +55,22 @@ WG4 touches neither. Its rate on the gateway's `main` was not measured. If a lat
 The pull request's `CHANGELOG.md` and `docs/upgrade-guide.md` *Unreleased* sections conflict with #102/#103 at merge:
 keep every entry.
 
+### 1b. The gateway pull requests were reviewed (thekim1, 2026-11-16) and answered
+
+- **#102:** approved, nothing to do.
+- **#104:** approved with two suggestions, both done in `d47c83c` (neutral example names; a doc note that an ownerless
+  integration named like a team's code joins that team). **The push dismissed the approval:** it needs a new one. CI
+  green on the new commit.
+- **#103** (still a draft): four findings, answered in `bc752b8` and a comment on the pull request. Fixed: the sign-in
+  start, callback and sign-out read the sign-in values at most once every 2 seconds per instance
+  (`AdminSignIn.SignInRefreshInterval`), a setup test's callback answers 404 without a read while setup is closed and is
+  limited to 20 a minute per address while open (`SetupCallbackThrottle`), and completing compares the claim mapping
+  the test ran with. Documented, not changed in code: on Kubernetes a deployment that declares `Oidc__Authority` sets
+  `Gateway__OidcAuthority` too (the reviewer may prefer clearing the stored authority; asked). Backend tests pass
+  (AdminApi 440, Domain 599, DataApi 29, IntegrationTests 64, Gateway 491); the browser test and the UI gate were not
+  re-run (no UI file changed). **Ume.Rag has the same shape** (rag-admin's sign-in refresh and setup callback, #762,
+  #767): check whether it reads the settings on every anonymous callback too, and bound it the same way.
+
 ### 2. Waiting for the user (the main session may not merge in the gateway's repository)
 
 - **Merge thekim1/llmgateway#102** (WG1 `UME_DOMAIN` for the gateway's hosts, WG2 `gateway.oidc_authority` in
@@ -133,8 +149,6 @@ nobody** (they stay readable), so it adds nothing to the list. Not looked at in 
   deploy files pin no provider host; an operator's own egress firewall must allow the provider.
 - **The gateway's Data API does not follow the wizard:** a gateway whose sign-in is set in the wizard sets
   `UME_DATA_AUTHORITY` for access tokens.
-- **The gateway's test callback is not rate limited per address** (one indexed update per request, only while setup is
-  open).
 - `GET /internal/openwebui/sign-in` is closed at the Portainer proxy; in Compose only the managed client's key opens
   it (Open WebUI calls rag-api by its public address there).
 - **CI:** what `AdminApi.Tests`' collections wait for inside one process is not found; attaching a profiler
