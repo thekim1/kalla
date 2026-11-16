@@ -250,7 +250,19 @@ rag-api and exits when they change. It covers Portainer, Compose and Kubernetes;
 repository. The main session builds it, stream b's paths included (user, 2026-11-15). Detail:
 `identity/design.md` §19; `admin/design.md` §5.11; `proposals/setup-wizard.md`; work: `work/main.md` M-20.
 
-*From:* decided by user, 2026-11-15 (session 40, W1–W10; agreed after an independent review).
+In the Portainer stack (stage 2, one typed value, `UME_DOMAIN`):
+
+- **The integration manifest is the stack file's default.** `deploy/portainer/build-stack.sh` rewrites one line of the
+  gateway's part, its bootstrap's `UME_INTEGRATION_MANIFEST`, to carry `deploy/portainer/integration-manifest.json` (no
+  owner) as the default for an unset variable; a set value wins and an empty one provisions nothing. The rest of the
+  gateway's part is copied unchanged, and the build stops when that line is not found.
+- **rag-admin's address of the gateway's admin** defaults to `https://<the gateway admin's host name>` (port 443, as
+  behind the TLS proxy) and is empty when the admin has no host name of its own; `UME_ADMIN_PUBLIC_URL` overrides it.
+- **The release's boot test sets no sign-in value,** so Open WebUI starts without sign-in there. Open WebUI with OIDC
+  sign-in is shown by the browser tests (`e2e.yml`) before a release.
+
+*From:* decided by user, 2026-11-15 (session 40, W1–W10; agreed after an independent review); the stage 2 points
+2026-11-16 (session 44).
 
 ### Deployment values across releases
 

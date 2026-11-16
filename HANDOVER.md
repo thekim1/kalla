@@ -53,9 +53,9 @@ pull requests (below).
   3. **The boot-only run** (handbook *Release dry runs*): `portainer-boot.sh` was rewritten (only `UME_DOMAIN`; the
      gateway's wizard first) and **has never run**. Expect a round or two of fixes.
   4. `e2e.yml` through the wizard, mark #786 ready, merge, tick M-20.
-- **For the user to rule on** (listed in #786 as design deviations): the one rewritten line of the gateway's part (or a
-  hook in the gateway's stack file instead); the default for `Admin__GatewayAdminUrl`; the boot test no longer shows
-  Open WebUI starting with OIDC sign-in (no provider anywhere, so it starts without).
+- **Decided by the user** (2026-11-16, Decisions "Setup wizard", the stage 2 points): the rewrite of the gateway's one
+  manifest line stays; rag-admin's default address of the gateway's admin stays; the boot test with no sign-in value
+  is accepted, Open WebUI's OIDC start being `e2e.yml`'s to show. #786's *Design deviations* can say "decided".
 - **Known from session 44:**
   - A default with braces needs Compose 2.24.7 or later; older ones cut the value at the first `}` without an error,
     also when the variable is set. Portainer pins a later one from 2.21 (read, not run). Not yet seen on the runner.
