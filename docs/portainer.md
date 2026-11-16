@@ -1,7 +1,7 @@
 # Deploying and upgrading with Portainer (0.7.x)
 
 How to run Ume.Rag with the LLM gateway `v0.11.0` as one Portainer stack: a first deploy on a new VM, the upgrade
-of a `0.6.0` stack to `0.7.0`, of a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
+of a `0.6.0` stack to `0.7.0` and of a `0.5.x` stack to `0.6.0` (an older one: *Upgrade from before 0.5.0*). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
 [*Portainer and other hosts without shell access*](runbook.md#portainer-and-other-hosts-without-shell-access), and
@@ -425,41 +425,11 @@ migration of its own). **Use the `v0.6.0` release's `compose.portainer.yaml`** f
     - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
     - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
 
-## Upgrade from 0.2.0–0.4.0
+## Upgrade from before 0.5.0
 
-**Not a rolling update:** migration `DailyTotalsWithoutCost` removes columns the old rag-api still writes, so rag-api
-and rag-admin stop before the migration. Plan a short window. The gateway's own upgrade (`v0.9.x` → `v0.10.1`) is
-rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgrade-guide.md#050). **Use the `v0.5.1`
-release's `compose.portainer.yaml`** for this step; then *Upgrade from 0.5.x to 0.6.0* with the `v0.6.0` file, and
-*Upgrade from 0.6.0* with the `v0.7.0` file.
-
-1. **Back up** both databases (`pg_dump` from `postgres` and `rag-postgres`) and the three Ume.Rag files of *First
-   deploy* step 11.
-2. **Stop** `rag-api` and `rag-admin` (*Containers*, select, *Stop*).
-3. **Edit the stack:** paste the `v0.5.1` file over the old one (keep the stack name), and change the variables:
-   - remove the per-level keys `UME_RAG_*GATEWAY_KEY_<level>` and the Data API's `UME_RAG_ORG_SYNC_KEY` and
-     `UME_RAG_ORG_SYNC_URL`; drop `data` from `COMPOSE_PROFILES` unless the gateway's Data API serves something else;
-   - add `clamav` to `COMPOSE_PROFILES` for the malware scan, or set `UME_RAG_CLAMAV_MODE=off` to store files without
-     one, marked so (the `v0.5.1` file reads the variable; the `0.6.0` step removes it, and the profile alone decides
-     from then on);
-   - add `openwebui` and its variables if you want the chat in this stack;
-   - optionally `UME_ADMIN_PUBLIC_URL` for the gateway.
-4. **Update the stack** (*Re-pull image and redeploy* on). The gateway moves to `v0.10.1` and migrates, `rag-migrate`
-   applies every migration since your version (from `0.4.0`: `UploadScannedAt`, `GatewayKeys`,
-   `GatewayModelLimitsSource`, `DailyUsage`, `ObjectGatewayKeys`, `DailyTotalsWithoutCost`, `ContentRetentionStep`) and
-   the grants, then `rag-api` and `rag-admin` start on the new
-   schema. `rag-bootstrap` deletes the old per-level key files and the Data API key file and logs it.
-5. **Issue the credential keys** in the gateway's admin and set them as in *First deploy* steps 7–8; update the stack
-   (`0.5.0`'s images: then restart `rag-api`, `rag-admin` and `rag-worker`). Until then their model calls are refused.
-6. **Revoke** the old per-level keys and the Data API key in the gateway's admin.
-7. **Check** as in *First deploy* step 9, then give each existing assistant and knowledge base one of its department's
-   assigned keys (they have none after the upgrade, and a published assistant can't be republished without one).
-8. Optional, once: files uploaded before `UploadScannedAt` have no scan date though they were scanned; set it with
-   `UPDATE content."Uploads" SET "ScannedAt" = "UploadedAt" WHERE "ScannedAt" IS NULL AND "State" IN ('clean',
-   'indexed');` in `rag-postgres` (*Containers → rag-postgres → Console*, then `psql -d ragdb`).
-
-Tokens and cost per assistant and day from before the upgrade are gone (`DailyTotalsWithoutCost`); from the upgrade
-on they are recorded per model call.
+First to 0.5.1, with the steps and the stack file of that time:
+[*Upgrade from 0.2.0–0.4.0* in this page at `v0.7.0`](https://github.com/thekim1/ume-rag-platform/blob/v0.7.0/docs/portainer.md#upgrade-from-020040)
+and the `v0.5.1` release's `compose.portainer.yaml`. Then *Upgrade from 0.5.x to 0.6.0* and *Upgrade from 0.6.0*, above.
 
 ## Opening the setup wizard again
 
