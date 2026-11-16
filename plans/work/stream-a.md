@@ -11,7 +11,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [ ] A-20 Pin GitHub Actions by commit SHA (#506)
+### [x] A-20 Pin GitHub Actions by commit SHA (#506)
 - **Do:** every `uses:` in `.github/workflows/*.yml` pinned to a full commit SHA with the version in a comment, checked
   against the action's release; optionally `zizmor` in `audit.yml`.
 - **Paths:** `.github/**`.
