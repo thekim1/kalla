@@ -2,8 +2,8 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.7.0`** (2026-11-16, the setup wizard; on the gateway's `v0.11.0`). `main` is 0.7.0 plus what
-sessions 44 to 46 merged after it (*Unreleased* in `CHANGELOG.md`), the deploy simplification among it. The user's VM
-runs 0.5.0. Repo `~/research/rag` on this
+sessions 44 to 46 merged after it (*Unreleased* in `CHANGELOG.md`), the deploy simplification among it; session 47's
+work is in open pull requests (*Start here*). The user's VM runs 0.5.0. Repo `~/research/rag` on this
 machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` =
 https://github.com/thekim1/ume-rag-platform (push after every commit; HTTPS through `gh auth git-credential`, handbook
 *Environment notes*).
@@ -27,138 +27,134 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 47)
+## Start here (session 48)
 
-Nothing is in work. Session 46 built the deploy simplification the user asked for on 2026-11-16
-([`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md), `plans/work/main.md`
-**M-22**), and the user ended it with "we'll continue next session". Ask what comes first; what can be taken
-without asking is below.
+**Everything session 47 did waits in pull requests.** `main` got a ruleset on 2026-11-16 23:29 CET ("Protect main":
+a pull request with one approving review and the required checks; `ume-nichlas` cannot bypass it, and an author cannot
+approve their own pull request), so the main session no longer commits to `main` or merges by itself. `plans/**` and
+this file go through a `main-session/` branch too. First look at which of these are approved or merged, and in this
+order:
 
-### The deploy simplification (M-22): what is, and what is left
+| PR | What | State when the session ended |
+|---|---|---|
+| #813 | `deploy/keycloak/README.md`: the standalone import over HTTPS on 8443 (closes #797) | green |
+| #814 | A-20: GitHub Actions pinned by commit SHA, checked in `doc-refs` (closes #506) | one unrelated test failed once (`IntegrationReadbackTests`, 401 from the fake gateway), re-run started |
+| #819 | A-27: the image CVE scan in `audit.yml`, `dependabot.yml` (closes #507). **Stacked on #814** | merge after #814 |
+| #815 | `LICENSES.md`: the LibreOffice section, the wider written offer (closes #793) | `parser-image` runs the staleness test in the image |
+| #816 | The admin UI without Open WebUI (closes #807, M-22 S9's last part) | checks running |
+| #817 | **M-22 S4b and S4c: upgrades in one step** (below) | a release dry run was started after its checks |
+| #820 | `chat."Messages"."ParentMessageId"` dropped (closes #792). **Stacked on #817** | merge after #817 |
+| this one | The handover, connectors design §5.2's sentence for #802 | |
 
-**What is** (Decisions "One deployment bootstrap"; detail `repo-and-deployment.md` §6 and §7.1):
+After a stacked pull request's base is squash-merged, merge `origin/main` into the stacked branch (no force push) and
+check its diff is only its own.
 
-- **One service file, `deploy/compose.rag.yaml`,** with the `rag-` names. Compose runs it directly;
-  `deploy/portainer/build-stack.sh` merges it with the gateway's file into `compose.portainer.yaml` (line marks
-  `#@joined` and `#@alone`). Overlays for a Compose host: `compose.backup.yaml`, `compose.hardened.yaml`,
-  `compose.host-24g.yaml`, `compose.clamav-conf.yaml`, `compose.rolling.yaml`.
-- **One bootstrap, `deploy/portainer/bootstrap.sh`:** the `rag-bootstrap` service in Compose and Portainer (volumes
-  `rag-certs`, `rag-secrets`, `rag-config`), and run locally by Kubernetes' `create-secrets.sh`.
-- **`deploy/init-deployment.sh` writes only `deploy/.env`** (about 200 lines; its header is the option list).
-- **Open WebUI is off unless asked for** (the profile `openwebui`); without it nothing of it is generated.
-- **Host hardening is an optional step on a Compose host** (`--hardened`; the quick start's step 7). Published ports
-  bind `0.0.0.0` in every form (Open WebUI `127.0.0.1`).
-- **The user's rules (2026-11-16):** a breaking deploy change comes with an **upgrade path where one is feasible**
-  (also in `AGENTS.md`), and **the setup wizard works the same in every form** (no sign-in value at install; the
-  provider's address only with `--hardened`). The Portainer stack's names stay: the regenerated stack rendered
-  identically to the one before, so the VM keeps upgrading. A Compose installation made with the old files is
-  installed again (none exists outside tests; `docs/upgrade-guide.md`, *Unreleased*).
-- **Merged:** #798, #800, #808 (S1), #799 (S4a), #806 and #809 (S9, deploy and guides), #810 (S2). The queue's status
-  line has one sentence on each.
+### Upgrades in one step (#817; Decisions "Upgrades in one step")
 
-**Left:**
+- **Service fences (data-model §10):** a migration the previous version of a service can't run beside carries
+  `[StopsServices(ServiceRoles.…)]`. On an upgrade `rag-migrate` revokes that role's schema `USAGE` (recorded in
+  `public.ume_rag_service_fences`) and logs *Migration … stops the services of role …*; rag-api, rag-admin and
+  rag-worker call `public.ume_rag_admit(<last migration compiled in>)` as their first hosted service and get the
+  schemas back, an older build is refused (`UR001`) and does not start. Complete on one slot (Compose, Portainer);
+  with two slots or on Kubernetes the old instances are still stopped first (the grant is per role).
+- **The upgrade boot test:** `deploy/tests/portainer-upgrade-boot.sh` boots an earlier release's stack asset with its
+  variables (`deploy/tests/fixtures/stack-<version>.env`) and applies the new file over it. `release.yml` runs it from
+  `UPGRADE_FROM` (0.5.1; 0.5.0's asset does not pin the gateway) with `--expect-fenced ume_rag_admin`. Alone, in
+  minutes: `gh workflow run release.yml --ref <branch> -f portainer_boot=0.7.0 -f portainer_upgrade_from=0.5.1`.
+- **Shown:** [run 43974596778](https://github.com/thekim1/ume-rag-platform/actions/runs/43974596778): 0.5.1's stack,
+  then the branch's file with 0.7.0's images: every service healthy, the schema from 33 to 41 migrations, the
+  embedding profile, the CA, the pepper and the Data Protection certificate kept, the gateway from 0.10.1 to 0.11.0 in
+  the same step. **The first boot of an upgraded stack anywhere.** That run had no fence (0.7.0's images).
+- **Not shown when the session ended:** the fence on real containers. The first dry run failed on two things that are
+  fixed on the branch (the API's SQL contract wants positional parameters; the upgrade step had no ghcr.io login in a
+  dry run); the second dry run was started by a background job. **Find it** (`gh run list --workflow release.yml`),
+  and if it is green, link it on #817; if not, fix the step alone with the boot-only run where the images allow.
+- **Guides:** `docs/portainer.md` has one *Upgrade* section (from 0.5.x or later); the joined stack defaults
+  `UME_INTEGRATION_API_URL`. **The VM** (below) can go from 0.5.0 to the next release in one update once it exists.
 
-1. **S9's admin UI part, #807** (stream b's paths; the main session offered to take it on a `main-session/` branch):
-   the last step of *Get started* and the Open WebUI settings and feedback pages when `OpenWebUi:Enabled` is absent.
-2. **S4b and S4c:** the migration step stops what it must itself, and an upgrade that skips a release is tested, so an
-   upgrade is one paste. Then **S6** (one command that writes one escrow set, the same in both forms) and **S8**
-   (operator pages without project vocabulary, as each is touched).
-3. **S5 and S7 are proposals in the gateway's repository,** thekim1/llmgateway#108 (one wizard hand-off) and #109 (a
-   manifest may create a first assigned key): the gateway's owner decides. Nothing here waits on them.
-4. **Connectors design §5.2** needs one sentence once #802 is merged (a leading `http(s)://` on a glob is ignored).
+### M-22: what is left
 
-**Not run anywhere** (say so when it matters): the hardened overlay on a host, and moving a running stack to it with
-`down` and `up` (quick start step 7); `compose-rolling-e2e.sh`; a boot without the `openwebui` profile after #806, and
-adding the profile to a running stack; root's `chown` on an NFS backup share; the upgrade guide's carry-over of an old
-Compose installation; `create-secrets.sh`'s upload to a cluster. **Stated in the guides, not verified:** `up -d` runs
-the exited `rag-bootstrap` again (the smoke test did it once), `docker compose create` makes the volumes before a
-first `up` (*Restoring onto another host*), Docker creates a missing backup directory at the first `up`.
+S6 (one command that writes one escrow set, the same in both forms), then S8 (operator pages without project
+vocabulary, as each is touched). S5 and S7 are proposals in the gateway's repository (thekim1/llmgateway#108, #109).
 
-**Left as it is in the design,** because the rewrite could not verify it (`repo-and-deployment.md`): §6.3's sentence on
-`compose.hardening.yaml`, `aspire publish` and `Test-Deployment.ps1` (none of the three exists), §5.4's
-"`compose.host-24g.yaml` may raise them" for the renderer, §6.1's "1 MB body limit" (the nginx files give rag-api 2m),
-§6.4's `connection-budget.sh` and §7.3's `rolling-update.sh --role` (P2, not built). History rows that now mislead:
-§11 row 14, §12 rows 8, 11 and 15, §14 row 2.
+**Not run anywhere** (unchanged from session 46): the hardened overlay on a host and moving a running stack to it;
+`compose-rolling-e2e.sh`; a boot without the `openwebui` profile after #806, and adding the profile to a running
+stack; root's `chown` on an NFS backup share; the upgrade guide's carry-over of an old Compose installation;
+`create-secrets.sh`'s upload to a cluster. **Stated in the guides, not verified:** `up -d` runs the exited
+`rag-bootstrap` again, `docker compose create` makes the volumes before a first `up`, Docker creates a missing backup
+directory at the first `up`. The design passages session 46 left as they are (`repo-and-deployment.md` §6.3, §5.4,
+§6.1, §6.4, §7.3's `--role`; history rows §11 row 14, §12 rows 8, 11 and 15, §14 row 2) are still as they are.
 
-### What else the main session can take without input
+### What the main session can take without input
 
-1. **A-20 (#506)** GitHub Actions pinned by commit SHA, and **A-27 (#507)** base-image CVE scans with automated digest
-   bumps: stream a's queue, both on the before-go-live list (roadmap step 7).
-2. **#792** (stream b's paths): `ParentMessageId` is never written, against chat design §11.4. Write it, or let the
-   design drop the column; ask on the issue first.
-3. **#793** (stream a's paths): `src/parser/LICENSES.md` has no LibreOffice section and its written offer names only
-   GPL and LGPL. The issue holds a draft; its entries marked *from memory* must be checked against the image's
-   `/usr/share/doc/*/copyright` files.
-4. **#797** (stream b's paths): `deploy/keycloak/README.md`'s standalone import command uses `http://keycloak:8080`,
-   and the gateway's Keycloak serves only HTTPS on 8443.
+1. **#818, the first image scan's findings** (stream a's paths): the .NET base image 10.0.13 → 10.0.15 in
+   `Directory.Build.targets` (the gateway's pin first or together), newer digests for `pgvector/pgvector`,
+   `python:3.12-slim-trixie` (3.12.16), ClamAV and Playwright. With #819 merged the scheduled Audit is red until then.
+2. **Dependabot's first pull requests** after #819: check that it can read the manifests at all (central package
+   management, `.npmrc` with `min-release-age`, digests with tags). A bump also moves the pin where it is repeated
+   (`.github/dependabot.yml`'s header lists the places).
+3. **#811** (labelled `main`): admins change the owner department of a knowledge base or an assistant. A design item:
+   the main session's recommended rules are in a comment on the issue, for the user to confirm; then admin design and
+   data-model, then a queue item for the streams.
+4. **M-22 S6.**
 
 Before a stream's paths: check for open `a/` or `b/` work and say so on the issue (handbook).
 
 ### Waiting on the user
 
-- **The VM:** 0.5.0 → 0.6.0 → 0.7.0 by `docs/portainer.md` (*Upgrade from 0.5.x to 0.6.0* **with the `v0.6.0`
-  release's stack file**, then *Upgrade from 0.6.0* with the `v0.7.0` file: #795 found that the guide said only "the
-  new file", and the 0.7.0 file at the first step would create three new credential keys).
-  Before the first step, rag-api's and rag-admin's credential keys get `OnPrem` and `Eu`, and each published assistant
-  needs a gateway key that reaches both its chat model and its embedding model. Pulls that say "denied":
-  `docker logout ghcr.io`. **This is the first boot of an upgraded stack and the first use of the new stack file in
-  Portainer itself: neither is tested anywhere.**
+- **Approvals** of the pull requests above (or a change to the ruleset, if the main session should merge again).
+- **The VM:** runs 0.5.0. With #817 released it goes to the new release in one update by `docs/portainer.md`,
+  *Upgrade* (steps 2 to 4 are the 0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups).
+  Until then the two-step path of `v0.7.0`'s guide holds (0.6.0's file first). Pulls that say "denied":
+  `docker logout ghcr.io`. Portainer's own *Update the stack* has still never been run on an upgraded stack.
+- **#811's rules** (above).
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): the user picks; the suggestion is
   F3, F4, F8 and F10.
-- **The roadmap's T0 row** (the gateway with the integration, keys and models) says *open* though T1, which depends on
-  it, is deployed: the user knows its state.
+- **The roadmap's T0 row** says *open* though T1, which depends on it, is deployed: the user knows its state.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
-- **To-verify row 110, a question to KB** (the user's call; the earlier licence review judged it unnecessary for the
-  pilot, the main session would send it before go-live): *"We intend to use KBLab/bert-base-swedish-cased-ner (revision
-  f3c83af8) in a municipal production service and possibly redistribute a container image containing the weights. Can
-  you confirm that the MIT licence on the model card covers the weights without restriction from the SUC 3.0
-  agreement, and which variant of SUC 3.0 (licensed or scrambled/SUCX) it was trained on? Which copyright line should
-  the MIT notice carry?"*
-- **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model. It misses 1 of 66 labelled names at 0.80
-  (0.60 finds it for one false positive). Left at 0.80: the sample is small.
+- **To-verify row 110, a question to KB** (the user's call; the main session would send it before go-live): *"We
+  intend to use KBLab/bert-base-swedish-cased-ner (revision f3c83af8) in a municipal production service and possibly
+  redistribute a container image containing the weights. Can you confirm that the MIT licence on the model card covers
+  the weights without restriction from the SUC 3.0 agreement, and which variant of SUC 3.0 (licensed or
+  scrambled/SUCX) it was trained on? Which copyright line should the MIT notice carry?"*
+- **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model (left at 0.80: the sample is small).
 - **U1 (pictures in uploads)** waits for DoIT's files at T6 (decided 2026-11-15).
 - **The Eneo report PDF** is only at `/mnt/c/temp/eneo-vs-ume-rag.pdf`; the user hasn't said whether to keep it in the
   repo.
 
 ### Watch
 
-- **#781, the flaky "search unavailable" answer in `ChatApiTests`:** it failed the first attempt of the 0.7.0 release
-  run. #790 gave rag-api's test hosts 30 s embedding limits and made every failed query embedding log why. The cause
-  (the 2 s limit passed on a busy runner) rests on elimination and on #584's precedent, **not on a reproduction**.
-  The issue stays open until 2026-11-30. If it recurs, the job's log has *The query embedding of profile … is
-  unavailable (…)*, which names the cause.
-- **Before the next release: a full dry run with `e2e=true`.** The browser tests did not run on the 0.7.0 tag (green
-  in dry run 43857593918 on that code) nor since, and the Compose files are new. Dry run 43941252174 (#800's branch,
-  without the browser tests) booted both forms.
-- **#805:** `Worker.Tests.HealthEndpointTests` failed once in its teardown (`JobDispatcher.StopAsync` on a disposed
-  `CancellationTokenSource`), in that dry run; stream a's path. Re-run the job if it shows again.
+- **#781, the flaky "search unavailable" answer in `ChatApiTests`:** open until 2026-11-30; if it recurs, the job's log
+  has *The query embedding of profile … is unavailable (…)*, which names the cause.
+- **`IntegrationReadbackTests.A_keys_usage_per_step_…` failed once** on #814 (no rows; the log has the fake gateway
+  answering 401 and `scope_missing`), in a pull request that changes no code. Seen once; no issue filed.
+- **Before the next release: a full dry run with `e2e=true`.** The browser tests have not run since 0.7.0's dry run;
+  #816 changes one line of `pilot.spec.ts` (*Model name:*) that no run has shown.
+- **#805:** `Worker.Tests.HealthEndpointTests` failed once in its teardown; stream a's path. Re-run the job if it
+  shows again.
+- **From the other machine, merged during session 47:** #802 (globs with a leading scheme) and #812 (a running run
+  shows live counters). #801, #803 and #804 are their crawl feature issues.
 
-## What session 46 did (2026-11-16)
+## What session 47 did (2026-11-16 to 17)
 
-- **M-22, the deploy simplification:** S1's four points put to the user and decided, then built: #798, #800, #808
-  (S1), #799 (S4a), #806 and #809 (S9's deploy part and guides), #810 (S2); the design and `AGENTS.md` follow. Detail above and
-  in `plans/work/main.md`.
-- **How it was done:** the two large steps (#800, and the guides of #808) were built by implementor agents in their
-  own worktrees from a written brief, and the design rewrite by a third. Each report was treated as a claim: the main
-  session read the diffs, re-ran every test, rendered the Portainer stack before and after and compared them, and
-  booted through CI (a release dry run for #800, boot-only runs for #806 and #808). Reading the guides agent's report
-  found a real fault in #800 (the gateway's key directory mounted into `rag-bootstrap`), fixed in #808.
-- **Two CI failures were in tests, not in the change:** a file comparison that depended on the runner's locale
-  (`kubernetes-secrets.sh`) and `config --images | grep -m1` under `pipefail` (`portainer-rerun.sh`). Both causes are
-  inferred from the fix holding on the runner, not reproduced locally.
-- **Decided at the end** (user: "1. sounds good, 2. ok, 3. do what you think is best"): the `0.0.0.0` bind default;
-  nothing replaces forcing a certificate re-issue before its last 30 days, Open WebUI on a VM of its own, or a stack
-  without the ingestion services; S2, S5 and S7 left to the main session, which took S2 (#810) and put S5 and S7 to
-  the gateway as proposals.
-- **From the other machine:** #802 (globs with a leading `https://`) read and commented, theirs to merge; connectors
-  design §5.2 needs one sentence once it is in (a leading `http(s)://` on a glob is ignored). #801, #803, #804 are
-  their crawl feature issues. **#805:** a flaky teardown in `Worker.Tests.HealthEndpointTests`, seen once.
-- **Session 45** (the Compose quick start, the guides' audit, the proposal): `git show 4c038beb:HANDOVER.md`.
+- The user: "do every point one by one, keep track on GitHub, work autonomously, take recommended decisions". The four
+  points were M-22's S4b and S4c with #807; A-20 and A-27; #792, #793 and #797.
+- **How:** the fence (S4b), #807 and #793 were built by implementor agents in their own worktrees from written
+  briefs; the main session read each diff, ran the tests again, drove #807's pages in a browser on a throwaway stack
+  without Open WebUI, and wrote S4c's boot test, the workflows, the guides and the design itself. Each agent corrected
+  statements of the brief (no Open WebUI section exists on the Settings page; `licences.py` reads installed
+  distributions, not `uv.lock`; two COIN-OR packages are not EPL-2.0).
+- **Decided by the main session, as the user asked:** Decisions "Upgrades in one step" (the fence rather than a
+  documented stop or a script; skipping releases; the stack's default for `UME_INTEGRATION_API_URL`); #792: the column
+  goes.
+- **The upgrade boot test took five runs** to pass, each failing on the test's own setup: no `gh` on the runner
+  (`scripts/ci/release-asset.sh` downloads with curl), 0.5.0's asset without gateway pins, a fixture group name that
+  0.5.1 refuses (it must start with `rag-`), and `sed` reading the wrong half of a JSON log line.
+- **Session 46** (the deploy simplification): `git show 2acdee77:HANDOVER.md`.
 
 ## Known gaps, documented, not fixed
 
-- **Not tested anywhere:** a boot of an upgraded stack (the previous release's volumes under the new images);
-  Portainer itself; both wizards completed against a real provider in one deployed stack (the boot test has no
+- **Not tested anywhere:** Portainer itself (an upgraded stack boots in CI since #817, with Compose); both wizards completed against a real provider in one deployed stack (the boot test has no
   provider and stops at each wizard's state); Entra ID and AD FS; a real untrusted TLS certificate; Kubernetes beyond
   rendering.
 - **The manifest default needs Compose 2.24.7 or later:** an older one cuts a default that contains `}` at the first
@@ -235,12 +231,16 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
   `/bff/setup/*`, rag-api's `GET /internal/openwebui/sign-in`; `/bff/user` gains `signIn.configured` and `setup.open`;
   `GET /api/overview` gains `secretExpiry` and `deploymentNotices`; `UME_DOMAIN`, `UME_RAG_SETUP_REOPEN`,
   `Setup__Secret`; Open WebUI starts through `deploy/openwebui/start-with-sign-in.py`.
-- **Open issues that matter:** #781 (watch), #805 (a flaky worker test teardown), #807 (S9's admin UI), #792, #793,
-  #797, #667 (M-16; C13 is done with #800), #506, #507, #333 (the exact-scan and
-  recall checks on the test host).
-- **Ume.Rag on this machine:** the local stack is stopped; two agent worktrees under `.claude/worktrees/` (`agent-a959…`, `agent-ad14…`) hold merged branches and can go (`git worktree remove`, then delete their local branches); volumes
-  `ume-rag-m1-postgres` (the dev data), `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept. Session 44's scratch
-  directory holds about 1 GB (883 MB of Compose binaries in `compose-check/bin`) and can go.
+- **Open issues that matter:** #781 (watch), #805 (a flaky worker test teardown), #811 (move to another department,
+  a design item), #818 (the image scan's findings), #667 (M-16; C13 is done with #800), #333 (the exact-scan and
+  recall checks on the test host); #506, #507, #792, #793, #797 and #807 close with their pull requests.
+- **Ume.Rag on this machine:** the local stack is stopped. Worktrees: `~/research/rag-small` (the main session's
+  second checkout, on whatever branch was last worked on) and, under `.claude/worktrees/`, `agent-a17f…` (the fence,
+  cherry-picked into #817), `agent-a8d4…` (#815's branch), `agent-ab00…` (#816's branch) and session 46's two
+  (`agent-a959…`, `agent-ad14…`, merged). Remove each once its pull request is merged (`git worktree remove`, then
+  the local branch). The main clone is on `main-session/m22-upgrade-one-step`. Volumes `ume-rag-m1-postgres` (the dev
+  data), `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept. Session 44's scratch directory holds about 1 GB
+  and can go.
 - **The gateway on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; merges and
   releases in the gateway are the user's). Worktrees `~/git/llmgateway`, `~/git/llmgateway-100`,
   `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull requests are all merged: they can
