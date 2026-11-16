@@ -120,7 +120,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   firewall reaches only the provider of `--oidc-authority` (documented; an allow-list is a follow-up). Stream b was
   told on #759.
 
-### [ ] M-21 Deployment values across releases: retired variables named, a notice on Home (user, 2026-11-16)
+### [x] M-21 Deployment values across releases: retired variables named, a notice on Home (user, 2026-11-16)
 - **Do:** Decisions "Deployment values across releases" and admin §5.5.1 (*Deployment notices*), on a
   `main-session/m21-<slug>` branch (stream a's and b's paths; announced on an issue). `rag-bootstrap` gets the retired
   list (every Portainer variable retired since 0.3.0, with what replaced it), names the ones a stack still sets on its
@@ -129,3 +129,4 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Waits on:** nothing.
 - **Done when:** `deploy/tests/portainer-rerun.sh` shows a retired variable on the checklist and in the file, and none
   without one; the admin API's and the admin UI's tests cover the notice; `verify.yml` green.
+- **Done** 2026-11-16 (#783): the re-run test, the admin API's test and the admin UI's specs cover it; `verify.yml` green.

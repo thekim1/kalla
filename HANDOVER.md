@@ -112,6 +112,16 @@ keep every entry.
 - **The user's rule for guides** (2026-11-16): someone who already runs Portainer or Compose must be able to upgrade to
   the next release from the guides alone. Both repositories' guides have numbered steps per deploy form.
 
+### Also done in session 43: deployment values across releases (M-21, #783)
+
+The user asked what happens when deployment variables come and go. Decided (Decisions "Deployment values across
+releases"; `AGENTS.md`, *Conventions*): a new variable has a default, is generated, or is a setting; a required one
+without a default needs the user's approval; a variable that is no longer read goes on `rag-bootstrap`'s retired list
+(`retired_hint` in `deploy/portainer/bootstrap.sh`, and its name in `UME_RAG_RETIRED_SET` in the stack template).
+`rag-bootstrap` names a retired variable a stack still sets on its checklist, and Home shows platform admins a
+deployment notice (`GET /api/overview`, `deploymentNotices`). **Stage 2 retires the gateway's host variables for
+nobody** (they stay readable), so it adds nothing to the list. Not looked at in a browser.
+
 ### Known gaps, documented, not fixed
 
 - **Not tested in either repository: a boot of an upgraded stack** (the previous release's volumes under the new
@@ -198,6 +208,7 @@ keep every entry.
 
 - **41:** the release dry run for the wizard, green on the first run; the four gateway issues (#98–#101); CI time:
   five measurements of `Ume.Rag.AdminApi.Tests` (collections, thread pool, `fsync`, GC, two processes), then #775.
-- **43 (2026-11-16):** the gateway's WG4 checked, corrected in one doc sentence and opened as thekim1/llmgateway#104.
+- **43 (2026-11-16):** the gateway's WG4 checked, corrected in one doc sentence and opened as thekim1/llmgateway#104;
+  M-21 (#783).
 - **42:** the gateway's WG1–WG3 as pull requests and WG4 built; the security review and its fixes in both
   repositories; the upgrade guides; the wizard's suggestion from the gateway; #776–#779.
