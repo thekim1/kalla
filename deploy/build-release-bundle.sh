@@ -54,6 +54,10 @@ cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav
 for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
+# The integration manifest a gateway on the same host creates Ume.Rag's credential keys from (init-deployment.sh
+# --gateway-secrets-dir, docs/compose-quick-start.md), at its path in the repository.
+mkdir -p "$dest/portainer"
+cp portainer/integration-manifest.json "$dest/portainer/"
 # init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.
 mkdir -p "$dest/clamav"
 cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/clamav/"
@@ -61,7 +65,7 @@ cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/
 cp "$repo/images/renderer/seccomp.json" "$stage/$name/images/renderer/"
 # The operator documents (platform plan §10: the upgrade guide ships with the release).
 cp "$repo/docs/production-setup.md" "$repo/docs/runbook.md" "$repo/docs/upgrade-guide.md" "$repo/docs/test-host.md" \
-  "$repo/docs/zero-downtime-updates.md" "$stage/$name/docs/"
+  "$repo/docs/zero-downtime-updates.md" "$repo/docs/compose-quick-start.md" "$stage/$name/docs/"
 
 cd "$dest"
 # Line endings matter: these files are mounted into Linux containers or run by bash.

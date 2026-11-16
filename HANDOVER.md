@@ -118,7 +118,12 @@ Before a stream's paths: check for open `a/` or `b/` work and say so on the issu
 - **The boot test shows no Open WebUI with OIDC** (no provider anywhere, so it starts without sign-in); `e2e.yml`
   shows it (accepted by the user).
 - **Compose's host firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it the wizard's
-  test can't reach a provider (the docs say to keep the option). An allow-list would be the fix.
+  test can't reach a provider. `init-deployment.sh` asks for it in an interactive run, and the wizard's message says
+  so; a run with `--yes` and no authority still ends there (its closing notes warn). A provider typed only in the
+  wizard would need the firewall to open rag-admin's egress, which is the user's call.
+- **The Compose quick start (`docs/compose-quick-start.md`) is read, not run:** `--gateway-secrets-dir` is tested with
+  placeholder files, the gateway's manifest path only in the Portainer boot test, and the same-host flow end to end
+  (the gateway on `--bind 0.0.0.0`, Ume.Rag's firewall letting its networks through) nowhere.
 - **The gateway's Data API does not follow its wizard:** a gateway whose sign-in is set there sets
   `UME_DATA_AUTHORITY` for access tokens. On Kubernetes a gateway that declares `Oidc__Authority` must set
   `Gateway__OidcAuthority` too (documented).

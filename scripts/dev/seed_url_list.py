@@ -27,7 +27,7 @@ command line. The plaintext key is printed once, to stdout, when the key is crea
 of the client for the collection says so and prints nothing secret. Nothing writes the key to a file.
 
 psql comes from PATH, or from the AppHost's Postgres container with --docker CONTAINER (docker exec; the container's own
-port 5432). On the production Compose stack (a pilot or test host, docs/gateway-host-setup.md) the superuser may only
+port 5432). On the production Compose stack (a pilot or test host, docs/production-setup.md) the superuser may only
 connect over the Unix socket: --docker ume-rag-postgres-1 --socket runs psql there as the container's postgres user
 (peer authentication, no password, no connection string). Exit 0 when seeded, 1 when psql or the SQL failed, 2 on bad
 arguments or a non-local database.

@@ -7,6 +7,9 @@ control zone, `deploy/compose.ingestion.yaml` the ingestion zone; `init-deployme
 so every command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory
 that holds `deploy/`.
 
+**A first install next to a gateway on the same host:** the [quick start](compose-quick-start.md) is the short path, and
+this page the reference behind it.
+
 Day-to-day operation (backups, restore, key escrow, the firewall, troubleshooting) is in the [runbook](runbook.md);
 upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and checks in [test-host.md](test-host.md). Ports, firewall and proxy rules per setup are in [network-and-ports.md](network-and-ports.md). The design behind this page is
 [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §6 and §7.
@@ -144,7 +147,7 @@ added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the 
 
 | Option | Default | Effect |
 |---|---|---|
-| `--oidc-authority URL` | the setup wizard's; a re-run without it keeps `deploy/.env`'s | the admin BFF's identity provider (HTTPS) as a deployment value, locked in the wizard: `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0`. Pass it with the host firewall, which lets rag-admin reach only this provider. Never prompted |
+| `--oidc-authority URL` | the setup wizard's; a re-run without it keeps `deploy/.env`'s | the admin BFF's identity provider (HTTPS) as a deployment value, locked in the wizard: `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0`. Pass it with the host firewall, which lets rag-admin reach only this provider: a run without `--yes` asks for it once when it is missing (empty leaves it to the wizard) |
 | `--oidc-client-id ID` | the setup wizard's, else `ume-rag-admin`; a re-run without it keeps `deploy/.env`'s | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's: `UME_RAG_OIDC_CLIENT_ID` |
 | `--oidc-client-secret-file FILE` | the setup wizard's | the admin registration's secret as a deployment value: `secrets/admin/Oidc__ClientSecret` (kept until you delete it). With `--oidc-authority` it declares the sign-in, and the wizard never opens |
 | `--oidc-refuse-guests true\|false` | the setup wizard's, else `true` | refusing guests (Entra ID) as a deployment value: `secrets/admin/Oidc__RefuseGuests` (kept on a re-run without it) |
@@ -155,6 +158,7 @@ added by hand (it keeps `UME_RAG_SETUP_REOPEN` itself). After the first run the 
 | `--gateway-url URL` | prompted | the LLM gateway (HTTPS): `UME_RAG_GATEWAY_URL` |
 | `--ca-file FILE` | – | appended to the trust store of api, admin and worker: the gateway's CA and your PKI chain |
 | `--gateway-credential-key-file SERVICE=FILE` | – | `SERVICE`'s credential key of the gateway integration *Ume.Rag* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service): `secrets/SERVICE/Gateway__Key`. A gateway admin issues the three keys (*Gateway credential keys*, below). A service without one has its model calls refused |
+| `--gateway-secrets-dir DIR` | – | the three keys from a gateway on this host instead: the directory its migration writes a manifest's keys to (`<gateway>/deploy/integration-secrets`, holding `Ume.Rag/rag-api`, `rag-admin` and `rag-worker`; *Gateway credential keys*, below). Run as root: the directory belongs to the gateway's migration service. A `--gateway-credential-key-file` wins for its service; a missing key stops the run and says how to get it |
 | `--key-provider file` | `file` | the only key provider until postponed decision K1 |
 | `--allow-file-keys` | – | required: accepts that the blob master key lives in a file on this host (pilot and test hosts) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` and the upload copy (below) |
@@ -312,7 +316,20 @@ it had.
 Each RAG service calls the LLM gateway with its own key: rag-api, rag-admin and rag-worker each hold one **credential
 key** of the gateway integration *Ume.Rag* (identity design §4.7, gateway-changes §5.1; the gateway's
 `docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-ume-max-residency`), and
-never holds another service's key. A gateway admin issues the three keys in the gateway's admin UI:
+never holds another service's key. The three keys come about in one of three ways:
+
+- **A gateway on this host creates them from a manifest**, and `init-deployment.sh` reads them: copy
+  `deploy/portainer/integration-manifest.json` to the gateway's `deploy/integration-manifests/ume-rag.json` (mode 644),
+  run the gateway's `up -d --wait` again (its migration service applies the manifest and writes each key's secret to
+  `deploy/integration-secrets/Ume.Rag/`), then pass `--gateway-secrets-dir <gateway>/deploy/integration-secrets`
+  ([quick start](compose-quick-start.md), step 3; the gateway's `docs/integrations.md`, *Provisioning from a manifest*).
+  The integration gets a team and department of its own, `ume-rag`: move it to your team in the gateway's admin
+  afterwards. To rotate, rotate the key in the gateway's admin, delete its file under `integration-secrets/Ume.Rag/`,
+  run the gateway's `up` again and re-run `init-deployment.sh` with the option, then restart the service.
+- **A gateway admin creates them from the preset:** *Access → Integrations → Add from manifest*, the preset *Ume.Rag*.
+  The three secrets are shown once; hand them over as step 3 below says.
+- **By hand**, field by field, in the gateway's admin UI. The manifest and the preset carry these settings, with an
+  empty address list:
 
 1. **The integration.** Under *Access → Integrations*, create `Ume.Rag` with its owner team. Calls made as a credential
    key are charged to that team: the organisation and model syncs, the embedding canary, model checks, and every call

@@ -38,7 +38,7 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
+| 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
 | 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |

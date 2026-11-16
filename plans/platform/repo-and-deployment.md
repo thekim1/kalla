@@ -743,6 +743,7 @@ Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. 
 | `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
 | `--gateway-credential-key-file SERVICE=FILE` (repeated for `api`, `admin`, `worker`) | – (credential keys issued by a gateway admin per service, gateway-changes §5.1) | `secrets/{api,admin,worker}/Gateway__Key` |
+| `--gateway-secrets-dir DIR` | – (a gateway on the same host: the directory its migration writes a manifest's keys to, `<gateway>/deploy/integration-secrets`, from `deploy/portainer/integration-manifest.json` in the gateway's `deploy/integration-manifests`) | the same three files, read from `DIR/Ume.Rag/rag-{api,admin,worker}`; a `--gateway-credential-key-file` wins for its service, and a missing key stops the run |
 | `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` (P0 builds `file` only; the others come with K1) | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key file `secrets/keys/rag-blob-internal` (mode 0400; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4), then a reminder to run `escrow-keys.sh` (§7.4) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` in `secrets/pgbackrest/repo.conf` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target: a mounted share gives `DIR/pgbackrest` (`UME_RAG_BACKUP_DIR`) and `DIR/uploads` (`UME_RAG_UPLOAD_BACKUP_DIR`); S3 (`--backup-s3-credentials-file`, `--backup-s3-region`) sets `UME_RAG_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built in P0; `local` = a Docker volume and `deploy/upload-backup` (test hosts only: not off the host) |
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
@@ -765,7 +766,9 @@ rag-api mounts it read-only as `Security:ExtraSecretsDirectory` (chat design §4
 same with `rag-openwebui-setup` and `rag-secrets/openwebui-feedback`. Nothing is done by hand.
 **Sign-in is set in the setup wizard** (Decisions "Setup wizard", identity §19): `--oidc-authority`,
 `--oidc-client-id`, `--oidc-client-secret-file` and the `--openwebui-oidc-*` options are optional and never prompted;
-given, they are the deployment's values and lock the wizard's fields. `--domain` (`UME_DOMAIN`) gives the host names
+given, they are the deployment's values and lock the wizard's fields. The one exception is `--oidc-authority`: an
+interactive run asks for it once when it is missing (empty leaves it to the wizard), because the host firewall (§6.1)
+lets rag-admin reach only that provider, so the wizard's test sign-in can't reach one the deployment doesn't name. `--domain` (`UME_DOMAIN`) gives the host names
 their defaults `rag.`, `rag-admin.` and `chat.` under it; without it `--api-host` and `--admin-host` are as before.
 The Portainer template and the Kubernetes base set no `Oidc__*` default. The script, `rag-bootstrap` and
 `create-secrets.sh` generate `secrets/admin/Setup__Secret`.
