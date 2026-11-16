@@ -11,7 +11,8 @@ namespace Ume.Rag.AdminApi;
 /// has a client audience (it is in Open WebUI). <c>GET /api/overview</c> is Home (§5.5.1, "P1's Home"): the caller's
 /// published assistants over the last 7 days (Live), the runs, queue and syncs (Health), and the collections whose
 /// checklist is not done yet (the attention items join it in P2); for a platform admin also the client secrets stored by the
-/// setup wizard that expire within <see cref="SecretExpiryDays"/> days (§5.11).
+/// setup wizard that expire within <see cref="SecretExpiryDays"/> days (§5.11) and the deployment notices (§5.5.1): the
+/// retired variables the deployment still sets, which the bootstrap hands rag-admin as <see cref="RetiredVariablesKey"/>.
 /// </summary>
 public static class SetupEndpoints
 {
@@ -27,6 +28,15 @@ public static class SetupEndpoints
     /// <summary>Home reminds platform admins of a wizard-stored client secret this many days before its expiry date (admin design §5.11).</summary>
     public const int SecretExpiryDays = 30;
 
+    /// <summary>
+    /// The deployment variables the stack still sets and this version no longer reads, comma-separated, written by the
+    /// bootstrap (Decisions "Deployment values across releases"); absent when there is none.
+    /// </summary>
+    public const string RetiredVariablesKey = "Deployment:RetiredVariables";
+
+    /// <summary>The most names a deployment notice carries.</summary>
+    public const int NoticeNames = 50;
+
     public static RouteGroupBuilder MapSetup(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -41,7 +51,7 @@ public static class SetupEndpoints
             .WithSummary("The collection's setup checklist (Kom igång), computed from state");
 
         api.MapGet("/overview", async (AdminContext admin, OrganisationSync organisation, GatewayModelSync models, SignInSettings signIn, OpenWebUiSignInSettings openWebUi,
-                CancellationToken ct) =>
+                IConfiguration configuration, CancellationToken ct) =>
             {
                 var collections = await CollectionEndpoints.Scoped(admin).AsNoTracking().OrderByDescending(c => c.UpdatedAt).ThenBy(c => c.Id).Take(OverviewCollections)
                     .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt, c.DepartmentId)).ToListAsync(ct);
@@ -50,10 +60,11 @@ public static class SetupEndpoints
                 var needsProfile = admin.IsPlatformAdmin
                     && !await admin.Db.EmbeddingProfiles.AsNoTracking().AnyAsync(p => p.IsDefault && p.State == EmbeddingProfileStates.Active, ct);
                 return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)], needsProfile, await LiveAsync(admin, ct),
-                    await HealthAsync(admin, organisation.Status, models.Status, ct), await SecretExpiryAsync(admin, signIn, openWebUi, ct));
+                    await HealthAsync(admin, organisation.Status, models.Status, ct), await SecretExpiryAsync(admin, signIn, openWebUi, ct),
+                    DeploymentNotices(admin, configuration));
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Overview").WithName("GetOverview")
-            .WithSummary("Home: the caller's published assistants over the last 7 days, the runs, queue and syncs, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created and the client secrets that expire soon");
+            .WithSummary("Home: the caller's published assistants over the last 7 days, the runs, queue and syncs, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created, the client secrets that expire soon and the deployment notices");
 
         return api;
     }
@@ -159,6 +170,27 @@ public static class SetupEndpoints
         return [.. secrets.Where(s => s.ExpiresOn <= last).Select(s => new SecretExpiry(s.Which, s.ExpiresOn!.Value))];
     }
 
+    /// <summary>
+    /// The deployment notices (§5.5.1), for a platform admin only: <see cref="DeploymentNoticeCodes.RetiredVariables"/> with the
+    /// names in <see cref="RetiredVariablesKey"/>. The value comes from the deployment's bootstrap; only names of capital
+    /// letters, digits and <c>_</c> are kept, each once, at most <see cref="NoticeNames"/>.
+    /// </summary>
+    private static List<DeploymentNotice> DeploymentNotices(AdminContext admin, IConfiguration configuration)
+    {
+        if (!admin.IsPlatformAdmin)
+        {
+            return [];
+        }
+
+        string[] retired =
+        [
+            .. (configuration[RetiredVariablesKey] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(n => n.Length <= 64 && n.All(c => c is (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '_'))
+                .Distinct(StringComparer.Ordinal).Take(NoticeNames),
+        ];
+        return retired.Length == 0 ? [] : [new DeploymentNotice(DeploymentNoticeCodes.RetiredVariables, retired)];
+    }
+
     /// <summary>A handful of grouped queries for all <paramref name="collections"/> at once (no per-collection round trips).</summary>
     private static async Task<List<CollectionSetup>> ComputeAsync(AdminContext admin, IReadOnlyList<CollectionRef> collections, CancellationToken ct)
     {
@@ -234,11 +266,22 @@ public sealed record CollectionSetup(
 /// Home (§5.5.1): whether any collection is in scope (the empty state, §5.4 step 1), the checklists not done,
 /// <see cref="NeedsEmbeddingProfile"/>: the caller is a platform admin and there is no active default embedding profile yet,
 /// which a new collection needs (<c>no_embedding_profile</c>), the published assistants' last 7 days (<see cref="Live"/>) and
-/// <see cref="Health"/>, and <see cref="SecretExpiry"/>: for a platform admin, the wizard-stored client secrets that expire within 30 days.
+/// <see cref="Health"/>, and for a platform admin <see cref="SecretExpiry"/>, the wizard-stored client secrets that expire within
+/// 30 days, and <see cref="DeploymentNotices"/>, what the person who runs the deployment should tidy (§5.5.1).
 /// </summary>
 public sealed record Overview(
     bool HasCollections, IReadOnlyList<CollectionSetup> Setup, bool NeedsEmbeddingProfile, IReadOnlyList<LiveAssistant> Live, OverviewHealth Health,
-    IReadOnlyList<SecretExpiry> SecretExpiry);
+    IReadOnlyList<SecretExpiry> SecretExpiry, IReadOnlyList<DeploymentNotice> DeploymentNotices);
+
+/// <summary>A deployment notice on Home: <see cref="Code"/> is a <see cref="DeploymentNoticeCodes"/> value, <see cref="Names"/> what it is about.</summary>
+public sealed record DeploymentNotice(string Code, IReadOnlyList<string> Names);
+
+/// <summary>The codes of <see cref="DeploymentNotice"/> (Decisions "Deployment values across releases").</summary>
+public static class DeploymentNoticeCodes
+{
+    /// <summary>Deployment variables the stack still sets and this version no longer reads; the names are the variables'.</summary>
+    public const string RetiredVariables = "retired_variables";
+}
 
 /// <summary>A client secret stored by the setup wizard that expires soon or has expired: <see cref="Which"/> is a <see cref="SetupTargets"/> value.</summary>
 public sealed record SecretExpiry(string Which, DateOnly ExpiresOn);

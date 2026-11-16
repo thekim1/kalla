@@ -419,6 +419,37 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         }
     }
 
+    [Fact]
+    public async Task Home_tells_a_platform_admin_which_retired_variables_the_deployment_still_sets()
+    {
+        static async Task<string[][]> NoticesAsync(HttpClient client) =>
+        [
+            .. (await client.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("deploymentNotices").EnumerateArray()
+                .Select(n => (string[])[n.GetProperty("code").GetString()!, .. n.GetProperty("names").EnumerateArray().Select(v => v.GetString()!)]),
+        ];
+
+        // Without the bootstrap's value there is no notice.
+        await using var plain = database.HeaderFactory();
+        using (var admin = await AdminDatabaseFixture.UserAsync(plain, RagRoles.PlatformAdmin))
+        {
+            (await NoticesAsync(admin)).ShouldBeEmpty();
+        }
+
+        // The bootstrap's list: each name once, and only what can be a variable's name.
+        await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
+            web.UseSetting(SetupEndpoints.RetiredVariablesKey, "UME_RAG_CLAMAV_MODE, UME_RAG_EMBEDDING_MODEL,,UME_RAG_CLAMAV_MODE,<b>x</b>,lower_case"));
+        using var platformAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        (await NoticesAsync(platformAdmin)).ShouldBe([[DeploymentNoticeCodes.RetiredVariables, "UME_RAG_CLAMAV_MODE", "UME_RAG_EMBEDDING_MODEL"]]);
+        // Only for a platform admin.
+        using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "1000");
+        (await NoticesAsync(departmentAdmin)).ShouldBeEmpty();
+
+        // Nothing usable in the value: no notice.
+        await using var garbage = database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting(SetupEndpoints.RetiredVariablesKey, " , not a name"));
+        using var garbageAdmin = await AdminDatabaseFixture.UserAsync(garbage, RagRoles.PlatformAdmin);
+        (await NoticesAsync(garbageAdmin)).ShouldBeEmpty();
+    }
+
     private static async Task<(string Which, DateOnly ExpiresOn)[]> SecretExpiryAsync(HttpClient client) =>
     [
         .. (await client.GetFromJsonAsync<JsonElement>("/api/overview", Ct)).GetProperty("secretExpiry").EnumerateArray()

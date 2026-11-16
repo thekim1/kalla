@@ -78,6 +78,11 @@ exception, with its own steps.
     log has `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`, and Open WebUI's sign-in page
     shows the button. `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the
     wizard again; remove it before restoring a database.
+- **A leftover variable is named (M-21).** Rolling update, no migration, no new variable to set. A Portainer stack that
+  still sets a variable this version no longer reads (the ones the sections below say to remove, back to 0.3.0) works
+  as before; `rag-bootstrap`'s checklist now names each with what replaced it, and Home in the admin UI shows platform
+  admins a notice with the names. **Apply:** nothing is required; to clear the notice, remove the named variables from
+  the stack's variables and update the stack. **Check:** `rag-bootstrap`'s log has no line *is set and no longer read*.
 
 ## 0.6.0
 

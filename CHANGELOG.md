@@ -42,6 +42,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   without an address gets a note with that link. The effective sign-in values and their sources don't change. The
   FakeGateway's context has `oidc_authority` (null unless `FakeGateway:Gateway:OidcAuthority` is set) and the feature,
   and `contracts/gateway/integrations.json` is the gateway's unreleased copy with that field.
+- **A stack that still sets a retired variable is told so** (M-21; Decisions "Deployment values across releases"):
+  the Portainer stack hands `rag-bootstrap` the names of the retired variables that have a value
+  (`UME_RAG_RETIRED_SET`, the 20 retired since 0.3.0). `rag-bootstrap` names each on its checklist with what replaced
+  it and writes the names to `admin/Deployment__RetiredVariables`; `GET /api/overview` returns them to a platform admin
+  as `deploymentNotices` (`{ code: "retired_variables", names }`, an addition), and Home shows a notice that can be
+  hidden. Nothing stops and no value is read. Compose and Kubernetes have no such list.
 
 ## 0.6.0 (2026-11-15)
 

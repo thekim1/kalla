@@ -8,8 +8,8 @@
 # service certificates are re-issued when they expire within 30 days or their host names change (the checklist at the
 # end names the services to restart, and every certificate that expires within 60 days). Files that follow a variable
 # (the gateway credential keys, also taken from the gateway's manifest secrets; the OIDC client secrets and refusing
-# guests, when the stack declares its sign-in instead of the setup wizard) are written again on every start, and removed
-# when the variable is empty.
+# guests, when the stack declares its sign-in instead of the setup wizard; the names of the retired variables the stack
+# still sets) are written again on every start, and removed when the variable is empty.
 #
 # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
 # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
@@ -163,6 +163,32 @@ esac
 # shows that it is set. Unset, the setup wizard's stored secret applies.
 put api OpenWebUi__Oidc__ClientSecret "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}"
 put admin OpenWebUi__Oidc__ClientSecret "${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}"
+# Retired variables the stack still sets (Decisions "Deployment values across releases"): the stack file lists their
+# names in UME_RAG_RETIRED_SET. They are named on the checklist with what replaced each, and rag-admin gets the names
+# (Deployment:RetiredVariables) for the notice on its Home page. A variable that is no longer read is added here and
+# to UME_RAG_RETIRED_SET in the stack template in the same change.
+retired_hint() {
+  case "$1" in
+    UME_RAG_ORG_SYNC_*) echo "rag-admin syncs the organisation with its gateway credential key" ;;
+    UME_RAG_OPENWEBUI_API_KEY|UME_RAG_OPENWEBUI_CLIENT_ID) echo "the deployment creates Open WebUI's client itself" ;;
+    UME_RAG_OPENWEBUI_ADMIN_API_KEY|UME_RAG_OPENWEBUI_PASSWORD_AUTH) echo "rag-openwebui-setup mints the feedback key" ;;
+    UME_RAG_OPENWEBUI_BASE_URL) echo "the feedback address follows the openwebui profile" ;;
+    UME_RAG_CLAMAV_MODE) echo "the malware scan follows the clamav profile" ;;
+    UME_RAG_EMBEDDING_*) echo "the embedding profile is created in the admin UI, under Models" ;;
+    UME_RAG_GATEWAY_MAX_RESIDENCY) echo "the ceiling is each credential key's allowed residencies in the gateway" ;;
+    UME_RAG_OIDC_GROUPS_*) echo "role groups are set in the admin UI, under Settings" ;;
+    UME_ORGANISATION_NAME) echo "the organisation's name comes from the gateway's branding" ;;
+    UME_RAG_GATEWAY_INTEGRATION_API_URL) echo "the address comes from the gateway's UME_INTEGRATION_API_URL" ;;
+    *) echo "see docs/upgrade-guide.md" ;;
+  esac
+}
+retired=""
+for name in ${UME_RAG_RETIRED_SET:-}; do
+  case "$name" in *[!A-Z0-9_]*) continue ;; esac
+  retired="$retired,$name"
+done
+retired="${retired#,}"
+put admin Deployment__RetiredVariables "$retired"
 # The feedback service account's Open WebUI key (chat design §13.3) is minted by rag-openwebui-setup into
 # openwebui-feedback (M-17 C6); the hand-made key of UME_RAG_OPENWEBUI_ADMIN_API_KEY that rag-api read before goes.
 if [ -e "$S/api/OpenWebUi__AdminApiKey" ]; then
@@ -277,6 +303,10 @@ for crt in "$C/ca.pem" "$C"/*/*.crt; do
     *) note "the certificate of rag-$(basename "$(dirname "$crt")") expires $end, within 60 days: update the stack once fewer than 30 days remain, and rag-bootstrap re-issues it" ;;
   esac
 done
+# Retired variables (collected above): tidying, nothing depends on it.
+old_ifs="$IFS"; IFS=','
+for name in $retired; do note "$name is set and no longer read ($(retired_hint "$name")): remove it from the stack's variables"; done
+IFS="$old_ifs"
 # The TLS proxy's host names (collected while its nginx.conf was written, above).
 old_ifs="$IFS"; IFS='|'
 for item in $proxy_todo; do [ -z "$item" ] || note "$item"; done

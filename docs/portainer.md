@@ -72,6 +72,10 @@ deploy it re-issues a service certificate that expires within 30 days, and the c
 - names **every certificate that expires within 60 days**. For a service certificate, update the stack once fewer than
   30 days remain (nothing needs to change): `rag-bootstrap` then re-issues it.
 
+The same checklist names **every variable the stack still sets that this version no longer reads**, with what
+replaced it (*… is set and no longer read (…): remove it from the stack's variables*). Such a variable has no effect;
+Home in the admin UI shows platform admins the same names until they are removed and the stack is updated.
+
 The checklist is written only when the stack is deployed. Update the stack at least once a year, or, with a shell on
 the host, run `deploy/host/cert-expiry.sh --certs-dir /var/lib/docker/volumes/<stack>_rag-certs/_data` as root daily
 (cron or a systemd timer): it names each certificate that expires within 60 days and then exits non-zero.

@@ -22,6 +22,7 @@ function overviewOf(overrides: Partial<Overview> = {}): Overview {
       modelSync: { lastSuccessAt: null, consecutiveFailures: 0 },
     },
     secretExpiry: [],
+    deploymentNotices: [],
     ...overrides,
   }
 }
@@ -311,5 +312,64 @@ describe('Home: the reminder before a client secret expires (admin design §5.11
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
     await flushPromises()
     expect(wrapper.find('[data-test=secret-expiry]').exists()).toBe(false)
+  })
+})
+
+describe('Home: the deployment notices (admin design §5.5.1)', () => {
+  const L = OVERVIEW.deployment
+  const notices: Overview['deploymentNotices'] = [{ code: 'retired_variables', names: ['UME_RAG_CLAMAV_MODE', 'UME_RAG_EMBEDDING_MODEL'] }]
+  afterEach(() => window.localStorage.clear())
+  const platformAdmin = () => signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
+  const mountHome = () => mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+
+  it('names the retired variables the deployment still sets for a platform admin, above the first-run step', async () => {
+    platformAdmin()
+    vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ deploymentNotices: notices, needsEmbeddingProfile: true }))
+    const wrapper = mountHome()
+    await flushPromises()
+    const notice = wrapper.get('[data-test=deployment-notice-retired_variables]')
+    expect(notice.get('[data-test=deployment-notice-title]').text()).toBe(L.retired_variables.title(2))
+    expect(notice.findAll('[data-test=deployment-notice-names] li').map((li) => li.text())).toEqual(['UME_RAG_CLAMAV_MODE', 'UME_RAG_EMBEDDING_MODEL'])
+    expect(notice.text()).toContain(L.retired_variables.text)
+    expect(wrapper.html().indexOf('data-test="deployment-notices"')).toBeLessThan(wrapper.html().indexOf('data-test="needs-profile"'))
+  })
+
+  it('says one variable in the singular', () => {
+    expect(L.retired_variables.title(1)).toBe('The deployment sets a variable that this version no longer reads')
+  })
+
+  it('hides the notice in this browser for those names, and shows it again when the names change', async () => {
+    platformAdmin()
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ deploymentNotices: notices }))
+    let wrapper = mountHome()
+    await flushPromises()
+    await wrapper.get('[data-test=deployment-notice-hide]').trigger('click')
+    expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
+    wrapper.unmount()
+
+    wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
+    wrapper.unmount()
+
+    overview.mockResolvedValue(overviewOf({ deploymentNotices: [{ code: 'retired_variables', names: ['UME_ORGANISATION_NAME'] }] }))
+    wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.get('[data-test=deployment-notice-names]').text()).toBe('UME_ORGANISATION_NAME')
+  })
+
+  it('shows nothing for a code it has no text for, and nothing to anyone but a platform admin', async () => {
+    platformAdmin()
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ deploymentNotices: [{ code: 'from_a_newer_api', names: ['x'] }] }))
+    let wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
+    wrapper.unmount()
+
+    signIn({ roles: ['rag-editor'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
+    overview.mockResolvedValue(overviewOf({ deploymentNotices: notices }))
+    wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
   })
 })
