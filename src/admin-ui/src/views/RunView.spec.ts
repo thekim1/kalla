@@ -43,6 +43,42 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     expect(items).toHaveBeenLastCalledWith('r1', expect.objectContaining({ outcome: 'failed' }))
   })
 
+  it('shows a running crawl’s progress, refreshes it and the documents with each poll, and stops when the run ends (#803)', async () => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+    try {
+      const running: Run = {
+        ...run,
+        report: null,
+        run: {
+          ...run.run, state: 'running', phase: 'fetch', added: 3, failed: 1, finishedAt: null,
+          progress: { processed: 4, admitted: 1200, maxPages: 5000, waiting: 96, seeds: 2, seedsFailed: 1, limitHit: false },
+        },
+      }
+      const done: Run = { ...run, run: { ...run.run, progress: null } }
+      const get = vi.spyOn(api.runs, 'get').mockResolvedValueOnce(running).mockResolvedValueOnce(done)
+      const items = vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+
+      const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+      await flushPromises()
+
+      const progress = wrapper.get('[data-test=progress]').text()
+      expect(progress).toMatch(/Fetching and processing pages · 4 handled · 96 waiting · 1\s200 found \(limit 5\s000\)/)
+      expect(progress).toContain('1 of 2 start addresses did not answer')
+      expect(items).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      await flushPromises()
+      expect(get).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-test=progress]').exists()).toBe(false)
+      expect(items).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(get).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('says a run’s files were not scanned for malware when its report says malwareScan off, and nothing otherwise (#535)', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })

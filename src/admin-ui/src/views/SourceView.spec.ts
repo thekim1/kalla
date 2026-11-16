@@ -101,4 +101,44 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect([...document.body.querySelectorAll<HTMLOptionElement>('#edit-level option')].map((o) => o.value)).toEqual(['public', 'internal'])
     wrapper.unmount()
   })
+
+  it('polls a running run, shows its progress in place and reloads the runs when it ends (#803)', async () => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+    try {
+      const auth = useAuthStore()
+      auth.user = bffUser({ roles: ['rag-editor'] })
+      auth.status = 'authenticated'
+      vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+      vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
+      const progress = { processed: 10, admitted: 40, maxPages: 2500, waiting: 30, seeds: 1, seedsFailed: 0, limitHit: false }
+      const running = run({ id: 'r2', state: 'running', phase: 'fetch', finishedAt: null, progress })
+      const runs = vi.spyOn(api.sources, 'runs')
+        .mockResolvedValueOnce({ items: [running, run({})], next: null })
+        .mockResolvedValue({ items: [run({ id: 'r2' }), run({})], next: null })
+      const get = vi.spyOn(api.runs, 'get')
+        .mockResolvedValueOnce({ run: { ...running, progress: { ...progress, processed: 25, waiting: 15 } } } as never)
+        .mockResolvedValueOnce({ run: run({ id: 'r2' }) } as never)
+
+      const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+      await flushPromises()
+      expect(wrapper.get('[data-test=run-progress]').text()).toBe('Fetching and processing pages · 10 handled · 30 waiting · 40 found (limit 2\u00a0500)')
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      await flushPromises()
+      expect(get).toHaveBeenCalledWith('r2')
+      expect(wrapper.get('[data-test=run-progress]').text()).toContain('25 handled · 15 waiting')
+      expect(runs).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      await flushPromises()
+      expect(runs).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-test=run-progress]').exists()).toBe(false)
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(get).toHaveBeenCalledTimes(2)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

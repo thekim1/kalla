@@ -1468,6 +1468,23 @@ export const RUN_PAGE = {
   robotsIgnored: (reason: string) => `robots.txt ignored: ${reason}`,
 } as const
 
+/** A running run's progress on the run and source pages (#803; admin design §5.4 step 6). */
+export const RUN_PROGRESS = {
+  title: 'Progress',
+  phase: {
+    list: 'Finding pages',
+    fetch: 'Fetching and processing pages',
+    reconcile: 'Finishing up',
+  } as Record<string, string>,
+  handled: (n: string) => `${n} handled`,
+  waiting: (n: string) => `${n} waiting`,
+  found: (n: string) => `${n} found`,
+  foundOfLimit: (n: string, limit: string) => `${n} found (limit ${limit})`,
+  limitHit: 'The page limit was reached; no more pages are added.',
+  seedsFailed: (failed: number, all: number) => `${failed} of ${all} start addresses did not answer`,
+  refreshing: 'Updates while the run is going.',
+} as const
+
 /** Cancel run on the run and source pages (#488 part 3; engine design §10.1). */
 export const CANCEL_RUN = {
   action: 'Cancel run',
