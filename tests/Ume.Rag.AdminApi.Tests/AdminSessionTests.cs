@@ -72,6 +72,38 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
     }
 }
 
+/// <summary>
+/// One admin API host (<see cref="AdminDatabaseFixture.HeaderFactory"/>) shared by the tests of a class: a class fixture on the
+/// class's admin-db database, started on first use and stopped after the class's last test. Starting a host takes about a second,
+/// a request about a millisecond (#785). A test that changes the host's settings or services keeps a factory of its own. The tests
+/// of a class sign in as one subject, so the per-user limit is raised for them.
+/// </summary>
+public class AdminHost(AdminDatabaseFixture database) : IAsyncDisposable
+{
+    private WebApplicationFactory<Program>? factory;
+
+    /// <summary>The shared host's factory; tests don't dispose it.</summary>
+    public WebApplicationFactory<Program> Factory => factory ??= Configure(database.HeaderFactory().WithWebHostBuilder(web =>
+        web.UseSetting("Admin:RequestsPerMinute", "10000")));
+
+    /// <summary>A class's own settings for its shared host.</summary>
+    protected virtual WebApplicationFactory<Program> Configure(WebApplicationFactory<Program> host) => host;
+
+    /// <summary>Stops or removes what a class's host used, after the host has stopped.</summary>
+    protected virtual ValueTask CleanupAsync() => default;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (factory is not null)
+        {
+            await factory.DisposeAsync();
+        }
+
+        await CleanupAsync();
+        GC.SuppressFinalize(this);
+    }
+}
+
 /// <summary>Test host helpers.</summary>
 public static class GatewaySyncTestExtensions
 {
@@ -92,8 +124,8 @@ public static class GatewaySyncTestExtensions
 }
 
 // The admin-db collections, each with its own database, as the worker tests' ragdb-N. The classes of one collection run one
-// after the other, the collections in parallel. Classes are spread by measured duration (about 100 s each locally,
-// 2026-11-15; the longest collection sets the project's time), so the collections end at about the same time; a new class
+// after the other, the collections in parallel. Classes are spread by measured duration (80-90 s each locally,
+// 2026-11-16, #785; the longest collection sets the project's time), so the collections end at about the same time; a new class
 // goes to the one that is shortest then. In CI collection N runs in process (N-1) mod 4 of scripts/ci/backend-tests.sh: the
 // collections of one process wait for one another (what for is not found), those of different processes don't.
 

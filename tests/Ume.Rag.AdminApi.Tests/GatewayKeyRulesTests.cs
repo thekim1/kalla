@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// assistant's and a knowledge base's gateway key (§4.6), against keys of the <c>GatewayKeys</c> mirror.
 /// </summary>
 [Collection(AdminDatabaseGroup8.Name)]
-public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
+public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private const string AnswerModel = "ume/chat-eu";
 
@@ -89,7 +89,7 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
     public async Task The_picker_lists_the_departments_keys_with_their_settings_and_unusable_ones_marked()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "Y" + seed.Code);
 
@@ -131,7 +131,7 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         var keys = (await admin.GetFromJsonAsync<JsonElement>($"/api/gateway/keys?departmentId={seed.Department}", Ct)).GetProperty("keys").EnumerateArray()
             .ToDictionary(k => k.GetProperty("id").GetGuid(), k => k.GetProperty("usedBy").GetInt32());
@@ -144,7 +144,7 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
     public async Task V39_refuses_a_knowledge_bases_key_of_another_department_disabled_unusable_out_of_ceiling_or_without_its_models()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         object Body(Guid key, string level = Classification.Internal) =>
             new { name = $"KB {Guid.NewGuid():N}", departmentId = seed.Department, classification = level, gatewayKeyId = key };
@@ -199,7 +199,7 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
     public async Task An_assistants_key_is_checked_against_its_models_and_a_missing_key_or_a_system_prompt_is_a_warning()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         using (var refused = await admin.PostAsJsonAsync("/api/assistants", new
@@ -255,7 +255,7 @@ public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database)
     public async Task A_draft_that_uses_a_model_the_key_does_not_allow_warns_and_the_key_change_is_refused()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var created = await admin.PostAsJsonAsync("/api/assistants", new
         {

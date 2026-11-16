@@ -28,12 +28,19 @@ namespace Ume.Rag.AdminApi.Tests;
 /// the gateway's lists fetched once per save and outside the config version lock (§4.4, #696).
 /// </summary>
 [Collection(AdminDatabaseGroup7.Name)]
-public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
+public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEndpointsTests.Host host) : IClassFixture<ClientEndpointsTests.Host>
 {
     private const string Pepper = "client-endpoints-test-pepper-0123456789abcdef";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private WebApplicationFactory<Program> Factory() => database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting("Security:KeyPepper", Pepper));
+
+    /// <summary>The class's admin host, with the class's key pepper.</summary>
+    public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
+    {
+        protected override WebApplicationFactory<Program> Configure(WebApplicationFactory<Program> host) =>
+            host.WithWebHostBuilder(web => web.UseSetting("Security:KeyPepper", Pepper));
+    }
 
     private static async Task<JsonElement> Ok(HttpResponseMessage response, HttpStatusCode expected = HttpStatusCode.OK)
     {
@@ -67,7 +74,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     public async Task An_open_webui_client_keeps_its_feedback_90_days_unless_another_value_is_set()
     {
         var code = "C" + Random.Shared.Next(100_000, 999_999);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin, code);
 
         var created = (await Ok(await admin.PostAsJsonAsync("/api/clients",
@@ -90,7 +97,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     public async Task A_client_that_keeps_chat_history_cannot_be_sensitive()
     {
         var name = "History " + Guid.NewGuid();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var problem = await Ok(await admin.PostAsJsonAsync("/api/clients",
@@ -107,7 +114,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     public async Task A_client_is_created_with_its_first_key_in_one_transaction()
     {
         var (code, department, team) = await SeedTeamAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var body = await Ok(await admin.PostAsJsonAsync("/api/clients", new
@@ -169,7 +176,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     public async Task A_refused_first_key_leaves_no_client()
     {
         var (code, _, _) = await SeedTeamAsync();
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         // A team that does not exist: refused inside the write, after the client was added, so the whole transaction rolls back.
@@ -238,7 +245,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
             (clientId, published, draft) = (client.Id, shown.Id, unpublished.Id);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var rows = (await admin.GetFromJsonAsync<JsonElement[]>("/api/clients", Ct))!;
@@ -271,7 +278,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     {
         var (code, department, _) = await SeedTeamAsync();
         var ids = await SeedAssistantsAsync(code, department, Classification.Internal, Classification.Public, Classification.Internal);
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var body = await Ok(await admin.PostAsJsonAsync("/api/clients", new
@@ -334,7 +341,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     {
         var (code, department, _) = await SeedTeamAsync();
         var ids = await SeedAssistantsAsync(code, department, Classification.Public, Classification.Sensitive);
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         // V7: an internal client cannot show a sensitive assistant; nothing of the write stays, the allowed assistant's row included.
@@ -357,7 +364,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task The_connection_names_rag_apis_public_address_when_the_deployment_sets_it()
     {
-        await using var unset = Factory();
+        var unset = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(unset, RagRoles.PlatformAdmin);
         (await admin.GetFromJsonAsync<JsonElement>("/api/clients/connection", Ct)).GetProperty("apiBaseUrl").ValueKind.ShouldBe(JsonValueKind.Null);
 
@@ -400,7 +407,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database)
             (clientId, keyId) = (managed.Id, key.Id);
         }
 
-        await using var factory = Factory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var row = (await admin.GetFromJsonAsync<JsonElement[]>("/api/clients", Ct))!.Single(r => r.GetProperty("id").GetGuid() == clientId);
         row.GetProperty("isManagedByDeployment").GetBoolean().ShouldBeTrue();

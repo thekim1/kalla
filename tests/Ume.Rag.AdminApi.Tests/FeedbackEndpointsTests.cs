@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// the period's totals and import health, and Markera som hanterad (FeedbackComments, audited).
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
-public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database)
+public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -111,7 +111,7 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database)
     public async Task Lists_ratings_without_content_scoped_to_the_department_with_totals_and_import_health()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
 
@@ -155,7 +155,7 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database)
     public async Task Marking_an_item_handled_is_feedback_comments_and_audited()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);

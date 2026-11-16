@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// its transaction, notify <c>rag_jobs</c> only on commit, and roll back with it.
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
-public sealed class CommandEnqueueTests(AdminDatabaseFixture database)
+public sealed class CommandEnqueueTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -61,7 +61,7 @@ public sealed class CommandEnqueueTests(AdminDatabaseFixture database)
         var runId = Guid.CreateVersion7();
         var notified = new List<string>();
         await using var listener = await ListenAsync(notified);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         await using var scope = factory.Services.CreateAsyncScope();
         var admin = Admin(scope);
         var id = Guid.CreateVersion7();
@@ -95,7 +95,7 @@ public sealed class CommandEnqueueTests(AdminDatabaseFixture database)
         var departmentId = await DepartmentAsync();
         var notified = new List<string>();
         await using var listener = await ListenAsync(notified);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         await using var scope = factory.Services.CreateAsyncScope();
         var admin = Admin(scope);
         var id = Guid.CreateVersion7();
@@ -125,7 +125,7 @@ public sealed class CommandEnqueueTests(AdminDatabaseFixture database)
     {
         var departmentId = await DepartmentAsync();
         var runId = Guid.CreateVersion7();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         for (var i = 0; i < 2; i++)
         {
             await using var scope = factory.Services.CreateAsyncScope();

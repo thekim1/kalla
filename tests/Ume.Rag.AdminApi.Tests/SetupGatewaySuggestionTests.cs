@@ -19,7 +19,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// <c>oidc-authority</c>) as a suggestion for rag-admin's authority, with the gateway admin's address for the link to its wizard; the
 /// effective sign-in values and their sources do not change by it. rag-admin's context is read from a FakeGateway.
 /// </summary>
-[Collection(AdminDatabaseGroup5.Name)]
+[Collection(AdminDatabaseGroup8.Name)]
 public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) : IAsyncLifetime
 {
     private const string ContextKey = "sk-ume-setup-gateway-000000000000";

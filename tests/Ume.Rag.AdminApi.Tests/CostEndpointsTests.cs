@@ -17,7 +17,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// no cost); deleted objects; the CSV's headers; <c>period_too_long</c>.
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
-public sealed class CostEndpointsTests(AdminDatabaseFixture database)
+public sealed class CostEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private const string Range = "from=2025-03-01&to=2025-04-30";
@@ -94,7 +94,7 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database)
     {
         await using var db = TestPostgres.Context(database.Connection(null));
         var s = await SeedAsync(db);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var adminA = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.A.CostCenterCode);
         using var viewerA = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, s.A.CostCenterCode);
 
@@ -137,7 +137,7 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database)
     {
         await using var db = TestPostgres.Context(database.Connection(null));
         var s = await SeedAsync(db);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var adminA = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.A.CostCenterCode);
         using var adminB = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.B.CostCenterCode);
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
@@ -180,7 +180,7 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database)
     {
         await using var db = TestPostgres.Context(database.Connection(null));
         var s = await SeedAsync(db);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var adminA = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.A.CostCenterCode);
 
         using var response = await adminA.GetAsync($"/api/costs?{Range}&granularity=month&format=csv", Ct);
@@ -199,7 +199,7 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_period_over_the_limit_is_period_too_long()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         foreach (var path in new[]
                  {

@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// endpoint runs. The ids are random: the filter answers before the endpoint looks anything up.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
-public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
+public sealed class AdminRequestValidationTests(AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -34,7 +34,7 @@ public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Test_retrieval_refuses_a_topK_out_of_range()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         var errors = await RefusedAsync(await admin.PostAsJsonAsync($"/api/collections/{Guid.NewGuid()}/test-retrieval",
@@ -46,7 +46,7 @@ public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
     [Fact]
     public async Task The_assistant_test_panel_refuses_a_long_question_history_and_an_unknown_general_knowledge_level()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var history = Enumerable.Range(0, 11).Select(i => new { role = "user", text = i == 0 ? new string('x', 4001) : "Hej" }).ToArray();
 
@@ -62,7 +62,7 @@ public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_key_refuses_more_than_100_scoped_assistants()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var scopes = new { assistantIds = Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray(), collectionIds = Array.Empty<Guid>() };
 
@@ -74,7 +74,7 @@ public sealed class AdminRequestValidationTests(AdminDatabaseFixture database)
     [Fact]
     public async Task An_assistant_refuses_a_collection_link_with_more_than_100_topics()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var link = new { collectionId = Guid.NewGuid(), tags = Enumerable.Range(0, 101).Select(i => "t" + i).ToArray() };
 

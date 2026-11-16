@@ -21,7 +21,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// audit entry with that version, in one transaction; database refusals answer their error codes.
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
-public sealed class WritePathTests(AdminDatabaseFixture database)
+public sealed class WritePathTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -45,7 +45,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_saved_change_bumps_the_config_version_with_one_audit_entry()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = await ConfigVersionAsync();
 
@@ -91,7 +91,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_stale_version_is_409_concurrent_change_with_the_current_version()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         using var created = await admin.PostAsJsonAsync("/api/clients", NewClient("Stale " + Guid.NewGuid()), Ct);
         var client = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("client");
@@ -116,7 +116,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_check_violation_is_400_platform_rule_and_writes_nothing()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var before = await ConfigVersionAsync();
 
@@ -134,7 +134,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_unique_violation_is_409_already_exists()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var azp = "azp-" + Guid.NewGuid();
         (await admin.PostAsJsonAsync("/api/clients", NewClient("First " + azp, oauthClientId: azp), Ct)).StatusCode.ShouldBe(HttpStatusCode.Created);
@@ -148,7 +148,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Field_errors_carry_invalid_value_codes()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         // Attribute rules run first; the cross-field rules only when every attribute passes (System.ComponentModel.DataAnnotations).
         using var refused = await admin.PostAsJsonAsync("/api/clients", new { name = "Fields", kind = "fax", classificationCeiling = "secret" }, Ct);
@@ -167,7 +167,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     public async Task A_failure_after_the_change_rolls_back_the_change_the_outbox_and_the_version()
     {
         // The audit insert fails (EntityType longer than its column) after the change was saved in the transaction.
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         await using var scope = factory.Services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext = new DefaultHttpContext
         {
@@ -247,7 +247,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Every_config_write_records_its_lock_wait_and_a_held_lock_a_longer_one()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         List<double> waits = [];
         using var listener = LockWaits(factory, waits);
@@ -293,7 +293,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_lock_held_longer_than_5_seconds_is_503_config_busy()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         await using var holder = new NpgsqlConnection(database.Connection(RagDatabase.Admin, pooling: false));
         await holder.OpenAsync(Ct);
@@ -336,7 +336,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, mine);
         var seen = await viewer.GetFromJsonAsync<JsonElement[]>("/api/organisation/departments", Ct);
         seen!.Select(d => d.GetProperty("costCenterCode").GetString()).ShouldBe([mine]);
@@ -388,7 +388,7 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var all = await platform.GetFromJsonAsync<JsonElement[]>("/api/organisation/departments", Ct);
         var row = all!.Single(d => d.GetProperty("costCenterCode").GetString() == owner.CostCenterCode);

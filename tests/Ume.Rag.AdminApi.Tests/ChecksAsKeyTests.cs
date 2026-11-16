@@ -26,7 +26,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// key, publish needs a key, a knowledge base without one still saves, and the status makes one acted call.
 /// </summary>
 [Collection(AdminDatabaseGroup8.Name)]
-public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
+public sealed class ChecksAsKeyTests(AdminDatabaseFixture database, ChecksAsKeyTests.Host host) : IClassFixture<ChecksAsKeyTests.Host>
 {
     private const string AdminKey = "sk-ume-checks-as-key-0000000000000";
     private const string AnswerModel = "ume/chat-eu";
@@ -70,10 +70,34 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
             }
         });
 
+    /// <summary>The class's admin host on a FakeGateway of its own (<see cref="Gateway"/> with its defaults).</summary>
+    public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
+    {
+        private readonly WebApplicationFactory<FakeGatewayProgram> _gateway = Gateway();
+
+        protected override WebApplicationFactory<Program> Configure(WebApplicationFactory<Program> host) => OnGateway(host, _gateway);
+
+        protected override ValueTask CleanupAsync() => _gateway.DisposeAsync();
+    }
+
+    /// <summary>The class's shared admin host, having read the gateway's context.</summary>
+    private async Task<WebApplicationFactory<Program>> SharedAsync()
+    {
+        (await host.Factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
+        return host.Factory;
+    }
+
     private static async Task<WebApplicationFactory<Program>> AdminAsync(AdminDatabaseFixture database, WebApplicationFactory<FakeGatewayProgram> gateway,
         CapturingLoggerProvider? logs = null)
     {
-        var factory = database.HeaderFactory().WithWebHostBuilder(web =>
+        var factory = OnGateway(database.HeaderFactory(), gateway, logs);
+        (await factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
+        return factory;
+    }
+
+    private static WebApplicationFactory<Program> OnGateway(WebApplicationFactory<Program> admin, WebApplicationFactory<FakeGatewayProgram> gateway,
+        CapturingLoggerProvider? logs = null) =>
+        admin.WithWebHostBuilder(web =>
         {
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
             web.UseSetting("Gateway:Key", AdminKey);
@@ -88,9 +112,6 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
                 }
             });
         });
-        (await factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
-        return factory;
-    }
 
     private sealed record Seed(string Code, Guid Department, Guid Collection);
 
@@ -198,8 +219,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     public async Task V39_as_the_key_names_the_condense_model_its_list_lacks_and_refuses_a_disabled_key()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = await AdminAsync(database, gateway);
+        var factory = await SharedAsync();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         var (id, detail) = await AssistantAsync(admin, seed);
 
@@ -255,8 +275,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        await using var gateway = Gateway();
-        await using var factory = await AdminAsync(database, gateway);
+        var factory = await SharedAsync();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         var (id, detail) = await AssistantAsync(admin, seed);
 
@@ -326,8 +345,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     {
         // #618 review: clearing the key would put the live assistant on rag-api's credential key, outside its department's budget.
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = await AdminAsync(database, gateway);
+        var factory = await SharedAsync();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         var (id, _) = await AssistantAsync(admin, seed, Full);
         // Published as the draft (the fixture's 8-dimension profile model is not in the FakeGateway's catalogue, so V39 as the key
@@ -354,8 +372,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     {
         // #618 review (admin §4.5): a gatewayKeyId that is not a key of a department in scope is 404, as /api/gateway/keys.
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = await AdminAsync(database, gateway);
+        var factory = await SharedAsync();
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "X" + seed.Code);
         using var own = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
 
@@ -369,8 +386,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database)
     public async Task A_knowledge_base_without_a_key_saves_and_the_status_reports_the_acted_echo()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = await AdminAsync(database, gateway);
+        var factory = await SharedAsync();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         using var created = await admin.PostAsJsonAsync("/api/collections", new { name = $"Keyless {seed.Code}", departmentId = seed.Department, classification = "internal" }, Ct);

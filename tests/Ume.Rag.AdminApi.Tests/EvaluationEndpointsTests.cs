@@ -16,7 +16,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// variants, the set's overview and a run's results; and member groups by hand (admin design §4.10).
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
-public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
+public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -74,7 +74,7 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
     public async Task Human_questions_are_edit_commands_and_runs_are_enqueued_once_with_their_variants()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
         var path = $"/api/collections/{seed.Collection}/evaluation";
@@ -162,7 +162,7 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
     public async Task A_run_needs_a_set()
     {
         var seed = await SeedAsync(withSet: false);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using (var run = await admin.PostAsJsonAsync($"/api/collections/{seed.Collection}/evaluation/run", new { }, Ct))
         {
@@ -201,7 +201,7 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
         }
 
         await db.SaveChangesAsync(Ct);
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         var path = $"/api/collections/{seed.Collection}/evaluation/generate";
@@ -279,7 +279,7 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
     public async Task Candidate_settings_are_checked_and_compared_and_runs_carry_the_threshold_proposal()
     {
         var seed = await SeedAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         var path = $"/api/collections/{seed.Collection}/evaluation/run";
 

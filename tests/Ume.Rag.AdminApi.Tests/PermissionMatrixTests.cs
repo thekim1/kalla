@@ -15,7 +15,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// an anonymous caller 401.
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
-public sealed class PermissionMatrixTests(AdminDatabaseFixture database)
+public sealed class PermissionMatrixTests(AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -38,7 +38,7 @@ public sealed class PermissionMatrixTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Every_api_endpoint_declares_its_own_policy_from_the_matrix()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         var endpoints = ApiEndpoints(factory.Services);
         endpoints.ShouldNotBeEmpty();
         foreach (var endpoint in endpoints)
@@ -53,7 +53,7 @@ public sealed class PermissionMatrixTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Every_endpoint_and_role_answers_as_the_matrix_says()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         var endpoints = ApiEndpoints(factory.Services);
         var mismatches = new List<string>();
         foreach (var role in RagRoles.All.Append(""))
@@ -77,7 +77,7 @@ public sealed class PermissionMatrixTests(AdminDatabaseFixture database)
     [Fact]
     public async Task An_anonymous_caller_gets_401_on_every_endpoint()
     {
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var anonymous = factory.CreateHttpsClient();
         foreach (var endpoint in ApiEndpoints(factory.Services))
         {

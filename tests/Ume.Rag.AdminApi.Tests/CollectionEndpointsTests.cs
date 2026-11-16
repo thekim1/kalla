@@ -14,7 +14,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// publish, retrieval settings (V16) with the advisory evaluation job, delete refused while used; every write audited.
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
-public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
+public sealed class CollectionEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -51,7 +51,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
     {
         var (department, code) = await DepartmentAsync();
         var (otherDepartment, otherCode) = await DepartmentAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, otherCode);
 
@@ -109,7 +109,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
     public async Task Retrieval_settings_are_checked_against_v16_and_start_the_advisory_evaluation()
     {
         var (department, code) = await DepartmentAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         var created = await CreateAsync(admin, department, "Inställningar " + code);
         var id = created.GetProperty("id").GetGuid();
@@ -163,7 +163,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
     public async Task Level_changes_follow_v2_and_v3_and_a_used_collection_is_not_deleted()
     {
         var (department, code) = await DepartmentAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         var created = await CreateAsync(admin, department, "Nivåer " + code, Classification.Internal);
         var id = created.GetProperty("id").GetGuid();
@@ -220,7 +220,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
     {
         var (department, code) = await DepartmentAsync();
         var (otherDepartment, _) = await DepartmentAsync();
-        await using var factory = database.HeaderFactory();
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
         var measured = (await CreateAsync(admin, department, "Mätt " + code)).GetProperty("id").GetGuid();
         var fresh = (await CreateAsync(admin, department, "Ny " + code)).GetProperty("id").GetGuid();

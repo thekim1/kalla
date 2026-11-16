@@ -25,7 +25,7 @@ namespace Ume.Rag.AdminApi.Tests;
 /// client with V7, and the level change re-checks.
 /// </summary>
 [Collection(AdminDatabaseGroup6.Name)]
-public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
+public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, AssistantEndpointsTests.Host host) : IClassFixture<AssistantEndpointsTests.Host>
 {
     private const string AdminKey = "fake-eu-key-assistants-0123456789"; // rag-admin\'s credential key
     private const string Model = "ume/chat-eu";
@@ -57,13 +57,21 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
-    private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway) => database.HeaderFactory().WithWebHostBuilder(web =>
+    /// <summary>The class's admin host with rag-admin's credential key, on a FakeGateway of its own.</summary>
+    public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
     {
-        web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
-        web.UseSetting("Gateway:Key", AdminKey);
-        web.ConfigureTestServices(services =>
-            services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler()));
-    });
+        private readonly WebApplicationFactory<FakeGatewayProgram> _gateway = Gateway();
+
+        protected override WebApplicationFactory<Program> Configure(WebApplicationFactory<Program> host) => host.WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
+            web.UseSetting("Gateway:Key", AdminKey);
+            web.ConfigureTestServices(services =>
+                services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler()));
+        });
+
+        protected override ValueTask CleanupAsync() => _gateway.DisposeAsync();
+    }
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) => await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
 
@@ -109,8 +117,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task An_assistant_is_drafted_published_offered_to_a_client_and_republished()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "Y" + seed.Code);
 
@@ -228,8 +235,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         // model's window (1,048,576 when unknown), maxOutputTokens 64 to its output limit (1,000,000 when unknown). The steps go
         // as raw JSON text so 10.0 reaches the database as written.
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         using var created = await admin.PostAsJsonAsync("/api/assistants", new
@@ -323,8 +329,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task A_new_assistants_first_draft_starts_from_the_default_instructions()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         await using var db = TestPostgres.Context(database.Connection(null));
         if (!await db.Settings.AnyAsync(Ct))
@@ -379,8 +384,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             await db.Collections.Where(c => c.Id == seed.Collection).ExecuteUpdateAsync(u => u.SetProperty(c => c.Classification, Classification.Public), Ct);
         }
 
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
 
         async Task<(Guid Id, string? Version, string? DraftVersion)> CreateAsync(string name, string level)
@@ -538,8 +542,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task Publish_refuses_a_model_the_gateway_does_not_serve_at_the_ceiling()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         await using (var db = TestPostgres.Context(database.Connection(null)))
         {
@@ -572,8 +575,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task Publish_refuses_an_embedding_model_as_the_answer_model()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         var embedding = "embed-" + seed.Code.ToLowerInvariant();
         await using (var db = TestPostgres.Context(database.Connection(null)))
@@ -607,8 +609,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     public async Task Versions_are_listed_restored_as_a_new_published_version_and_archive_and_retention_are_saved()
     {
         var seed = await SeedAsync();
-        await using var gateway = Gateway();
-        await using var factory = Admin(gateway);
+        var factory = host.Factory;
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
