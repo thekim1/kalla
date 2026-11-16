@@ -1037,6 +1037,15 @@ runs are not counted; the queue counts `queued` jobs within the caller's scope (
 status (a time and a count, held per instance) shows to every role; Live keeps its cards when every count is zero,
 since cost may come from the test panel.
 
+**Deployment notices** (Decisions "Deployment values across releases"; user, 2026-11-16): for a platform admin,
+`GET /api/overview` returns `deploymentNotices`, a list of `{ code, names }`, shown at the top of Home after the secret
+reminders (§5.11) and hideable per browser for that code and those names. The codes: `retired_variables`, the
+deployment variables the stack still sets and this version no longer reads, which rag-admin gets from the bootstrap as
+`Deployment:RetiredVariables` (a comma-separated list; only names of capital letters, digits and `_` are kept, at most
+50). The notice names them, says they have no effect and that the person who runs the deployment removes them, with
+`rag-bootstrap`'s log and the upgrade guide saying what replaced each. A setting that a person must choose after an
+upgrade adds a code here (or a card as the embedding profile's). They are not the attention items below.
+
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
 items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
 seen on its own page (run page, source page, feedback import state, gateway status). Attention item sources: runs
