@@ -1,5 +1,6 @@
 # GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it
-# from the gateway's deploy/compose.portainer.yaml (below, unchanged)
+# from the gateway's deploy/compose.portainer.yaml (below, unchanged but for the default of
+# UME_INTEGRATION_MANIFEST)
 # and deploy/portainer/compose.rag.template.yaml.
 # Do not edit it by hand; the gateway's own note below refers to the gateway's part.
 #
@@ -14,21 +15,41 @@
 # environment variables. Requires Docker 28+ / a recent Compose (configs content, volume subpath).
 #
 # Required variables
-#   GATEWAY_IMAGE, ADMINAPI_IMAGE, MIGRATIONS_IMAGE   images pushed to a registry the host can pull
-#   UME_OIDC_AUTHORITY        https URL of your OIDC provider (Keycloak realm, AD FS, Entra ID)
-#   UME_GATEWAY_HOST          public hostname of the gateway API (for example llm.example.se)
-#   UME_GATEWAY_PUBLIC_URL    its public URL (https://llm.example.se, add :port if not 443)
+#   UME_DOMAIN                your domain (for example example.se): the host names default to llm.<domain> (the
+#                             gateway API) and llm-admin.<domain> (the admin UI). Or set UME_GATEWAY_HOST instead.
+#   GATEWAY_IMAGE, ADMINAPI_IMAGE, MIGRATIONS_IMAGE   images pushed to a registry the host can pull. The
+#                             compose.portainer.yaml attached to a GitHub release already pins that release's images by
+#                             digest, so with it only UME_DOMAIN is required.
+# Sign-in to the admin console, one of two ways (docs/runbook.md, "Portainer and other hosts without shell access"):
+#   - the setup wizard: set nothing. At its first start the admin API prints a setup code in the adminapi container's
+#     log; open https://<admin host>[:UME_ADMIN_PORT]/setup, enter it, and the wizard takes the provider, client and
+#     secret and tests a sign-in before saving. The end of the bootstrap container's log names the address;
+#   - declared: UME_OIDC_AUTHORITY, the https URL of your OIDC provider (Keycloak realm, AD FS, Entra ID), with
+#     UME_OIDC_CLIENT_ID and UME_OIDC_CLIENT_SECRET as needed. A set authority keeps the wizard closed for good; every
+#     UME_OIDC_* that is set is the deployment's value and locks its field in the wizard. UME_OIDC_CLIENT_SECRET is used
+#     only together with UME_OIDC_AUTHORITY.
 # Optional variables
-#   UME_ADMIN_HOST            public hostname of the admin UI (defaults to UME_GATEWAY_HOST)
-#   UME_OIDC_CLIENT_ID (ume-admin), UME_OIDC_CLIENT_SECRET (confidential clients only)
+#   UME_GATEWAY_HOST          public hostname of the gateway API, to override llm.<domain> (required without
+#                             UME_DOMAIN)
+#   UME_GATEWAY_PUBLIC_URL    its public URL when it is not https://<gateway host> (add :port if not 443)
+#   UME_ADMIN_HOST            public hostname of the admin UI, to override llm-admin.<domain> (without UME_DOMAIN it
+#                             defaults to UME_GATEWAY_HOST)
+#   UME_SETUP_REOPEN          empty. Any new value (for example today's date), then Update the stack, opens the setup
+#                             wizard once more, for an hour, with a new code in the adminapi log; empty it before
+#                             restoring a database
+#   UME_OIDC_AUTHORITY, UME_OIDC_CLIENT_ID (code default ume-admin), UME_OIDC_CLIENT_SECRET (confidential clients)
 #   UME_GATEWAY_BIND / UME_ADMIN_BIND (0.0.0.0), UME_GATEWAY_PORT (8443), UME_ADMIN_PORT (9443)
-#   UME_OIDC_ROLE_CLAIM, UME_OIDC_DEPARTMENT_CLAIM, UME_OIDC_TEAM_CLAIM, UME_OIDC_GROUP_CLAIM, UME_OIDC_EXTRA_SCOPE,
+#   UME_OIDC_ROLE_CLAIM, UME_OIDC_DEPARTMENT_CLAIM, UME_OIDC_TEAM_CLAIM, UME_OIDC_GROUP_CLAIM, UME_OIDC_EXTRA_SCOPE
+#                             (unset: the wizard's value, else the code's default: roles, departmentCodes, teamCodes,
+#                             groups and no extra scope; openid, profile and email are always requested)
 #   UME_OIDC_GROUPS_GATEWAY_ADMIN / _DEPARTMENT_ADMIN / _VIEWER / _TEAM_ADMIN  (see docs/runbook.md, "Identity provider")
 #   UME_OTEL_ENDPOINT         OTLP collector for logs, traces and security events (off when empty)
 #   UME_SOURCE_ADDRESS        client address kept for refused keys: Truncated (default), Full or None
 #   (behind a reverse proxy, list it under Settings > Trusted proxies in the admin UI; UME_FORWARDED_HEADERS is gone)
 #   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, UME_DATA_PORT 10443, UME_DATA_HOST,
-#                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md)
+#                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md). It does not
+#                             follow the wizard: with sign-in set there, set UME_DATA_AUTHORITY for access tokens, or the
+#                             Data API accepts only Data API keys
 #   UME_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
 #   UME_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
 #   UME_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
@@ -39,7 +60,8 @@
 # The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
 # (<stack>_ume-config holds static configuration and is rewritten on every start).
 # Do not delete them: a restored database is unusable without the key pepper and the Data
-# Protection certificate (back up ume-secrets/.pepper and ume-certs/data-protection.pfx).
+# Protection certificate (back up ume-secrets/.pepper and ume-certs/data-protection.pfx). A client secret saved in the
+# setup wizard is encrypted with that certificate too.
 # Ports: inside the containers the apps listen on 8443 and the health probe checks that; only
 # the host side of the mapping is configurable (see compose.prod.yaml for details).
 #
@@ -53,15 +75,20 @@
 # of rag-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
 # them (built from a gateway release). Steps: docs/portainer.md.
 #
-# Required variables (besides the gateway's above)
-#   UME_DOMAIN                the base domain (for example example.se): the host names default to rag.<domain>
-#                             (rag-api), rag-admin.<domain> (rag-admin) and chat.<domain> (Open WebUI). Each
-#                             UME_RAG_*_HOST (Optional, below) overrides its name; without UME_DOMAIN, UME_RAG_API_HOST
-#                             is required instead
-#   UME_INTEGRATION_MANIFEST  (the gateway's) the integration Ume.Rag with its three credential keys, as in
-#                             stack.env.example: the gateway's migrations create what is missing (never change what
-#                             exists) and write each new key to the volume <stack>_integration-secrets, from which
-#                             rag-bootstrap gives each service its key (M-17 C7). Without it, or for a key issued by hand:
+# Required variable: one, the gateway's too
+#   UME_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
+#                             llm-admin.<domain> (the gateway's), rag.<domain> (rag-api), rag-admin.<domain>
+#                             (rag-admin) and chat.<domain> (Open WebUI). Each UME_RAG_*_HOST (Optional, below)
+#                             overrides its name; without UME_DOMAIN, UME_GATEWAY_HOST and UME_RAG_API_HOST are
+#                             required instead
+# Set by the stack file or stack.env.example, nothing to type
+#   UME_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
+#                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
+#                             its own (ume-rag) that a gateway admin can move. The gateway's migrations create what is
+#                             missing (never change what exists) and write each new key to the volume
+#                             <stack>_integration-secrets, from which rag-bootstrap gives each service its key (M-17
+#                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
+#                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
 #                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
@@ -73,9 +100,11 @@
 # Recommended
 #   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
 #                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
-# Sign-in is set in rag-admin's setup wizard: after the first start, open https://<UME_RAG_ADMIN_HOST>/setup with the
-# setup code from rag-admin's log. It shows the redirect URIs to register and takes the client secrets. rag-admin's
-# provider is the gateway's UME_OIDC_AUTHORITY (locked in the wizard; UME_RAG_OIDC_AUTHORITY to use another).
+# Sign-in is set in two setup wizards, the gateway's first: https://<UME_ADMIN_HOST>/setup with the setup code from
+# adminapi's log (the gateway's part above), then https://<UME_RAG_ADMIN_HOST>/setup with the setup code from
+# rag-admin's log. Each shows the redirect URIs to register, takes its client secret and tests a sign-in. rag-admin's
+# wizard suggests the provider saved in the gateway's. A stack that sets UME_OIDC_AUTHORITY declares the provider for
+# both instead (locked in both wizards; UME_RAG_OIDC_AUTHORITY gives rag-admin another).
 # Optional
 #   UME_RAG_OIDC_CLIENT_SECRET  declares RAG admin's own OIDC client's secret instead of the wizard (client
 #                             UME_RAG_OIDC_CLIENT_ID, default ume-rag-admin): with the authority, the wizard never opens.
@@ -179,11 +208,24 @@ services:
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:?Set UME_GATEWAY_HOST}
-      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
+      # Each host name, else its default under UME_DOMAIN (llm., llm-admin.). Without the domain the admin's name stays
+      # empty, which the script reads as "the gateway's name" (as before UME_DOMAIN); with neither the domain nor the
+      # gateway's name, that name is empty too and the script stops with "Set UME_DOMAIN or UME_GATEWAY_HOST". Never a
+      # ":?" inside a default here: some Compose versions evaluate it even when the outer variable is set.
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
+      UME_ADMIN_PORT: ${UME_ADMIN_PORT:-9443}
       UME_DATA_HOST: ${UME_DATA_HOST:-}
+      # Sign-in: the client secret file follows the variable, and only with the authority; the rest only shapes the
+      # closing lines of the log (the wizard's address, the Data API's authority).
+      UME_OIDC_AUTHORITY: ${UME_OIDC_AUTHORITY:-}
       UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
-      UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
+      UME_DATA_AUTHORITY: ${UME_DATA_AUTHORITY:-}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      # Rewritten by the RAG repository's build-stack.sh: the integration Ume.Rag and its three credential keys as the
+      # default (deploy/portainer/integration-manifest.json), used only while the variable is unset. Set, the variable
+      # wins; set and empty, nothing is provisioned.
+      UME_INTEGRATION_MANIFEST: '${UME_INTEGRATION_MANIFEST-{"schemaVersion":1,"integration":{"name":"Ume.Rag","description":"Ume.Rag retrieval platform"},"credentialKeys":[{"name":"rag-api","allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]},{"name":"rag-admin","integrationScopes":["organisation.read","usage.read"],"allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]},{"name":"rag-worker","allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]}]}}'
     configs:
       - {source: bootstrap-script, target: /config/bootstrap.sh}
       - {source: redis-acl-template, target: /config/users.acl.example}
@@ -245,7 +287,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.10.3@sha256:6922650dc684204c15a05bc6fae9a8fb14ee7294cf20843fbb3cf9c307d62984}
+    image: ${MIGRATIONS_IMAGE:?Set MIGRATIONS_IMAGE}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -268,7 +310,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.10.3@sha256:29f4b9309fb297575fc7a33bd38a744b817c0a53e523d19b32dd21ae0af4aba0}
+    image: ${GATEWAY_IMAGE:?Set GATEWAY_IMAGE}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -284,6 +326,9 @@ services:
       # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
+      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md). Empty
+      # hands out the authority saved in the setup wizard.
+      Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem
@@ -305,7 +350,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.10.3@sha256:41609b36f4f6d8923ec8f5cbc54b45d65160beba190aa2a908d232a925f58ca0}
+    image: ${ADMINAPI_IMAGE:?Set ADMINAPI_IMAGE}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
@@ -318,18 +363,23 @@ services:
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/adminapi.key
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: adminapi
-      Oidc__Authority: ${UME_OIDC_AUTHORITY:?Set UME_OIDC_AUTHORITY (https URL)}
-      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-ume-admin}
-      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-roles}
-      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
-      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-teamCodes}
-      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-groups}
-      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-email}
+      # Sign-in (docs/identity-and-roles.md, "Setup mode"): an empty value is unset, so the setup wizard's value applies,
+      # else the code's default (client ume-admin, claims roles, departmentCodes, teamCodes, groups, no extra scope). A
+      # set authority declares the sign-in and keeps the wizard closed.
+      Oidc__Authority: ${UME_OIDC_AUTHORITY:-}
+      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-}
+      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-}
+      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-}
+      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-}
+      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-}
+      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-}
       Oidc__RoleGroups__gateway-admin: ${UME_OIDC_GROUPS_GATEWAY_ADMIN:-}
       Oidc__RoleGroups__department-admin: ${UME_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
       Oidc__RoleGroups__viewer: ${UME_OIDC_GROUPS_VIEWER:-}
       Oidc__RoleGroups__team-admin: ${UME_OIDC_GROUPS_TEAM_ADMIN:-}
-      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:?Set UME_GATEWAY_PUBLIC_URL (https URL)}
+      # A new value opens the setup wizard once more (the setup code's key is the file Setup__Secret the bootstrap writes).
+      Setup__Reopen: ${UME_SETUP_REOPEN:-}
+      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:-https://${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}}
       DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: https://gateway:8443
       # Integration API (/integration/v1): requests per minute per credential key.
@@ -355,7 +405,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.10.3@sha256:87df3ad16329a5eec9351bc0c0fdf352b579c7fc418a3263b0bf2f3d08592be2}
+    image: ${DATAAPI_IMAGE:-ume-llm-gateway/dataapi:latest}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
@@ -365,7 +415,8 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/dataapi.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/dataapi.key
-      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY}}
+      # Not the setup wizard's authority: without either variable the Data API accepts only Data API keys.
+      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
       DataApi__Audience: ${UME_DATA_AUDIENCE:-ume-data-api}
       DataApi__MinimumGroupSize: ${UME_DATA_MINIMUM_GROUP_SIZE:-5}
       DataApi__TimeZone: ${UME_DATA_TIME_ZONE:-Europe/Stockholm}
@@ -398,9 +449,9 @@ services:
       # versions evaluate it even when the outer variable is set).
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-${UME_DOMAIN:+rag-admin.}${UME_DOMAIN:-}}
-      # The TLS proxy's host names (profile proxy).
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-}
-      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
+      # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
@@ -626,6 +677,10 @@ services:
       OTEL_SERVICE_NAME: rag-admin
       # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
       Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
+      # The gateway admin console's address for rag-admin's links to it (the setup wizard's link to the gateway's wizard
+      # among them), used while the gateway's context names none (UME_ADMIN_PUBLIC_URL sets it there): its host name on
+      # port 443, as behind the TLS proxy. On another port, set UME_ADMIN_PUBLIC_URL.
+      Admin__GatewayAdminUrl: ${UME_ADMIN_PUBLIC_URL:-https://${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
@@ -928,15 +983,17 @@ configs:
     content: |
       #!/bin/sh
       # One-shot bootstrap for compose.portainer.yaml: creates the internal CA, service certificates,
-      # Data Protection certificate, passwords, key pepper and Redis ACL in the ume-certs / ume-secrets
-      # volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
+      # Data Protection certificate, passwords, key pepper, the admin API's setup secret and Redis ACL in the ume-certs /
+      # ume-secrets volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
       # certificate would break existing data); service certificates are re-issued when they expire
-      # within 30 days or the hostnames change. Inputs come from environment variables.
+      # within 30 days or the hostnames change. Inputs come from environment variables; the host names arrive resolved from
+      # the stack file (UME_DOMAIN's defaults unless a UME_*_HOST is set). Its last lines say how sign-in is set up: declared
+      # by the stack's UME_OIDC_AUTHORITY, or in the setup wizard.
       set -eu
       umask 077
       C=/certs
       S=/secrets
-      : "$${UME_GATEWAY_HOST:?Set UME_GATEWAY_HOST (public hostname of the gateway API)}"
+      : "$${UME_GATEWAY_HOST:?Set UME_DOMAIN or UME_GATEWAY_HOST (public hostname of the gateway API)}"
       ADMIN_HOST="$${UME_ADMIN_HOST:-$$UME_GATEWAY_HOST}"
       DATA_HOST="$${UME_DATA_HOST:-$$UME_GATEWAY_HOST}"
       for d in postgres redis gateway adminapi dataapi migrations; do mkdir -p "$$C/$$d" "$$S/$$d"; done
@@ -1004,12 +1061,29 @@ configs:
       # Data API (optional, profile "data"): read-only role, no pepper, no Redis.
       printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
         "$$(cat "$$S/postgres/data_password")" > "$$S/dataapi/ConnectionStrings__gatewaydb"
-      # Confidential OIDC client (optional); the file follows the variable, so removing it clears the secret.
-      if [ -n "$${UME_OIDC_CLIENT_SECRET:-}" ]; then
+      # The admin API's setup secret: the setup code is derived from it (docs/identity-and-roles.md, "Setup mode"). Kept, but
+      # not worth backing up: a new one only changes the setup codes printed from then on.
+      [ -f "$$S/adminapi/Setup__Secret" ] || rand | tr -d '\n' > "$$S/adminapi/Setup__Secret"
+      # Confidential OIDC client (optional); the file follows the variable, so removing it clears the secret. Only with the
+      # stack's authority: a deployment client secret goes only to the deployment's own provider, so without one it would make
+      # every test sign-in of the setup wizard fail (deployment_secret_without_authority).
+      notes=""
+      note() { notes="$$notes
+      bootstrap: $$*"; }
+      if [ -n "$${UME_OIDC_CLIENT_SECRET:-}" ] && [ -n "$${UME_OIDC_AUTHORITY:-}" ]; then
         printf '%s' "$$UME_OIDC_CLIENT_SECRET" > "$$S/adminapi/Oidc__ClientSecret"
       else
         rm -f "$$S/adminapi/Oidc__ClientSecret"
+        [ -z "$${UME_OIDC_CLIENT_SECRET:-}" ] || note "UME_OIDC_CLIENT_SECRET is left out: it is used only with UME_OIDC_AUTHORITY. Set the authority too, or remove the secret and enter it in the setup wizard"
       fi
+      # An example value left in a sign-in variable declares a wrong provider or secret, and the wizard stays closed.
+      case "$${UME_OIDC_AUTHORITY:-}" in
+        "" | https://*) ;;
+        *) note "UME_OIDC_AUTHORITY must be the https URL of your OIDC provider (the admin API refuses to start with it)" ;;
+      esac
+      case "$${UME_OIDC_AUTHORITY:-}$${UME_OIDC_CLIENT_SECRET:-}" in
+        *example.se* | *example.com* | *CHANGE*) note "UME_OIDC_AUTHORITY or UME_OIDC_CLIENT_SECRET still holds an example value: set the real one, or remove both for the setup wizard" ;;
+      esac
 
       # Static configuration files (services run read-only, so they get them from a volume).
       F=/conf
@@ -1032,6 +1106,18 @@ configs:
       # Secrets of credential keys created from the manifest: the migration service writes them, a platform's bootstrap reads them.
       chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
       echo "bootstrap: certificates and secrets ready"
+      # How sign-in is set up. The bootstrap has no network and cannot see whether setup was finished, so this is printed on
+      # every run.
+      if [ -n "$${UME_OIDC_AUTHORITY:-}" ]; then
+        echo "bootstrap: sign-in to the admin console is declared by the stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: sign in at https://$$ADMIN_HOST:$${UME_ADMIN_PORT:-9443}/ (behind a reverse proxy https://$$ADMIN_HOST/)"
+      else
+        echo "bootstrap: sign-in to the admin console is set in the setup wizard: https://$$ADMIN_HOST:$${UME_ADMIN_PORT:-9443}/setup (behind a reverse proxy https://$$ADMIN_HOST/setup), with the setup code from the adminapi container's log (printed at its first start, and after a new UME_SETUP_REOPEN); skip this if you can already sign in"
+      fi
+      case ",$${COMPOSE_PROFILES:-}," in
+        *,data,*) [ -n "$${UME_DATA_AUTHORITY:-}$${UME_OIDC_AUTHORITY:-}" ] ||
+          note "the Data API has no token issuer (UME_DATA_AUTHORITY, else UME_OIDC_AUTHORITY), so it accepts only Data API keys; the setup wizard's provider does not apply to it" ;;
+      esac
+      [ -z "$$notes" ] || printf '%s\n' "$${notes#?}"
   redis-acl-template:
     content: |
       user default off
@@ -1112,6 +1198,8 @@ configs:
       INSERT INTO "GatewaySettings" ("Id", "TrustedProxies", "AuditRetentionDays") VALUES (1, ARRAY[]::text[], 365) ON CONFLICT ("Id") DO NOTHING;
       -- The same for the admin console's branding (organisation name and logo; the name's default is the column default).
       INSERT INTO "Branding" ("Id") VALUES (1) ON CONFLICT ("Id") DO NOTHING;
+      -- And for the admin console's stored sign-in values (all unset until setup mode stores them).
+      INSERT INTO "SignInSettings" ("Id", "ExtraScopes") VALUES (1, ARRAY[]::text[]) ON CONFLICT ("Id") DO NOTHING;
 
       -- Gateway (faces the clients): what it authenticates, routes and accounts with. Not the audit log or Data API keys. It reads
       -- the Data Protection key ring but does not add keys (it only decrypts; the admin API creates and rotates them).
@@ -1122,19 +1210,26 @@ configs:
       GRANT UPDATE ("LastUsedAt") ON "VirtualKeys" TO ume_gateway;
       -- The organisation's name for integrations' context; never the logo.
       GRANT SELECT ("OrganisationName") ON "Branding" TO ume_gateway;
+      -- The sign-in provider's address for integrations' context; never the client id or the encrypted client secret.
+      GRANT SELECT ("Authority") ON "SignInSettings" TO ume_gateway;
 
       -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
       -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.
       GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
         "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
         "UsageRecords", "UsageMonthlyTotals", "AuditLog", "AlertEvents", "AuthFailures", "DataProtectionKeys",
-        "Branding", "__EFMigrationsHistory" TO ume_admin;
+        "Branding", "SignInSettings", "SetupSessions", "SetupTests", "__EFMigrationsHistory" TO ume_admin;
       GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "Integrations", "ProviderAccounts",
         "ModelDeployments", "ModelPrices", "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets",
         "Budgets", "DataApiKeys" TO ume_admin;
       GRANT UPDATE ("TrustedProxies", "LogAllRequests", "LogAllRequestsUntil", "UpdatedAt", "UsageRetentionDays", "AuditRetentionDays",
         "RetentionLastRunAt", "RetentionLastRunDeleted", "RetentionLastRunError") ON "GatewaySettings" TO ume_admin;
       GRANT UPDATE ("OrganisationName", "Logo", "LogoContentType", "UpdatedAt") ON "Branding" TO ume_admin;
+      GRANT UPDATE ("Authority", "ClientId", "RoleClaim", "DepartmentClaim", "TeamClaim", "GroupClaim", "ExtraScopes", "EncryptedClientSecret",
+        "ClientSecretSetAt", "ClientSecretExpiresOn", "UpdatedAt", "SetupCompletedAt", "SetupNonce", "SetupOpenedAt", "SetupReopenConsumed")
+        ON "SignInSettings" TO ume_admin;
+      -- Setup mode's short-lived sessions and test sign-ins (deleted when their opening ends).
+      GRANT INSERT, UPDATE, DELETE ON "SetupSessions", "SetupTests" TO ume_admin;
       GRANT INSERT ON "AuditLog", "DataProtectionKeys" TO ume_admin;
       GRANT UPDATE ("Acknowledged") ON "AlertEvents" TO ume_admin;
       -- Data retention: old rows are removed only through this function (owner's rights, minimum 90 days); the admin role
@@ -1441,7 +1536,7 @@ configs:
       example() { case "$$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
-        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: no key for rag-$$svc. Set UME_INTEGRATION_MANIFEST (stack.env.example) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
+        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: no key for rag-$$svc. Leave UME_INTEGRATION_MANIFEST unset (the stack file's default) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
       done
       # A name under UME_DOMAIN is named once, as the domain; a name set of its own, as its variable.
       if [ -n "$${UME_DOMAIN:-}" ] && example "$$UME_DOMAIN"; then note "UME_DOMAIN is still an example value (the host names default under it)"; fi
