@@ -25,6 +25,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   reach only that provider, and without it the setup wizard's test sign-in failed. The wizard's message for a provider
   it cannot reach now says so. New: [`docs/compose-quick-start.md`](docs/compose-quick-start.md), the gateway and
   Ume.Rag on one host in six steps; it replaces `docs/gateway-host-setup.md`.
+- **Kubernetes gets its certificates and secrets from the stacks' bootstrap** (the first step of one bootstrap for
+  every deployment form, Decisions "One deployment bootstrap"). `deploy/kubernetes/create-secrets.sh` runs
+  `deploy/portainer/bootstrap.sh` on the operator's machine and uploads the result, so the install is one command
+  instead of `init-deployment.sh` and then `create-secrets.sh`, and it takes the host names, the credential keys, a
+  CA to trust, your own certificates, the backup repository and `--postgres-host` itself. `bootstrap.sh` takes its
+  paths and those inputs as variables; the Portainer stack sets none of them and behaves as before. An existing
+  installation keeps every secret ([upgrade guide](docs/upgrade-guide.md)).
 - **The install and upgrade guides were checked line by line against the scripts, the stack files and the releases**,
   and corrected. What an operator would have tripped on: Docker Compose must be 2.33.1 or later (the guides said 2.24;
   the Compose files use `gw_priority`); an upgrade with Portainer over several releases takes each release's own

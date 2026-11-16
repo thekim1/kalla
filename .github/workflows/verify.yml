@@ -406,6 +406,10 @@ jobs:
           if echo "$k8s_images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned Kubernetes images in the bundle"; exit 1; fi
           # The Portainer stack asset: RAG's images pinned to the release.
           grep -q "RAG_API_IMAGE:-ghcr.io/example/ume-rag/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
+      - name: Kubernetes' create-secrets.sh generates with the stacks' bootstrap and keeps its secrets on a re-run
+        # Decisions "One deployment bootstrap": create-secrets.sh runs deploy/portainer/bootstrap.sh on the operator's
+        # machine. No cluster: --generate-only, twice, then on directories that init-deployment.sh made (the upgrade).
+        run: bash deploy/tests/kubernetes-secrets.sh
       - name: init-deployment.sh keeps its secrets on a re-run
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
         # crawl key pepper, rag-admin's setup secret and the renderer's WebSocket path among them, is unchanged by the
