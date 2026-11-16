@@ -43,6 +43,25 @@ chatbot, the support-chatbot proposal.
 - **The pin pull request** was opened by `release.yml` itself this time (#789). A pull request opened by the workflow's
   token starts no checks: close and reopen it, then merge (handbook, *Release dry runs*).
 
+### After the release, in session 44 (2026-11-16)
+
+- **#790, merged:** #781's fix (above).
+- **#764, closed:** its three fixes shipped in 0.7.0; knowledge §6.6 and data-model §1.1 now say a search slot is one
+  statement's connection; the exact-scan finding is on to-verify row 6.
+- **#791, merged: the *Before go-live* checks.** 14 rows of `plans/to-verify.md` are done, each with its evidence in
+  the new `plans/work/results-main.md`, by five agents in parallel (each report checked against its diff and its tests
+  re-run, except the Open WebUI browser spec, which was only type-checked). Two defects fixed: the admin saved
+  schedules the scheduler skips for good; chat's 413 had the wrong shape. Designs corrected: engine §9.6, parser §4,
+  data-model §1.1.
+  - **Open for the user:** row 96 (the NVDA pass, needs Windows); whether to ask KB in writing that MIT covers the
+    SUC-trained NER weights (row 110; the question is drafted in the session's report and in results-main's row);
+    whether `NerMinScore` moves for int8 (row 79: 1 of 66 names missed at 0.80; left as it is).
+  - **Filed:** #792 (stream b: `ParentMessageId` is never written), #793 (stream a: `LICENSES.md` lacks a LibreOffice
+    section; the draft in the issue has entries to check against the image).
+  - `tests/e2e/specs/openwebui.spec.ts` is a by-hand spec (project `openwebui`; the stack needs
+    `FakeGateway__Latency__TokenIntervalMs=80` and `FakeGateway__Latency__AnswerWords=150`): not in `e2e.yml`.
+- **Next without input:** C13 (#667), then #506 and #507 (Actions pinned by SHA, base-image scans).
+
 ### 1. What stage 2 is, and what is not shown
 
 - **Built in session 44:** `stack.env.example` has 1 CHANGE value; `build-stack.sh` rewrites the gateway's one
@@ -148,7 +167,7 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
   its chat model and its embedding model. Pulls that say "denied": `docker logout ghcr.io`.
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): the user picks; the suggestion is
   F3, F4, F8 and F10.
-- **Checks before go-live:** the 16 *Before go-live* rows of `plans/to-verify.md` need no input.
+- **Checks before go-live:** done but for row 96 (#791).
 
 ## State
 

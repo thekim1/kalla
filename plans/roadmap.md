@@ -69,8 +69,9 @@ table says "user".
 
 Each becomes a queue item when the main session picks it up.
 - **Grading dry run: done** (main, 2026-11-15, FakeGateway stack): `answer` → graded CSV → `totals` against a live rag-api with a real integration key (5 questions, one off-topic; `totals` exits 1 on a failing gate and 2 on an inconsistent file, naming the rows). Step 3 starts on working tools. Set-up note for step 3: the pilot assistant needs a description, a contact and a gateway key of its department that reaches both the chat model and the collection's embedding model at the assistant's ceiling (#720 for the refusal's wording).
-- **Checks before go-live:** the 16 rows of [`to-verify.md`](to-verify.md) *Before go-live* need no input (local
-  tests, source readings, the NVDA pass, licences); the live block's rows are listed there under each step below.
+- **Checks before go-live:** done 2026-11-16 (#791; results in [`work/results-main.md`](work/results-main.md)) but
+  for row 96, the NVDA pass, which needs a Windows screen reader. Follow-ups: #792, #793; the question to KB (row 110)
+  is the user's call. The live block's rows are listed in [`to-verify.md`](to-verify.md) under each step below.
 - **Upload gaps** ([`proposals/upload-quality-review.md`](proposals/upload-quality-review.md), U1–U7): measured on 14
   public IT guides (2026-11-15). U1 is the largest loss: 18 % of the text is inside screenshots (19–76 % in
   step-by-step guides), none of it kept. U5 and U7 cost little. The same script (`scripts/upload-gaps/measure.py`)
