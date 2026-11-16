@@ -27,6 +27,11 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   every form. M-17's C13 is absorbed by S1's step 3. S2, S5 and S7 wait for the user's decision.
 - **Paths:** `deploy/**`, `docs/**`, `.github/workflows/**` (stream a's: `main-session/<slug>` branches, no open `a/`
   work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
+- **Status (2026-11-16, session 46):** S1's four points decided. Merged: #798 (S1 steps 1 and 4: `bootstrap.sh` takes
+  its paths and inputs as variables, `create-secrets.sh` runs it; an existing Kubernetes installation keeps its
+  secrets) and #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide). Next: S1 step 2
+  (the one service file and its overlays, with S3), planned in the proposal; then step 3 (the short
+  `init-deployment.sh`), step 5 (the guides) and S9.
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.

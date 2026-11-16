@@ -26,25 +26,32 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 46): the deploy simplification (M-22)
+## Start here: the deploy simplification (M-22), S1 step 2
 
-The user asked for it on 2026-11-16: [`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md)
-says where deployment is more complex than it needs to be and what to do first; the queue item is `plans/work/main.md`
-**M-22**. Read the proposal, then:
+The user asked for it on 2026-11-16: [`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md);
+the queue item is `plans/work/main.md` **M-22**, whose status line says what is merged.
 
-1. **S1, one bootstrap for Compose and Portainer.** It has four points to decide before any code (where the files live
-   in Compose, what stays in `init-deployment.sh`, one stack file or two, what Kubernetes does). Put them to the user
-   first, each as four alternatives with one recommendation. **C13** of M-17 (the script loses the options whose
-   values moved; `plans/proposals/deploy-configuration.md` §5) is S1's first step and needs no decision.
-2. **S3 with S9, Open WebUI as a profile in Compose and easy to skip** (the user's own point: not every installation
-   needs it). Off unless asked for in every form, and no trace of it when it is off: the stack example's default
-   profiles, the `chat.` host, the managed client, the last step of *Get started*, the first-install guides. S9's list
-   is from reading; check each point in the code first. The admin UI's texts are stream b's paths.
-3. **S4a, delete the upgrade paths nobody runs:** every per-version section but the newest.
-
-**Upgrades may break** (user, 2026-11-16: "assume no one is really using this yet"): a low-hanging simplification
-need not keep an existing stack upgradable, as long as the release says so; the proposal lists what that frees
-(*Allowed now that upgrades may break*). Tell the user when a change means the VM is reinstalled, not upgraded.
+- **Decided in session 46** (Decisions "One deployment bootstrap"): Compose keeps its certificates and secrets in
+  Docker volumes as Portainer; `init-deployment.sh` writes only `deploy/.env`; one Ume.Rag service file with the
+  `rag-` names plus overlays, merged with the gateway's for Portainer; Kubernetes runs the same `bootstrap.sh`.
+- **Two more rules from the user that day:** a breaking deploy change comes with an **upgrade path where one is
+  feasible** (a step in the upgrade guide or a migration in the bootstrap; *install again* only when no reasonable
+  path exists, and tell the user when that is the VM's case), and **the setup wizard works the same in every form**
+  (no sign-in value asked for at install, except the provider's address with the host firewall overlay).
+- **Merged:** #798 (`bootstrap.sh` takes its paths and inputs as variables; `create-secrets.sh` runs it, tested by
+  `deploy/tests/kubernetes-secrets.sh`) and #799 (S4a: upgrade sections older than 0.5.x removed, with a pointer to the
+  `v0.7.0` guide).
+- **Next: step 2,** the one service file `deploy/compose.rag.yaml` and its overlays, which also makes Open WebUI a
+  profile in Compose (S3). The proposal's *Step 2, how* is the plan. The Portainer stack's service, volume and
+  variable names must stay, so the user's VM keeps upgrading; a Compose install made with the old files has no
+  upgrade path (none exists outside tests) and the release says so. Then step 3 (the short `init-deployment.sh`, which
+  absorbs M-17's C13), step 5 (the guides, and `repo-and-deployment.md` §7.1 and §10, which still describe
+  `create-secrets.sh` as reading `init-deployment.sh`'s output) and **S9** (Open WebUI easy to skip).
+- **S9, checked in the code so far:** `stack.env.example` presets `COMPOSE_PROFILES=clamav,openwebui`; the proxy's
+  Open WebUI block, the managed client's key for `rag-migrate` and the checklist's notes already follow the profile;
+  `rag-bootstrap` still generates Open WebUI's secrets and the `rag-openwebui-data` volume without it, and rag-admin
+  always gets `OpenWebUi__PublicUrl`. rag-api reads `OpenWebUi:JwtSecret` as optional (`OpenWebUiUserJwt.cs`; whether
+  start-up validation needs the file is not checked). The admin UI's texts are stream b's paths.
 
 S2 (the host firewall and slice as optional hardening), S5 (one wizard hand-off from the gateway) and S7 (the manifest
 names the owner and a first assigned key) wait for the user's decision: S2 changes the security design, S5 and S7 the
