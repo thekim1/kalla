@@ -5,6 +5,37 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.7.0 (2026-11-16)
+
+**The setup wizard (M-20):** sign-in is set up in the browser instead of in the deployment's variables. rag-admin
+prints a one-time setup code at its first start; `/setup` takes the provider, the client and its secret, runs a test
+sign-in and saves only what a platform admin's test passed with; Open WebUI's sign-in is a step of the same wizard. A
+new Portainer stack needs one typed value, `UME_DOMAIN`, and no secret (0.6.0: nine values, two secrets), with the
+gateway's own setup wizard first (pins the gateway's v0.11.0). Also: a stack that still sets a retired variable is told
+so (M-21), and three hot paths measured in #764 are shorter.
+**Rolling update: yes** from 0.6.0 (migrations `IdentityOidcSettings`, `SetupMode` and `OpenWebUiSignInSettings` only
+add). **An existing deployment keeps its variables and never sees a wizard.** See `docs/upgrade-guide.md`.
+
+### Added
+
+- **Sign-in values as settings** (setup wizard S1, S2; identity design §19): `Settings.Identity.Oidc` holds the
+  provider address, the client and the token's shape, with the client secret encrypted with Data Protection and
+  write-only; each effective value has a source (the deployment's wins and is shown locked, then the wizard's, then
+  the code's default), shown by `GET /api/settings/sign-in`. rag-admin signs in with the effective values, starts
+  without an authority, and follows a change without a restart (#761, #762).
+- **Setup mode** (setup wizard S3, S4; admin design §5.11): open only before its first completion and after a re-open,
+  never on a fault; a deployment that declares an authority and a client secret counts as completed. `/bff/setup/*`
+  takes the setup code (derived from the setup secret file, the same on every replica, valid one hour, written to
+  rag-admin's standard output only), gives a setup session, runs a test sign-in in a window of its own and completes
+  with the tested values; security events 6008–6013. The admin UI's `/setup` has the steps *Setup code*, *Addresses*,
+  *Sign-in*, *Open WebUI* and *Summary and finish* (#767, #769, #773).
+- **Home reminds a platform admin before a client secret expires** (`GET /api/overview`, `secretExpiry`; the date is
+  typed in the wizard, #773).
+- **The browser test of the setup wizard** on a stack of its own in `e2e.yml` (#774), and
+  `deploy/tests/portainer-upgrade.sh`: the stack file renders with the previous release's variables (#777).
+
+### Changed
+
 - **`UME_DOMAIN` gives the host names their defaults** (setup wizard S0): in the Portainer stack, rag-api, rag-admin
   and Open WebUI default to `rag.<domain>`, `rag-admin.<domain>` and `chat.<domain>`, each `UME_RAG_*_HOST` still
   overrides its own, and a stack with the names and no domain works as before; `init-deployment.sh --domain` does the
@@ -67,6 +98,17 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   own manifest changes nothing; one without a manifest gets the default (new keys beside hand-made ones: upgrade
   guide). The stack is built from the gateway's release with setup mode and manifests without an owner.
   `docs/portainer.md`, the upgrade guide, the runbook, `production-setup.md` and `keycloak.md` follow.
+
+### Fixed
+
+- **Setup mode after an independent security review** (#778, #770): the right setup code is never throttled by wrong
+  ones, a made-up callback keeps the test's cookie, completing re-checks the provider the test ran against, and a
+  `complete` that lost the race answers 404.
+- **A Portainer stack with only the host names renders on every Compose** (#776): no required-variable form inside a
+  default, which some Compose versions evaluate even when the outer variable is set.
+- **Hot paths measured 2026-11-15** (#764): a search slot is one statement's connection, held only while the statement
+  runs (#766); a lane keeps its ready departments for a second instead of reading them before every claim (#768); the
+  chunk insert and the embedding cache send vectors as a binary `vector[]`, not as text (#780).
 
 ## 0.6.0 (2026-11-15)
 

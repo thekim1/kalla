@@ -14,6 +14,8 @@ lands or an input arrives.
 | `v0.3.0` (2026-11-10) | Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, the #499–#513 review fixes |
 | `v0.4.0` (2026-11-11) | Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics in the worker, lower idle cost |
 | `v0.5.0` (2026-11-13) | **Gateway integration phases 1–3** (#580): one credential key per service, a gateway key per assistant and knowledge base that every call runs as, organisation and models from the gateway's context (no Data API), **cost attribution** stages 1 and 2 (built; stage 2's live done-when waits on step 0 below) with the gateway's cost and budgets beside Ume.Rag's, refusals in chat and admin, content retention, malware scan optional |
+| `v0.6.0` (2026-11-15) | A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys, the rest comes from the gateway, the admin UI or the stack; apps and keys connected in one go (M-16); the admin UI review (M-19); the fixes of the 2026-11-14 review (#694) |
+| `v0.7.0` (2026-11-16) | **The setup wizard** (M-20): sign-in set in the browser with a setup code and a test sign-in; a new Portainer stack needs one typed value, `UME_DOMAIN`, and no secret, with the gateway's wizard first (gateway `v0.11.0`); retired deployment variables named (M-21); three hot paths of #764 |
 
 Every code item of both stream queues is done. What is left before go-live is live work, and every step of it waits on
 an input from people.
@@ -77,9 +79,8 @@ Each becomes a queue item when the main session picks it up.
   five processes, and a pull request with only admin UI or browser-test changes skips the job. Left: what the test
   collections of one process wait for (not CPU, thread pool, disk or GC; a profiler would say), and one
   `WebApplicationFactory` per class (#580 note to stream b).
-- **Setup wizard** (`work/main.md` M-20): done on `main`, unreleased (#786, 2026-11-16): a deployer types 1 value,
-  `UME_DOMAIN`, and no secret, and sets sign-in in two setup wizards, the gateway's first (gateway `v0.11.0`). Shown by a
-  release dry run with the browser tests; not tried in Portainer itself.
+- **Setup wizard** (M-20, in `archive/work/to-v0.7.0.md`): released in `v0.7.0`. Shown by a release dry run with the
+  browser tests; not tried in Portainer itself, nor with both wizards completed against a real provider in one stack.
 - **Plan files:** the restructuring of session 33 (`work/main.md` M-14).
 - **Deploy configuration** (decided 2026-11-13, `work/main.md` M-17, [`proposals/deploy-configuration.md`](proposals/deploy-configuration.md)): a deploy that needs
   only what a process can't start without; C0–C10 and C12 merged (C7 and C12 on the gateway's v0.10.2); C11 in review (#740); C13 left.
