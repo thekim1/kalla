@@ -28,7 +28,7 @@
 # gets integration-manifest.json (beside this script, written on one line) as its default, so the gateway creates the
 # integration Ume.Rag and its three credential keys with nothing typed (M-20 S8). The default applies only when the
 # variable is unset ("-", not ":-"): a stack that sets its own manifest keeps it, and an empty value creates nothing.
-# The manifest names no owner, which the gateway accepts from the release after 0.10.3. The build stops when the
+# The manifest names no owner, which the gateway accepts from 0.11.0. The build stops when the
 # gateway's file does not have exactly that line.
 # A default that contains "}" needs Compose 2.24.7 or later (compose-go 5ede864, "default values can contain curly
 # braces"); an older one ends the expression at the first "}" without an error, also when the variable is set (tried
