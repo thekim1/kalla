@@ -1,36 +1,28 @@
-using System.Globalization;
 using System.Text.Json;
 using Npgsql;
+using Pgvector;
 using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Processing;
 using Ume.Rag.Worker.Connectors.Persistence;
-using static Ume.Rag.Worker.Processing.Persistence.VectorText;
+using static Ume.Rag.Worker.Processing.Persistence.Vectors;
 
 namespace Ume.Rag.Worker.Processing.Persistence;
 
-/// <summary>Vectors cross the wire as pgvector's text form (<c>[1,2,3]</c>): the <c>vector</c> columns are not in the EF model.</summary>
-internal static class VectorText
+/// <summary>
+/// Vectors go to Postgres in pgvector's binary form, as a <c>vector[]</c> parameter (<see cref="Pgvector.Vector"/>; the
+/// data source maps the type, <c>AddRagDatabase</c>): the <c>vector</c> columns are not in the EF model. As text
+/// (<c>'[1,2,3]'::vector</c>) 1,000 vectors of 1,024 floats took 178 ms and 111 MB of strings; binary takes 20 ms (#764).
+/// They are read back as <c>real[]</c>.
+/// </summary>
+internal static class Vectors
 {
     /// <summary>The first row of a read, or null.</summary>
     public static T? First<T>(IReadOnlyList<T> rows) where T : class => rows.Count > 0 ? rows[0] : null;
 
-    public static string Format(IReadOnlyList<float> vector)
-    {
-        var builder = new System.Text.StringBuilder(vector.Count * 10 + 2).Append('[');
-        for (var i = 0; i < vector.Count; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append(',');
-            }
-
-            builder.Append(vector[i].ToString("R", CultureInfo.InvariantCulture));
-        }
-
-        return builder.Append(']').ToString();
-    }
+    /// <summary><paramref name="vector"/> as the parameter value; the floats are not copied when it is an array.</summary>
+    public static Vector Of(IReadOnlyList<float> vector) => new(vector as float[] ?? [.. vector]);
 }
 
 /// <summary><see cref="INodeOutputStore"/> over <c>content."NodeOutputs"</c> (engine design §8).</summary>
@@ -155,7 +147,7 @@ public sealed class PostgresEmbeddingCache(JobDatabase database) : IEmbeddingCac
 
     private const string PutSql = """
         INSERT INTO content."EmbeddingCache" ("Classification", "EmbeddingProfileId", "TextHash", "Embedding", "LastUsedAt")
-        SELECT $1, $2, u.h, u.e::vector, $5 FROM unnest($3::bytea[], $4::text[]) AS u(h, e)
+        SELECT $1, $2, u.h, u.e, $5 FROM unnest($3::bytea[], $4::vector[]) AS u(h, e)
         ON CONFLICT ("Classification", "EmbeddingProfileId", "TextHash") DO NOTHING
         """;
 
@@ -223,7 +215,7 @@ public sealed class PostgresEmbeddingCache(JobDatabase database) : IEmbeddingCac
             Parameters =
             {
                 Db.P(classification), Db.P(embeddedWith.Id), Db.P(vectors.Keys.Select(Db.Bytes).ToArray()),
-                Db.P(vectors.Values.Select(v => VectorText.Format(v)).ToArray()), Db.P(now.ToUniversalTime()),
+                Db.P(vectors.Values.Select(v => Of(v)).ToArray()), Db.P(now.ToUniversalTime()),
             },
         })
         {
