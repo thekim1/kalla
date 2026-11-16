@@ -26,51 +26,34 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 43): finish the gateway's WG4, then wait for the user's merges and a gateway release
+## Start here (session 44): wait for the user's merges and a gateway release, then Ume.Rag's side of stage 2
 
 The setup wizard (M-20) has two stages. **Stage 1** (Ume.Rag and Open WebUI; a deployer types 5 values and no secret)
 is on `main` and shown by a release dry run. **Stage 2** (one typed value, `UME_DOMAIN`) needs the gateway's part,
-which session 42 built in the gateway's repository on the user's word ("build it", 2026-11-16).
+which sessions 42 and 43 built in the gateway's repository on the user's word ("build it", 2026-11-16): three pull
+requests, all waiting for the user.
 
-### 1. First: finish WG4 in the gateway (uncommitted work)
+### 1. WG4 is a pull request: thekim1/llmgateway#104 (closes #101)
 
-thekim1/llmgateway#101, the integration manifest without an edit. **Built, uncommitted, not pushed**, in the worktree
-`~/git/llmgateway-101` (branch `feat/101-manifest-default-owner`, from the gateway's `origin/main`). Session 42 stopped
-there because the tool's permission check failed for several calls in a row (a transient fault).
-
-What it is (the user asked for it after an explanation, "ok do it"): an integration cannot exist without an owner
-team (every credential key belongs to a team; usage is stored per team and department), so "without an owner" is a
-**default owner that can be moved**:
+The integration manifest without an edit (the user asked for it after an explanation, "ok do it"). An integration
+cannot exist without an owner team, so "without an owner" is a **default owner that can be moved**:
 - `integration.owner` is optional in the manifest. Without it a new integration gets a team and a department named
   after it, with a code slugged from the name ("Ume.Rag" → `ume-rag`); the migration log and the import preview say so
   (`defaultOwner` in the result, and a warning). A manifest with an owner behaves as before.
 - `PUT /api/integrations/{id}` with another `ownerTeamId` no longer answers 409 while the integration has credential
-  keys: its credential keys that are not revoked move with it, each audited; revoked and assigned keys stay; recorded
-  usage keeps its team. **Added by the main session:** a move to an inactive team, or a team in an inactive department,
-  is refused (400 on `ownerTeamId`), with a test and the docs.
+  keys: those not revoked move with it, each audited; revoked and assigned keys stay; recorded usage keeps its team.
+  A move to an inactive team, or a team in an inactive department, is refused (400 on `ownerTeamId`).
 - The Ume.Rag preset (`deploy/integration-presets/ume-rag.json`) no longer names an owner.
 
-To do, in order:
-1. **Re-run `Ume.LlmGateway.Gateway.Tests` a few times.** One run gave 486 of 487:
-   `ClientAddressTests.Forwarded_address_is_used_only_through_a_trusted_proxy` failed once. It writes the shared
-   settings row (trusted proxies) and WG4 doesn't touch that area; the implementor's two earlier runs passed. Decide:
-   an existing flake (say so in the PR) or an effect of the two new Gateway tests (`HotPathTests`,
-   `IntegrationGatewayTests`), which publish key invalidations.
-2. Add to `CHANGELOG.md`'s entry, after "…while the new one counts from the move.": *A move to an inactive team, or to
-   a team in an inactive department, is refused (400): the gateway refuses such a team's keys.* (The edit was refused by
-   the failing check; `docs/integrations.md` and `docs/admin-api.md` already say it.)
-3. Re-run everything: `dotnet build UmeLlmGateway.slnx -c Release --no-incremental --nologo -v:q`; each test project
-   with `ASPNETCORE_URLS=http://127.0.0.1:0 dotnet test --project tests/Ume.LlmGateway.<P> -c Release --no-build`
-   (last run: AdminApi 376, Domain 599, DataApi 29, IntegrationTests 73 pass); the UI gate in a scratch copy (the
-   implementor's is `<scratchpad>/gw-ui-101/ui`, gone with the session: `rsync` the worktree's `src/admin-ui` to a
-   scratch directory, `npm ci` there, then lint, typecheck, test, build; 268 tests at the implementor's run).
-4. Read the rest of the diff (the main session read the service, the provisioner and the manifest; not yet the UI
-   drawers, the tests and the docs in full), commit, push as `ume-nichlas`, open the pull request against `main` (a
-   draft first; mark it ready to run CI once), closing #101. Its `CHANGELOG.md` and `docs/upgrade-guide.md` *Unreleased*
-   sections will conflict with #102/#103 at merge: keep every entry.
-5. Three things an admin should know about a move are in the docs; say them in the PR too: the previous team keeps the
-   period's spend and the new one counts from the move; the new team's request policy and routing rules apply to the
-   moved keys; an ownerless manifest lands in an existing team that already has the slugged code.
+Session 43 read the rest of the diff (one sentence in `docs/integrations.md` contradicted the 400 and is corrected),
+re-ran everything (Release build clean; AdminApi 376, Domain 599, DataApi 29, IntegrationTests 73, Gateway 487; the UI
+gate with 268 tests), committed (`a3f491a`), pushed and marked the pull request ready so that CI ran once: **green**
+(`verify`, `rolling-update`).
+**A flaky gateway test, not caused by WG4:** `ClientAddressTests.Forwarded_address_is_used_only_through_a_trusted_proxy`
+failed in 2 of 8 local runs of `Gateway.Tests`. It writes the shared settings row, which `AccountingTests` also writes;
+WG4 touches neither. Its rate on the gateway's `main` was not measured. If a later CI run fails on it, re-run the job.
+The pull request's `CHANGELOG.md` and `docs/upgrade-guide.md` *Unreleased* sections conflict with #102/#103 at merge:
+keep every entry.
 
 ### 2. Waiting for the user (the main session may not merge in the gateway's repository)
 
@@ -84,7 +67,8 @@ To do, in order:
   bundled Keycloak (5 of 5, with axe on every step), and a boot of the Portainer stack with only `UME_DOMAIN` (code
   printed, a wrong one refused, the printed one accepted, setup closed once the authority is declared).
   **A gateway deployment that sets `UME_OIDC_AUTHORITY` never sees the wizard and needs nothing new.**
-- **Then WG4's pull request** (above), and **a gateway release** with all of it.
+- **Then merge thekim1/llmgateway#104** (WG4, above; rebase it after #102 and #103, keeping every *Unreleased*
+  entry), and **a gateway release** with all of it.
 
 ### 3. After the gateway release: Ume.Rag's side of stage 2 (M-20, S8)
 
@@ -195,7 +179,7 @@ To do, in order:
 - **Gateway, on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; `Crotalus` is
   read-only on the gateway). Worktrees: `~/git/llmgateway` (the branch of #102), `~/git/llmgateway-100` (the branch of
   #103, with `node_modules` in `src/admin-ui` and `tests/e2e`), `~/git/llmgateway-100-deploy` (merged into #103's
-  branch; can go), `~/git/llmgateway-101` (WG4, **uncommitted**). Local images `ume-llm-gateway/*:setup-test`.
+  branch; can go), `~/git/llmgateway-101` (WG4, the branch of #104, pushed). Local images `ume-llm-gateway/*:setup-test`.
   Something else holds ports 5000 and 5173 here: the gateway's IntegrationTests need
   `ASPNETCORE_URLS=http://127.0.0.1:0`. The Aspire CLI is at
   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH). The gateway's own rules:
@@ -210,9 +194,10 @@ To do, in order:
   `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). The local `gh` token can't read
   ghcr packages: live stack tests run on the runner.
 
-## Sessions 41 and 42 (2026-11-15 and 16)
+## Sessions 41 to 43 (2026-11-15 and 16)
 
 - **41:** the release dry run for the wizard, green on the first run; the four gateway issues (#98–#101); CI time:
   five measurements of `Ume.Rag.AdminApi.Tests` (collections, thread pool, `fsync`, GC, two processes), then #775.
+- **43 (2026-11-16):** the gateway's WG4 checked, corrected in one doc sentence and opened as thekim1/llmgateway#104.
 - **42:** the gateway's WG1–WG3 as pull requests and WG4 built; the security review and its fixes in both
   repositories; the upgrade guides; the wizard's suggestion from the gateway; #776–#779.
