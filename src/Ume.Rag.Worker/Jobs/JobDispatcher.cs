@@ -169,13 +169,10 @@ public sealed partial class JobDispatcher(
     }
 
     /// <summary>
-    /// Per-department fairness (data-model §4.2): fewest running here first, then priority, then age. Without a hit, how
-    /// long until the class's next queued job is due.
-    /// </summary>
-    /// <summary>
-    /// The lane's next job, from the ready list it holds when that is younger than <see cref="ReadyListLifetime"/>, else
-    /// from a new one. Null with the time until the class's next job is due only after a list read in this call gave
-    /// nothing, so an idle lane's wait is always computed from the queue as it is now.
+    /// The lane's next job, with per-department fairness (data-model §4.2): fewest running here first, then priority, then
+    /// age. The departments come from the ready list the lane holds when that is younger than <see cref="ReadyListLifetime"/>,
+    /// else from a new one (#764). Without a hit, how long until the class's next queued job is due, only ever from a list
+    /// read in this call, so an idle lane's wait is computed from the queue as it is now.
     /// </summary>
     private async Task<(LeasedJob? Job, TimeSpan? NextReadyIn)> TryDequeueAsync(Lane lane, CancellationToken cancellationToken)
     {
@@ -225,6 +222,10 @@ public sealed partial class JobDispatcher(
         return lane.Ready = new ReadyList(time.GetTimestamp(), [.. read.Departments], read.NextReadyIn);
     }
 
+    /// <summary>
+    /// Until the next queued job is due, rounded up to a whole millisecond and at least one (a timer that fires a little
+    /// early costs one more probe), and at most <paramref name="cap"/>.
+    /// </summary>
     internal static TimeSpan IdleWait(TimeSpan? nextReadyIn, TimeSpan cap) =>
         nextReadyIn is { } next && next < cap ? TimeSpan.FromMilliseconds(Math.Ceiling(Math.Max(next.TotalMilliseconds, 1))) : cap;
 
