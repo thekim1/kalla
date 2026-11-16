@@ -48,6 +48,7 @@ builder.Services.AddScoped<OpenWebUiSignInSettings>();
 // Setup mode (identity design §19): the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.
 builder.Services.AddSingleton<SetupSecret>();
 builder.Services.AddSingleton<SetupCodeThrottle>();
+builder.Services.AddSingleton<SetupCallbackThrottle>();
 builder.Services.AddSingleton<SetupEventSampler>();
 builder.Services.AddSingleton<SetupCleanup>();
 builder.Services.AddSingleton(new SetupConsole());

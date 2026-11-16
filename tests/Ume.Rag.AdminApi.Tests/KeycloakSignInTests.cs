@@ -1,5 +1,8 @@
 extern alias fakegateway;
 
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -215,10 +218,14 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
     public async Task Sign_in_follows_the_wizards_values_and_one_started_before_a_change_fails_cleanly()
     {
         // M-20 S2 (identity design §19): no Oidc:Authority or secret in the deployment, the realm's from the setup wizard's settings.
+        // The sign-in paths read the values at most once per AdminSignIn.RefreshInterval, so the clock moves on after each save
+        // (it starts at the real time and stays within seconds of it: the realm's tokens are validated against it).
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
         await using var factory = keycloak.Factory().WithWebHostBuilder(web =>
         {
             web.UseSetting("Oidc:Authority", "");
             web.UseSetting("Oidc:ClientSecret", "");
+            web.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(time));
         });
         var values = new OidcWizardValues { Authority = keycloak.Authority };
         try
@@ -239,6 +246,7 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
             login.StatusCode.ShouldBe(HttpStatusCode.Redirect);
             var callback = await LoginAtKeycloakAsync(login.Headers.Location!.ToString(), "rag-viewer");
             await SignInSettingsTests.SaveAsync(factory, values, "not-the-realms-secret");
+            time.Advance(AdminSignIn.RefreshInterval);
             using (var failed = await CallbackAsync(stale, callback))
             {
                 failed.StatusCode.ShouldBe(HttpStatusCode.Redirect, await failed.Content.ReadAsStringAsync(Ct));
@@ -252,6 +260,7 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
 
             // With the right secret again, the next sign-in works, without a restart.
             await SignInSettingsTests.SaveAsync(factory, values, keycloak.OidcClientSecret);
+            time.Advance(AdminSignIn.RefreshInterval);
             await SignInAsync(stale, "rag-viewer");
         }
         finally

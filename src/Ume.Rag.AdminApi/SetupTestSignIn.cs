@@ -151,7 +151,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         var test = new SetupTest
         {
             Id = Guid.NewGuid(), SessionId = session.Id, Target = SetupTargets.RagAdmin, MarkerHash = SetupSessions.Hash(marker), BrowserHash = SetupSessions.Hash(browser),
-            Protected = secrets.Protect(StoredSecret.SetupTest, JsonSerializer.Serialize(payload, Json)), ValuesFingerprint = Fingerprint(SetupTargets.RagAdmin, values),
+            Protected = secrets.Protect(StoredSecret.SetupTest, JsonSerializer.Serialize(payload, Json)), ValuesFingerprint = Fingerprint(values, MappingOf(values)),
             CreatedAt = now, ExpiresAt = now + Lifetime,
         };
         db.SetupTests.Add(test);
@@ -291,6 +291,37 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         return Fingerprint(target, values.Normalized().ToJson());
     }
 
+    /// <summary>
+    /// <see cref="Fingerprint(string, OidcWizardValues)"/> for rag-admin with what the test's result rests on besides the values: the
+    /// effective claim names, tenant and guest rule, and the deployment's role groups (<paramref name="mapping"/>). A passed test
+    /// keeps the one of its callback, and <c>complete</c> compares it with the mapping then in force, so a deployment whose claim
+    /// names or role groups changed in between (a rolling change) asks for a new test.
+    /// </summary>
+    public static byte[] Fingerprint(OidcWizardValues values, OidcOptions mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+        // Length-prefixed, so no two different mappings give the same text.
+        var text = new StringBuilder(Convert.ToHexString(Fingerprint(SetupTargets.RagAdmin, values)));
+        void Add(string? value) => text.Append('|').Append(value?.Length ?? -1).Append(':').Append(value);
+        Add(mapping.RoleClaim);
+        Add(mapping.GroupClaim);
+        Add(mapping.DepartmentClaim);
+        Add(mapping.TeamClaim);
+        Add(mapping.TenantId);
+        Add(mapping.RefuseGuests ? "refuse" : "allow");
+        foreach (var (role, group) in mapping.RoleGroups.OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            Add(role);
+            Add(group);
+        }
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()));
+    }
+
+    /// <summary>The mapping <paramref name="values"/> give with this instance's deployment values now (<see cref="Fingerprint(OidcWizardValues, OidcOptions)"/>).</summary>
+    public OidcOptions MappingOf(OidcWizardValues values) =>
+        SignInSnapshot.Of(SignInSettings.Resolve(configuration, values, () => StoredSecretValue.NotSet, null, 0, null), RequireHttps).ToOidcOptions(deployment.Value.RoleGroups);
+
     /// <summary>The same over a target's normalized values as JSON (Open WebUI's, <see cref="SetupOpenWebUiTest"/>).</summary>
     public static byte[] Fingerprint(string target, string normalizedJson) => SHA256.HashData(Encoding.UTF8.GetBytes(target + "\n" + normalizedJson));
 
@@ -390,6 +421,8 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         var principal = new ClaimsPrincipal(identity);
         var options = SignInSnapshot.Of(effective, RequireHttps).ToOidcOptions(deployment.Value.RoleGroups);
         var refusal = await AdminAuthentication.ValidateSignInAsync(principal, options, db, ct);
+        // The result rests on this mapping, which may differ from the one the test started with.
+        test.ValuesFingerprint = Fingerprint(payload.Values, options);
         return (refusal ?? SetupTestReasons.Passed, ResultOf(principal, options, refusal is null));
     }
 
@@ -410,11 +443,14 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
 /// <summary>
 /// Takes the callbacks of setup tests before authentication (identity design §19): only requests to the OpenID Connect callback path
 /// whose <c>state</c> starts with <c>rag-setup-test.</c>, from the query (GET) or the form (POST, form_post). Every other request,
-/// a real sign-in's callback included, passes on untouched; reading the form leaves it cached for the handler.
+/// a real sign-in's callback included, passes on untouched; reading the form leaves it cached for the handler. Anyone can send such
+/// a request, so before a test is looked up: while setup is closed by the sign-in values last read (<see cref="AdminSignIn"/>, read
+/// at most once per <see cref="AdminSignIn.RefreshInterval"/>) the answer is 404 with nothing more read, and while it is open
+/// <see cref="SetupCallbackThrottle"/> limits the callbacks per client address (429).
 /// </summary>
-public sealed class SetupCallbackMiddleware(RequestDelegate next)
+public sealed class SetupCallbackMiddleware(RequestDelegate next, AdminSignIn signIn, SetupCallbackThrottle throttle, TimeProvider time)
 {
-    public async Task InvokeAsync(HttpContext http, IOptionsMonitor<OpenIdConnectOptions> monitor)
+    public async Task InvokeAsync(HttpContext http, IOptionsMonitor<OpenIdConnectOptions> monitor, IOptionsMonitorCache<OpenIdConnectOptions> cache)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(monitor);
@@ -433,6 +469,31 @@ public sealed class SetupCallbackMiddleware(RequestDelegate next)
             var values = parameters?.ToDictionary(p => p.Key, p => p.Value.ToString(), StringComparer.Ordinal);
             if (values is not null && values.TryGetValue(OpenIdConnectParameterNames.State, out var state) && state.StartsWith(SetupTestSignIn.StatePrefix, StringComparison.Ordinal))
             {
+                if (!signIn.ReadRecently)
+                {
+                    try
+                    {
+                        await signIn.RefreshAsync(http.RequestServices.GetRequiredService<SignInSettings>(), monitor, cache, http.RequestAborted, unlessReadRecently: true);
+                    }
+                    catch (Exception ex) when (AdminSignIn.IsDatabaseAway(ex))
+                    {
+                        // The values last read decide; an open setup's callback then fails at its own read.
+                    }
+                }
+
+                if (!SetupMode.IsOpen(signIn.Current.Values, time.GetUtcNow()))
+                {
+                    http.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+
+                if (!throttle.TryAcquire(AdminActor.AddressOf(http), out var retryAfter))
+                {
+                    http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    http.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    return;
+                }
+
                 await http.RequestServices.GetRequiredService<SetupTestSignIn>().HandleCallbackAsync(http, state,
                     values.GetValueOrDefault(OpenIdConnectParameterNames.Code), values.ContainsKey(OpenIdConnectParameterNames.Error));
                 return;
