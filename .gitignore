@@ -48,3 +48,5 @@ CLAUDE.local.md
 .playwright-cli/
 deploy/upload-backup/
 deploy/openwebui-data/
+# The gateway CA certificate that init-deployment.sh --gateway-ca-file copies.
+deploy/gateway-ca/

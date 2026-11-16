@@ -72,7 +72,7 @@ rag_cert_expiry_timestamp_seconds{file=\"$file\"} $end"
   svc="$(basename "$(dirname "$crt")")"
   # rag-bootstrap writes "operator" to .san for a certificate of yours (UME_RAG_PKI_DIR), the host names for its own.
   if [ "$file" = ca.pem ]; then
-    how="replace the internal CA (docs/portainer.md, Internal certificates)"
+    how="replace the internal CA (docs/production-setup.md, Internal TLS)"
   elif [ "$(cat "$certs/$svc/.san" 2>/dev/null)" = operator ]; then
     how="your PKI's certificate: put the new one in UME_RAG_PKI_DIR, then run rag-bootstrap again"
   else

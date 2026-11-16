@@ -31,8 +31,8 @@ With `compose.hardened.yaml`:
 
 - **cgroup v2 with Docker's systemd cgroup driver** (`docker info` shows `Cgroup Driver: systemd`, `Cgroup Version: 2`;
   to-verify #90). Without it the slice caps nothing. Where the slice is not installed (a developer machine), set
-  `UME_RAG_INGESTION_SLICE=` (empty) in `deploy/.env`, by hand: a re-run of `init-deployment.sh` drops empty
-  values, so add it again after each run.
+  `UME_RAG_INGESTION_SLICE=` (empty) in `deploy/.env`: `init-deployment.sh --set UME_RAG_INGESTION_SLICE=`, which a
+  re-run keeps.
 - **Docker's iptables integration** (the default), so `DOCKER-USER` exists. The firewall uses the `iptables` that
   Docker uses (`iptables-nft` on current distributions). IPv4 only: the Compose networks have no IPv6.
 - `172.30.0.0/16` stays out of Docker's `default-address-pools` (the Compose networks use fixed subnets there).

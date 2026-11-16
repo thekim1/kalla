@@ -290,11 +290,11 @@ docker compose --env-file ~/rag-deploy-test/deploy/.env logs rag-admin | grep 'S
 ```
 
 Sign-in is then set in the setup wizard at `https://localhost:9543/setup`, with the setup code from rag-admin's log. A
-gateway whose certificate comes from its own CA needs `--gateway-ca-dir` (a directory with its `ca.pem`). With
+gateway whose certificate comes from its own CA needs `--gateway-ca-file` (its CA certificate, `ca.pem`). With
 `--hardened` (the host firewall's subnets, the ingestion slice, the renderer's seccomp profile) the copy also needs
 `images/renderer/seccomp.json` at `~/rag-deploy-test/images/renderer/` (the layout of a release bundle) and, without
-the slice installed, the line `UME_RAG_INGESTION_SLICE=` in `deploy/.env`. `--set` cannot write it (an empty value
-removes the variable, and a re-run of the script drops it again), so add it by hand after each run. The .NET images are tagged `ume-rag/<service>:latest` (`ContainerImageTag` in
+the slice installed, the line `UME_RAG_INGESTION_SLICE=` in `deploy/.env` (`--set UME_RAG_INGESTION_SLICE=`; the script keeps this one
+empty value on a re-run). The .NET images are tagged `ume-rag/<service>:latest` (`ContainerImageTag` in
 `Directory.Build.props`). See [production-setup.md](production-setup.md) for what `rag-bootstrap` generates, and
 [p1a-local-run.md](p1a-local-run.md) for the local P1a run (now on the dev Keycloak and FakeGateway, then the live
 block's shared Keycloak and gateway).

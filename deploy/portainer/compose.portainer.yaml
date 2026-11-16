@@ -1265,7 +1265,7 @@ configs:
     content: |
       #!/bin/sh
       # One-shot bootstrap of the RAG part of compose.portainer.yaml (the gateway's stack plus RAG, one Portainer stack).
-      # The Portainer counterpart of deploy/init-deployment.sh, after the gateway's deploy/portainer/bootstrap.sh: creates
+      # The bootstrap of every deployment form (below), after the gateway's deploy/portainer/bootstrap.sh: creates
       # RAG's internal CA, its service certificates, the Data Protection certificate, the database passwords, the key pepper,
       # the api's keys, rag-admin's setup secret, the worker's crawl key pepper, the renderer's WebSocket path and the blob
       # master key in the rag-certs and rag-secrets volumes, and copies the static configuration into rag-config. Idempotent:
@@ -1322,6 +1322,16 @@ configs:
       T="$${UME_RAG_BOOTSTRAP_TRUST:-/trust}"
       P="$${UME_RAG_BOOTSTRAP_PKI:-/pki}"
       OWN="$${UME_RAG_BOOTSTRAP_OWN:-yes}"
+      # The words of the checklist at the end follow the form: the Portainer stack (the gateway in it), or a Compose host
+      # (UME_RAG_BOOTSTRAP_PROXY_GATEWAY=no, which compose.rag.yaml sets when it runs alone).
+      if [ "$${UME_RAG_BOOTSTRAP_PROXY_GATEWAY:-yes}" = no ]; then
+        guide="docs/production-setup.md"; ca_guide="docs/production-setup.md, Internal TLS"; again="run 'docker compose --env-file deploy/.env up -d' again"
+        restart_how="docker compose --env-file deploy/.env restart"
+        key_how="Give --gateway-secrets-dir (a gateway on this host that applied Ume.Rag's manifest) or --gateway-credential-key-file to deploy/init-deployment.sh, then $$again; no restart needed"
+      else
+        guide="docs/portainer.md"; ca_guide="docs/portainer.md, Internal certificates"; again="update the stack"; restart_how="Containers, select, Restart"
+        key_how="Leave UME_INTEGRATION_MANIFEST unset (the stack file's default) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
+      fi
       PG="$${UME_RAG_POSTGRES_HOST:-rag-postgres}"
       W="$$(mktemp -d)"; trap 'rm -rf "$$W"' EXIT
       # The host names come resolved from the stack file: UME_DOMAIN's defaults unless a UME_RAG_*_HOST is set.
@@ -1686,7 +1696,7 @@ configs:
       example() { case "$$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
-        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: no key for rag-$$svc. Leave UME_INTEGRATION_MANIFEST unset (the stack file's default) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
+        [ -e "$$S/$$svc/Gateway__Key" ] || note "UME_RAG_$${up}_GATEWAY_KEY: no key for rag-$$svc. $$key_how"
       done
       # A name under UME_DOMAIN is named once, as the domain; a name set of its own, as its variable.
       if [ -n "$${UME_DOMAIN:-}" ] && example "$$UME_DOMAIN"; then note "UME_DOMAIN is still an example value (the host names default under it)"; fi
@@ -1706,13 +1716,13 @@ configs:
       # 60 days is named on every run; the service certificates are re-issued below 30 days, the CA never.
       restart=""
       for svc in $$reissued; do case "$$svc" in postgres|parser) restart="$$restart rag-$$svc" ;; esac; done
-      [ -z "$$restart" ] || note "restart$$restart (Containers, select, Restart): a re-issued certificate takes effect there only after a restart"
+      [ -z "$$restart" ] || note "restart$$restart ($$restart_how): a re-issued certificate takes effect there only after a restart"
       for crt in "$$C/ca.pem" "$$C"/*/*.crt; do
         quiet openssl x509 -checkend 5184000 -noout -in "$$crt" && continue
         end="$$(openssl x509 -enddate -noout -in "$$crt" | cut -d= -f2)"
         case "$$crt" in
-          "$$C/ca.pem") note "RAG's internal CA expires $$end, within 60 days: replace it (docs/portainer.md, Internal certificates)" ;;
-          *) note "the certificate of rag-$$(basename "$$(dirname "$$crt")") expires $$end, within 60 days: update the stack once fewer than 30 days remain, and rag-bootstrap re-issues it" ;;
+          "$$C/ca.pem") note "RAG's internal CA expires $$end, within 60 days: replace it ($$ca_guide)" ;;
+          *) note "the certificate of rag-$$(basename "$$(dirname "$$crt")") expires $$end, within 60 days: $$again once fewer than 30 days remain, and rag-bootstrap re-issues it" ;;
         esac
       done
       # Retired variables (collected above): tidying, nothing depends on it.
@@ -1733,7 +1743,7 @@ configs:
             note "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET is still an example value: set the real secret, or empty it for the setup wizard" ;; esac ;;
       esac
       if [ -n "$$todo" ]; then
-        echo "rag-bootstrap: still to do (docs/portainer.md):$$todo"
+        echo "rag-bootstrap: still to do ($$guide):$$todo"
       else
         echo "rag-bootstrap: every setting it checks is in place"
       fi

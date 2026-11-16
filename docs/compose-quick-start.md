@@ -50,7 +50,7 @@ host's loopback. Choose one:
   address is then `https://llm.<domain>`.
 - **No proxy** (a test host): `--bind 0.0.0.0` on the gateway's script. The addresses carry the ports
   (`https://<host>:8443`), the certificates come from each product's internal CA (the browser warns), and Ume.Rag
-  trusts the gateway's CA through `--gateway-ca-dir`. Restrict the four ports in a network firewall.
+  trusts the gateway's CA through `--gateway-ca-file`. Restrict the four ports in a network firewall.
 
 The commands below are the second case. With a proxy, replace the gateway's `--bind 0.0.0.0` with `--proxy`, use the
 host names, and add `--proxy-address` to Ume.Rag's script.
@@ -115,7 +115,7 @@ and pass them with `--gateway-credential-key-file` ([Gateway credential keys](pr
 ```bash
 cd ume-rag-X.Y.Z
 sudo ./deploy/init-deployment.sh --api-host <host> --admin-host <host> \
-  --gateway-url https://<host>:8443 --gateway-ca-dir ../ume-llm-gateway-X.Y.Z/deploy/certs \
+  --gateway-url https://<host>:8443 --gateway-ca-file ../ume-llm-gateway-X.Y.Z/deploy/certs/ca.pem \
   --gateway-secrets-dir ../ume-llm-gateway-X.Y.Z/deploy/integration-secrets \
   --set UME_RAG_API_PUBLIC_URL=https://<host>:8543 \
   --hardened --oidc-authority https://<provider>/realms/ume \
@@ -130,7 +130,8 @@ sudo systemctl start rag-backup.service
 - **The script writes only `deploy/.env`** (mode 600). The certificates and secrets are created at the first `up` by
   the one-shot `rag-bootstrap`, in Docker volumes; the end of its log lists what is still missing (a credential key,
   for example) and the setup wizard's address.
-- **`--gateway-ca-dir` is the gateway's certificate directory**, which holds its `ca.pem`: Ume.Rag's services then
+- **`--gateway-ca-file` is the gateway's CA certificate**, which the script copies to `deploy/gateway-ca` (only the
+  certificate: the gateway's directory also holds its private keys): Ume.Rag's services then
   trust the gateway's internal CA.
 - **`--hardened`** adds the host firewall, the slice the ingestion containers run in and the renderer's seccomp
   profile (*1. Before you start*). Without it Ume.Rag asks for no sign-in value at all and none of the host's checks of
@@ -194,7 +195,7 @@ The script ends with the next steps, the setup wizard's address among them.
 | `rag-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file deploy/.env logs rag-clamav`; `--freshclam-proxy` behind an egress proxy |
 | The end of `rag-bootstrap`'s log: *UME_RAG_API_GATEWAY_KEY: no key for rag-api* (or `rag-admin`, `rag-worker`) | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again (its `migrations` log names a manifest it refused), then Ume.Rag's `up -d` |
 | The wizard: *rag-admin could not reach the provider address* | the host firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file deploy/.env up -d` and `sudo systemctl start rag-firewall.service` |
-| *Models* is empty, or the organisation sync is *degraded* | Ume.Rag's containers do not reach the gateway, or do not trust its certificate | the check below; `--gateway-ca-dir` with the gateway's certificate directory; `docker compose --env-file deploy/.env logs rag-admin` |
+| *Models* is empty, or the organisation sync is *degraded* | Ume.Rag's containers do not reach the gateway, or do not trust its certificate | the check below; `--gateway-ca-file` with the gateway's `deploy/certs/ca.pem`; `docker compose --env-file deploy/.env logs rag-admin` |
 | 403 `model_not_allowed` or `max_residency_not_met` in a log | the model is not hosted at `OnPrem` or `Eu`, or a key lists other models | the provider's residency and the three keys, in the gateway's admin |
 
 **Do Ume.Rag's containers reach the gateway?** A throwaway container on the `llm` network gets the same firewall rules
