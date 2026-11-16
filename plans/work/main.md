@@ -29,9 +29,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
 - **Status (2026-11-16, session 46):** S1's four points decided. Merged: #798 (S1 steps 1 and 4: `bootstrap.sh` takes
   its paths and inputs as variables, `create-secrets.sh` runs it; an existing Kubernetes installation keeps its
-  secrets) and #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide). Next: S1 step 2
-  (the one service file and its overlays, with S3), planned in the proposal; then step 3 (the short
-  `init-deployment.sh`), step 5 (the guides) and S9.
+  secrets), #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide) and #800 (S1 steps
+  2 and 3 with S3: `deploy/compose.rag.yaml` and its overlays, Compose on `rag-bootstrap` and volumes, Open WebUI as a
+  profile, the 193-line `init-deployment.sh`; the Portainer stack renders as before; booted in dry run 43941252174).
+  Next: step 5 (the guides and the design, which #800's *Design deviations* and *Hand-offs* list) and S9.
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.

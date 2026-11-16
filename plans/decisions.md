@@ -289,8 +289,8 @@ Every deployment form gets its certificates, secrets and derived files from one 
   migration in the bootstrap. *Install again* is the answer only when no reasonable path exists, and the release says
   so.
 
-Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. Until M-22's steps are merged the code
-still has the two bootstraps.
+Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. Built in #798 and #800 (2026-11-16); the
+guides and `platform/repo-and-deployment.md` follow in M-22's next step.
 
 *From:* decided by user, 2026-11-16 (session 46, four points with four alternatives each; the wizard and the upgrade
 path the same day).

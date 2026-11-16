@@ -26,7 +26,7 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here: the deploy simplification (M-22), S1 step 2
+## Start here: the deploy simplification (M-22), the guides and S9
 
 The user asked for it on 2026-11-16: [`plans/proposals/deploy-simplification.md`](plans/proposals/deploy-simplification.md);
 the queue item is `plans/work/main.md` **M-22**, whose status line says what is merged.
@@ -38,15 +38,24 @@ the queue item is `plans/work/main.md` **M-22**, whose status line says what is 
   feasible** (a step in the upgrade guide or a migration in the bootstrap; *install again* only when no reasonable
   path exists, and tell the user when that is the VM's case), and **the setup wizard works the same in every form**
   (no sign-in value asked for at install, except the provider's address with the host firewall overlay).
-- **Merged:** #798 (`bootstrap.sh` takes its paths and inputs as variables; `create-secrets.sh` runs it, tested by
-  `deploy/tests/kubernetes-secrets.sh`) and #799 (S4a: upgrade sections older than 0.5.x removed, with a pointer to the
-  `v0.7.0` guide).
-- **Next: step 2,** the one service file `deploy/compose.rag.yaml` and its overlays, which also makes Open WebUI a
-  profile in Compose (S3). The proposal's *Step 2, how* is the plan. The Portainer stack's service, volume and
-  variable names must stay, so the user's VM keeps upgrading; a Compose install made with the old files has no
-  upgrade path (none exists outside tests) and the release says so. Then step 3 (the short `init-deployment.sh`, which
-  absorbs M-17's C13), step 5 (the guides, and `repo-and-deployment.md` §7.1 and §10, which still describe
-  `create-secrets.sh` as reading `init-deployment.sh`'s output) and **S9** (Open WebUI easy to skip).
+- **Merged:** #798 (`bootstrap.sh` takes its paths and inputs as variables; `create-secrets.sh` runs it), #799 (S4a:
+  upgrade sections older than 0.5.x removed, with a pointer to the `v0.7.0` guide) and **#800 (S1 steps 2 and 3, with
+  S3):** `deploy/compose.rag.yaml` is the one service file, Compose runs it with `rag-bootstrap` and the volumes,
+  overlays `compose.backup.yaml`, `compose.hardened.yaml`, `compose.host-24g.yaml`, `compose.clamav-conf.yaml` and
+  `compose.rolling.yaml`, Open WebUI as the profile `openwebui`, and `init-deployment.sh` writes only `deploy/.env`.
+  The regenerated Portainer stack renders identically to the one before (services, volumes, networks, variables), so
+  the user's VM keeps upgrading. Release dry run 43941252174 booted both forms (*Smoke test the bundle*, *Boot the
+  Portainer stack*).
+- **Next: step 5, the guides and the design.** Stale since #800: `docs/compose-quick-start.md`,
+  `production-setup.md`, `runbook.md`, `network-and-ports.md`, `zero-downtime-updates.md`, `local-development.md`;
+  `repo-and-deployment.md` §1, §6, §7 and §10; Decisions "Pilot containers" (names `rag-blobs-init`) and "Deployment
+  values across releases" (its last sentence on Compose and `init-deployment.sh`). #800's *Design deviations* lists
+  eight points to settle in the design. rag-bootstrap's checklist says `docs/portainer.md` on a Compose host too. Then
+  **S9** (Open WebUI easy to skip).
+- **For the user to confirm:** Compose's published ports now bind `0.0.0.0` as Portainer's (before: loopback); with
+  `--hardened` the firewall admits only the proxy's addresses. Told on 2026-11-16, no answer yet.
+- **Not run anywhere:** the hardened overlay on a host (the smoke test boots without it), `compose-rolling-e2e.sh`,
+  root's `chown` on an NFS backup share, and the upgrade guide's carry-over of an old Compose installation.
 - **S9, checked in the code so far:** `stack.env.example` presets `COMPOSE_PROFILES=clamav,openwebui`; the proxy's
   Open WebUI block, the managed client's key for `rag-migrate` and the checklist's notes already follow the profile;
   `rag-bootstrap` still generates Open WebUI's secrets and the `rag-openwebui-data` volume without it, and rag-admin
