@@ -126,8 +126,10 @@ x-rag-secrets: &rag-secrets-mount
     environment:
       # The host names: each UME_RAG_*_HOST, else its default under UME_DOMAIN (rag., rag-admin., chat.). Without the
       # domain the admin's name is empty (bootstrap.sh gives it rag-api's) and so is Open WebUI's. rag-api, rag-admin and
-      # rag-openwebui repeat the same expressions below.
-      UME_RAG_API_HOST: ${UME_RAG_API_HOST:-rag.${UME_DOMAIN:?Set UME_DOMAIN or UME_RAG_API_HOST}}
+      # rag-openwebui repeat the same expressions below. With neither the domain nor rag-api's name, that name is empty
+      # and bootstrap.sh stops with "Set UME_DOMAIN or UME_RAG_API_HOST" (never ":?" inside a default: some Compose
+      # versions evaluate it even when the outer variable is set).
+      UME_RAG_API_HOST: ${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-${UME_DOMAIN:+rag-admin.}${UME_DOMAIN:-}}
       # The TLS proxy's host names (profile proxy).
       UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-}
@@ -250,7 +252,7 @@ x-rag-secrets: &rag-secrets-mount
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
       # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
-      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-rag.${UME_DOMAIN:?Set UME_DOMAIN or UME_RAG_API_HOST}}}
+      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -342,7 +344,7 @@ x-rag-secrets: &rag-secrets-mount
       OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
       OTEL_SERVICE_NAME: rag-admin
       # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
-      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-rag.${UME_DOMAIN:?Set UME_DOMAIN or UME_RAG_API_HOST}}}
+      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
