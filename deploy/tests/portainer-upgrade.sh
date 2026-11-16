@@ -18,7 +18,7 @@
 # is unset: the 0.6.0 variables without their manifest line get it (compared as JSON), and with UME_INTEGRATION_MANIFEST=
 # (set, empty) the gateway's bootstrap gets an empty value and provisions nothing.
 #
-# fixtures/stack-0.5.0.env, a 0.5.x stack's variables (keys issued by hand, retired variables still there): it renders
+# fixtures/stack-0.5.1.env, a 0.5.x stack's variables (keys issued by hand, retired variables still there): it renders
 # too, stays declared, hands a hand-issued key to rag-bootstrap and needs no UME_INTEGRATION_API_URL.
 #
 # And fixtures/stack-stage1.env, the variables of stack.env.example before M-20 S8 (five CHANGE values, among them
@@ -128,7 +128,7 @@ else
 fi
 
 # A 0.5.x stack (docs/portainer.md, "Upgrade": one step from 0.5.x): its variables, with keys issued by hand.
-old5="$here/fixtures/stack-0.5.0.env"
+old5="$here/fixtures/stack-0.5.1.env"
 sed -e 's/^UME_RAG_API_GATEWAY_KEY=$/UME_RAG_API_GATEWAY_KEY=hand-issued-api-key/' "$old5" > "$work/0.5.env"
 render "$work/0.5.env" "0.5.x's variables"
 ok "the stack renders with 0.5.x's variables and nothing added (retired ones are ignored)"

@@ -65,8 +65,9 @@ env:
   GH_CLI_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
   # Microsoft.Sbom.DotNetTool 4.1.13 (NuGet, 2026-09-22), the gateway's.
   SBOM_TOOL: Microsoft.Sbom.DotNetTool@4.1.13
-  # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh).
-  UPGRADE_FROM: 0.5.0
+  # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh). 0.5.1, not 0.5.0:
+  # 0.5.0's stack asset does not pin the gateway's images.
+  UPGRADE_FROM: 0.5.1
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
@@ -391,7 +392,7 @@ jobs:
         run: |
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
       - name: Upgrade the oldest supported release's Portainer stack
-        # docs/portainer.md, "Upgrade": v0.5.0's stack (its release asset, its variables) is booted, then this
+        # docs/portainer.md, "Upgrade": v0.5.1's stack (its release asset, its variables) is booted, then this
         # release's file is applied over it with nothing added, changed or stopped by hand. It skips 0.6.0 and 0.7.0
         # and crosses RemoveWorkerConcurrency, for which rag-migrate must stop the old rag-admin itself.
         env:
