@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Ume.Rag.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
+    [StopsServices(ServiceRoles.Admin)]
     public partial class RemoveWorkerConcurrency : Migration
     {
         /// <inheritdoc />

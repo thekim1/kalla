@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddDeploymentSecrets();
 builder.DefaultWorkerPoolSize();
 builder.AddServiceDefaults();
-builder.AddRagDatabase();
+builder.AddRagDatabase(admitAtStart: true);
 builder.AddRagConfigMonitor();
 builder.AddRagWorker();
 builder.AddRagEngine();

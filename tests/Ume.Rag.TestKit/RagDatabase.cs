@@ -37,6 +37,14 @@ public class RagDatabase : IAsyncDisposable
 
     public async ValueTask InitializeAsync()
     {
+        await StartWithoutMigrationsAsync();
+        await using var db = TestPostgres.Context(Connection(Migrator));
+        await RagDatabaseMigrator.MigrateAsync(db, RolesSqlPath, CancellationToken.None);
+    }
+
+    /// <summary>Starts the container and runs init.sql, as before the first migration service run.</summary>
+    public async Task StartWithoutMigrationsAsync()
+    {
         await _postgres.StartAsync();
         var initSql = await File.ReadAllTextAsync(TestPostgres.RepositoryFile(Path.Combine("deploy", "postgres", "init.sql")));
         var result = await _postgres.ExecScriptAsync("\\set ON_ERROR_STOP on\n" + initSql);
@@ -44,9 +52,6 @@ public class RagDatabase : IAsyncDisposable
         {
             throw new InvalidOperationException($"init.sql failed ({result.ExitCode}): {result.Stderr}");
         }
-
-        await using var db = TestPostgres.Context(Connection(Migrator));
-        await RagDatabaseMigrator.MigrateAsync(db, RolesSqlPath, CancellationToken.None);
     }
 
     /// <summary>Runs app-roles.sql again as the migration service does.</summary>
