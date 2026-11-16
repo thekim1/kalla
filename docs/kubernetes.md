@@ -3,8 +3,8 @@
 `deploy/kubernetes` has Kustomize manifests for running Ume Rag on Kubernetes, with updates that do not interrupt
 clients, in the shape of the gateway's (its [Kubernetes guide](https://github.com/thekim1/llmgateway/blob/main/docs/kubernetes.md)).
 They are the same services, settings, certificates and secrets as the [Docker Compose setup](production-setup.md), and
-the Kubernetes Services keep the Compose service names (`rag-api`, `postgres`, `rag-parser`, ...), so the certificates
-and connection strings `init-deployment.sh` generates work unchanged. Docker Compose stays the default. The design is
+the certificates and secrets come from the same script as theirs (`deploy/portainer/bootstrap.sh`, which
+`create-secrets.sh` runs on your machine). Docker Compose stays the default. The design is
 [`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §10.
 
 ## What you get
@@ -18,7 +18,7 @@ and connection strings `init-deployment.sh` generates work unchanged. Docker Com
 | `components/renderer/` | Optional rag-renderer for JavaScript-rendered pages (needs a seccomp profile on the nodes, below) |
 | `components/ingress-controller/` | The NetworkPolicy that lets the Ingress controller reach rag-api and rag-admin; in the example by default (below) |
 | `example/` | An overlay to copy: namespace, images, settings, Ingress, the blob volume's storage class |
-| `create-secrets.sh` | Creates the Kubernetes secrets from what `init-deployment.sh` generates |
+| `create-secrets.sh` | Generates the certificates and secrets and creates the Kubernetes secrets from them |
 | `deploy.sh` | Deploys or updates an overlay: Postgres, the migration, then a rolling update |
 
 Every pod runs as non-root with a read-only file system, no privileges and the runtime's default seccomp profile (the
@@ -30,43 +30,43 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
 
 ## Install
 
-1. **Generate certificates and secrets** with the same script as for Compose. `--no-chown` leaves the files readable for
-   you (the containers read them from Kubernetes secrets, not from disk):
+1. **Generate the certificates and secrets and create the Kubernetes secrets**, in one step, on a machine with
+   `openssl` and `kubectl`:
 
    ```bash
-   ./deploy/init-deployment.sh --no-chown --yes \
-       --api-host rag.example.se --admin-host rag-admin.example.se --gateway-url https://llm.example.se \
+   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag --domain example.se \
        --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
        --gateway-credential-key-file worker=rag-worker.key \
-       --backup-target s3://s3.example.se/ume-rag --backup-s3-credentials-file s3.cred --allow-file-keys
+       --datastores --backup-target s3://s3.example.se/ume-rag --backup-s3-credentials-file s3.cred [--renderer]
    ```
 
-   Sign-in is set in the setup wizard after the first deploy (*Sign-in*, below). To declare it instead, add
-   `--oidc-client-secret-file ume-rag-admin.secret` here (and `Oidc__Authority` in the overlay); with `--yes`
-   the script asks nothing; without it, it asks once for the provider's address, which Kubernetes does not use (leave
-   it empty).
+   `--domain` gives the host names `rag.<domain>` and `rag-admin.<domain>` (`--api-host` and `--admin-host` name
+   others). Leave out `--datastores` and the backup options if you bring your own Postgres (below), and `--renderer`
+   without the renderer component. `--ca-file FILE` adds a CA the services must trust (a gateway or sign-in provider
+   with a certificate from your own CA). Sign-in is set in the setup wizard after the first deploy (*Sign-in*, below);
+   to declare it instead, add `--oidc-client-secret-file ume-rag-admin.secret` (and `Oidc__Authority` in the overlay).
+   `--help` lists every option.
 
-   It creates an internal CA, a certificate per service, database passwords, the key pepper, the blob master key, the
-   Data Protection certificate, the pgBackRest repository settings and connection strings to the host `postgres` (the
-   Service in `components/datastores`), and puts each service's gateway credential key (issued by a gateway admin:
-   [production-setup.md](production-setup.md), *Gateway credential keys*) in `deploy/secrets/<service>/Gateway__Key`.
-   The key's address list then holds the cluster's egress addresses. It also writes `deploy/.env`, which Kubernetes
-   does not use. **Back up
-   `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal` and `deploy/certs/data-protection.pfx`** outside the
-   cluster (runbook, *Key escrow*): without them a restored database is unusable.
+   The script runs `deploy/portainer/bootstrap.sh`, the bootstrap of the Compose and Portainer stacks, into
+   `deploy/certs` and `deploy/secrets`: an internal CA, a certificate per service, database passwords, the key pepper,
+   the blob master key, the Data Protection certificate, rag-admin's setup secret, the pgBackRest repository settings
+   and connection strings to the host `postgres` (the Service in `components/datastores`). Each service's gateway
+   credential key (issued by a gateway admin: [production-setup.md](production-setup.md), *Gateway credential keys*)
+   goes to `deploy/secrets/<service>/Gateway__Key` and into `ume-rag-<service>-secrets`; the key's address list then
+   holds the cluster's egress addresses. **Back up `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal`
+   and `deploy/certs/data-protection.pfx`** outside the cluster (runbook, *Key escrow*): without them a restored
+   database is unusable. Keep the two directories: the next run reads them.
 
-2. **Create the secrets** in your namespace:
+   **Running it again** keeps every generated secret and every value an option gave before (a credential key, the
+   client secret, the backup repository); the host names, `--ca-file` and your own certificates are given on every
+   run. It re-issues a service certificate that expires within 30 days, which needs `deploy/certs/ca.key` (keep it
+   offline in between). After a run that changed something, restart the deployments (`kubectl rollout restart`; for a
+   rotated credential key, passed with `--gateway-credential-key-file SERVICE=FILE`, only `deployment/rag-<service>`).
 
-   ```bash
-   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag --datastores [--renderer]
-   ```
-
-   Leave out `--datastores` if you bring your own Postgres (below), and `--renderer` without the renderer component.
-   `--renderer` needs the worker's endpoint file, which `init-deployment.sh` writes only with `--render`.
-   Each service's `ume-rag-<service>-secrets` holds its `Gateway__Key`. The script can run again after
-   `init-deployment.sh --renew-certs` or a rotated credential key (`init-deployment.sh` with the new
-   `--gateway-credential-key-file SERVICE=FILE`); restart the deployments afterwards (`kubectl rollout restart`, for a
-   key only `deployment/rag-<service>`). Keep `deploy/certs/ca.key` offline between renewals.
+   **An installation made with `init-deployment.sh`** (before this script generated the files itself): run
+   `create-secrets.sh` with the same `--certs-dir` and `--secrets-dir`. It keeps the CA, the passwords, the keys, the
+   pepper and the Data Protection certificate, and issues the five service certificates again from the same CA, so
+   have `ca.key` in place and restart the deployments afterwards.
 
 3. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
    repository with the `../base` paths adjusted) and change:
@@ -130,15 +130,14 @@ another port needs its own egress rule (*Network policies*).
 
 **Declaring sign-in instead:** each `Oidc__*` literal the overlay sets (`Oidc__Authority`, `Oidc__ClientId`,
 `Oidc__TenantId`, `Oidc__RefuseGuests`, the claim names) is the deployment's value and is locked in the wizard; the
-example overlay shows them commented out. With `Oidc__Authority` and the client secret (`init-deployment.sh
---oidc-client-secret-file`, then `create-secrets.sh`, which puts `Oidc__ClientSecret` in `ume-rag-admin-secrets`) the
-wizard never opens.
+example overlay shows them commented out. With `Oidc__Authority` and the client secret (`create-secrets.sh
+--oidc-client-secret-file`, which puts `Oidc__ClientSecret` in `ume-rag-admin-secrets`) the wizard never opens.
 
 **Opening the setup wizard again** (a client secret about to expire, a new provider, a broken sign-in): set
 `Setup__Reopen` in the overlay's `ume-rag-admin-config` to a new value (for example today's date) and deploy. rag-admin
 opens the wizard once and prints a new setup code, valid for one hour, in `kubectl -n ume-rag logs deploy/rag-admin`
 (either pod); the current sign-in keeps working until you finish. Before restoring a database, remove the literal
-first. The code's key is `Setup__Secret` in `ume-rag-admin-secrets`, generated once by `init-deployment.sh`; it needs
+first. The code's key is `Setup__Secret` in `ume-rag-admin-secrets`, generated once by `create-secrets.sh`; it needs
 no backup. The client secrets the wizard stores need the same `data-protection.pfx` (runbook, *Sign-in and the setup
 wizard*). Kubernetes has no Open WebUI.
 
@@ -181,10 +180,12 @@ production prefer your platform's database service (Postgres 17 with pgvector 0.
 - Create the database and roles as `deploy/postgres/init.sql` does: `ume_rag_migrator` owns `ragdb`; `ume_rag_api`,
   `ume_rag_admin` and `ume_rag_worker` may only connect, with the connection limits there. The `rag-migrate` Job
   grants the rest and creates the `vector` extension if the migrator may.
-- Require TLS. The connection strings verify the server certificate against `ca.pem` (`SSL Mode=VerifyFull`): append
-  your database's CA to `deploy/certs/<service>/ca.pem` for api, admin, worker and migrations.
-- Edit `deploy/secrets/<service>/ConnectionStrings__ragdb` (host and passwords) for those four, run
-  `create-secrets.sh` without `--datastores`, and remove the component from the overlay.
+- Require TLS. The connection strings verify the server certificate against `ca.pem` (`SSL Mode=VerifyFull`): pass
+  your database's CA to `create-secrets.sh` with `--ca-file`, which adds it for api, admin, worker and migrations.
+- Run `create-secrets.sh` with `--postgres-host <your database's host>` and without `--datastores`, and remove the
+  component from the overlay. The connection strings are written on every run from that host name and the passwords
+  in `deploy/secrets/postgres/<role>_password` (`migrator`, `api`, `admin`, `worker`): give the roles those
+  passwords, or put your own in the files and run the script again.
 - Backups (and the point-in-time restore of the runbook) are then your platform's.
 
 ## Malware scan

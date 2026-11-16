@@ -58,6 +58,8 @@ done
 # --gateway-secrets-dir, docs/compose-quick-start.md), at its path in the repository.
 mkdir -p "$dest/portainer"
 cp portainer/integration-manifest.json "$dest/portainer/"
+# The bootstrap that kubernetes/create-secrets.sh runs (the Portainer stack file carries its own copy).
+cp portainer/bootstrap.sh "$dest/portainer/"
 # init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.
 mkdir -p "$dest/clamav"
 cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/clamav/"

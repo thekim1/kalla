@@ -763,7 +763,7 @@ open it again; the next re-open needs another new value.
 - **Rotating a client secret:** create the new secret at the provider (keep the old one valid), re-open, type the new
   secret and its expiry date, test and finish, then remove the old one at the provider. Home reminds platform admins from 30 days
   before the expiry date typed there. A declared secret is rotated where it is declared instead:
-  `init-deployment.sh --oidc-client-secret-file` (Kubernetes: then `create-secrets.sh`), or `UME_RAG_OIDC_CLIENT_SECRET`
+  `init-deployment.sh --oidc-client-secret-file` (Kubernetes: `create-secrets.sh` with the same option), or `UME_RAG_OIDC_CLIENT_SECRET`
   and update the stack (Portainer); rag-admin follows the file at the next sign-in.
 - **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate rag-admin no longer trusts): re-open
   and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`

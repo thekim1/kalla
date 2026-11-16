@@ -17,6 +17,14 @@ exception, with its own steps.
   when neither `--oidc-authority` nor `deploy/.env` gives one: leave it empty to keep the provider in the setup wizard,
   or type it so the host firewall lets rag-admin reach it. New and optional: `--gateway-secrets-dir`, which reads the
   three credential keys from a gateway on the same host ([quick start](compose-quick-start.md)).
+- **Kubernetes:** `create-secrets.sh` now generates the certificates and secrets itself, with the bootstrap of the
+  Compose and Portainer stacks, and no longer reads what `init-deployment.sh` wrote. Run it on your existing
+  `deploy/certs` and `deploy/secrets` with your host names (`--domain`, or `--api-host` and `--admin-host`): it keeps
+  the CA, the passwords, the keys, the pepper, the Data Protection certificate and the credential keys, and issues
+  the five service certificates again from the same CA (have `deploy/certs/ca.key` in place), so restart the
+  deployments afterwards. The options that `init-deployment.sh` took for Kubernetes are now its own
+  ([Kubernetes](kubernetes.md), *Install*); with your own database, pass `--postgres-host` instead of editing the
+  connection strings.
 - **The prerequisite was stated too low:** the Compose files need Docker Compose 2.33.1 or later (`gw_priority`), as
   they have since they pinned each service's default route; the guides said 2.24.
 

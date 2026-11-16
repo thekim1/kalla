@@ -360,8 +360,8 @@ never holds another service's key. The three keys come about in one of three way
    `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key
    --gateway-credential-key-file worker=rag-worker.key`. It writes `secrets/api/Gateway__Key`,
    `secrets/admin/Gateway__Key` and `secrets/worker/Gateway__Key` (mode 0600, owned by the services' user like every
-   secret file). Delete the handed-over files afterwards. On Kubernetes, `create-secrets.sh` then puts each into its
-   service's secret ([Kubernetes](kubernetes.md)); on Portainer the keys are the variables `UME_RAG_API_GATEWAY_KEY`,
+   secret file). Delete the handed-over files afterwards. On Kubernetes, `create-secrets.sh` takes the same option and
+   puts each into its service's secret ([Kubernetes](kubernetes.md)); on Portainer the keys are the variables `UME_RAG_API_GATEWAY_KEY`,
    `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY` (runbook, *Portainer and other hosts without shell
    access*).
 
@@ -373,7 +373,8 @@ the new key in a file and re-run `sudo ./deploy/init-deployment.sh` with your op
 `--gateway-credential-key-file SERVICE=FILE` for that service only: it rewrites that key file and keeps the others and
 every generated secret. Then restart the service, which reads its secret files at start:
 `docker compose --env-file deploy/.env restart rag-api` (or `rag-admin`, `rag-worker`). Check its log for gateway
-`401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again, then
+`401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again with that
+option, then
 `kubectl rollout restart deployment/rag-<service>`. Portainer: change the variable, update the stack (`rag-bootstrap`
 rewrites the file), then restart that service's container. A key that
 leaked is rotated without the grace period (*revoke immediately*): the service fails its model calls until it is

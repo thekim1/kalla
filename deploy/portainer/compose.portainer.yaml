@@ -1275,12 +1275,44 @@ configs:
       # still sets) are written again on every start, and removed when the variable is empty.
       #
       # Trust: the services that call out (rag-api, rag-admin, rag-worker) trust RAG's CA plus the gateway's (its ume-certs
-      # volume, mounted at /gateway-certs), so https://gateway:8443 verifies.
+      # volume, mounted at /gateway-certs), so https://gateway:8443 verifies, and every *.pem in /trust (an operator's CA
+      # for a gateway or a sign-in provider elsewhere).
+      #
+      # The one bootstrap of every deployment form (Decisions "One deployment bootstrap"): the Portainer stack and Compose
+      # run it as the rag-bootstrap service, and deploy/kubernetes/create-secrets.sh runs it on the operator's machine. What
+      # differs between them comes in these variables; unset, each has the stack's value:
+      #   UME_RAG_BOOTSTRAP_CERTS, _SECRETS, _CONF   where it writes (/certs, /secrets, /conf); an empty _CONF writes no
+      #                                              static configuration
+      #   UME_RAG_BOOTSTRAP_CONFIG                   where the static configuration is read from (/config)
+      #   UME_RAG_BOOTSTRAP_GATEWAY_CERTS            the directory with the gateway's ca.pem (/gateway-certs);
+      #   UME_RAG_BOOTSTRAP_GATEWAY_CA=optional      a missing one is then no error (a gateway with a public certificate)
+      #   UME_RAG_BOOTSTRAP_TRUST                    more CA certificates to trust, *.pem (/trust); rag-migrate gets them
+      #                                              too (a database with a certificate from another CA)
+      #   UME_RAG_BOOTSTRAP_INTEGRATION_SECRETS      the gateway's manifest keys (/integration-secrets)
+      #   UME_RAG_BOOTSTRAP_PKI                      the operator's own certificates for the public listeners: api.crt and
+      #                                              api.key, admin.crt and admin.key (/pki); a pair found there is used
+      #                                              instead of one from the internal CA
+      #   UME_RAG_BOOTSTRAP_OWN=no                   leave every file owned by the caller and create no blob directories
+      #                                              (Kubernetes: the files become secrets, never mounts)
+      #   UME_RAG_POSTGRES_HOST                      the database's host name in its certificate and the connection strings
+      #                                              (rag-postgres)
+      #   UME_RAG_BACKUP_TARGET                      a pgBackRest repository: s3://ENDPOINT/BUCKET[/PATH] (with
+      #                                              UME_RAG_BACKUP_S3_KEY, UME_RAG_BACKUP_S3_KEY_SECRET and
+      #                                              UME_RAG_BACKUP_S3_REGION, default us-east-1), or anything else for a
+      #                                              posix repository at /var/lib/pgbackrest. Unset (the Portainer stack):
+      #                                              no repository settings
       set -eu
       umask 077
-      C=/certs
-      S=/secrets
-      F=/conf
+      C="$${UME_RAG_BOOTSTRAP_CERTS:-/certs}"
+      S="$${UME_RAG_BOOTSTRAP_SECRETS:-/secrets}"
+      F="$${UME_RAG_BOOTSTRAP_CONF-/conf}"
+      K="$${UME_RAG_BOOTSTRAP_CONFIG:-/config}"
+      G="$${UME_RAG_BOOTSTRAP_GATEWAY_CERTS:-/gateway-certs}"
+      T="$${UME_RAG_BOOTSTRAP_TRUST:-/trust}"
+      P="$${UME_RAG_BOOTSTRAP_PKI:-/pki}"
+      OWN="$${UME_RAG_BOOTSTRAP_OWN:-yes}"
+      PG="$${UME_RAG_POSTGRES_HOST:-rag-postgres}"
+      W="$$(mktemp -d)"; trap 'rm -rf "$$W"' EXIT
       # The host names come resolved from the stack file: UME_DOMAIN's defaults unless a UME_RAG_*_HOST is set.
       : "$${UME_RAG_API_HOST:?Set UME_DOMAIN or UME_RAG_API_HOST (public hostname of rag-api)}"
       ADMIN_HOST="$${UME_RAG_ADMIN_HOST:-$$UME_RAG_API_HOST}"
@@ -1303,37 +1335,58 @@ configs:
            quiet openssl x509 -checkend 2592000 -noout -in "$$dir/$$svc.crt" && quiet openssl verify -CAfile "$$C/ca.pem" "$$dir/$$svc.crt"; then
           return
         fi
+        [ -f "$$C/ca.key" ] || { echo "rag-bootstrap: $$C/ca.key is needed to issue the certificate of $$svc: copy it back from where you keep it" >&2; exit 1; }
         [ ! -f "$$dir/$$svc.crt" ] || reissued="$$reissued $$svc"
         echo "rag-bootstrap: issuing certificate for $$svc ($$san)"
-        quiet openssl req -newkey rsa:3072 -nodes -keyout "$$dir/$$svc.key" -out "/tmp/$$svc.csr" -subj "/CN=$$svc"
+        quiet openssl req -newkey rsa:3072 -nodes -keyout "$$dir/$$svc.key" -out "$$W/$$svc.csr" -subj "/CN=$$svc"
         printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' \
-          "$$san" > "/tmp/$$svc.ext"
-        quiet openssl x509 -req -in "/tmp/$$svc.csr" -CA "$$C/ca.pem" -CAkey "$$C/ca.key" -CAcreateserial -CAserial /tmp/ca.srl \
-          -out "$$dir/$$svc.crt" -days 825 -extfile "/tmp/$$svc.ext"
+          "$$san" > "$$W/$$svc.ext"
+        quiet openssl x509 -req -in "$$W/$$svc.csr" -CA "$$C/ca.pem" -CAkey "$$C/ca.key" -CAcreateserial -CAserial "$$W/ca.srl" \
+          -out "$$dir/$$svc.crt" -days 825 -extfile "$$W/$$svc.ext"
         printf '%s' "$$san" > "$$dir/.san"
       }
-      issue postgres "DNS:rag-postgres,DNS:localhost"
-      issue api "DNS:rag-api,DNS:localhost,DNS:$$UME_RAG_API_HOST"
-      issue admin "DNS:rag-admin,DNS:localhost,DNS:$$ADMIN_HOST"
+      # public SVC SAN-LIST: the operator's own certificate when $$P has the pair (copied on every run, so a renewed one is
+      # picked up), else one from the internal CA. Without the pair, a certificate that came from $$P is re-issued.
+      public() {
+        if [ -f "$$P/$$1.crt" ] && [ -f "$$P/$$1.key" ]; then
+          cp "$$P/$$1.crt" "$$C/$$1/$$1.crt"; cp "$$P/$$1.key" "$$C/$$1/$$1.key"; printf 'operator' > "$$C/$$1/.san"
+        else
+          issue "$$1" "$$2"
+        fi
+      }
+      issue postgres "DNS:$$PG,DNS:localhost"
+      public api "DNS:rag-api,DNS:localhost,DNS:$$UME_RAG_API_HOST"
+      public admin "DNS:rag-admin,DNS:localhost,DNS:$$ADMIN_HOST"
       issue worker "DNS:rag-worker,DNS:localhost"
       issue parser "DNS:rag-parser,DNS:localhost"
 
       if [ ! -f "$$C/data-protection.pfx" ]; then
-        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout /tmp/dp.key -out /tmp/dp.crt -days 3650 -subj /CN=ume-rag-data-protection
-        quiet openssl pkcs12 -export -inkey /tmp/dp.key -in /tmp/dp.crt -out "$$C/data-protection.pfx" -passout pass:
+        quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout "$$W/dp.key" -out "$$W/dp.crt" -days 3650 -subj /CN=ume-rag-data-protection
+        quiet openssl pkcs12 -export -inkey "$$W/dp.key" -in "$$W/dp.crt" -out "$$C/data-protection.pfx" -passout pass:
       fi
       for d in api admin migrations; do cp "$$C/data-protection.pfx" "$$C/$$d/data-protection.pfx"; done
       for d in postgres parser migrations; do cp "$$C/ca.pem" "$$C/$$d/ca.pem"; done
-      [ -f /gateway-certs/ca.pem ] || { echo "rag-bootstrap: the gateway's CA (/gateway-certs/ca.pem) is missing" >&2; exit 1; }
-      for d in api admin worker; do cat "$$C/ca.pem" /gateway-certs/ca.pem > "$$C/$$d/ca.pem"; done
+      # What the services that call out trust besides RAG's CA: the gateway's CA and the operator's (see the header).
+      cp "$$C/ca.pem" "$$W/trust.pem"
+      if [ -f "$$G/ca.pem" ]; then
+        cat "$$G/ca.pem" >> "$$W/trust.pem"
+      elif [ "$${UME_RAG_BOOTSTRAP_GATEWAY_CA:-}" != optional ]; then
+        echo "rag-bootstrap: the gateway's CA ($$G/ca.pem) is missing" >&2; exit 1
+      fi
+      # rag-migrate calls only the database: it gets the operator's CAs too, for a database with a certificate of its own.
+      for f in "$$T"/*.pem; do
+        [ -f "$$f" ] || continue
+        cat "$$f" >> "$$W/trust.pem"; cat "$$f" >> "$$C/migrations/ca.pem"
+      done
+      for d in api admin worker; do cp "$$W/trust.pem" "$$C/$$d/ca.pem"; done
 
       # --- Database (connection pools per instance, data-model §1.1: api 12, admin 5, worker 10, migrator 2) ---------------
       for role in bootstrap migrator api admin worker; do
         [ -f "$$S/postgres/$${role}_password" ] || rand > "$$S/postgres/$${role}_password"
       done
       connection() {
-        printf 'Host=rag-postgres;Database=ragdb;Username=ume_rag_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable;Maximum Pool Size=%s' \
-          "$$1" "$$(tr -d '\r\n' < "$$S/postgres/$${1}_password")" "$$2"
+        printf 'Host=%s;Database=ragdb;Username=ume_rag_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable;Maximum Pool Size=%s' \
+          "$$PG" "$$1" "$$(tr -d '\r\n' < "$$S/postgres/$${1}_password")" "$$2"
       }
       connection migrator 2 > "$$S/migrations/ConnectionStrings__ragdb"
       connection api 12 > "$$S/api/ConnectionStrings__ragdb"
@@ -1358,7 +1411,8 @@ configs:
       tr -d '\n' < "$$S/.openwebui-jwt-secret" > "$$S/openwebui/jwt-secret"
       [ -f "$$S/openwebui/webui_secret_key" ] || rand > "$$S/openwebui/webui_secret_key"
       [ -f "$$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$$S/openwebui/admin-password"
-      cat /etc/ssl/certs/ca-certificates.crt "$$C/ca.pem" /gateway-certs/ca.pem > "$$S/openwebui/ca.pem"
+      # (the public CAs are the image's; outside a container the bundle may be elsewhere, and Open WebUI is not run from there)
+      { [ ! -r /etc/ssl/certs/ca-certificates.crt ] || cat /etc/ssl/certs/ca-certificates.crt; cat "$$W/trust.pem"; } > "$$S/openwebui/ca.pem"
       [ -f "$$S/worker/Security__CrawlKeyPepper" ] || rand | tr -d '\n' > "$$S/worker/Security__CrawlKeyPepper"
       # The renderer's secret WebSocket path (connectors design §8.3): the worker gets the endpoint only while the render
       # profile is on, so without the renderer it refuses rendering instead of waiting for a browser that never starts.
@@ -1406,7 +1460,7 @@ configs:
       # /integration-secrets. UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY and UME_RAG_WORKER_GATEWAY_KEY, when set,
       # win over the files (keys issued by hand, or a gateway elsewhere). The per-level keys they replace are revoked at the
       # gateway and read by no service, so none is left in the volume.
-      I=/integration-secrets/Ume.Rag
+      I="$${UME_RAG_BOOTSTRAP_INTEGRATION_SECRETS:-/integration-secrets}/Ume.Rag"
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
         key="$$(printenv "UME_RAG_$${up}_GATEWAY_KEY" || true)"
@@ -1464,20 +1518,57 @@ configs:
         echo "rag-bootstrap: deleted admin/OrgSync__DataApiKey; ask the gateway admin to revoke that Data API key"
       fi
 
+      # --- pgBackRest repository (repo-and-deployment §7.4), only where the deployment names a backup target ---------------
+      # The passphrase is generated once (a new one could not read the existing backups: escrow it); repo.conf is written
+      # again from it and the variables on every run.
+      if [ -n "$${UME_RAG_BACKUP_TARGET:-}" ]; then
+        mkdir -p "$$S/pgbackrest"
+        [ -f "$$S/pgbackrest/cipher-pass" ] || openssl rand -base64 48 | tr -d '\n' > "$$S/pgbackrest/cipher-pass"
+        {
+          echo "# Written by rag-bootstrap (repo-and-deployment §7.4); the passphrase is pgbackrest/cipher-pass."
+          echo "[global]"
+          echo "repo1-cipher-type=aes-256-cbc"
+          echo "repo1-cipher-pass=$$(cat "$$S/pgbackrest/cipher-pass")"
+          case "$$UME_RAG_BACKUP_TARGET" in
+            s3://*)
+              location="$${UME_RAG_BACKUP_TARGET#s3://}"; endpoint="$${location%%/*}"; bucket_path="$${location#*/}"
+              if [ "$$bucket_path" = "$$location" ] || [ -z "$$bucket_path" ]; then
+                echo "rag-bootstrap: UME_RAG_BACKUP_TARGET is s3://ENDPOINT/BUCKET[/PATH]" >&2; exit 1
+              fi
+              if [ -z "$${UME_RAG_BACKUP_S3_KEY:-}" ] || [ -z "$${UME_RAG_BACKUP_S3_KEY_SECRET:-}" ]; then
+                echo "rag-bootstrap: an s3:// backup target needs UME_RAG_BACKUP_S3_KEY and UME_RAG_BACKUP_S3_KEY_SECRET" >&2; exit 1
+              fi
+              bucket="$${bucket_path%%/*}"; path="$${bucket_path#"$$bucket"}"; path="$${path#/}"; path="$${path%/}"
+              echo "repo1-type=s3"
+              echo "repo1-path=/$${path:-ume-rag}"
+              echo "repo1-s3-endpoint=$$endpoint"
+              echo "repo1-s3-bucket=$$bucket"
+              echo "repo1-s3-region=$${UME_RAG_BACKUP_S3_REGION:-us-east-1}"
+              echo "repo1-s3-key=$$UME_RAG_BACKUP_S3_KEY"
+              echo "repo1-s3-key-secret=$$UME_RAG_BACKUP_S3_KEY_SECRET"
+              echo "repo1-s3-uri-style=path" ;;
+            *)
+              echo "repo1-type=posix"
+              echo "repo1-path=/var/lib/pgbackrest" ;;
+          esac
+        } > "$$S/pgbackrest/repo.conf"
+      fi
+
       # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
+      proxy_todo=""
+      if [ -n "$$F" ]; then
       mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations" "$$F/openwebui-setup" "$$F/openwebui"
       # rag-openwebui-setup's script and rag-openwebui's start wrapper (profile openwebui): those services are read-only, so they
       # read their scripts from rag-config.
-      cp /config/feedback-key-setup.py "$$F/openwebui-setup/feedback-key-setup.py"
-      cp /config/start-with-sign-in.py "$$F/openwebui/start-with-sign-in.py"
-      cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
-      cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
-      cp /config/postgresql.conf "$$F/postgres/postgresql.conf"
-      cp /config/app-roles.sql "$$F/migrations/app-roles.sql"
+      cp "$$K"/feedback-key-setup.py "$$F/openwebui-setup/feedback-key-setup.py"
+      cp "$$K"/start-with-sign-in.py "$$F/openwebui/start-with-sign-in.py"
+      cp "$$K"/postgres-init.sql "$$F/postgres-init/10-roles.sql"
+      cp "$$K"/pg_hba.conf "$$F/postgres/pg_hba.conf"
+      cp "$$K"/postgresql.conf "$$F/postgres/postgresql.conf"
+      cp "$$K"/app-roles.sql "$$F/migrations/app-roles.sql"
       # The TLS proxy's nginx.conf (profile proxy, M-17 C8): the template with the stack's host names. A host without a name
       # of its own (the gateway's admin on the gateway's name, rag-admin on rag-api's) gets no block, nor Open WebUI without
       # its profile; the checklist at the end says so.
-      proxy_todo=""
       mkdir -p "$$F/proxy"
       case ",$${COMPOSE_PROFILES:-}," in
         *,proxy,*)
@@ -1504,21 +1595,24 @@ configs:
           esac
           # shellcheck disable=SC2086 # $$enable is a list of sed expressions
           sed $$enable -e "s/@GATEWAY_HOST@/$$gw/g" -e "s/@ADMIN_HOST@/$$gw_admin/g" -e "s/@API_HOST@/$$api/g" \
-            -e "s/@RAG_ADMIN_HOST@/$$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$$owui_host/g" /config/nginx-proxy.conf.template > "$$F/proxy/nginx.conf"
+            -e "s/@RAG_ADMIN_HOST@/$$rag_admin/g" -e "s/@OPENWEBUI_HOST@/$$owui_host/g" "$$K/nginx-proxy.conf.template" > "$$F/proxy/nginx.conf"
           # The internal CAs it verifies the upstreams against (public certificates only; ume-certs also holds private keys).
           cp "$$C/ca.pem" "$$F/proxy/rag-ca.pem"
-          cp /gateway-certs/ca.pem "$$F/proxy/gateway-ca.pem"
+          [ ! -f "$$G/ca.pem" ] || cp "$$G/ca.pem" "$$F/proxy/gateway-ca.pem"
           echo "rag-bootstrap: wrote the TLS proxy's nginx.conf" ;;
         *) rm -f "$$F/proxy/nginx.conf" "$$F/proxy/rag-ca.pem" "$$F/proxy/gateway-ca.pem" ;;
       esac
       chmod -R a+rX "$$F"
+      fi
 
+      if [ "$$OWN" != no ]; then
       # --- Blob container (issue #41): rag/ and the worker's spool, owned by the services' uid ----------------------------
       mkdir -p /blobs/rag /blobs/spool
       chown 1654:1654 /blobs/rag /blobs/spool
       chmod 0750 /blobs/rag /blobs/spool
 
       chown -R 999:999 "$$C/postgres" "$$S/postgres"
+      [ ! -d "$$S/pgbackrest" ] || chown -R 999:999 "$$S/pgbackrest"
       chown -R 10001:10001 "$$C/parser"
       chown -R 10002:10002 "$$S/renderer"
       chown -R 1000:1000 "$$S/openwebui" /openwebui-data
@@ -1528,6 +1622,7 @@ configs:
       chmod 2750 "$$S/openwebui-feedback"
       chown -R 1654:1654 "$$C/api" "$$C/admin" "$$C/worker" "$$C/migrations" "$$S/api" "$$S/admin" "$$S/worker" "$$S/migrations" "$$S/keys"
       chmod 755 "$$C" "$$S"
+      fi
       echo "rag-bootstrap: certificates and secrets ready"
 
       # --- What is still missing: a checklist at the end of the log (never fatal: the stack starts and waits) ------------
