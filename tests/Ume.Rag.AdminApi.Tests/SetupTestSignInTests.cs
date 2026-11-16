@@ -542,6 +542,28 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
     }
 
     [Fact]
+    public async Task A_callback_with_a_made_up_marker_does_not_end_the_test_the_browser_is_running()
+    {
+        // A page that makes the deployer's browser load the callback address with its own state must not cancel the test: the
+        // test cookie is deleted only once a test is claimed.
+        using var provider = new FakeProvider();
+        await using var host = Host(provider);
+        using var session = await SessionAsync(host, Admin);
+        var (_, _, state) = await StartAsync(session, provider);
+        using (var forged = await CallbackAsync(session, SetupTestSignIn.StatePrefix + new string('x', 43)))
+        {
+            forged.Headers.Location!.OriginalString.ShouldBe(SetupTestSignIn.DonePath);
+        }
+
+        using (var real = await CallbackAsync(session, state))
+        {
+            real.Headers.Location!.OriginalString.ShouldBe(SetupTestSignIn.DonePath);
+        }
+
+        (await LatestTestAsync(session)).GetProperty("status").GetString().ShouldBe("passed");
+    }
+
+    [Fact]
     public async Task Two_callbacks_with_one_marker_at_once_make_one_token_call_and_an_expired_test_none()
     {
         using var provider = new FakeProvider();

@@ -185,7 +185,6 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
         var ct = http.RequestAborted;
         var options = oidc.Get(OpenIdConnectDefaults.AuthenticationScheme);
         var browser = http.Request.Cookies[TestCookieName];
-        http.Response.Cookies.Delete(TestCookieName, TestCookie(options.CallbackPath, null));
         var status = await setup.ReadAsync(ct);
         if (!status.Open)
         {
@@ -212,6 +211,8 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
 
         if (test is null)
         {
+            // The test cookie stays: a request with a made-up marker (a page that makes the deployer's browser load this address)
+            // must not end the test that browser is running.
             if (sampler.ShouldLog(UnknownTestEvent, out var count))
             {
                 SecurityEvents.SetupTestSignIn(security, SetupTargets.RagAdmin, "failed", SetupTestReasons.UnknownTest, null, false, null, address, count);
@@ -221,6 +222,8 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
             return;
         }
 
+        // The test is claimed: its cookie has done its work, whatever the outcome.
+        http.Response.Cookies.Delete(TestCookieName, TestCookie(options.CallbackPath, null));
         var session = await db.SetupSessions.AsNoTracking().SingleOrDefaultAsync(s => s.Id == test.SessionId && s.OpeningNonce == status.Nonce && s.ExpiresAt > now, ct);
         var sameBrowser = browser is { Length: > 0 and <= 100 } && CryptographicOperations.FixedTimeEquals(SetupSessions.Hash(browser), test.BrowserHash);
         (string Reason, SetupTestResult? Result) outcome = session is null ? (SetupTestReasons.SessionExpired, null)
