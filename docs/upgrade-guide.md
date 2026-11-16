@@ -27,6 +27,11 @@ exception, with its own steps.
   connection strings.
 - **The prerequisite was stated too low:** the Compose files need Docker Compose 2.33.1 or later (`gw_priority`), as
   they have since they pinned each service's default route; the guides said 2.24.
+- **Open WebUI is off unless asked for.** `stack.env.example` no longer has `openwebui` in `COMPOSE_PROFILES`, and
+  without the profile `rag-bootstrap` generates nothing for Open WebUI and removes rag-api's `OpenWebUi__JwtSecret`. **A
+  stack that has the profile keeps it: nothing to do.** A stack that ran without the profile changes in one way:
+  rag-api no longer has a key to check Open WebUI's user tokens with, which nothing used. Turning the profile on later
+  generates what is missing; turning it off keeps Open WebUI's store and keys for the next time.
 - **Portainer: nothing changes.** The stack file is generated from `deploy/compose.rag.yaml` now, with the same
   services, volumes, networks and variables; update the stack as for any release.
 - **Compose: no in-place upgrade; install again.** Compose runs `deploy/compose.rag.yaml` with the Portainer stack's

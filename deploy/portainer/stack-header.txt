@@ -12,7 +12,7 @@
 # Required variable: one, the gateway's too
 #   UME_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
 #                             llm-admin.<domain> (the gateway's), rag.<domain> (rag-api), rag-admin.<domain>
-#                             (rag-admin) and chat.<domain> (Open WebUI). Each UME_RAG_*_HOST (Optional, below)
+#                             (rag-admin) and, with the openwebui profile, chat.<domain>. Each UME_RAG_*_HOST (Optional, below)
 #                             overrides its name; without UME_DOMAIN, UME_GATEWAY_HOST and UME_RAG_API_HOST are
 #                             required instead
 # Set by the stack file or stack.env.example, nothing to type
@@ -55,6 +55,8 @@
 #   UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
 #                             residencies in the gateway (register M2: OnPrem and Eu)
 #   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   Open WebUI is optional: without the openwebui profile nothing of it is created (no secrets, no client in RAG's
+#                             admin, no chat host name in the proxy), and Ume.Rag serves its API to your applications.
 #   COMPOSE_PROFILES=clamav,openwebui  also rag-openwebui, Open WebUI as the chat for users, on plain HTTP at
 #                             UME_RAG_OPENWEBUI_BIND (127.0.0.1):UME_RAG_OPENWEBUI_PORT (3000) for a TLS proxy in front
 #                             (it sets Secure cookies, so users reach it over HTTPS only). It calls rag-api inside the
