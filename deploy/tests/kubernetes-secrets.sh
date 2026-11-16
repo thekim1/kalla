@@ -16,6 +16,7 @@
 #
 #   deploy/tests/kubernetes-secrets.sh
 set -euo pipefail
+export LC_ALL=C
 here="$(cd "$(dirname "$0")" && pwd)"
 deploy="$here/.."
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
@@ -100,7 +101,9 @@ bash "$t/up/deploy/kubernetes/create-secrets.sh" --generate-only --api-host rag.
   --datastores --renderer > "$t/up.log" 2>&1 || { cat "$t/up.log"; fail "create-secrets.sh failed on init-deployment.sh's directories"; }
 sums "$t/up/deploy" > "$t/up2"
 # Every file init-deployment.sh wrote is unchanged, except the five service certificates and their keys.
-changed="$(join -j 2 <(sort -k2 "$t/up1") <(sort -k2 "$t/up2") | awk '$2 != $3 { print $1 }' | LC_ALL=C sort | tr '\n' ' ')"
+# (Compared by exact name in awk: join pairs names by the locale's collation, and one that ignores punctuation took
+# secrets/.openwebui-jwt-secret and the new secrets/openwebui/jwt-secret for the same file on the CI runner.)
+changed="$(awk 'NR == FNR { before[$2] = $1; next } ($2 in before) && before[$2] != $1 { print $2 }' "$t/up1" "$t/up2" | LC_ALL=C sort | tr '\n' ' ')"
 expected="certs/admin/admin.crt certs/admin/admin.key certs/api/api.crt certs/api/api.key certs/parser/parser.crt certs/parser/parser.key certs/postgres/postgres.crt certs/postgres/postgres.key certs/worker/worker.crt certs/worker/worker.key "
 [ "$changed" = "$expected" ] || fail "the upgrade changed: $changed"
 for svc in api admin worker parser postgres; do
