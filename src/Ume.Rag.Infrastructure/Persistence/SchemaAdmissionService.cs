@@ -36,8 +36,8 @@ public sealed partial class SchemaAdmissionService(
             }
         }
 
-        await using var admit = new NpgsqlCommand("SELECT public.ume_rag_admit(@build)", connection);
-        admit.Parameters.Add(new NpgsqlParameter<string>("build", build));
+        await using var admit = new NpgsqlCommand("SELECT public.ume_rag_admit($1)", connection);
+        admit.Parameters.Add(new NpgsqlParameter<string> { TypedValue = build });
         try
         {
             await admit.ExecuteNonQueryAsync(cancellationToken);

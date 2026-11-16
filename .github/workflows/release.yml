@@ -398,10 +398,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The earlier release's images are on ghcr.io; a dry run has not logged in there (its own images go to the
+          # job's registry). The login lives in this job's own Docker config and is removed again.
+          if [ "$GITHUB_EVENT_NAME" != push ]; then echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin; fi
           bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
             --version "${{ steps.version.outputs.version }}" --expect-fenced ume_rag_admin
+          if [ "$GITHUB_EVENT_NAME" != push ]; then docker logout ghcr.io; fi
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.
         run: |
