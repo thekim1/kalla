@@ -114,7 +114,7 @@ public static class SetupModeEndpoints
                 : adminTest?.Id != test.Id ? "not_latest"
                 : test.Passed != true || result is null ? "not_passed"
                 : !result.IsPlatformAdmin ? "not_platform_admin"
-                : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(test.Target, values)) ? "values_changed"
+                : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(values, tests.MappingOf(values))) ? "values_changed"
                 // What is about to be in force must be what the test ran against: the deployment's values are read again here,
                 // and they may differ from the instance and moment the test started on (a rolling change of Oidc:Authority).
                 : !TestedProviderIsInForce(configuration, payload, values) ? "values_changed"
@@ -148,6 +148,9 @@ public static class SetupModeEndpoints
                     row.SetupNonce = null;
                     await admin.Db.SetupSessions.ExecuteDeleteAsync(attempt);
                 }, ct);
+            // This instance's /bff/user and sign-in follow at once; another replica within AdminSignIn.RefreshInterval.
+            await services.GetRequiredService<AdminSignIn>().RefreshAsync(signIn, services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>(),
+                services.GetRequiredService<IOptionsMonitorCache<OpenIdConnectOptions>>(), ct);
             SetupSessions.DeleteCookie(http);
             SecurityEvents.SetupCompleted(SecurityEvents.CreateLogger(loggers), actor.Subject, actor.SessionId, actor.SourceAddress);
             return new SetupCompletedDto(SignInUrl);

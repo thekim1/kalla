@@ -16,6 +16,7 @@ using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.TestKit;
@@ -37,6 +38,12 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
     private const string WizardSecret = "wizard-secret-0c4d7e";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// The hosts' clock: the sign-in paths read the values at most once per <see cref="AdminSignIn.RefreshInterval"/>, so
+    /// <see cref="ChallengeAsync"/> and <see cref="UserDocumentAsync"/> move it on.
+    /// </summary>
+    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
+
     /// <summary>The admin API with no deployment authority or secret, plus <paramref name="settings"/>.</summary>
     private WebApplicationFactory<Program> Host(CapturingLoggerProvider? logs = null, params (string Key, string Value)[] settings) =>
         database.Factory().WithWebHostBuilder(web =>
@@ -48,6 +55,7 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
                 web.UseSetting(key, value);
             }
 
+            web.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(_time));
             if (logs is not null)
             {
                 web.ConfigureTestServices(services => services.AddLogging(b => b.AddProvider(logs).SetMinimumLevel(LogLevel.Trace)));
@@ -55,8 +63,13 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
         });
 
     /// <summary>Starts a sign-in at <c>/bff/login</c>; returns where the browser is sent.</summary>
-    private static async Task<Uri> ChallengeAsync(WebApplicationFactory<Program> factory)
+    private async Task<Uri> ChallengeAsync(WebApplicationFactory<Program> factory, bool atOnce = false)
     {
+        if (!atOnce)
+        {
+            _time.Advance(AdminSignIn.RefreshInterval);
+        }
+
         using var client = AdminDatabaseFixture.HttpsClient(factory, allowAutoRedirect: false);
         using var response = await client.GetAsync("/bff/login?returnUrl=/sources", Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync(Ct));
@@ -69,8 +82,9 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
         HttpUtility.ParseQueryString(location.Query)["client_id"].ShouldBe(clientId);
     }
 
-    private static async Task<JsonElement> UserDocumentAsync(WebApplicationFactory<Program> factory)
+    private async Task<JsonElement> UserDocumentAsync(WebApplicationFactory<Program> factory)
     {
+        _time.Advance(AdminSignIn.RefreshInterval);
         using var client = AdminDatabaseFixture.HttpsClient(factory);
         using var json = JsonDocument.Parse(await client.GetStringAsync("/bff/user", Ct));
         return json.RootElement.Clone();
@@ -127,6 +141,48 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
         finally
         {
             await ClearWizardAsync(first);
+        }
+    }
+
+    [Fact]
+    public async Task The_sign_in_paths_read_the_values_at_most_every_two_seconds_and_requests_arriving_together_read_once()
+    {
+        await using var factory = Host();
+        try
+        {
+            await SignInSettingsTests.SaveAsync(factory, new OidcWizardValues { Authority = WizardA, ClientId = "client-a" }, null);
+            ShouldGoTo(await ChallengeAsync(factory), WizardA, "client-a");
+
+            // Anyone may call the sign-in start, the callback, the sign-out and /bff/user: they go on with the values last read for two seconds.
+            await SignInSettingsTests.SaveAsync(factory, new OidcWizardValues { Authority = WizardB, ClientId = "client-b" }, null);
+            ShouldGoTo(await ChallengeAsync(factory, atOnce: true), WizardA, "client-a");
+            var signIn = factory.Services.GetRequiredService<AdminSignIn>();
+            signIn.ReadRecently.ShouldBeTrue();
+            using (var client = AdminDatabaseFixture.HttpsClient(factory, allowAutoRedirect: false))
+            {
+                using var callback = await client.GetAsync(LiveOptions(factory).CallbackPath + "?state=made-up&code=x", Ct);
+                using var user = await client.GetAsync("/bff/user", Ct);
+                signIn.Current.Values.Authority.Value.ShouldBe(WizardA);
+            }
+
+            _time.Advance(AdminSignIn.RefreshInterval);
+            signIn.ReadRecently.ShouldBeFalse();
+
+            // Requests that waited for another one's read take that read.
+            using var scope = factory.Services.CreateScope();
+            var settings = scope.ServiceProvider.GetRequiredService<SignInSettings>();
+            var monitor = factory.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>();
+            var cache = factory.Services.GetRequiredService<IOptionsMonitorCache<OpenIdConnectOptions>>();
+            var first = await signIn.RefreshAsync(settings, monitor, cache, Ct, unlessReadRecently: true);
+            first.Values.Authority.Value.ShouldBe(WizardB);
+            await SignInSettingsTests.SaveAsync(factory, new OidcWizardValues { Authority = WizardA, ClientId = "client-a" }, null);
+            (await signIn.RefreshAsync(settings, monitor, cache, Ct, unlessReadRecently: true)).ShouldBeSameAs(first);
+            // Without it (completing setup) the values are read at once.
+            (await signIn.RefreshAsync(settings, monitor, cache, Ct)).Values.Authority.Value.ShouldBe(WizardA);
+        }
+        finally
+        {
+            await ClearWizardAsync(factory);
         }
     }
 
@@ -216,6 +272,7 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
                 await db.Settings.ExecuteUpdateAsync(s => s.SetProperty(x => x.IdentityOidcEncryptedClientSecret, foreign), Ct);
             }
 
+            _time.Advance(AdminSignIn.RefreshInterval);
             using var client = AdminDatabaseFixture.HttpsClient(factory, allowAutoRedirect: false);
             using var login = await client.GetAsync("/bff/login", Ct);
             login.StatusCode.ShouldBe(HttpStatusCode.Conflict, await login.Content.ReadAsStringAsync(Ct));

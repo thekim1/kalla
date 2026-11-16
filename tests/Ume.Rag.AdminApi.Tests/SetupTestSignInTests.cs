@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -561,6 +562,107 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         }
 
         (await LatestTestAsync(session)).GetProperty("status").GetString().ShouldBe("passed");
+    }
+
+    [Fact]
+    public async Task Setup_callbacks_are_limited_per_address_while_setup_is_open_and_answer_404_once_it_is_closed()
+    {
+        // Anyone can send a callback with a setup test's state; each one that reaches the lookup costs a statement.
+        using var provider = new FakeProvider();
+        var forged = SetupTestSignIn.StatePrefix + new string('x', 43);
+        await using (var host = Host(provider))
+        {
+            using var session = await SessionAsync(host, Admin);
+            using var stranger = host.CreateHttpsClient();
+            for (var i = 0; i < SetupCallbackThrottle.Limit; i++)
+            {
+                using var answered = await CallbackAsync(stranger, forged);
+                answered.Headers.Location!.OriginalString.ShouldBe(SetupTestSignIn.DonePath);
+            }
+
+            using var limited = await CallbackAsync(stranger, forged);
+            limited.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+            limited.Headers.RetryAfter.ShouldNotBeNull();
+        }
+
+        // Closed (every deployment after its setup): 404 from the values last read, whatever the marker and however many.
+        await ResetAsync(Admin, completed: true);
+        await using var closed = Host(provider);
+        using var client = closed.CreateHttpsClient();
+        for (var i = 0; i < SetupCallbackThrottle.Limit + 5; i++)
+        {
+            using var answered = await CallbackAsync(client, forged);
+            answered.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+    }
+
+    [Fact]
+    public void The_callback_limit_counts_each_address_on_its_own_in_one_minute_windows()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var throttle = new SetupCallbackThrottle(time);
+        for (var i = 0; i < SetupCallbackThrottle.Limit; i++)
+        {
+            throttle.TryAcquire("198.51.100.1", out _).ShouldBeTrue();
+        }
+
+        throttle.TryAcquire("198.51.100.1", out var retryAfter).ShouldBeFalse();
+        retryAfter.ShouldBe(SetupCallbackThrottle.Window);
+        // A flood from one address does not keep another one's callback out; no address counts as one.
+        throttle.TryAcquire("203.0.113.9", out _).ShouldBeTrue();
+        throttle.TryAcquire(null, out _).ShouldBeTrue();
+        time.Advance(SetupCallbackThrottle.Window);
+        throttle.TryAcquire("198.51.100.1", out _).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Completing_asks_for_a_new_test_when_the_claim_mapping_changed_since_the_test_and_this_instance_follows_a_completion_at_once()
+    {
+        using var provider = new FakeProvider();
+        await using var host = Host(provider);
+        using var session = await SessionAsync(host, Admin);
+        provider.Claims = FakeProvider.Person("person-1", RagRoles.PlatformAdmin);
+        var (testId, _, state) = await StartAsync(session, provider);
+        using (await CallbackAsync(session, state))
+        {
+        }
+
+        (await LatestTestAsync(session)).GetProperty("status").GetString().ShouldBe("passed");
+        var body = new { authority = FakeProvider.Authority, refuseGuests = true, testId };
+
+        // The deployment now names another role claim (a rolling change): the passed test read the old one.
+        var configuration = host.Services.GetRequiredService<IConfiguration>();
+        configuration["Oidc:RoleClaim"] = "app_roles";
+        using (var refused = await PostAsync(session, "/bff/setup/complete", body))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(Ct));
+            (await ReasonOf(refused)).ShouldBe("values_changed");
+        }
+
+        configuration["Oidc:RoleClaim"] = null;
+        var signIn = host.Services.GetRequiredService<AdminSignIn>();
+        SetupMode.IsOpen(signIn.Current.Values, DateTimeOffset.UtcNow).ShouldBeTrue();
+        using var completed = await PostAsync(session, "/bff/setup/complete", body);
+        completed.StatusCode.ShouldBe(HttpStatusCode.OK, await completed.Content.ReadAsStringAsync(Ct));
+        // Read by the completion itself, not by the next request two seconds later.
+        SetupMode.IsOpen(signIn.Current.Values, DateTimeOffset.UtcNow).ShouldBeFalse();
+        signIn.Current.Values.Authority.Value.ShouldBe(FakeProvider.Authority);
+    }
+
+    [Fact]
+    public void The_tests_fingerprint_covers_the_claim_names_the_tenant_the_guest_rule_and_the_role_groups()
+    {
+        var values = new OidcWizardValues { Authority = FakeProvider.Authority };
+        OidcOptions Mapping(string roleClaim = "roles", string? tenant = null, bool refuseGuests = true, params (string Role, string Group)[] groups) =>
+            new() { RoleClaim = roleClaim, TenantId = tenant, RefuseGuests = refuseGuests, RoleGroups = groups.ToDictionary(g => g.Role, g => g.Group) };
+        (string, string)[] groups = [("rag-platform-admin", "GG-Admins"), ("rag-viewer", "GG-All")];
+        var same = SetupTestSignIn.Fingerprint(values, Mapping(groups: groups));
+        SetupTestSignIn.Fingerprint(values, Mapping(groups: [groups[1], groups[0]])).ShouldBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping(groups: [("rag-platform-admin", "GG-Everyone"), groups[1]])).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping("app_roles", groups: groups)).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping(tenant: "another-tenant", groups: groups)).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping(refuseGuests: false, groups: groups)).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(new OidcWizardValues { Authority = "https://idp2.test/realms/ume" }, Mapping(groups: groups)).ShouldNotBe(same);
     }
 
     [Fact]

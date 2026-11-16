@@ -105,13 +105,16 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
     public async Task Closed_setup_answers_404_on_every_route_even_with_a_cookie_of_an_earlier_opening()
     {
         await ResetAsync(Admin, completed: false);
-        await using (var opening = Host())
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        await using (var opening = Host(time: time))
         {
             using var session = await SessionAsync(opening, Admin);
             (await session.GetAsync("/bff/setup/state", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
-            // Setup closes (as a completion does): the same cookie gets 404 everywhere.
+            // Setup closes (as a completion on another replica does): the same cookie gets 404 everywhere at once, and /bff/user
+            // says so once the values last read are two seconds old.
             await ResetAsync(Admin, completed: true);
+            time.Advance(AdminSignIn.RefreshInterval);
             (await session.GetAsync("/bff/setup/state", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
             (await PostAsync(session, "/bff/setup/test", new { authority = "https://idp.invalid" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
             (await PostAsync(session, "/bff/setup/complete", new { testId = Guid.NewGuid() })).StatusCode.ShouldBe(HttpStatusCode.NotFound);

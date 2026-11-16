@@ -351,6 +351,48 @@ public sealed class SetupCodeThrottle(TimeProvider time)
 }
 
 /// <summary>
+/// The limit on setup test callbacks (<see cref="SetupCallbackMiddleware"/>; identity design §19), which anyone can send while setup
+/// is open and which each cost a database statement: at most <see cref="Limit"/> per minute and client address in this process, a
+/// fixed window; further ones answer 429 before anything is read. Per address, so a flood from elsewhere does not keep the
+/// deployer's own callback out; past <see cref="MaxAddresses"/> addresses in a window the rest share one count.
+/// </summary>
+public sealed class SetupCallbackThrottle(TimeProvider time)
+{
+    public const int Limit = 20;
+    public const int MaxAddresses = 10_000;
+    public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
+
+    private readonly Lock _lock = new();
+    private readonly Dictionary<string, int> _counts = new(StringComparer.Ordinal);
+    private DateTimeOffset _windowStart = DateTimeOffset.MinValue;
+
+    /// <summary>Counts one callback from <paramref name="address"/>: false when its window is full, with <paramref name="retryAfter"/> the time to its end.</summary>
+    public bool TryAcquire(string? address, out TimeSpan retryAfter)
+    {
+        var now = time.GetUtcNow();
+        lock (_lock)
+        {
+            if (now - _windowStart >= Window)
+            {
+                _windowStart = now;
+                _counts.Clear();
+            }
+
+            retryAfter = _windowStart + Window - now;
+            var key = address ?? "";
+            if (!_counts.ContainsKey(key) && _counts.Count >= MaxAddresses)
+            {
+                key = "\0others";
+            }
+
+            var count = _counts.GetValueOrDefault(key) + 1;
+            _counts[key] = count;
+            return count <= Limit;
+        }
+    }
+}
+
+/// <summary>
 /// Samples setup's flood-prone security events (6009 wrong codes, 6011 <c>unknown_test</c>): at most one per <see cref="Every"/> per
 /// event in this process, carrying the number since the last one, so a flood cannot fill the log.
 /// </summary>

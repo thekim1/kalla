@@ -48,6 +48,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   it and writes the names to `admin/Deployment__RetiredVariables`; `GET /api/overview` returns them to a platform admin
   as `deploymentNotices` (`{ code: "retired_variables", names }`, an addition), and Home shows a notice that can be
   hidden. Nothing stops and no value is read. Compose and Kubernetes have no such list.
+- **rag-admin's sign-in paths are bounded for anonymous callers** (setup wizard, from the review of
+  thekim1/llmgateway#103; identity design §19). `/bff/login`, `/bff/user`, `/bff/logout` and the sign-in callback read
+  the sign-in values at most once every 2 seconds per instance (requests arriving together share one read) instead of
+  once per request; completing setup reads them at once on its own instance, another replica follows within 2 seconds.
+  A callback with a setup test's state answers 404 without a read while setup is closed and is limited to 20 a minute
+  per client address while it is open (429). Completing setup also compares what the test's result rested on (claim
+  names, tenant, guest rule, the deployment's role groups) with what is in force (`values_changed`).
 
 ## 0.6.0 (2026-11-15)
 
