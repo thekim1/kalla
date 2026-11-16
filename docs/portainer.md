@@ -7,15 +7,15 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 [*Portainer and other hosts without shell access*](runbook.md#portainer-and-other-hosts-without-shell-access), and
 [production-setup.md](production-setup.md#portainer-gateway-and-rag-in-one-stack).
 
-> **Open WebUI in this stack is new in `0.5.0`'s stack file (#657) and was merged without a boot test.** If
-> `rag-openwebui` doesn't come up, check its log first for the start-up wrapper (the two secrets it reads from the
-> `rag-secrets` volume), the CA bundle (`openwebui/ca.pem`) and the owner of its data volume, and report it.
+> **Each release has its own stack file, and an upgrade over several releases goes one release at a time**, with
+> that release's `compose.portainer.yaml` asset at each step: a `0.5.x` stack takes the `v0.6.0` file first, then the
+> `v0.7.0` file. The steps of each section below are written for that section's file.
 
 ## Which file
 
 Use the **`compose.portainer.yaml` asset of the `v0.7.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.11.0` in the `v0.7.0` asset; `v0.10.2` in the `v0.6.0` asset) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+(`v0.11.0` in the `v0.7.0` asset; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
 no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand. The one typed
 value, the two setup wizards and the default integration manifest of *First deploy* need a file built from the
 gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
@@ -175,7 +175,8 @@ read the CA only at start.
         holds the claim names, with a preset for Keycloak and for Entra ID (the tenant ID). **Test sign-in** opens the
         provider in a new window: sign in there as yourself. The result shows who signed in, the roles, groups and
         departments the token carried, and whether that person is a platform admin.
-     4. *Summary and finish*: the values to save and where each comes from. **Finish**, then **Sign in**.
+     4. *Open WebUI* (step 6 below): its client secret, or **Skip for now**.
+     5. *Summary and finish*: the values to save and where each comes from. **Finish**, then **Sign in**.
    - **Who may finish:** only a test sign-in by a platform admin enables *Finish*: the role `rag-platform-admin` in the
      token's `roles` claim (Keycloak: that realm role, directly or through a group,
      [`deploy/keycloak/README.md`](../deploy/keycloak/README.md)), or a group named in
@@ -370,8 +371,10 @@ accepts only Data API keys unless you set `UME_DATA_AUTHORITY` to the old addres
 ## Upgrade from 0.5.x to 0.6.0
 
 **Not a rolling update:** migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads, so stop
-rag-admin first. Plan a short window (the services restart once). The gateway moves to `v0.10.2` (rolling, no
-migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md#060).
+rag-admin first. Plan a short window (the services restart once). The gateway moves to `v0.10.3` (rolling, no
+migration of its own). **Use the `v0.6.0` release's `compose.portainer.yaml`** for this step, not a later one: from
+`0.7.0` the file creates three new credential keys by default, which step 7 below does not expect. Then go on with
+*Upgrade from 0.6.0*. Every change and why: [upgrade-guide.md](upgrade-guide.md#060).
 
 **Before the update**
 
@@ -390,7 +393,7 @@ migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md
 **The update**
 
 6. **Stop** `rag-admin` (*Containers*, select, *Stop*).
-7. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
+7. **Edit the stack:** paste the `v0.6.0` file over the old one (keep the stack name), and change the variables:
    - **add** `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1` (the cost and budget read-back);
    - **keep** `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY`. Don't add
      `UME_INTEGRATION_MANIFEST` from `stack.env.example`: it would create three new keys beside yours (the 0.5.0 keys
@@ -426,17 +429,19 @@ migration of its own). Every change and why: [upgrade-guide.md](upgrade-guide.md
 
 **Not a rolling update:** migration `DailyTotalsWithoutCost` removes columns the old rag-api still writes, so rag-api
 and rag-admin stop before the migration. Plan a short window. The gateway's own upgrade (`v0.9.x` → `v0.10.1`) is
-rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgrade-guide.md#050).
+rolling and its migrations run by themselves. All notes: [upgrade-guide.md](upgrade-guide.md#050). **Use the `v0.5.1`
+release's `compose.portainer.yaml`** for this step; then *Upgrade from 0.5.x to 0.6.0* with the `v0.6.0` file, and
+*Upgrade from 0.6.0* with the `v0.7.0` file.
 
 1. **Back up** both databases (`pg_dump` from `postgres` and `rag-postgres`) and the three Ume.Rag files of *First
    deploy* step 11.
 2. **Stop** `rag-api` and `rag-admin` (*Containers*, select, *Stop*).
-3. **Edit the stack:** paste the new file over the old one (keep the stack name), and change the variables:
+3. **Edit the stack:** paste the `v0.5.1` file over the old one (keep the stack name), and change the variables:
    - remove the per-level keys `UME_RAG_*GATEWAY_KEY_<level>` and the Data API's `UME_RAG_ORG_SYNC_KEY` and
      `UME_RAG_ORG_SYNC_URL`; drop `data` from `COMPOSE_PROFILES` unless the gateway's Data API serves something else;
-   - add `clamav` to `COMPOSE_PROFILES` for the malware scan; without it files are stored without a scan, marked so
-     (`rag-bootstrap` sets the worker's mode from the profile; the stack no longer reads `UME_RAG_CLAMAV_MODE` or
-     `UME_RAG_OPENWEBUI_BASE_URL`, so remove them if you set them);
+   - add `clamav` to `COMPOSE_PROFILES` for the malware scan, or set `UME_RAG_CLAMAV_MODE=off` to store files without
+     one, marked so (the `v0.5.1` file reads the variable; the `0.6.0` step removes it, and the profile alone decides
+     from then on);
    - add `openwebui` and its variables if you want the chat in this stack;
    - optionally `UME_ADMIN_PUBLIC_URL` for the gateway.
 4. **Update the stack** (*Re-pull image and redeploy* on). The gateway moves to `v0.10.1` and migrates, `rag-migrate`
@@ -499,7 +504,7 @@ the gateway's.
 | The gateway answers `403` to Ume.Rag | the credential key's address list (the `llm` subnet) and its integration role *Credential* |
 | *Models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `rag-clamav` healthy (its first signature download takes minutes) |
-| `rag-openwebui` restarts | its log: the wrapper's two files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
+| `rag-openwebui` restarts | its log: a restart after *sign-in settings changed* is expected; otherwise the wrapper's secret files in `rag-secrets/openwebui/`, the CA bundle, write access to its volume |
 | Open WebUI lists no models | *Apps and keys*: the Open WebUI app managed by the deployment offers assistants, and they are published; `rag-migrate`'s log names the client |
 | No setup code in `adminapi`'s log | The stack sets `UME_OIDC_AUTHORITY` (the gateway's `bootstrap` log says sign-in *is declared by the stack's variables*), or the gateway's setup is done already (to change it, a new `UME_SETUP_REOPEN` value) |
 | Ume.Rag's wizard suggests no provider address and links to the gateway's wizard | The gateway's setup isn't finished (*First deploy* step 4), or rag-admin hasn't read the gateway's context since: it reads it with its credential key, so check `rag-bootstrap`'s checklist for a missing key. Or type the address |

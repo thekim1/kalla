@@ -37,7 +37,7 @@ When an instance is told to stop, it:
 
 The database is migrated before the first new instance starts, so until the last old instance stops the old version
 runs against the new schema. That works only when the release's migration is backward compatible.
-**Until the first production deployment, releases are not** (Decisions, "No backward compatibility before
+**Until the first production deployment, a release may not be** (Decisions, "No backward compatibility before
 production"): the [upgrade guide](upgrade-guide.md) marks every release **Rolling update: yes** or **no**, and for a
 "no" release you stop everything and update as for a single instance (`dc up -d --wait`).
 
@@ -144,8 +144,7 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 - **Requests longer than the shutdown timeout** (300 s for rag-api) are cut off. Raise `UME_RAG_SHUTDOWN_TIMEOUT_SECONDS`
   (and `stop_grace_period` in `compose.rolling.yaml`) if you have longer ones.
 - **Postgres** is a single instance: a new image is a short outage (`--with-postgres`).
-- **Releases marked "Rolling update: no"**, which is every release until the first production deployment, need a
-  planned stop.
+- **Releases marked "Rolling update: no"** (0.5.0 and 0.6.0 so far) need a planned stop.
 - **The single-instance installation's first rolling update** stops instances that had no drain configured; a few POSTs
   can fail at that moment, later updates do not have this.
 

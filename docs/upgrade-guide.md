@@ -12,7 +12,13 @@ exception, with its own steps.
 
 ## Unreleased
 
-Nothing yet.
+- **Rolling update: yes.** No migration, no new variable, nothing to do.
+- **Compose:** an interactive re-run of `init-deployment.sh` (no `--yes`) now asks for the sign-in provider's address
+  when neither `--oidc-authority` nor `deploy/.env` gives one: leave it empty to keep the provider in the setup wizard,
+  or type it so the host firewall lets rag-admin reach it. New and optional: `--gateway-secrets-dir`, which reads the
+  three credential keys from a gateway on the same host ([quick start](compose-quick-start.md)).
+- **The prerequisite was stated too low:** the Compose files need Docker Compose 2.33.1 or later (`gw_priority`), as
+  they have since they pinned each service's default route; the guides said 2.24.
 
 ## 0.7.0
 
@@ -24,11 +30,6 @@ Nothing yet.
   keys from the stack file's default, or sets the variable empty (below, and `docs/portainer.md`, *Upgrade from 0.6.0*).
 - **After the update:** read the end of `rag-bootstrap`'s log (a retired variable the stack still sets is named
   there), and check that you sign in as before.
-
-- **The Portainer stack pins the gateway's `v0.10.3`.** Rolling update, no migration, no new variable: the only
-  change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
-  allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
-  preset keep their residencies: set them to `OnPrem` and `Eu` in the gateway's admin (0.6.0, *Before the update*).
 - **`UME_DOMAIN` names Ume.Rag's hosts (setup wizard S0).** Rolling update, no migration. Portainer: `UME_DOMAIN`
   gives rag-api `rag.<domain>`, its admin `rag-admin.<domain>` and Open WebUI `chat.<domain>`; each `UME_RAG_*_HOST`
   still overrides its own name. Compose: `init-deployment.sh --domain DOMAIN` does the same for `--api-host`,
@@ -65,7 +66,7 @@ Nothing yet.
   - **Compose apply** (an existing 0.6.0 deployment; steps 1–3 and 7–8 of *Upgrade procedure* below stay as they are):
     1. Replace `deploy/` with the release's, keeping `deploy/.env`, `deploy/certs` and `deploy/secrets`, and set the
        image pins.
-    2. Re-run `init-deployment.sh` with your options. The `--oidc-*` options are optional and never prompted; a re-run
+    2. Re-run `init-deployment.sh` with your options. The `--oidc-*` options are optional and, in 0.7.0, never prompted; a re-run
        without `--oidc-authority` or `--oidc-client-id` keeps the value in `deploy/.env`, and the client secret file
        in `secrets/admin` stays, so the sign-in stays declared and the wizard stays closed. It writes
        `secrets/admin/Setup__Secret`. With the host firewall, keep `--oidc-authority`: rag-admin reaches only that
@@ -81,7 +82,8 @@ Nothing yet.
     `admin/Setup__Secret`), then `deploy.sh`. The base no longer sets `Oidc__ClientId`, the claims, `Oidc__ExtraScopes__0`
     or `Oidc__RefuseGuests`: add to your overlay any of them you had changed.
   - **To move a declared deployment to the wizard** (and the secrets out of the variables): remove the client secret
-    (Portainer: `UME_RAG_OIDC_CLIENT_SECRET`, and Open WebUI's once the wizard has its step; Compose: delete
+    (Portainer: `UME_RAG_OIDC_CLIENT_SECRET`, and Open WebUI's `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`, which is then
+    entered in the wizard's Open WebUI step; Compose: delete
     `secrets/admin/Oidc__ClientSecret`; Kubernetes: delete the key from `ume-rag-admin-secrets`), set
     `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) to a new value, update the stack, then enter the values in the
     wizard with the code from rag-admin's log. Until you finish, sign-in uses the stored values, which are now
@@ -92,7 +94,8 @@ Nothing yet.
     shows the button. `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the
     wizard again; remove it before restoring a database.
 - **A leftover variable is named (M-21).** Rolling update, no migration, no new variable to set. A Portainer stack that
-  still sets a variable this version no longer reads (the ones the sections below say to remove, back to 0.3.0) works
+  still sets a variable this version no longer reads (the ones the sections below say to remove, back to 0.5.0's; the
+  per-level `UME_RAG_*GATEWAY_KEY_<level>` variables of 0.4.0 and before are not named) works
   as before; `rag-bootstrap`'s checklist now names each with what replaced it, and Home in the admin UI shows platform
   admins a notice with the names. **Apply:** nothing is required; to clear the notice, remove the named variables from
   the stack's variables and update the stack. **Check:** `rag-bootstrap`'s log has no line *is set and no longer read*.
@@ -138,7 +141,7 @@ Nothing yet.
 - **Rolling update: no** from 0.5.x. Migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads:
   stop the old rag-admin before `rag-migrate` runs, then start the new one (rag-api and rag-worker are not affected).
 - **Before the update:** give rag-api's and rag-admin's credential keys the residencies `OnPrem` and `Eu` in the
-  gateway (C9, below). **Portainer:** paste the new `compose.portainer.yaml` (gateway v0.10.2, Ume.Rag 0.6.0) and add
+  gateway (C9, below). **Portainer:** paste the `v0.6.0` release's `compose.portainer.yaml` (gateway v0.10.3, Ume.Rag 0.6.0) and add
   `UME_INTEGRATION_API_URL` (C11); keep your `UME_RAG_*_GATEWAY_KEY` variables unless you move to the manifest (C7).
 - **After the update:** create the embedding profile if none exists (C5) and check *Models* shows `act-as-key`.
 
@@ -222,7 +225,11 @@ Nothing yet.
   client admin-console: Created" (or `Adopted`, then `Unchanged`).
 - **Migration `ChunkSetsEmbeddingProfileIndex` (#712)** adds an index on `content."ChunkSets"."EmbeddingProfileId"`
   for the admin's embedding-profile *in use* checks. Nothing else changes; the old services run against it.
-- **The Portainer stack pins the gateway's `v0.10.2`, and the gateway creates Ume.Rag's credential keys (M-17 C7).**
+- **The Portainer stack pins the gateway's `v0.10.3`.** Against `v0.10.2` (next entry): rolling update, no migration,
+  no new variable; the only change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
+  allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
+  preset keep their residencies: set them to `OnPrem` and `Eu` in the gateway's admin (0.6.0, *Before the update*).
+- **The gateway creates Ume.Rag's credential keys (M-17 C7; the gateway's `v0.10.2`, in the stack's `v0.10.3`).**
   The gateway's own upgrade notes for 0.10.2 apply (rolling update, no migration; a new volume
   `<stack>_integration-secrets`; a read grant on `Branding.OrganisationName`). The gateway's `migrations` now applies
   `UME_INTEGRATION_MANIFEST` (in `stack.env.example`): it creates the integration `Ume.Rag`, its owner team and the keys
@@ -310,7 +317,7 @@ Nothing yet.
   to rag-admin's credential key, and the new `UME_RAG_GATEWAY_INTEGRATION_API_URL` in `deploy/.env` (rag-admin's
   `Gateway__IntegrationApiUrl`; Kubernetes: that key in `ume-rag-admin-config`; Portainer: the variable) names the
   gateway's Admin API; unset, there is no read-back (production-setup.md, *Cost and budget read-back*).
-- **Rolling update: no**, because of `DailyTotalsWithoutCost` below. Five more migrations since 0.4.0, besides
+- **Rolling update: no**, because of `DailyTotalsWithoutCost` below. Six more migrations since 0.4.0, besides
   `UploadScannedAt` above; `rag-migrate` applies them and the grants in `app-roles.sql`, with no superuser steps:
   - `GatewayKeys` adds `config."GatewayKeys"`, the mirror of the integration's assigned keys that rag-admin syncs from
     the gateway's context (#580, B-35, B-36). Additive.
@@ -320,6 +327,8 @@ Nothing yet.
     model call per day and step (B-38, A-31), and adds the first table to the chat retention step (3 years). Additive.
   - `ObjectGatewayKeys` adds `config."Assistants"."GatewayKeyId"` and `config."Collections"."GatewayKeyId"` (B-36), the
     key each one is charged to. Additive; an existing assistant or knowledge base has none until someone picks one.
+  - `ContentRetentionStep` adds the function `content.rag_retention_content_step`, the content retention's step (#626).
+    Additive.
   - `DailyTotalsWithoutCost` drops `CostUsd`, `InputTokens` and `OutputTokens` from `chat."AssistantDailyTotals"`
     (B-38): tokens and cost are only in `AssistantDailyUsage` now, and the totals of days before the upgrade lose them.
     The previous release's rag-api still writes those columns, so **stop rag-api and rag-admin before `rag-migrate`**
@@ -463,7 +472,9 @@ Nothing yet.
 5. **Superuser steps**, only if the release lists them (below), all before step 6. Role caps and per-role settings
    run against the running database. With a new `POSTGRES_IMAGE`, first replace postgres alone with
    `dc up -d --wait postgres` (a short outage of every service), then update the extension.
-6. **Migrate and replace:**
+6. **Migrate and replace.** For a release marked *Rolling update: no*, first stop the services its section names
+   (`dc stop rag-api rag-admin`, or `dc stop rag-admin` for 0.6.0): `up` runs the migration while the old containers
+   are still running, and replaces them only afterwards.
 
    ```bash
    dc up -d --wait
@@ -494,6 +505,7 @@ defaults are the local `ume-rag/<service>:latest` images built on the host. To r
 | `MIGRATIONS_IMAGE`, `API_IMAGE`, `ADMIN_IMAGE`, `WORKER_IMAGE` | the .NET services |
 | `PARSER_IMAGE` | the parser |
 | `CLAMAV_IMAGE` | `ume-rag/clamav` |
+| `RENDERER_IMAGE` | `ume-rag/renderer` |
 | `OPENWEBUI_IMAGE` | Open WebUI, in the separate `compose.openwebui.yaml` project |
 
 Every pin, image or package, was released at least 7 days before it was pinned.

@@ -556,8 +556,8 @@ certificates are re-issued when they expire within 30 days or the host names cha
 services to restart, and names every certificate within 60 days of expiry:
 [portainer.md](portainer.md#internal-certificates)). The secrets that follow a variable (the gateway credential keys,
 a declared OIDC client secret) are written again on every deploy, and removed when the variable is emptied; they live in
-the stack's environment, so restrict who can view it. The services read them at start: after changing one, restart the
-service that uses it.
+the stack's environment, so restrict who can view it. Update the stack after changing one: the services pick up a
+changed gateway key or client secret within seconds, without a restart.
 
 **Differences from `compose.prod.yaml`.** No fixed subnets and no host firewall (*Host firewall* does not apply;
 firewall 8543 and 9543 to your proxy yourself), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
@@ -568,8 +568,8 @@ on); without it the crawler indexes pages as served. PKI-issued certificates are
 - **Back up** `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and `rag-certs/data-protection.pfx` with the
   database (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A database restored without
   them is unusable.
-- **Upgrade.** Read the [upgrade guide](upgrade-guide.md), regenerate the file for the new release (or set the
-  `RAG_*_IMAGE` variables to its images, all on the same version: the migrations image must match the services), and
+- **Upgrade.** Read the [upgrade guide](upgrade-guide.md), paste the new release's `compose.portainer.yaml` asset over
+  the stack's file (one release at a time: [portainer.md](portainer.md)), and
   *Update the stack* with *Re-pull image and redeploy*. `rag-migrate` runs before the services.
 - **Generated file.** Edit `deploy/portainer/compose.rag.template.yaml` or `deploy/portainer/bootstrap.sh`, then run
   `deploy/portainer/build-stack.sh`: it takes the gateway's current `compose.portainer.yaml` (from GitHub, or a path

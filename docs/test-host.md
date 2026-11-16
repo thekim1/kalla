@@ -22,7 +22,7 @@ the directory that holds `deploy/`.
 
 - **8 vCPU and 24 GB**, the pilot's 24 GB profile (repo-and-deployment §6.2). The `cpus` values are caps, not
   reservations, so a smaller host starts the stack, but its R1 numbers do not stand for the pilot.
-- The [host prerequisites](production-setup.md#host-prerequisites): systemd, Docker 28+ with Compose v2.24+, cgroup v2
+- The [host prerequisites](production-setup.md#host-prerequisites): systemd, Docker 28+ with Compose v2.33.1+, cgroup v2
   with the systemd cgroup driver, `default-address-pools` outside `172.30.0.0/16`, an encrypted disk. Record the
   driver check for #90:
 

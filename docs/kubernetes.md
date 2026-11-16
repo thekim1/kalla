@@ -42,8 +42,9 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    ```
 
    Sign-in is set in the setup wizard after the first deploy (*Sign-in*, below). To declare it instead, add
-   `--oidc-client-secret-file ume-rag-admin.secret` here (and `Oidc__Authority` in the overlay); the `--oidc-*`
-   options are never prompted.
+   `--oidc-client-secret-file ume-rag-admin.secret` here (and `Oidc__Authority` in the overlay); with `--yes`
+   the script asks nothing; without it, it asks once for the provider's address, which Kubernetes does not use (leave
+   it empty).
 
    It creates an internal CA, a certificate per service, database passwords, the key pepper, the blob master key, the
    Data Protection certificate, the pgBackRest repository settings and connection strings to the host `postgres` (the

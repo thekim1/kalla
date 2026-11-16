@@ -576,10 +576,10 @@ allowed to reach it, and the egress chain matches such endpoints by their origin
 | `mcp` (P2) | *to allocate* | **yes** | rag-api(+b) and rag-admin(+b) (in-process tool hub; skill gate, discovery, drift polling), hosted MCP servers; never rag-worker | none |
 | `mcp-<name>-egress` (P2) | one per hosted server (172.30.8.0/21 proposed, tools design §15) | no | that MCP server | firewall: only its wrapped system's address and port |
 
-Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-admin` `127.0.0.1:9543` (P2:
+Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-admin` `127.0.0.1:9543` (with `--rolling`:
 `rag-api-b` `:8544`, `rag-admin-b` `:9544`) → container 8443. The municipal reverse proxy terminates public TLS and
-re-encrypts to these (gateway runbook *Reverse proxy and PKI*; in P0 `init-deployment.sh --proxy` prints the proxy
-routes; writing the nginx file is later work). The optional Open WebUI publishes `127.0.0.1:3000` → container 8080 in
+re-encrypts to these (gateway runbook *Reverse proxy and PKI*; `init-deployment.sh --proxy` writes `deploy/proxy/nginx.conf` and prints the
+routes for another proxy). The optional Open WebUI publishes `127.0.0.1:3000` → container 8080 in
 plain HTTP on loopback, the proxy terminating TLS. Nothing else is published. These networks are per host;
 across hosts (§6.4) services talk over the routed LAN with TLS, never a Docker overlay network.
 The proxy keeps the gateway's 1 MB body limit except on the admin upload route
@@ -696,7 +696,7 @@ so `docker compose --env-file deploy/.env up -d --wait` is the same and the `-f`
 
 | Step | Host A (data plane) | Host B (ingestion) |
 |---|---|---|
-| Compose | `compose.prod.yaml` only | `compose.ingestion.yaml -f compose.ingestion-remote.yaml` |
+| Compose | `compose.prod.yaml` only | `compose.ingestion.yaml -f compose.ingestion-remote.yaml` (P2: the remote overlay is not built) |
 | Postgres | publish `5432` on host A's LAN address; `pg_hba.conf` adds `hostssl ragdb ume_rag_worker <host B>/32 scram-sha-256` | worker connection string `Host=<host A>;SSL Mode=VerifyFull` |
 | Blobs | switch `IBlobStore` to S3 (`BlobStore:Kind=S3`, `AWSSDK.S3`; server: the municipality's S3-capable storage if IT offers one, else SeaweedFS, never MinIO built from archived source; postponed decision S2) or Azure Blob (plan §12.1) for admin uploads and worker; migrate `rag-blobs` with `rag-blob-migrate` command | – |
 | Gateway | – | worker on its own `llm` network to the gateway |
@@ -737,22 +737,23 @@ Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. 
 
 | Option | Default | Writes |
 |---|---|---|
-| `--oidc-authority URL` | prompted | `UME_RAG_OIDC_AUTHORITY` |
+| `--oidc-authority URL` | the setup wizard's; an interactive run asks once (below) | `UME_RAG_OIDC_AUTHORITY` |
 | `--oidc-client-id ID` | `ume-rag-admin` (RAG's own client: in P1 the shared Keycloak's, from P2 the Entra registration; identity §1.6) | `UME_RAG_OIDC_CLIENT_ID` |
 | `--oidc-client-secret-file FILE` | – | `secrets/admin/Oidc__ClientSecret` (own credential, never the gateway's) |
 | `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
 | `--gateway-credential-key-file SERVICE=FILE` (repeated for `api`, `admin`, `worker`) | – (credential keys issued by a gateway admin per service, gateway-changes §5.1) | `secrets/{api,admin,worker}/Gateway__Key` |
 | `--gateway-secrets-dir DIR` | – (a gateway on the same host: the directory its migration writes a manifest's keys to, `<gateway>/deploy/integration-secrets`, from `deploy/portainer/integration-manifest.json` in the gateway's `deploy/integration-manifests`) | the same three files, read from `DIR/Ume.Rag/rag-{api,admin,worker}`; a `--gateway-credential-key-file` wins for its service, and a missing key stops the run |
-| `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` (P0 builds `file` only; the others come with K1) | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key file `secrets/keys/rag-blob-internal` (mode 0400; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4), then a reminder to run `escrow-keys.sh` (§7.4) |
+| `--key-provider file` (the only provider built; `openbao` and `azure` and their options come with K1) | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key file `secrets/keys/rag-blob-internal` (mode 0400; `rag-chat-<level>` only once A1 allows stored chat content, weakness review §4), then a reminder to run `escrow-keys.sh` (§7.4) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | prompted | pgBackRest `repo1` in `secrets/pgbackrest/repo.conf` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target: a mounted share gives `DIR/pgbackrest` (`UME_RAG_BACKUP_DIR`) and `DIR/uploads` (`UME_RAG_UPLOAD_BACKUP_DIR`); S3 (`--backup-s3-credentials-file`, `--backup-s3-region`) sets `UME_RAG_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built in P0; `local` = a Docker volume and `deploy/upload-backup` (test hosts only: not off the host) |
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
 | `--host-memory 16\|24` | `16` | the §6.2 profile: 24 adds `compose.host-24g.yaml` and the 24 GB ClamAV confs (§5.5) to `COMPOSE_FILE` |
 | `--freshclam-proxy HOST:PORT` | none | `UME_RAG_FRESHCLAM_PROXY` and the mounted `freshclam.conf` (§5.5); the `mirror` network then reaches only the proxy (§6.1) |
 | `--clamav on\|off` | `on`; a re-run keeps the value in `deploy/.env` | `UME_RAG_CLAMAV_MODE` (the worker's `ClamAv__Mode`) and the profile `clamav` in `COMPOSE_PROFILES`; `off` starts no `rag-clamav`, writes no ClamAV confs and says so in the closing notes (§5.5) |
-| `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-provider-url`, `--openwebui-data-dir`, `--openwebui-oidc-client-secret-file`, `--openwebui-api-key-file`, `--openwebui-rag-client-id` | none; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8). `openwebui.env` is written once; a re-run sets only `OAUTH_CLIENT_SECRET` and `OPENAI_API_KEYS` in place when their files are given, never the JWT secret |
+| `--openwebui-host`, `--openwebui-oidc-client-id`, `--openwebui-oidc-client-secret-file`, `--openwebui-oidc-provider-url`, `--openwebui-oidc-provider-name`, `--openwebui-data-dir` | no Open WebUI without the host; the setup wizard's values, else client `open-webui`, the authority's discovery document and *Umeå kommun*; `deploy/openwebui-data` | the optional Open WebUI stack: `secrets/openwebui.env` and `UME_RAG_OPENWEBUI_*` (§6.3, §12.8). Its key for rag-api and its JWT secret are generated once and kept on a re-run; the OIDC client secret goes to `secrets/api` and `secrets/admin` (rag-api serves the sign-in settings to Open WebUI's start), never into `openwebui.env` |
 | `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets); P0 builds `all` only |
-| `--proxy`, `--upstream-host`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway; in P0 `--proxy` prints the proxy routes instead of writing the nginx file, and `--rolling` is not built (P2) |
+| `--proxy`, `--upstream-host`, `--proxy-address`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway: `--proxy` writes `proxy/nginx.conf` from `nginx.conf.example` and prints the routes; `--proxy-address` gives the host firewall the proxy's source addresses (`UME_RAG_PROXY_SOURCES`, #453); `--rolling` adds `compose.rolling.yaml` (second slots on 8544 and 9544) |
+| `--domain`, `--api-port`, `--admin-port`, `--bind`, `--render`, `--oidc-refuse-guests`, `--certs-dir`, `--secrets-dir` | – | the rest of the script's options; its header (`--help`) is the full list and wins where this table differs |
 
 It generates: the internal CA and service certificates (api, admin, worker, parser, postgres), the Data
 Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`, the pgBackRest repository passphrase (escrowed, §7.4), the key
@@ -808,13 +809,17 @@ one stack, configured only through variables, for hosts where `init-deployment.s
 Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE
 POSTGRES_IMAGE` (`ume-rag/postgres`), `RENDERER_IMAGE`, each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
 script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (compose files, scripts,
-`postgres/`, `pgbackrest/`, `redis/`, `proxy/`, `otel/`, `host/`). The Portainer stack is a release asset of its own
-(§7.1).
+`postgres/`, `pgbackrest/`, `proxy/`, `otel/`, `host/`, `kubernetes/`, `openwebui/`, the ClamAV confs and
+`portainer/integration-manifest.json`), `docs/` (the operator guides) and `images/renderer/seccomp.json`. The Portainer
+stack is a release asset of its own (§7.1).
 
 ### 7.3 Updates (single slot in the pilot, rolling from P2)
 
-`rolling-update.sh` (adapted): pull → **extensions** (`upgrade-extensions.sql`, `ALTER EXTENSION vector UPDATE`, as the
-bootstrap user through `docker compose exec postgres`, only when the pinned `POSTGRES_IMAGE` changed; the migrator
+A single-slot stack updates with `docker compose --env-file deploy/.env up -d --wait` on the new release's files
+(`docs/upgrade-guide.md`). `rolling-update.sh` (adapted; it needs the second slots of `--rolling` and refuses to run
+without them; options `--pull`, `--force`, `--with-postgres`): pull → **extensions** (with `--with-postgres`:
+`ALTER EXTENSION vector UPDATE`, as the
+bootstrap user through `docker compose exec postgres`, for a new pinned `POSTGRES_IMAGE`; the migrator
 cannot, since it is not superuser) → `run --rm migrations` → services. **Pilot (one slot)**: `rag-api` and `rag-admin`
 are replaced together in a short announced maintenance window (`release.yml` ships them from the same release: the
 admin test panel and answer judge run the same `Ume.Rag.Answering` as the api). **From P2 (a/b slots)**: replace `rag-api`/`rag-api-b`, then
@@ -903,8 +908,8 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 
 | Workflow | Phase | Trigger | Mirrors | Content |
 |---|---|---|---|---|
-| `verify.yml` | P0 | push to main, PR, dispatch, `workflow_call` | gateway `verify.yml` | §8.2 |
-| `parser.yml` | P0 | push to main, PR, dispatch, `workflow_call`: always runs; its jobs skip unless the parser, `contracts/parser/`, the parser contract tests, `tests/fixtures/parser/`, the worker's parser client or the workflow changed (a skipped job counts as passed for a required check; a workflow left out by an `on.*.paths` filter never reports) | new | jobs `parser`, `parser-image`, `contract` (§8.2), out of `verify.yml` so only a parser change builds the 3 GB image |
+| `verify.yml` | P0 | PR (not a draft), dispatch, `workflow_call`; nothing on a push to `main` | gateway `verify.yml` | §8.2 |
+| `parser.yml` | P0 | PR (not a draft), dispatch, `workflow_call`: always runs; its jobs skip unless the parser, `contracts/parser/`, the parser contract tests, `tests/fixtures/parser/`, the worker's parser client or the workflow changed (a skipped job counts as passed for a required check; a workflow left out by an `on.*.paths` filter never reports) | new | jobs `parser`, `parser-image`, `contract` (§8.2), out of `verify.yml` so only a parser change builds the 3 GB image |
 | `release.yml` | P0 | tag `v*.*.*` | gateway `release.yml` | `verify.yml` and `parser.yml` (both called, in full) beside the build, which doesn't wait for them; `e2e.yml` when asked, after all three; publish only when all are green. Build: the admin UI (`npm ci`, `npm run build`) and push all images to `ghcr.io/<owner>/ume-rag/<service>:X.Y.Z` (`latest` moves in publish, for non-pre-releases; the admin image is published with `-p:PublishAdminUi=true`, which adds the built UI as `wwwroot/`, the gateway's switch) → bundle pinned by digest → smoke test (init-deployment, `up --wait`, `/v1/models` = 401 without a key, admin `/` = 200, a Swedish compound query through the API, `pgbackrest check` in the postgres container, parser `/v1/info` from the worker container) → GitHub release with bundle, SBOM, `SHA256SUMS` |
 | `deploy-e2e.yml` | P2 (with a/b slots) | PR touching `deploy/**`, `images/**`, ServiceDefaults | gateway `deploy-e2e.yml` | rolling update under load behind nginx (`compose-rolling-e2e.sh`), fails on one lost request; kind cluster only once §10 exists |
 | `flake-hunt.yml` | P2 | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
@@ -927,17 +932,17 @@ run every other job. Locally, a change runs the test projects it touches; the fu
 
 | Job | Steps | Source of the pattern |
 |---|---|---|
-| deploy-checks | image defaults stay `:latest` dev images; `docker compose … config --quiet` for prod, prod+ingestion, ingestion-remote (P2: prod+rolling); the Portainer stack's `rag-bootstrap` run twice on the same volumes keeps every secret, owner and mode (`deploy/tests/portainer-rerun.sh`, #697) | gateway |
+| deploy-checks | image defaults stay `:latest` dev images; `docker compose … config --quiet` for prod, prod+ingestion, the ClamAV and 24 GB overlays, prod+rolling and Open WebUI; `init-deployment.sh`'s re-run, `--proxy`, `--domain` and wizard cases; the release bundle's pins; the Portainer stack's `rag-bootstrap` run twice on the same volumes keeps every secret, owner and mode (`deploy/tests/portainer-rerun.sh`, #697) | gateway |
 | images (when an image changed) | build `ume-rag/postgres` from `images/postgres/Dockerfile` and run `deploy/postgres/test.sh` (pgvector version, HNSW build, `pg_stat_statements`, `wal_compression=lz4`, `archive-push` from inside the image, §5.2); build `ume-rag/clamav` and run `images/clamav/test.sh` (§5.5). The parser image is built in `parser.yml` | new |
 | backend | `dotnet build UmeRag.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against `ume-rag/postgres` built from the commit** (the job builds `images/postgres/Dockerfile` as `ume-rag.local/postgres:ci` and sets `UME_RAG_TEST_POSTGRES_IMAGE`, read by `TestPostgres.Image`; it builds `ume-rag.local/clamav:ci` the same way for the ClamAV client test) and, for the P2 Redis implementations of `IRateLimitStore`/`ISharedCache`, Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
-| base-image scan | Trivy 0.67.2 on the chiseled base, the `ume-rag/postgres`, parser and ClamAV images (`HIGH,CRITICAL`, `--ignore-unfixed`) | gateway (extended) |
+| base-image scan | **not built** (A-27, #507): Trivy on the chiseled base, the `ume-rag/postgres`, parser and ClamAV images (`HIGH,CRITICAL`, `--ignore-unfixed`) | gateway (extended) |
 | admin-ui | `npm ci`, `npm audit --audit-level=low`, `lint`, `typecheck`, `test`, `build`, the size budget (§2.3; initial JS includes the landing route `OverviewView`) in `src/admin-ui`; design-system drift report (warning). `tests/e2e` joins this job once it exists (named `admin-ui`, not `ui`) | gateway |
 | parser (`parser.yml`) | `uv lock --check`, `ruff check`, `pytest` (incl. supervisor tests with a fake converter and `test_offline.py` with network disabled), `export_schema.py` + `git diff --exit-code contracts/` , `pip-audit` | new |
 | parser-image (`parser.yml`) | builds the parser image's `test` target, whose tests run during the build with no network; built without `REVISION`, so an unchanged parser reuses the cached test result (re-running the job does not re-run the tests) | new |
 | contract (`parser.yml`) | `Ume.Rag.ContractTests` start the parser image (built with `REVISION`) (Testcontainers) and convert `tests/fixtures/parser/*` with the worker's client; compare structure to golden JSON (tolerant to timings and versions); responses and error fixtures validated against `contracts/parser/v1/` | new |
 | evaluation-smoke (when its path changed) | AppHost-free, the trait `Category=EvaluationSmoke` in `Ume.Rag.Worker.Tests` (it hosts the worker and rag-api in process, with FakeGateway and Testcontainers Postgres), which `backend` leaves out: ingest `tests/evaluation/smoke` (13 pages, through the worker as one `public` upload batch; no parser or ClamAV image), run the 30 questions through rag-api; recall@10 ≥ 0.8 and every answer has a citation; the smoke collection uses `{"coverageMaxDistance":0.85}` (`SmokeSet.RetrievalSettings`), because the FakeGateway's feature-hashing embeddings put the best chunk at cosine distance 0.33–0.78; with it the job also checks that the worker's evaluator and `POST /v1/retrieve` return the same chunks in the same order | new |
 | e2e | browser tests (gateway `tests/e2e` setup): the admin **pilot journey** (admin design §5.4, §11.4) run with mouse and keyboard only, against a static fixture site container (nginx, Swedish pages and PDFs); the extended accessibility spec (axe, target size, reflow; zero CSP violations); role journeys | gateway (release and dispatch, not every PR: the gateway only checks types on PR; no schedule; Decisions "E2E only on release or by hand") |
-| sbom | `dotnet publish` + `Microsoft.Sbom.DotNetTool@4.1.13`, artifact `ume-rag-spdx`; Syft SBOMs for the non-.NET images (Syft v1.55.0 in `release.yml`; to-verify #91 resolved) | gateway (extended) |
+| sbom (in `release.yml` only, not on a PR) | `dotnet publish` + `Microsoft.Sbom.DotNetTool@4.1.13`, artifact `ume-rag-spdx`; Syft SBOMs for the non-.NET images (Syft v1.55.0 in `release.yml`; to-verify #91 resolved) | gateway (extended) |
 
 ### 8.3 R1 release test (`perf.yml`, P1)
 
@@ -958,7 +963,7 @@ p50/p95/p99).
 | Images | base digests pinned; release images referenced by digest in the bundle | same, for every image incl. the stock pgvector image |
 | SBOM | SPDX via `Microsoft.Sbom.DotNetTool` | same + image SBOMs |
 | Signing / provenance | none (listed as the operator's responsibility in `security-and-compliance.md`) | `actions/attest-build-provenance` for pushed images in both repos: open with postponed S1 (§12.10) |
-| Dependency audits | `dotnet list --vulnerable`, `npm audit` | same + `pip-audit`, Trivy on every image |
+| Dependency audits | `dotnet list --vulnerable`, `npm audit` | same + `pip-audit`; Trivy on every image is not built (A-27, #507) |
 | npm / Python policy | `.npmrc` (§2.3) | same + uv `no-build`, `exclude-newer` |
 
 ## 9. Observability
@@ -1021,23 +1026,23 @@ p50/p95/p99).
   *Capacity* (per-stage saturation, queue age per class, host budget utilisation, embedding tokens/s vs cap, HNSW
   memory, connections vs budget; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.14). The Aspire dashboard is used in development only.
 
-## 10. Kubernetes (later; mirrors `docs/kubernetes.md`)
+## 10. Kubernetes (mirrors `docs/kubernetes.md`)
 
-**Later (P3, only when its trigger fires):** same shape as the gateway's `deploy/kubernetes`: `base/` (api ×2, admin ×2, worker ×1, migrations Job, probes on
-`/health/*`, PodDisruptionBudgets, restricted Pod Security Standard), `components/datastores` (`ume-rag/postgres` as a
-StatefulSet, pgBackRest inside; Redis), `components/ingestion` (worker, parser), `components/clamav` (optional, §5.5), `example/`, `create-secrets.sh`,
-`deploy.sh`. Compose roles map to Deployments per class group, and `rag.jobs.age` drives the autoscaler. **PgBouncer is
-required** there (transaction mode for `ume_rag_api` and `ume_rag_worker`, §6.2), because replica counts vary and the
-connection budget can no longer be fixed per host. What changes against Compose:
+**Built** (#538, 2026-11-10; rendered in CI, not run on a cluster): the same shape as the gateway's `deploy/kubernetes`.
+[`docs/kubernetes.md`](../../docs/kubernetes.md) is the description and wins where this section differs. `base/` holds
+api, admin, the migrations Job, the blob volume claim and the NetworkPolicies; `components/` holds `datastores`
+(`ume-rag/postgres` as a StatefulSet, pgBackRest inside), `ingestion` (worker, parser), `clamav` (optional, §5.5),
+`renderer` and `ingress-controller`; `example/` is an overlay to copy; `create-secrets.sh`, `deploy.sh` and
+`sync-config.sh` are the scripts. Not built: Redis, PgBouncer, priority classes, resource quotas and an autoscaler,
+which come only when a scaling trigger fires. What changes against Compose:
 
 | Compose | Kubernetes |
 |---|---|
 | internal networks, firewall on bridges | NetworkPolicies in `base` with default-deny (#706): parser and renderer ingress only from worker, egress none; Postgres only from the four app roles; the worker's and freshclam's 80/443 egress to `0.0.0.0/0` except the private, link-local, CGNAT and loopback ranges (`Crawl__AllowedPrivateRanges` and a private gateway each get an overlay rule); ClamAV's rules in `components/clamav`, the Ingress controller's in `components/ingress-controller` |
-| CPU shares, slice | requests/limits, `PriorityClass` `rag-data-plane` > `rag-ingestion`, ResourceQuota per namespace (`ume-rag`, `ume-rag-ingestion`) |
-| one host | ingestion on its own node pool (`nodeSelector` + taint); data plane never schedules OCR (plan §2) |
-| file blob volume | S3-compatible or Azure Blob only (no RWX volume) |
-| Postgres container | the pgvector image in the StatefulSet; or CloudNativePG (its own backups and standby; pgvector in its images *to verify*); or managed Postgres (pgvector ≥ 0.8) |
-| rolling-update.sh | `deploy.sh`: extensions Job (when needed) → migrations Job → rolling update |
+| CPU shares, slice | requests and limits per container |
+| file blob volume | a volume claim (`base/blobs.yaml`): ReadWriteMany with more than one node |
+| Postgres container | the pgvector image in the StatefulSet (`components/datastores`), or a database of your own |
+| the single-slot `up`, `rolling-update.sh` | `deploy.sh`: the migrations Job, then a rolling update |
 
 ## 11. P0 checklist (ordered)
 
