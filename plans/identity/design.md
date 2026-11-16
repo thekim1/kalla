@@ -1455,6 +1455,13 @@ code's default. The API reports each value's source (`deployment`, `wizard`, `de
 *set* and when). `Oidc:RoleGroups:rag-platform-admin` stays a deployment value (§2.5). rag-admin starts without an
 authority.
 
+**The gateway's provider address as a suggestion (M-20 S8).** rag-admin reads the gateway's provider address from its
+context (`gateway.oidc_authority`, feature `oidc-authority`; only an absolute https address without user information, at
+most 500 characters) and `GET /bff/setup/state` carries it as `gateway.suggestedAuthority`, with `gateway.adminUrl` (the
+context's `admin_url`, else `Admin:GatewayAdminUrl`); `gateway` is null for a gateway without the feature. It is a
+suggestion only: it is not a source in `SignInSettings.Resolve`, the effective values and their precedence (deployment,
+wizard, default) are unchanged, and it is stored only as a wizard value after a passed test and Finish, like a typed one.
+
 **Stored secrets.** The client secrets are encrypted with Data Protection under a purpose per secret
 (`config."DataProtectionKeys"`, the ring protected by `data-protection.pfx`). rag-api registers Data Protection with
 the same application name and certificate and with key generation off; its code unprotects only Open WebUI's secret.

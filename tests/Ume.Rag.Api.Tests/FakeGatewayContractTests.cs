@@ -43,6 +43,9 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
         context["gateway"]!["organisation_name"]!.GetValue<string>().ShouldBe("Umeå kommun"); // gateway v0.10.2
         context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("integration-api-url");
         context["gateway"]!["integration_api_url"]!.GetValue<string>().ShouldEndWith("/integration/v1"); // the fake's own
+        context["gateway"]!["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldContain("oidc-authority");
+        context["gateway"]!.AsObject().ContainsKey("oidc_authority").ShouldBeTrue();
+        context["gateway"]!["oidc_authority"].ShouldBeNull(); // the fake's default: the gateway's sign-in is not set up yet
 
         var departments = context["departments"]!.AsArray();
         departments.Count.ShouldBe(4);

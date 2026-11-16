@@ -188,11 +188,19 @@ public sealed class FakeGatewayInfo
     public string? IntegrationApiUrl { get; set; }
 
     /// <summary>
+    /// The address of the sign-in provider the gateway's admin console uses (the context's <c>oidc_authority</c>, feature
+    /// <c>oidc-authority</c>, gateway setup mode, llmgateway#99). Not set or empty: null in the context, as a gateway whose sign-in
+    /// is not set up yet; a test sets it.
+    /// </summary>
+    public string? OidcAuthority { get; set; }
+
+    /// <summary>
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
     /// thekim1/llmgateway <c>v0.10.2</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42),
-    /// <c>stream-cost</c> (B-38), <c>organisation-name</c> (M-17 C12) and <c>integration-api-url</c> (M-17 C11).
+    /// <c>stream-cost</c> (B-38), <c>organisation-name</c> (M-17 C12), <c>integration-api-url</c> (M-17 C11) and
+    /// <c>oidc-authority</c> (M-20 S8, after <c>v0.10.3</c>).
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url"];
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority"];
 }
 
 /// <summary>The integration <c>Ume.Rag</c>, owned by the pilot team.</summary>

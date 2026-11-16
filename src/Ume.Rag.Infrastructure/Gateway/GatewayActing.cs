@@ -61,10 +61,17 @@ public sealed class GatewayFeatures
     /// <summary>The context carries <c>gateway.integration_api_url</c> (gateway v0.10.2; M-17 C11).</summary>
     public const string IntegrationApiUrlFeature = "integration-api-url";
 
+    /// <summary>The context carries <c>gateway.oidc_authority</c> (gateway setup mode, llmgateway#99; M-20 S8).</summary>
+    public const string OidcAuthorityFeature = "oidc-authority";
+
+    /// <summary>The longest provider address taken from the context: the setup wizard's own limit for the authority.</summary>
+    public const int OidcAuthorityMaxLength = 500;
+
     private volatile HashSet<string> _features = new(StringComparer.Ordinal);
     private volatile StrongBox<Residency>? _credentialMaximum;
     private volatile string? _organisationName;
     private volatile string? _integrationApiUrl;
+    private volatile string? _oidcAuthority;
 
     public IReadOnlySet<string> Current => _features;
 
@@ -91,17 +98,42 @@ public sealed class GatewayFeatures
     /// </summary>
     public string? IntegrationApiUrl => _integrationApiUrl;
 
+    /// <summary>
+    /// The address of the sign-in provider the gateway's admin console uses (the context's <c>gateway.oidc_authority</c>, feature
+    /// <see cref="OidcAuthorityFeature"/>; identity design §19), trimmed: the setup wizard's suggestion for rag-admin's own
+    /// authority, never a sign-in value by itself. Null when the gateway has none, lacks the feature, sends something that is not
+    /// an absolute <c>https</c> address without user information (<see cref="ValidOidcAuthority"/>), or before the first context answer.
+    /// </summary>
+    public string? OidcAuthority => _oidcAuthority;
+
     public void Update(IEnumerable<string> features) => _features = new HashSet<string>(features, StringComparer.Ordinal);
 
     /// <summary>
     /// What the context says about the gateway besides its features: <paramref name="organisationName"/> counts only under
-    /// <see cref="OrganisationNameFeature"/> and <paramref name="integrationApiUrl"/> only under
-    /// <see cref="IntegrationApiUrlFeature"/> (call <see cref="Update"/> first); an empty one is none.
+    /// <see cref="OrganisationNameFeature"/>, <paramref name="integrationApiUrl"/> only under <see cref="IntegrationApiUrlFeature"/>
+    /// and <paramref name="oidcAuthority"/> only under <see cref="OidcAuthorityFeature"/> (call <see cref="Update"/> first); an
+    /// empty one is none, and so is an authority that <see cref="ValidOidcAuthority"/> refuses.
     /// </summary>
-    public void UpdateGateway(string? organisationName, string? integrationApiUrl)
+    public void UpdateGateway(string? organisationName, string? integrationApiUrl, string? oidcAuthority)
     {
         _organisationName = _features.Contains(OrganisationNameFeature) && !string.IsNullOrWhiteSpace(organisationName) ? organisationName.Trim() : null;
         _integrationApiUrl = _features.Contains(IntegrationApiUrlFeature) && !string.IsNullOrWhiteSpace(integrationApiUrl) ? integrationApiUrl.Trim() : null;
+        _oidcAuthority = _features.Contains(OidcAuthorityFeature) ? ValidOidcAuthority(oidcAuthority) : null;
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> trimmed when it is an absolute <c>https</c> address with a host, without user information or control
+    /// characters, and at most <see cref="OidcAuthorityMaxLength"/> characters long; else null. The gateway sends only such an address,
+    /// but the value is offered in a security-relevant form, so it is checked here again.
+    /// </summary>
+    public static string? ValidOidcAuthority(string? value)
+    {
+        var trimmed = value?.Trim();
+        return !string.IsNullOrEmpty(trimmed) && trimmed.Length <= OidcAuthorityMaxLength && !trimmed.Any(char.IsControl) &&
+               Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host) &&
+               string.IsNullOrEmpty(uri.UserInfo)
+            ? trimmed
+            : null;
     }
 
     /// <summary>The credential key's ceiling from its <c>allowed_residencies</c> (<see cref="HighestOf"/>).</summary>
@@ -245,7 +277,7 @@ public sealed partial class GatewayContextReader(
             response.EnsureSuccessStatusCode();
             var context = await response.Content.ReadFromJsonAsync<ContextFeatures>(Json, cancellationToken);
             features.Update(context?.Gateway?.Features ?? []);
-            features.UpdateGateway(context?.Gateway?.OrganisationName, context?.Gateway?.IntegrationApiUrl);
+            features.UpdateGateway(context?.Gateway?.OrganisationName, context?.Gateway?.IntegrationApiUrl, context?.Gateway?.OidcAuthority);
             // The credential key's residencies bound every call's ceiling (Decisions "Residency per level", M-17 C9); an
             // answer without them keeps the ceiling as it was (unknown: OnPrem).
             if (context?.Key?.AllowedResidencies is { } residencies)
@@ -269,7 +301,7 @@ public sealed partial class GatewayContextReader(
 
     private sealed record ContextKeyPart(IReadOnlyList<string>? AllowedResidencies);
 
-    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features, string? OrganisationName, string? IntegrationApiUrl);
+    private sealed record ContextGatewayPart(IReadOnlyList<string>? Features, string? OrganisationName, string? IntegrationApiUrl, string? OidcAuthority);
 
     [LoggerMessage(LogLevel.Information, "Gateway features: {Features}; the credential key's ceiling: {Ceiling}")]
     private static partial void LogRead(ILogger logger, string features, string ceiling);

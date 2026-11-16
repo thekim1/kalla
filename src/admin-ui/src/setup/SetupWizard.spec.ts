@@ -275,6 +275,74 @@ describe('setup wizard: sign-in and the test (admin design §5.11 step 3)', () =
   })
 })
 
+describe('setup wizard: the provider address from the gateway (identity design §19)', () => {
+  const GATEWAY_AUTHORITY = 'https://login.example.org/realms/kommun'
+  const authorityInput = (wrapper: VueWrapper) => wrapper.get('#setup-authority').element as HTMLInputElement
+
+  it('fills in the gateway\'s address when nothing sets one, says where it came from, and tests it like a typed one', async () => {
+    const wrapper = await resume(setupState({ gateway: { suggestedAuthority: GATEWAY_AUTHORITY, adminUrl: 'https://llm-admin.example.org' } }))
+    await goTo(wrapper, 'signIn')
+    expect(authorityInput(wrapper).value).toBe(GATEWAY_AUTHORITY)
+    expect(authorityInput(wrapper).disabled).toBe(false)
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.authorityFromGateway)
+    expect(wrapper.find('[data-test=gateway-sign-in-missing]').exists()).toBe(false)
+
+    vi.spyOn(window, 'open').mockReturnValue(fakePopup() as unknown as Window)
+    const test = vi.spyOn(api.setup, 'test').mockResolvedValue({ testId: 't2', authorizeUrl: AUTHORIZE, expiresAt: '' })
+    await startTest(wrapper)
+    expect(wrapper.text()).not.toContain(L.signIn.authorityRequired)
+    expect(test).toHaveBeenCalledWith(expect.objectContaining({ authority: GATEWAY_AUTHORITY }))
+
+    // Changed by the person: their own value, with the field's usual hint.
+    await wrapper.get('#setup-authority').setValue(AUTHORITY)
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.authorityHint)
+    wrapper.unmount()
+  })
+
+  it('keeps the wizard\'s own value and a deployment\'s value instead of the gateway\'s', async () => {
+    const gateway = { suggestedAuthority: GATEWAY_AUTHORITY, adminUrl: null }
+    let wrapper = await resume(setupState({ gateway, signIn: signInSettings({ authority: { value: AUTHORITY, source: 'wizard' } }) }))
+    await goTo(wrapper, 'signIn')
+    expect(authorityInput(wrapper).value).toBe(AUTHORITY)
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.authorityHint)
+    wrapper.unmount()
+
+    wrapper = await resume(setupState({ gateway, signIn: signInSettings({ authority: { value: AUTHORITY, source: 'deployment' } }) }))
+    await goTo(wrapper, 'signIn')
+    expect(authorityInput(wrapper).value).toBe(AUTHORITY)
+    expect(authorityInput(wrapper).disabled).toBe(true)
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.locked)
+    wrapper.unmount()
+  })
+
+  it('says the gateway\'s sign-in is not set up yet, with a link to its setup when its admin address is known', async () => {
+    let wrapper = await resume(setupState({ gateway: { suggestedAuthority: null, adminUrl: 'https://llm-admin.example.org/' } }))
+    await goTo(wrapper, 'signIn')
+    expect(authorityInput(wrapper).value).toBe('')
+    expect(wrapper.get('[data-test=gateway-sign-in-missing]').text()).toContain(L.signIn.gatewayWithoutAuthority)
+    const link = wrapper.get('[data-test=gateway-setup-link]')
+    expect(link.attributes('href')).toBe('https://llm-admin.example.org/setup')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    wrapper.unmount()
+
+    wrapper = await resume(setupState({ gateway: { suggestedAuthority: null, adminUrl: null } }))
+    await goTo(wrapper, 'signIn')
+    expect(wrapper.find('[data-test=gateway-sign-in-missing]').exists()).toBe(true)
+    expect(wrapper.find('[data-test=gateway-setup-link]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('changes nothing for a gateway without the feature', async () => {
+    const wrapper = await resume(setupState({ gateway: null }))
+    await goTo(wrapper, 'signIn')
+    expect(authorityInput(wrapper).value).toBe('')
+    expect(wrapper.get('#setup-authority-hint').text()).toBe(L.signIn.authorityHint)
+    expect(wrapper.find('[data-test=gateway-sign-in-missing]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
 describe('setup wizard: summary and finish (admin design §5.11 step 5)', () => {
   it('finishes with the tested values and the test id, then offers the sign-in', async () => {
     const tested = setupTest({ values: wizardValues({ authority: AUTHORITY, tenantId: 'tid' }) })

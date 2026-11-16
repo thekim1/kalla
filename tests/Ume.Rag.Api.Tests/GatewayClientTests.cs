@@ -151,22 +151,44 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
 
         features.OrganisationName.ShouldBe("Umeå kommun");
         features.IntegrationApiUrl.ShouldBe("http://fake-gateway/integration/v1");
+        features.OidcAuthority.ShouldBeNull(); // the fake's default: the gateway's sign-in is not set up yet
     }
 
     [Fact]
-    public void The_organisation_name_and_the_integration_api_count_only_under_their_features_and_empty_is_none()
+    public void The_organisation_name_the_integration_api_and_the_provider_address_count_only_under_their_features_and_empty_is_none()
     {
+        const string authority = "https://idp.example.se/realms/ume";
         var features = new GatewayFeatures();
         features.Update(["organisation"]);
-        features.UpdateGateway("Exempelstad", "https://llm-admin.example.se/integration/v1");
-        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe((null, null)); // a gateway before v0.10.2
+        features.UpdateGateway("Exempelstad", "https://llm-admin.example.se/integration/v1", authority);
+        (features.OrganisationName, features.IntegrationApiUrl, features.OidcAuthority).ShouldBe((null, null, null)); // a gateway before v0.10.2
 
-        features.Update([GatewayFeatures.OrganisationNameFeature, GatewayFeatures.IntegrationApiUrlFeature]);
-        features.UpdateGateway(" Exempelstad ", "https://llm-admin.example.se/integration/v1");
-        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe(("Exempelstad", "https://llm-admin.example.se/integration/v1"));
+        features.Update([GatewayFeatures.OrganisationNameFeature, GatewayFeatures.IntegrationApiUrlFeature, GatewayFeatures.OidcAuthorityFeature]);
+        features.UpdateGateway(" Exempelstad ", "https://llm-admin.example.se/integration/v1", $" {authority} ");
+        (features.OrganisationName, features.IntegrationApiUrl, features.OidcAuthority)
+            .ShouldBe(("Exempelstad", "https://llm-admin.example.se/integration/v1", authority));
 
-        features.UpdateGateway(" ", null);
-        (features.OrganisationName, features.IntegrationApiUrl).ShouldBe((null, null));
+        features.UpdateGateway(" ", null, null);
+        (features.OrganisationName, features.IntegrationApiUrl, features.OidcAuthority).ShouldBe((null, null, null));
+    }
+
+    [Theory]
+    [InlineData("http://idp.example.se/realms/ume")]
+    [InlineData("/realms/ume")]
+    [InlineData("idp.example.se")]
+    [InlineData("https://user:secret@idp.example.se/realms/ume")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("https://idp.example.se/realms/\u0007ume")]
+    [InlineData(" ")]
+    public void A_provider_address_that_is_not_an_absolute_https_address_is_none(string value)
+    {
+        // M-20 S8: the address is offered in the setup wizard's sign-in form, so only what the gateway promises is taken.
+        var features = new GatewayFeatures();
+        features.Update([GatewayFeatures.OidcAuthorityFeature]);
+        features.UpdateGateway(null, null, value);
+        features.OidcAuthority.ShouldBeNull();
+        features.UpdateGateway(null, null, "https://idp.example.se/" + new string('a', GatewayFeatures.OidcAuthorityMaxLength));
+        features.OidcAuthority.ShouldBeNull(); // longer than the wizard takes
     }
 
     [Fact]

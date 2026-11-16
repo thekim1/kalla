@@ -72,6 +72,32 @@ describe('setup values (admin design §5.11, identity design §19)', () => {
     expect(valuesOf(form, signIn).clientSecretExpiresOn).toBeNull()
   })
 
+  it('fills in the gateway\'s provider address only while neither the deployment nor the wizard sets one, and sends it as typed', () => {
+    const suggested = 'https://login.example.org/realms/kommun'
+    const signIn = signInSettings()
+    const form = newForm(signIn, null, suggested)
+    expect(form.authority).toBe(suggested)
+    expect(testRequestOf(form, signIn)).toEqual({ ...wizardValues({ authority: suggested }), clientSecret: null })
+    expect(newForm(signIn, null, null).authority).toBe('')
+
+    expect(newForm(signInSettings({ authority: { value: AUTHORITY, source: 'wizard' } }), null, suggested).authority).toBe(AUTHORITY)
+    const deployed = signInSettings({ authority: { value: AUTHORITY, source: 'deployment' } })
+    expect(newForm(deployed, null, suggested).authority).toBe(AUTHORITY)
+    expect(valuesOf(newForm(deployed, null, suggested), deployed).authority).toBeNull()
+    // A reload restores the tested values, not the suggestion.
+    expect(newForm(signIn, setupTest({ values: wizardValues({ authority: AUTHORITY }) }), suggested).authority).toBe(AUTHORITY)
+  })
+
+  it('compares a filled-in gateway address with a test like a typed one', () => {
+    const suggested = 'https://login.example.org/realms/kommun'
+    const signIn = signInSettings()
+    const form = newForm(signIn, null, suggested)
+    const test = setupTest({ values: wizardValues({ authority: suggested }) })
+    expect(isStale(test, form, signIn, false)).toBe(false)
+    form.authority = AUTHORITY
+    expect(isStale(test, form, signIn, false)).toBe(true)
+  })
+
   it('fills the form from the tested values on a reload, so the test still counts', () => {
     const signIn = signInSettings()
     const test = setupTest({ values: wizardValues({ authority: AUTHORITY, tenantId: 'tid', refuseGuests: false }), clientSecret: 'removed' })

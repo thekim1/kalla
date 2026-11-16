@@ -488,6 +488,7 @@
           "admin_url",
           "integration_api_url",
           "organisation_name",
+          "oidc_authority",
           "features"
         ],
         "properties": {
@@ -518,12 +519,19 @@
             ],
             "description": "The organisation's name from the admin console's branding; null when it is empty. Feature organisation-name."
           },
+          "oidc_authority": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The address of the sign-in provider the admin console uses: Gateway:OidcAuthority, else the authority stored in the admin console's sign-in settings (https only); null when neither is set. Feature oidc-authority."
+          },
           "features": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups, organisation-name, integration-api-url."
+            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups, organisation-name, integration-api-url, oidc-authority."
           }
         }
       },

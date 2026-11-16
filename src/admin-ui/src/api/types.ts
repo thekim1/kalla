@@ -160,7 +160,17 @@ export interface SetupTest {
   result: SetupTestResult | null
 }
 
-/** `GET /bff/setup/state`. */
+/**
+ * What the gateway's context says of its own sign-in (`SetupGatewaySignIn`, identity design §19): `suggestedAuthority` is the gateway's
+ * provider address, a suggestion for rag-admin's authority only (null while the gateway has none); `adminUrl` is the gateway admin's
+ * address for the link to its own setup.
+ */
+export interface SetupGatewaySignIn {
+  suggestedAuthority: string | null
+  adminUrl: string | null
+}
+
+/** `GET /bff/setup/state`. `gateway` is null while the gateway lacks the feature `oidc-authority`. */
 export interface SetupState {
   kind: 'first_run' | 'reopen'
   endsAt: IsoDateTime
@@ -168,6 +178,7 @@ export interface SetupState {
   signIn: SignInSettings
   redirectUris: { signIn: string; signOutCallback: string }
   deployment: { gatewayBaseUrl: string | null; apiPublicUrl: string | null; platformAdminGroups: string[] }
+  gateway: SetupGatewaySignIn | null
   latestTest: SetupTest | null
   openWebUi: SetupOpenWebUiState
 }

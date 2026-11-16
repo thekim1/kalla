@@ -157,7 +157,7 @@ function apply(next: SetupState): void {
   state.value = next
   withOpenWebUi.value = next.openWebUi.enabled
   if (!form.value) {
-    form.value = newForm(next.signIn, next.latestTest)
+    form.value = newForm(next.signIn, next.latestTest, next.gateway?.suggestedAuthority ?? null)
     preset.value = presetOf(form.value)
   }
   openWebUiForm.value ??= newOpenWebUiForm(next.openWebUi.signIn, next.openWebUi.latestTest)
