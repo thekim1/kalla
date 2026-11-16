@@ -24,7 +24,7 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md` and `results-b.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 42): the setup wizard's stage 1 is done; stage 2 waits on the gateway
+## Start here (session 42): the setup wizard's stage 1 is done; the gateway's part of stage 2 is in work
 
 **What happened in session 41.** The user said to go on until the wizard is done, with the main session's
 recommendations for the open answers.
@@ -44,6 +44,22 @@ recommendations for the open answers.
   only the test projects a PR touches (several tests read other projects' sources; it would save at most the 3
   minutes the tests take now).
 - **A public client that declares everything** keeps today's rule (it gets the wizard once); nothing changed.
+
+**The gateway's part is being built by this session** (user, 2026-11-16: "build it"; nobody had picked the issues up),
+in `~/git/llmgateway` as `ume-nichlas` (which can push there; `Crotalus` cannot):
+- **WG1 and WG2:** thekim1/llmgateway#102, green, **ready for the user to merge** (this session's merge was stopped by
+  the permission check). `gateway.oidc_authority` is `Gateway:OidcAuthority` (set from `UME_OIDC_AUTHORITY` in the
+  deploy files), feature `oidc-authority`.
+- **WG3** on branch `feat/100-setup-mode` in the worktree `~/git/llmgateway-100`, stacked on #102's branch, not pushed:
+  G1 (commit `30bb288`: stored sign-in values in a table `SignInSettings`, the secret encrypted, effective values,
+  sign-in from them with reload, start without an authority; read in full, 1,579 tests re-run green) is done; G2 (setup
+  code, session, test sign-in, complete, re-open) is with an implementor agent; then G3 (the wizard's pages) and G4
+  (deploy files and docs). Each step: read the diff, re-run the tests (`ASPNETCORE_URLS=http://127.0.0.1:0` per test
+  project, because something on this machine holds port 5000). Rebase on `main` once #102 is merged.
+- **WG4** (optional) is not started.
+- **Found on the way** (#776, merged): a `:?` inside a default in a stack file is evaluated by some Compose versions
+  even when the outer variable is set (GitHub's hosted runner; not 5.0.2), which refused a stack with only the host
+  names. Neither repository's Portainer file has one now.
 
 **Next for the wizard: Ume.Rag's side of stage 2, when the gateway releases each issue** (M-20, S8):
 - WG2: the context's `oidc_authority` as the wizard's default for the authority (a source below the deployment's and
