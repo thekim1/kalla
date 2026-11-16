@@ -40,7 +40,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/gw-certs/ca.key" -out "
   -subj /CN=fake-gateway-ca 2>/dev/null
 printf api-key-from-manifest > "$work/gw-secrets/Ume.Rag/rag-api"; printf admin-key-from-manifest > "$work/gw-secrets/Ume.Rag/rag-admin"
 printf 'worker-key-by-hand\n' > "$work/worker.key"
-bash "$d/init-deployment.sh" --domain boot.test --gateway-url https://llm.boot.test --gateway-ca-dir "$work/gw-certs" \
+bash "$d/init-deployment.sh" --domain boot.test --gateway-url https://llm.boot.test --gateway-ca-file "$work/gw-certs/ca.pem" \
   --gateway-secrets-dir "$work/gw-secrets" --gateway-credential-key-file worker="$work/worker.key" \
   --profiles clamav,render,openwebui,proxy --backup-target local --host-memory 24 --freshclam-proxy proxy.boot.test:3128 \
   --yes > "$work/init.log" || { cat "$work/init.log"; fail "init-deployment.sh failed"; }

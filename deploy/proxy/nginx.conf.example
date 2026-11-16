@@ -51,7 +51,7 @@ server {
         proxy_next_upstream_timeout 10s;
         proxy_next_upstream_tries 2;
         proxy_connect_timeout 5s;
-        # The listener presents the internal CA's certificate. To verify it, copy certs/ca.pem to the proxy and enable:
+        # The listener presents the internal CA's certificate. To verify it, copy ca.pem out of the rag-certs volume to the proxy (docs/production-setup.md, step 5) and enable:
         # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
         # proxy_ssl_name rag-api;
     }

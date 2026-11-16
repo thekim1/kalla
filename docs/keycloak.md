@@ -9,10 +9,10 @@ does not run its own. The realm files and their placeholders are described in
 
 | Your setup | What to do |
 |---|---|
-| **The gateway's Keycloak, shared realm `ume`** (the pilot, Decisions "Gateway release 1 and shared Keycloak as built") | Copy `deploy/keycloak/rag-additions.json` from the Ume Rag release into the gateway's Keycloak additions directory, set its placeholders, and run the gateway's Keycloak `up` again (README, *Shared realm*). Then `init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ...` |
+| **The gateway's Keycloak, shared realm `ume`** (the pilot, Decisions "Gateway release 1 and shared Keycloak as built") | Copy `deploy/keycloak/rag-additions.json` from the Ume Rag release into the gateway's Keycloak additions directory, set its placeholders, and run the gateway's Keycloak `up` again (README, *Shared realm*). Then rag-admin's setup wizard takes the realm `https://<keycloak host>/realms/ume` and the client secret (Compose with `--hardened`: also `init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume`, for the host firewall) |
 | **Gateway and RAG in one Portainer stack** | The same additions file in the gateway's Keycloak; in the stack, `UME_RAG_OIDC_AUTHORITY` defaults to the gateway's `UME_OIDC_AUTHORITY`, and without either rag-admin's setup wizard suggests the realm saved in the gateway's wizard (runbook, *Portainer and other hosts without shell access*) |
 | **A Keycloak of RAG's own** (standalone) | `deploy/keycloak/standalone/10-rag-realm.json` in place of the gateway's base realm file, then `rag-additions.json`, applied with keycloak-config-cli (README, *Standalone*). Run Keycloak with the gateway's `deploy/keycloak` project |
-| **Entra ID or AD FS directly**, no Keycloak | Register `ume-rag-admin` there and pass its authority to `init-deployment.sh`; Entra needs `UME_RAG_OIDC_TENANT_ID` (production setup, *Sign-in*) |
+| **Entra ID or AD FS directly**, no Keycloak | Register `ume-rag-admin` there and enter its authority in rag-admin's setup wizard (Compose with `--hardened`: also `init-deployment.sh --oidc-authority`); Entra needs its tenant ID, in the wizard or as `UME_RAG_OIDC_TENANT_ID` (production setup, *Sign-in*) |
 | **Kubernetes** | Any of the above; the overlay's `Oidc__Authority` names the realm (Kubernetes guide) |
 
 In every setup:
@@ -21,7 +21,8 @@ In every setup:
   (with the port, when the admin is reached on 9543 directly). `rag-additions.json` takes them from
   `UME_RAG_ADMIN_PUBLIC_HOST`. `rag-additions.local.json` adds localhost URIs and never goes into production.
 - **The client secret** must be the same in Keycloak and in RAG: entered in rag-admin's setup wizard, or declared by
-  the deployment (`--oidc-client-secret-file`, or `UME_RAG_OIDC_CLIENT_SECRET` in the Portainer stack).
+  the deployment (`UME_RAG_OIDC_CLIENT_SECRET`: `init-deployment.sh --set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` on a
+  Compose host, a variable in the Portainer stack).
 - **Roles** come from the `rag-*` realm roles or from groups mapped under *Settings → Role groups* in the admin UI (and the break-glass
   `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`); one
   group can grant a role in both products (README, *One group for both products*;

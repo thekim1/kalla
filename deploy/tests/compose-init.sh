@@ -91,6 +91,20 @@ for rule in '-A UME-RAG-EGRESS -s 10.1.2.3 -p tcp -m conntrack --ctstate DNAT --
 done
 ok "profiles, the 24 GB overlays on and off, the backup targets, --set and --set-file, --hardened and the firewall's rules"
 
+echo "== the gateway's CA certificate, and a host without the slice"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/gw-ca.key" -out "$work/gw-ca.pem" -days 1 -subj /CN=gw-ca 2>/dev/null
+init --gateway-ca-file "$work/gw-ca.pem" --set UME_RAG_INGESTION_SLICE= --yes
+cmp -s "$work/gw-ca.pem" "$d/gateway-ca/ca.pem" || fail "--gateway-ca-file did not copy the certificate to deploy/gateway-ca/ca.pem"
+[ "$(ls "$d/gateway-ca")" = ca.pem ] || fail "deploy/gateway-ca holds more than the certificate"
+grep -qxF "UME_RAG_GATEWAY_CA_DIR='$d/gateway-ca'" "$env" || fail "UME_RAG_GATEWAY_CA_DIR does not name deploy/gateway-ca"
+grep -qxF "UME_RAG_INGESTION_SLICE=''" "$env" || fail "an empty UME_RAG_INGESTION_SLICE was not written"
+init --yes
+grep -qxF "UME_RAG_INGESTION_SLICE=''" "$env" || fail "a re-run dropped the empty UME_RAG_INGESTION_SLICE"
+if bash "$d/init-deployment.sh" --gateway-ca-file "$work/gw-ca.key" --yes < /dev/null > "$work/init.log" 2>&1; then
+  fail "a private key was accepted as the gateway's CA certificate"
+fi
+ok "--gateway-ca-file copies the certificate alone and refuses a key; an empty UME_RAG_INGESTION_SLICE survives a re-run"
+
 echo "== refusals"
 refused 'UME_RAG_CLAMAV_MODE is no longer read' --set UME_RAG_CLAMAV_MODE=on
 refused 'SERVICE is api, admin or worker' --gateway-credential-key-file parser="$work/secret"

@@ -13,10 +13,12 @@ exception, with its own steps.
 ## Unreleased
 
 - **Rolling update: yes** for Portainer and Kubernetes. No migration, no new variable, nothing to do.
-- **Compose:** an interactive re-run of `init-deployment.sh` (no `--yes`) now asks for the sign-in provider's address
-  when neither `--oidc-authority` nor `deploy/.env` gives one: leave it empty to keep the provider in the setup wizard,
-  or type it so the host firewall lets rag-admin reach it. New and optional: `--gateway-secrets-dir`, which reads the
-  three credential keys from a gateway on the same host ([quick start](compose-quick-start.md)).
+- **Compose:** `init-deployment.sh` asks for no sign-in value: sign-in is set in the setup wizard
+  (`https://<admin host>/setup`, the setup code in rag-admin's log), as on Portainer. Only with `--hardened` does an
+  interactive run (no `--yes`) ask for the sign-in provider's address when neither `--oidc-authority` nor `deploy/.env`
+  gives one: leave it empty to keep the provider in the setup wizard, or type it so the host firewall lets rag-admin
+  reach it. New and optional: `--gateway-secrets-dir`, which reads the three credential keys from a gateway on the same
+  host ([quick start](compose-quick-start.md)).
 - **Kubernetes:** `create-secrets.sh` now generates the certificates and secrets itself, with the bootstrap of the
   Compose and Portainer stacks, and no longer reads what `init-deployment.sh` wrote. Run it on your existing
   `deploy/certs` and `deploy/secrets` with your host names (`--domain`, or `--api-host` and `--admin-host`): it keeps
@@ -37,8 +39,9 @@ exception, with its own steps.
 - **Compose: no in-place upgrade; install again.** Compose runs `deploy/compose.rag.yaml` with the Portainer stack's
   names (`rag-postgres`, the volumes `rag-postgres-data`, `rag-certs`, `rag-secrets`, `rag-config`, the `RAG_*_IMAGE`
   variables), and `rag-bootstrap` keeps the certificates and secrets in volumes instead of `deploy/certs` and
-  `deploy/secrets`. No Compose installation exists outside tests, so there is no migration. To carry an installation's
-  data over, keep before the new install: the database volume `ume-rag_postgres-data` with the role passwords that
+  `deploy/secrets`. Its published ports bind `0.0.0.0` by default, as the Portainer stack's (before: `127.0.0.1`).
+  No Compose installation exists outside tests, so there is no migration. To carry an installation's data over, keep
+  before the new install: the database volume `ume-rag_postgres-data` with the role passwords that
   open it (`deploy/secrets/postgres/*_password`), `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal`
   and `deploy/certs/data-protection.pfx` (without these three the database is unusable), and the `ume-rag_rag-blobs`
   volume. Then run the new `init-deployment.sh` (`--help`) and, before the first `up`, copy the old database volume's
@@ -311,12 +314,12 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
    ```
 
    Note the time: with the WAL archive, any later moment is restorable too (runbook, *Restore*).
-4. **New files and images.** Replace `deploy/` with the release's (keep `deploy/.env`, `deploy/certs` and
-   `deploy/secrets`), and set the image pins in `deploy/.env` (below). Re-run `sudo deploy/host/install.sh` when
-   `deploy/host/` changed.
+4. **New files and images.** Replace `deploy/` with the release's (keep `deploy/.env`; the certificates and secrets
+   are in the Docker volumes), and remove or update any image pins you set in `deploy/.env` (below). Re-run
+   `sudo deploy/host/install.sh` when `deploy/host/` changed.
 5. **Superuser steps**, only if the release lists them (below), all before step 6. Role caps and per-role settings
-   run against the running database. With a new `POSTGRES_IMAGE`, first replace postgres alone with
-   `dc up -d --wait postgres` (a short outage of every service), then update the extension.
+   run against the running database. With a new `RAG_POSTGRES_IMAGE`, first replace rag-postgres alone with
+   `dc up -d --wait rag-postgres` (a short outage of every service), then update the extension.
 6. **Migrate and replace.** For a release marked *Rolling update: no*, first stop the services its section names
    (`dc stop rag-api rag-admin`, or `dc stop rag-admin` for 0.6.0): `up` runs the migration while the old containers
    are still running, and replaces them only afterwards.
@@ -325,8 +328,8 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
    dc up -d --wait
    ```
 
-   Compose recreates every container whose image or settings changed. `rag-migrate` runs first; api, admin and the
-   worker start only after it has finished successfully, so no service runs against an older schema. The worker is
+   Compose recreates every container whose image or settings changed. `rag-bootstrap` runs first, then `rag-migrate`;
+   api, admin and the worker start only after it has finished successfully, so no service runs against an older schema. The worker is
    stopped before its replacement starts (its leases make the pause harmless; an overlap would exceed its role's
    connection limit). The parser and ClamAV are recreated only if their image changed.
 7. **Verify:** `dc ps` all healthy, `/health/ready` and `/version` of api and admin, `dc logs rag-migrate` shows the
@@ -341,28 +344,31 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
 ## Image pins
 
 Production runs images pinned by digest. A release bundle (from `v0.1.0`) has each digest written into the Compose
-files' `${X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone the
-defaults are the local `ume-rag/<service>:latest` images built on the host. To run images from a registry, or to override one, set the variable in `deploy/.env` to `<image>@sha256:…`:
+files' `${RAG_X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone the
+defaults of `deploy/compose.rag.yaml` are the last release's pins. To run images from a registry or built on the host,
+or to override one, set the variable in `deploy/.env` (`init-deployment.sh --set RAG_API_IMAGE=<image>@sha256:…`;
+`--set RAG_API_IMAGE=` removes it again):
 
 | Variable | Image |
 |---|---|
-| `POSTGRES_IMAGE` | `ume-rag/postgres` (pinned `pgvector/pgvector` plus pgBackRest) |
-| `MIGRATIONS_IMAGE`, `API_IMAGE`, `ADMIN_IMAGE`, `WORKER_IMAGE` | the .NET services |
-| `PARSER_IMAGE` | the parser |
-| `CLAMAV_IMAGE` | `ume-rag/clamav` |
-| `RENDERER_IMAGE` | `ume-rag/renderer` |
-| `OPENWEBUI_IMAGE` | Open WebUI, in the separate `compose.openwebui.yaml` project |
+| `RAG_POSTGRES_IMAGE` | `ume-rag/postgres` (pinned `pgvector/pgvector` plus pgBackRest) |
+| `RAG_MIGRATIONS_IMAGE`, `RAG_API_IMAGE`, `RAG_ADMIN_IMAGE`, `RAG_WORKER_IMAGE` | the .NET services |
+| `RAG_PARSER_IMAGE` | the parser |
+| `RAG_CLAMAV_IMAGE` | `ume-rag/clamav` |
+| `RAG_RENDERER_IMAGE` | `ume-rag/renderer` |
+| `OPENWEBUI_IMAGE` | Open WebUI, the profile `openwebui` (pinned in `deploy/compose.rag.yaml`) |
+| `RAG_PROXY_IMAGE` | nginx of the TLS proxy, the profile `proxy` (pinned in `deploy/compose.rag.yaml`) |
 
 Every pin, image or package, was released at least 7 days before it was pinned.
 
 ## Superuser steps
 
 The migrator (`ume_rag_migrator`) owns ragdb but is not a superuser and cannot create or alter roles, so two kinds of
-change need the bootstrap superuser. They run inside the postgres container over its socket, as the
+change need the bootstrap superuser. They run inside the rag-postgres container over its socket, as the
 `postgres` user (peer authentication):
 
 ```bash
-dc exec -T postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c '<statement>'
+dc exec -T rag-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c '<statement>'
 ```
 
 **Role caps and per-role settings.** Connection limits, timeouts and the `hnsw.*` defaults of the service roles are
@@ -378,15 +384,15 @@ ALTER ROLE ume_rag_api IN DATABASE ragdb SET statement_timeout = '5s';
 New sessions pick up a per-role setting; restart the service to make all its connections use it. Check the current
 values with `SELECT rolname, rolconnlimit FROM pg_roles WHERE rolname LIKE 'ume_rag_%'` and `\drds`.
 
-**Extensions.** A new `POSTGRES_IMAGE` with a newer pgvector needs `ALTER EXTENSION vector UPDATE;` once the new
-image runs (`dc up -d --wait postgres`) and before the migrations. Recreating postgres restarts the database: a short
-outage of every service.
+**Extensions.** A new `RAG_POSTGRES_IMAGE` with a newer pgvector needs `ALTER EXTENSION vector UPDATE;` once the new
+image runs (`dc up -d --wait rag-postgres`) and before the migrations. Recreating rag-postgres restarts the database: a
+short outage of every service.
 
 ## Change types
 
 | Change | Procedure |
 |---|---|
-| pgvector minor | new `POSTGRES_IMAGE`; extension step above |
+| pgvector minor | new `RAG_POSTGRES_IMAGE`; extension step above |
 | Postgres major (17 → 18) | not rolling: `pg_upgrade` where possible (else `pg_dump`/`pg_restore` into a new volume), then a new pgBackRest stanza and a full backup |
 | Word list or decompounder | changes the stored search text: the release ships a worker command that recomputes it in batches; the evaluation smoke set is compared before and after |
 | Parser image (Docling, models) | the parse cache key includes the parser build, so old outputs stay valid; re-parsing is an opt-in publish |
@@ -396,16 +402,20 @@ None of these has happened yet; the first release that brings one adds its comma
 
 ## Certificate and secret rotation
 
-- **Internal certificates** (825 days): `sudo ./deploy/init-deployment.sh --renew-certs` with `ca.key` back on the
-  host, then `dc up -d --force-recreate`, and move `ca.key` off again. `--renew-ca` replaces the CA as well.
-- **PKI certificates** of the public listeners: run `init-deployment.sh` again, with all your original options and the
-  new `--api-cert`, `--api-key`, `--admin-cert` and `--admin-key`, then recreate api and admin.
-- **Gateway credential keys and the OIDC client secret:** run `init-deployment.sh` again, with all your original options
-  and the new `--gateway-credential-key-file SERVICE=FILE` or `--oidc-client-secret-file`; it rewrites those files.
-  Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
+- **Internal certificates** (825 days): `rag-bootstrap` re-issues a service certificate at the first `dc up -d` within
+  30 days of its expiry (it needs `ca.key` in the `rag-certs` volume), and the end of its log names what to restart:
+  `dc restart rag-postgres rag-parser`. A new internal CA: delete `ca.pem` and `ca.key` in `rag-certs`,
+  `dc up -d --wait`, then `dc restart` (production-setup.md, *Internal TLS*).
+- **PKI certificates** of the public listeners: put the new `api.crt` and `api.key`, `admin.crt` and `admin.key` in
+  the directory `UME_RAG_PKI_DIR` names and run `dc up -d`: `rag-bootstrap` copies them at every start. rag-api and
+  rag-admin serve theirs through Kestrel, which watches the files; if a client still sees the old certificate, restart
+  them.
+- **Gateway credential keys and the OIDC client secret:** run `init-deployment.sh` with only the new
+  `--gateway-credential-key-file SERVICE=FILE` or `--set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` (it keeps the rest of
+  `deploy/.env`), then `dc up -d`: `rag-bootstrap` rewrites those files. Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
   (production-setup.md, *Gateway credential keys*).
 - **Never regenerate** the pepper, the Data Protection certificate, the blob master key or the pgBackRest passphrase:
   existing data or backups would become unreadable. There is no rotation procedure for them yet; after any future
   rotation, escrow again (runbook, *Key escrow*).
-- A re-run without `--renew-certs` rewrites `deploy/.env` and keeps the old one as `deploy/.env.bak`: carry over the
-  lines you added by hand (image pins, `UME_RAG_OTEL_ENDPOINT`).
+- A re-run of `init-deployment.sh` changes only what its options name and keeps every other variable in
+  `deploy/.env` (image pins and `UME_OTEL_ENDPOINT` included); only comments and empty values are dropped.

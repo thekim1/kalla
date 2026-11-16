@@ -16,8 +16,10 @@
 #   --api-host HOST, --admin-host HOST
 #                            UME_RAG_API_HOST, UME_RAG_ADMIN_HOST: a name of its own instead
 #   --gateway-url URL        UME_RAG_GATEWAY_URL: the gateway's https URL (required)
-#   --gateway-ca-dir DIR     UME_RAG_GATEWAY_CA_DIR: a directory with the gateway's ca.pem (a gateway on this host: its
-#                            certificate directory); not needed for a gateway with a public certificate
+#   --gateway-ca-file FILE   the gateway's CA certificate (a gateway on this host: deploy/certs/ca.pem of its
+#                            directory), copied to deploy/gateway-ca/ca.pem, which UME_RAG_GATEWAY_CA_DIR then names;
+#                            give it again when the gateway gets a new CA. Not needed for a gateway with a public
+#                            certificate. (Only the certificate is copied: the gateway's directory also holds its keys.)
 #   --gateway-secrets-dir DIR  UME_RAG_GATEWAY_SECRETS_DIR: the credential keys a gateway on this host wrote from
 #                            Ume.Rag's manifest (deploy/portainer/integration-manifest.json): DIR/Ume.Rag/rag-api,
 #                            rag-admin and rag-worker
@@ -36,7 +38,8 @@
 #                            alone admits to the published ports
 #   --rolling                compose.rolling.yaml: a second rag-api and rag-admin (deploy/rolling-update.sh)
 #   --overlays LIST          the overlays exactly: backup, hardened, host-24g, clamav-conf, rolling (empty: none)
-#   --set NAME=VALUE         any other variable (deploy/portainer/stack.env.example lists them); empty removes it
+#   --set NAME=VALUE         any other variable (deploy/portainer/stack.env.example lists them); empty removes it,
+#                            except UME_RAG_INGESTION_SLICE, whose empty value is kept (a host without the slice)
 #   --set-file NAME=FILE     the same with FILE's first line as the value, for a secret (UME_RAG_OIDC_CLIENT_SECRET)
 #   --yes                    no questions: a missing required value stops the run
 set -euo pipefail
@@ -73,7 +76,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --domain) sets+=("UME_DOMAIN=$2");; --api-host) sets+=("UME_RAG_API_HOST=$2");;
     --admin-host) sets+=("UME_RAG_ADMIN_HOST=$2");; --gateway-url) sets+=("UME_RAG_GATEWAY_URL=${2%/}");;
-    --gateway-ca-dir) dir_of "$2"; sets+=("UME_RAG_GATEWAY_CA_DIR=$(cd "$2" && pwd)");;
+    --gateway-ca-file)
+      readable "$2"; grep -q 'BEGIN CERTIFICATE' "$2" || die "$2 is not a PEM certificate"
+      ! grep -q 'PRIVATE KEY' "$2" || die "$2 holds a private key: give the CA's certificate only"
+      mkdir -p "$here/gateway-ca"; (umask 022; cat "$2" > "$here/gateway-ca/ca.pem"); chmod 755 "$here/gateway-ca"
+      sets+=("UME_RAG_GATEWAY_CA_DIR=$here/gateway-ca");;
     --gateway-secrets-dir) dir_of "$2"; sets+=("UME_RAG_GATEWAY_SECRETS_DIR=$(cd "$2" && pwd)");;
     --gateway-credential-key-file)
       svc="${2%%=*}"; case "$svc" in api|admin|worker) ;; *) die "$1 SERVICE=FILE: SERVICE is api, admin or worker";; esac
@@ -166,8 +173,9 @@ tmp="$(mktemp "$env_file.XXXXXX")"
   echo "# Written by deploy/init-deployment.sh (its --help lists the options); edit it with a re-run, or by hand."
   printf "COMPOSE_FILE='%s'\n" "$compose_file"
   for n in "${order[@]}"; do
-    # An empty value is left out, but an empty COMPOSE_PROFILES stays: none, not a first run's default.
-    if [ "$n" != COMPOSE_FILE ] && { [ -n "${val[$n]}" ] || [ "$n" = COMPOSE_PROFILES ]; }; then printf "%s='%s'\n" "$n" "${val[$n]}"; fi
+    # An empty value is left out, but an empty COMPOSE_PROFILES stays (none, not a first run's default), and an empty
+    # UME_RAG_INGESTION_SLICE (no slice on this host, where unset means rag-ingestion.slice).
+    if [ "$n" != COMPOSE_FILE ] && { [ -n "${val[$n]}" ] || [ "$n" = COMPOSE_PROFILES ] || [ "$n" = UME_RAG_INGESTION_SLICE ]; }; then printf "%s='%s'\n" "$n" "${val[$n]}"; fi
   done
 } > "$tmp"
 chmod 600 "$tmp"; mv -f "$tmp" "$env_file"

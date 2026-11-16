@@ -3,14 +3,14 @@
 P1a is shown on a developer machine with the pilot member present (`plans/archive/p1/README.md` §7, U-a). Until the live block
 at the end of P1a, everything runs against the **dev Keycloak** and **FakeGateway**; the live block points the same
 stack at the **interim gateway** (J10) and the **Keycloak shared with the gateway** (J11). Their addresses, keys and
-secrets go only in the AppHost's user secrets or in `deploy/.env` and the secret files `init-deployment.sh` writes,
+secrets go only in the AppHost's user secrets or in `deploy/.env`, which `init-deployment.sh` writes (mode 600),
 never in the repository, a transcript or a screenshot. Every host name below is a placeholder.
 
 There are two ways to run the stack locally:
 
 | | The AppHost ([local-development.md](local-development.md)) | The pilot stack (production Compose) |
 |---|---|---|
-| What runs | the services from source, the dev Keycloak (realm `ume` from `dev/keycloak/`), FakeGateway, Open WebUI (`http://localhost:7410`) | the images, hardened, as on the pilot host: `compose.prod.yaml`, `compose.ingestion.yaml`, and `compose.openwebui.yaml` as a project of its own |
+| What runs | the services from source, the dev Keycloak (realm `ume` from `dev/keycloak/`), FakeGateway, Open WebUI (`http://localhost:7410`) | the images, as on the pilot host: `compose.rag.yaml` with `compose.backup.yaml` (the pilot host adds `compose.hardened.yaml`), Open WebUI as the profile `openwebui` |
 | Sign-in and model calls now | yes: dev Keycloak test users, FakeGateway | no: Compose has no Keycloak and no FakeGateway, so sign-in and answers wait for the live block |
 | Use it for | the demo: sign-in, set-up through Scalar, a cited answer in Open WebUI | checking the production shape: every container healthy, secrets as files, the networks |
 
@@ -29,61 +29,62 @@ to the admin with a test user from [local-development.md](local-development.md#k
 ## 2. Now: the pilot stack on your machine
 
 Build the images from the commit you are testing (as in
-[local-development.md](local-development.md#production-compose-on-your-machine)): the Compose files mount
-`deploy/postgres/app-roles.sql` from the tree, so older `rag-migrate` images fail on tables they do not have yet. Then
-run `init-deployment.sh` in a scratch copy of `deploy/` with placeholders for the systems that are not there yet:
+[local-development.md](local-development.md#production-compose-on-your-machine)): `rag-bootstrap` copies
+`deploy/postgres/app-roles.sql` from the tree into the stack, so older `rag-migrate` images fail on tables they do not
+have yet. Then run `init-deployment.sh` in a scratch copy of `deploy/` with a placeholder for the gateway, which is not
+there yet, and the local images:
 
 ```bash
 cp -r deploy ~/rag-p1a && cd ~/rag-p1a
-./init-deployment.sh --oidc-authority https://keycloak.invalid/realms/ume --gateway-url https://gateway.invalid \
-  --api-host localhost --openwebui-host chat.localhost --backup-target local --allow-file-keys --yes
-echo 'UME_RAG_INGESTION_SLICE=' >> .env    # no rag-ingestion.slice on a developer machine
+images=()
+for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=ume-rag/$s:latest"); done
+./init-deployment.sh --gateway-url https://gateway.invalid --api-host localhost --backup-target local "${images[@]}" --yes
 docker compose --env-file .env up -d --wait
 docker compose --env-file .env ps
-curl --cacert certs/ca.pem https://localhost:8543/health/ready
+docker run --rm --network none -v ume-rag_rag-certs:/c:ro --entrypoint cat \
+  "$(docker compose --env-file .env config --images rag-bootstrap)" /c/ca.pem > ca.pem
+curl --cacert ca.pem https://localhost:8543/health/ready
 ```
 
-Run the `chown` commands the script prints first (the containers read their files as their own users), unless it ran
-as root. `up --wait` returns when every service with a health check is healthy and `rag-migrate` has completed; the
-parser and ClamAV take a few minutes on the first start. The health checks do not call the OIDC authority or the
-gateway, so the placeholders do not stop the stack from becoming healthy. If `172.30.0.0/16` is taken on your machine,
-add a Compose file with other subnets to `COMPOSE_FILE` in `.env` (`deploy/tests/release-smoke.sh --compose-file`
-does the same); the host firewall is not installed on a developer machine.
+`rag-bootstrap` creates the certificates and secrets in the project's volumes (`ume-rag_rag-certs`,
+`ume-rag_rag-secrets`) and gives each service's files to its user. `up --wait` returns when every service with a
+health check is healthy and `rag-migrate` has completed; the parser and ClamAV take a few minutes on the first start.
+The health checks do not call the OIDC authority or the gateway, so the placeholder does not stop the stack from
+becoming healthy. Without `--hardened` the networks take subnets that Docker chooses, and neither the host firewall
+nor the ingestion slice is used on a developer machine.
 
 `deploy/tests/release-smoke.sh` runs the same steps on a release bundle and checks the listeners
 ([production-setup.md](production-setup.md)).
 
-What the script generated for P1a: the Open WebUI JWT secret, once, as `secrets/api/OpenWebUi__JwtSecret` and as
-`FORWARD_USER_INFO_HEADER_JWT_SECRET` in `secrets/openwebui.env`; the worker's crawl key pepper
-`secrets/worker/Security__CrawlKeyPepper` (the HMAC key of `HostHash` in security event 5101). A re-run never changes
-them.
+What `rag-bootstrap` generated for P1a, in `rag-secrets`: the Open WebUI JWT secret, once, as
+`api/OpenWebUi__JwtSecret` and as `openwebui/jwt-secret`; the worker's crawl key pepper
+`worker/Security__CrawlKeyPepper` (the HMAC key of `HostHash` in security event 5101). A re-run never changes them.
 
-**Open WebUI in Compose on one machine.** `compose.openwebui.yaml` calls `rag-api` at `UME_RAG_API_PUBLIC_URL` and
-sends the browser back to `https://UME_RAG_OPENWEBUI_HOST/oauth/oidc/login/callback`: on the pilot host the reverse proxy
-serves both with a trusted certificate. On a developer machine neither exists (`https://localhost:8543` is the Open
-WebUI container itself, and it does not trust the internal CA), so the demo's Open WebUI is the AppHost's. Check the
-Compose project with `docker compose -f compose.openwebui.yaml --env-file .env config --quiet`.
+**Open WebUI in Compose on one machine.** With the profile `openwebui`, `rag-openwebui` calls `rag-api` inside the
+stack and trusts RAG's CA, but it sends the browser back to `https://UME_RAG_OPENWEBUI_HOST/oauth/oidc/login/callback`
+and sets secure cookies: on the pilot host a TLS proxy serves it with a trusted certificate. On a developer machine
+there is none (Open WebUI's own port, `127.0.0.1:3000`, is plain HTTP), so the demo's Open WebUI is the AppHost's.
+Check that the profile renders with `docker compose --env-file .env --profile openwebui config --quiet`.
 
 ## 3. The live block: what changes
 
 Nothing in the repository changes. You set values in one of two places:
 
-| Value | AppHost (user secrets, `dotnet user-secrets --project src/Ume.Rag.AppHost set ...`) | Pilot stack (`init-deployment.sh` options: `deploy/.env` and secret files) |
+| Value | AppHost (user secrets, `dotnet user-secrets --project src/Ume.Rag.AppHost set ...`) | Pilot stack (`init-deployment.sh` options, written to `deploy/.env`, or rag-admin's setup wizard) |
 |---|---|---|
-| The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--ca-file`) |
+| The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--gateway-ca-file`) |
 | Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
 | The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/ume/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
-| The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
-| The shared Keycloak for Open WebUI | the AppHost's `open-webui` resource | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
-| Open WebUI's client in rag-api | created by the AppHost seed | nothing: `init-deployment.sh` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
+| The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | the setup wizard (`https://<admin host>/setup`, the setup code in rag-admin's log) takes the realm and the secret of `ume-rag-admin`; declared instead: `--oidc-authority https://<keycloak host>/realms/ume --set-file UME_RAG_OIDC_CLIENT_SECRET=ume-rag-admin.secret` |
+| The shared Keycloak for Open WebUI | the AppHost's `open-webui` resource | `openwebui` in `--profiles`, and the setup wizard's Open WebUI step takes the secret (declared instead: `--set-file UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=open-webui.secret`); client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--set UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME=...` sets the sign-in button's label (default *Umeå kommun*) |
+| Open WebUI's client in rag-api | created by the AppHost seed | nothing: `rag-bootstrap` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
 
 Keep the key and secret files outside the repository (for example in `~/rag-p1a-secrets/`, mode 0600) and delete them
-once `init-deployment.sh` has copied them. Re-run `init-deployment.sh` with all the options of the first run plus the
-new ones: it keeps every generated secret and rewrites `.env` (the previous one is kept as `.env.bak`; carry over lines
-you added by hand, such as `UME_RAG_INGESTION_SLICE=`). Then recreate the services:
-`docker compose --env-file .env up -d --wait` (and the Open WebUI project).
+once `init-deployment.sh` has run: it keeps each value in `.env` (mode 600). Re-run `init-deployment.sh` with only the
+new options: it changes what they name and keeps every other line of `.env`, and `rag-bootstrap` keeps every generated
+secret in the volumes. Then recreate the services: `docker compose --env-file .env up -d --wait`.
 
-The redirect URIs the script prints must be registered on the shared realm's clients: `ume-rag-admin`
+The redirect URIs the setup wizard shows must be registered on the shared realm's clients: `ume-rag-admin`
 (`https://<admin host>[:<port>]/signin-oidc`, `/signout-callback-oidc`) and `open-webui`
 (`https://<owui host>/oauth/oidc/login/callback`). The realm additions (`deploy/keycloak/`, stream B, J8)
 carry the pilot hosts; a demo on a developer machine needs that machine's URIs on the clients too (the AppHost's admin
