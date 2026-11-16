@@ -20,7 +20,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   follows it.
 - **Read:** #506; repo-and-deployment §8.
 
-### [ ] A-27 Image CVE scan and automated pin bumps (#507)
+### [x] A-27 Image CVE scan and automated pin bumps (#507)
 - **Do:** a scheduled scan of the built images in `audit.yml` (fixable High/Critical fail it), and Renovate or Dependabot
   for image digests, NuGet, npm, uv and Actions with a minimum release age of 7 days (the 7-day rule).
 - **Paths:** `.github/**`, `images/**`.
