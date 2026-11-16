@@ -529,13 +529,14 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
 2. **Registry:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private: add `ghcr.io` as a registry in Portainer
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
-3. **Variables:** the gateway's required ones (`UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`, `UME_GATEWAY_PUBLIC_URL`) and
-   Ume.Rag's (`UME_DOMAIN`, which names rag-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>`,
-   or `UME_RAG_API_HOST` and the other `UME_RAG_*_HOST` instead), and `COMPOSE_PROFILES=clamav` (add `openwebui` for
-   the chat, `render` for JavaScript pages). The credential keys come from the gateway's manifest
-   (`UME_INTEGRATION_MANIFEST`), or are issued by hand and set as the three `UME_RAG_*_GATEWAY_KEY`. No client secret:
-   after the first start, sign-in is set in rag-admin's setup wizard with the setup code from its log
-   ([portainer.md](portainer.md), *First deploy* step 4), unless the stack declares it.
+3. **Variables:** `UME_DOMAIN`, which names the gateway API and its admin `llm.` and `llm-admin.<domain>`, and
+   rag-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>` (or `UME_GATEWAY_HOST`,
+   `UME_RAG_API_HOST` and the other host variables instead), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the
+   chat, `render` for JavaScript pages). The credential keys come from the stack file's default manifest (leave the
+   gateway's `UME_INTEGRATION_MANIFEST` unset), or are issued by hand and set as the three `UME_RAG_*_GATEWAY_KEY`. No
+   provider and no client secret: after the first start, sign-in is set in the gateway's setup wizard and then in
+   rag-admin's, each with the setup code from its log ([portainer.md](portainer.md), *First deploy* steps 4–5), unless
+   the stack declares it (`UME_OIDC_AUTHORITY`).
 4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI
    (3000) serves plain HTTP on loopback. Put a reverse proxy with real certificates in front of the public names
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `UME_RAG_OPENWEBUI_BIND` and the other `*_BIND`
@@ -551,7 +552,7 @@ and [portainer.md](portainer.md) for a first deploy and the upgrade to 0.5.0 ste
    rag-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
 6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Ume.Rag's admin
-   (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 8). Until then no knowledge base
+   (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 9). Until then no knowledge base
    can be created.
 
 ## Reverse proxy and PKI

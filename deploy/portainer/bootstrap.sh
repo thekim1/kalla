@@ -274,7 +274,7 @@ note() { todo="$todo
 example() { case "$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
 for svc in api admin worker; do
   up="$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
-  [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: no key for rag-$svc. Set UME_INTEGRATION_MANIFEST (stack.env.example) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
+  [ -e "$S/$svc/Gateway__Key" ] || note "UME_RAG_${up}_GATEWAY_KEY: no key for rag-$svc. Leave UME_INTEGRATION_MANIFEST unset (the stack file's default) so the gateway creates it, or issue it in the gateway's admin (integration Ume.Rag) and set the variable; then update the stack, no restart needed"
 done
 # A name under UME_DOMAIN is named once, as the domain; a name set of its own, as its variable.
 if [ -n "${UME_DOMAIN:-}" ] && example "$UME_DOMAIN"; then note "UME_DOMAIN is still an example value (the host names default under it)"; fi

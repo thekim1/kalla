@@ -11,8 +11,8 @@
 #     integration-secrets, the file is used without one, and with neither the service has no key
 #   - the host names under UME_DOMAIN: the example's domain is on the checklist, the names derived from it are not
 #   - the TLS proxy (profile proxy): a URL where a host name belongs leaves that block out of nginx.conf and names it on
-#     the checklist, instead of stopping rag-bootstrap (#711); the blocks of rag-api, rag-admin and Open WebUI carry
-#     the names derived from UME_DOMAIN
+#     the checklist, instead of stopping rag-bootstrap (#711); the blocks of the gateway, its admin, rag-api, rag-admin
+#     and Open WebUI carry the names derived from UME_DOMAIN
 #   - retired variables (Decisions "Deployment values across releases"): one the stack still sets is on the checklist
 #     with what replaced it and in admin/Deployment__RetiredVariables for rag-admin; an empty one and none are not
 #
@@ -118,10 +118,16 @@ echo "== the host names under UME_DOMAIN"
 grep -q 'UME_DOMAIN is still an example value' "$work/bootstrap-2.log" || fail "the checklist does not name the example UME_DOMAIN"
 grep -qE 'UME_RAG_(API|OPENWEBUI)_HOST' "$work/bootstrap-2.log" && fail "the checklist names a host variable the example does not set"
 ok "the example's UME_DOMAIN is on the checklist once, not as the host names derived from it"
+# The gateway's two names come from UME_DOMAIN too (the example sets neither UME_GATEWAY_HOST nor UME_ADMIN_HOST).
+conf="$(in_helper -v "${project}_rag-config:/f:ro" "$helper" -c 'cat /f/proxy/nginx.conf')"
+grep -q 'server_name llm\.example\.se;' <<< "$conf" || fail "the proxy has no gateway block for llm.example.se under UME_DOMAIN"
+grep -q 'server_name llm-admin\.example\.se;' <<< "$conf" || fail "the proxy has no gateway admin block for llm-admin.example.se under UME_DOMAIN"
+ok "the proxy's gateway and gateway admin blocks carry llm. and llm-admin. under UME_DOMAIN"
 
 echo "== the proxy with a URL as a host name"
-sed -i 's|^UME_GATEWAY_HOST=.*|UME_GATEWAY_HOST=https://llm.example.se|' "$work/stack.env"
-grep -q '^UME_GATEWAY_HOST=https://' "$work/stack.env" || echo "UME_GATEWAY_HOST=https://llm.example.se" >> "$work/stack.env"
+# A deployer's own UME_GATEWAY_HOST (the example has it only as a comment), given a URL instead of a host name.
+sed -i '/^#*UME_GATEWAY_HOST=/d' "$work/stack.env"
+echo "UME_GATEWAY_HOST=https://llm.example.se" >> "$work/stack.env"
 run_bootstrap 3
 grep -q 'UME_GATEWAY_HOST is not a host name, so the proxy has no gateway block' "$work/bootstrap-3.log" \
   || fail "the checklist does not name the bad UME_GATEWAY_HOST"
@@ -131,6 +137,7 @@ grep -q 'server_name rag.example.se;' <<< "$conf" || fail "the proxy lost rag-ap
 grep -q 'server_name rag-admin.example.se;' <<< "$conf" || fail "the proxy has no rag-admin block under UME_DOMAIN"
 grep -q 'server_name chat.example.se;' <<< "$conf" || fail "the proxy has no Open WebUI block under UME_DOMAIN"
 grep -q 'llm.example.se\|@GATEWAY_HOST@' <<< "$conf" && fail "nginx.conf still has a gateway block"
+grep -q 'server_name llm-admin\.example\.se;' <<< "$conf" || fail "the proxy lost the gateway admin's block with a bad UME_GATEWAY_HOST"
 ok "a URL as UME_GATEWAY_HOST leaves the gateway block out and is on the checklist; rag-bootstrap completes"
 
 echo "== retired variables"

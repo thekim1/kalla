@@ -1461,6 +1461,13 @@ most 500 characters) and `GET /bff/setup/state` carries it as `gateway.suggested
 context's `admin_url`, else `Admin:GatewayAdminUrl`); `gateway` is null for a gateway without the feature. It is a
 suggestion only: it is not a source in `SignInSettings.Resolve`, the effective values and their precedence (deployment,
 wizard, default) are unchanged, and it is stored only as a wizard value after a passed test and Finish, like a typed one.
+When the state would suggest no address and neither the deployment nor the wizard sets rag-admin's authority, rag-admin
+reads its gateway context again before answering: at most once per 5 seconds per instance
+(`GatewayContextReader.RefreshInterval`), shared by concurrent requests, and waited for at most 2 seconds, after which the
+state answers with what it has; a failed or slow read never fails the request. So a deployer who finishes the gateway's
+wizard and then opens Ume.Rag's sees the address without waiting for the context interval. The wizard page reads the
+state again when its tab is shown again (back from the gateway's wizard, which the sign-in step's link opens in a tab of
+its own) and puts the address into the field while that is empty and no test has been made.
 
 **Stored secrets.** The client secrets are encrypted with Data Protection under a purpose per secret
 (`config."DataProtectionKeys"`, the ring protected by `data-protection.pfx`). rag-api registers Data Protection with

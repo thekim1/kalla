@@ -1,6 +1,7 @@
 #!/bin/sh
 # Generates deploy/portainer/compose.portainer.yaml: the gateway's Portainer stack (its deploy/compose.portainer.yaml,
-# unchanged) plus RAG's services from compose.rag.template.yaml, as one stack to paste into Portainer.
+# unchanged but for one line, below) plus RAG's services from compose.rag.template.yaml, as one stack to paste into
+# Portainer.
 #
 #   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
 #   deploy/portainer/build-stack.sh v0.10.1        # ... of that gateway release
@@ -21,9 +22,22 @@
 # Each "@SECTION name" block of the template goes into the same top-level section of the gateway's file (header: after
 # its comment, x: after its x- anchors), and "@INCLUDE path" lines (relative to deploy/) are inlined, indented, with $
 # escaped as $$, as the gateway's build-portainer-stack.sh does. Run again after a gateway or RAG change.
+#
+# The one line of the gateway's part that is rewritten: its bootstrap's
+#   UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
+# gets integration-manifest.json (beside this script, written on one line) as its default, so the gateway creates the
+# integration Ume.Rag and its three credential keys with nothing typed (M-20 S8). The default applies only when the
+# variable is unset ("-", not ":-"): a stack that sets its own manifest keeps it, and an empty value creates nothing.
+# The manifest names no owner, which the gateway accepts from 0.11.0. The build stops when the
+# gateway's file does not have exactly that line.
+# A default that contains "}" needs Compose 2.24.7 or later (compose-go 5ede864, "default values can contain curly
+# braces"); an older one ends the expression at the first "}" without an error, also when the variable is set (tried
+# with Compose 2.17.3 to 5.7.1, 2026-11-16). Portainer has a later one from 2.21 (its pinned versions, not run), and
+# the stack's volume subpaths are newer than that Compose too (not tried on an older one).
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 template="$here/compose.rag.template.yaml"
+manifest="$here/integration-manifest.json"
 committed="$here/compose.portainer.yaml"
 check=0; images=""
 while [ $# -gt 0 ]; do
@@ -65,10 +79,27 @@ if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
   gateway="$tmp"
 fi
 out="$committed"; [ "$check" = 0 ] || out="$out_tmp"
-python3 - "$gateway" "$template" "$here/.." "$out" <<'EOF'
-import re, sys
-gateway_path, template_path, deploy_dir, out_path = sys.argv[1:]
+python3 - "$gateway" "$template" "$here/.." "$out" "$manifest" <<'EOF'
+import json, re, sys
+gateway_path, template_path, deploy_dir, out_path, manifest_path = sys.argv[1:]
 gw = open(gateway_path, encoding="utf-8").read().replace("\r\n", "\n").split("\n")
+
+# The integration manifest as the default of the gateway's UME_INTEGRATION_MANIFEST (the header says why). On one line,
+# in a single-quoted YAML scalar; "$" would start a variable for Compose and "'" would end the scalar.
+manifest = json.dumps(json.load(open(manifest_path, encoding="utf-8")), separators=(",", ":"), ensure_ascii=True)
+if "$" in manifest or "'" in manifest:
+    sys.exit(f"{manifest_path} must not contain $ or '")
+passed = "UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}"
+at = [i for i, l in enumerate(gw) if l.strip() == passed]
+if len(at) != 1:
+    sys.exit(f"the gateway's file has {len(at)} lines '{passed}', expected 1: see this script's header")
+indent = gw[at[0]][: len(gw[at[0]]) - len(gw[at[0]].lstrip())]
+gw[at[0]:at[0] + 1] = [
+    indent + "# Rewritten by the RAG repository's build-stack.sh: the integration Ume.Rag and its three credential keys as the",
+    indent + "# default (deploy/portainer/integration-manifest.json), used only while the variable is unset. Set, the variable",
+    indent + "# wins; set and empty, nothing is provisioned.",
+    indent + "UME_INTEGRATION_MANIFEST: '${UME_INTEGRATION_MANIFEST-" + manifest + "}'",
+]
 
 sections, current = {}, None
 for line in open(template_path, encoding="utf-8").read().replace("\r\n", "\n").split("\n"):
@@ -108,7 +139,8 @@ for key, body in sections.items():
     inserts.append((block_end(key), ([""] if key == "services" else []) + body))
 
 inserts.append((0, ["# GENERATED FILE: deploy/portainer/build-stack.sh of the RAG repository (thekim1/ume-rag-platform) writes it",
-                    "# from the gateway's deploy/compose.portainer.yaml (below, unchanged)",
+                    "# from the gateway's deploy/compose.portainer.yaml (below, unchanged but for the default of",
+                    "# UME_INTEGRATION_MANIFEST)",
                     "# and deploy/portainer/compose.rag.template.yaml.",
                     "# Do not edit it by hand; the gateway's own note below refers to the gateway's part.", "#"]))
 out = list(gw)

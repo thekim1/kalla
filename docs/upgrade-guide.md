@@ -83,6 +83,42 @@ exception, with its own steps.
   as before; `rag-bootstrap`'s checklist now names each with what replaced it, and Home in the admin UI shows platform
   admins a notice with the names. **Apply:** nothing is required; to clear the notice, remove the named variables from
   the stack's variables and update the stack. **Check:** `rag-bootstrap`'s log has no line *is set and no longer read*.
+- **One typed value in the Portainer stack, `UME_DOMAIN`, and the gateway's own setup wizard (M-20 S8).** The stack pins
+  the gateway's `v0.11.0`: **rolling update: yes**, its migrations `SignInSettings` and `SetupMode` add tables,
+  columns and grants (the gateway's upgrade guide, *Portainer*). No variable has to be added and none is retired (the
+  gateway's new `UME_SETUP_REOPEN` is optional).
+  - **Host names:** the gateway's two default under `UME_DOMAIN` as Ume.Rag's three do (`llm.<domain>`,
+    `llm-admin.<domain>`), and its public URL to `https://<gateway host>`. rag-admin links to the gateway's admin
+    (among them the setup wizard's link to the gateway's wizard) at `UME_ADMIN_PUBLIC_URL`, else
+    `https://<gateway admin host>`. Each `UME_*_HOST` and public URL that is set still wins.
+  - **Sign-in:** `stack.env.example` no longer sets `UME_OIDC_AUTHORITY`. Unset, the gateway's admin opens its own
+    setup wizard (the code is in `adminapi`'s log; `UME_SETUP_REOPEN` opens it again) and rag-admin has no declared
+    authority: its wizard suggests the provider saved in the gateway's. So a new stack sets up the gateway's wizard
+    first, then Ume.Rag's. Set, `UME_OIDC_AUTHORITY` declares the provider for both, as before, and the gateway's
+    wizard stays closed; `UME_OIDC_CLIENT_SECRET` is used only together with it.
+  - **The integration manifest:** the stack file gives the gateway's `UME_INTEGRATION_MANIFEST` a default,
+    `deploy/portainer/integration-manifest.json` (the integration `Ume.Rag` and its three credential keys, every key
+    limited to `OnPrem` and `Eu`, no owner). The gateway places an integration without an owner in a team and
+    department of its own, code `ume-rag`, which a gateway admin moves to another team with its keys. Unset, the
+    default applies; set, the stack's own manifest wins (0.6.0's, with an owner: nothing changes); set and empty,
+    nothing is provisioned.
+  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade-from-060). A stack that sets
+    `UME_OIDC_AUTHORITY` and `UME_INTEGRATION_MANIFEST` (every 0.6.0 stack made from its `stack.env.example`) changes
+    nothing: paste the new file and update the stack. **A stack without `UME_INTEGRATION_MANIFEST`** (keys issued by
+    hand, kept from 0.5.x) gets the default from now on: the gateway creates the keys `rag-api`, `rag-admin` and
+    `rag-worker` in the integration `Ume.Rag` where they don't exist (and the integration, in a team `ume-rag`, if none
+    has that name), writes their secrets to `<stack>_integration-secrets`, and changes no existing key. The services
+    keep the keys their `UME_RAG_*_GATEWAY_KEY` variables set, which win, so the new keys stay unused. To create none,
+    add `UME_INTEGRATION_MANIFEST` with an empty value before the update; or revoke the three afterwards (a revoked key
+    is not created again). Optional afterwards: set `UME_DOMAIN` and remove the host and public URL lines whose value
+    is its default.
+  - **Compose and Kubernetes:** nothing. This change touches only the Portainer stack; a gateway deployed with its own
+    Compose bundle or on Kubernetes follows the gateway's upgrade guide for `v0.11.0`, which keeps a deployment
+    that sets the authority as it is.
+  - **Check:** the gateway's `bootstrap` log has `bootstrap: sign-in to the admin console is declared by the
+    stack's variables (UME_OIDC_AUTHORITY), …` (an existing stack) or `… is set in the setup wizard: …` (a new one);
+    `adminapi`'s log has no `Setup code` line for a declared stack; `migrations`' log says
+    `… 'Ume.Rag' applied, 0 of 3 credential keys created` for a stack whose keys exist.
 
 ## 0.6.0
 
@@ -118,7 +154,7 @@ exception, with its own steps.
   Portainer) and `EmbeddingProfile__*` with the `ume-rag-migrations-config` map (Kubernetes) are gone. An existing
   profile stays as it is. **Apply:** remove those variables from the stack or `deploy/.env`; Kubernetes: take the new
   base and drop the `ume-rag-migrations-config` entry from your overlay. A new deployment: a platform admin creates the
-  profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 8).
+  profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 9).
 - **The Open WebUI feedback key is minted by the stack (M-17 C6).** A one-shot job (Portainer: `rag-openwebui-setup`;
   Compose: `open-webui-setup` in `compose.openwebui.yaml`) mints the feedback service account's key after Open WebUI
   starts, with password sign-in off, into `openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api now reads

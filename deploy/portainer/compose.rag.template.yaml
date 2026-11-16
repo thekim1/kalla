@@ -22,15 +22,20 @@
 # of rag-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
 # them (built from a gateway release). Steps: docs/portainer.md.
 #
-# Required variables (besides the gateway's above)
-#   UME_DOMAIN                the base domain (for example example.se): the host names default to rag.<domain>
-#                             (rag-api), rag-admin.<domain> (rag-admin) and chat.<domain> (Open WebUI). Each
-#                             UME_RAG_*_HOST (Optional, below) overrides its name; without UME_DOMAIN, UME_RAG_API_HOST
-#                             is required instead
-#   UME_INTEGRATION_MANIFEST  (the gateway's) the integration Ume.Rag with its three credential keys, as in
-#                             stack.env.example: the gateway's migrations create what is missing (never change what
-#                             exists) and write each new key to the volume <stack>_integration-secrets, from which
-#                             rag-bootstrap gives each service its key (M-17 C7). Without it, or for a key issued by hand:
+# Required variable: one, the gateway's too
+#   UME_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
+#                             llm-admin.<domain> (the gateway's), rag.<domain> (rag-api), rag-admin.<domain>
+#                             (rag-admin) and chat.<domain> (Open WebUI). Each UME_RAG_*_HOST (Optional, below)
+#                             overrides its name; without UME_DOMAIN, UME_GATEWAY_HOST and UME_RAG_API_HOST are
+#                             required instead
+# Set by the stack file or stack.env.example, nothing to type
+#   UME_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
+#                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
+#                             its own (ume-rag) that a gateway admin can move. The gateway's migrations create what is
+#                             missing (never change what exists) and write each new key to the volume
+#                             <stack>_integration-secrets, from which rag-bootstrap gives each service its key (M-17
+#                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
+#                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
 #   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
 #                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
@@ -42,9 +47,11 @@
 # Recommended
 #   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
 #                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
-# Sign-in is set in rag-admin's setup wizard: after the first start, open https://<UME_RAG_ADMIN_HOST>/setup with the
-# setup code from rag-admin's log. It shows the redirect URIs to register and takes the client secrets. rag-admin's
-# provider is the gateway's UME_OIDC_AUTHORITY (locked in the wizard; UME_RAG_OIDC_AUTHORITY to use another).
+# Sign-in is set in two setup wizards, the gateway's first: https://<UME_ADMIN_HOST>/setup with the setup code from
+# adminapi's log (the gateway's part above), then https://<UME_RAG_ADMIN_HOST>/setup with the setup code from
+# rag-admin's log. Each shows the redirect URIs to register, takes its client secret and tests a sign-in. rag-admin's
+# wizard suggests the provider saved in the gateway's. A stack that sets UME_OIDC_AUTHORITY declares the provider for
+# both instead (locked in both wizards; UME_RAG_OIDC_AUTHORITY gives rag-admin another).
 # Optional
 #   UME_RAG_OIDC_CLIENT_SECRET  declares RAG admin's own OIDC client's secret instead of the wizard (client
 #                             UME_RAG_OIDC_CLIENT_ID, default ume-rag-admin): with the authority, the wizard never opens.
@@ -131,9 +138,9 @@ x-rag-secrets: &rag-secrets-mount
       # versions evaluate it even when the outer variable is set).
       UME_RAG_API_HOST: ${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}
       UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-${UME_DOMAIN:+rag-admin.}${UME_DOMAIN:-}}
-      # The TLS proxy's host names (profile proxy).
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-}
-      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
+      # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
+      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
@@ -359,6 +366,11 @@ x-rag-secrets: &rag-secrets-mount
       OTEL_SERVICE_NAME: rag-admin
       # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
       Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
+      # The gateway admin console's address for rag-admin's links to it (the setup wizard's link to the gateway's wizard
+      # among them), used while the gateway's context names none (UME_ADMIN_PUBLIC_URL sets it there): its host name on
+      # port 443, as behind the TLS proxy. On another port, set UME_ADMIN_PUBLIC_URL. Empty (no links) when the admin has
+      # no name of its own: without UME_DOMAIN and UME_ADMIN_HOST it shares the gateway's name on another port.
+      Admin__GatewayAdminUrl: ${UME_ADMIN_PUBLIC_URL:-${UME_ADMIN_HOST:+https://}${UME_ADMIN_HOST:-${UME_DOMAIN:+https://llm-admin.}${UME_DOMAIN:-}}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:

@@ -514,9 +514,10 @@ journalctl -u rag-restart-unhealthy.service --since today
 
 `deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
 through environment variables, for hosts where `init-deployment.sh` cannot run. It is the gateway's
-`deploy/compose.portainer.yaml`, unchanged, plus RAG's services (all named `rag-…`): rag-postgres, rag-migrate,
-rag-api (8543), rag-admin (9543), rag-worker, rag-parser and, with their profiles, rag-clamav (`clamav`) and
-rag-renderer (`render`) and rag-openwebui (`openwebui`, #657). Step by step for a new VM or an upgrade: [portainer.md](portainer.md).
+`deploy/compose.portainer.yaml`, unchanged but for the default of its `UME_INTEGRATION_MANIFEST` (below), plus RAG's
+services (all named `rag-…`): rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker, rag-parser and,
+with their profiles, rag-clamav (`clamav`) and rag-renderer (`render`) and rag-openwebui (`openwebui`, #657). Step by
+step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
 gateway's volumes `<stack>_ume-certs`, `<stack>_ume-secrets` and its database are found by it), add the variables
@@ -525,16 +526,20 @@ that can read packages.
 
 | Variable | |
 |---|---|
-| `UME_DOMAIN`, `UME_RAG_API_PUBLIC_URL` | required (or `UME_RAG_API_HOST` instead of the domain): the host names default to `rag.<domain>` (rag-api), `rag-admin.<domain>` and `chat.<domain>` (Open WebUI); `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and `UME_RAG_OPENWEBUI_HOST` override one each. rag-api's public URL is `https://<host>` unless `UME_RAG_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
-| `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says; without one that service's model calls are refused, so deploy once, issue the keys, add them and update the stack |
+| `UME_DOMAIN`, `UME_RAG_API_PUBLIC_URL` | `UME_DOMAIN` is required, and the one value a new stack types (without it, `UME_GATEWAY_HOST` and `UME_RAG_API_HOST`): the host names default to `llm.<domain>` and `llm-admin.<domain>` (the gateway's), `rag.<domain>` (rag-api), `rag-admin.<domain>` and `chat.<domain>` (Open WebUI); `UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and `UME_RAG_OPENWEBUI_HOST` override one each. rag-api's public URL is `https://<host>` unless `UME_RAG_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
+| `UME_INTEGRATION_MANIFEST` | the gateway's; unset, the stack file's default, `deploy/portainer/integration-manifest.json`: the gateway creates the integration *Ume.Rag* and its three credential keys (in a team and department `ume-rag` that a gateway admin can move) and `rag-bootstrap` gives each service its key. Set, your own manifest wins; set and empty, nothing is created |
+| `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | optional: each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says (an empty manifest, or a gateway elsewhere); set, it wins over the manifest's. Without a key that service's model calls are refused |
 | `COMPOSE_PROFILES` | `clamav`: `rag-clamav`, the malware scan; `clamav,render` adds the renderer; `openwebui` the chat. `rag-bootstrap` sets the worker's malware scan from it: on with `clamav`, else off, which stores files without a scan, marked so ([production-setup.md](production-setup.md), *Malware scan*) |
 | `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: this is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
 
-Sign-in is no variable: after the first start a platform admin sets it in rag-admin's setup wizard
-(`https://<admin host>/setup`, with the setup code from rag-admin's log; *Sign-in and the setup wizard* below). RAG
-admin's client `ume-rag-admin` uses the gateway's `UME_OIDC_AUTHORITY`. A stack may declare sign-in instead with
-`UME_RAG_OIDC_CLIENT_SECRET` (and the other `UME_RAG_OIDC_*`): then the wizard never opens ([portainer.md](portainer.md),
-*Declaring sign-in instead*).
+Sign-in is no variable: after the first start a gateway admin sets the gateway's in its own setup wizard
+(`https://<gateway admin host>/setup`, with the setup code from `adminapi`'s log), then a platform admin sets
+rag-admin's in rag-admin's wizard (`https://<admin host>/setup`, with the setup code from rag-admin's log; *Sign-in and
+the setup wizard* below), which suggests the provider saved in the gateway's. A stack may declare sign-in instead: the
+gateway's `UME_OIDC_AUTHORITY` is the provider of both (rag-admin's client `ume-rag-admin` uses it unless
+`UME_RAG_OIDC_AUTHORITY` names another) and keeps the gateway's wizard closed, and with `UME_RAG_OIDC_CLIENT_SECRET`
+(and the other `UME_RAG_OIDC_*`) rag-admin's wizard never opens ([portainer.md](portainer.md), *Declaring sign-in
+instead*).
 
 The optional ones (ports, a separate admin host, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image overrides
 `RAG_*_IMAGE`) are listed at the top of the file. The embedding profile is no variable: a platform admin creates it in
@@ -542,7 +547,7 @@ the admin UI from the gateway's embedding model (*Models → Embedding profiles 
 key must allow that model). rag-api, rag-admin and rag-worker join the gateway's `llm`
 network and reach it at `https://gateway:8443`, trusting the gateway's internal CA; rag-admin's organisation and model
 syncs call it there with `UME_RAG_ADMIN_GATEWAY_KEY` (scope `organisation.read`). The gateway's part of the file is
-the gateway's own, unchanged.
+the gateway's own, unchanged but for that one default.
 
 **Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
@@ -743,7 +748,7 @@ badge (the gateway still refuses the calls).
 
 rag-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
 first setup: [production-setup.md](production-setup.md), *3. Sign-in*, or [portainer.md](portainer.md), *First deploy*
-step 4). After setup they change only in the wizard after a re-open, never from an admin session. A value the
+step 5). After setup they change only in the wizard after a re-open, never from an admin session. A value the
 deployment sets (`deploy/.env`, the secret files, the Portainer variables, the Kubernetes literals) wins and is locked
 there.
 

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "integration": {
+    "name": "Ume.Rag",
+    "description": "Ume.Rag retrieval platform"
+  },
+  "credentialKeys": [
+    { "name": "rag-api", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
+    { "name": "rag-admin", "integrationScopes": ["organisation.read", "usage.read"], "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
+    { "name": "rag-worker", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] }
+  ]
+}
