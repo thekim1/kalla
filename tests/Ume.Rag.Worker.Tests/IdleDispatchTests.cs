@@ -113,6 +113,83 @@ public sealed class IdleDispatchTests(RagDatabaseFixture database) : IAsyncLifet
         await WaitForStateAsync(database, job, JobStates.Succeeded);
     }
 
+    [Fact]
+    public async Task A_busy_lane_reads_the_ready_departments_once_per_lifetime_not_once_per_job()
+    {
+        // #764: the ready list is a pass over the class's whole queue; before, every claim made one.
+        const int Jobs = 300;
+        var handler = new BlockingCommand(released: true);
+        Guid[] departments = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        JobRequest[] jobs = [.. Enumerable.Range(0, Jobs).Select(i => Command(BlockingCommand.KindName, departments[i % 3]))];
+        await using var worker = await StartAsync(handler, LongIdleWaitSeconds);
+        var probes = Probes(worker);
+        var before = probes.Of(JobClasses.Command);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        (await database.Queue(Ume.Rag.TestKit.RagDatabase.Admin).EnqueueAsync(jobs, null, Ct)).Count.ShouldBe(Jobs);
+        await WaitUntilAsync(async () => await Sql.ScalarAsync<long>(database.Connection(null),
+            """SELECT count(*) FROM content."Jobs" WHERE "Class" = 'command' AND "State" = 'succeeded'""") == Jobs, TimeSpan.FromSeconds(120));
+        var seconds = clock.Elapsed.TotalSeconds;
+
+        var used = probes.Of(JobClasses.Command) - before;
+        Log($"{Jobs} jobs of 3 departments in {seconds:F1} s: {used} ready-department probes");
+        // One per lifetime while busy, one for the wake-up and one to find the lane idle; far from one per job.
+        used.ShouldBeLessThanOrEqualTo((int)Math.Ceiling(seconds / JobDispatcher.ReadyListLifetime.TotalSeconds) + 4);
+        handler.StartedCount.ShouldBe(Jobs);
+    }
+
+    [Fact]
+    public async Task A_department_that_becomes_ready_while_the_lane_is_busy_is_served_before_the_busy_queue_drains()
+    {
+        // The lane (two slots) works through a long queue of one department from its kept list. Another department's job
+        // enqueued meanwhile is not in that list; once the list is read again it runs fewer jobs here than the busy one,
+        // so the next free slot is its (engine design §9.3), and it must not wait for the queue to drain.
+        const int Jobs = 200;
+        var handler = new SlowCommand(TimeSpan.FromMilliseconds(40)); // 4 s of work on two slots
+        var busy = Guid.NewGuid();
+        await using var worker = await WorkerHost.StartAsync(database, s => s.AddSingleton<ICommandHandler>(handler),
+            new Dictionary<string, string?> { ["Worker:Concurrency:command"] = "2" });
+        await database.Queue(Ume.Rag.TestKit.RagDatabase.Admin).EnqueueAsync([.. Enumerable.Range(0, Jobs).Select(_ => Command(SlowCommand.KindName, busy))], null, Ct);
+        await WaitUntilAsync(() => Task.FromResult(handler.Started >= 5));
+
+        var enqueuedAt = handler.Now;
+        var late = await EnqueueAsync(database, Command(SlowCommand.KindName, Guid.NewGuid()));
+        var waited = await handler.StartedAsync(late, TimeSpan.FromSeconds(60)) - enqueuedAt;
+
+        // The time is logged only: a wall-clock bound fails on a busy runner. Being served before the busy queue drained is the point.
+        Log($"the other department's job started {waited.TotalMilliseconds:F0} ms after its enqueue, as job {handler.Started} of {Jobs + 1}");
+        handler.Started.ShouldBeLessThan(Jobs, "before the busy department's queue drained");
+    }
+
+    /// <summary><c>test-slow</c>: each job takes a fixed time; records when each started.</summary>
+    private sealed class SlowCommand(TimeSpan work) : ICommandHandler
+    {
+        public const string KindName = "test-slow";
+
+        private readonly ConcurrentDictionary<Guid, TaskCompletionSource<TimeSpan>> _started = new();
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private int _count;
+
+        public string Kind => KindName;
+
+        public int Started => Volatile.Read(ref _count);
+
+        public TimeSpan Now => _clock.Elapsed;
+
+        public Task<TimeSpan> StartedAsync(Guid jobId, TimeSpan timeout) => Of(jobId).Task.WaitAsync(timeout, Ct);
+
+        public async Task<JobResult> ExecuteAsync(JobContext context, System.Text.Json.JsonElement payload, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _count);
+            Of(context.Job.Id).TrySetResult(_clock.Elapsed);
+            await Task.Delay(work, cancellationToken);
+            return new JobResult.Success();
+        }
+
+        private TaskCompletionSource<TimeSpan> Of(Guid jobId) =>
+            _started.GetOrAdd(jobId, _ => new TaskCompletionSource<TimeSpan>(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+
     [Theory]
     [InlineData(null, 30_000d, 30_000d)]
     [InlineData(2_000.4, 30_000d, 2_001d)]
