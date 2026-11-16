@@ -32,7 +32,7 @@ sink" monolith. Design and code live in this repo.
 The setup wizard (M-20) has two stages. **Stage 1** (Ume.Rag and Open WebUI; a deployer types 5 values and no secret)
 is on `main`, shown by a release dry run, unreleased. **Stage 2** (one typed value, `UME_DOMAIN`) is **built on a
 branch, draft pull request #786** (`main-session/m20-s8-stage2`), and waits for the gateway's release with its three
-pull requests (below).
+pull requests, **all merged 2026-11-16; the release is the user's to cut** (below).
 
 ### 1. What #786 holds, and what is left (M-20 S8)
 
@@ -61,10 +61,9 @@ pull requests (below).
     also when the variable is set. Portainer pins a later one from 2.21 (read, not run). Not yet seen on the runner.
   - A stack without `UME_INTEGRATION_MANIFEST` (0.5.x style) gets the default: three unused keys unless the variable is
     set empty first (in the upgrade steps).
-  - The gateway's merged tree used for the stack was a scratch worktree of `~/git/llmgateway` (gone after a reboot:
-    `git -C ~/git/llmgateway worktree prune`). To rebuild before the release: merge `origin/main` into
-    `origin/feat/100-setup-mode` in a throwaway worktree (only `CHANGELOG.md` and `docs/upgrade-guide.md` conflict) and
-    pass its `deploy/compose.portainer.yaml` to `build-stack.sh`.
+  - The stack on #786 is byte for byte what the gateway's `main` (`70122b4`, all three merged) gives, and the contract
+    file equals `main`'s. Until the release, rebuild with `git -C ~/git/llmgateway show
+    origin/main:deploy/compose.portainer.yaml > <file>` and `build-stack.sh <file>`.
 
 ### 2. The gateway's pull requests (the main session may not merge in the gateway's repository)
 
@@ -72,12 +71,7 @@ Built in sessions 42 and 43 on the user's word ("build it", 2026-11-16), reviewe
 
 - **#102** (WG1 `UME_DOMAIN` for the gateway's hosts, WG2 `gateway.oidc_authority` in `/v1/ume/context`): **merged**
   2026-11-16.
-- **#103** (WG3, setup mode in the gateway's admin): **marked ready, review required, and conflicting with `main`
-  since #104 merged** (2026-11-16; only `CHANGELOG.md` and `docs/upgrade-guide.md` conflict: keep every *Unreleased*
-  entry). The user said to assume it merges shortly. Retargeted to `main` in session 43 (`c21863d`). The review's four findings are answered in `bc752b8` and a comment:
-  the sign-in start, callback and sign-out read the sign-in values at most once every 2 seconds per instance; a setup
-  test's callback answers 404 without a read while setup is closed and is limited to 20 a minute per address while
-  open; completing compares the claim mapping the test ran with; one doc contradiction fixed. **Open with the
+- **#103** (WG3, setup mode in the gateway's admin): **merged** 2026-11-16 (`70122b4`). **Open with the
   reviewer:** on Kubernetes a deployment that declares `Oidc__Authority` must set `Gateway__OidcAuthority` too
   (documented), or the stored authority is cleared in code instead (not done; asked). Backend tests pass (AdminApi 440,
   Domain 599, DataApi 29, IntegrationTests 64, Gateway 491); the browser test and the UI gate were not re-run after
