@@ -10,6 +10,14 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   a time-out left nothing in the log while the search went keyword-only. The test hosts of rag-api get generous
   embedding limits, as the service hosts have since #584: a first call on a busy runner passed the 2 s default and
   turned an expected answer into "search unavailable" (it failed the first attempt of the 0.7.0 release run).
+- **The admin refuses a schedule the scheduler would not run** (to-verify 16): a source's schedule and
+  `Settings.DefaultSchedules` are parsed with the scheduler's own parser (Cronos, 5 fields). Before, an expression with
+  five tokens that does not parse (`60 2 * * *`) was saved and the source then never ran, without a word.
+- **A chat request over 2 MB answers 413 `request_too_large` in the OpenAI error shape** (to-verify 32; chat design
+  §3.6), not the host's own error format.
+- **Tests:** the request body limits per route on real Kestrel, the cron behaviour over the daylight-saving changes,
+  LibreOffice's shipped link and macro defaults and that no linked local file reaches a conversion's output, and a
+  browser spec for Open WebUI against rag-api (`tests/e2e`, project `openwebui`, run by hand).
 
 ## 0.7.0 (2026-11-16)
 

@@ -57,7 +57,7 @@ over the local Unix socket, so it needs no network entry (repo-and-deployment §
 | `ume_rag_api` | `rag-api` (knowledge, chat, MCP; P2 in-process tool hub) | 26 | 12 (+1 LISTEN) | 5s | 1s | 10s |
 | `ume_rag_admin` | `rag-admin` | 12 | 5 (+1 LISTEN) | 30s | 5s | 60s |
 | `ume_rag_worker` | `rag-worker` | 12 | 10 (+1 LISTEN) | 60s | 5s | 60s |
-| `ume_rag_monitor` (P2) | OTel Collector `postgresql` receiver (`pg_monitor`) | 2 | – | 5s | 1s | 10s |
+| `ume_rag_monitor` (P2) | OTel Collector `postgresql` receiver (`pg_monitor`), and a `sqlquery` receiver for connections per role | 4 | – | 5s | 1s | 10s |
 
 `max_connections = 100` (`deploy/postgres/postgresql.conf`). Pool sizes are **starting values measured in P0**
 (reasoning: simplification pass §9). The api pool of
@@ -69,8 +69,15 @@ More retrieval statements at once come from more instances, not a larger pool. A
 api and admin (the P2 a/b slots) and for the worker's stop-then-start; the sum (3 + 26 + 12 + 12 + 3 reserved = 56)
 stays well under `max_connections`. **Budget rule** (P2, first multi-host deployment; reasoning and per-topology
 counts: performance pass §3.1): for each role, Σ over instances (`Maximum Pool Size` + 1 LISTEN) ≤ its
-`CONNECTION LIMIT`; Σ limits + 3 (`superuser_reserved_connections`) + 2 (`ume_rag_monitor`) ≤ `max_connections`;
-checked at deploy time by `deploy/postgres/connection-budget.sh`; the pilot's values are fixed in `.env`. **No
+`CONNECTION LIMIT`; Σ limits + 3 (`superuser_reserved_connections`) + 4 (`ume_rag_monitor`) ≤ `max_connections`;
+checked at deploy time by `deploy/postgres/connection-budget.sh`; the pilot's values are fixed in `.env`. **The
+monitor role as measured** (to-verify 123, Collector contrib 0.120.0): the `postgresql` receiver runs three queries at
+once (a limit of 2 gave "too many connections" on every scrape; with the per-role query beside it the role needs 4) and
+always connects to the database `postgres` first, so its `pg_hba.conf` line names `postgres,ragdb`. Its
+`postgresql.backends` counts per database, not per role: connections per role come from a `sqlquery` receiver on
+`pg_roles` joined to `pg_stat_activity`, which needs only login and `CONNECT`. Dead tuples (`postgresql.rows`,
+`state=dead`) and `postgresql.index.size` are on by default; the table attribute carries the schema in the first and
+not in the second. **No
 pooler up to 5 hosts**: a backend costs about 10 MB (no dictionaries load into Postgres, §3.1), and the Postgres
 memory limit comes from the P0 measurement; PgBouncer (≥ 1.21, transaction mode) comes only when the budget no longer
 fits `max_connections`, e.g. a further api host at 5-host scale (performance pass §6 trigger). There is no

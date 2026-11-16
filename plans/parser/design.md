@@ -93,7 +93,13 @@ peaks at 2.9 GB). No output, a breach of either limit included, gives `conversio
 writes passes the same zip pre-check as an upload (`limit_exceeded` with the `zip_*` name), then goes through the
 declarative backend, and the result keeps the sniffed format. `/v1/inspect` does not open these files. With
 its defaults, LibreOffice 25.2 reads no linked local file (linked Writer sections, RTF `INCLUDETEXT`, Calc external
-references; tested on #526). **Before go-live:** keep LibreOffice in the parser or move it to a separate converter
+references; tested on #526). The image sets no registry key of its own: the defaults are what protects, and
+`tests/test_legacy.py` pins them in the built image (macro security 2, High, with no trusted location; link update on
+request for Writer and Calc; no update checker in Debian's build) and that a planted file and `/etc/passwd` reach no
+output through RTF, DOC or XLS links, with a control where updates are switched on (to-verify 69, 70). **If these keys
+are ever set, go by the code and not the schema text:** for Writer's `Office.Writer/Content/Update/Link` the schema
+labels 0 "Always" and 2 "Never", while LibreOffice treats 0 as never and 2 as always (`sw/inc/linkenum.hxx`; seen in
+the image: 2 updated a linked section); for Calc never is 1. **Before go-live:** keep LibreOffice in the parser or move it to a separate converter
 container, decided together with the parser's sandbox question.
 
 ## 5. Email
