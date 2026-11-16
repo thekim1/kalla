@@ -24,7 +24,7 @@ public sealed record ChunkSetRow(Guid Id, ChunkSetKey Key, string State, byte[] 
 /// <c>superseded</c> with its chunks deleted. A set with the wanted key that
 /// is <c>superseded</c> (rollback within 14 days) is swapped back without a write; a noise-only change re-keys the live set
 /// in one row. Sets never swapped (a crash between the batches and the swap) stay invisible until the orphan sweep removes
-/// them. Vectors are written as pgvector text through <c>unnest</c> (the <c>vector</c> column is not in the EF model);
+/// them. Vectors are written as a binary <c>vector[]</c> through <c>unnest</c> (the <c>vector</c> column is not in the EF model; #764);
 /// each profile's partial HNSW index is created before its first chunk (<c>content.rag_ensure_profile_index</c>).
 /// </summary>
 public sealed class IndexWriter(JobDatabase database)
@@ -48,10 +48,10 @@ public sealed class IndexWriter(JobDatabase database)
                                      "PageEnd", "Text", "SearchText", "OverlapChars", "TextHash", "TokenCount", "Tags", "DocumentType",
                                      "SourceModifiedAt", "EmbeddingProfileId", "Embedding", "DeletedAt", "ContentKind", "LargeTable")
         SELECT u.id, u.cs, u.doc, u.coll, u.lvl, u.kind, u.ord, u.heading, u.page, u.page_end, u.body, u.search, u.overlap, u.hash, u.tokens,
-               ARRAY(SELECT jsonb_array_elements_text(u.tags)), u.dtype, u.modified, u.profile, u.emb::vector, u.deleted, u.content_kind, u.large_table
+               ARRAY(SELECT jsonb_array_elements_text(u.tags)), u.dtype, u.modified, u.profile, u.emb, u.deleted, u.content_kind, u.large_table
         FROM unnest($1::uuid[], $2::uuid[], $3::uuid[], $4::uuid[], $5::varchar[], $6::varchar[], $7::int[], $8::text[], $9::int[], $10::int[],
                     $11::text[], $12::text[], $13::smallint[], $14::bytea[], $15::int[], $16::jsonb[], $17::varchar[], $18::timestamptz[],
-                    $19::uuid[], $20::text[], $21::timestamptz[], $22::varchar[], $23::bool[])
+                    $19::uuid[], $20::vector[], $21::timestamptz[], $22::varchar[], $23::bool[])
              AS u(id, cs, doc, coll, lvl, kind, ord, heading, page, page_end, body, search, overlap, hash, tokens, tags, dtype, modified, profile, emb, deleted,
                   content_kind, large_table)
         """;
@@ -477,7 +477,7 @@ public sealed class IndexWriter(JobDatabase database)
                 Db.P(chunks.Select(c => c.Draft.DocumentType).ToArray()),
                 Db.P(chunks.Select(c => c.Draft.SourceModifiedAt is { } date ? new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : (DateTimeOffset?)null).ToArray()),
                 Db.P(chunks.Select(c => c.EmbeddingProfileId).ToArray()),
-                Db.P(chunks.Select(c => VectorText.Format(c.Embedding)).ToArray()),
+                Db.P(chunks.Select(c => Vectors.Of(c.Embedding)).ToArray()),
                 Db.P(chunks.Select(c => Db.Utc(c.DeletedAt)).ToArray()),
                 Db.P(chunks.Select(c => c.Draft.ContentKind).ToArray()),
                 Db.P(chunks.Select(c => c.Draft.LargeTable).ToArray()),

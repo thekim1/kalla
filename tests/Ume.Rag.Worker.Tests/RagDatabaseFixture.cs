@@ -45,7 +45,13 @@ public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
     public PostgresJobQueue Queue(string role) => new(Database(role), new JobWakeUps(TimeProvider.System));
 
     /// <summary>The queue's connections as <paramref name="role"/>, from one data source per role, as a process has.</summary>
-    public JobDatabase Database(string role) => new(_dataSources.GetOrAdd(role, r => NpgsqlDataSource.Create(Connection(r))));
+    public JobDatabase Database(string role) => new(_dataSources.GetOrAdd(role, r =>
+    {
+        // pgvector's types mapped, as AddRagDatabase does for a process: the worker writes vector[] parameters (#764).
+        var builder = new NpgsqlDataSourceBuilder(Connection(r));
+        builder.UseVector();
+        return builder.Build();
+    }));
 
     async ValueTask IAsyncDisposable.DisposeAsync()
     {
