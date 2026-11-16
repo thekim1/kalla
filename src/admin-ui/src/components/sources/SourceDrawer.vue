@@ -5,6 +5,7 @@ import type { CheckState, Collection, Level, PreflightResult, Source, SourceType
 import FetchModeFields from '@/components/sources/FetchModeFields.vue'
 import PreviewResult from '@/components/sources/PreviewResult.vue'
 import { type FetchMode, READY_SELECTOR_MAX, withFetchSettings } from '@/components/sources/fetchMode'
+import { sitemapsValid } from '@/components/sources/sitemaps'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -38,6 +39,8 @@ const name = ref('')
 const level = ref<Level>('public')
 const urls = ref('')
 const include = ref('')
+// #801: sitemaps besides robots.txt and /sitemap.xml (crawl setting `sitemaps`), e.g. one the check does not find.
+const sitemaps = ref('')
 const exclude = ref(DEFAULT_EXCLUDE.join('\n'))
 // A modest first crawl (#285 review): the form starts at 500 pages; the schema's default (10,000) stays for the API.
 const FIRST_CRAWL_PAGES = '500'
@@ -56,7 +59,7 @@ const previewStarting = ref(false)
 /** The worker previews at most 5 documents (preview.limit_documents). */
 const PREVIEW_URLS = 5
 const form = useFormErrors({
-  name: 'source-name', urls: 'source-urls', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector',
+  name: 'source-name', urls: 'source-urls', sitemaps: 'source-sitemaps', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector',
 })
 
 const levelOptions = computed(() =>
@@ -85,6 +88,7 @@ watch(
     level.value = props.collection.classification
     urls.value = ''
     include.value = ''
+    sitemaps.value = ''
     exclude.value = DEFAULT_EXCLUDE.join('\n')
     maxPages.value = FIRST_CRAWL_PAGES
     maxDepth.value = '10'
@@ -99,7 +103,7 @@ watch(
   },
 )
 // A changed address or scope makes the last check stale; a changed address or type the last preview.
-watch([type, urls, include, exclude, maxPages, maxDepth], () => {
+watch([type, urls, sitemaps, include, exclude, maxPages, maxDepth], () => {
   preflight.stop()
   preflight.job.value = null
 })
@@ -117,7 +121,7 @@ function settings(): Record<string, unknown> {
   const fetch = { fetchMode: fetchMode.value, readySelector: readySelector.value, scrollToLoad: scrollToLoad.value }
   if (type.value === 'url-list') return withFetchSettings({ urls: lines(urls.value), ...piiPart }, fetch)
   return withFetchSettings({
-    startUrls: lines(urls.value), include: lines(include.value), exclude: lines(exclude.value),
+    startUrls: lines(urls.value), sitemaps: lines(sitemaps.value), include: lines(include.value), exclude: lines(exclude.value),
     maxPages: Number(maxPages.value), maxDepth: Number(maxDepth.value), ...piiPart,
   }, fetch)
 }
@@ -136,6 +140,7 @@ function valid(forSave: boolean): boolean {
   return form.validate({
     name: forSave && !name.value.trim() && SOURCE.nameRequired,
     urls: (addresses.length === 0 || addresses.some((u) => !/^https?:\/\//.test(u))) && SOURCE.urlsRequired,
+    sitemaps: type.value === 'crawl' && !sitemapsValid(lines(sitemaps.value)) && SOURCE.sitemapsInvalid,
     maxPages: type.value === 'crawl' && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: type.value === 'crawl' && !integer(maxDepth.value) && SOURCE.numberInvalid,
     readySelector: fetchMode.value === 'browser' && readySelector.value.trim().length > READY_SELECTOR_MAX && SOURCE.readySelectorInvalid,
@@ -220,6 +225,10 @@ async function save(): Promise<void> {
         <TextAreaField
           id="source-urls" v-model="urls" :label="type === 'crawl' ? SOURCE.startUrls : SOURCE.urls"
           :hint="type === 'crawl' ? SOURCE.startUrlsHint : SOURCE.urlsHint" :error="form.errors.urls" mono
+        />
+        <TextAreaField
+          v-if="type === 'crawl'" id="source-sitemaps" v-model="sitemaps" :label="SOURCE.sitemaps" :hint="SOURCE.sitemapsHint"
+          :error="form.errors.sitemaps" mono
         />
         <FetchModeFields
           v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="source"

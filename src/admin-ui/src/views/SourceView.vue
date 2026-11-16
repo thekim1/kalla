@@ -97,6 +97,7 @@ const addresses = computed(() => {
   const list = (settings.startUrls ?? settings.urls ?? []) as string[]
   return list
 })
+const sitemaps = computed(() => ((source.data.value?.settings.sitemaps ?? []) as string[]))
 const demoted = computed(() =>
   ((source.data.value?.settings.demote ?? []) as { pattern: string; factor?: number }[]).map((d) => `${d.pattern} ×${String(d.factor ?? 0.5).replace('.', ',')}`),
 )
@@ -164,6 +165,9 @@ onMounted(load)
         <dl class="m-0">
           <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
             <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
+          </DetailRow>
+          <DetailRow v-if="sitemaps.length" :label="SOURCE_PAGE.sitemaps">
+            <span class="font-mono text-small" data-test="sitemaps">{{ sitemaps.join(', ') }}</span>
           </DetailRow>
           <DetailRow :label="SOURCE.fetchMode">
             <span data-test="fetch-mode">{{ SOURCE.fetchModes[source.data.value.settings.fetchMode === 'browser' ? 'browser' : 'http'] }}</span>

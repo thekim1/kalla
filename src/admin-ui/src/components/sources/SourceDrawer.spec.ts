@@ -39,13 +39,20 @@ describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
     const wrapper = await open()
 
     input('#source-urls', 'https://www.umea.se/bygga')
+    // #801: a sitemap the check would not find; a line that is not an address is refused first.
+    input('#source-sitemaps', 'www.umea.se/sitemap.xml')
+    click('check')
+    await flushPromises()
+    expect(preflight).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Each sitemap address must start with http:// or https://.')
+    input('#source-sitemaps', 'https://www.umea.se/sitemap1.xml.gz')
     click('check')
     await flushPromises()
 
     expect(preflight).toHaveBeenCalledWith({
       collectionId: 'c1', type: 'crawl',
       settings: {
-        startUrls: ['https://www.umea.se/bygga'], include: [], exclude: ['**/sok?*', '**/search?*', '**?*sort=*', '**?*print=*', '**/login*', '**/logout*'],
+        startUrls: ['https://www.umea.se/bygga'], sitemaps: ['https://www.umea.se/sitemap1.xml.gz'], include: [], exclude: ['**/sok?*', '**/search?*', '**?*sort=*', '**?*print=*', '**/login*', '**/logout*'],
         maxPages: 500, maxDepth: 10, piiMode: 'hold',
       },
     })
