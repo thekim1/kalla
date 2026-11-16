@@ -9,7 +9,7 @@ You need:
 - the Aspire CLI 13.6 on `PATH` as `aspire`: `dotnet tool install --global Aspire.Cli --version 13.6.5`. The AppHost
   sets `AspireUseCliBundle`, so a restore also puts a copy in the NuGet cache
   (`~/.nuget/packages/aspire.cli.<rid>/13.6.1/tools/net10.0/<rid>/aspire`), which you can call by that path;
-- [uv](https://docs.astral.sh/uv/) for the parser, and Node 24.15+ once the admin UI (`src/admin-ui`) exists.
+- [uv](https://docs.astral.sh/uv/) for the parser, and Node 22 or later for the admin UI in `src/admin-ui` (CI uses 24).
 
 Enable the pre-commit hook once per clone. It runs the admin UI lint and the parser's ruff check on staged changes:
 
@@ -41,16 +41,18 @@ aspire stop --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interacti
 
 Stop **this** AppHost before you build the backend or edit the AppHost (as in the gateway).
 
-**Demo data.** The migration service seeds only an empty database, and never in Production. The seeder does not exist
-yet: it arrives with the first seeded table. Until then `-Empty` and the default start the same stack. To switch an
+**Demo data.** The migration service seeds only an empty database, and never in Production. `-Empty`
+(`Seed__Enabled=false`) starts without it. To switch an
 existing environment between demo and empty, stop the stack, delete the AppHost's Postgres volume
 (`docker volume ls`, then `docker volume rm <name>`, or the volume named in `DevelopmentVolumes:Postgres`), and start
 again.
 
 **Generated secrets.** The AppHost generates its passwords and keys on the first run and keeps them in its user
 secrets (`UserSecretsId` `ume-rag-apphost-dev`) as `Parameters:<name>`: `postgres-password`, `key-pepper`, `dev-key`,
-`oidc-client-secret`, `dev-user-password`, `api-client-secret` and the services' dev credential keys for the fake
-gateway, `gateway-key-api`, `gateway-key-admin` and `gateway-key-worker`. Keep them stable. The Postgres volume
+`oidc-client-secret`, `dev-user-password`, `api-client-secret`, `openwebui-client-secret`, `cache-key-pepper`,
+`download-grant-key`, `render-ws-path`, `openwebui-jwt-secret`, `openwebui-secret-key`, the services' dev credential
+keys for the fake gateway (`gateway-key-api`, `gateway-key-admin`, `gateway-key-worker`) and, when their switch is on,
+`setup-secret` and `redis-password`. Keep them stable. The Postgres volume
 stores the password it was created with, and the key pepper hashes every key in the database, so changing either
 breaks the existing data. Do not print them into logs, transcripts or screenshots; the dashboard shows a parameter's
 value when you need it.
@@ -70,6 +72,7 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 | `Parser:Mode` | `container` | `container` builds `src/parser/Dockerfile`; `local` runs `uvicorn ume_parser.app:app` from `src/parser` with hot reload (see [the parser's README](../src/parser/README.md) for the models it then needs); `off` starts no parser |
 | `ClamAv:Mode` | `on` | `off` starts no ClamAV and gives the worker `ClamAv__Mode=off`: files are stored without a malware scan and marked as not scanned (Decisions "Malware scan optional"). With `on` and no clamd configured, a Development worker run outside the AppHost uses its EICAR-only scanner |
 | `Render:Mode` | `container` | `container` builds `images/renderer` (Chromium behind Playwright's `launch-server`, hardened as in Compose with `images/renderer/seccomp.json`) and gives the worker `Render__Endpoint` with a generated secret path (parameter `render-ws-path`); `off` starts no renderer, and `browser` sources wait with `render.not_configured`. Unlike production the renderer is on Aspire's network, not an internal one |
+| `OpenWebUi:Enabled` | `true` | `false` starts no Open WebUI |
 | `FakeGateway:Enabled` | `true` | `false` runs against a real gateway (below) |
 | `FakeGateway:Latency:*` | 0 (off) | a real gateway's timing on the fake (below) |
 | `Ollama:Enabled` | `false` | real BGE-M3 embeddings from Ollama behind the fake gateway (development only: the AppHost refuses it outside run mode) |
@@ -99,7 +102,7 @@ test are the bundled Keycloak's realm, `https://localhost:7411/realms/ume`, and 
 Remove both settings to go back.
 
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
-The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
+The admin UI is on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
 Container ports are fixed too: Open WebUI `http://localhost:7410`, Keycloak `https://localhost:7411`, Postgres `7412`,
 parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`), renderer `7417` (WebSocket, the path is secret).
 
@@ -230,7 +233,7 @@ The renderer test uses the subnets `10.214.0.0/24` and `10.214.1.0/24`; set `REN
 
 **Browser tests.** `Start-E2E.ps1` starts the stack on its own Postgres volume (`ume-rag-e2e-postgres`), reset on every
 start, with demo data and the fake gateway forced on. It uses the dev stack's ports, so stop the dev stack first. The
-Playwright tests (`tests/e2e`) arrive with the admin UI.
+Playwright tests are in `tests/e2e` ([its README](../tests/e2e/README.md)).
 
 ```powershell
 .\scripts\Start-E2E.ps1          # reset the test volume, start
