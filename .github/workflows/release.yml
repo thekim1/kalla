@@ -21,6 +21,8 @@ name: Release
 # A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
 # compose.portainer.yaml pinned to that version's images already on ghcr.io (a tag run pushes them before its boot
 # tests), so a fix to the stack file or the boot test is tested without building anything (handbook, "Release dry runs").
+# With portainer_upgrade_from (X.Y.Z) beside it, the run does deploy/tests/portainer-upgrade-boot.sh instead: that
+# release's stack is booted with its variables and this ref's stack file applied over it.
 on:
   push:
     tags: ['v*.*.*']
@@ -36,6 +38,10 @@ on:
         default: false
       portainer_boot:
         description: Only boot the Portainer stack against this version's images on ghcr.io (X.Y.Z); skips everything else
+        type: string
+        default: ''
+      portainer_upgrade_from:
+        description: With portainer_boot, boot this earlier release's stack first (X.Y.Z) and upgrade it, instead of a first boot
         type: string
         default: ''
 permissions:
@@ -60,6 +66,8 @@ env:
   # Microsoft.Sbom.DotNetTool 4.1.13 (NuGet, 2026-09-22), the gateway's.
   SBOM_TOOL: Microsoft.Sbom.DotNetTool@4.1.13
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
+  # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh).
+  UPGRADE_FROM: 0.5.0
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
   verify:
@@ -111,9 +119,22 @@ jobs:
           done < images.env
           grep -oE 'ume-rag/[a-z]+:[^@]+@sha256:[0-9a-f]{12}' dist/compose.portainer.yaml | sort -u
       - name: Boot the Portainer stack
+        if: inputs.portainer_upgrade_from == ''
         env:
           VERSION: ${{ inputs.portainer_boot }}
         run: bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "$VERSION"
+      - name: Upgrade an earlier release's Portainer stack
+        # No --expect-fenced: the images of a published version may predate the migrator's fence (data-model §10).
+        if: inputs.portainer_upgrade_from != ''
+        env:
+          VERSION: ${{ inputs.portainer_boot }}
+          FROM: ${{ inputs.portainer_upgrade_from }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$FROM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$FROM' is not X.Y.Z"; exit 1; }
+          gh release download "v$FROM" --pattern compose.portainer.yaml --dir "dist/from-$FROM"
+          bash deploy/tests/portainer-upgrade-boot.sh "dist/from-$FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
+            --from-env "deploy/tests/fixtures/stack-$FROM.env" --version "$VERSION"
 
   e2e:
     # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
@@ -369,6 +390,17 @@ jobs:
         # (deploy-configuration plan, step C0). After the smoke test, which has removed its own stack by now.
         run: |
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
+      - name: Upgrade the oldest supported release's Portainer stack
+        # docs/portainer.md, "Upgrade": v0.5.0's stack (its release asset, its variables) is booted, then this
+        # release's file is applied over it with nothing added, changed or stopped by hand. It skips 0.6.0 and 0.7.0
+        # and crosses RemoveWorkerConcurrency, for which rag-migrate must stop the old rag-admin itself.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "v$UPGRADE_FROM" --pattern compose.portainer.yaml --dir "dist-from/$UPGRADE_FROM"
+          bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
+            --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
+            --version "${{ steps.version.outputs.version }}" --expect-fenced ume_rag_admin
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.
         run: |
