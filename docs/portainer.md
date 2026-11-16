@@ -1,6 +1,6 @@
 # Deploying and upgrading with Portainer (0.6.x)
 
-How to run Ume.Rag with the LLM gateway `GATEWAY_NEXT` as one Portainer stack: a first deploy on a new VM, the upgrade
+How to run Ume.Rag with the LLM gateway `v0.11.0` as one Portainer stack: a first deploy on a new VM, the upgrade
 of a `0.5.x` stack to `0.6.0`, and the upgrade from Ume.Rag `0.2.0`–`0.4.0` (gateway `v0.9.x`). The stack is configured only through
 environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list: the
 header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -15,10 +15,10 @@ header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compos
 
 Use the **`compose.portainer.yaml` asset of the `v0.6.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.10.2` in the `v0.6.0` asset, `GATEWAY_NEXT` in the repository since) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
+(`v0.10.2` in the `v0.6.0` asset, `v0.11.0` in the repository since) and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0` asset predates both: it has
 no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be set by hand. The one typed
 value, the two setup wizards and the default integration manifest of *First deploy* need a file built from the
-gateway's `GATEWAY_NEXT` or later: the `v0.6.0` asset has none of them.
+gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 
 ## What you need
 
@@ -265,12 +265,12 @@ databases instead.
 ## Upgrade from 0.6.0
 
 To the release after 0.6.0, the one with the setup wizards. **A rolling update:** Ume.Rag's migrations only add columns
-and a table, and the gateway's (it moves to `GATEWAY_NEXT`: `SignInSettings` and `SetupMode`) only add tables, columns
+and a table, and the gateway's (it moves to `v0.11.0`: `SignInSettings` and `SetupMode`) only add tables, columns
 and grants, so nothing is stopped first; Open WebUI restarts once. **Your stack keeps its variables and sees neither
 wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
 `UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Nothing has to be added. Every change and why:
 [upgrade-guide.md](upgrade-guide.md#unreleased), and the gateway's
-[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md). From 0.5.x, do *Upgrade from
+[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner). From 0.5.x, do *Upgrade from
 0.5.x to 0.6.0* first.
 
 **Before the update**

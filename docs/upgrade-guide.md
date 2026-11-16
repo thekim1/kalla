@@ -84,7 +84,7 @@ exception, with its own steps.
   admins a notice with the names. **Apply:** nothing is required; to clear the notice, remove the named variables from
   the stack's variables and update the stack. **Check:** `rag-bootstrap`'s log has no line *is set and no longer read*.
 - **One typed value in the Portainer stack, `UME_DOMAIN`, and the gateway's own setup wizard (M-20 S8).** The stack pins
-  the gateway's `GATEWAY_NEXT`: **rolling update: yes**, its migrations `SignInSettings` and `SetupMode` add tables,
+  the gateway's `v0.11.0`: **rolling update: yes**, its migrations `SignInSettings` and `SetupMode` add tables,
   columns and grants (the gateway's upgrade guide, *Portainer*). No variable has to be added and none is retired (the
   gateway's new `UME_SETUP_REOPEN` is optional).
   - **Host names:** the gateway's two default under `UME_DOMAIN` as Ume.Rag's three do (`llm.<domain>`,
@@ -113,7 +113,7 @@ exception, with its own steps.
     is not created again). Optional afterwards: set `UME_DOMAIN` and remove the host and public URL lines whose value
     is its default.
   - **Compose and Kubernetes:** nothing. This change touches only the Portainer stack; a gateway deployed with its own
-    Compose bundle or on Kubernetes follows the gateway's upgrade guide for `GATEWAY_NEXT`, which keeps a deployment
+    Compose bundle or on Kubernetes follows the gateway's upgrade guide for `v0.11.0`, which keeps a deployment
     that sets the authority as it is.
   - **Check:** the gateway's `bootstrap` log has `bootstrap: sign-in to the admin console is declared by the
     stack's variables (UME_OIDC_AUTHORITY), …` (an existing stack) or `… is set in the setup wizard: …` (a new one);
