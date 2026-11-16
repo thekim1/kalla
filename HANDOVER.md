@@ -35,8 +35,10 @@ chatbot, the support-chatbot proposal.
 - **The release** ([run 43865015500](https://github.com/thekim1/ume-rag-platform/actions/runs/43865015500)): the first
   attempt failed in `verify / backend` on `ChatApiTests.A_public_assistant_runs_its_published_level_behind_the_caveat_line`
   (the answer was the "search unavailable" fallback; no cause in the log; noted on #781, the same symptom in that
-  class). The failed job was re-run once and passed, and `publish` followed. **#781 is worth fixing before the next
-  release:** it has now cost a release attempt. The browser tests did not run on the tag (they were green in dry run
+  class). The failed job was re-run once and passed, and `publish` followed. **#781 has a fix** (#790, session 44): rag-api's test hosts get 30 s
+  embedding limits and a failed query embedding now logs why. The cause (the 2 s limit on a busy runner) rests on
+  elimination and on #584's precedent, not on a reproduction, so the issue stays open until 2026-11-30; a recurrence
+  is named by the new warning in the job's log. The browser tests did not run on the tag (they were green in dry run
   43857593918 on the same code).
 - **The pin pull request** was opened by `release.yml` itself this time (#789). A pull request opened by the workflow's
   token starts no checks: close and reopen it, then merge (handbook, *Release dry runs*).
