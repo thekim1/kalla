@@ -77,6 +77,36 @@ They remove the most code and documentation without changing what the system doe
   3. `init-deployment.sh` as the short `deploy/.env` writer; `verify.yml`'s script tests rewritten.
   4. `create-secrets.sh` on `bootstrap.sh`.
   5. The guides (`compose-quick-start.md`, `production-setup.md`, `kubernetes.md`, the upgrade guide).
+
+  Steps 1 and 4 went together (#798: Kubernetes was the first consumer of the script's parameters).
+- **Step 2, how** (the main session's plan, 2026-11-16; adjust it when the code says otherwise):
+  - **The one file** is `deploy/compose.rag.yaml`, a valid Compose file that starts Ume.Rag alone: today's
+    `portainer/compose.rag.template.yaml` with the `rag-` names, its static files as `configs` with `file:`, the
+    networks and the two gateway inputs of its own (`llm` and `edge` defined here; the gateway's CA and its manifest
+    keys as host paths, `UME_RAG_GATEWAY_CA_DIR` and `UME_RAG_GATEWAY_SECRETS_DIR`, both optional).
+  - **What differs in the joined Portainer stack** is marked in that file line by line, as `nginx.portainer.conf.template`
+    marks its blocks: a line that exists only joined is a comment `#@joined ...` (waiting for the gateway's `bootstrap`
+    and `migrations`, the volumes `ume-certs` and `integration-secrets`), a line that exists only alone ends in
+    `#@alone` (the two networks' definitions, the host-path mounts). `build-stack.sh` applies the marks, turns each
+    `file:` config into inline `content:` and adds the sections to the gateway's file as today. `build-stack.sh
+    --check` and the boot test show that the generated stack is the one the VM runs (same service, volume and
+    variable names).
+  - **Overlays, Compose hosts only:** `compose.backup.yaml` (WAL archiving on, the pgBackRest settings from
+    `rag-secrets`, the repository, the `backup` network, `rag-upload-backup`), `compose.hardened.yaml` (the fixed
+    subnets for `deploy/host/docker-user-firewall.sh`, the ingestion slice, the restart-unhealthy labels, the
+    renderer's seccomp file), and `compose.rolling.yaml`, `compose.host-24g.yaml` and `compose.clamav-conf.yaml` as
+    today under the new names. `deploy/.env`'s `COMPOSE_FILE` lists the ones in use.
+  - **One set of variable names:** the stack's (`RAG_*_IMAGE`, `UME_OTEL_*`, `UME_DOMAIN`, the profiles `clamav`,
+    `render`, `openwebui`, `proxy`); Compose's own `UME_RAG_CLAMAV_MODE`, `UME_RAG_OPENWEBUI_BASE_URL`,
+    `UME_RAG_CERTS_DIR`, `UME_RAG_SECRETS_DIR` and `*_IMAGE` go. The release bundle's image file follows.
+  - **What reads the volumes afterwards:** `escrow-keys.sh`, `cert-expiry.sh`, `rolling-update.sh` and the tests,
+    through `docker run` with the volume mounted read-only; `backup-postgres.sh`, `restore-pitr.sh` and
+    `backup-uploads.sh` take the service name `rag-postgres`.
+  - **Gone with it:** `compose.prod.yaml`, `compose.ingestion.yaml`, `compose.openwebui.yaml` (S3),
+    `rag-blobs-init` (the bootstrap does it), `deploy/tests/openwebui-parity.sh` (one definition, nothing to compare).
+  - **Tests:** `pilot-stack.sh` and `release-smoke.sh` boot the one file with the overlays; the smoke test checks
+    the setup wizard's state as `portainer-boot.sh` does. A Compose install made with the old files has no upgrade
+    path (none exists outside tests); the release says so.
 - **Read first:** `deploy/portainer/bootstrap.sh`, `deploy/portainer/compose.rag.template.yaml`,
   `deploy/portainer/build-stack.sh`, `deploy/init-deployment.sh`, `deploy/kubernetes/create-secrets.sh`,
   `deploy/tests/portainer-*.sh` and `pilot-stack.sh`, repo-and-deployment §7.1.
