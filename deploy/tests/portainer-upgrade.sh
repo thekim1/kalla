@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# An existing deployment's variables with the current Portainer stack file (docs/portainer.md, "Upgrade from 0.6.0"):
+# An existing deployment's variables with the current Portainer stack file (docs/portainer.md, "Upgrade"):
 # the upgrade is "paste the new file, keep your variables", so the new file must render with the previous release's
 # variables and give each service what the upgrade steps promise. Offline, with `docker compose config --format json`
 # of compose.portainer.yaml and fixtures/stack-0.6.0.env (v0.6.0's stack.env.example with its two secrets filled in):

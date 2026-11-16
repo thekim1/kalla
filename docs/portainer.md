@@ -291,26 +291,39 @@ step in its setup wizard. The steps are the same at a first deploy and on a runn
 managed client stays in *Apps and keys* with its key, unused: `rag-migrate` touches it only while the profile is on,
 and rag-api accepts no Open WebUI user without the profile.
 
-## Upgrade from 0.6.0
+## Upgrade
 
-To 0.7.0, the release with the setup wizards. **A rolling update:** Ume.Rag's migrations only add columns
-and a table, and the gateway's (it moves to `v0.11.0`: `SignInSettings` and `SetupMode`) only add tables, columns
-and grants, so nothing is stopped first; Open WebUI restarts once. **Your stack keeps its variables and sees neither
+From 0.5.x or later to this release, **in one update**: paste this release's stack file over the old one and update
+the stack. No release in between has to be installed first, no variable has to be added, and nothing is stopped by
+hand: where a migration can't run beside the old version of a service (0.6.0's `RemoveWorkerConcurrency` and the old
+rag-admin), `rag-migrate` keeps that service out of the database until its new version starts. Plan a short window:
+every service restarts once, and the gateway moves to `v0.11.0`. The release tests this path by booting 0.5.1's stack
+with its variables and applying the new file over it. **Your stack keeps its variables and sees neither setup
 wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
-`UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Nothing has to be added. Every change and why:
-[upgrade-guide.md](upgrade-guide.md#070), and the gateway's
-[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner). From 0.5.x, do *Upgrade from
-0.5.x to 0.6.0* first.
+`UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Every change and why:
+[upgrade-guide.md](upgrade-guide.md), and the gateway's
+[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md).
 
 **Before the update**
 
 1. **Back up** both databases, the three Ume.Rag files of *First deploy* step 11 and the gateway's two
    (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`).
-2. **Look through the stack's variables:**
-   - `UME_OIDC_AUTHORITY` holds your provider's address, as it must in a working 0.6.0 stack: it keeps the gateway's
+2. **From 0.5.x, the gateway keys' residencies:** in the gateway's admin, give `rag-api`'s and `rag-admin`'s credential
+   keys the residencies **`OnPrem` and `Eu` only** (the worker's already are). From 0.6.0 each service's ceiling is its
+   key's residencies; a key that allows every residency would let a public assistant answer at `External`. Each
+   published assistant also needs a gateway key that reaches both its chat model and its embedding model.
+3. **From 0.5.x, if Open WebUI is on and its client was made by hand:** in Ume.Rag's admin, *Apps and keys*, open that
+   client and note its assistants, information class, history and feedback days. After the update Open WebUI uses a
+   client the deployment makes, and the hand-made one is no longer trusted.
+4. **From 0.5.x,** if you set any of `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` or
+   `_VIEWER`, note their groups (with the shared Keycloak the roles come in the token and there is nothing to note).
+5. Optional: set the organisation's name in the gateway's admin console (branding); Ume.Rag's header and sign-in page
+   show it.
+6. **Look through the stack's variables:**
+   - `UME_OIDC_AUTHORITY` holds your provider's address, as it must in a working stack: it keeps the gateway's
      sign-in declared and is rag-admin's provider. Keep it and every other `UME_OIDC_*` you set;
    - `UME_RAG_OIDC_CLIENT_SECRET` and `UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET` must hold the real secrets, as they do in
-     a working 0.6.0 stack. A leftover `CHANGE` declares a wrong secret and keeps the wizard closed;
+     a working stack. A leftover `CHANGE` declares a wrong secret and keeps the wizard closed;
    - a token-shape variable you changed (`UME_RAG_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`,
      `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS`, `_CLIENT_ID`): keep the line. The new file passes each only when
      it is set; unset, the code's default applies, which is the old file's default;
@@ -326,43 +339,65 @@ wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done 
      integration `Ume.Rag`, in a new team and department `ume-rag`. Your services keep their keys: a
      `UME_RAG_*_GATEWAY_KEY` that is set wins over the manifest's. The new keys stay unused. **To create nothing,** add
      `UME_INTEGRATION_MANIFEST` with an empty value now: set and empty, the default doesn't apply. Or let them be
-     created and revoke them afterwards (*After the update*, step 8).
+     created and revoke them afterwards (*After the update*, step 14).
 
 **The update**
 
-3. **Edit the stack:** paste the new file over the old one (keep the stack name). **No variable has to be added or
-   changed** (the empty `UME_INTEGRATION_MANIFEST` of step 2 is your choice). The host names stay as they are:
-   `UME_DOMAIN` is for new stacks, or for the one-value form later (*Optional, afterwards*, below).
-4. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `bootstrap`, which now also writes
-   `adminapi/Setup__Secret`; the gateway's `migrations` (migrations `SignInSettings` and `SetupMode`, then the
-   integration manifest); `rag-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files
-   for rag-api and rag-admin; `rag-migrate` (migrations `IdentityOidcSettings`, `SetupMode`,
-   `OpenWebUiSignInSettings`); then the services. Open WebUI now starts through a wrapper that asks rag-api for its
-   sign-in settings.
+7. **Edit the stack:** paste the new file over the old one (keep the stack name). **No variable has to be added or
+   changed** (the empty `UME_INTEGRATION_MANIFEST` of step 6 is your choice; the Integration API's address for the
+   cost and budget read-back is the stack's default). The host names stay as they are: `UME_DOMAIN` is for new
+   stacks, or for the one-value form later (*Optional, afterwards*, below). Tidying, since a leftover is ignored and
+   `rag-bootstrap`'s log names it: `UME_RAG_OPENWEBUI_API_KEY`, `UME_RAG_OPENWEBUI_CLIENT_ID`,
+   `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH`, `UME_RAG_OPENWEBUI_BASE_URL`,
+   `UME_RAG_CLAMAV_MODE`, `UME_RAG_EMBEDDING_MODEL` and the other `UME_RAG_EMBEDDING_*`,
+   `UME_RAG_GATEWAY_MAX_RESIDENCY`, `UME_RAG_GATEWAY_INTEGRATION_API_URL`, `UME_ORGANISATION_NAME` and the four group
+   variables of step 4 (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays).
+8. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `bootstrap`, which also writes
+   `adminapi/Setup__Secret`; the gateway's `migrations` (its migrations, then the integration manifest);
+   `rag-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files for rag-api and
+   rag-admin; `rag-migrate` (from 0.5.x eight migrations, from 0.6.0 three; it creates the managed clients *Open
+   WebUI*, while its profile is on, and `admin-console`); then the services. From 0.5.x `rag-migrate`'s log has
+   *Migration …RemoveWorkerConcurrency stops the services of role ume_rag_admin*: the old rag-admin answers errors for
+   the seconds until it is replaced. Open WebUI starts through a wrapper that asks rag-api for its sign-in settings,
+   and `rag-openwebui-setup` mints the feedback key a minute after Open WebUI starts.
 
 **After the update**
 
-5. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing, and says *sign-in to Ume.Rag's admin is
-   declared by the stack's variables …, so the setup wizard stays closed*.
-6. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
-   stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and no line
-   `bootstrap: UME_OIDC_CLIENT_SECRET is left out: …` after it.
-7. **Check:**
-   - `adminapi`'s log has, once, the record
-     `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (in the JSON line's
-     `Message`), and **no** line with `Setup code`; you sign in to the gateway's admin as before;
-   - rag-admin's log has *The deployment declares the sign-in* once, and **no** line with *Setup code*;
-   - you sign in to Ume.Rag's admin as before;
-   - `migrations`' log has `… 'Ume.Rag' applied, 0 of 3 credential keys created` when your keys came from a manifest
-     (`3 of 3` for a stack of step 2 without one; no such line with an empty value);
-   - `rag-openwebui`'s log has *starting with OIDC sign-in from rag-api's sign-in settings*, Open WebUI's sign-in page
-     shows the button, and a test user signs in and gets an answer;
-   - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them.
-8. **Only if step 2 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Ume.Rag*,
-   revoke `rag-api`, `rag-admin` and `rag-worker` (the manifest never creates a revoked key again). Or move to them
-   instead: give them the settings of your keys (models, address list), remove the three `UME_RAG_*_GATEWAY_KEY`
-   variables and update the stack, so `rag-bootstrap` hands each service its new key from the volume; once *Models*
-   shows a recent organisation sync again, revoke your old keys.
+9. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing and each variable that is no longer read,
+   and says *sign-in to Ume.Rag's admin is declared by the stack's variables …, so the setup wizard stays closed*.
+10. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
+    stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and no line
+    `bootstrap: UME_OIDC_CLIENT_SECRET is left out: …` after it.
+11. **From 0.5.x, Open WebUI's client** (step 3): in *Apps and keys*, open *Open WebUI* (*Managed by the deployment*),
+    set the class, history and feedback days to the old client's and tick the same assistants; save. Then disable the
+    hand-made client and revoke its key.
+12. **From 0.5.x,** if you noted groups in step 4, enter them under *Settings → Role groups*.
+13. **Check:**
+    - `adminapi`'s log has, once, the record
+      `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (in the JSON line's
+      `Message`), and **no** line with `Setup code`; rag-admin's log has *The deployment declares the sign-in* once,
+      and **no** line with *Setup code*; you sign in to both admins as before;
+    - each of `rag-api`, `rag-admin` and `rag-worker` logs *the credential key's ceiling: Eu* at start;
+    - `migrations`' log has `… 'Ume.Rag' applied, 0 of 3 credential keys created` when your keys came from a manifest
+      (`3 of 3` for a stack of step 6 without one; no such line with an empty value);
+    - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
+    - `rag-openwebui`'s log has *starting with OIDC sign-in from rag-api's sign-in settings*, Open WebUI's sign-in page
+      shows the button, and a test user signs in, sees the assistants and gets an answer; `rag-openwebui-setup`'s log
+      says *minted* or *kept*;
+    - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
+    - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them;
+    - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
+14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Ume.Rag*,
+    revoke `rag-api`, `rag-admin` and `rag-worker` (the manifest never creates a revoked key again). Or move to them
+    instead: give them the settings of your keys (models, address list), remove the three `UME_RAG_*_GATEWAY_KEY`
+    variables and update the stack, so `rag-bootstrap` hands each service its new key from the volume; once *Models*
+    shows a recent organisation sync again, revoke your old keys.
+
+**Tested and not:** the release boots 0.5.1's stack (its file and variables, `clamav` and `openwebui`, no gateway
+keys, no identity provider) and applies the new file: every service comes back healthy on the new images, the
+database, the CA, the pepper and the Data Protection certificate are kept, and `rag-migrate` reports the role it
+stopped. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by hand are not part of that test,
+and Portainer's own *Update the stack* is not run by it.
 
 **If rag-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
 `UME_RAG_OIDC_CLIENT_SECRET` is missing or empty. Either add it and update the stack, or use the wizard (*First deploy*
@@ -396,68 +431,11 @@ into the wizard*, *Everything*: remove `UME_OIDC_AUTHORITY` and every `UME_OIDC_
 the same address in the same change, or rag-admin is left without one. With the `data` profile, the Data API then
 accepts only Data API keys unless you set `UME_DATA_AUTHORITY` to the old address.
 
-## Upgrade from 0.5.x to 0.6.0
-
-**Not a rolling update:** migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads, so stop
-rag-admin first. Plan a short window (the services restart once). The gateway moves to `v0.10.3` (rolling, no
-migration of its own). **Use the `v0.6.0` release's `compose.portainer.yaml`** for this step, not a later one: from
-`0.7.0` the file creates three new credential keys by default, which step 7 below does not expect. Then go on with
-*Upgrade from 0.6.0*. Every change and why: [upgrade-guide.md](upgrade-guide.md#060).
-
-**Before the update**
-
-1. **Back up** both databases and the three Ume.Rag files of *First deploy* step 11.
-2. **In the gateway's admin**, give `rag-api`'s and `rag-admin`'s credential keys the residencies **`OnPrem` and `Eu`
-   only** (the worker's already are). From 0.6.0 each service's ceiling is its key's residencies; a key that allows
-   every residency would let a public assistant answer at `External`.
-3. **If Open WebUI is on and its client was made by hand** (the 0.5.0 stack): in Ume.Rag's admin, *Apps and keys*,
-   open that client and note its assistants, information class, history and feedback days. After the update Open WebUI
-   uses a client the deployment makes, and the hand-made one is no longer trusted.
-4. If you set any of `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` or `_VIEWER`, note their
-   groups (with the shared Keycloak the roles come in the token and there is nothing to note).
-5. Optional: set the organisation's name in the gateway's admin console (branding); Ume.Rag's header and sign-in page
-   show it from now on.
-
-**The update**
-
-6. **Stop** `rag-admin` (*Containers*, select, *Stop*).
-7. **Edit the stack:** paste the `v0.6.0` file over the old one (keep the stack name), and change the variables:
-   - **add** `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1` (the cost and budget read-back);
-   - **keep** `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY` and `UME_RAG_WORKER_GATEWAY_KEY`. Don't add
-     `UME_INTEGRATION_MANIFEST` from `stack.env.example`: it would create three new keys beside yours (the 0.5.0 keys
-     are named `Ume.Rag api` etc., not `rag-api`). The upgrade guide says when to move to it;
-   - **remove** those that are no longer read (a leftover is ignored, so this is tidying): `UME_RAG_OPENWEBUI_API_KEY`,
-     `UME_RAG_OPENWEBUI_CLIENT_ID`, `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH`,
-     `UME_RAG_OPENWEBUI_BASE_URL`, `UME_RAG_CLAMAV_MODE`, `UME_RAG_EMBEDDING_MODEL` and the other
-     `UME_RAG_EMBEDDING_*`, `UME_RAG_GATEWAY_MAX_RESIDENCY`, `UME_RAG_GATEWAY_INTEGRATION_API_URL`,
-     `UME_ORGANISATION_NAME` and the four group variables of step 4 (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays).
-8. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `migrations`; `rag-bootstrap`;
-   `rag-migrate` (migrations `ClientManagedByDeployment`, `RemoveWorkerConcurrency`, `IdentityRoleGroups`,
-   `ChunkSetsEmbeddingProfileIndex`, `ClientsManagedPerName`; it creates the managed clients *Open WebUI* (while its
-   profile is on) and
-   `admin-console`); then the services. With Open WebUI on, `rag-openwebui-setup` mints the feedback key a minute after
-   Open WebUI starts.
-
-**After the update**
-
-9. **Read the end of `rag-bootstrap`'s log:** it lists what is still missing, and should name no gateway key.
-10. **Open WebUI's client** (step 3): in *Apps and keys*, open *Open WebUI* (*Managed by the deployment*), set the class,
-    history and feedback days to the old client's and tick the same assistants; save. Then disable the hand-made client
-    and revoke its key.
-11. If you noted groups in step 4, enter them under *Settings → Role groups*.
-12. **Check:**
-    - each of `rag-api`, `rag-admin` and `rag-worker` logs *the credential key's ceiling: Eu* at start;
-    - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
-    - a test user signs in to Open WebUI, sees the assistants and gets an answer;
-    - `rag-openwebui-setup`'s log says *minted*;
-    - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
-    - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
-
 ## Upgrade from before 0.5.0
 
 First to 0.5.1, with the steps and the stack file of that time:
 [*Upgrade from 0.2.0–0.4.0* in this page at `v0.7.0`](https://github.com/thekim1/ume-rag-platform/blob/v0.7.0/docs/portainer.md#upgrade-from-020040)
-and the `v0.5.1` release's `compose.portainer.yaml`. Then *Upgrade from 0.5.x to 0.6.0* and *Upgrade from 0.6.0*, above.
+and the `v0.5.1` release's `compose.portainer.yaml`. Then *Upgrade*, above.
 
 ## Opening the setup wizard again
 

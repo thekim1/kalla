@@ -925,6 +925,13 @@ before production"): a release may change schemas, payloads and settings in one 
 and development and pilot data are rebuilt or re-crawled instead. From the first production deployment on, migrations
 are expand/contract only (data-model §10, gateway ADR 017), which the rolling updates above rely on; every release notes
 *Rolling update: yes/no*.
+**A release marked *Rolling update: no* needs no manual stop on one slot** (Decisions "Upgrades in one step"):
+`rag-migrate` holds the service roles its migrations stop out of the schemas until the new version of each starts
+(the service fences of data-model §10), so `up -d` (Compose) or *Update the stack* (Portainer) is the whole step. With
+the second slots (`rolling-update.sh`) and on Kubernetes (`deploy.sh`) the old instances of such a release are stopped
+or scaled to 0 first, as before. **An upgrade may skip releases:** migrations are cumulative, a retired variable is
+ignored and named, and `release.yml` boots the oldest supported release's Portainer stack (`UPGRADE_FROM`) and applies
+the new stack file over it with nothing added, changed or stopped (`deploy/tests/portainer-upgrade-boot.sh`).
 Postgres image changes that restart Postgres itself are never rolling (a short data-plane outage, announced).
 
 ### 7.4 Backup, recovery and key escrow

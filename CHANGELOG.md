@@ -63,6 +63,12 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   release's `images.env` now names `RAG_*_IMAGE`). The host scripts (`escrow-keys.sh`, `cert-expiry.sh`, the backup
   and restore scripts, `rolling-update.sh`, the host firewall) read the volumes and use the service `rag-postgres`. A
   Compose installation made with the old files is installed again ([upgrade guide](docs/upgrade-guide.md)).
+- **An upgrade is one step, from 0.5.x on** (M-22 S4b, S4c). `rag-migrate` keeps the services a migration can't run
+  beside out of the database until their new version starts (a migration declares the roles it stops; a service asks
+  for admission at start), so a release marked *Rolling update: no* needs no manual stop on one slot. An upgrade may
+  skip releases: the release boots 0.5.1's Portainer stack and applies the new file over it
+  (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
+  stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
 
 ## 0.7.0 (2026-11-16)
 

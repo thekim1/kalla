@@ -13,7 +13,7 @@
 #   - rag-bootstrap kept what it had generated: the CA certificate, the pepper and the Data Protection certificate
 #     are the files of the earlier release (compared by checksum, never printed)
 #   - rag-api: /health/ready = 200 and /version (with --version); rag-admin: / = 200
-#   - with --expect-fenced ROLE: rag-migrate's log says it stopped that service role for a migration the earlier
+#   - with --expect-fenced ROLE: rag-migrate's log names that service role as stopped for a migration the earlier
 #     version can't run beside (data-model §10), so the operator stops nothing
 #   - the end of rag-bootstrap's log (its checklist) is printed, as the upgrade guide tells the operator to read it
 #
@@ -186,8 +186,8 @@ ok "the embedding profiles and the settings row are the earlier release's"
 ok "the CA, the pepper and the Data Protection certificate are the earlier release's"
 
 for role in ${fenced[@]+"${fenced[@]}"}; do
-  dc logs --no-color --no-log-prefix rag-migrate 2>/dev/null | grep -F "Stopped $role" >/dev/null \
-    || fail "rag-migrate's log has no 'Stopped $role' line: the earlier version's service was not fenced"
+  dc logs --no-color --no-log-prefix rag-migrate 2>/dev/null | grep -F "stops the services of role $role" >/dev/null \
+    || fail "rag-migrate's log has no 'stops the services of role $role' line: the earlier version's service was not fenced"
   ok "rag-migrate stopped $role itself for a migration the earlier version can't run beside"
 done
 
