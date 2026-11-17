@@ -495,6 +495,11 @@
       "code": "move_pipeline_department",
       "status": 409,
       "message": "Sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first."
+    },
+    {
+      "code": "run_not_continuable",
+      "status": 409,
+      "message": "Only the latest crawl run that ended with pages left or failed can be continued. Use Sync now."
     }
   ]
 }

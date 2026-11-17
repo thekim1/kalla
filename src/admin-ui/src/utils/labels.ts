@@ -1977,6 +1977,7 @@ export const AUDIT_EVENTS = {
   'document.pii.view': 'Personal data in a document viewed',
   'document.pii-clear': 'Personal-data flag cleared',
   'run.cancel': 'Run cancelled',
+  'run.continue': 'Run continued',
   'run.confirm-deletion': 'Deletions confirmed',
   'run.reject-deletion': 'Deletions rejected',
   'pipeline.plan': 'Processing change prepared',
@@ -2426,4 +2427,17 @@ export const COSTS = {
   caption: 'Cost per assistant and knowledge base, highest first',
   stepsCaption: (name: string) => `Cost of ${name} by step`,
   filters: 'Cost filters',
+} as const
+
+/** Continue on a crawl run (#804): goes on from the pages the run left open or failed, instead of starting again. */
+export const CONTINUE_RUN = {
+  action: 'Continue',
+  hint: 'Fetch the pages this run left or failed, and follow their links, without starting again from the start addresses.',
+  started: 'The run is being continued.',
+  alreadyRunning: 'A run of this source is already running or queued.',
+  continuedFrom: 'Continued from',
+  earlierRun: 'the earlier run',
+  carried: (open: string, failed: string) => `Took over ${open} pages left open and ${failed} failed pages.`,
+  dropped: (n: string) => `${n} pages were left out because they are no longer within the scope or the depth limit.`,
+  limit: (admitted: string) => `Only ${admitted} of them were fetched before the page limit.`,
 } as const

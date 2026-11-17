@@ -195,28 +195,17 @@ public static class SourceEndpoints
             }
 
             var collection = await admin.Db.Collections.AsNoTracking().SingleAsync(c => c.Id == source.CollectionId, attempt);
-            var running = await admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == id && r.State == RunStates.Running)
-                .OrderByDescending(r => r.StartedAt).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(attempt);
             var action = kind == SyncKind.Sync ? "sync" : "retry-failed";
-            if (running is not null)
+            if (await QueuedSyncAsync(admin, id, attempt) is { } already)
             {
-                return new AdminChange<SyncStarted>(new SyncStarted(null, running, true, null), action, AuditEntityTypes.Source, id, null, new { runId = running })
+                object details = already.RunId is { } runId ? new { runId } : new { jobId = already.JobId };
+                return new AdminChange<SyncStarted>(already, action, AuditEntityTypes.Source, id, null, details)
                 {
                     DepartmentId = collection.DepartmentId, Classification = source.Classification,
                 };
             }
 
             var dedup = JobDedupKeys.Sync(id);
-            var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == dedup && (j.State == JobStates.Queued || j.State == JobStates.Running))
-                .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
-            if (queued is not null)
-            {
-                return new AdminChange<SyncStarted>(new SyncStarted(queued, null, true, await QueuedKindAsync(admin, queued.Value, attempt)), action, AuditEntityTypes.Source, id, null, new { jobId = queued })
-                {
-                    DepartmentId = collection.DepartmentId, Classification = source.Classification,
-                };
-            }
-
             var job = new JobRequest(JobClasses.Sync, collection.DepartmentId, source.Classification,
                 JsonSerializer.Serialize(new SyncPayload { SourceId = id, Kind = kind, Trigger = RunTrigger.Manual }, ContractJson.Options))
             {
@@ -229,6 +218,26 @@ public static class SourceEndpoints
                 DepartmentId = collection.DepartmentId, Classification = source.Classification, Jobs = [job],
             };
         }, ct);
+
+    /// <summary>
+    /// The source's run already running, else its <c>sync</c> job already queued or running (dedup <c>sync:{sourceId}</c>),
+    /// as the answer to a request that enqueues nothing; null when neither.
+    /// </summary>
+    public static async Task<SyncStarted?> QueuedSyncAsync(AdminContext admin, Guid sourceId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        var running = await admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == sourceId && r.State == RunStates.Running)
+            .OrderByDescending(r => r.StartedAt).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+        if (running is not null)
+        {
+            return new SyncStarted(null, running, true, null);
+        }
+
+        var dedup = JobDedupKeys.Sync(sourceId);
+        var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == dedup && (j.State == JobStates.Queued || j.State == JobStates.Running))
+            .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(ct);
+        return queued is null ? null : new SyncStarted(queued, null, true, await QueuedKindAsync(admin, queued.Value, ct));
+    }
 
     private static string KindName(SyncKind kind) => kind == SyncKind.RetryFailed ? "retry-failed" : "sync";
 
@@ -505,8 +514,8 @@ public sealed record SourceImpact(IReadOnlyList<string> Effects, int LiveDocumen
 
 /// <summary>
 /// The sync job enqueued, or the job already queued or the run already running (<see cref="AlreadyRunning"/>: nothing was
-/// enqueued). <see cref="Kind"/> is the job's kind (<c>sync</c> or <c>retry-failed</c>; null for a running run): sync now and
-/// retry failed share <c>sync:{sourceId}</c>, so a request may be answered by the other one.
+/// enqueued). <see cref="Kind"/> is the job's kind (<c>sync</c>, <c>retry-failed</c> or <c>continue</c>; null for a running run): sync
+/// now, retry failed and continue share <c>sync:{sourceId}</c>, so a request may be answered by another one.
 /// </summary>
 public sealed record SyncStarted(Guid? JobId, Guid? RunId, bool AlreadyRunning, string? Kind);
 

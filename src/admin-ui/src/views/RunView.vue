@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Run, RunItem } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
+import ContinueRunButton from '@/components/runs/ContinueRunButton.vue'
 import DeletionDecision from '@/components/sources/DeletionDecision.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -17,7 +19,7 @@ import { pollDelay } from '@/composables/useJobPoll'
 import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_PROGRESS, RUN_STATE_LABEL } from '@/utils/labels'
+import { CONTINUE_RUN, PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_PROGRESS, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { runProgressText } from '@/utils/runs'
 
@@ -26,8 +28,11 @@ import { runProgressText } from '@/utils/runs'
 // report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
 // §6.6, and for a browser source the rendered pages, those with no main text, render failures and pages kept from their
 // last good content, §8.6), the deletion decision when the guard held deletions back, and the run's documents with their
-// outcome and reason. Cancel run while it is running or waiting for the deletion decision (#488 part 3).
+// outcome and reason. Cancel run while it is running or waiting for the deletion decision (#488 part 3). Continue on the
+// latest crawl run that left pages open or failed (#804), which opens the source page with the new run; a continue run
+// says which run it went on from and what it took over.
 const props = defineProps<{ id: string }>()
+const router = useRouter()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
 const next = ref<number | null>(null)
@@ -57,6 +62,7 @@ const politeness = computed(() =>
   })),
 )
 const render = computed(() => run.data.value?.report?.render)
+const continued = computed(() => run.data.value?.report?.continued)
 const verdictReasons = computed(() =>
   [run.data.value?.report?.verdict?.runFailure, run.data.value?.report?.verdict?.runDegradation].filter((r): r is string => !!r),
 )
@@ -99,7 +105,22 @@ onBeforeUnmount(() => {
         <UiBadge :label="RUN_STATE_LABEL[summary.state] ?? summary.state" data-test="state" />
         <RouterLink :to="{ name: 'source', params: { id: run.data.value.sourceId } }" class="text-accent-ink underline">{{ RUN_PAGE.back }}</RouterLink>
         <CancelRunButton :run-id="summary.id" :state="summary.state" @cancelled="load" />
+        <ContinueRunButton
+          :run-id="summary.id" :can-continue="run.data.value.canContinue"
+          @started="router.push({ name: 'source', params: { id: run.data.value.sourceId } })"
+        />
       </PageHeader>
+      <UiCard v-if="continued" class="mb-6" data-test="continued">
+        <p>
+          {{ CONTINUE_RUN.continuedFrom }}
+          <RouterLink :to="{ name: 'run', params: { id: continued.from } }" class="link">{{ CONTINUE_RUN.earlierRun }}</RouterLink>.
+          {{ CONTINUE_RUN.carried(formatNumber(continued.open), formatNumber(continued.failed)) }}
+        </p>
+        <p v-if="continued.dropped" class="mt-2 text-small text-fg-2">{{ CONTINUE_RUN.dropped(formatNumber(continued.dropped)) }}</p>
+        <p v-if="continued.admitted < continued.open + continued.failed" class="mt-2 text-small text-warn">
+          {{ CONTINUE_RUN.limit(formatNumber(continued.admitted)) }}
+        </p>
+      </UiCard>
       <UiCard v-if="progress" class="mb-6" data-test="progress">
         <h2 class="mb-2 font-medium">{{ RUN_PROGRESS.title }}</h2>
         <p class="tabular" aria-live="polite">{{ progress }}</p>

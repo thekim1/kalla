@@ -70,7 +70,7 @@ const WORKER_CODES = [
   'egress.embedded_address', 'egress.scheme', 'egress.port', 'egress.userinfo', 'egress.blocked_host',
   'egress.redirect_downgrade',
   // Crawl completeness reasons (TraversalCompleteness.cs).
-  'crawl.incremental', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
+  'crawl.incremental', 'crawl.continued', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
   // Preview stage outcomes the preview result shows (PreviewSegment.cs).
   'parse.empty', 'raw.missing',
   // Job and run-item reasons of processing, embedding, the gateway, evaluation, the parser, personal data and uploads.

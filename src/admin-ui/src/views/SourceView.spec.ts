@@ -81,6 +81,46 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
+  it('offers Continue beside Sync now when the latest crawl run can be continued, and reloads the runs (#804)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    const runs = vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [run({ state: 'failed' })], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue({ applies: false, piiMode: 'off', collectionClassification: 'public', truncated: false, documents: [] })
+    vi.spyOn(api.runs, 'get').mockResolvedValue({
+      run: run({ state: 'failed' }), sourceId: 's1', pipelineVersionId: null, scheduledFor: null, report: null, continuesRunId: null, canContinue: true,
+    })
+    const started = vi.spyOn(api.runs, 'continue').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'continue' })
+
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    runs.mockClear()
+    await wrapper.get('[data-test=continue-run]').trigger('click')
+    await flushPromises()
+
+    expect(started).toHaveBeenCalledWith('r1')
+    expect(runs).toHaveBeenCalled()
+  })
+
+  it('offers no Continue for a source that is not a crawl', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, type: 'url-list', settings: { urls: ['https://www.umea.se/a'] } })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [run({ state: 'failed' })], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue({ applies: false, piiMode: 'off', collectionClassification: 'public', truncated: false, documents: [] })
+    const get = vi.spyOn(api.runs, 'get')
+
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+
+    expect(get).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test=continue-run]').exists()).toBe(false)
+  })
+
   it('shows the Demote rules and opens Edit source with the collection for its level ceiling', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
@@ -138,7 +178,8 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
       expect(runs).toHaveBeenCalledTimes(2)
       expect(wrapper.find('[data-test=run-progress]').exists()).toBe(false)
       await vi.advanceTimersByTimeAsync(20_000)
-      expect(get).toHaveBeenCalledTimes(2)
+      // Two polls, then one read of the ended run for Continue (#804); no further polls.
+      expect(get).toHaveBeenCalledTimes(3)
       wrapper.unmount()
     } finally {
       vi.useRealTimers()
