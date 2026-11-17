@@ -52,6 +52,8 @@ export interface BffUser {
   signIn: { configured: boolean }
   /** Whether setup mode is open: the wizard at /setup takes the setup code (identity design §19, "Setup state"). */
   setup: { open: boolean }
+  /** Whether the deployment runs Open WebUI (rag-admin's `OpenWebUi:Enabled`, its `openwebui` profile); without it the UI leaves Open WebUI out. */
+  openWebUi: { enabled: boolean }
 }
 
 // ---------- Setup mode (identity design §19; admin design §5.11) ----------

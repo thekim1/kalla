@@ -65,7 +65,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
-    expect(wrapper.text()).toContain('Model name in Open WebUI: bygglov')
+    expect(wrapper.text()).toContain('Model name: bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('ume/chat-eu')
     expect(options).toContain('ume/chat') // a route alias is a chat model

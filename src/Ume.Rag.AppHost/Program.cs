@@ -508,6 +508,8 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
     }
 
     api.WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
+    // As the openwebui profile in deploy/: rag-admin knows the chat runs, so the admin UI names it (/bff/user openWebUi.enabled).
+    adminApi.WithEnvironment("OpenWebUi__Enabled", "true");
     var openWebUi = builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
         .WithHttpEndpoint(port: 7410, targetPort: 8080, name: "http")
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")

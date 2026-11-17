@@ -169,7 +169,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
     await openWebUi.close()
-    const slug = (await page.getByText(/^Model name in Open WebUI: /).textContent())!.replace('Model name in Open WebUI: ', '').trim()
+    const slug = (await page.getByText(/^Model name: /).textContent())!.replace('Model name: ', '').trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'rag-api lists the assistant', 60_000)
 
     // 14 Share the knowledge base with the whole organisation (admin design §5.5.2, item 36; renamed in #544).

@@ -974,6 +974,13 @@ progress flags), which disappears when the collection has a published assistant 
 so "in Open WebUI" is checked as "a published assistant that links the collection has a client audience". The start
 page's **Create knowledge base** opens the Knowledge bases page, where the drawer is.
 
+**Without Open WebUI** (the deployment has no `OpenWebUi:Enabled`; `/bff/user` says `openWebUi.enabled: false`, for
+every role) the admin UI names nothing that only holds with it: the checklist's last step reads *Connect an app with a
+key under Apps and keys* and opens the assistant's Audience tab (the same done rule, a client audience); the feedback
+page has no import card and its empty text names `POST /v1/feedback`; Add app offers no Open WebUI card; Check access
+offers no Open WebUI user. Texts that describe apps in general name no product. A managed Open WebUI client that
+exists from before stays listed as it is.
+
 | # | Step (UI) | Page | Defaults and guidance | Guard |
 |---|---|---|---|---|
 | 1 | Sign in | Home | empty state "Here you build knowledge bases and assistants for your department." + **Create knowledge base** | role and department from sign-in |
