@@ -27,10 +27,11 @@ for all of them.
 
 ## Image
 
-The Dockerfile installs `playwright-core`, removes Firefox, WebKit and full Chromium (only the headless shell is
-launched), makes `/ms-playwright` read-only for everyone but root (the base leaves it world-writable), and copies the
-result into one layer `FROM scratch`: deleting in a `RUN` step alone would keep the browsers in the base's layers. About
-1.48 GB against the base's 2.54 GB. The base's environment (`PATH`, `LANG`, `LC_ALL`, `PLAYWRIGHT_BROWSERS_PATH`) is set
+The Dockerfile installs `playwright-core`, upgrades the base's Ubuntu packages (`apt-get upgrade`: each build takes the
+security fixes released since the base was built), removes npm and yarn (only `node` runs), removes Firefox, WebKit and
+full Chromium (only the headless shell is launched), makes `/ms-playwright` read-only for everyone but root (the base
+leaves it world-writable), and copies the result into one layer `FROM scratch`: deleting in a `RUN` step alone would
+keep the browsers in the base's layers. About 1.46 GB against the base's 2.54 GB. The base's environment (`PATH`, `LANG`, `LC_ALL`, `PLAYWRIGHT_BROWSERS_PATH`) is set
 again in the final stage.
 
 ```bash
