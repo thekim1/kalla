@@ -38,12 +38,12 @@ order:
 | PR | What | State when the session ended |
 |---|---|---|
 | #813 | `deploy/keycloak/README.md`: the standalone import over HTTPS on 8443 (closes #797) | green |
-| #814 | A-20: GitHub Actions pinned by commit SHA, checked in `doc-refs` (closes #506) | one unrelated test failed once (`IntegrationReadbackTests`, 401 from the fake gateway), re-run started |
-| #819 | A-27: the image CVE scan in `audit.yml`, `dependabot.yml` (closes #507). **Stacked on #814** | merge after #814 |
-| #815 | `LICENSES.md`: the LibreOffice section, the wider written offer (closes #793) | `parser-image` runs the staleness test in the image |
-| #816 | The admin UI without Open WebUI (closes #807, M-22 S9's last part) | checks running |
-| #817 | **M-22 S4b and S4c: upgrades in one step** (below) | dry run green; `backend` re-run started (flaky under load) |
-| #820 | `chat."Messages"."ParentMessageId"` dropped (closes #792). **Stacked on #817** | merge after #817 |
+| #814 | A-20: GitHub Actions pinned by commit SHA, checked in `doc-refs` (closes #506) | green (one unrelated test failed once: `IntegrationReadbackTests`, 401 from the fake gateway) |
+| #819 | A-27: the image CVE scan in `audit.yml`, `dependabot.yml` (closes #507). **Stacked on #814** | green; merge after #814 |
+| #815 | `LICENSES.md`: the LibreOffice section, the wider written offer (closes #793) | green (`parser-image` ran the staleness test in the image) |
+| #816 | The admin UI without Open WebUI (closes #807, M-22 S9's last part) | green |
+| #817 | **M-22 S4b and S4c: upgrades in one step** (below) | green, dry run green |
+| #820 | `chat."Messages"."ParentMessageId"` dropped (closes #792). **Stacked on #817** | green; merge after #817 |
 | this one | The handover, connectors design §5.2's sentence for #802 | |
 
 After a stacked pull request's base is squash-merged, merge `origin/main` into the stacked branch (no force push) and
@@ -73,7 +73,7 @@ check its diff is only its own.
 - **Flaky under load:** with six pull requests' checks on the two runners, `backend` failed on #817 and #819 with
   tests neither touches (`ChatApiTests.Every_call_of_a_turn_counts_…`, `ChatApiTests.A_failed_answer_call_still_writes_…`,
   `RenderTests.The_real_renderer_reports_a_refused_ready_selector_…`); the test projects took twice their usual time.
-  Re-runs were started; check them.
+  Run alone, one after the other, both passed. No issue filed: decide whether the renderer tests need more room.
 - **Guides:** `docs/portainer.md` has one *Upgrade* section (from 0.5.x or later); the joined stack defaults
   `UME_INTEGRATION_API_URL`. **The VM** (below) can go from 0.5.0 to the next release in one update once it exists.
 
