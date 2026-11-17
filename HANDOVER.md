@@ -44,6 +44,9 @@ order:
 | #816 | The admin UI without Open WebUI (closes #807, M-22 S9's last part) | green |
 | #817 | **M-22 S4b and S4c: upgrades in one step** (below) | green, dry run green |
 | #820 | `chat."Messages"."ParentMessageId"` dropped (closes #792). **Stacked on #817** | green; merge after #817 |
+| #827 | #818: aspnet 10.0.15 with the Microsoft packages (the gateway's pins); PostgreSQL 17.12 in the pgvector base | green on the same commit as #824, which it replaces |
+| #825 | #818: ClamAV's rebuilt base; the renderer upgrades its Ubuntu packages and drops npm and yarn (fixable findings 4 → 0 and 8 → 0) | checks running |
+| #826 | #818: parser on Python 3.12.16, Debian snapshot 2026-11-09, the base's packages upgraded from it (12 → 6). **Meets #815 in `LICENSES.md`:** the second to merge regenerates the file in the image | checks running |
 | this one | The handover, connectors design §5.2's sentence for #802 | |
 
 After a stacked pull request's base is squash-merged, merge `origin/main` into the stacked branch (no force push) and
@@ -92,9 +95,10 @@ directory at the first `up`. The design passages session 46 left as they are (`r
 
 ### What the main session can take without input
 
-1. **#818, the first image scan's findings** (stream a's paths): the .NET base image 10.0.13 → 10.0.15 in
-   `Directory.Build.targets` (the gateway's pin first or together), newer digests for `pgvector/pgvector`,
-   `python:3.12-slim-trixie` (3.12.16), ClamAV and Playwright. With #819 merged the scheduled Audit is red until then.
+1. **#818's open decision:** six High in the ffmpeg 8.1.2 inside the `opencv-python-headless` 4.14.0.94 wheel (the
+   parser); PyPI has no newer wheel. Wait, drop the dependency if only Docling needs it, or a dated exception list for
+   the scan. The rest of #818 is in #827, #825 and #826. With #819 merged the scheduled Audit is red until they are
+   merged **and released** (the scan reads the last release's images), and for the parser until that decision.
 2. **Dependabot's first pull requests** after #819: check that it can read the manifests at all (central package
    management, `.npmrc` with `min-release-age`, digests with tags). A bump also moves the pin where it is repeated
    (`.github/dependabot.yml`'s header lists the places).
