@@ -1,0 +1,20 @@
+{
+  "matches": [
+    {
+      "vulnerability": { "id": "CVE-2026-52296", "severity": "High", "fix": { "state": "fixed", "versions": ["9.0"] } },
+      "artifact": { "name": "ffmpeg", "version": "8.1.2", "type": "binary" }
+    },
+    {
+      "vulnerability": { "id": "CVE-2026-115557", "severity": "Critical", "fix": { "state": "fixed", "versions": ["3.12.16"] } },
+      "artifact": { "name": "python", "version": "3.12.15", "type": "binary" }
+    },
+    {
+      "vulnerability": { "id": "CVE-2026-100001", "severity": "Critical", "fix": { "state": "not-fixed", "versions": [] } },
+      "artifact": { "name": "libc6", "version": "2.41-12", "type": "deb" }
+    },
+    {
+      "vulnerability": { "id": "CVE-2026-100002", "severity": "Medium", "fix": { "state": "fixed", "versions": ["1.2.3"] } },
+      "artifact": { "name": "zlib1g", "version": "1.2.2", "type": "deb" }
+    }
+  ]
+}

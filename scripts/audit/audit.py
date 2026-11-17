@@ -9,10 +9,18 @@ Usage:
   npm audit --json > npm.json || true          # in src/admin-ui, after npm ci
   python3 -I scripts/audit/audit.py npm npm.json [--exceptions FILE] [--today YYYY-MM-DD] [--summary FILE]
 
+  grype registry:<image> -o json --file <name>.json -q    # one report per image
+  python3 -I scripts/audit/audit.py grype <name>=<name>.json ... [--exceptions FILE] [--today YYYY-MM-DD]
+      [--title TEXT] [--summary FILE]
+
 dotnet  fails on any top-level or transitive package with a vulnerability, and on an error the report lists.
 npm     fails on any advisory without a current exception. An exception is a line "<GHSA id> <last day, YYYY-MM-DD>
         <reason>" in the exceptions file (default: npm-audit-exceptions.txt next to this script); it stops applying
         after its last day, so the check turns red again unless the fix has landed.
+grype   fails on a High or Critical finding with a fix in any image, unless a current exception lists it: a line
+        "<vulnerability id> <image> <package> <last day, YYYY-MM-DD> <reason>" in the exceptions file (default:
+        image-scan-exceptions.txt next to this script). An expired exception, and one that matched no finding, is
+        printed as a workflow warning.
 
 Exit 0 when clean, 1 with a message on stderr otherwise. --summary appends a short Markdown summary to FILE
 (the workflow's $GITHUB_STEP_SUMMARY).
@@ -27,6 +35,8 @@ import sys
 from pathlib import Path
 
 DEFAULT_EXCEPTIONS = Path(__file__).resolve().parent / "npm-audit-exceptions.txt"
+DEFAULT_IMAGE_EXCEPTIONS = Path(__file__).resolve().parent / "image-scan-exceptions.txt"
+SERIOUS = ("Critical", "High")
 
 
 def dotnet(report: dict) -> tuple[list[str], list[str]]:
@@ -78,6 +88,79 @@ def npm(report: dict, allowed: dict[str, str], today: str) -> list[tuple[str, st
     return out
 
 
+def read_image_exceptions(path: Path) -> dict[tuple[str, str, str], str]:
+    """Returns {(vulnerability id, image, package): last day}."""
+    allowed = {}
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.split(maxsplit=4)
+        try:
+            if len(parts) < 5:
+                raise ValueError
+            datetime.date.fromisoformat(parts[3])
+        except ValueError:
+            sys.exit(f"{path}:{number}: expected '<id> <image> <package> <YYYY-MM-DD> <reason>', got: {line}")
+        allowed[(parts[0], parts[1], parts[2])] = parts[3]
+    return allowed
+
+
+def grype(image: str, report: dict, allowed: dict[tuple[str, str, str], str], today: str) -> dict:
+    """Counts one image's matches; "fails" and "excepted" are the High and Critical findings with a fix."""
+    counts = {"Critical": 0, "High": 0, "lower": 0}
+    fails: set[str] = set()
+    excepted: set[tuple[str, str, str]] = set()
+    for match in report.get("matches", []):
+        vulnerability, artifact = match["vulnerability"], match["artifact"]
+        severity = vulnerability.get("severity")
+        counts[severity if severity in SERIOUS else "lower"] += 1
+        if severity not in SERIOUS or vulnerability.get("fix", {}).get("state") != "fixed":
+            continue
+        key = (vulnerability["id"], image, artifact["name"])
+        until = allowed.get(key)
+        if until and today <= until:
+            excepted.add(key)
+        else:
+            fixed = ", ".join(vulnerability["fix"].get("versions", []))
+            fails.add(f"{vulnerability['id']} {severity} {artifact['name']} {artifact.get('version')} -> {fixed}")
+    return {**counts, "fails": sorted(fails), "excepted": excepted}
+
+
+def grype_main(args: argparse.Namespace) -> int:
+    allowed = read_image_exceptions(args.exceptions)
+    for (vid, image, package), until in sorted(allowed.items()):
+        if until < args.today:
+            print(f"::warning::image scan exception {vid} ({image}, {package}) expired on {until}, no longer applies")
+    rows = [
+        "| Image | Critical | High | with a fix, failing | with a fix, excepted | Medium and lower |",
+        "|---|---|---|---|---|---|",
+    ]
+    details, used, failing_images = [], set(), []
+    for pair in args.reports:
+        image, _, path = pair.partition("=")
+        result = grype(image, json.loads(Path(path).read_text(encoding="utf-8")), allowed, args.today)
+        used |= result["excepted"]
+        failing, excepted = len(result["fails"]), len(result["excepted"])
+        critical, high = result["Critical"], result["High"]
+        rows.append(f"| {image} | {critical} | {high} | {failing} | {excepted} | {result['lower']} |")
+        print(f"{image}: {critical} critical, {high} high ({failing} failing, {excepted} excepted)")
+        for line in result["fails"]:
+            print(f"  {line}")
+        if result["fails"]:
+            failing_images.append(image)
+            details += [f"<details><summary>{image}: High and Critical with a fix</summary>", "", "```"]
+            details += result["fails"] + ["```", "</details>", ""]
+    scanned = {pair.partition("=")[0] for pair in args.reports}
+    for key, until in sorted(allowed.items()):
+        if until >= args.today and key[1] in scanned and key not in used:
+            print(f"::warning::image scan exception {key[0]} ({key[1]}, {key[2]}) matched no finding: remove it")
+    append(args.summary, [f"### Image scan{args.title}", "", *rows, "", *details])
+    if failing_images:
+        images = ", ".join(failing_images)
+        sys.exit(f"High or Critical vulnerabilities with a fix in {images}: bump the base image or the package")
+    return 0
+
+
 def iso_date(value: str) -> str:
     return datetime.date.fromisoformat(value).isoformat()
 
@@ -99,7 +182,15 @@ def main(argv: list[str]) -> int:
     p_npm.add_argument("--exceptions", type=Path, default=DEFAULT_EXCEPTIONS)
     p_npm.add_argument("--today", type=iso_date, default=datetime.date.today().isoformat())
     p_npm.add_argument("--summary")
+    p_grype = sub.add_parser("grype", help="grype -o json, one report per image")
+    p_grype.add_argument("reports", nargs="+", metavar="IMAGE=REPORT")
+    p_grype.add_argument("--exceptions", type=Path, default=DEFAULT_IMAGE_EXCEPTIONS)
+    p_grype.add_argument("--today", type=iso_date, default=datetime.date.today().isoformat())
+    p_grype.add_argument("--title", default="", help="appended to the summary's heading, e.g. ', release 0.7.0'")
+    p_grype.add_argument("--summary")
     args = parser.parse_args(argv)
+    if args.ecosystem == "grype":
+        return grype_main(args)
     report = json.loads(args.report.read_text(encoding="utf-8"))
 
     if args.ecosystem == "dotnet":

@@ -3,7 +3,7 @@
 `audit.py` checks the reports of `dotnet list package --vulnerable` and `npm audit`, for the `backend` and `admin-ui`
 jobs of `.github/workflows/verify.yml` (each pull request that changes code) and for `.github/workflows/audit.yml`
 (daily against `main` and from the Actions tab), so a new advisory against an unchanged `main` shows up the next
-morning. Both workflows call this one file, so the checks cannot drift. The parser's `pip-audit` needs no script:
+morning. In `audit.yml` it also reads Grype's reports of the last release's images (the `images` job). Both workflows call this one file, so the checks cannot drift. The parser's `pip-audit` needs no script:
 `audit.yml` repeats the two commands of `parser.yml`.
 
 It is one Python file using only the standard library, like `scripts/grading/`. Tests: `test_audit.py` (standard
@@ -36,3 +36,17 @@ They apply only to the all-dependencies audit, so only to dev-only advisories (p
 first, with no exceptions), and only for a fix that can't land yet (issue #61: lint toolchain fixes younger than 7
 days). After its last day an exception no longer applies and both workflows turn red until the fix lands. A malformed
 line fails the check. .NET and Python have no exceptions.
+
+## Image scan exceptions
+
+`image-scan-exceptions.txt` holds the image scan's dated exceptions, one line each: `<vulnerability id> <image>
+<package> <last day, YYYY-MM-DD> <reason>`, matched on all three of id, image (`parser`, `renderer`, …) and package
+name as Grype reports it. Only for a High or Critical finding with a fix that no release can take yet and whose
+vulnerable code the image cannot reach (#818: FFmpeg inside the opencv wheel, which nothing calls). An excepted finding
+is still counted in the summary. After its last day the exception no longer applies; an expired one, and one that
+matched no finding in its image, are printed as workflow warnings. A malformed line fails the check.
+
+```bash
+grype registry:ghcr.io/thekim1/ume-rag/parser:0.7.0 -o json --file /tmp/parser.json -q
+python3 -I scripts/audit/audit.py grype parser=/tmp/parser.json
+```

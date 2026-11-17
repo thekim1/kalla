@@ -1,0 +1,16 @@
+# Dated exceptions for the image scan in audit.yml (images job, Grype). A listed finding no longer fails the job until
+# its last day; it is still counted in the summary, under "excepted". Only for a finding that has a fix nobody can take
+# yet and whose vulnerable code the image cannot reach. Never for a base image or a package we can bump.
+# One line per exception: <vulnerability id> <image> <package> <last day, YYYY-MM-DD> <reason>.
+# After its last day it no longer applies, and the scan says so. Renew only after checking again for a fixed release.
+
+# #818: FFmpeg 8.1.2 bundled inside the opencv-python-headless 4.14.0.94 wheel (opencv_python_headless.libs), the
+# newest 4.x on PyPI. Docling's TableFormer needs cv2, but only for cv2.resize, cv2.dilate and border constants: FFmpeg
+# is reached only through cv2.VideoCapture/VideoWriter, which neither Docling nor ume_parser calls. The parser takes
+# document formats only and runs without egress.
+CVE-2026-107695 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
+CVE-2026-52296 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
+CVE-2026-52297 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
+CVE-2026-70628 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
+CVE-2026-70632 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
+CVE-2026-96611 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)

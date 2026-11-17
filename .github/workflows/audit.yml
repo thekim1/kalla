@@ -5,7 +5,8 @@ name: Audit
 # (workflow_dispatch). No push or pull request trigger. The checks are shared, not copied: scripts/audit/audit.py reads
 # the .NET and npm reports in both places, and the parser job repeats parser.yml's two pip-audit commands (pip-audit
 # itself decides; there is nothing to extract). The npm exceptions (dated, dev-only) live in
-# scripts/audit/npm-audit-exceptions.txt; .NET and Python have none. Every job runs on the self-hosted runner (labels
+# scripts/audit/npm-audit-exceptions.txt, the image scan's (dated, for code the image cannot reach) in
+# scripts/audit/image-scan-exceptions.txt; .NET and Python have none. Every job runs on the self-hosted runner (labels
 # self-hosted, linux, x64) and writes what it audited and what it found to the run summary. The images job scans the
 # last release's images for known vulnerabilities (Grype).
 on:
@@ -114,9 +115,10 @@ jobs:
   images:
     # The last release's eight images on ghcr.io, scanned for known vulnerabilities in their OS and language packages
     # (A-27, #507): the base images are pinned by digest, so nothing else reports a CVE in an unchanged image. Grype
-    # reads each image from the registry. The job fails on a High or Critical finding that has a fix; findings without
-    # a fix are listed in the summary only. Grype v0.121.3 (2026-11-09), sha256 of grype_0.121.3_linux_amd64.tar.gz
-    # from the release's grype_0.121.3_checksums.txt.
+    # reads each image from the registry; scripts/audit/audit.py reads the reports. The job fails on a High or Critical
+    # finding that has a fix, unless scripts/audit/image-scan-exceptions.txt lists it until a day not yet passed;
+    # findings without a fix are counted in the summary only. Grype v0.121.3 (2026-11-09), sha256 of
+    # grype_0.121.3_linux_amd64.tar.gz from the release's grype_0.121.3_checksums.txt.
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 45
     permissions:
@@ -126,6 +128,7 @@ jobs:
       GRYPE_VERSION: 0.121.3
       GRYPE_SHA256: e9da18cc1429e786722e32161288103600efffd8e483c90761f90485bd1bec85
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Grype
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -152,29 +155,9 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no latest release found ('$version')"; exit 1; }
           prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
           grype db update
-          { echo "### Image scan, release $version"; echo
-            echo "| Image | Critical | High | of them with a fix | Medium and lower |"; echo "|---|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
-          status=0
+          reports=()
           for name in api admin worker migrations postgres clamav renderer parser; do
-            report="$RUNNER_TEMP/grype-$name.json"
-            grype "registry:$prefix/$name:$version" -o json --file "$report" -q
-            counts="$(jq -r '[.matches[] | {s: .vulnerability.severity, f: (.vulnerability.fix.state == "fixed")}] as $m
-              | [($m | map(select(.s == "Critical")) | length), ($m | map(select(.s == "High")) | length),
-                 ($m | map(select((.s == "Critical" or .s == "High") and .f)) | length),
-                 ($m | map(select(.s != "Critical" and .s != "High")) | length)] | @tsv' "$report")"
-            read -r critical high fixable lower <<< "$counts"
-            echo "| $name | $critical | $high | $fixable | $lower |" >> "$GITHUB_STEP_SUMMARY"
-            echo "$name: $critical critical, $high high ($fixable with a fix), $lower lower"
-            if [ "$fixable" -gt 0 ]; then
-              status=1
-              jq -r '.matches[] | select((.vulnerability.severity == "Critical" or .vulnerability.severity == "High")
-                  and .vulnerability.fix.state == "fixed")
-                | "  \(.vulnerability.id) \(.vulnerability.severity) \(.artifact.name) \(.artifact.version) -> \(.vulnerability.fix.versions | join(", "))"' \
-                "$report" | sort -u | tee "$RUNNER_TEMP/grype-$name.txt"
-              { echo; echo "<details><summary>$name: High and Critical with a fix</summary>"; echo; echo '```'
-                cat "$RUNNER_TEMP/grype-$name.txt"; echo '```'; echo "</details>"; echo; } >> "$RUNNER_TEMP/details.md"
-            fi
+            grype "registry:$prefix/$name:$version" -o json --file "$RUNNER_TEMP/grype-$name.json" -q
+            reports+=("$name=$RUNNER_TEMP/grype-$name.json")
           done
-          if [ -s "$RUNNER_TEMP/details.md" ]; then cat "$RUNNER_TEMP/details.md" >> "$GITHUB_STEP_SUMMARY"; fi
-          if [ "$status" != 0 ]; then echo "::error::High or Critical vulnerabilities with a fix: bump the base image or the package"; fi
-          exit "$status"
+          python3 -I scripts/audit/audit.py grype "${reports[@]}" --title ", release $version" --summary "$GITHUB_STEP_SUMMARY"
