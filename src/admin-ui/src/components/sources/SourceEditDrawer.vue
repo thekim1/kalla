@@ -4,6 +4,7 @@ import { api } from '@/api'
 import type { Collection, Level, Source, SourceImpact } from '@/api/types'
 import FetchModeFields from '@/components/sources/FetchModeFields.vue'
 import { type FetchMode, READY_SELECTOR_MAX, fetchForm, withFetchSettings } from '@/components/sources/fetchMode'
+import { sitemapsValid } from '@/components/sources/sitemaps'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -27,6 +28,8 @@ const name = ref('')
 const level = ref<Level>('public')
 const urls = ref('')
 const include = ref('')
+// #801: sitemaps besides robots.txt and /sitemap.xml (a scope change: shown with its impact).
+const sitemaps = ref('')
 const exclude = ref('')
 const demote = ref('')
 const maxPages = ref('')
@@ -38,7 +41,7 @@ const scrollToLoad = ref(false)
 const impact = ref<SourceImpact | null>(null)
 const saving = ref(false)
 const form = useFormErrors({
-  name: 'edit-name', urls: 'edit-urls', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth', readySelector: 'edit-ready-selector',
+  name: 'edit-name', urls: 'edit-urls', sitemaps: 'edit-sitemaps', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth', readySelector: 'edit-ready-selector',
 })
 
 const crawl = computed(() => props.source.type === 'crawl')
@@ -64,6 +67,7 @@ watch(
     level.value = props.source.classification
     urls.value = strings(crawl.value ? s.startUrls : s.urls).join('\n')
     include.value = strings(s.include).join('\n')
+    sitemaps.value = strings(s.sitemaps).join('\n')
     exclude.value = strings(s.exclude).join('\n')
     demote.value = (Array.isArray(s.demote) ? (s.demote as { pattern: string; factor?: number }[]) : [])
       .map((d) => `${d.pattern} ${String(d.factor ?? 0.5).replace('.', ',')}`).join('\n')
@@ -79,7 +83,7 @@ watch(
   },
 )
 // A changed field makes a shown impact stale.
-watch([name, level, urls, include, exclude, demote, maxPages, maxDepth, piiMode, fetchMode, readySelector, scrollToLoad], () => {
+watch([name, level, urls, sitemaps, include, exclude, demote, maxPages, maxDepth, piiMode, fetchMode, readySelector, scrollToLoad], () => {
   impact.value = null
 })
 
@@ -101,7 +105,7 @@ function settings(): Record<string, unknown> {
   if (props.collection?.classification === 'public') base.piiMode = piiMode.value
   if (!crawl.value) return { ...base, urls: lines(urls.value) }
   return {
-    ...base, startUrls: lines(urls.value), include: lines(include.value), exclude: lines(exclude.value), demote: demoteRules() ?? [],
+    ...base, startUrls: lines(urls.value), sitemaps: lines(sitemaps.value), include: lines(include.value), exclude: lines(exclude.value), demote: demoteRules() ?? [],
     maxPages: Number(maxPages.value), maxDepth: Number(maxDepth.value),
   }
 }
@@ -112,6 +116,7 @@ function valid(): boolean {
   return form.validate({
     name: !name.value.trim() && SOURCE.nameRequired,
     urls: (addresses.length === 0 || addresses.some((u) => !/^https?:\/\//.test(u))) && SOURCE.urlsRequired,
+    sitemaps: crawl.value && !sitemapsValid(lines(sitemaps.value)) && SOURCE.sitemapsInvalid,
     demote: crawl.value && demoteRules() === null && SOURCE_EDIT.demoteInvalid,
     maxPages: crawl.value && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: crawl.value && !integer(maxDepth.value) && SOURCE.numberInvalid,
@@ -161,6 +166,7 @@ async function save(): Promise<void> {
         :ready-selector-error="form.errors.readySelector"
       />
       <template v-if="crawl">
+        <TextAreaField id="edit-sitemaps" v-model="sitemaps" :label="SOURCE.sitemaps" :hint="SOURCE.sitemapsHint" :error="form.errors.sitemaps" mono />
         <TextAreaField id="edit-include" v-model="include" :label="SOURCE.include" :hint="SOURCE.includeHint" mono />
         <TextAreaField id="edit-exclude" v-model="exclude" :label="SOURCE.exclude" :hint="SOURCE.excludeHint" mono />
         <TextAreaField id="edit-demote" v-model="demote" :label="SOURCE_EDIT.demote" :hint="SOURCE_EDIT.demoteHint" :error="form.errors.demote" mono />

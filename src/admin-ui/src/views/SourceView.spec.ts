@@ -86,7 +86,9 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     const auth = useAuthStore()
     auth.user = bffUser({ roles: ['rag-editor'] })
     auth.status = 'authenticated'
-    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, settings: { ...source.settings, demote: [{ pattern: 'www.umea.se/bygga/**/arkiv/**', factor: 0.5 }] } })
+    vi.spyOn(api.sources, 'get').mockResolvedValue({
+      ...source, settings: { ...source.settings, sitemaps: ['https://www.umea.se/sitemap1.xml.gz'], demote: [{ pattern: 'www.umea.se/bygga/**/arkiv/**', factor: 0.5 }] },
+    })
     vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
     vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
     const collection = vi.spyOn(api.collections, 'get').mockResolvedValue({ id: 'c1', classification: 'internal' } as never)
@@ -94,6 +96,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     expect(wrapper.get('[data-test=demoted]').text()).toBe('www.umea.se/bygga/**/arkiv/** ×0,5')
+    expect(wrapper.get('[data-test=sitemaps]').text()).toBe('https://www.umea.se/sitemap1.xml.gz')
     await wrapper.get('[data-test=edit-source]').trigger('click')
     await flushPromises()
     expect(collection).toHaveBeenCalledWith('c1')
