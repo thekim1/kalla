@@ -259,9 +259,10 @@ the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a
 | `archive_command` in rag-postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
 
 Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. What no
-backup holds and a restore needs (the pepper, the blob master key, the pgBackRest passphrase, the Data Protection
-certificate and the internal CA) is in the escrow set (*Key escrow*). The other files in `rag-secrets` and `rag-certs`
-are generated again by `rag-bootstrap` when they are missing. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
+backup holds and a restore needs (the pepper, the blob master key, the pgBackRest passphrase, the database roles' passwords,
+the conversation id key, the Data Protection certificate and the internal CA) is in the escrow set (*Key escrow*). The
+other files in `rag-secrets` and `rag-certs` are generated again by `rag-bootstrap` when they are missing, and a new
+one breaks nothing a backup restores. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
 script in P0** (*Public-records requests*).
 
 ```bash
@@ -421,13 +422,19 @@ Record the date, the achieved RPO and RTO, and anything that went wrong.
 ## Key escrow
 
 `deploy/escrow-keys.sh` writes one escrow set with everything a restored deployment needs that no backup holds, reads
-it back, and restores it. The same command in every form; `rag-bootstrap` derives every other file from these:
+it back, and restores it. The same command in every form. `rag-bootstrap` generates each of these once and never again; every other file it
+generates or derives on each start:
 
 - `rag-secrets/.pepper`: the key pepper. Without it no API key or client key verifies.
 - `rag-secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
   `internal` blobs cannot be decrypted. Chat master keys (`rag-chat-<level>`) join only once stored chat content is
   allowed (register A1).
 - `rag-secrets/pgbackrest/cipher-pass`, with a backup target: the repository passphrase. Without it no backup can be read.
+- `rag-secrets/postgres/*_password`: the passwords of the database roles (`bootstrap`, the superuser, and the four
+  service roles). A restored cluster keeps the roles it had, with these passwords: with new ones the services can't log
+  in after `restore-pitr.sh`. Restored before the first start, they are also the ones the new cluster is created with.
+- `rag-secrets/api/Security__ConversationIdKeys__*`: the keys that sign the conversation ids clients hold. Without them
+  every conversation id a client kept is refused (`conversation_not_found`), though the conversations are restored.
 - `rag-certs/data-protection.pfx`: the Data Protection certificate. Without it the stored client secrets (the sign-in
   settings) can't be read.
 - `rag-certs/ca.pem` and `ca.key`: the internal CA. With them the services' certificates and the trust in them stay as

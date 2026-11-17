@@ -14,7 +14,10 @@
 #   - the host scripts that read the volumes: escrow-keys.sh exports the escrow set and verifies it (by --env-file, and
 #     by --project as for a Portainer stack), cert-expiry.sh reads the certificates
 #   - escrow-keys.sh --restore into a new project's volumes before its first start: rag-bootstrap there keeps the
-#     escrowed pepper, keys, Data Protection certificate and CA, and the set verifies against the new project
+#     escrowed pepper, keys, role passwords, conversation id key, Data Protection certificate and CA, and the set
+#     verifies against the new project
+#   - --verify on media with another deployment's set too takes the project's own set, and a restore from media with
+#     several other deployments' sets is refused
 #
 # Nothing but rag-bootstrap's image (alpine/openssl) is pulled and nothing else starts; no network is created.
 #
@@ -114,7 +117,7 @@ ok "repo.conf, the repository's and the upload copy's owners, the blob directori
 echo "== the host scripts read the volumes"
 (cd "$d" && COMPOSE_PROJECT_NAME="$project" bash ./escrow-keys.sh "$work/escrow" > "$work/escrow.log") \
   || { cat "$work/escrow.log"; fail "escrow-keys.sh failed"; }
-grep -q '^escrowed 6 files' "$work/escrow.log" || fail "escrow-keys.sh: $(cat "$work/escrow.log")"
+grep -q '^escrowed 12 files' "$work/escrow.log" || fail "escrow-keys.sh: $(cat "$work/escrow.log")"
 (cd "$d" && COMPOSE_PROJECT_NAME="$project" bash ./escrow-keys.sh --verify "$work/escrow" > "$work/verify.log") \
   || { cat "$work/verify.log"; fail "escrow-keys.sh --verify failed"; }
 grep -q '^PASS' "$work/verify.log" || fail "escrow-keys.sh --verify did not pass"
@@ -135,10 +138,10 @@ docker compose -p "$restored" --env-file "$d/.env" run --rm --no-deps rag-bootst
   || { cat "$work/bootstrap-restored.log"; fail "rag-bootstrap failed on the restored volumes"; }
 base() { # base PROJECT: the escrowed files and a service certificate's issuer
   in_helper -v "$1_rag-secrets:/secrets:ro" -v "$1_rag-certs:/certs:ro" "$helper" -c '
-    cd / && sha256sum secrets/.pepper secrets/keys/rag-blob-internal secrets/pgbackrest/cipher-pass certs/ca.key certs/ca.pem \
-      certs/data-protection.pfx && openssl verify -CAfile certs/ca.pem certs/worker/worker.crt >/dev/null && echo issued-by-ca'
+    cd / && sha256sum secrets/.pepper secrets/keys/rag-blob-internal secrets/pgbackrest/cipher-pass secrets/postgres/*_password \
+      secrets/api/Security__ConversationIdKeys__k1 certs/ca.key certs/ca.pem certs/data-protection.pfx && openssl verify -CAfile certs/ca.pem certs/worker/worker.crt >/dev/null && echo issued-by-ca'
 }
-diff -u <(base "$project") <(base "$restored") || fail "the restored project's pepper, keys or CA are not the escrowed ones"
+diff -u <(base "$project") <(base "$restored") || fail "the restored project's pepper, keys, role passwords or CA are not the escrowed ones"
 grep -q '^rag-bootstrap: certificates and secrets ready$' "$work/bootstrap-restored.log" \
   || fail "rag-bootstrap did not finish on the restored volumes"
 bash "$d/escrow-keys.sh" --project "$restored" --image "$helper" --verify "$work/escrow" | grep -q '^PASS' \
@@ -147,5 +150,18 @@ in_helper -v "${restored}_rag-secrets:/secrets" "$helper" -c 'openssl rand -hex 
 out="$(bash "$d/escrow-keys.sh" --project "$restored" --image "$helper" --restore "$work/escrow" 2>&1)" \
   && fail "a restore over a different pepper was accepted"
 grep -q 'rag-secrets/.pepper .* differs from the set' <<< "$out" || fail "a restore over a different pepper: $out"
-ok "a restore keeps the pepper, the keys, the Data Protection certificate and the CA; a restore over other files is refused"
+ok "a restore keeps the pepper, the keys, the role passwords, the Data Protection certificate and the CA; a restore over other files is refused"
+
+echo "== escrow media with the sets of several deployments"
+# Another deployment's set, newer than this project's: --verify by DEST still takes this project's own set, and a
+# restore into a project with no set there is refused, since the media hold two other deployments' sets.
+own="$(find "$work/escrow" -mindepth 1 -maxdepth 1 -type d -name "ume-rag-keys-$project-*")"
+cp -r "$own" "$work/escrow/ume-rag-keys-other-29991231T235959Z"
+bash "$d/escrow-keys.sh" --project "$project" --verify "$work/escrow" > "$work/verify-own.log" \
+  || { cat "$work/verify-own.log"; fail "--verify did not take the project's own set beside another deployment's"; }
+grep -q "^verifying $own\$" "$work/verify-own.log" || fail "--verify took another set: $(head -n 1 "$work/verify-own.log")"
+out="$(bash "$d/escrow-keys.sh" --project "$project-third" --image "$helper" --restore "$work/escrow" 2>&1)" \
+  && fail "a restore from the sets of two other deployments was accepted"
+grep -q 'sets of several deployments .*: name one set' <<< "$out" || fail "a restore from several deployments' sets: $out"
+ok "the deployment's own set is taken by DEST; a restore with several other deployments' sets there needs one set"
 echo PASS

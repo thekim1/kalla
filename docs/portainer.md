@@ -216,8 +216,8 @@ read the CA only at start.
 10. **First content:** follow *Get started* on Ume.Rag's *Home* (a knowledge base, a source, the first fetch, test
     questions, an assistant). Your applications call rag-api with an app and its key from *Apps and keys*.
 11. **Escrow the keys** on the Docker host, with `escrow-keys.sh` from the release bundle (`deploy/`): it writes one
-    set with everything a restored database needs that no backup holds (the pepper, the blob key, the Data Protection
-    certificate and the internal CA; the runbook's *Key escrow*), and `--verify` reads it back:
+    set with everything a restored database needs that no backup holds (the pepper, the blob key, the database passwords,
+    the conversation id key, the Data Protection certificate and the internal CA; the runbook's *Key escrow*), and `--verify` reads it back:
 
     ```bash
     sudo deploy/escrow-keys.sh --project <stack> /media/<escrow>

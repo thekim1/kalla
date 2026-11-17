@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # Key escrow (plans/platform/repo-and-deployment.md §7.4): one set with everything a restored deployment needs that no
-# backup holds, the same in every form. rag-bootstrap generates these once and derives the rest from them:
+# backup holds, the same in every form. rag-bootstrap generates each of these once and never again; every other file it
+# generates or derives on each start, and a new one breaks nothing a backup restores:
 #   rag-secrets/.pepper                   the key pepper (the hashes of API keys)
 #   rag-secrets/keys/rag-blob-*           the blob master keys (rag-chat-<level> join once A1 allows stored chat content)
 #   rag-secrets/pgbackrest/cipher-pass    the pgBackRest passphrase, with a backup target
+#   rag-secrets/postgres/*_password       the database roles' passwords: a restored cluster keeps the roles' old ones
+#   rag-secrets/api/Security__ConversationIdKeys__*   the keys that sign the conversation ids clients hold
 #   rag-certs/data-protection.pfx         the Data Protection certificate (sign-in cookies, stored OIDC secrets)
 #   rag-certs/ca.pem, rag-certs/ca.key    the internal CA: the services' certificates, and the trust in them, stay
 # Keep each set as long as the data and backups it protects, sealed in two places: the files are in the clear. Escrow
 # again after every rotation.
 #
 #   deploy/escrow-keys.sh DEST              writes DEST/ume-rag-keys-<project>-<UTC time>/ with SHA256SUMS and MANIFEST
-#   deploy/escrow-keys.sh --verify PATH     PATH is one set, or DEST (its newest set): checks the checksums, the formats,
-#                                           and that every file equals the deployment's
+#   deploy/escrow-keys.sh --verify PATH     PATH is one set, or DEST (the deployment's newest set there): checks the
+#                                           checksums, the formats, and that every file equals the deployment's
 #   deploy/escrow-keys.sh --restore PATH    writes the set into a new deployment before its first start, and refuses to
-#                                           replace a file that differs; rag-bootstrap derives the rest when it starts
+#                                           replace a file that differs; rag-bootstrap derives the rest when it starts.
+#                                           PATH as for --verify; with no set of the deployment in DEST, another
+#                                           deployment's newest is taken only when it is the only deployment there
 #
 # The deployment, one of:
 #   --env-file FILE       [deploy/.env] a Compose installation: its project's volumes
@@ -31,7 +36,7 @@ umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="$here/.env"; project=""; secrets=""; certs=""; image=""; mode="export"; dest=""
 
-usage() { sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -77,7 +82,8 @@ fi
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 current="$work/current"; mkdir -p "$current/rag-secrets" "$current/rag-certs"
-secret_files='.pepper keys/rag-blob-* keys/rag-chat-* pgbackrest/cipher-pass pgbackrest/repo.conf'
+secret_files='.pepper keys/rag-blob-* keys/rag-chat-* pgbackrest/cipher-pass pgbackrest/repo.conf postgres/*_password'
+secret_files="$secret_files api/Security__ConversationIdKeys__*"
 cert_files='ca.pem ca.key data-protection.pfx'
 
 # The deployment's files of the set (and repo.conf, for --verify) into $current; none when it has none yet.
@@ -117,7 +123,24 @@ check_format() { # check_format NAME FILE
   esac
 }
 
-required="rag-secrets/.pepper rag-secrets/keys/rag-blob-internal rag-certs/data-protection.pfx rag-certs/ca.pem"
+required="rag-secrets/.pepper rag-secrets/keys/rag-blob-internal rag-certs/data-protection.pfx rag-certs/ca.pem
+  rag-secrets/api/Security__ConversationIdKeys__k1"
+for role in bootstrap migrator api admin worker; do required="$required rag-secrets/postgres/${role}_password"; done
+
+# What each file of a set is, for its MANIFEST: whoever opens the sealed media may not have this repository at hand.
+describe() {
+  case "$1" in
+    rag-secrets/.pepper) echo "the key pepper: without it no API key or client key verifies";;
+    rag-secrets/keys/*) echo "a blob master key (base64, 32 bytes): without it its blobs can't be decrypted";;
+    rag-secrets/pgbackrest/cipher-pass) echo "the pgBackRest repository passphrase: without it no backup can be read";;
+    rag-secrets/postgres/*_password) echo "a database role's password: the restored cluster's role has this one";;
+    rag-secrets/api/Security__ConversationIdKeys__*) echo "a conversation id key: without it clients' conversation ids are refused";;
+    rag-certs/data-protection.pfx) echo "the Data Protection certificate: without it the stored sign-in secrets can't be read";;
+    rag-certs/ca.pem) echo "the internal CA's certificate";;
+    rag-certs/ca.key) echo "the internal CA's private key";;
+    *) echo "";;
+  esac
+}
 
 if [ "$mode" = export ]; then
   [ -d "$dest" ] || die "$dest is not a directory (mount the escrow media first)"
@@ -136,6 +159,8 @@ if [ "$mode" = export ]; then
     echo "created:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "source:   $source_name"
     echo
+    for f in "${files[@]}"; do printf '%-56s %s\n' "$f" "$(describe "$f")"; done
+    echo
     echo "Each file goes back to its path in the volume it is named after (Kubernetes: --secrets-dir, --certs-dir),"
     echo "before the deployment's first start: deploy/escrow-keys.sh --restore <this directory> plus the deployment."
     [ -f "$current/rag-certs/ca.key" ] || echo "rag-certs/ca.key was not in the deployment (kept offline): keep that copy with this set."
@@ -151,11 +176,22 @@ if [ "$mode" = export ]; then
   exit 0
 fi
 
-# --verify and --restore: one set, or the newest set below PATH.
+# --verify and --restore: one set, or the deployment's newest set below PATH. Media can hold the sets of several
+# deployments (a drill host's and production's): another deployment's set is taken only when it is the only one there,
+# and is named, so a restore never takes the wrong deployment's keys without saying so.
 set_dir="$dest"
 if [ ! -f "$set_dir/SHA256SUMS" ]; then
-  set_dir="$(find "$dest" -mindepth 1 -maxdepth 1 -type d -name "ume-rag-keys-*" | LC_ALL=C sort | tail -n 1)"
-  [ -n "$set_dir" ] || die "no escrow set ume-rag-keys-* in $dest"
+  newest() { find "$dest" -mindepth 1 -maxdepth 1 -type d -name "$1" | LC_ALL=C sort | tail -n 1; }
+  set_dir="$(newest "ume-rag-keys-$project-????????T??????Z")"
+  if [ -z "$set_dir" ]; then
+    others="$(find "$dest" -mindepth 1 -maxdepth 1 -type d -name 'ume-rag-keys-*' -printf '%f\n' \
+      | sed -E 's/^ume-rag-keys-(.*)-[0-9]{8}T[0-9]{6}Z$/\1/' | LC_ALL=C sort -u)"
+    [ -n "$others" ] || die "no escrow set ume-rag-keys-* in $dest"
+    [ "$(wc -l <<< "$others")" = 1 ] \
+      || die "no set of $project in $dest, and sets of several deployments ($(paste -sd, <<< "$others")): name one set"
+    set_dir="$(newest 'ume-rag-keys-*')"
+    echo "note: no set of $project in $dest; using ${set_dir##*/}, of the deployment $others"
+  fi
 fi
 (cd "$set_dir" && sha256sum --quiet -c SHA256SUMS) || die "the checksums of $set_dir do not match"
 mapfile -t files < <(set_files "$set_dir")

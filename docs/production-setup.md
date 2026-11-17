@@ -312,7 +312,8 @@ sudo deploy/escrow-keys.sh /media/<escrow>   # one set with every key; then --ve
 ```
 
 The escrow set holds everything a restored database needs that no backup holds: the pepper, the blob key, the
-pgBackRest passphrase, `rag-certs/data-protection.pfx` and the internal CA (`ca.pem`, `ca.key`); the runbook's *Key
+pgBackRest passphrase, the database roles' passwords, the conversation id key, `rag-certs/data-protection.pfx` and the
+internal CA (`ca.pem`, `ca.key`); the runbook's *Key
 escrow* says how to keep it. `rag-certs/ca.key` also stays in the volume: `rag-bootstrap` needs it to re-issue a
 service certificate (*Internal TLS*, below), and anyone who can read it can issue certificates the services trust.
 
