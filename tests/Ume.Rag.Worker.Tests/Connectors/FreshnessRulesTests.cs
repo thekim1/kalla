@@ -145,6 +145,17 @@ public sealed class FreshnessRulesTests
     }
 
     [Fact]
+    public void A_continue_run_whose_carried_seeds_all_fail_again_is_unreachable()
+    {
+        var run = new CrawlRunRecord { RunId = Guid.NewGuid(), Classification = "public", SourceId = Guid.NewGuid(), MaxPages = 100, MaxDepth = 3, Seeds = 2 };
+
+        TraversalCompleteness.Evaluate(run with { SeedsFailed = 1 }, 0, false, CompletenessRule.Ratio, incremental: false, continued: true).RunFailure
+            .ShouldBeNull();
+        TraversalCompleteness.Evaluate(run with { SeedsFailed = 2 }, 0, false, CompletenessRule.Ratio, incremental: false, continued: true).RunFailure
+            .ShouldBe(TraversalCompleteness.SeedsUnreachable);
+    }
+
+    [Fact]
     public void The_report_has_the_completeness_and_removal_sections()
     {
         var run = new CrawlRunRecord
