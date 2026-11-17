@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
@@ -146,6 +147,19 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
         row.LastError.ShouldBe(JobDispatcher.ShutdownReason);
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."WorkerInstances" WHERE "InstanceId" = $1""", worker.InstanceId))
             .ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_stop_after_the_host_was_disposed_does_nothing()
+    {
+        // A WebApplicationFactory stops the host while Program's RunAsync stops and disposes it: on a busy machine the
+        // second stop reaches a disposed dispatcher (#805).
+        var worker = await WorkerHost.StartAsync(database);
+        var dispatcher = worker.Services.GetServices<IHostedService>().OfType<JobDispatcher>().Single();
+
+        await worker.StopAsync();
+
+        await Should.NotThrowAsync(() => dispatcher.StopAsync(Ct));
     }
 
     [Fact]
