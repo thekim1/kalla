@@ -601,7 +601,13 @@ public static class RunKinds
     public const string RetryFailed = "retry-failed";
     public const string Reprocess = "reprocess";
 
-    public static IReadOnlyList<string> All { get; } = [Sync, RetryFailed, Reprocess];
+    /// <summary>
+    /// A crawl run that goes on from a failed, cancelled or limit-stopped run of its source (#804): it takes over that run's
+    /// open frontier rows and failed items, with link discovery, and is never a complete traversal.
+    /// </summary>
+    public const string Continue = "continue";
+
+    public static IReadOnlyList<string> All { get; } = [Sync, RetryFailed, Reprocess, Continue];
 }
 
 /// <summary>Run triggers of P1 (engine design §10.1; <c>notification</c> is P2 SharePoint).</summary>
@@ -651,6 +657,10 @@ public sealed class Run
     public required string Classification { get; set; }
     public required string Kind { get; set; }
     public required string Trigger { get; set; }
+
+    /// <summary>A <c>continue</c> run: the run of the same source it goes on from (#804).</summary>
+    public Guid? ContinuesRunId { get; set; }
+
     public Guid? PipelineVersionId { get; set; }
     public DateTimeOffset? ScheduledFor { get; set; }
     public string? Phase { get; set; }

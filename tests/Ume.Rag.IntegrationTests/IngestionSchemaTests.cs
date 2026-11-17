@@ -392,6 +392,15 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
             SELECT concat_ws(',', "Added", "Updated", "Unchanged", "Deleted", "Failed", "ProposedDeletions", "CostUsd"::int)
             FROM content."Runs" WHERE "Id" = '{runId}'
             """)).ShouldBe("0,0,0,0,0,0,0");
+
+        // A continue run names the run it goes on from (#804); the retention step deleting that run leaves the reference null.
+        var continueId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(worker, $"""
+            INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "State", "ContinuesRunId")
+            VALUES ('{continueId}', '{source.Id}', 'public', '{RunKinds.Continue}', '{RunTriggers.Manual}', '{RunStates.Running}', '{runId}')
+            """);
+        await Sql.ExecuteAsync(database.Connection(null), $"""DELETE FROM content."Runs" WHERE "Id" = '{runId}'""");
+        (await Sql.ScalarAsync<bool>(worker, $"""SELECT "ContinuesRunId" IS NULL FROM content."Runs" WHERE "Id" = '{continueId}'""")).ShouldBeTrue();
     }
 
     private static async Task<EmbeddingProfile> AddProfileAsync(Ume.Rag.Infrastructure.Persistence.RagDbContext db, int dimensions, Residency ceiling = Residency.Eu)
