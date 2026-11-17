@@ -29,7 +29,7 @@ set -euo pipefail
 umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; project=""; secrets=""; certs=""; image=""; mode=export; dest=""
+env_file="$here/.env"; project=""; secrets=""; certs=""; image=""; mode="export"; dest=""
 
 usage() { sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -89,6 +89,7 @@ read_current() {
     (cd "$certs" && for f in $cert_files; do [ ! -f "$f" ] || cp "$f" "$current/rag-certs/"; done)
     return 0
   fi
+  # shellcheck disable=SC2016 # expanded by the container's shell
   docker run --rm --network none -v "${project}_rag-secrets:/rag-secrets:ro" -v "${project}_rag-certs:/rag-certs:ro" \
     --entrypoint /bin/sh "$image" -c '
       cd /rag-secrets && for f in '"$secret_files"'; do [ ! -f "$f" ] || echo "rag-secrets/$f"; done > /tmp/list
@@ -184,6 +185,7 @@ if [ "$mode" = restore ]; then
     done
   else
     # rag-bootstrap gives each file its owner when it starts; until then they are root's.
+    # shellcheck disable=SC2016 # expanded by the container's shell
     (cd "$set_dir" && tar -cf - "${files[@]}") | docker run --rm -i --network none \
       -v "${project}_rag-secrets:/rag-secrets" -v "${project}_rag-certs:/rag-certs" --entrypoint /bin/sh "$image" -c '
         cd / && tar -xf - && for f in '"${files[*]}"'; do chown 0:0 "/$f" && chmod 0600 "/$f" || exit 1; done' \
