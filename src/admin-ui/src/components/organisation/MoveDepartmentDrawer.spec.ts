@@ -42,6 +42,8 @@ describe('Change department (#811, admin design §3.2)', () => {
     ])
     const impact = vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({
       shares: [{ collectionId: 'c1', collection: 'Vuxen', departmentId: 'old', department: 'Fritid' }], sourcesOnDepartmentPipelines: [], ownerTeamId: 't1', impactToken: 'tok',
+      brokenLinks: [{ assistantId: 'a9', assistant: 'Kundtjänst skola', department: 'Skola', collectionId: 'c1', collection: 'Vuxen' }],
+      scopedKeys: [{ keyId: 'k1', key: 'skolportal', department: 'Skola' }],
     })
     const move = vi.spyOn(api.collections, 'move').mockResolvedValue({ id: 'c1', departmentId: 'new' } as Collection)
 
@@ -64,6 +66,8 @@ describe('Change department (#811, admin design §3.2)', () => {
     await flushPromises()
     expect(impact).toHaveBeenLastCalledWith('c1', { departmentId: 'new', ownerTeamId: 't1', gatewayKeyId: null, version: '7' })
     expect(wrapper.get('[data-test=impact]').text()).toContain('Vuxen with Fritid')
+    expect(wrapper.get('[data-test=impact]').text()).toContain('Kundtjänst skola (Skola) → Vuxen')
+    expect(wrapper.get('[data-test=impact]').text()).toContain('skolportal (Skola)')
     expect(move).not.toHaveBeenCalled()
 
     await wrapper.get('form').trigger('submit')
@@ -76,7 +80,7 @@ describe('Change department (#811, admin design §3.2)', () => {
   it('shows the sources that block the move and offers no Move, and a changed field asks for a new check', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([department('old', 'Fritid'), department('new', 'Vuxenutbildning'), department('x', 'Skola')])
-    vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({ shares: [], sourcesOnDepartmentPipelines: ['umea.se vuxen (Fritids pipeline)'], ownerTeamId: null, impactToken: null })
+    vi.spyOn(api.collections, 'moveImpact').mockResolvedValue({ shares: [], sourcesOnDepartmentPipelines: ['umea.se vuxen (Fritids pipeline)'], ownerTeamId: null, brokenLinks: [], scopedKeys: [], impactToken: null })
     const wrapper = mount(MoveDepartmentDrawer, {
       props: { open: true, kind: 'collection', id: 'c1', departmentId: 'old', version: '7' },
       global: { stubs: { GatewayKeyPicker: true, Teleport: true } },

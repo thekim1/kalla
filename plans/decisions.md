@@ -888,10 +888,12 @@ changeable under ⋯. The Map is a table in P1b. Detail: `admin/design.md`
 ### Moving to another department
 
 A platform admin can change the owner department of a knowledge base or an assistant, to correct one created under the
-wrong department; department admins cannot. The move keeps every link working: it shares the knowledge base with each
-department whose assistants would otherwise lose it (the old department when a knowledge base moves; the new one, for
-each linked knowledge base it cannot reach, when an assistant moves), and those shares stay until someone removes them
-under Sharing (V35 still guards that). The moved object takes an owner team of the new department: the one the admin
+wrong department; department admins cannot. The move keeps every link that works today working: it shares the
+knowledge base with each active department whose assistants would otherwise lose it (the old department when a
+knowledge base moves; the new one, for each linked knowledge base it cannot reach, when an assistant moves), and those
+shares stay until someone removes them under Sharing (V35 still guards that). A link that doesn't work today stays
+broken, and client keys of other departments scoped to the object keep their scope; the admin sees both before
+confirming. The moved object takes an owner team of the new department: the one the admin
 picks, which is required when the department has several active teams, else its only team (none when it has no team).
 It takes a gateway key of the new department, or none (V39 unchanged: a published assistant needs a key once the gateway
 acts as keys). A knowledge base whose sources use

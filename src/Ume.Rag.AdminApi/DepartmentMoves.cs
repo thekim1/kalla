@@ -164,27 +164,47 @@ public static class DepartmentMoves
     }
 
     /// <summary>
-    /// A collection moving to <paramref name="target"/>: each other department whose assistants (published version or draft,
-    /// archived too) link it and that its sharing would not reach with the new owner gets a share; a live source on a
-    /// pipeline of another department blocks the move.
+    /// A collection moving to <paramref name="target"/>. A department whose assistants (published version or draft, archived
+    /// too) link it gets a share when its link works today (the old owner, or a department its sharing reaches now), the
+    /// new owner's sharing would not reach it, and it is active. A link that does not work today stays broken and is listed
+    /// (#821 review: a draft may link a collection it cannot reach, and a move must not share it into reach). A live
+    /// source on a pipeline of another department blocks the move.
     /// </summary>
     private static async Task<MovePlan> PlanCollectionAsync(AdminContext admin, Collection collection, Guid target, CancellationToken ct)
     {
         var users = await CollectionEndpoints.UsedByAsync(admin, collection.Id, ct);
         var shares = await admin.Db.CollectionShares.AsNoTracking().Where(s => s.CollectionId == collection.Id).Select(s => s.DepartmentId).ToListAsync(ct);
-        var reach = await CollectionSharing.ReachAsync(admin.Db, target, collection.SharedWith, shares, ct);
-        var needed = users.Select(u => u.DepartmentId).Where(d => d != target && !reach.Contains(d)).Distinct().ToList();
+        var now = await CollectionSharing.ReachAsync(admin.Db, collection.DepartmentId, collection.SharedWith, shares, ct);
+        now.Add(collection.DepartmentId);
+        var after = await CollectionSharing.ReachAsync(admin.Db, target, collection.SharedWith, shares, ct);
+        var departments = users.Select(u => u.DepartmentId).Distinct().ToList();
+        var active = (await admin.Db.Departments.AsNoTracking().Where(d => departments.Contains(d.Id) && d.IsActive).Select(d => d.Id).ToListAsync(ct)).ToHashSet();
+        var needed = new List<(Guid, string, Guid)>();
+        var broken = new List<MoveBrokenLink>();
+        foreach (var user in users.Where(u => u.DepartmentId != target && !after.Contains(u.DepartmentId)))
+        {
+            if (!now.Contains(user.DepartmentId))
+            {
+                broken.Add(new MoveBrokenLink(user.Id, user.Name, user.DepartmentName, collection.Id, collection.Name));
+            }
+            else if (active.Contains(user.DepartmentId) && !needed.Any(n => n.Item3 == user.DepartmentId))
+            {
+                needed.Add((collection.Id, collection.Name, user.DepartmentId));
+            }
+        }
+
         var blocking = await (from s in admin.Db.Sources.AsNoTracking()
                               join p in admin.Db.Pipelines.AsNoTracking() on s.PipelineId equals p.Id
                               where s.CollectionId == collection.Id && s.DeletedAt == null && p.DepartmentId != null && p.DepartmentId != target
                               orderby s.Name
                               select s.Name + " (" + p.Name + ")").ToListAsync(ct);
-        return new MovePlan(await NamedAsync(admin, needed.Select(d => (collection.Id, collection.Name, d)), ct), blocking);
+        return new MovePlan(await NamedAsync(admin, needed, ct), blocking, broken, await ScopedKeysAsync(admin, collection.Id, target, ct));
     }
 
     /// <summary>
     /// An assistant moving to <paramref name="target"/>: each collection its published version or draft links, owned by
-    /// another department and not reaching the new one, gets a share for it.
+    /// another department, linkable by the assistant's department today (V11) and not reaching the new one, gets a share
+    /// for it. A link it cannot reach today stays broken and is listed (#821 review).
     /// </summary>
     private static async Task<MovePlan> PlanAssistantAsync(AdminContext admin, Assistant assistant, Guid target, CancellationToken ct)
     {
@@ -193,17 +213,46 @@ public static class DepartmentMoves
         var ids = links.SelectMany(l => l).Select(l => l.CollectionId).Distinct().ToList();
         var collections = await admin.Db.Collections.AsNoTracking().Where(c => ids.Contains(c.Id) && c.DeletedAt == null && c.DepartmentId != target)
             .OrderBy(c => c.Name).ToListAsync(ct);
+        var linkable = await CollectionSharing.LinkableAsync(admin.Db, assistant.DepartmentId, ids, ct);
+        var department = await admin.Db.Departments.AsNoTracking().Where(d => d.Id == assistant.DepartmentId).Select(d => d.Name).SingleAsync(ct);
         var needed = new List<(Guid, string, Guid)>();
+        var broken = new List<MoveBrokenLink>();
         foreach (var collection in collections)
         {
             var shares = await admin.Db.CollectionShares.AsNoTracking().Where(s => s.CollectionId == collection.Id).Select(s => s.DepartmentId).ToListAsync(ct);
-            if (!(await CollectionSharing.ReachAsync(admin.Db, collection.DepartmentId, collection.SharedWith, shares, ct)).Contains(target))
+            if ((await CollectionSharing.ReachAsync(admin.Db, collection.DepartmentId, collection.SharedWith, shares, ct)).Contains(target))
+            {
+                continue;
+            }
+
+            if (linkable.Contains(collection.Id))
             {
                 needed.Add((collection.Id, collection.Name, target));
             }
+            else
+            {
+                broken.Add(new MoveBrokenLink(assistant.Id, assistant.Name, department, collection.Id, collection.Name));
+            }
         }
 
-        return new MovePlan(await NamedAsync(admin, needed, ct), []);
+        return new MovePlan(await NamedAsync(admin, needed, ct), [], broken, await ScopedKeysAsync(admin, assistant.Id, target, ct));
+    }
+
+    /// <summary>
+    /// The live client keys scoped to <paramref name="id"/> (an assistant or a collection) whose team is of another
+    /// department than <paramref name="target"/> (#821 review): they keep reaching the object after the move (the run-time
+    /// scope is by id), but V23 no longer holds for them, so their next scope save is refused until the object is taken
+    /// out, and the new owner's admins do not see them. Listed in the impact; the move changes no key.
+    /// </summary>
+    private static async Task<List<MoveScopedKey>> ScopedKeysAsync(AdminContext admin, Guid id, Guid target, CancellationToken ct)
+    {
+        var keys = await (from k in admin.Db.Keys.AsNoTracking()
+                          join t in admin.Db.Teams.AsNoTracking() on k.TeamId equals t.Id
+                          join d in admin.Db.Departments.AsNoTracking() on t.DepartmentId equals d.Id
+                          where k.RevokedAt == null && t.DepartmentId != target
+                          select new { k.Id, k.Name, k.Scopes, Department = d.Name }).ToListAsync(ct);
+        return [.. keys.Where(k => k.Scopes.AssistantIds.Contains(id) || k.Scopes.CollectionIds.Contains(id))
+            .OrderBy(k => k.Name, StringComparer.Ordinal).Select(k => new MoveScopedKey(k.Id, k.Name, k.Department))];
     }
 
     private static async Task<List<MoveShare>> NamedAsync(AdminContext admin, IEnumerable<(Guid Collection, string Name, Guid Department)> shares, CancellationToken ct)
@@ -212,16 +261,18 @@ public static class DepartmentMoves
         var ids = list.Select(s => s.Department).Distinct().ToList();
         var names = await admin.Db.Departments.AsNoTracking().Where(d => ids.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
         return [.. list.Select(s => new MoveShare(s.Collection, s.Name, s.Department, names.GetValueOrDefault(s.Department, s.Department.ToString())))
-            .OrderBy(s => s.Collection).ThenBy(s => s.DepartmentId)];
+            .OrderBy(s => s.CollectionId).ThenBy(s => s.DepartmentId)];
     }
 
     private static MoveImpact Impact(MovePlan plan, Guid id, uint version, MoveRequest request, Guid? team) =>
-        new(plan.Shares, plan.BlockingSources, team, plan.BlockingSources.Count > 0 ? null : Token(id, version, request, team, plan.Shares));
+        new(plan.Shares, plan.BlockingSources, team, plan.BrokenLinks, plan.ScopedKeys,
+            plan.BlockingSources.Count > 0 ? null : Token(id, version, request, team, plan.Shares));
 
     /// <summary>
     /// Adds the plan's shares (a collection at <c>department</c> level becomes <c>selected</c> with only them, after dropping
-    /// the rows kept unused at that level) and drops a moved collection's share row for its new owner. One audited
-    /// <c>share</c> per collection whose sharing changed, under its owner's department.
+    /// the rows kept unused at that level) and drops a moved collection's share row for its new owner; a <c>selected</c>
+    /// collection left with no share falls back to <c>department</c>, as the sharing route allows no empty list. One audited
+    /// <c>share</c> per collection whose sharing changed, under its owner's department and at its level, reason <c>move</c>.
     /// </summary>
     private static async Task<List<AuditAlso>> ApplySharesAsync(AdminContext admin, MovePlan plan, IReadOnlyList<Collection> moved, CancellationToken ct)
     {
@@ -231,8 +282,8 @@ public static class DepartmentMoves
         {
             var collection = moved.FirstOrDefault(c => c.Id == id) ?? await admin.Db.Collections.SingleAsync(c => c.Id == id, ct);
             var rows = await admin.Db.CollectionShares.Where(s => s.CollectionId == id).ToListAsync(ct);
-            var before = new SharingAudit(collection.SharedWith,
-                collection.SharedWith == CollectionSharingLevels.Selected ? [.. rows.Select(r => r.DepartmentId).Order()] : []);
+            var level = collection.SharedWith;
+            var before = new SharingAudit(level, level == CollectionSharingLevels.Selected ? [.. rows.Select(r => r.DepartmentId).Order()] : []);
             var adding = plan.Shares.Where(s => s.CollectionId == id).Select(s => s.DepartmentId).ToList();
             if (adding.Count > 0 && collection.SharedWith == CollectionSharingLevels.Department)
             {
@@ -250,15 +301,20 @@ public static class DepartmentMoves
                 kept.Add(department);
             }
 
+            if (collection.SharedWith == CollectionSharingLevels.Selected && kept.Count == 0)
+            {
+                collection.SharedWith = CollectionSharingLevels.Department;
+            }
+
             var after = new SharingAudit(collection.SharedWith, collection.SharedWith == CollectionSharingLevels.Selected ? [.. kept.Order()] : []);
-            if (adding.Count > 0 || owner.Count > 0)
+            if (adding.Count > 0 || owner.Count > 0 || collection.SharedWith != level)
             {
                 // The aggregate root's stamp moves its xmin, so a concurrent sharing save conflicts (admin design §4.3).
                 collection.UpdatedAt = admin.Now;
                 collection.UpdatedBy = admin.Actor;
-                also.Add(new AuditAlso("share", AuditEntityTypes.Collection, id, before, new { sharing = after, reason = MoveAction })
+                also.Add(new AuditAlso("share", AuditEntityTypes.Collection, id, before, after)
                 {
-                    DepartmentId = collection.DepartmentId,
+                    DepartmentId = collection.DepartmentId, Classification = collection.Classification, Reason = MoveAction,
                 });
             }
         }
@@ -290,8 +346,10 @@ public static class DepartmentMoves
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())))[..32];
     }
 
-    private sealed record MovePlan(IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> BlockingSources);
+    private sealed record MovePlan(
+        IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> BlockingSources, IReadOnlyList<MoveBrokenLink> BrokenLinks, IReadOnlyList<MoveScopedKey> ScopedKeys);
 
+    /// <summary>The audit of a move, before and after (admin design §3.2).</summary>
     private sealed record MoveAudit(Guid DepartmentId, Guid? OwnerTeamId, Guid? GatewayKeyId)
     {
         public static MoveAudit Of(Guid department, Guid? team, Guid? key) => new(department, team, key);
@@ -318,5 +376,16 @@ public sealed record MoveRequest : AdminRequest
 /// <summary>A share the move adds so a link keeps working.</summary>
 public sealed record MoveShare(Guid CollectionId, string Collection, Guid DepartmentId, string Department);
 
-/// <summary>What a move does: the shares, the blocking sources, the owner team it gets; <see cref="ImpactToken"/> is null while sources block it.</summary>
-public sealed record MoveImpact(IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> SourcesOnDepartmentPipelines, Guid? OwnerTeamId, string? ImpactToken);
+/// <summary>A link that does not work today (the assistant's department cannot reach the knowledge base) and stays broken.</summary>
+public sealed record MoveBrokenLink(Guid AssistantId, string Assistant, string Department, Guid CollectionId, string Collection);
+
+/// <summary>A live client key of another department scoped to the moved object: it keeps working; its scope needs a look.</summary>
+public sealed record MoveScopedKey(Guid KeyId, string Key, string Department);
+
+/// <summary>
+/// What a move does: the shares, the blocking sources, the owner team it gets, the links that stay broken and the keys of
+/// other departments scoped to it; <see cref="ImpactToken"/> is null while sources block it.
+/// </summary>
+public sealed record MoveImpact(
+    IReadOnlyList<MoveShare> Shares, IReadOnlyList<string> SourcesOnDepartmentPipelines, Guid? OwnerTeamId,
+    IReadOnlyList<MoveBrokenLink> BrokenLinks, IReadOnlyList<MoveScopedKey> ScopedKeys, string? ImpactToken);

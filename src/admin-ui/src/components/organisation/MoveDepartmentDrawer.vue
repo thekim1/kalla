@@ -128,6 +128,16 @@ const move = () =>
           </ul>
         </template>
         <p v-else>{{ MOVE_DEPARTMENT.noShares }}</p>
+        <template v-if="impact.brokenLinks.length">
+          <p class="mt-2 font-medium" data-test="broken-links">{{ MOVE_DEPARTMENT.brokenLinks }}</p>
+          <ul class="ml-5 list-disc">
+            <li v-for="l in impact.brokenLinks" :key="`${l.assistantId}:${l.collectionId}`">{{ MOVE_DEPARTMENT.brokenLink(l.assistant, l.department, l.collection) }}</li>
+          </ul>
+        </template>
+        <template v-if="impact.scopedKeys.length">
+          <p class="mt-2 font-medium" data-test="scoped-keys">{{ MOVE_DEPARTMENT.scopedKeys }}</p>
+          <ul class="ml-5 list-disc"><li v-for="k in impact.scopedKeys" :key="k.keyId">{{ MOVE_DEPARTMENT.scopedKey(k.key, k.department) }}</li></ul>
+        </template>
       </div>
       <div v-if="refusals.length" ref="refusalBox" role="alert" class="rounded-card border border-danger p-3 text-small text-danger" data-test="refusals">
         <p class="font-medium">{{ MOVE_DEPARTMENT.refused }}</p>

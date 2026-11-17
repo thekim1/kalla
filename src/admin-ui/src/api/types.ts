@@ -283,6 +283,10 @@ export interface MoveImpact {
   sourcesOnDepartmentPipelines: string[]
   /** The owner team it gets: the one chosen, else the new department's only active team. */
   ownerTeamId: string | null
+  /** Links that do not work today (the department cannot reach the knowledge base): the move leaves them broken. */
+  brokenLinks: { assistantId: string; assistant: string; department: string; collectionId: string; collection: string }[]
+  /** Client keys of other departments scoped to the object: they keep working; their scope needs a look. */
+  scopedKeys: { keyId: string; key: string; department: string }[]
   impactToken: string | null
 }
 

@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -155,10 +157,10 @@ public sealed class DepartmentMoveTests(AdminDatabaseFixture database, AdminHost
             // Audited under both departments; the added share audited on the collection with the move as its reason.
             var entries = await db.AuditLog.AsNoTracking().Where(e => e.EntityId == seed.Collection.ToString()).ToListAsync(Ct);
             entries.Where(e => e.Action == DepartmentMoves.MoveAction).Select(e => e.DepartmentId).ShouldBe([seed.Target, seed.Old], ignoreOrder: true);
-            entries.ShouldContain(e => e.Action == "share" && e.Details!.Contains("\"move\"", StringComparison.Ordinal));
+            entries.ShouldContain(e => e.Action == "share" && e.Reason == DepartmentMoves.MoveAction);
         }
 
-        // The old department now sees it as shared with it, and its published assistant still passes V11 on publish checks.
+        // The old department now sees it as shared with it: its assistant's link is linkable again (V11 holds through the share).
         (await oldAdmin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("shared").GetBoolean().ShouldBeTrue();
         (await oldAdmin.GetAsync($"/api/assistants/{oldAssistant}", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
@@ -271,6 +273,134 @@ public sealed class DepartmentMoveTests(AdminDatabaseFixture database, AdminHost
                 .ShouldBe([seed.Target], "the stale row of the department level does not come back");
             var entries = await db.AuditLog.AsNoTracking().Where(e => e.EntityId == assistant.ToString() && e.Action == DepartmentMoves.MoveAction).ToListAsync(Ct);
             entries.Select(e => e.DepartmentId).ShouldBe([seed.Target, seed.Old], ignoreOrder: true);
+        }
+    }
+
+    [Fact]
+    public async Task Only_links_that_work_today_get_shares_and_broken_links_scoped_keys_and_cost_rows_are_kept_as_they_are()
+    {
+        var seed = await SeedAsync();
+        var userTeam = Guid.CreateVersion7();
+        Guid key;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            // The old department is inactive (disbanded); a client key of User's team is scoped to the collection; a cost row of yesterday.
+            await db.Departments.Where(d => d.Id == seed.Old).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsActive, false), Ct);
+            db.Teams.Add(new Team { Id = userTeam, Name = "Elevhälsa " + seed.User, DepartmentId = seed.User, SyncedAt = DateTimeOffset.UtcNow });
+            var client = new Client { Name = "Skolportalen " + seed.User, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Internal, UpdatedAt = DateTimeOffset.UtcNow };
+            var apiKey = new ApiKey
+            {
+                ClientId = client.Id, TeamId = userTeam, Name = "skolportal " + seed.User, Prefix = "sk-test", KeyHash = Guid.NewGuid().ToString("N"),
+                Scopes = new KeyScopes([], [seed.Collection]), CreatedAt = DateTimeOffset.UtcNow,
+            };
+            key = apiKey.Id;
+            db.AddRange(client, apiKey);
+            db.CollectionDailyUsage.Add(new CollectionDailyUsage
+            {
+                Day = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)), CollectionId = seed.Collection, Classification = Classification.Internal, Step = "embed",
+                DepartmentId = seed.Old, Calls = 3, CostUsd = 0.02m,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await AssistantAsync(seed.Old, seed.Collection);
+        // User's draft links the collection, which is not shared with User: that link does not work today.
+        var broken = await AssistantAsync(seed.User, seed.Collection, published: false);
+        using var platform = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.PlatformAdmin);
+        var path = $"/api/collections/{seed.Collection}";
+        var version = await VersionAsync(platform, path);
+        var request = new { departmentId = seed.Target, version };
+
+        var impact = await Json(await platform.PostAsJsonAsync($"{path}/move/impact", request, Ct));
+        impact.GetProperty("shares").GetArrayLength().ShouldBe(0, "no share for an inactive department, none to bring a broken link into reach");
+        impact.GetProperty("brokenLinks").EnumerateArray().ShouldHaveSingleItem().GetProperty("assistantId").GetGuid().ShouldBe(broken);
+        impact.GetProperty("scopedKeys").EnumerateArray().ShouldHaveSingleItem().GetProperty("keyId").GetGuid().ShouldBe(key);
+        var stale = impact.GetProperty("impactToken").GetString();
+
+        // The plan changes at the same version (Old is active again, so its assistant's link needs a share): the token no longer fits.
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Departments.Where(d => d.Id == seed.Old).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsActive, true), Ct);
+        }
+
+        using (var refused = await platform.PostAsJsonAsync($"{path}/move", new { request.departmentId, version, impactToken = stale }, Ct))
+        {
+            (await Json(refused)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.MoveNotConfirmed.Code);
+        }
+
+        impact = await Json(await platform.PostAsJsonAsync($"{path}/move/impact", request, Ct));
+        impact.GetProperty("shares").EnumerateArray().ShouldHaveSingleItem().GetProperty("departmentId").GetGuid().ShouldBe(seed.Old);
+        using (var moved = await platform.PostAsJsonAsync($"{path}/move", new { request.departmentId, version, impactToken = impact.GetProperty("impactToken").GetString() }, Ct))
+        {
+            moved.StatusCode.ShouldBe(HttpStatusCode.OK, await moved.Content.ReadAsStringAsync(Ct));
+        }
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.CollectionShares.AsNoTracking().Where(s => s.CollectionId == seed.Collection).Select(s => s.DepartmentId).ToListAsync(Ct))
+                .ShouldBe([seed.Old], "User's broken link is not shared into reach");
+            (await db.Keys.AsNoTracking().SingleAsync(k => k.Id == key, Ct)).Scopes.CollectionIds.ShouldBe([seed.Collection], "the move changes no key");
+            (await db.CollectionDailyUsage.AsNoTracking().SingleAsync(u => u.CollectionId == seed.Collection, Ct)).DepartmentId
+                .ShouldBe(seed.Old, "cost rows keep the department of their calls");
+            var share = await db.AuditLog.AsNoTracking().SingleAsync(e => e.EntityId == seed.Collection.ToString() && e.Action == "share", Ct);
+            (share.Reason, share.Classification).ShouldBe((DepartmentMoves.MoveAction, Classification.Internal));
+        }
+    }
+
+    [Fact]
+    public async Task A_selected_collection_left_with_no_share_falls_back_to_its_department_and_an_assistant_s_broken_link_stays_broken()
+    {
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Collections.Where(c => c.Id == seed.Collection).ExecuteUpdateAsync(u => u.SetProperty(c => c.SharedWith, CollectionSharingLevels.Selected), Ct);
+            db.CollectionShares.Add(new CollectionShare { CollectionId = seed.Collection, DepartmentId = seed.Target, SharedBy = "test", SharedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var platform = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.PlatformAdmin);
+        var path = $"/api/collections/{seed.Collection}";
+        var version = await VersionAsync(platform, path);
+        var impact = await Json(await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.Target, version }, Ct));
+        (await platform.PostAsJsonAsync($"{path}/move", new { departmentId = seed.Target, version, impactToken = impact.GetProperty("impactToken").GetString() }, Ct))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.Collections.AsNoTracking().SingleAsync(c => c.Id == seed.Collection, Ct)).SharedWith.ShouldBe(CollectionSharingLevels.Department);
+            (await db.CollectionShares.AsNoTracking().CountAsync(s => s.CollectionId == seed.Collection, Ct)).ShouldBe(0);
+        }
+
+        // An assistant of User with a draft link to Target's collection, which it cannot reach: moving it shares nothing.
+        var assistant = await AssistantAsync(seed.User, seed.Collection, published: false);
+        var assistantPath = $"/api/assistants/{assistant}";
+        var assistantVersion = await VersionAsync(platform, assistantPath);
+        var assistantImpact = await Json(await platform.PostAsJsonAsync($"{assistantPath}/move/impact", new { departmentId = seed.Old, version = assistantVersion }, Ct));
+        assistantImpact.GetProperty("shares").GetArrayLength().ShouldBe(0);
+        assistantImpact.GetProperty("brokenLinks").EnumerateArray().ShouldHaveSingleItem().GetProperty("collectionId").GetGuid().ShouldBe(seed.Collection);
+    }
+
+    [Fact]
+    public async Task A_published_assistant_is_not_moved_without_a_key_once_the_gateway_acts_as_keys()
+    {
+        var seed = await SeedAsync();
+        var assistant = await AssistantAsync(seed.Old, seed.Collection);
+        var features = host.Factory.Services.GetRequiredService<GatewayFeatures>();
+        var before = features.Current.ToList();
+        features.Update([.. before, GatewayFeatures.ActAsKeyFeature]);
+        try
+        {
+            using var platform = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.PlatformAdmin);
+            var path = $"/api/assistants/{assistant}";
+            var version = await VersionAsync(platform, path);
+            var impact = await Json(await platform.PostAsJsonAsync($"{path}/move/impact", new { departmentId = seed.Target, version }, Ct));
+            using var refused = await platform.PostAsJsonAsync($"{path}/move",
+                new { departmentId = seed.Target, version, impactToken = impact.GetProperty("impactToken").GetString() }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(Ct));
+            (await Json(refused)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.GatewayKeyRequired.Code);
+        }
+        finally
+        {
+            features.Update(before);
         }
     }
 }

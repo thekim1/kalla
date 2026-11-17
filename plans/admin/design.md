@@ -177,12 +177,16 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
   department* on a knowledge base or an assistant moves it, its sources, documents, runs, versions and test questions
   with it. First `…/move/impact` says what the move does, then `…/move` does it with the impact's token (a hash of the
   object's id, version, the request and the shares to add, so a change in between answers `move_not_confirmed`).
-  - **Links kept.** A knowledge base moving out: every department whose assistants (published version or draft, archived
-    ones too) link it, other than the new owner, must reach it afterwards; a department it doesn't reach gets a share
-    (level *only our department* becomes *selected departments* with just those shares, after dropping the stale rows
-    kept at that level). The new owner's own share row goes. An assistant moving: each knowledge base its published
-    version or draft links, owned by another department and not shared with the new one, gets a share for the new one.
-    The shares are listed in the impact and audited `share` on each knowledge base, with `reason: move`.
+  - **Links kept, only those that work today** (#821 review: a draft may link a knowledge base it cannot reach, V11 being
+    a warning there). A knowledge base moving out: a department whose assistants (published version or draft, archived
+    ones too) link it gets a share when its link works today (it is the old owner, or the sharing reaches it now), the
+    new owner's sharing would not reach it, and it is active; level *only our department* becomes *selected
+    departments* with just those shares, after dropping the stale rows kept at that level. The new owner's own share row
+    goes, and a *selected* list left empty falls back to *only our department*. An assistant moving: each knowledge base
+    its published version or draft links, owned by another department, linkable for its department today and not
+    reaching the new one, gets a share for the new one. Links that don't work today stay broken and the impact lists
+    them (`brokenLinks`). The shares are listed in the impact and audited `share` on each knowledge base, at its level,
+    with the reason `move`.
   - **Owner team and key**: the request names an owner team of the new department, one of its active teams; without
     one the move takes the department's only active team, none when it has no team, and `invalid_value` on
     `ownerTeamId` when it has several (the impact answers the team it takes). The gateway key is one of the new
@@ -193,11 +197,15 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
   - **What stays**: cost and usage rows (`AssistantDailyUsage`, `AssistantDailyTotals`, `CollectionDailyUsage`) keep
     the department of their calls, by day: the row of the move day is one per object and step, so an assistant's keeps
     the department of its first call that day and a knowledge base's takes the department of its last; audit entries
-    keep theirs. Queued jobs keep their fairness department until they
-    run. Client keys scoped to a moved assistant keep their scope. Department parse rules follow the knowledge base's
-    department from the next parse.
-  - **Audit**: `move` on the object under the new department, with `fromDepartmentId`/`toDepartmentId`, and the same
-    entry under the old department, so both departments' admins see it.
+    keep theirs. Queued jobs keep their fairness department until they run. Department parse rules follow the
+    knowledge base's department from the next parse. An assistant's conversations and feedback follow the assistant:
+    the new department's reviewers see them, as they see everything else about it.
+  - **Client keys**: a live key of another department scoped to the object keeps its scope and keeps working (the
+    run-time scope is by id); V23 no longer holds for it, so its next scope save is refused until the object is taken
+    out, and only its own department's admins see it. The impact lists these keys (`scopedKeys`); the move changes no
+    key.
+  - **Audit**: `move` on the object under the new department, its `departmentId`, `ownerTeamId` and `gatewayKeyId`
+    before and after, and the same entry under the old department, so both departments' admins see it.
 - **Topics**: the tags the sources' path rules put on chunks (processing §7). A link from an assistant to a collection
   may name topics; retrieval then keeps only that collection's chunks carrying one of them (knowledge §4.2, §6.2).
 - **Ownership of shared content**: content used across the municipality is owned by the department that runs it (umea.se:
@@ -375,7 +383,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `POST /api/collections/{id}/move/impact`, `POST /api/collections/{id}/move` | Admin | §3.2 *Changing the owner department*: body `{ departmentId, ownerTeamId, gatewayKeyId, version }` (+ `impactToken` on the move); the impact answers `{ shares: [{ collectionId, collection, departmentId, department }], sourcesOnDepartmentPipelines: [...], ownerTeamId, impactToken }`; the move answers the collection's detail |
+| `POST /api/collections/{id}/move/impact`, `POST /api/collections/{id}/move` | Admin | §3.2 *Changing the owner department*: body `{ departmentId, ownerTeamId, gatewayKeyId, version }` (+ `impactToken` on the move); the impact answers `{ shares: [{ collectionId, collection, departmentId, department }], sourcesOnDepartmentPipelines: [...], ownerTeamId, brokenLinks: [{ assistantId, assistant, department, collectionId, collection }], scopedKeys: [{ keyId, key, department }], impactToken }`; the move answers the collection's detail |
 | `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification, contact, optional `gatewayKeyId` (V39); profile = default; an empty owner team becomes the creator's first active team in the department by name (from the `teamCodes` claim), none when the creator has no team there; the owner's detail (`shared: false`) carries `sharedWith`, `sharedWithDepartmentIds` (with `selected`) and `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Affects the assistants: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); also refused while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first. A department the collection is shared with gets the shared summary of the list row (`shared: true`) from `GET …/{id}`, the read-only Overview of §5.5.2; every other route of the collection answers it 404 |
 | `GET /api/collections?view=mine\|shared\|all` | Read | `mine` (default): the caller's departments' collections; `shared`: collections of other departments shared with one of the caller's departments or with the municipality, as the shared summary (name, owning department, level, contact, document count, topics; no sources); `all`: both. The assistant's collection picker reads `all` |
 | `PUT /api/collections/{id}/sharing` `{ sharedWith, departmentIds, version }` | Manage | `sharedWith` = `department`/`selected`/`municipality`; `departmentIds` only with `selected`, at least one, active departments other than the owner (otherwise 400 `invalid_value`); at the other levels the share rows are kept but unused; narrowing is refused (V35) with the linking assistants and their departments; audited `collection.share`; the detail's `usedBy[]` lists other departments' assistants too |
