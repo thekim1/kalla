@@ -241,6 +241,18 @@ main session needs:
   on `main` with `git -C ~/research/rag` and absolute paths, and reuse the worktree for the next branch
   (`git checkout -B <branch> origin/main`).
 
+- **`main` is protected since 2026-11-16** (ruleset "Protect main"): every change is a pull request with one
+  approving review; the main session can't approve its own or bypass. Never `gh pr merge --admin`. Design and handover
+  changes go on a `main-session/` branch; a design line that belongs to a code change goes into that pull request.
+- **SQL in `src/Ume.Rag.Infrastructure/` uses positional parameters** (`$1`), also in new non-EF code: the API's SQL
+  contract prepares every string constant there and reads `@name` as a column (session 47; run
+  `tests/Ume.Rag.Api.Tests` `SqlSchemaContractTests`, regenerate with `UME_RAG_UPDATE_CONTRACTS=1`).
+- **The runners have no `gh`:** a workflow step downloads a release asset with `scripts/ci/release-asset.sh`.
+- **A boot test's fixture is the earlier release's own example file with real-looking values:** 0.5.1's rag-admin
+  refuses a platform-admin group that doesn't start with `rag-` and restarts for ever (session 47).
+- **Six pull requests at once fill both runners for an hour** (session 47): open the small ones first, and dispatch a
+  dry run only after the pull request's own checks are done.
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
