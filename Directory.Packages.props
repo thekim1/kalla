@@ -13,18 +13,18 @@
     <PackageVersion Include="Aspire.Hosting.Keycloak" Version="13.6.5-preview.1.26559.7" />
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.6.5" />
     <PackageVersion Include="Aspire.Hosting.Python" Version="13.6.5" />
-    <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Ollama" Version="13.6.0" />
+    <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Ollama" Version="13.6.1" />
     <!-- Transitive via Aspire.Hosting; pinned above GHSA-qhrr-8q5h-9q3h until Aspire ships a fixed version (as the gateway). -->
     <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
   <ItemGroup Label="Runtime">
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.11.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.20.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.20.1" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
@@ -35,8 +35,8 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.18.0" />
-    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.19.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
   </ItemGroup>
   <ItemGroup Label="Vectors">
     <PackageVersion Include="Pgvector" Version="0.3.2" />
@@ -50,14 +50,14 @@
   <ItemGroup Label="Worker">
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <!-- HTML DOM for change detection and link discovery (connectors design §12.2); 1.8.6 (2026-10-25) as repo-and-deployment §2 lists it. -->
-    <PackageVersion Include="AngleSharp" Version="1.8.6" />
+    <PackageVersion Include="AngleSharp" Version="1.10.1" />
     <!-- Markdown blocks for the plain-text parser (processing design §3.7); BSD-2-Clause, 1.5.1 of 2026-10-28 (7-day rule suspended, P1 README §1a). -->
-    <PackageVersion Include="Markdig" Version="1.5.1" />
+    <PackageVersion Include="Markdig" Version="1.6.0" />
     <!-- The renderer's client (connectors design §8.3): exactly the version of images/renderer's launch-server (playwright-core 1.64.1); 1.64.1 of 2026-10-22 (7-day rule suspended). -->
     <PackageVersion Include="Microsoft.Playwright" Version="[1.64.1]" />
   </ItemGroup>
   <ItemGroup Label="Testing">
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
@@ -75,6 +75,6 @@
   </ItemGroup>
   <ItemGroup Label="Pipelines">
     <!-- JSON Schema 2020-12 validator (to-verify #17): BSD-3-Clause, 2026-10-16. Corvus.Text.Json.Validator was checked first: its analyzers flow into every consuming project and flag System.Text.Json code. -->
-    <PackageVersion Include="LateApexEarlySpeed.Json.Schema" Version="4.2.2" />
+    <PackageVersion Include="LateApexEarlySpeed.Json.Schema" Version="4.2.4" />
   </ItemGroup>
 </Project>
