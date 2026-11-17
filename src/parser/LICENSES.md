@@ -186,12 +186,12 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 
 ## Debian packages
 
-From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...) and `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract).
+From Debian main (trixie) at snapshot `20261109T000000Z` and the `python:3.12.16-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...) and `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract).
 
 | Package | Version |
 |---|---|
 | adduser | 3.152 |
-| apt | 3.0.3 |
+| apt | 3.0.4 |
 | base-files | 13.8+deb13u7 |
 | base-passwd | 3.6.7 |
 | bash | 5.2.37-2+b10 |
@@ -216,7 +216,7 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | fontconfig-config | 2.15.0-2.3 |
 | fonts-dejavu-core | 2.37-8 |
 | fonts-dejavu-mono | 2.37-8 |
-| fonts-opensymbol | 4:102.12+LibO25.2.3-2+deb13u8 |
+| fonts-opensymbol | 4:102.12+LibO25.2.3-2+deb13u9 |
 | gcc-14-base | 14.2.0-19 |
 | gnupg | 2.4.7-21+deb13u1 |
 | gnupg-l10n | 2.4.7-21+deb13u1 |
@@ -231,7 +231,7 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | libabsl20240722 | 20240722.0-4 |
 | libabw-0.1-1 | 0.1.3-1+b2 |
 | libacl1 | 2.3.2-2+b1 |
-| libapt-pkg7.0 | 3.0.3 |
+| libapt-pkg7.0 | 3.0.4 |
 | libarchive13t64 | 3.7.4-4+deb13u1 |
 | libargon2-1 | 0~20190702+dfsg-4+b2 |
 | libassuan9 | 3.0.2-2 |
@@ -248,7 +248,7 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | libboost-locale1.83.0 | 1.83.0-4.2 |
 | libboost-thread1.83.0 | 1.83.0-4.2 |
 | libbox2d2 | 2.4.1-3+b3 |
-| libbrotli1 | 1.1.0-2+b7 |
+| libbrotli1 | 1.1.0-2+deb13u1 |
 | libbsd0 | 0.12.2-2 |
 | libbz2-1.0 | 1.0.8-6 |
 | libc-bin | 2.41-12+deb13u4 |
@@ -336,7 +336,7 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | libngtcp2-crypto-gnutls8 | 1.11.0-1+deb13u1 |
 | libnpth0t64 | 1.8-3 |
 | libnspr4 | 2:4.36-1 |
-| libnss3 | 2:3.110-1+deb13u4 |
+| libnss3 | 2:3.110-1+deb13u5 |
 | libnumbertext-1.0-0 | 1.0.11-4+b2 |
 | libnumbertext-data | 1.0.11-4 |
 | libodfgen-0.1-1 | 0.1.8-2+b2 |
@@ -363,18 +363,18 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | librasqal3t64 | 0.9.33-2.1+b2 |
 | librdf0t64 | 1.0.17-4+b1 |
 | libreadline8t64 | 8.2-6 |
-| libreoffice-base-core | 4:25.2.3-2+deb13u8 |
-| libreoffice-calc-nogui | 4:25.2.3-2+deb13u8 |
-| libreoffice-common | 4:25.2.3-2+deb13u8 |
-| libreoffice-core-nogui | 4:25.2.3-2+deb13u8 |
-| libreoffice-draw-nogui | 4:25.2.3-2+deb13u8 |
-| libreoffice-impress-nogui | 4:25.2.3-2+deb13u8 |
-| libreoffice-style-colibre | 4:25.2.3-2+deb13u8 |
-| libreoffice-uiconfig-calc | 4:25.2.3-2+deb13u8 |
-| libreoffice-uiconfig-common | 4:25.2.3-2+deb13u8 |
-| libreoffice-uiconfig-draw | 4:25.2.3-2+deb13u8 |
-| libreoffice-uiconfig-impress | 4:25.2.3-2+deb13u8 |
-| libreoffice-writer-nogui | 4:25.2.3-2+deb13u8 |
+| libreoffice-base-core | 4:25.2.3-2+deb13u9 |
+| libreoffice-calc-nogui | 4:25.2.3-2+deb13u9 |
+| libreoffice-common | 4:25.2.3-2+deb13u9 |
+| libreoffice-core-nogui | 4:25.2.3-2+deb13u9 |
+| libreoffice-draw-nogui | 4:25.2.3-2+deb13u9 |
+| libreoffice-impress-nogui | 4:25.2.3-2+deb13u9 |
+| libreoffice-style-colibre | 4:25.2.3-2+deb13u9 |
+| libreoffice-uiconfig-calc | 4:25.2.3-2+deb13u9 |
+| libreoffice-uiconfig-common | 4:25.2.3-2+deb13u9 |
+| libreoffice-uiconfig-draw | 4:25.2.3-2+deb13u9 |
+| libreoffice-uiconfig-impress | 4:25.2.3-2+deb13u9 |
+| libreoffice-writer-nogui | 4:25.2.3-2+deb13u9 |
 | librevenge-0.0-0 | 0.0.5-3+b2 |
 | librtmp1 | 2.4+20151223.gitfa8646d.1-2+b5 |
 | libsasl2-2 | 2.1.28+dfsg1-9 |
@@ -403,11 +403,11 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | libtinfo6 | 6.5+20250216-2 |
 | libudev1 | 257.13-1~deb13u1 |
 | libunistring5 | 1.3-2 |
-| libuno-cppu3t64 | 4:25.2.3-2+deb13u8 |
-| libuno-cppuhelpergcc3-3t64 | 4:25.2.3-2+deb13u8 |
-| libuno-purpenvhelpergcc3-3t64 | 4:25.2.3-2+deb13u8 |
-| libuno-sal3t64 | 4:25.2.3-2+deb13u8 |
-| libuno-salhelpergcc3-3t64 | 4:25.2.3-2+deb13u8 |
+| libuno-cppu3t64 | 4:25.2.3-2+deb13u9 |
+| libuno-cppuhelpergcc3-3t64 | 4:25.2.3-2+deb13u9 |
+| libuno-purpenvhelpergcc3-3t64 | 4:25.2.3-2+deb13u9 |
+| libuno-sal3t64 | 4:25.2.3-2+deb13u9 |
+| libuno-salhelpergcc3-3t64 | 4:25.2.3-2+deb13u9 |
 | libuuid1 | 2.41.5-0+deb13u1 |
 | libvisio-0.1-1 | 0.1.7-1+b5 |
 | libwebp7 | 1.5.0-0.1 |
@@ -457,18 +457,18 @@ From Debian main (trixie) at snapshot `20261022T000000Z` and the `python:3.12.15
 | tesseract-ocr-osd | 1:4.1.0-2 |
 | tesseract-ocr-swe | 1:4.1.0-2 |
 | tini | 0.19.0-3+b8 |
-| tzdata | 2026c-0+deb13u1 |
+| tzdata | 2026f-0+deb13u1 |
 | ucf | 3.0052 |
-| uno-libs-private | 4:25.2.3-2+deb13u8 |
-| ure | 4:25.2.3-2+deb13u8 |
+| uno-libs-private | 4:25.2.3-2+deb13u9 |
+| ure | 4:25.2.3-2+deb13u9 |
 | util-linux | 2.41.5-0+deb13u1 |
-| zlib1g | 1:1.3.dfsg+really1.3.1-1+b1 |
+| zlib1g | 1:1.3.dfsg+really1.3.1-1+deb13u1 |
 
 ## Written offer
 
 The GPL and LGPL components of this image (the Debian packages above, the libraries bundled in the Python wheels) are
 distributed unmodified. Their complete corresponding source is available from the upstream projects named above and,
-for the Debian packages, from `https://snapshot.debian.org/archive/debian/20261022T000000Z` and
-`https://snapshot.debian.org/archive/debian-security/20261022T000000Z`. For three years after we distribute an image,
+for the Debian packages, from `https://snapshot.debian.org/archive/debian/20261109T000000Z` and
+`https://snapshot.debian.org/archive/debian-security/20261109T000000Z`. For three years after we distribute an image,
 Umeå kommun provides that source on request, on a medium customarily used for software interchange, for no more than
 the cost of making the copy.

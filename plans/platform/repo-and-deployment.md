@@ -475,7 +475,7 @@ anchor). The renderer image (`images/renderer/`, Playwright server + Chromium, Â
 
 ### 5.3 Parser image (`src/parser/Dockerfile`)
 
-Stage 1 `python:3.12.15-slim-trixie` by digest + uv (copied from the pinned `ghcr.io/astral-sh/uv` image): `uv sync
+Stage 1 `python:3.12.16-slim-trixie` by digest + uv (copied from the pinned `ghcr.io/astral-sh/uv` image): `uv sync
 --frozen --no-dev --no-install-project` (`docling-slim` 2.142.0 with selected extras, `pypdfium2`, `defusedxml`,
 `psutil`, `pillow`, and `opencv-python-headless` and `pandas` as direct dependencies, so no `libgl1` or fonts are
 needed), then `python scripts/download_models.py --out /opt/models` (pinned revisions and SHA-256, Docling models and
