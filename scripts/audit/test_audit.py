@@ -1,5 +1,6 @@
 """Tests for audit.py against real reports in tests/fixtures/audit/ (a clean run of this repo and one vulnerable
-package each, Newtonsoft.Json 12.0.1 and minimist 1.2.5). Standard library only:
+package each, Newtonsoft.Json 12.0.1 and minimist 1.2.5; grype-parser.json is a Grype report cut down to the fields
+audit.py reads). Standard library only:
 
     python3 -I -m unittest discover -s scripts/audit -v
 """
@@ -148,6 +149,66 @@ class NpmTests(Temp):
         text = Path(summary).read_text(encoding="utf-8")
         self.assertIn("### npm audit, all dependencies (317 packages)\n\nNo advisories.", text)
         self.assertIn(f"### npm audit, all dependencies (1 packages)\n\n- {GHSA}: minimist (critical): FAILS", text)
+
+
+class GrypeTests(Temp):
+    REPORT = f"parser={FIXTURES / 'grype-parser.json'}"
+    FFMPEG = "CVE-2026-52296 parser ffmpeg {day} FFmpeg in the opencv wheel, unreachable\n"
+    PYTHON = "CVE-2026-115557 parser python {day} test\n"
+
+    def grype(self, exceptions: str, *extra: str) -> subprocess.CompletedProcess[str]:
+        path = self.write("exceptions.txt", exceptions)
+        return run("grype", self.REPORT, "--exceptions", path, "--today", "2026-11-17", *extra)
+
+    def test_fixable_high_or_critical_without_exception_fails(self) -> None:
+        result = self.grype(self.FFMPEG.format(day="2026-12-17"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CVE-2026-115557 Critical python 3.12.15 -> 3.12.16", result.stdout)
+        self.assertNotIn("CVE-2026-52296 High", result.stdout)
+        self.assertIn("in parser: bump", result.stderr)
+
+    def test_unfixed_and_lower_findings_never_fail(self) -> None:
+        result = self.grype(self.FFMPEG.format(day="2026-12-17") + self.PYTHON.format(day="2026-11-17"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("parser: 2 critical, 1 high (0 failing, 2 excepted)", result.stdout)
+        self.assertNotIn("::warning::", result.stdout)
+
+    def test_expired_exception_fails_and_warns(self) -> None:
+        result = self.grype(self.FFMPEG.format(day="2026-11-16") + self.PYTHON.format(day="2026-12-17"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CVE-2026-52296 High ffmpeg 8.1.2 -> 9.0", result.stdout)
+        warning = "::warning::image scan exception CVE-2026-52296 (parser, ffmpeg) expired on 2026-11-16"
+        self.assertIn(warning, result.stdout)
+
+    def test_exception_applies_only_to_its_image_and_package(self) -> None:
+        other = "CVE-2026-52296 renderer ffmpeg 2026-12-17 x\nCVE-2026-52296 parser libavcodec 2026-12-17 x\n"
+        result = self.grype(other + self.PYTHON.format(day="2026-12-17"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CVE-2026-52296 High ffmpeg", result.stdout)
+
+    def test_unused_exception_warns_for_a_scanned_image_only(self) -> None:
+        unused = "CVE-2026-1 parser openssl 2026-12-17 x\nCVE-2026-2 renderer openssl 2026-12-17 x\n"
+        result = self.grype(self.FFMPEG.format(day="2026-12-17") + self.PYTHON.format(day="2026-12-17") + unused)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("::warning::image scan exception CVE-2026-1 (parser, openssl) matched no finding", result.stdout)
+        self.assertNotIn("CVE-2026-2", result.stdout)
+
+    def test_malformed_exception_fails(self) -> None:
+        result = self.grype("CVE-2026-52296 parser ffmpeg 17.12.2026 reason\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("expected '<id> <image> <package> <YYYY-MM-DD> <reason>'", result.stderr)
+
+    def test_repository_exceptions_file_parses(self) -> None:
+        result = run("grype", self.REPORT, "--today", "2026-11-17")
+        self.assertNotIn("expected", result.stderr)
+
+    def test_summary(self) -> None:
+        summary = self.write("summary.md", "")
+        self.grype(self.FFMPEG.format(day="2026-12-17"), "--summary", summary, "--title", ", release 0.7.0")
+        text = Path(summary).read_text(encoding="utf-8")
+        self.assertIn("### Image scan, release 0.7.0", text)
+        self.assertIn("| parser | 2 | 1 | 1 | 1 | 1 |", text)
+        self.assertIn("<details><summary>parser: High and Critical with a fix</summary>", text)
 
 
 if __name__ == "__main__":
