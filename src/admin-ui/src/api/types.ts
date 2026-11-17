@@ -1017,6 +1017,8 @@ export interface CrawlReport {
   render?: RenderReport
   /** `off`: the deployment runs without the malware scan, so the run's files were not scanned (#535, connectors §11). */
   malwareScan?: 'off' | string
+  /** A continue run (#804): the run it went on from and the pages taken over (still open, failed), dropped by scope or depth, admitted. */
+  continued?: { from: string; open: number; failed: number; dropped: number; admitted: number }
   [section: string]: unknown
 }
 
@@ -1026,6 +1028,10 @@ export interface Run {
   pipelineVersionId: string | null
   scheduledFor: IsoDateTime | null
   report: CrawlReport | null
+  /** A continue run: the run it goes on from (#804). */
+  continuesRunId: string | null
+  /** The latest crawl run that ended with pages left or failed can be continued (#804). */
+  canContinue: boolean
 }
 
 export interface RunItem {

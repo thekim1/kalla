@@ -49,9 +49,17 @@ public static class RunEndpoints
             {
                 var run = await ScopedRunAsync(admin, id, ct);
                 var dto = RunDto.Of(run);
-                return dto with { Run = await RunLive.WithProgressAsync(admin, dto.Run, run.Classification, run.SourceId, ct) };
+                return dto with
+                {
+                    Run = await RunLive.WithProgressAsync(admin, dto.Run, run.Classification, run.SourceId, ct),
+                    CanContinue = await RunContinuation.CanContinueAsync(admin, run, ct),
+                };
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetRun").WithSummary("A run with its crawl report");
+
+        runs.MapPost("/{id:guid}/continue", (Guid id, AdminContext admin, CancellationToken ct) => RunContinuation.ContinueAsync(id, admin, ct))
+            .RequireAuthorization(AdminPolicies.Edit).WithName("ContinueRun")
+            .WithSummary("Continue a crawl run from the pages it left open or failed (#804); answers the running run or queued sync when there is one");
 
         runs.MapGet("/{id:guid}/items", async (Guid id, long? after, int? limit, string? outcome, string? reason, string? q, AdminContext admin, CancellationToken ct) =>
             {
@@ -244,8 +252,13 @@ public sealed record RunSummary(
         r.ProposedDeletions, r.CostUsd, r.StartedAt, r.FinishedAt);
 }
 
-/// <summary>A run with its <c>Report</c> (the crawl report: traversal, site-profile version, extraction quality, failures by reason).</summary>
-public sealed record RunDto(RunSummary Run, Guid SourceId, Guid? PipelineVersionId, DateTimeOffset? ScheduledFor, JsonElement? Report)
+/// <summary>
+/// A run with its <c>Report</c> (the crawl report: traversal, site-profile version, extraction quality, failures by reason;
+/// a continue run's <c>continued</c> section), the run a <c>continue</c> run goes on from, and whether this run can be
+/// continued now (<see cref="RunContinuation.CanContinueAsync"/>; only on <c>GET /api/runs/{id}</c>).
+/// </summary>
+public sealed record RunDto(RunSummary Run, Guid SourceId, Guid? PipelineVersionId, DateTimeOffset? ScheduledFor, JsonElement? Report,
+    Guid? ContinuesRunId = null, bool CanContinue = false)
 {
     public static RunDto Of(Run r)
     {
@@ -257,7 +270,7 @@ public sealed record RunDto(RunSummary Run, Guid SourceId, Guid? PipelineVersion
             report = json.RootElement.Clone();
         }
 
-        return new(RunSummary.Of(r), r.SourceId, r.PipelineVersionId, r.ScheduledFor, report);
+        return new(RunSummary.Of(r), r.SourceId, r.PipelineVersionId, r.ScheduledFor, report, r.ContinuesRunId);
     }
 }
 

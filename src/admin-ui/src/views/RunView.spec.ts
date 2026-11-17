@@ -3,15 +3,20 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { Run } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { bffUser } from '@/test/fixtures'
 import { RUN_PAGE } from '@/utils/labels'
 import RunView from './RunView.vue'
+
+const push = vi.fn()
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRouter: () => ({ push }) }))
 
 const run: Run = {
   run: {
     id: 'r1', kind: 'sync', trigger: 'manual', state: 'degraded', phase: null, added: 9800, updated: 0, unchanged: 0, deleted: 0, failed: 2, proposedDeletions: 0,
     costUsd: 0, startedAt: '2026-11-01T01:12:00Z', finishedAt: '2026-11-01T03:00:00Z',
   },
-  sourceId: 's1', pipelineVersionId: null, scheduledFor: null,
+  sourceId: 's1', pipelineVersionId: null, scheduledFor: null, continuesRunId: null, canContinue: false,
   report: {
     completeness: { complete: false, reasons: ['crawl.limit_pages'], seeds: 2, seedsResolved: 1, seedsFailed: 1, incremental: false },
     verdict: { runFailure: null, runDegradation: 'crawl.limit_pages' },
@@ -19,6 +24,46 @@ const run: Run = {
 }
 
 describe('Run (admin design §5.5.3; #278 slice 2)', () => {
+  it('offers Continue on a run that can be continued and opens the source when it started (#804)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, canContinue: true })
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+    const started = vi.spyOn(api.runs, 'continue').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'continue' })
+
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    await wrapper.get('[data-test=continue-run]').trigger('click')
+    await flushPromises()
+
+    expect(started).toHaveBeenCalledWith('r1')
+    expect(push).toHaveBeenCalledWith({ name: 'source', params: { id: 's1' } })
+  })
+
+  it('says what a continue run took over, what the scope dropped and the page limit, and offers no Continue when it cannot (#804)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.runs, 'get').mockResolvedValue({
+      ...run, continuesRunId: 'r0',
+      report: { ...run.report, continued: { from: 'r0', open: 120, failed: 3, dropped: 2, admitted: 100 } },
+    })
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+
+    const card = wrapper.get('[data-test=continued]').text()
+    expect(card).toContain('Continued from')
+    expect(card).toContain('Took over 120 pages left open and 3 failed pages.')
+    expect(card).toContain('2 pages were left out because they are no longer within the scope or the depth limit.')
+    expect(card).toContain('Only 100 of them were fetched before the page limit.')
+    expect(wrapper.find('[data-test=continue-run]').exists()).toBe(false)
+  })
+
   it('shows the counters, the crawl report in Swedish and the failed documents with their reason', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'get').mockResolvedValue(run)

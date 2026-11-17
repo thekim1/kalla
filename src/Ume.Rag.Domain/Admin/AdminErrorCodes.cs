@@ -128,6 +128,13 @@ public static class AdminErrorCodes
     /// <summary>Sync now on a paused source: the worker would start no run. Resume it first.</summary>
     public static AdminErrorCode SourcePaused { get; } = new("source_paused", 409, "The source is paused. Resume it first.");
 
+    /// <summary>
+    /// Continue on a run (#804) that cannot be continued: not a crawl, not the source's latest run, still running or waiting
+    /// for a deletion decision, or it left no open pages and no failed ones.
+    /// </summary>
+    public static AdminErrorCode RunNotContinuable { get; } = new("run_not_continuable", 409,
+        "Only the latest crawl run that ended with pages left or failed can be continued. Use Sync now.");
+
     /// <summary>The slug <c>{slug}</c> is taken (also by a deleted collection); <c>{suggestion}</c> is free.</summary>
     public static AdminErrorCode SlugTaken { get; } = new("slug_taken", 400, "The short name {slug} is already used. Try {suggestion}.");
 
@@ -352,5 +359,5 @@ public static class AdminErrorCodes
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
             GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
-            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment];
+            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment, RunNotContinuable];
 }

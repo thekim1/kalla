@@ -391,4 +391,77 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHos
         paused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await Json(paused)).GetProperty("code").GetString().ShouldBe("source_paused");
     }
+
+    [Fact]
+    public async Task Continue_is_offered_on_the_latest_crawl_run_that_left_pages_and_enqueues_a_continue_sync()
+    {
+        var (collection, code) = await CollectionAsync();
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "OTHER" + code);
+        using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
+            new { type = "url-list", name = "Webbplats", classification = "internal", settings = UrlList("https://a.se/") }, Ct);
+        var id = (await Json(created)).GetProperty("id").GetGuid();
+
+        // Two finished runs; the latest failed one left a page whose fetch failed and one that was fetched.
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var now = DateTimeOffset.UtcNow;
+        var old = new Run { SourceId = id, Classification = "internal", Kind = "sync", Trigger = "manual", State = RunStates.Failed, StartedAt = now.AddHours(-2), FinishedAt = now.AddHours(-2) };
+        var latest = new Run { SourceId = id, Classification = "internal", Kind = "sync", Trigger = "manual", State = RunStates.Failed, StartedAt = now.AddHours(-1), FinishedAt = now.AddMinutes(-50) };
+        db.Runs.AddRange(old, latest);
+        await db.SaveChangesAsync(Ct);
+        CrawlFrontierEntry Row(string url, string state, Guid runId) => new()
+        {
+            Classification = "internal", SourceId = id, Url = url, Host = "a.se", State = state, RunId = runId,
+            UrlHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)),
+        };
+        db.CrawlFrontier.AddRange(Row("https://a.se/", CrawlFrontierStates.Idle, latest.Id), Row("https://a.se/ok", CrawlFrontierStates.Idle, latest.Id),
+            Row("https://a.se/older", CrawlFrontierStates.Pending, old.Id));
+        db.RunItems.AddRange(
+            new RunItem { RunId = latest.Id, CreatedAt = now.AddMinutes(-55), Classification = "internal", Identity = "https://a.se/", Outcome = "failed", Reason = "http.403" },
+            new RunItem { RunId = latest.Id, CreatedAt = now.AddMinutes(-55), Classification = "internal", Identity = "https://a.se/ok", Outcome = "added" });
+        await db.SaveChangesAsync(Ct);
+
+        async Task<bool> CanContinueAsync(Guid run) => (await admin.GetFromJsonAsync<JsonElement>($"/api/runs/{run}", Ct)).GetProperty("canContinue").GetBoolean();
+        (await CanContinueAsync(latest.Id)).ShouldBeFalse("a URL list has no traversal to continue");
+
+        await db.Sources.Where(s => s.Id == id).ExecuteUpdateAsync(u => u.SetProperty(s => s.Type, SourceTypes.Crawl), Ct);
+        (await CanContinueAsync(latest.Id)).ShouldBeTrue();
+        (await CanContinueAsync(old.Id)).ShouldBeFalse("only the latest run can be continued");
+        using (var refused = await admin.PostAsync($"/api/runs/{old.Id}/continue", null, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(refused)).GetProperty("code").GetString().ShouldBe("run_not_continuable");
+        }
+
+        (await stranger.PostAsync($"/api/runs/{latest.Id}/continue", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        Guid jobId;
+        using (var started = await admin.PostAsync($"/api/runs/{latest.Id}/continue", null, Ct))
+        {
+            started.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var body = await Json(started);
+            (body.GetProperty("alreadyRunning").GetBoolean(), body.GetProperty("kind").GetString()).ShouldBe((false, "continue"));
+            jobId = body.GetProperty("jobId").GetGuid();
+        }
+
+        var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"sync:{id}", Ct);
+        (job.Id, job.Class, job.Priority).ShouldBe((jobId, JobClasses.Sync, (short)10));
+        using (var payload = JsonDocument.Parse(job.Payload))
+        {
+            (payload.RootElement.GetProperty("kind").GetString(), payload.RootElement.GetProperty("trigger").GetString(),
+                payload.RootElement.GetProperty("continuesRunId").GetGuid()).ShouldBe(("continue", "manual", latest.Id));
+        }
+
+        using (var again = await admin.PostAsync($"/api/runs/{latest.Id}/continue", null, Ct)) // dedup sync:{id}: the queued job is answered
+        {
+            var body = await Json(again);
+            (body.GetProperty("jobId").GetGuid(), body.GetProperty("alreadyRunning").GetBoolean(), body.GetProperty("kind").GetString()).ShouldBe((jobId, true, "continue"));
+        }
+
+        // Once the fetched page's later item supersedes the failure, nothing is left to continue.
+        await db.Jobs.Where(j => j.Id == jobId).ExecuteDeleteAsync(Ct);
+        db.RunItems.Add(new RunItem { RunId = latest.Id, CreatedAt = now.AddMinutes(-52), Classification = "internal", Identity = "https://a.se/", Outcome = "added" });
+        await db.SaveChangesAsync(Ct);
+        (await CanContinueAsync(latest.Id)).ShouldBeFalse();
+    }
 }

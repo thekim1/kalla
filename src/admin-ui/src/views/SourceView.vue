@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
+import ContinueRunButton from '@/components/runs/ContinueRunButton.vue'
 import FilesPanel from '@/components/files/FilesPanel.vue'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
 import HeldDocuments from '@/components/sources/HeldDocuments.vue'
@@ -120,6 +121,16 @@ async function loadRuns(append = false): Promise<void> {
     next.value = page.next
     return [...previous, ...page.items]
   })
+  if (!append) await loadContinuable()
+}
+
+// Continue beside Sync now (#804): the latest run of a crawl source, when it ended with pages left or failed.
+const continuable = ref<string | null>(null)
+async function loadContinuable(): Promise<void> {
+  const latest = runs.data.value[0]
+  continuable.value = null
+  if (source.data.value?.type !== 'crawl' || !latest || latest.state === 'running' || latest.state === 'awaiting-deletion-confirmation') return
+  continuable.value = (await api.runs.get(latest.id).catch(() => null))?.canContinue ? latest.id : null
 }
 
 async function load(): Promise<void> {
@@ -154,6 +165,7 @@ onMounted(load)
         <UiBadge :label="SOURCE_TYPE_LABEL[source.data.value.type]" />
         <UiBadge :label="LEVEL_LABEL[source.data.value.classification]" />
         <UiButton v-if="canEdit" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
+        <ContinueRunButton v-if="continuable && !activeRun" :run-id="continuable" can-continue @started="loadRuns()" />
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
       </PageHeader>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
