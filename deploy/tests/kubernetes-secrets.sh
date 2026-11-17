@@ -11,6 +11,9 @@
 #     (--api-cert ...) are used instead of the internal CA's
 #   - a second run with none of the value options keeps every secret and every value: the keys, the client secret, the
 #     repository settings, the certificates
+#   - escrow-keys.sh on the directories: the set verifies against them, a restore into new directories followed by a
+#     first run keeps the pepper, the blob key, the passphrase, the Data Protection certificate and the CA (the new
+#     certificates are the same CA's), the set verifies there too, and a restore over a different file is refused
 #   - a missing host name, and --datastores without a repository, stop with one line
 #
 #   deploy/tests/kubernetes-secrets.sh
@@ -18,7 +21,7 @@ set -euo pipefail
 export LC_ALL=C
 here="$(cd "$(dirname "$0")" && pwd)"
 deploy="$here/.."
-t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
+t="$(mktemp -d)"; trap 'chmod -R u+w "$t"; rm -rf "$t"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 sums() { (cd "$1" && find certs secrets -type f | LC_ALL=C sort | xargs sha256sum); }
@@ -84,6 +87,27 @@ grep -Ev '^[0-9a-f]+  (certs/(api|admin|postgres)/|secrets/[a-z]+/ConnectionStri
 sums "$t/k" | grep -Ev '^[0-9a-f]+  (certs/(api|admin|postgres)/|secrets/[a-z]+/ConnectionStrings__ragdb|secrets/worker/(Gateway__Key|Render__Endpoint)|certs/(worker|migrations)/ca\.pem|secrets/openwebui/ca\.pem)' > "$t/kept3"
 diff "$t/kept1" "$t/kept3" > "$t/diff" || { cut -c1-2,67- "$t/diff"; fail "the third run changed a file its options do not name"; }
 ok "a database host, a new key and your own certificates take effect; nothing else changed"
+
+echo "== escrow and restore"
+escrow() { bash "$deploy/escrow-keys.sh" "$@"; }
+mkdir "$t/escrow"
+escrow --secrets-dir "$s" --certs-dir "$c" "$t/escrow" > "$t/escrow.log" || { cat "$t/escrow.log"; fail "the escrow failed"; }
+grep -q '^escrowed 6 files' "$t/escrow.log" || fail "the escrow did not write 6 files: $(cat "$t/escrow.log")"
+escrow --secrets-dir "$s" --certs-dir "$c" --verify "$t/escrow" | grep -q '^PASS' || fail "the set does not verify against its source"
+escrow --secrets-dir "$t/r/secrets" --certs-dir "$t/r/certs" --restore "$t/escrow" > "$t/restore.log" \
+  || { cat "$t/restore.log"; fail "the restore failed"; }
+bash "$deploy/kubernetes/create-secrets.sh" --generate-only --certs-dir "$t/r/certs" --secrets-dir "$t/r/secrets" \
+  --domain example.se --datastores --backup-target s3://s3.example.se/bucket/rag --backup-s3-credentials-file "$t/s3.cred" \
+  > "$t/restored.log" 2>&1 || { cat "$t/restored.log"; fail "the first run after the restore failed"; }
+for f in secrets/.pepper secrets/keys/rag-blob-internal secrets/pgbackrest/cipher-pass certs/data-protection.pfx certs/ca.pem certs/ca.key; do
+  cmp -s "$t/k/$f" "$t/r/$f" || fail "$f is not the escrowed one after the restore and a first run"
+done
+openssl verify -CAfile "$c/ca.pem" "$t/r/certs/worker/worker.crt" >/dev/null 2>&1 || fail "the restored deployment's certificates are not the escrowed CA's"
+escrow --secrets-dir "$t/r/secrets" --certs-dir "$t/r/certs" --verify "$t/escrow" | grep -q '^PASS' || fail "the set does not verify after the restore"
+openssl rand -hex 48 > "$t/r/secrets/.pepper"
+out="$(escrow --secrets-dir "$t/r/secrets" --certs-dir "$t/r/certs" --restore "$t/escrow" 2>&1)" && fail "a restore over a different pepper was accepted"
+grep -q 'rag-secrets/.pepper .* differs from the set' <<< "$out" || fail "a restore over a different pepper: $out"
+ok "the escrow set restores the pepper, the keys, the Data Protection certificate and the CA; a different file is refused"
 
 echo "== refusals"
 out="$(bash "$deploy/kubernetes/create-secrets.sh" --generate-only --certs-dir "$t/n/certs" --secrets-dir "$t/n/secrets" 2>&1)" && fail "no host name was accepted"

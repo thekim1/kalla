@@ -192,8 +192,7 @@ if [[ "$overlays" == *" backup "* ]]; then
   echo "  $dc exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create    # once per database or repository"
   [[ "$overlays" == *" hardened "* ]] || echo "  sudo $here/host/install.sh    # the backup and certificate timers"
 fi
-echo "  $here/escrow-keys.sh /media/<escrow>    # the blob key and the backup passphrase; back up the rest of"
-echo "    rag-secrets/.pepper and rag-certs/data-protection.pfx with the database: without them it is unusable"
+echo "  $here/escrow-keys.sh /media/<escrow>    # every key a restored database needs: without them it is unusable"
 [[ ",$(get COMPOSE_PROFILES)," == *,proxy,* ]] || [ -n "$(get UME_RAG_PROXY_SOURCES)" ] || [ -n "$(get UME_RAG_API_PUBLIC_URL)" ] \
   || echo "Without a TLS proxy (the profile proxy, or yours) rag-api is https://<its name>:8543: --set UME_RAG_API_PUBLIC_URL=..."
 if [[ "$overlays" == *" hardened "* ]] && [ -z "$(get UME_RAG_OIDC_AUTHORITY)" ]; then

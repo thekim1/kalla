@@ -258,11 +258,10 @@ the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a
 | `rag-upload-backup.timer` | `backup-uploads.sh`: new files below `uploads/` of the blob store to the upload copy, never overwriting | every 10 minutes (not with an S3 target) |
 | `archive_command` in rag-postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
 
-Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. The pepper
-(`rag-secrets/.pepper`) and `rag-certs/data-protection.pfx` are backed up separately, through the municipality's
-secret store (production-setup.md, *5. Start*, reads them out of the volumes); the blob master key and the pgBackRest
-passphrase are also escrowed (*Key escrow*). The other files in `rag-secrets` and `rag-certs` are generated again by
-`rag-bootstrap` when they are missing. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
+Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. What no
+backup holds and a restore needs (the pepper, the blob master key, the pgBackRest passphrase, the Data Protection
+certificate and the internal CA) is in the escrow set (*Key escrow*). The other files in `rag-secrets` and `rag-certs`
+are generated again by `rag-bootstrap` when they are missing. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
 script in P0** (*Public-records requests*).
 
 ```bash
@@ -380,24 +379,15 @@ existing secret but creates a new one where none is, at the first `up`:
 
 1. Run `init-deployment.sh` on the new host with the same `--backup-target`, then the install steps of
    production-setup.md up to, not including, the first `up`.
-2. Create the project's volumes without starting anything (`dc create`), and put back into them from the escrow and the
-   secret store: `pgbackrest/cipher-pass` (mode 0600) and `keys/rag-blob-internal` (mode 0400) into `rag-secrets`,
-   `.pepper` into `rag-secrets` and `data-protection.pfx` into `rag-certs`. The escrow set's `MANIFEST` says where
-   each key goes; `rag-bootstrap` gives them to their users. For example, with the escrow set at `/media/escrow-a/<set>`
-   and the two secret-store files in `/root/restore`:
+2. Put the escrow set back into the project's new volumes, before anything starts (`--restore` creates the volumes,
+   and refuses to replace a file that differs from the set):
 
    ```bash
-   dc create
-   docker run --rm --network none -v ume-rag_rag-secrets:/s -v ume-rag_rag-certs:/c \
-     -v /media/escrow-a/<set>:/e:ro -v /root/restore:/k:ro --entrypoint sh \
-     "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" -c '
-       mkdir -p /s/keys /s/pgbackrest
-       cp /e/keys/rag-blob-internal /s/keys/ && chmod 0400 /s/keys/rag-blob-internal
-       cp /e/pgbackrest/cipher-pass /s/pgbackrest/ && chmod 0600 /s/pgbackrest/cipher-pass
-       cp /k/.pepper /s/.pepper && cp /k/data-protection.pfx /c/data-protection.pfx'
+   sudo deploy/escrow-keys.sh --restore /media/escrow-a/<set>
    ```
 
-3. `dc up -d --wait` (no `stanza-create`: the stanza exists), then `escrow-keys.sh --verify` against the set.
+3. `dc up -d --wait` (no `stanza-create`: the stanza exists; `rag-bootstrap` derives the rest from the restored files),
+   then `escrow-keys.sh --verify` against the set.
 4. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
 
 For a drill (not a real loss of the production host), give the drill host a **copy** of the repository, not the
@@ -430,27 +420,36 @@ Record the date, the achieved RPO and RTO, and anything that went wrong.
 
 ## Key escrow
 
-`deploy/escrow-keys.sh` exports the keys no backup can replace to escrow media and reads them back. Escrowed in P0
-and P1:
+`deploy/escrow-keys.sh` writes one escrow set with everything a restored deployment needs that no backup holds, reads
+it back, and restores it. The same command in every form; `rag-bootstrap` derives every other file from these:
 
-- `keys/rag-blob-*` in `rag-secrets`: the blob master keys of the file key provider (`rag-blob-internal`). Without
-  them the `internal` blobs cannot be decrypted.
-- `pgbackrest/cipher-pass` in `rag-secrets`: the repository passphrase. Without it no backup can be read.
-
-Chat master keys (`rag-chat-<level>`) join only once stored chat content is allowed (register A1); there are none in
-P0 and P1. The pepper and `data-protection.pfx` go to the secret store, not to this escrow.
+- `rag-secrets/.pepper`: the key pepper. Without it no API key or client key verifies.
+- `rag-secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
+  `internal` blobs cannot be decrypted. Chat master keys (`rag-chat-<level>`) join only once stored chat content is
+  allowed (register A1).
+- `rag-secrets/pgbackrest/cipher-pass`, with a backup target: the repository passphrase. Without it no backup can be read.
+- `rag-certs/data-protection.pfx`: the Data Protection certificate. Without it the stored client secrets (the sign-in
+  settings) can't be read.
+- `rag-certs/ca.pem` and `ca.key`: the internal CA. With them the services' certificates and the trust in them stay as
+  they were (a Kubernetes installation that keeps `ca.key` offline keeps that copy with the set).
 
 ```bash
 sudo deploy/escrow-keys.sh /media/escrow-a              # writes /media/escrow-a/ume-rag-keys-<project>-<UTC time>/
 sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, or name one set
+sudo deploy/escrow-keys.sh --restore /media/escrow-a/<set>   # into a new deployment, before its first start
 ```
 
-The export writes the keys with `SHA256SUMS` and a `MANIFEST` (what each key is and where it goes back), read-only for
-the owner. It reads the keys out of the deployment's `rag-secrets` volume, read-only, with `rag-bootstrap`'s image.
-`--verify` checks the checksums and the key formats, and that every key equals this deployment's current one (and the
-passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `PASS` and exits 0, or names each `FAIL`.
-`--env-file FILE` or `--secrets-dir DIR` (a directory instead of the volume, such as Kubernetes' `deploy/secrets`)
-points it at another deployment.
+The deployment is the Compose installation of `deploy/.env` (`--env-file FILE` for another), a Portainer stack by
+`--project <stack>` (the image comes from the stack's `rag-bootstrap` container; before the stack's first deploy pass
+`--image` with the stack file's `rag-bootstrap` image), or Kubernetes' directories by `--secrets-dir deploy/secrets
+--certs-dir deploy/certs`.
+
+The export writes the files with `SHA256SUMS` and a `MANIFEST`, read-only for the owner, read out of the volumes
+read-only. `--verify` checks the checksums and the formats, that every file equals the deployment's, that the
+deployment has no key the set lacks, and that the passphrase equals `repo1-cipher-pass` in `repo.conf`; it prints
+`PASS` and exits 0, or names each `FAIL`. `--restore` checks the set the same way, makes the volumes (with the
+project's labels) when they don't exist yet, and refuses to replace a file that differs: it is for new volumes, before
+`rag-bootstrap` has made its own.
 
 - **Run it** after the first deployment (production-setup.md) and **after every rotation**, then verify: `--verify`
   fails with "differs from the deployment's key" until the new key is escrowed. The upgrade guide verifies the escrow
@@ -458,8 +457,8 @@ points it at another deployment.
 - **Seal the media in two places** (or use the key service's own backup). The files are in the clear: whoever holds
   the media can read every `internal` blob and every backup. Where the escrow lives is agreed with IT (to-verify #145).
 - **Keep each set as long as the data and backups it protects.**
-- **A restore reads them back**: copy the keys to the places the `MANIFEST` names (*Restoring onto another host*),
-  then `--verify` against the set; every drill does this.
+- **A restore reads them back**: `--restore` before the first start (*Restoring onto another host*), then `--verify`
+  against the set; every drill does this.
 
 ## Upload copy
 

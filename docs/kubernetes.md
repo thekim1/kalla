@@ -53,9 +53,10 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    and connection strings to the host `postgres` (the Service in `components/datastores`). Each service's gateway
    credential key (issued by a gateway admin: [production-setup.md](production-setup.md), *Gateway credential keys*)
    goes to `deploy/secrets/<service>/Gateway__Key` and into `ume-rag-<service>-secrets`; the key's address list then
-   holds the cluster's egress addresses. **Back up `deploy/secrets/.pepper`, `deploy/secrets/keys/rag-blob-internal`
-   and `deploy/certs/data-protection.pfx`** outside the cluster (runbook, *Key escrow*): without them a restored
-   database is unusable. Keep the two directories: the next run reads them.
+   holds the cluster's egress addresses. **Escrow the keys** outside the cluster (runbook, *Key escrow*): without them
+   a restored database is unusable. `deploy/escrow-keys.sh --secrets-dir deploy/secrets --certs-dir deploy/certs
+   /media/<escrow>` writes the set, `--verify` reads it back, and `--restore` puts it into new directories before the
+   first run of a restored installation. Keep the two directories: the next run reads them.
 
    **Running it again** keeps every generated secret and every value an option gave before (a credential key, the
    client secret, the backup repository); the host names, `--ca-file` and your own certificates are given on every

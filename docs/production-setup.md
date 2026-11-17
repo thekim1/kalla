@@ -308,24 +308,17 @@ take the first backup and escrow the keys:
 
 ```bash
 sudo systemctl start rag-backup.service      # a full backup, as there is none yet
-sudo deploy/escrow-keys.sh /media/<escrow>   # then --verify it, and seal the media (runbook)
+sudo deploy/escrow-keys.sh /media/<escrow>   # one set with every key; then --verify it, and seal the media (runbook)
 ```
 
-Back up `rag-secrets/.pepper` and `rag-certs/data-protection.pfx` separately from the database backups (a restored
-database is unusable without them). They are read out of the volumes with `rag-bootstrap`'s image, as the escrow
-script does:
+The escrow set holds everything a restored database needs that no backup holds: the pepper, the blob key, the
+pgBackRest passphrase, `rag-certs/data-protection.pfx` and the internal CA (`ca.pem`, `ca.key`); the runbook's *Key
+escrow* says how to keep it. `rag-certs/ca.key` also stays in the volume: `rag-bootstrap` needs it to re-issue a
+service certificate (*Internal TLS*, below), and anyone who can read it can issue certificates the services trust.
 
 ```bash
 image="$(docker compose --env-file deploy/.env config --images rag-bootstrap)"
-(umask 077
- docker run --rm --network none -v ume-rag_rag-secrets:/s:ro --entrypoint cat "$image" /s/.pepper > pepper
- docker run --rm --network none -v ume-rag_rag-certs:/c:ro --entrypoint cat "$image" /c/data-protection.pfx > data-protection.pfx)
 ```
-
-Move both files to the secret store and delete them here. `rag-certs/ca.key`, the internal CA's key, stays in the
-volume: anyone who can read it can issue certificates the services trust, and `rag-bootstrap` needs it to re-issue a
-service certificate (*Internal TLS*, below). Without it `rag-bootstrap` stops with an error when a certificate is due,
-and `up` fails until it is copied back.
 
 Check the listeners with the internal CA, read out of the volume the same way:
 

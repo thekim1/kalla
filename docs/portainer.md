@@ -215,10 +215,17 @@ read the CA only at start.
    must allow the model. The first profile is the default, which new knowledge bases use.
 10. **First content:** follow *Get started* on Ume.Rag's *Home* (a knowledge base, a source, the first fetch, test
     questions, an assistant). Your applications call rag-api with an app and its key from *Apps and keys*.
-11. **Back up** with the databases: `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and
-    `rag-certs/data-protection.pfx` (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A
-    database restored without them is unusable, and the client secrets the wizard stored can only be read with the same
-    `data-protection.pfx`. The gateway's two are `ume-secrets/.pepper` and `ume-certs/data-protection.pfx`, which
+11. **Escrow the keys** on the Docker host, with `escrow-keys.sh` from the release bundle (`deploy/`): it writes one
+    set with everything a restored database needs that no backup holds (the pepper, the blob key, the Data Protection
+    certificate and the internal CA; the runbook's *Key escrow*), and `--verify` reads it back:
+
+    ```bash
+    sudo deploy/escrow-keys.sh --project <stack> /media/<escrow>
+    sudo deploy/escrow-keys.sh --project <stack> --verify /media/<escrow>     # PASS
+    ```
+
+    A database restored without the set is unusable, and the client secrets the wizard stored can only be read with
+    the same Data Protection certificate. Escrow again after every rotation. The gateway's two are `ume-secrets/.pepper` and `ume-certs/data-protection.pfx`, which
     protects the client secret its wizard stored the same way. The stack has no WAL archiving: use `pg_dump` or volume
     snapshots.
 
@@ -306,8 +313,9 @@ wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done 
 
 **Before the update**
 
-1. **Back up** both databases, the three Ume.Rag files of *First deploy* step 11 and the gateway's two
-   (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`).
+1. **Back up** both databases and the gateway's two files (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`), and
+   check Ume.Rag's escrow set (*First deploy* step 11): `sudo deploy/escrow-keys.sh --project <stack> --verify
+   /media/<escrow>` prints `PASS`, or escrow again.
 2. **From 0.5.x, the gateway keys' residencies:** in the gateway's admin, give `rag-api`'s and `rag-admin`'s credential
    keys the residencies **`OnPrem` and `Eu` only** (the worker's already are). From 0.6.0 each service's ceiling is its
    key's residencies; a key that allows every residency would let a public assistant answer at `External`. Each

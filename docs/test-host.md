@@ -124,8 +124,7 @@ sudo deploy/escrow-keys.sh /media/<escrow>
 sudo deploy/escrow-keys.sh --verify /media/<escrow>     # PASS
 ```
 
-Label the media as the test host's. Where the escrow lives is agreed with IT (to-verify #145). `rag-secrets/.pepper` and
-`rag-certs/data-protection.pfx` go to the secret store, as in production-setup.md step 5.
+Label the media as the test host's. Where the escrow lives is agreed with IT (to-verify #145).
 
 ## Restore drill
 

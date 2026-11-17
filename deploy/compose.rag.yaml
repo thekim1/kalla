@@ -7,8 +7,8 @@
 # The one-shot rag-bootstrap (deploy/portainer/bootstrap.sh) creates the certificates and secrets in the volumes
 # rag-certs and rag-secrets on the first start and the static configuration in rag-config on every start; the end of
 # its log lists what is still missing and points at the setup wizard (https://<admin host>/setup, with the setup code in
-# rag-admin's log). Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx
-# with the database (deploy/escrow-keys.sh). The overlays, for a Compose host only:
+# rag-admin's log). Escrow the keys a restored database needs with deploy/escrow-keys.sh. The overlays, for a Compose
+# host only:
 #   compose.backup.yaml       WAL archiving and pgBackRest (UME_RAG_BACKUP_TARGET), the upload copy rag-upload-backup
 #   compose.hardened.yaml     fixed subnets for the host firewall, the ingestion slice, the restart-unhealthy labels,
 #                             the renderer's seccomp profile and the CPU weights (deploy/host/)
