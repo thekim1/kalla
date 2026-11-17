@@ -78,7 +78,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # As in build: the login below must not outlive the job in the runner user's shared ~/.docker/config.json.
         run: |
@@ -134,7 +134,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # The runners share one user's ~/.docker/config.json, where a tag release's `docker login ghcr.io` used to leave
         # its GITHUB_TOKEN behind. Once expired, buildx still sent it for ghcr.io and the dry run of 0.4.0 failed pulling
@@ -186,10 +186,10 @@ jobs:
             echo "NUGET_HTTP_CACHE_PATH=$RUNNER_TEMP/nuget-http-cache"
             echo "npm_config_cache=$RUNNER_TEMP/npm-cache"
           } >> "$GITHUB_ENV"
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.401
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           # No npm cache for a tag release (#704, above).
@@ -405,7 +405,7 @@ jobs:
       packages: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # As in build: the ghcr.io login for :latest must not outlive the job.
         run: |
