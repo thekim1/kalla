@@ -10,6 +10,9 @@ exception, with its own steps.
 
 `dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
 
+A pull request does not edit *Unreleased* below: it adds `changes/<branch>.upgrade.md` ([`changes/`](../changes/README.md)),
+and the release preparation folds the notes in here and writes the release's *Rolling update* line.
+
 ## Unreleased
 
 - **Rolling update: yes** for Portainer and Kubernetes. No migration, no new variable, nothing to do.

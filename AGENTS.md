@@ -39,6 +39,8 @@ gateway's conventions for names, config keys, claims, key format and security ev
   ordering and formatting of existing lines as they are.
 - **Design documents are read-only for streams.** If the code has to differ from the design, take the smallest
   sound option and list it under "Design deviations" in the PR. The main session settles it in the design.
+- **Release notes.** Don't edit `CHANGELOG.md` or the upgrade guide's *Unreleased*: add `changes/<branch>.md` (and
+  `changes/<branch>.upgrade.md` when an operator has something to do) in the same PR ([`changes/`](changes/README.md)).
 - **Tests.** Run locally the test projects your change touches, and say which in the PR. CI runs the full backend
   suite; the image tests and the evaluation smoke run when their paths change or before a release, and the browser
   tests (`e2e.yml`) only by hand or before a release when asked (repo-and-deployment §8.2). Don't dispatch workflows by hand

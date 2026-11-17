@@ -28,8 +28,10 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   report is a claim: read the diff, re-run the tests, check CI's test totals, check live, spot-check line numbers.
   Splitting a feature into an API agent and a UI agent against a contract written first in the design worked well
   (#532); integrate on one branch and check both sides agree.
-- **Shared files** (`Directory.Packages.props`, `README.md`, `CHANGELOG.md`, `UmeRag.slnx`, `.gitignore`): small PR,
-  append-only. Secrets never go into the repo, a log or a chat. Verify claims against real sources.
+- **Shared files** (`Directory.Packages.props`, `README.md`, `UmeRag.slnx`, `.gitignore`): small PR, append-only.
+- **Release notes are files, not edits** (user, 2026-11-17): a pull request adds `changes/<branch>.md` (CHANGELOG) and,
+  when an operator has something to do, `changes/<branch>.upgrade.md` (upgrade guide) instead of appending to
+  *Unreleased*, where any two pull requests conflicted (#817 and #827). `scripts/unreleased.py` checks and folds them. Secrets never go into the repo, a log or a chat. Verify claims against real sources.
 - **No backward compatibility before production:** no migration data steps for old rows (fix development data by
   hand, and put the SQL in the PR), no shims.
 
@@ -258,7 +260,8 @@ main session needs:
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
   the roadmap's critical path first.
 - **At each release** move the queues' ticked items to `plans/archive/work/to-v<version>.md` (unchanged, links fixed
-  for the depth), and the CHANGELOG's and upgrade guide's *Unreleased* to the version.
+  for the depth), fold the release notes (`python3 scripts/unreleased.py fold`), and move the CHANGELOG's and upgrade
+  guide's *Unreleased* to the version.
 - **Designs hold the specification.** History (answered questions, deferred items, milestones) goes to
   `plans/archive/design-history/<area>.md`; a moved section keeps its number and heading with a `Moved to [...]` line,
   which `scripts/check-doc-refs.py` follows. Non-binding papers go to `plans/proposals/` with a status line.
