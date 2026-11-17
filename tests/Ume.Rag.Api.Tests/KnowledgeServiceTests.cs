@@ -794,6 +794,22 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         }
     }
 
+    /// <summary>
+    /// The production limits (1.5 s an attempt, 2 s in all) are too tight for a busy CI runner: a first call through the
+    /// FakeGateway's in-process server timed out and failed these tests (#826, #837, #838 on 2026-11-17), as the service
+    /// hosts' did before #584 and #781. No test here measures the limits: the time-out test throws at once.
+    /// </summary>
+    private static QueryEmbeddingOptions Generous(int? cacheEntries = null)
+    {
+        var options = new QueryEmbeddingOptions { AttemptTimeout = TimeSpan.FromSeconds(30), TotalTimeout = TimeSpan.FromSeconds(30) };
+        if (cacheEntries is { } entries)
+        {
+            options.CacheEntries = entries;
+        }
+
+        return options;
+    }
+
     private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler, QueryEmbeddingOptions? options = null, ILogger<GatewayQueryEmbedder>? logger = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
@@ -801,7 +817,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName, retryFailed: false).ConfigurePrimaryHttpMessageHandler(() => handler);
         builder.Services.UseGatewayCredentialCeiling();
         var host = builder.Build();
-        return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
+        return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? Generous(), new byte[32], TimeProvider.System,
             logger ?? NullLogger<GatewayQueryEmbedder>.Instance), host);
     }
 
@@ -857,7 +873,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     {
         // To-verify #162 (test part): the one-slot pilot keeps the cache in process; a restart empties it without errors.
         var counting = new Counting(fake.Server.CreateHandler());
-        var (embedder, host) = Build(counting, new QueryEmbeddingOptions { CacheEntries = 3 });
+        var (embedder, host) = Build(counting, Generous(cacheEntries: 3));
         using (host)
         using (embedder)
         {
@@ -870,7 +886,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         }
 
         var callsBefore = counting.Calls;
-        var (restarted, host2) = Build(counting, new QueryEmbeddingOptions { CacheEntries = 3 });
+        var (restarted, host2) = Build(counting, Generous(cacheEntries: 3));
         using var _ = host2;
         using var __ = restarted;
         restarted.CachedCount.ShouldBe(0);
