@@ -15,7 +15,7 @@
     <PackageVersion Include="Aspire.Hosting.Python" Version="13.6.5" />
     <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Ollama" Version="13.6.0" />
     <!-- Transitive via Aspire.Hosting; pinned above GHSA-qhrr-8q5h-9q3h until Aspire ships a fixed version (as the gateway). -->
-    <PackageVersion Include="MessagePack" Version="2.5.307" />
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
   </ItemGroup>
   <ItemGroup Label="Runtime">
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
