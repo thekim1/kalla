@@ -142,8 +142,10 @@ export PARSER_MODELS_DIR="$PWD/.models"
 
 Every pin is at least 7 days old when it is set (`AGENTS.md`).
 
-- **Python packages:** move `exclude-newer` in `pyproject.toml` to 7 days before the lock date, update the `==`
-  pins of the direct dependencies, run `uv lock`, and check that no file in `uv.lock` has a later `upload-time`.
+- **Python packages:** update the `==` pins of the direct dependencies and run `uv lock`. `exclude-newer = "7 days"`
+  in `pyproject.toml` is relative (`exclude-newer-span` in `uv.lock`), so every lock takes only files uploaded at least
+  7 days before it; nothing is moved by hand. A security fix younger than that is a deliberate exception: an
+  `exclude-newer-package` entry for that one package, removed once the fix is 7 days old.
 - **Debian packages:** move `DEBIAN_SNAPSHOT` in the `Dockerfile` (a `snapshot.debian.org` timestamp at least 7
   days old) and update the `=version` pins to what that snapshot has.
 - **Base images:** take a digest pushed at least 7 days ago.

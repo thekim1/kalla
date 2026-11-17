@@ -1,7 +1,9 @@
 # Version bumps proposed as pull requests (A-27, #507): base images by digest, NuGet, npm, uv and the pinned GitHub
 # Actions. One grouped pull request per ecosystem and week, so a week's bumps are read and tested once.
 #
-# cooldown is the 7-day package rule (AGENTS.md): a release is proposed only once it is 7 days old. Security updates
+# cooldown is the 7-day package rule (AGENTS.md): a release is proposed only once it is 7 days old. uv's is 8 days: the
+# parser's lock refuses files uploaded in the last 7 days (exclude-newer = "7 days"), and a release's files can be
+# uploaded after its date, so 7 would let Dependabot propose a version the lock then rejects (the first uv run, 2026-11-17). Security updates
 # ignore it (GitHub's rule), which is what we want. A bump is a proposal: whoever takes the pull request also moves the
 # same pin wherever it is repeated (a Dockerfile's uv image in parser.yml and audit.yml, the Playwright version in
 # images/renderer/package.json and tests/e2e, the renderer live check for a Chromium bump) before it is merged.
@@ -40,7 +42,7 @@ updates:
   - package-ecosystem: uv
     directory: /src/parser
     schedule: {interval: weekly, day: monday}
-    cooldown: {default-days: 7}
+    cooldown: {default-days: 8}
     open-pull-requests-limit: 2
     groups:
       parser-minor: {patterns: ["*"], update-types: [minor, patch]}
