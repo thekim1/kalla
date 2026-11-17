@@ -4,7 +4,7 @@
 #   docker build --target test src/parser    (runs the tests during the build, with no network)
 # Nothing is downloaded at run time: the venv, the models and the Debian packages are all in the image.
 
-# uv 0.13.5 (released 2026-10-22).
+# uv 0.13.8 (released 2026-11-12).
 FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 # Python 3.12.16 on Debian 13 (trixie), built 2026-11-05. The same base for both stages, so the venv's interpreter
