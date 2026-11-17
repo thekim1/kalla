@@ -485,6 +485,16 @@
       "code": "setup_test_required",
       "status": 409,
       "message": "Saving needs a passed test sign-in by a platform admin with exactly these values ({reason})."
+    },
+    {
+      "code": "move_not_confirmed",
+      "status": 409,
+      "message": "Check what moving it to the other department does and confirm."
+    },
+    {
+      "code": "move_pipeline_department",
+      "status": 409,
+      "message": "Sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first."
     }
   ]
 }

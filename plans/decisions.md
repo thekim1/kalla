@@ -907,6 +907,26 @@ changeable under ⋯. The Map is a table in P1b. Detail: `admin/design.md`
 *From:* log rows 62, 73, 86, 101; decided by user, 2026-11-05.
 *Also:* "M-2 open design calls", "Organisation: department-owned, municipality-shared knowledge bases with topics"
 
+### Moving to another department
+
+A platform admin can change the owner department of a knowledge base or an assistant, to correct one created under the
+wrong department; department admins cannot. The move keeps every link that works today working: it shares the
+knowledge base with each active department whose assistants would otherwise lose it (the old department when a
+knowledge base moves; the new one, for each linked knowledge base it cannot reach, when an assistant moves), and those
+shares stay until someone removes them under Sharing (V35 still guards that). A link that doesn't work today stays
+broken, and client keys of other departments scoped to the object keep their scope; the admin sees both before
+confirming. The moved object takes an owner team of the new department: the one the admin
+picks, which is required when the department has several active teams, else its only team (none when it has no team).
+It takes a gateway key of the new department, or none (V39 unchanged: a published assistant needs a key once the gateway
+acts as keys). A knowledge base whose sources use
+a pipeline of the old department is not moved until they use a platform pipeline or one of the new department. History
+stays where it was: cost and usage rows keep the department of their calls, and audit entries their department; the
+move itself is audited under both. The admin sees what the move changes and confirms it. Detail: `admin/design.md`
+§3.2, §4.5.
+
+*From:* decided by user, 2026-11-17 (#811): platform admins only, shares keep the links; the owner-team rule from
+the main session's review on #811.
+
 ### Level change in the edit drawer
 
 A level is changed in the item's edit drawer under `edit`; the API's checks run as before and their refusals show

@@ -4,8 +4,8 @@
 # Dockerfile.dockerignore next to this file limits the context to the one file copied below.
 # postgresql.conf, pg_hba.conf, init.sql, certificates and the pgBackRest repository settings are mounted, not baked.
 
-# pgvector 0.8.7 on PostgreSQL 17 (Debian trixie), pushed 2026-10-01; the same pin as the AppHost and TestKit.
-FROM pgvector/pgvector:0.8.7-pg17-trixie@sha256:7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84
+# pgvector 0.8.7 on PostgreSQL 17 (Debian trixie; 17.12, built 2026-11-12); the same pin as the AppHost and TestKit.
+FROM pgvector/pgvector:0.8.7-pg17-trixie@sha256:89947206f52eac3a9df9b663df7e76987cbdc623be6576b3a524953d568700d7
 
 # From the PGDG repository the base image already configures. 2.59.3 (upstream 2026-10-04, PGDG trixie build
 # 2026-10-05); 2.60.0 is not yet 7 days old. The package's /etc/pgbackrest.conf is replaced by the file below.

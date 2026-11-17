@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
@@ -21,7 +21,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
 import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
-import { runStateTone } from '@/utils/runs'
+import { pollDelay } from '@/composables/useJobPoll'
+import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
@@ -59,6 +60,32 @@ const piiColumns: Column[] = [
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 // The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
 const activeRun = computed(() => runs.data.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
+const activeProgress = computed(() => runProgressText(activeRun.value))
+// #803: a running run is polled (admin design §4.7) and its row replaced in place, so paging through older runs is kept;
+// when it stops, the list is loaded again.
+let runTimer: ReturnType<typeof setTimeout> | null = null
+let runPollStarted = 0
+function stopRunPoll(): void {
+  if (runTimer) clearTimeout(runTimer)
+  runTimer = null
+}
+async function pollRun(id: string): Promise<void> {
+  runTimer = null
+  const fresh = await api.runs.get(id).then((r) => r.run).catch(() => null)
+  if (!fresh) return
+  runs.data.value = runs.data.value.map((r) => (r.id === fresh.id ? fresh : r))
+  if (fresh.state !== 'running') void loadRuns()
+}
+watch(
+  () => (activeRun.value?.state === 'running' ? activeRun.value : null),
+  (running) => {
+    stopRunPoll()
+    if (!running) return
+    if (!runPollStarted) runPollStarted = Date.now()
+    runTimer = setTimeout(() => void pollRun(running.id), pollDelay(Date.now() - runPollStarted))
+  },
+)
+onBeforeUnmount(stopRunPoll)
 
 const runColumns: Column[] = [
   { key: 'started', label: SOURCE_PAGE.started },
@@ -70,6 +97,7 @@ const addresses = computed(() => {
   const list = (settings.startUrls ?? settings.urls ?? []) as string[]
   return list
 })
+const sitemaps = computed(() => ((source.data.value?.settings.sitemaps ?? []) as string[]))
 const demoted = computed(() =>
   ((source.data.value?.settings.demote ?? []) as { pattern: string; factor?: number }[]).map((d) => `${d.pattern} ×${String(d.factor ?? 0.5).replace('.', ',')}`),
 )
@@ -129,11 +157,17 @@ onMounted(load)
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
       </PageHeader>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
+      <p v-if="activeProgress && activeRun" class="mb-4 tabular" aria-live="polite" data-test="run-progress">
+        <RouterLink :to="runTo(activeRun)" class="link">{{ activeProgress }}</RouterLink>
+      </p>
 
       <UiCard v-if="source.data.value.type !== 'upload'" :title="SOURCE_PAGE.settings" class="mb-6">
         <dl class="m-0">
           <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
             <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
+          </DetailRow>
+          <DetailRow v-if="sitemaps.length" :label="SOURCE_PAGE.sitemaps">
+            <span class="font-mono text-small" data-test="sitemaps">{{ sitemaps.join(', ') }}</span>
           </DetailRow>
           <DetailRow :label="SOURCE.fetchMode">
             <span data-test="fetch-mode">{{ SOURCE.fetchModes[source.data.value.settings.fetchMode === 'browser' ? 'browser' : 'http'] }}</span>

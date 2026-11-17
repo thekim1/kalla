@@ -17,5 +17,6 @@
   "AdminApi.PipelineEndpoints.PublicationAsync#1": ["Value integer"],
   "AdminApi.RetentionService.RunOnceAsync#1": ["Value bigint"],
   "AdminApi.RetentionService.RunOnceAsync#2": ["Value bigint"],
+  "AdminApi.RunLive.WithProgressAsync#1": ["Added integer", "Updated integer", "Unchanged integer", "Deleted integer", "Failed integer", "Processed integer", "CostUsd numeric"],
   "AdminApi.SiteProfileEndpoints.DepartmentForAsync#1": ["Value uuid"]
 }

@@ -69,6 +69,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   skip releases: the release boots 0.5.1's Portainer stack and applies the new file over it
   (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
   stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
+- **Security updates of the .NET and Postgres images** (#818, from the first image scan): the services build on
+  `aspnet:10.0.15` (ASP.NET Core runtime advisories GHSA-67wp-ghc2-fw2g, GHSA-wr8v-9x5q-ggcm, GHSA-x33c-w48q-qrgc) with
+  the Microsoft packages at 10.0.15, the gateway's pins; `ume-rag/postgres` builds on a newer build of the same
+  pgvector image (PostgreSQL 17.12). **Rolling update: yes**; Postgres restarts once (a minor update, same data
+  directory).
 
 ## 0.7.0 (2026-11-16)
 

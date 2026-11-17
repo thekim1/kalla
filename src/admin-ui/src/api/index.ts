@@ -84,6 +84,8 @@ import type {
   Run,
   RunItem,
   RunSummary,
+  MoveImpact,
+  MoveRequest,
   Source,
   SourceCreate,
   DeletionProposalPage,
@@ -138,6 +140,9 @@ export const api = {
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
     update: (id: string, body: CollectionUpdate) => http.put<Collection>(`/api/collections/${id}`, body),
+    /** #811: what moving it to another department does (platform admins). */
+    moveImpact: (id: string, body: MoveRequest) => http.post<MoveImpact>(`/api/collections/${id}/move/impact`, body),
+    move: (id: string, body: MoveRequest) => http.post<Collection>(`/api/collections/${id}/move`, body),
     sources: (id: string) => http.get<SourceListItem[]>(`/api/collections/${id}/sources`),
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
     retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
@@ -202,6 +207,9 @@ export const api = {
     }) =>
       http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),
     update: (id: string, body: AssistantUpdate) => http.put<Assistant>(`/api/assistants/${id}`, body),
+    /** #811: what moving it to another department does (platform admins). */
+    moveImpact: (id: string, body: MoveRequest) => http.post<MoveImpact>(`/api/assistants/${id}/move/impact`, body),
+    move: (id: string, body: MoveRequest) => http.post<Assistant>(`/api/assistants/${id}/move`, body),
     publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean; confirmGeneralKnowledge?: boolean }) =>
       http.post<Assistant>(`/api/assistants/${id}/publish`, body),
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),

@@ -30,7 +30,15 @@ public static class RunEndpoints
                     query = query.Where(r => r.StartedAt < start || (r.StartedAt == start && r.Id.CompareTo(last) < 0));
                 }
 
-                var rows = await query.OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id).Take(take + 1).Select(r => RunSummary.Of(r)).ToListAsync(ct);
+                var page = await query.OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id).Take(take + 1)
+                    .Select(r => new { Summary = RunSummary.Of(r), r.Classification }).ToListAsync(ct);
+                var rows = new List<RunSummary>(page.Count);
+                foreach (var run in page)
+                {
+                    // A running run's counters are derived on read (#803); a finished run keeps the finalizer's.
+                    rows.Add(await RunLive.WithProgressAsync(admin, run.Summary, run.Classification, id, ct));
+                }
+
                 return new KeysetPage<RunSummary, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Runs").WithName("ListRuns").WithSummary("A source's runs, newest first (keyset)");
@@ -38,7 +46,11 @@ public static class RunEndpoints
         var runs = api.MapGroup("/runs").WithTags("Runs");
 
         runs.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
-                RunDto.Of(await ScopedRunAsync(admin, id, ct)))
+            {
+                var run = await ScopedRunAsync(admin, id, ct);
+                var dto = RunDto.Of(run);
+                return dto with { Run = await RunLive.WithProgressAsync(admin, dto.Run, run.Classification, run.SourceId, ct) };
+            })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetRun").WithSummary("A run with its crawl report");
 
         runs.MapGet("/{id:guid}/items", async (Guid id, long? after, int? limit, string? outcome, string? reason, string? q, AdminContext admin, CancellationToken ct) =>
@@ -223,9 +235,10 @@ public sealed record DeletionGuardLimits(int Percent, int MinCount, int MaxCount
 /// <summary>A page of a run's deletion proposals with the guard's limits (admin §5.5.3).</summary>
 public sealed record DeletionProposalPage(IReadOnlyList<DeletionProposalDto> Items, Guid? Next, DeletionGuardLimits Guard);
 
+/// <summary>A run's state and counters; <see cref="Progress"/> only while it is <c>running</c> (#803, <see cref="RunLive"/>).</summary>
 public sealed record RunSummary(
     Guid Id, string Kind, string Trigger, string State, string? Phase, int Added, int Updated, int Unchanged, int Deleted, int Failed, int ProposedDeletions,
-    decimal CostUsd, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt)
+    decimal CostUsd, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, RunProgress? Progress = null)
 {
     public static RunSummary Of(Run r) => new(r.Id, r.Kind, r.Trigger, r.State, r.Phase, r.Added, r.Updated, r.Unchanged, r.Deleted, r.Failed,
         r.ProposedDeletions, r.CostUsd, r.StartedAt, r.FinishedAt);

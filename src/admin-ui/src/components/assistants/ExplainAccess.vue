@@ -9,21 +9,26 @@ import TextField from '@/components/ui/TextField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useAuthStore } from '@/stores/auth'
 import { EXPLAIN } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Explain access (admin design §4.5 row 21, identity design §4.9): why a client and a subject may or may not use this
 // assistant, as the first failing policy step and its reason. Nothing is accessed and no security event is raised.
+// An Open WebUI user is a subject to check only while the deployment runs Open WebUI; without it the check starts from a key.
 const props = defineProps<{ assistantId: string; clients: ClientSummary[] }>()
+const auth = useAuthStore()
 
-const form = reactive({ clientId: '', kind: 'owui-user', id: '', departments: '', groups: '' })
+const form = reactive({ clientId: '', kind: auth.openWebUiEnabled ? 'owui-user' : 'key', id: '', departments: '', groups: '' })
 const result = ref<AccessExplanation | null>(null)
 const error = ref<unknown>(null)
 const idError = ref<string | null>(null)
 const busy = ref(false)
 
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })))
-const kindOptions = Object.entries(EXPLAIN.kinds).map(([value, label]) => ({ value, label }))
+const kindOptions = Object.entries(EXPLAIN.kinds)
+  .filter(([value]) => auth.openWebUiEnabled || value !== 'owui-user')
+  .map(([value, label]) => ({ value, label }))
 const lines = (text: string) => text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
 
 async function explain(): Promise<void> {

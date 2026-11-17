@@ -49,6 +49,23 @@ public sealed class CrawlRulesTests
     }
 
     [Fact]
+    public void An_include_written_with_a_scheme_admits_its_section_and_names_its_host()
+    {
+        // The pilot's source: both patterns pasted from the browser, which used to admit nothing, not even the start URLs.
+        var scope = Scope(include:
+        [
+            "https://www.umea.se/forskolaskolaochutbildning/vuxenutbildning",
+            "https://www.umea.se/forskolaskolaochutbildning/vuxenutbildning/**",
+            "https://regionvasterbotten.se/vard/**",
+        ]);
+
+        scope.Check("https://www.umea.se/forskolaskolaochutbildning/vuxenutbildning").ShouldBe(ScopeDecision.In);
+        scope.Check("https://www.umea.se/forskolaskolaochutbildning/vuxenutbildning/komvux").ShouldBe(ScopeDecision.In);
+        scope.Check("https://www.umea.se/omsorg").ShouldBe(ScopeDecision.Out(CrawlScope.NotIncluded));
+        scope.Check("https://regionvasterbotten.se/vard/akut").ShouldBe(ScopeDecision.OffSiteLeaf);
+    }
+
+    [Fact]
     public void A_non_empty_include_narrows_the_scope_hosts_and_exclude_wins()
     {
         var scope = Scope(include: ["www.umea.se/skola/**"], exclude: ["www.umea.se/skola/arkiv/**"], extraHosts: ["kommun.umea.se"]);

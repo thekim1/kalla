@@ -22,6 +22,10 @@ the browser ("The server cannot be reached") although the same commit passed alo
   (`deploy/tests/portainer-boot.sh`: the release's `compose.portainer.yaml` with the gateway's pinned release, `clamav`,
   `openwebui` and `proxy`) before the tag, and it never reaches the publish job. `-f portainer_boot=X.Y.Z` runs only
   the boot test, against that version's published images.
+- **Actions are pinned by commit SHA** (`uses: owner/name@<40-hex commit> # vX.Y.Z`), and `verify.yml`'s `doc-refs`
+  job fails on a tag. To move one: take the commit of the release's tag
+  (`gh api repos/<owner>/<name>/commits/<tag> --jq .sha`), check it is the release you mean, and change the SHA and
+  the comment in every workflow that uses it.
 - **The runner has no sudo, no .NET 8 and no `gh`.** A workflow that needs a tool downloads a pinned, checksummed copy
   (as `release.yml` does for Syft and `gh`) or rolls forward (`DOTNET_ROLL_FORWARD: Major` for the net8-only SBOM tool).
 - **Reading a failed smoke test:** `gh run view <id> --log-failed` is long; grep `ok:|error:` for the script's own

@@ -43,6 +43,24 @@ public sealed class UrlPatternTests
         parsed.Matches("https://www.umea.se/intranat/" + new string('a', 100_000)).ShouldBeTrue();
     }
 
+    [Theory]
+    // An address pasted from the browser: the scheme is dropped, so the glob still matches (the URL is matched without it).
+    [InlineData("https://www.umea.se/vuxenutbildning/**", "https://www.umea.se/vuxenutbildning/komvux", true)]
+    [InlineData("http://www.umea.se/vuxenutbildning/**", "https://www.umea.se/vuxenutbildning/komvux", true)]
+    [InlineData("HTTPS://www.umea.se/vuxenutbildning", "https://www.umea.se/vuxenutbildning", true)]
+    [InlineData("  https://www.umea.se/a/*  ", "https://www.umea.se/a/b", true)]
+    [InlineData("https://www.umea.se/vuxenutbildning/**", "https://www.umea.se/omsorg", false)]
+    public void A_leading_scheme_on_a_glob_is_ignored(string pattern, string url, bool expected) =>
+        UrlPattern.Parse(pattern).Matches(url).ShouldBe(expected);
+
+    [Theory]
+    [InlineData("https://www.umea.se/a/**", "www.umea.se/a/**")]
+    [InlineData("Http://www.umea.se", "www.umea.se")]
+    [InlineData(" www.umea.se/** ", "www.umea.se/**")]
+    [InlineData("re:^https://x", "re:^https://x")]
+    public void Normalize_drops_the_scheme_of_a_glob_and_leaves_a_regex_alone(string pattern, string expected) =>
+        UrlPattern.Normalize(pattern).ShouldBe(expected);
+
     [Fact]
     public void An_invalid_regex_is_refused_on_parse() =>
         Should.Throw<ArgumentException>(() => UrlPattern.Parse("re:("));

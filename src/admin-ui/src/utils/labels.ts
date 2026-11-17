@@ -359,7 +359,7 @@ export const PAGE = {
   appsAndKeys: { title: 'Apps and keys', description: 'The apps that use the platform, their keys and the assistants they offer' },
   models: { title: 'Models', description: 'The AI gateway’s models, their limits and the embedding profiles' },
   settings: { title: 'Settings', description: 'How the platform answers, fetches and keeps content' },
-  assistants: { title: 'Assistants', description: 'The assistants that answer in Open WebUI and other clients' },
+  assistants: { title: 'Assistants', description: 'The assistants that answer in the apps that use the platform' },
   source: { title: 'Source' },
   run: { title: 'Run' },
   publication: { title: 'Publication' },
@@ -653,11 +653,14 @@ export const SOURCE = {
   urlsRequired: 'Enter at least one address that starts with http:// or https://.',
   startUrls: 'Start addresses',
   startUrlsHint: 'One per line. The website is fetched from them, following links within the same website.',
+  sitemaps: 'Sitemaps',
+  sitemapsHint: 'Optional, one address per line, for example https://www.example.org/sitemap.xml or a compressed …/sitemap.xml.gz. Use it when the check finds no sitemap: the website’s robots.txt and /sitemap.xml are always tried.',
+  sitemapsInvalid: 'Each sitemap address must start with http:// or https://. At most 20.',
   advanced: 'More settings',
   include: 'Only include',
-  includeHint: 'Patterns, one per line, for example www.example.org/building/**. Empty means the whole website.',
+  includeHint: 'Patterns, one per line, for example www.example.org/building* for that page (also when its address goes on, as in building.4.1a2b.html) and www.example.org/building/** for every page under it. * stays within one part of the path, ** crosses parts. A leading https:// is ignored. Empty means the whole website.',
   exclude: 'Skip',
-  excludeHint: 'Patterns, one per line. Skip wins over Only include.',
+  excludeHint: 'Patterns, one per line, written like Only include. Skip wins over Only include.',
   maxPages: 'Maximum number of pages',
   maxDepth: 'Maximum number of link steps from a start address',
   numberInvalid: 'Enter a whole number.',
@@ -943,7 +946,7 @@ export const PLATFORM = {
     oAuthClientId: 'OAuth client ID',
     classificationCeiling: 'Highest information class',
     storesHistory: 'Stores chat history',
-    clientRetentionDays: 'Feedback kept in Open WebUI (days)',
+    clientRetentionDays: 'Feedback kept (days)',
     allowedOrigins: 'Allowed origins',
     toolPolicy: 'Tool policy',
     portalUrl: 'Portal URL',
@@ -990,7 +993,7 @@ export const PLATFORM = {
     editor: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
     viewer: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
     requestsPerMinute:
-      'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. Open WebUI users always get the per-user limit.',
+      'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. An app that says who each user is gets the per-user limit for each of them.',
     dimensions: 'The size of each vector. It must match what the model returns.',
     requestDimensions:
       'Sends the size on every call, for a model that can shorten its vectors (text-embedding-3-large at 1024). Leave it off for a model that cannot (BGE-M3).',
@@ -1022,7 +1025,7 @@ export const PLATFORM = {
   resources: {
     clients: {
       label: 'Apps and keys',
-      description: 'The apps that use the platform (Open WebUI, integrations, internal tools), their keys and the assistants they offer',
+      description: 'The apps that use the platform (integrations, internal tools and more), their keys and the assistants they offer',
       keywords: ['keys', 'api keys', 'clients', 'integrations', 'rotate', 'revoke', 'connect'],
     },
     settings: { label: 'Settings', description: 'The platform’s settings per section' },
@@ -1248,7 +1251,7 @@ export const PLATFORM = {
 export const PLATFORM_CLIENTS = {
   lead: 'The apps that use the platform, each with its own keys and the assistants it offers.',
   add: 'Add app',
-  empty: 'No app yet. Add Open WebUI first.',
+  empty: 'No app yet. Use Add app to connect one.',
   columns: { name: 'Name', kind: 'Type', ceiling: 'Information class', enabled: 'Enabled', activeKeys: 'Active keys', lastUsed: 'Last used' },
   neverUsed: 'Never used',
   /** One card per client kind in the Add app drawer's first step. */
@@ -1402,6 +1405,7 @@ export const SOURCE_PAGE = {
   settings: 'Settings',
   addresses: 'Addresses',
   startAddresses: 'Start addresses',
+  sitemaps: 'Sitemaps',
   maxPages: 'Maximum number of pages',
   syncNow: 'Fetch now',
   syncStarted: 'Fetching has started.',
@@ -1468,6 +1472,23 @@ export const RUN_PAGE = {
   robotsIgnored: (reason: string) => `robots.txt ignored: ${reason}`,
 } as const
 
+/** A running run's progress on the run and source pages (#803; admin design §5.4 step 6). */
+export const RUN_PROGRESS = {
+  title: 'Progress',
+  phase: {
+    list: 'Finding pages',
+    fetch: 'Fetching and processing pages',
+    reconcile: 'Finishing up',
+  } as Record<string, string>,
+  handled: (n: string) => `${n} handled`,
+  waiting: (n: string) => `${n} waiting`,
+  found: (n: string) => `${n} found`,
+  foundOfLimit: (n: string, limit: string) => `${n} found (limit ${limit})`,
+  limitHit: 'The page limit was reached; no more pages are added.',
+  seedsFailed: (failed: number, all: number) => `${failed} of ${all} start addresses did not answer`,
+  refreshing: 'Updates while the run is going.',
+} as const
+
 /** Cancel run on the run and source pages (#488 part 3; engine design §10.1). */
 export const CANCEL_RUN = {
   action: 'Cancel run',
@@ -1521,7 +1542,7 @@ export const ASSISTANTS = {
 export const ASSISTANT = {
   tabs: { draft: 'Draft', test: 'Test', versions: 'Versions', audience: 'Audience', storage: 'Storage', statistics: 'Statistics' },
   tabsLabel: 'Parts of the assistant',
-  modelName: (slug: string) => `Model name in Open WebUI: ${slug}`,
+  modelName: (slug: string) => `Model name: ${slug}`,
   publishedVersion: (n: number) => `Published: version ${n}`,
   advanced: 'Advanced: model, follow-up questions, history, length',
   advancedHint: 'Leave a field empty to use the platform default.',
@@ -1864,6 +1885,8 @@ export const SETUP = {
     assistantPublish: 'Publish the assistant',
     assistantPublished: 'Assistant published',
     available: 'Make available in Open WebUI',
+    /** The last step without Open WebUI (`/bff/user` `openWebUi.enabled` false): an app with a key offers the assistant. */
+    availableApp: 'Connect an app with a key under Apps and keys',
   },
   empty: 'You have no knowledge bases yet. Start by creating one.',
   create: 'Create knowledge base',
@@ -2060,6 +2083,8 @@ export const FEEDBACK = {
   version: (n: number) => `version ${n}`,
   caption: 'Feedback, newest first',
   empty: 'No feedback yet. It arrives when users give a thumbs up or down in Open WebUI.',
+  /** Without Open WebUI, ratings arrive only through rag-api's feedback endpoint (chat design §3.5). */
+  emptyApi: 'No feedback yet. It arrives when an app sends a thumbs up or down to the API (POST /v1/feedback).',
   mark: 'Mark as handled',
   reopen: 'Open again',
   more: 'Show more',
@@ -2123,6 +2148,33 @@ export const EDIT_DRAWER = {
   saved: 'Saved.',
   levelHint: 'Changing the information class is checked against the sources, the knowledge bases and the assistants it affects. If something stops it, it is listed here.',
   refused: 'Not saved:',
+} as const
+
+/** Change department on a knowledge base and an assistant (#811, admin design §3.2; platform admins only). */
+export const MOVE_DEPARTMENT = {
+  action: 'Change department',
+  collectionTitle: 'Move the knowledge base to another department',
+  assistantTitle: 'Move the assistant to another department',
+  intro:
+    'For an object created under the wrong department. Its history stays: costs and the audit log keep the department they were recorded under.',
+  department: 'New department',
+  choose: 'Choose a department',
+  ownerTeam: 'Owner team',
+  noTeam: 'No owner team (the department has no teams)',
+  chooseTeam: 'Choose an owner team',
+  keyHint: 'A key of the new department, or none. A published assistant needs one.',
+  check: 'Check what the move does',
+  shares: 'To keep every link working, the move shares:',
+  share: (collection: string, department: string) => `${collection} with ${department}`,
+  noShares: 'No sharing changes: every link keeps working as it is.',
+  brokenLinks: 'These links do not work today, and the move does not change that:',
+  brokenLink: (assistant: string, department: string, collection: string) => `${assistant} (${department}) → ${collection}`,
+  scopedKeys: 'These keys of other departments are limited to it. They keep working, but their department’s admins should check the key’s limits:',
+  scopedKey: (key: string, department: string) => `${key} (${department})`,
+  blocked: 'These sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first:',
+  move: 'Move',
+  moved: (department: string) => `Moved to ${department}.`,
+  refused: 'Not moved:',
 } as const
 
 /** The gateway key picker on an assistant's and a knowledge base's edit drawer (admin design §5.5.2, §5.5.4; B-36, V39). */

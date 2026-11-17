@@ -52,6 +52,8 @@ export interface BffUser {
   signIn: { configured: boolean }
   /** Whether setup mode is open: the wizard at /setup takes the setup code (identity design §19, "Setup state"). */
   setup: { open: boolean }
+  /** Whether the deployment runs Open WebUI (rag-admin's `OpenWebUi:Enabled`, its `openwebui` profile); without it the UI leaves Open WebUI out. */
+  openWebUi: { enabled: boolean }
 }
 
 // ---------- Setup mode (identity design §19; admin design §5.11) ----------
@@ -266,6 +268,28 @@ export interface Team {
   name: string
   code: string | null
   isActive: boolean
+}
+
+/** A move to another department (#811, admin design §3.2): the impact's token is required by the move. */
+export interface MoveRequest {
+  departmentId: string
+  ownerTeamId: string | null
+  gatewayKeyId: string | null
+  version: string
+  impactToken?: string
+}
+
+/** What a move does: the shares it adds to keep links working, and the sources that block it (then no token). */
+export interface MoveImpact {
+  shares: { collectionId: string; collection: string; departmentId: string; department: string }[]
+  sourcesOnDepartmentPipelines: string[]
+  /** The owner team it gets: the one chosen, else the new department's only active team. */
+  ownerTeamId: string | null
+  /** Links that do not work today (the department cannot reach the knowledge base): the move leaves them broken. */
+  brokenLinks: { assistantId: string; assistant: string; department: string; collectionId: string; collection: string }[]
+  /** Client keys of other departments scoped to the object: they keep working; their scope needs a look. */
+  scopedKeys: { keyId: string; key: string; department: string }[]
+  impactToken: string | null
 }
 
 export interface Department {
@@ -934,6 +958,22 @@ export interface RunSummary {
   costUsd: number
   startedAt: IsoDateTime
   finishedAt: IsoDateTime | null
+  /** Only while the run is `running` (#803); the counters above are then derived from its items so far. */
+  progress?: RunProgress | null
+}
+
+/**
+ * How far a running run has got (AdminApi `RunProgress`, #803): the documents handled so far and, for a crawl, its
+ * frontier (null for other source types).
+ */
+export interface RunProgress {
+  processed: number
+  admitted: number | null
+  maxPages: number | null
+  waiting: number | null
+  seeds: number | null
+  seedsFailed: number | null
+  limitHit: boolean | null
 }
 
 /**

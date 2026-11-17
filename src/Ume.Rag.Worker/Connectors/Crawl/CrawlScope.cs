@@ -128,7 +128,7 @@ public sealed class CrawlScope
 
         var include = settings.Include.Select(UrlPattern.Parse).ToList();
         var offSite = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var pattern in settings.Include.Where(p => !p.StartsWith(UrlPattern.RegexPrefix, StringComparison.Ordinal)))
+        foreach (var pattern in settings.Include.Where(p => !p.StartsWith(UrlPattern.RegexPrefix, StringComparison.Ordinal)).Select(UrlPattern.Normalize))
         {
             var slash = pattern.IndexOf('/', StringComparison.Ordinal);
             var host = slash < 0 ? pattern : pattern[..slash];
