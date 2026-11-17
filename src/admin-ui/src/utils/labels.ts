@@ -2150,6 +2150,33 @@ export const EDIT_DRAWER = {
   refused: 'Not saved:',
 } as const
 
+/** Change department on a knowledge base and an assistant (#811, admin design §3.2; platform admins only). */
+export const MOVE_DEPARTMENT = {
+  action: 'Change department',
+  collectionTitle: 'Move the knowledge base to another department',
+  assistantTitle: 'Move the assistant to another department',
+  intro:
+    'For an object created under the wrong department. Its history stays: costs and the audit log keep the department they were recorded under.',
+  department: 'New department',
+  choose: 'Choose a department',
+  ownerTeam: 'Owner team',
+  noTeam: 'No owner team (the department has no teams)',
+  chooseTeam: 'Choose an owner team',
+  keyHint: 'A key of the new department, or none. A published assistant needs one.',
+  check: 'Check what the move does',
+  shares: 'To keep every link working, the move shares:',
+  share: (collection: string, department: string) => `${collection} with ${department}`,
+  noShares: 'No sharing changes: every link keeps working as it is.',
+  brokenLinks: 'These links do not work today, and the move does not change that:',
+  brokenLink: (assistant: string, department: string, collection: string) => `${assistant} (${department}) → ${collection}`,
+  scopedKeys: 'These keys of other departments are limited to it. They keep working, but their department’s admins should check the key’s limits:',
+  scopedKey: (key: string, department: string) => `${key} (${department})`,
+  blocked: 'These sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first:',
+  move: 'Move',
+  moved: (department: string) => `Moved to ${department}.`,
+  refused: 'Not moved:',
+} as const
+
 /** The gateway key picker on an assistant's and a knowledge base's edit drawer (admin design §5.5.2, §5.5.4; B-36, V39). */
 export const GATEWAY_KEY = {
   label: 'AI gateway key',

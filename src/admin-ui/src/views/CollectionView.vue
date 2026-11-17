@@ -31,7 +31,8 @@ import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Filer (§5.5.7: the Files card of an upload
@@ -91,6 +92,9 @@ const addFilesError = ref<unknown>(null)
 const noFilesSource = ref(false)
 // Edit (§5.5.2, #446): the own fields, the level included.
 const editing = ref(false)
+// Change department (#811): platform admins only, on the owner's view.
+const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const moving = ref(false)
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 let documentsRequest = 0
 
@@ -189,6 +193,11 @@ function edited(saved: Collection): void {
   ui.notify(EDIT_DRAWER.saved)
 }
 
+function moved(saved: Collection, department: string): void {
+  read.data.value = saved
+  ui.notify(MOVE_DEPARTMENT.moved(department))
+}
+
 async function publish(): Promise<void> {
   if (!collection.data.value) return
   publishing.value = true
@@ -275,6 +284,7 @@ onMounted(load)
           data-test="state"
         />
         <UiButton v-if="canEdit" icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
+        <UiButton v-if="canMove && !shared" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
         <UiButton v-if="canPublish && !collection.data.value.publishedAt" variant="primary" :loading="publishing" data-test="publish" @click="publish">
           {{ COLLECTION.publish }}
         </UiButton>
@@ -421,6 +431,10 @@ onMounted(load)
       </div>
       <SourceDrawer v-model:open="adding" :collection="collection.data.value" @saved="sourceSaved" />
       <CollectionEditDrawer v-if="canEdit" v-model:open="editing" :collection="collection.data.value" @saved="edited" />
+      <MoveDepartmentDrawer
+        v-if="canMove && !shared" :id="collection.data.value.id" v-model:open="moving" kind="collection"
+        :department-id="collection.data.value.departmentId" :version="collection.data.value.version" @moved-collection="moved"
+      />
     </template>
   </AsyncState>
 </template>

@@ -31,7 +31,8 @@ import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
+import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
+import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
@@ -115,6 +116,9 @@ const retentionDays = ref('90')
 const retentionError = ref<string | undefined>(undefined)
 const error = ref<unknown>(null)
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+// Change department (#811): platform admins only.
+const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const moving = ref(false)
 const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 
 const tabs = [
@@ -385,6 +389,12 @@ function edited(saved: Assistant): void {
   ui.notify(EDIT_DRAWER.saved)
 }
 
+function moved(saved: Assistant, department: string): void {
+  assistant.data.value = saved
+  ui.notify(MOVE_DEPARTMENT.moved(department))
+  void load()
+}
+
 async function archive(): Promise<void> {
   assistant.data.value = await api.assistants.archive(props.id, assistant.data.value!.version)
   ui.notify(ASSISTANT.archivedDone)
@@ -424,6 +434,7 @@ onMounted(load)
         </UiButton>
         <template v-if="canEdit">
           <UiButton icon="edit" data-test="edit" @click="editing = true">{{ ASSISTANT.editDetails }}</UiButton>
+          <UiButton v-if="canMove" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
         </template>
@@ -604,6 +615,10 @@ onMounted(load)
       <ConfirmDialog
         :open="restoring !== null" :title="ASSISTANT.restoreTitle(restoring ?? 0)" :consequence="ASSISTANT.restoreConsequence(restoring ?? 0)"
         :confirm-label="ASSISTANT.restore" :action="restore" @update:open="!$event && (restoring = null)"
+      />
+      <MoveDepartmentDrawer
+        v-if="canMove" :id="assistant.data.value.id" v-model:open="moving" kind="assistant"
+        :department-id="assistant.data.value.departmentId" :version="assistant.data.value.version" @moved-assistant="moved"
       />
       <AssistantEditDrawer
         v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
