@@ -18,7 +18,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -3340,6 +3340,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("ContinuesRunId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("CostUsd")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(18, 8)
@@ -3415,6 +3418,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ContinuesRunId");
+
                     b.HasIndex("SourceId", "StartedAt")
                         .IsDescending(false, true);
 
@@ -3422,7 +3427,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Runs_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
 
-                            t.HasCheckConstraint("CK_Runs_Kind", "\"Kind\" IN ('sync', 'retry-failed', 'reprocess')");
+                            t.HasCheckConstraint("CK_Runs_Kind", "\"Kind\" IN ('sync', 'retry-failed', 'reprocess', 'continue')");
 
                             t.HasCheckConstraint("CK_Runs_Phase", "\"Phase\" IS NULL OR \"Phase\" IN ('list', 'fetch', 'reconcile', 'done')");
 
@@ -4198,6 +4203,14 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PipelineId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Run", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Run", null)
+                        .WithMany()
+                        .HasForeignKey("ContinuesRunId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.SetupTest", b =>

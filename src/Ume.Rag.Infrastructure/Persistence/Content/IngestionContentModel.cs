@@ -300,6 +300,7 @@ internal static class IngestionContentModel
             e.Property(x => x.CostUsd).HasPrecision(18, 8).HasDefaultValue(0m);
             e.Property(x => x.StartedAt).HasDefaultValueSql("now()");
             e.HasIndex(x => new { x.SourceId, x.StartedAt }).IsDescending(false, true);
+            e.HasOne<Run>().WithMany().HasForeignKey(x => x.ContinuesRunId).OnDelete(DeleteBehavior.SetNull); // the retention step may delete the older run
         });
 
         modelBuilder.Entity<ParseObservation>(e =>
