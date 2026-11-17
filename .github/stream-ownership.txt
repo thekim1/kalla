@@ -19,6 +19,8 @@ platforms/**                                  main
 docs/stakeholder-report.html                  main
 README.md                                     shared
 CHANGELOG.md                                  shared
+# Release notes (changes/README.md): each PR adds its own files here, in that PR
+changes/**                                    shared
 LICENSE                                       main
 NOTICE                                        a
 *.md                                          main

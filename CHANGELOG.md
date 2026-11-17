@@ -1,7 +1,8 @@
 # Changelog
 
 Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[Semantic Versioning](https://semver.org/). Shared file: append under **Unreleased**, in a PR of its own.
+[Semantic Versioning](https://semver.org/). A pull request does not edit this file: it adds its note as
+`changes/<branch>.md` ([`changes/`](changes/README.md)), and the release preparation folds the notes in here.
 
 ## Unreleased
 
