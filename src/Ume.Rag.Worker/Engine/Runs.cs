@@ -35,9 +35,9 @@ public sealed record CrawlRunHistory(bool Complete, bool Incremental);
 public sealed class RunStore(JobDatabase database)
 {
     private const string OpenSql = """
-        INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "PipelineVersionId", "ScheduledFor", "SettingsHashes", "Phase", "State",
-                                   "Added", "Updated", "Unchanged", "Deleted", "Failed", "ProposedDeletions", "CostUsd")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'list', 'running', 0, 0, 0, 0, 0, 0, 0)
+        INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "PipelineVersionId", "ScheduledFor", "SettingsHashes", "ContinuesRunId",
+                                   "Phase", "State", "Added", "Updated", "Unchanged", "Deleted", "Failed", "ProposedDeletions", "CostUsd")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, 'list', 'running', 0, 0, 0, 0, 0, 0, 0)
         ON CONFLICT ("Id") DO NOTHING
         """;
 
@@ -114,6 +114,7 @@ public sealed class RunStore(JobDatabase database)
             {
                 Db.P(runId), Db.P(source.SourceId), Db.P(source.Classification), Db.P(Text(payload.Kind)), Db.P(Text(payload.Trigger)),
                 Db.P(pipelineVersionId), Db.P(Db.Utc(payload.ScheduledFor)), Db.P(SettingsEffects.HashesJson(source.Type, source.Settings)),
+                Db.P(payload.ContinuesRunId),
             },
         })
         {
@@ -247,8 +248,8 @@ public sealed class RunStore(JobDatabase database)
 /// <summary>
 /// The run finalizer (engine design §10.3–§10.4): every <c>Worker:FinalizerSeconds</c> (30 s) the instance holding the
 /// advisory lock looks at <c>running</c> runs that no queued or running job serves. A <c>sync</c> run whose fetches are done
-/// first gets its <c>reconcile</c> job (deletions and the guard); a URL-list or crawl run (<c>sync</c> or
-/// <c>retry-failed</c>) with frontier rows still open gets a fetch top-up first, so a job lost between a release and its
+/// first gets its <c>reconcile</c> job (deletions and the guard), and so does a crawl's <c>continue</c> run; a URL-list or crawl run (<c>sync</c>,
+/// <c>continue</c> or <c>retry-failed</c>) with frontier rows still open gets a fetch top-up first, so a job lost between a release and its
 /// enqueue, or a worker that died before its top-up, is not lost work. <c>retry-failed</c> and <c>reprocess</c> runs have
 /// no reconcile. Then the counters are derived from the run items (the latest item per document or identity;
 /// <c>superseded</c> items are not counted), jobs that died without an item count as failed, and the state is set:
@@ -361,7 +362,7 @@ public sealed partial class RunFinalizer(
         {
             // Rows still open with no job are released again by a fetch-phase continuation (URL lists and crawls).
             var topUp = run.OpenFrontier && run.SourceType is SourceTypes.UrlList or SourceTypes.Crawl;
-            if (run.Phase is RunPhases.List or RunPhases.Fetch && (run.Kind == RunKinds.Sync || (run.Kind == RunKinds.RetryFailed && topUp)))
+            if (run.Phase is RunPhases.List or RunPhases.Fetch && (run.Kind is RunKinds.Sync or RunKinds.Continue || (run.Kind == RunKinds.RetryFailed && topUp)))
             {
                 var phase = topUp ? SyncPhase.Fetch : SyncPhase.Reconcile;
                 if (phase == SyncPhase.Reconcile)

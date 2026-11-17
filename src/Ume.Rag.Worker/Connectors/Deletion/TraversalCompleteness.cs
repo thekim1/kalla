@@ -42,6 +42,7 @@ public static class TraversalCompleteness
     public const string Cancelled = "crawl.cancelled";
     public const string SeedsUnreachable = "crawl.seeds_unreachable";
     public const string Incremental = "crawl.incremental";
+    public const string Continued = "crawl.continued";
 
     /// <summary>The share of seeds (percent) <see cref="CompletenessRule.Ratio"/> needs resolved.</summary>
     public const int ResolvedPercent = 99;
@@ -54,13 +55,22 @@ public static class TraversalCompleteness
     /// <param name="cancelled">The run was cancelled.</param>
     /// <param name="rule">The seed rule.</param>
     /// <param name="incremental">An incremental run (§5.4): never a complete traversal.</param>
-    public static TraversalVerdict Evaluate(CrawlRunRecord run, int openRows, bool cancelled, CompletenessRule rule, bool incremental)
+    /// <param name="continued">
+    /// A <c>continue</c> run (#804): it lists no seeds and sees only the part of the site the run it continues left, so it is
+    /// never a complete traversal either, and fails on its seeds only as an incremental run does.
+    /// </param>
+    public static TraversalVerdict Evaluate(CrawlRunRecord run, int openRows, bool cancelled, CompletenessRule rule, bool incremental, bool continued = false)
     {
         ArgumentNullException.ThrowIfNull(run);
         var reasons = new List<string>();
         if (incremental)
         {
             reasons.Add(Incremental);
+        }
+
+        if (continued)
+        {
+            reasons.Add(Continued);
         }
 
         if (run.LimitHit)
@@ -74,7 +84,7 @@ public static class TraversalCompleteness
         }
 
         // An incremental run admits only changed and new seeds, often none: it fails only when it had seeds and none resolved.
-        var unreachable = incremental ? run.Seeds > 0 && run.SeedsFailed >= run.Seeds : run.Seeds == 0 || run.SeedsFailed >= run.Seeds;
+        var unreachable = incremental || continued ? run.Seeds > 0 && run.SeedsFailed >= run.Seeds : run.Seeds == 0 || run.SeedsFailed >= run.Seeds;
         if (unreachable)
         {
             reasons.Add(SeedsUnreachable);

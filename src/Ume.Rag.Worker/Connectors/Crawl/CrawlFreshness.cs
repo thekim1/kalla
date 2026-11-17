@@ -130,15 +130,17 @@ public static class CrawlReportSections
     /// <param name="failedProtected">Live documents whose URL failed in the run (<see cref="DeletionCandidates.FromTraversal"/>'s protected set).</param>
     /// <param name="earlierNewestFirst">The source's earlier crawl runs, newest first.</param>
     /// <param name="alertThreshold"><c>Settings.Crawl.IncompleteRunsAlert</c>.</param>
+    /// <param name="continued">A <c>continue</c> run (#804), left out of the incomplete-traversal count like an incremental one.</param>
     public static CompletenessSection Completeness(
         CrawlRunRecord run, TraversalVerdict verdict, CompletenessRule rule, bool incremental, int failedProtected,
-        IEnumerable<TraversalHistoryEntry> earlierNewestFirst, int alertThreshold)
+        IEnumerable<TraversalHistoryEntry> earlierNewestFirst, int alertThreshold, bool continued = false)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(verdict);
         ArgumentNullException.ThrowIfNull(earlierNewestFirst);
         var resolved = TraversalCompleteness.Resolved(run);
-        var consecutive = TraversalCompleteness.ConsecutiveIncomplete(earlierNewestFirst.Prepend(new TraversalHistoryEntry(verdict.Complete, incremental)));
+        // A continue run is no traversal either (#804): like an incremental one, it is left out of the count.
+        var consecutive = TraversalCompleteness.ConsecutiveIncomplete(earlierNewestFirst.Prepend(new TraversalHistoryEntry(verdict.Complete, incremental || continued)));
         return new CompletenessSection(
             verdict.Complete,
             verdict.Reasons,

@@ -234,7 +234,7 @@ public sealed class CrawlSourceRunner(
 
     /// <summary>
     /// Phase <c>fetch</c> (the night window opened, or the finalizer found open rows with no job): releases and enqueues
-    /// again; when nothing can move, a <c>sync</c> run goes on to its reconcile and a <c>retry-failed</c> run ends. A
+    /// again; when nothing can move, a <c>sync</c> or <c>continue</c> run goes on to its reconcile and a <c>retry-failed</c> run ends. A
     /// released row is still moving even when its enqueue was dropped: its dedup key is held by a fetch already queued or
     /// running (the top-up that released it enqueued it after the finalizer looked).
     /// </summary>
@@ -254,7 +254,7 @@ public sealed class CrawlSourceRunner(
             return new JobResult.Success();
         }
 
-        if (run.Kind != RunKinds.Sync)
+        if (run.Kind is not (RunKinds.Sync or RunKinds.Continue))
         {
             await runs.SetPhaseAsync(run.Id, RunPhases.Done, null, cancellationToken);
             return new JobResult.Success();
@@ -338,7 +338,7 @@ public sealed class CrawlSourceRunner(
         var record = await crawlRuns.GetAsync(run.Id, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
         var history = (await runs.CrawlHistoryAsync(source.SourceId, run.Id, cancellationToken)).Select(h => new TraversalHistoryEntry(h.Complete, h.Incremental));
         var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedInRun.Count, history,
-            policy.Current.IncompleteRunsAlert);
+            policy.Current.IncompleteRunsAlert, continued: context.Kind == SyncKind.Continue);
         var settings = crawl.Settings;
         // Demote counts over Documents.Url, the URL retrieval matches demote on (the path form on an identity-rule host, #228).
         var live = all.Where(d => d.DeletedAt is null && d.Url is not null).Select(d => d.Url!).ToList();

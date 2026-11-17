@@ -3,6 +3,7 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Persistence;
@@ -52,6 +53,19 @@ public sealed class SourceReruns(
     WorkerIdentity identity,
     TimeProvider time)
 {
+    // What a continue run takes over from the run it continues (#804): that run's rows still open, and its rows whose latest
+    // item failed (a failed fetch completes its row idle). Rows a later run admitted carry that run's id and are not taken.
+    private const string CarriedSql = """
+        SELECT f."Url", f."FetchUrl", f."Host", f."Depth", f."Leaf", f."RemovalCheck", f."SitemapLastMod", f."State" <> 'idle'
+        FROM content."CrawlFrontier" f
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3
+          AND (f."State" <> 'idle' OR (
+              SELECT i."Outcome" FROM content."RunItems" i
+              WHERE i."RunId" = $3 AND i."Identity" = f."Url" AND i."Outcome" <> 'superseded'
+              ORDER BY i."CreatedAt" DESC, i."Id" DESC LIMIT 1) = 'failed')
+        ORDER BY f."Depth", f."Url"
+        """;
+
     /// <summary>A reprocess iteration yields after this many documents (engine design §9.2).</summary>
     public const int ReprocessItems = 1000;
 
@@ -70,6 +84,57 @@ public sealed class SourceReruns(
         WHERE last."Outcome" = 'failed' AND d."DeletedAt" IS NULL
         ORDER BY last."Identity"
         """;
+
+    /// <summary>Phase <c>list</c> of a crawl's <c>continue</c> run (#804).</summary>
+    /// <remarks>
+    /// Takes over what <paramref name="continuesRunId"/> left: its frontier rows still <c>pending</c> or <c>released</c>,
+    /// and the rows whose latest item in that run failed, each at its depth and with its leaf and removal-check flags, so
+    /// the traversal goes on with link discovery instead of starting again from the seeds. Each row is checked against the
+    /// current scope on the form it was found under (<see cref="CrawlScope.CheckStored"/>) and the current
+    /// <c>maxDepth</c>; the ones dropped are counted. The run lists no seeds, fetches in the current fetch mode without
+    /// revalidating, and is never a complete traversal (<see cref="Connectors.Deletion.TraversalCompleteness"/>), so its reconcile proposes no
+    /// <c>not-seen</c> deletions. The report's <c>continued</c> section says what was carried over.
+    /// </remarks>
+    public async Task<JobResult> ContinueAsync(SourceContext source, RunRow run, Guid continuesRunId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        var context = await crawls.StartAsync(source, run, incremental: false, force: false, cancellationToken);
+        var crawl = await crawlConnector.SourceAsync(source.SourceId, source.Classification, source.Settings, cancellationToken);
+        var admissions = new List<FrontierAdmission>();
+        int open = 0, failed = 0, dropped = 0;
+        foreach (var row in await CarriedAsync(source, continuesRunId, cancellationToken))
+        {
+            if (row.Depth > crawl.Settings.MaxDepth || !crawl.Scope.CheckStored(row.Url, row.FetchUrl, crawl.Canonicalizer).Admitted)
+            {
+                dropped++;
+                continue;
+            }
+
+            if (row.Open)
+            {
+                open++;
+            }
+            else
+            {
+                failed++;
+            }
+
+            admissions.Add(new FrontierAdmission(row.Url, row.Host, row.Depth, row.Leaf, row.SitemapLastMod, row.RemovalCheck, row.FetchUrl));
+        }
+
+        var admitted = await frontier.AdmitAsync(context.Run, admissions, cancellationToken);
+        var report = ContractJson.Serialize(new { continued = new ContinuedSection(continuesRunId, open, failed, dropped, admitted.Admitted.Count) });
+        await using (var commit = await EngineCommit.BeginAsync(database, cancellationToken))
+        {
+            await RunStore.AddReportAsync(run.Id, report, commit.Transaction, cancellationToken);
+            await runs.SetPhaseAsync(run.Id, RunPhases.Fetch, commit.Transaction, cancellationToken);
+            await commit.CommitAsync(cancellationToken);
+        }
+
+        await crawls.TopUpAsync(context, cancellationToken);
+        return new JobResult.Success();
+    }
 
     /// <summary>Phase <c>list</c> of a <c>reprocess</c> run; <paramref name="bypassFrom"/> is a forced run's first bypassed stage.</summary>
     public async Task<JobResult> ReprocessAsync(SourceContext source, RunRow run, LeasedJob job, string? bypassFrom, CancellationToken cancellationToken)
@@ -214,6 +279,24 @@ public sealed class SourceReruns(
         await crawls.TopUpAsync(context, cancellationToken);
     }
 
+    private async Task<IReadOnlyList<CarriedRow>> CarriedAsync(SourceContext source, Guid continuesRunId, CancellationToken cancellationToken)
+    {
+        var rows = new List<CarriedRow>();
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(CarriedSql, connection)
+        {
+            Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(continuesRunId) },
+        };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new CarriedRow(reader.GetString(0), Db.String(reader, 1), reader.GetString(2), reader.GetInt16(3), reader.GetBoolean(4),
+                reader.GetBoolean(5), Db.Nullable<DateTimeOffset>(reader, 6), reader.GetBoolean(7)));
+        }
+
+        return rows;
+    }
+
     private async Task<IReadOnlyList<(string Identity, FailedItem Last)>> FailedAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
     {
         var failed = new List<(string, FailedItem)>();
@@ -244,3 +327,13 @@ public sealed class SourceReruns(
         await commit.CommitAsync(cancellationToken);
     }
 }
+
+/// <summary>A frontier row a <c>continue</c> run takes over; <see cref="Open"/> it was still pending or released, else its fetch failed.</summary>
+internal sealed record CarriedRow(string Url, string? FetchUrl, string Host, short Depth, bool Leaf, bool RemovalCheck, DateTimeOffset? SitemapLastMod, bool Open);
+
+/// <summary>
+/// The <c>continued</c> section of a continue run's report (#804): the run it went on from, the rows taken over that were still
+/// open and those whose fetch had failed, the rows the current scope or <c>maxDepth</c> dropped, and the rows admitted (fewer
+/// than taken over when <c>maxPages</c> was reached).
+/// </summary>
+public sealed record ContinuedSection(Guid From, int Open, int Failed, int Dropped, int Admitted);

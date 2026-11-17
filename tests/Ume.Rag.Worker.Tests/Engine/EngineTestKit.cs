@@ -257,9 +257,9 @@ internal static class EngineKit
 
     /// <summary>A "sync now" (or retry failed, or a publish's reprocess) as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
     public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed, SyncKind kind = SyncKind.Sync, RunTrigger trigger = RunTrigger.Manual,
-        bool incremental = false)
+        bool incremental = false, Guid? continuesRunId = null)
     {
-        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = kind, Trigger = trigger, Incremental = incremental };
+        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = kind, Trigger = trigger, Incremental = incremental, ContinuesRunId = continuesRunId };
         var job = new Domain.Ports.JobRequest(JobClasses.Sync, seed.DepartmentId, seed.Classification, ContractJson.Serialize(payload))
         {
             DedupKey = JobDedupKeys.Sync(seed.SourceId),
