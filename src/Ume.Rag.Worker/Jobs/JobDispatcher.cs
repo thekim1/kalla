@@ -67,6 +67,7 @@ public sealed partial class JobDispatcher(
     private readonly CancellationTokenSource _dispatching = new();
     private readonly CancellationTokenSource _cancelJobs = new();
     private readonly ConcurrentDictionary<Guid, Task> _jobs = new();
+    private volatile bool _disposed;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -90,7 +91,31 @@ public sealed partial class JobDispatcher(
         await Task.WhenAll(lanes.Select(lane => RunLaneAsync(lane, dispatching.Token, stoppingToken)));
     }
 
+    /// <remarks>
+    /// A stop can come again after <see cref="Dispose"/>: a test's WebApplicationFactory stops the host while
+    /// <c>Program</c>'s run stops and disposes it (#805). The first stop has done the work, so a later one does nothing.
+    /// </remarks>
     public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await StopDispatchingAsync(cancellationToken);
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // Disposed while this stop waited: the other stop has finished.
+            return;
+        }
+
+        await base.StopAsync(cancellationToken);
+    }
+
+    private async Task StopDispatchingAsync(CancellationToken cancellationToken)
     {
         await _dispatching.CancelAsync();
         var all = Task.WhenAll(_jobs.Values);
@@ -108,12 +133,11 @@ public sealed partial class JobDispatcher(
                 await Task.WhenAll(_jobs.Values).WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             }
         }
-
-        await base.StopAsync(cancellationToken);
     }
 
     public override void Dispose()
     {
+        _disposed = true;
         base.Dispose();
         _dispatching.Dispose();
         _cancelJobs.Dispose();
