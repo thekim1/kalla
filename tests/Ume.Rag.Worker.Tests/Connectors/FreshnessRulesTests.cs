@@ -129,6 +129,22 @@ public sealed class FreshnessRulesTests
         CrawlFreshness.Revalidates(before, every, forced, incremental).ShouldBe(revalidates);
 
     [Fact]
+    public void A_continue_run_without_seeds_is_never_complete_never_unreachable_and_not_counted_as_a_traversal()
+    {
+        var run = new CrawlRunRecord { RunId = Guid.NewGuid(), Classification = "public", SourceId = Guid.NewGuid(), MaxPages = 100, MaxDepth = 3 };
+
+        var verdict = TraversalCompleteness.Evaluate(run, 0, false, CompletenessRule.Ratio, incremental: false, continued: true);
+        var section = CrawlReportSections.Completeness(run, verdict, CompletenessRule.Ratio, false, 0, [new(false, false), new(true, false)], 3, continued: true);
+
+        verdict.Complete.ShouldBeFalse();
+        verdict.Reasons.ShouldBe([TraversalCompleteness.Continued]);
+        verdict.RunFailure.ShouldBeNull();
+        section.ConsecutiveIncomplete.ShouldBe(1, "the continue run itself is left out, as an incremental run is");
+        TraversalCompleteness.Evaluate(run, 0, false, CompletenessRule.Ratio, incremental: false).RunFailure
+            .ShouldBe(TraversalCompleteness.SeedsUnreachable, "a sync without seeds still fails");
+    }
+
+    [Fact]
     public void The_report_has_the_completeness_and_removal_sections()
     {
         var run = new CrawlRunRecord

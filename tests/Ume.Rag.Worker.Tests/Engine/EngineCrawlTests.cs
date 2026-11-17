@@ -22,7 +22,8 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>Runs.Report</c> carries the crawl report's sections and <c>rag.crawl.incomplete_runs</c> is recorded; a worker killed
 /// between a crawl fetch and the document's commit loses no document and duplicates none; <c>reprocess</c> after a new
 /// published version re-processes every live document without a request (and only re-keys when no stage changed);
-/// <c>retry-failed</c> fetches only what failed, for a crawl and a URL list; a fetch-phase continuation reconciles only
+/// <c>retry-failed</c> fetches only what failed, for a crawl and a URL list; <c>continue</c> takes over a crawl run's failed
+/// rows with link discovery and proposes no <c>not-seen</c> deletion (#804); a fetch-phase continuation reconciles only
 /// once the run's fetches are done.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
@@ -453,6 +454,60 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             }
 
             (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Kind" FROM content."Runs" WHERE "Id" = $1""", retryId)).ShouldBe(RunKinds.RetryFailed);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task Continue_takes_over_the_failed_start_page_discovers_its_links_and_proposes_no_not_seen_deletion()
+    {
+        _linksDE = true;
+        await using var site = await SiteAsync();
+        var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            // The start page fails, so its links (/p/c, /p/d, /p/e) are never found; the sitemap's /p/a and /p/b are.
+            _status["/"] = StatusCodes.Status403Forbidden;
+            var firstId = await EngineKit.SyncNowAsync(database, seed);
+            (await EngineKit.WaitForRunAsync(database, firstId)).ShouldBe(new RunCounters(RunStates.Degraded, 2, 0, 0, 0, 1, 0));
+            _status.Clear();
+            _sitemapListsB = false; // a complete traversal now would make /p/b a not-seen candidate; a continue run never does
+            var before = new Dictionary<string, int>(_hits, StringComparer.Ordinal);
+
+            var continueId = await EngineKit.SyncNowAsync(database, seed, SyncKind.Continue, continuesRunId: firstId);
+            var run = await EngineKit.WaitForRunAsync(database, continueId);
+
+            run.ShouldBe(new RunCounters(RunStates.Succeeded, 4, 0, 0, 0, 0, 0));
+            _hits["/"].ShouldBe(before["/"] + 1);
+            foreach (var path in new[] { "/p/c", "/p/d", "/p/e" })
+            {
+                _hits[path].ShouldBe(1, $"{path} is found through the start page's links");
+            }
+
+            foreach (var path in new[] { "/p/a", "/p/b" })
+            {
+                _hits[path].ShouldBe(before[path], $"{path} did not fail and is not fetched again");
+            }
+
+            (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Kind" || ' ' || "ContinuesRunId" FROM content."Runs" WHERE "Id" = $1""", continueId))
+                .ShouldBe($"{RunKinds.Continue} {firstId}");
+            using (var report = await ReportAsync(continueId))
+            {
+                var continued = report.RootElement.GetProperty("continued");
+                continued.GetProperty("from").GetGuid().ShouldBe(firstId);
+                (continued.GetProperty("open").GetInt32(), continued.GetProperty("failed").GetInt32(), continued.GetProperty("dropped").GetInt32(),
+                    continued.GetProperty("admitted").GetInt32()).ShouldBe((0, 1, 0, 1));
+                var completeness = report.RootElement.GetProperty("completeness");
+                completeness.GetProperty("complete").GetBoolean().ShouldBeFalse();
+                completeness.GetProperty("reasons").EnumerateArray().Select(r => r.GetString()).ShouldContain("crawl.continued");
+            }
+
+            (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."DeletionProposals" WHERE "RunId" = $1""", continueId)).ShouldBe(0);
+            (await EngineKit.DocumentsAsync(database, seed)).ShouldBe(6);
         }
         finally
         {

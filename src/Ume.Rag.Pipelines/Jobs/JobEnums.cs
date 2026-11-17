@@ -6,6 +6,9 @@ public enum SyncKind
     Sync,
     RetryFailed,
     Reprocess,
+
+    /// <summary>A crawl run that goes on from an earlier run of its source (#804), named by <c>continuesRunId</c>.</summary>
+    Continue,
 }
 
 /// <summary><c>Runs.Trigger</c> (engine design §10.1); <c>notification</c> (SharePoint) is P2.</summary>

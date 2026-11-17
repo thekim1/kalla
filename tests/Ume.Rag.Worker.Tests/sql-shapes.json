@@ -88,6 +88,7 @@
   "Engine.SiteProfiles.AppliedSql": ["Id uuid", "Number integer", "Profile text"],
   "Engine.SourceContexts.SourceSql": ["Id uuid", "Type character varying", "Classification character varying", "Settings text", "?column? boolean", "Id uuid", "Classification character varying", "DepartmentId uuid", "EmbeddingProfileId uuid", "Id uuid", "PublishedVersionId uuid", "GatewayKeyId uuid"],
   "Engine.SourceContexts.VersionSql": ["Definition text", "State character varying", "PipelineId uuid"],
+  "Engine.SourceReruns.CarriedSql": ["Url text", "FetchUrl character varying", "Host character varying", "Depth smallint", "Leaf boolean", "RemovalCheck boolean", "SitemapLastMod timestamp with time zone", "?column? boolean"],
   "Engine.SourceReruns.FailedSql": ["Identity text", "DocumentId uuid", "Reason character varying", "coalesce character varying"],
   "Engine.StageManifestRegistrar.PublishedSql": ["Id uuid", "Definition text"],
   "Engine.StageManifestRegistrar.ReadManifestSql": ["NodeType character varying", "TypeVersion integer", "Metadata text"],

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Egress;
@@ -358,7 +359,8 @@ public sealed class CrawlTraversal(
         var run = context.Run;
         var record = await runs.GetAsync(run.RunId, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
         var open = (await frontier.HostLoadAsync(run, cancellationToken)).Sum(l => l.Pending + l.Released);
-        var verdict = TraversalCompleteness.Evaluate(record, open, cancelled, options.Value.CompletenessRule, context.Incremental);
+        var verdict = TraversalCompleteness.Evaluate(record, open, cancelled, options.Value.CompletenessRule, context.Incremental,
+            continued: context.Kind == SyncKind.Continue);
         await runs.SetCompleteAsync(run.RunId, verdict.Complete, cancellationToken);
         _traps.TryRemove(run.RunId, out _);
         _softNotFound.Drop(run.RunId);

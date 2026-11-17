@@ -27,7 +27,7 @@ public abstract record JobPayload
 /// dedup <c>sync-upload:{batchId}</c>, <c>trigger</c> <c>upload</c> with <c>batchId</c>; publish confirm and rollback: a
 /// <c>reprocess</c> per source, dedup <c>sync:{sourceId}</c>, <c>trigger</c> <c>publish</c>/<c>rollback</c>); the worker
 /// opens the run and carries <c>runId</c> into its continuations. <c>retry-failed</c> lists only the documents whose last
-/// run item failed; <c>reprocess</c> iterates the live documents and never fetches (engine design §9.2, §12).
+/// run item failed; <c>continue</c> (crawl only) takes over the open frontier rows and failed items of <c>continuesRunId</c>; <c>reprocess</c> iterates the live documents and never fetches (engine design §9.2, §12).
 /// </summary>
 [Description("Payload of a sync job (engine design §9.1, §9.2; connectors design §2.2, §9.1).")]
 [SchemaKeyword("allOf", """
@@ -35,7 +35,8 @@ public abstract record JobPayload
       { "if": { "properties": { "trigger": { "const": "upload" } }, "required": ["trigger"] }, "then": { "required": ["batchId"] } },
       { "if": { "properties": { "phase": { "enum": ["fetch", "reconcile"] } }, "required": ["phase"] }, "then": { "required": ["runId"] } },
       { "if": { "properties": { "trigger": { "enum": ["publish", "rollback"] } }, "required": ["trigger"] }, "then": { "properties": { "kind": { "const": "reprocess" } } } },
-      { "if": { "properties": { "incremental": { "const": true } }, "required": ["incremental"] }, "then": { "properties": { "kind": { "const": "sync" } } } }
+      { "if": { "properties": { "incremental": { "const": true } }, "required": ["incremental"] }, "then": { "properties": { "kind": { "const": "sync" } } } },
+      { "if": { "properties": { "kind": { "const": "continue" } }, "required": ["kind"], "not": { "required": ["runId"] } }, "then": { "required": ["continuesRunId"] } }
     ]
     """)]
 public sealed record SyncPayload : JobPayload
@@ -65,6 +66,9 @@ public sealed record SyncPayload : JobPayload
 
     [Description("Upload commit: the batch whose manifest uploads/{sourceId}/batches/{batchId}.json the sync reads.")]
     public Guid? BatchId { get; init; }
+
+    [Description("continue: the earlier run of the source whose open frontier rows and failed items this run takes over (#804); required on the run's first job.")]
+    public Guid? ContinuesRunId { get; init; }
 
     [Description("Crawl: an incremental run (incrementalSchedule, connectors design §5.4) fetches only seeds with a newer sitemap lastmod and new sitemap URLs, and never marks a traversal complete.")]
     public bool Incremental { get; init; }

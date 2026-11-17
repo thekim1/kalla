@@ -20,7 +20,8 @@
       "enum": [
         "sync",
         "retry-failed",
-        "reprocess"
+        "reprocess",
+        "continue"
       ]
     },
     "trigger": {
@@ -86,6 +87,14 @@
       ],
       "format": "uuid",
       "description": "Upload commit: the batch whose manifest uploads/{sourceId}/batches/{batchId}.json the sync reads."
+    },
+    "continuesRunId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "continue: the earlier run of the source whose open frontier rows and failed items this run takes over (#804); required on the run's first job."
     },
     "incremental": {
       "type": "boolean",
@@ -191,6 +200,28 @@
             "const": "sync"
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "continue"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "not": {
+          "required": [
+            "runId"
+          ]
+        }
+      },
+      "then": {
+        "required": [
+          "continuesRunId"
+        ]
       }
     }
   ],
