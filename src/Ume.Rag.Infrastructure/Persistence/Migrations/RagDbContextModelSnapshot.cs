@@ -2709,9 +2709,6 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<int?>("OutputTokens")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("ParentMessageId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(20)

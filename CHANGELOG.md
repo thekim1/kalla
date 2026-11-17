@@ -75,6 +75,9 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   the Microsoft packages at 10.0.15, the gateway's pins; `ume-rag/postgres` builds on a newer build of the same
   pgvector image (PostgreSQL 17.12). **Rolling update: yes**; Postgres restarts once (a minor update, same data
   directory).
+- **`chat."Messages"."ParentMessageId"` is dropped** (#792): nothing wrote or read it. Migration `DropMessageParentId`;
+  **Rolling update: no** (the previous rag-api and rag-admin map the column), which `rag-migrate` handles itself on
+  one slot.
 
 ## 0.7.0 (2026-11-16)
 

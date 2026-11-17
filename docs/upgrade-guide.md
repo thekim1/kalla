@@ -22,7 +22,10 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
-- **Rolling update: yes** for Portainer and Kubernetes. No migration, no new variable, nothing to do.
+- **Rolling update: no.** Migration `DropMessageParentId` drops `chat."Messages"."ParentMessageId"` (never written or
+  read, #792), which the previous rag-api and rag-admin still map. On one slot (Compose, Portainer) there is nothing
+  to do: `rag-migrate` keeps both out of the database until their new version starts. With two slots or on
+  Kubernetes, stop or scale down rag-api and rag-admin before the migration. No new variable.
 - **`rag-migrate` stops what a migration can't run beside** (above). Nothing to do: the first run creates the table
   `public.ume_rag_service_fences` and the function `public.ume_rag_admit` in ragdb. **Rolling back** after a release
   marked *Rolling update: no*: the previous version is refused at start (*The database's schema is newer than this
