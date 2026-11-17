@@ -231,7 +231,7 @@ def debian_table(status: Path, snapshot: str) -> list[str]:
     lines = [
         "## Debian packages",
         "",
-        f"From Debian main (trixie) at snapshot `{snapshot}` and the `python:3.12.15-slim-trixie` base. Each package's "
+        f"From Debian main (trixie) at snapshot `{snapshot}` and the `python:3.12.16-slim-trixie` base. Each package's "
         "licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, "
         "...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...), `libjbig0` (GPL-2.0-or-later, through "
         "libtiff6, Leptonica and Tesseract) and LibreOffice with its libraries (MPL-2.0, EPL, CPL-1.0, GPL and LGPL; "
