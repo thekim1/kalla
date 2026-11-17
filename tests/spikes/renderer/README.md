@@ -9,7 +9,7 @@ before it is built, and measures them. Not in `UmeRag.slnx`, not shipped. Result
 |---|---|---|
 | `renderer` | `render` only (internal, 10.213.0.0/26) | `renderer/Dockerfile`: the official `mcr.microsoft.com/playwright:v1.64.1-noble` image by digest plus `playwright-core` 1.64.1 from `package-lock.json` (the image ships browsers but no Playwright package, so `npx playwright run-server` would download one at every start). `start.sh` runs `run-server` (default; `--unsafe` so the client can turn the sandbox on) or `launch-server` with the sandbox in a server-side config (`RENDER_MODE=launch-server`). User 10002, read-only, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges`, seccomp `seccomp/chrome-sandbox.json` |
 | `fixture` | `fixture` only (internal, 10.213.0.64/26) | `fixture/server.py` (stdlib Python) answering as `site.test`, `api.test`, `cdn.test`, `tracker.test`, with `LATENCY_MS` (100) before every answer |
-| `spike` (profile `run`) | `render` and `fixture` | the "worker": `RendererSpike` published to `out/` and run on the worker's base image (`aspnet:10.0.13-noble-chiseled-extra`, user 1654, read-only) |
+| `spike` (profile `run`) | `render` and `fixture` | the "worker": `RendererSpike` published to `out/` and run on the worker's base image (`aspnet:10.0.15-noble-chiseled-extra`, user 1654, read-only) |
 | `lightpanda` (profile `lightpanda`) | `render` only | `lightpanda/browser:1.0.3` by digest, CDP on 9222 |
 
 The renderer can reach only the spike; the spike's fetches go through the worker's real `EgressGuard` and

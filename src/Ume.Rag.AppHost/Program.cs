@@ -13,7 +13,7 @@ const string DatabaseResourceName = "ragdb";
 // Ume.Rag.TestKit.TestPostgres.Image; update both together.
 const string PostgresImage = "pgvector/pgvector";
 const string PostgresTag = "0.8.7-pg17-trixie";
-const string PostgresDigest = "7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84";
+const string PostgresDigest = "89947206f52eac3a9df9b663df7e76987cbdc623be6576b3a524953d568700d7";
 
 // The shared Keycloak's version (the gateway's deploy/keycloak/Dockerfile, identity design §11.2), pinned by digest.
 // Same pin as Ume.Rag.AdminApi.Tests.KeycloakFixture.Image; update both together.
