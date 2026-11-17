@@ -24,6 +24,8 @@ export const useAuthStore = defineStore('auth', () => {
   const departmentSources = computed(() => user.value?.departmentSources ?? [])
   const sessionExpiresAt = computed<Date | null>(() => toDate(user.value?.sessionExpiresAt))
   const sessionLimitAt = computed<Date | null>(() => toDate(user.value?.sessionLimitAt))
+  /** Whether the deployment runs Open WebUI; until the user document says otherwise, it does. */
+  const openWebUiEnabled = computed(() => user.value?.openWebUi.enabled !== false)
 
   function toDate(value: string | null | undefined): Date | null {
     if (!value) return null
@@ -116,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
     departmentSources,
     sessionExpiresAt,
     sessionLimitAt,
+    openWebUiEnabled,
     isDevelopment,
     isPlatformAdmin,
     hasAccess,

@@ -87,7 +87,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # As in build: the login below must not outlive the job in the runner user's shared ~/.docker/config.json.
         run: |
@@ -156,7 +156,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # The runners share one user's ~/.docker/config.json, where a tag release's `docker login ghcr.io` used to leave
         # its GITHUB_TOKEN behind. Once expired, buildx still sent it for ghcr.io and the dry run of 0.4.0 failed pulling
@@ -208,16 +208,16 @@ jobs:
             echo "NUGET_HTTP_CACHE_PATH=$RUNNER_TEMP/nuget-http-cache"
             echo "npm_config_cache=$RUNNER_TEMP/npm-cache"
           } >> "$GITHUB_ENV"
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.401
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           # No npm cache for a tag release (#704, above).
           cache: ${{ github.event_name == 'push' && '' || 'npm' }}
           cache-dependency-path: src/admin-ui/package-lock.json
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # The builder pushes to localhost:5000 in a dry run.
           driver-opts: network=host
@@ -284,7 +284,7 @@ jobs:
           done
       - name: Build and push ume-rag/postgres
         id: postgres
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: images/postgres/Dockerfile
@@ -299,7 +299,7 @@ jobs:
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/postgres-new,mode=max
       - name: Build and push ume-rag/clamav
         id: clamav
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: images/clamav
           build-args: |
@@ -313,7 +313,7 @@ jobs:
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/clamav-new,mode=max
       - name: Build and push ume-rag/renderer
         id: renderer
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: images/renderer
           build-args: |
@@ -327,7 +327,7 @@ jobs:
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/renderer-new,mode=max
       - name: Build and push ume-rag/parser
         id: parser
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: src/parser
           build-args: |
@@ -417,7 +417,7 @@ jobs:
           cat "$syft_dir/log"
           [ "$(cat "$syft_dir/exit")" = 0 ] || { echo "::error::Syft failed (exit $(cat "$syft_dir/exit"))"; exit 1; }
           ls -l sbom
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
           path: |
@@ -442,7 +442,7 @@ jobs:
       packages: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A Docker client config of this job's own
         # As in build: the ghcr.io login for :latest must not outlive the job.
         run: |
@@ -457,7 +457,7 @@ jobs:
           echo "$GH_CLI_SHA256  $RUNNER_TEMP/gh.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/gh.tar.gz" -C "$RUNNER_TEMP/bin" --strip-components=2 "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release
           path: release

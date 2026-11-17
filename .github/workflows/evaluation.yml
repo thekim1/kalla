@@ -28,7 +28,7 @@ jobs:
     environment: test-host
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly evaluation
         env:
           DEPLOY_ENV: ${{ vars.UME_RAG_TEST_HOST_DEPLOY_ENV }}
@@ -40,7 +40,7 @@ jobs:
       - name: Report to the job summary
         if: always()
         run: if [ -f "$RUNNER_TEMP/evaluation/report.md" ]; then cat "$RUNNER_TEMP/evaluation/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: evaluation

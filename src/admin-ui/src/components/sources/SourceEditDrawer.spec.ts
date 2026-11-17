@@ -44,12 +44,13 @@ describe('Edit source (admin design §5.5.3, V25)', () => {
 
     expect(document.body.querySelector<HTMLTextAreaElement>('#edit-demote')!.value).toBe('www.umea.se/bygga/**/arkiv/** 0,5')
     input('#edit-exclude', '**/sok?*\n**/gammalt/**')
+    input('#edit-sitemaps', 'https://www.umea.se/sitemap.xml')
     input('#edit-demote', 'www.umea.se/bygga/**/arkiv/** 0,3\nwww.umea.se/bygga/**/nyheter/**')
     click('save-source')
     await flushPromises()
 
     const settings = {
-      ...source.settings, exclude: ['**/sok?*', '**/gammalt/**'],
+      ...source.settings, sitemaps: ['https://www.umea.se/sitemap.xml'], exclude: ['**/sok?*', '**/gammalt/**'],
       demote: [{ pattern: 'www.umea.se/bygga/**/arkiv/**', factor: 0.3 }, { pattern: 'www.umea.se/bygga/**/nyheter/**', factor: 0.5 }],
     }
     expect(impact).toHaveBeenCalledWith('s1', { settings })

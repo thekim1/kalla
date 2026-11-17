@@ -351,6 +351,29 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHos
         rest.GetProperty("items").GetArrayLength().ShouldBe(1);
         (await stranger.GetAsync($"/api/runs/{running.Id}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
+        // #803: while it runs, the counters are derived from the items so far (the finalizer writes them only at the end),
+        // and a crawl run shows its frontier: admitted, still waiting, the page limit and the start addresses.
+        detail.GetProperty("run").GetProperty("progress").ValueKind.ShouldBe(JsonValueKind.Null);
+        var live = (await admin.GetFromJsonAsync<JsonElement>($"/api/runs/{running.Id}", Ct)).GetProperty("run");
+        (live.GetProperty("added").GetInt32(), live.GetProperty("failed").GetInt32(), live.GetProperty("progress").GetProperty("processed").GetInt32())
+            .ShouldBe((1, 2, 3));
+        live.GetProperty("progress").GetProperty("admitted").ValueKind.ShouldBe(JsonValueKind.Null, "a run without a crawl row has no frontier");
+
+        db.CrawlRuns.Add(new CrawlRun { RunId = running.Id, Classification = "internal", SourceId = id, Admitted = 5, MaxPages = 100, MaxDepth = 3, Seeds = 2, SeedsFailed = 1 });
+        CrawlFrontierEntry Row(string url, string state, Guid? runId) => new()
+        {
+            Classification = "internal", SourceId = id, Url = url, Host = "a.se", State = state, RunId = runId,
+            UrlHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)),
+        };
+        db.CrawlFrontier.AddRange(
+            Row("https://a.se/p1", CrawlFrontierStates.Pending, running.Id), Row("https://a.se/p2", CrawlFrontierStates.Released, running.Id),
+            Row("https://a.se/x", CrawlFrontierStates.Idle, running.Id), Row("https://a.se/old", CrawlFrontierStates.Pending, old.Id));
+        await db.SaveChangesAsync(Ct);
+        var progress = (await admin.GetFromJsonAsync<JsonElement>($"/api/sources/{id}/runs?limit=1", Ct)).GetProperty("items")[0].GetProperty("progress");
+        (progress.GetProperty("admitted").GetInt32(), progress.GetProperty("waiting").GetInt32(), progress.GetProperty("maxPages").GetInt32(),
+            progress.GetProperty("seeds").GetInt32(), progress.GetProperty("seedsFailed").GetInt32(), progress.GetProperty("limitHit").GetBoolean())
+            .ShouldBe((5, 2, 100, 2, 1, false), "waiting counts this run's open rows only");
+
         (await admin.PostAsync($"/api/runs/{running.Id}/cancel", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var ended = await admin.PostAsync($"/api/runs/{old.Id}/cancel", null, Ct))
         {

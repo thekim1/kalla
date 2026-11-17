@@ -5,12 +5,13 @@ import { api } from '@/api'
 import type { FeedbackItem } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
+import { FEEDBACK } from '@/utils/labels'
 import FeedbackView from './FeedbackView.vue'
 
-function signIn(roles: string[]) {
+function signIn(roles: string[], openWebUi = true) {
   setActivePinia(createPinia())
   const auth = useAuthStore()
-  auth.user = bffUser({ roles })
+  auth.user = bffUser({ roles, openWebUi: { enabled: openWebUi } })
   auth.status = 'authenticated'
 }
 
@@ -77,6 +78,42 @@ describe('Feedback (admin design §8.1)', () => {
     // No answers: the count, not a dash that reads as "— found nothing".
     expect(wrapper.get('[data-test=totals]').text()).toContain('0 not found')
     expect(wrapper.get('[data-test=totals]').text()).not.toContain('—')
+  })
+
+  it('says that feedback comes from Open WebUI while the deployment runs it', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(FEEDBACK.empty)
+    expect(wrapper.get('[data-test=imports]').text()).toContain('Import from Open WebUI')
+  })
+
+  it('without Open WebUI shows no import block and names the API, and still lists the stored feedback', async () => {
+    signIn(['rag-viewer'], false)
+    const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
+    // An import that ran before the profile was turned off: its health is not shown, as nothing is imported any more.
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({
+      totals: { answers: 3, notFound: 0, thumbsUp: 1, thumbsDown: 0 },
+      imports: [{ clientId: 'c2', clientName: 'Open WebUI (test)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'failed:401', unmapped: 0, failedRuns: 4, alert: true }],
+    })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test=imports]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=import-alert]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=totals]').text()).toContain('1 up, 0 down')
+    expect(wrapper.text()).toContain(FEEDBACK.emptyApi)
+    expect(wrapper.text()).not.toContain('Open WebUI')
+
+    list.mockResolvedValue({ items: [item()], next: null })
+    await wrapper.findAll('select')[1]!.setValue('-1')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Altan och uteplats')
   })
 
   it('labels every filter above its field, the same layout as Costs', async () => {

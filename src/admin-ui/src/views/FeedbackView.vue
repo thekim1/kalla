@@ -21,6 +21,8 @@ import { problemMessage } from '@/utils/problem'
 // Feedback (admin design §8.1, chat design §14.4): ratings of the department's assistants without content (no
 // question, answer or comment): rating, reason category, assistant and version, client, outcome, coverage, cited
 // documents; totals for the period and import health per Open WebUI client. FeedbackComments holders mark items handled.
+// Without Open WebUI (`/bff/user` `openWebUi.enabled` false) nothing is imported: no import block, and the empty text
+// names the API's feedback endpoint; feedback already stored still shows.
 const auth = useAuthStore()
 const items = useLoadable<FeedbackItem[]>([])
 const summary = ref<FeedbackSummary | null>(null)
@@ -98,13 +100,13 @@ onMounted(async () => {
 <template>
   <PageHeader :title="PAGE.feedback.title" :description="FEEDBACK.lead" />
 
-  <div v-if="totals" class="mb-6 grid gap-4 md:grid-cols-3" data-test="totals">
+  <div v-if="totals" class="mb-6 grid gap-4" :class="auth.openWebUiEnabled ? 'md:grid-cols-3' : 'md:grid-cols-2'" data-test="totals">
     <MetricTile
       :label="FEEDBACK.answers" :value="formatNumber(totals.answers)"
       :context="FEEDBACK.notFound(formatNumber(totals.notFound), totals.answers ? formatRatio(totals.notFound / totals.answers) : null)"
     />
     <MetricTile :label="FEEDBACK.ratings" :value="formatNumber(ratings)" :context="FEEDBACK.thumbs(totals.thumbsUp, totals.thumbsDown)" />
-    <UiCard :title="FEEDBACK.imports" data-test="imports">
+    <UiCard v-if="auth.openWebUiEnabled" :title="FEEDBACK.imports" data-test="imports">
       <p v-if="!summary?.imports.length" class="text-small text-fg-2">{{ FEEDBACK.noImports }}</p>
       <ul v-else class="grid gap-1 text-small">
         <li v-for="i in summary.imports" :key="i.clientId">
@@ -129,7 +131,7 @@ onMounted(async () => {
   <p class="mb-4 text-small text-fg-2">{{ FEEDBACK.noContent }}</p>
   <InlineError v-if="markError" :message="problemMessage(markError)" class="mb-4" />
 
-  <AsyncState :loading="items.loading.value && items.data.value.length === 0" :error="items.error.value" :empty="items.data.value.length === 0" :empty-text="FEEDBACK.empty" @retry="load()">
+  <AsyncState :loading="items.loading.value && items.data.value.length === 0" :error="items.error.value" :empty="items.data.value.length === 0" :empty-text="auth.openWebUiEnabled ? FEEDBACK.empty : FEEDBACK.emptyApi" @retry="load()">
     <DataTable :columns="columns" :rows="items.data.value" :row-key="(r) => r.id" :caption="FEEDBACK.caption">
       <template #cell-time="{ row }"><span class="tabular whitespace-nowrap">{{ formatDateTime(row.createdAt) }}</span></template>
       <template #cell-rating="{ row }">

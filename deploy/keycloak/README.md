@@ -111,7 +111,9 @@ standalone later"). Then `standalone/10-rag-realm.json` takes the place of the g
 
 ```bash
 docker run --rm --network <Keycloak's network> \
-  -e KEYCLOAK_URL=http://keycloak:8080 -e KEYCLOAK_GRANTTYPE=client_credentials -e KEYCLOAK_CLIENTID=<bootstrap admin client> \
+  -e KEYCLOAK_URL=https://keycloak:8443 -e KEYCLOAK_GRANTTYPE=client_credentials -e KEYCLOAK_CLIENTID=<bootstrap admin client> \
+  -e JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/run/certs/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" \
+  -v <the directory with truststore.p12>:/run/certs:ro \
   -e SPRING_CONFIG_IMPORT=configtree:/run/import-secrets/config/ \
   -v <a directory with the file keycloak.client-secret>:/run/import-secrets/config:ro \
   -e IMPORT_VARSUBSTITUTION_ENABLED=true \
@@ -122,7 +124,9 @@ docker run --rm --network <Keycloak's network> \
   docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
 ```
 
-Set every other `IMPORT_MANAGED_*` to `no-delete` too, as the gateway's `compose.yaml` does (the full list is
+The address and the trust store are those of the gateway's `deploy/keycloak` project, whose Keycloak serves only HTTPS
+on 8443 with a certificate from the deployment's CA (`<UME_CERTS_DIR>/keycloak-import` holds `truststore.p12`); for a
+Keycloak of your own, use its address and a trust store with its CA. Set every other `IMPORT_MANAGED_*` to `no-delete` too, as the gateway's `compose.yaml` does (the full list is
 `RealmImport.ImportSettings` in the tests). Standalone has no Compose project of its own yet: it is a tested realm file,
 ready for one. OTP is not set here either.
 

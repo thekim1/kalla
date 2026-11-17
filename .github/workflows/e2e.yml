@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/docker-config"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Specs present
         id: specs
         run: |
@@ -42,11 +42,11 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::notice::tests/e2e does not exist yet (stream B's pilot-journey specs, P1b hand-off L7): nothing to run."
           fi
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         if: steps.specs.outputs.present == 'true'
         with:
           dotnet-version: 10.0.401
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.specs.outputs.present == 'true'
         with:
           node-version: 24

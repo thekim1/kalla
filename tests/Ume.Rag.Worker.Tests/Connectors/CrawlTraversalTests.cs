@@ -290,6 +290,30 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
         verdict.RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
     }
 
+    [Theory]
+    // #801: a sitemap given in the source's settings, as compressed sitemaps are served. umea.se (2026-11-17) serves its
+    // sitemap1.xml.gz as application/x-gzip without Content-Encoding; some servers add Content-Encoding: gzip on top.
+    [InlineData("gzip")]
+    [InlineData("x-gzip")]
+    [InlineData("octet")]
+    [InlineData("encoded")]
+    public async Task A_declared_gzip_sitemap_is_read_whatever_its_content_type_and_encoding(string variant)
+    {
+        await using var rig = CrawlRig.Create(_site);
+        var settings = ContractJson.ToElement(new CrawlSettings { StartUrls = [Url("/")], Sitemaps = [Url($"/declared/{variant}.xml.gz")], MaxPages = 100 });
+        var context = Context(settings);
+
+        var events = new List<ListingEvent<CrawlCheckpoint>>();
+        await rig.Traversal.StartAsync(context, Ct);
+        await foreach (var e in rig.Connector.ListAsync(Listing(context), new CrawlCheckpoint(), Ct))
+        {
+            events.Add(e);
+        }
+
+        events.OfType<ListingEvent<CrawlCheckpoint>.Item>().Select(i => i.Work.CanonicalIdentity).ShouldContain(Url($"/declared-page-{variant}"));
+        events.OfType<ListingEvent<CrawlCheckpoint>.Failure>().Where(f => f.Identity.Contains("/declared/", StringComparison.Ordinal)).ShouldBeEmpty();
+    }
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static CrawlFetchResult.Done Done(Dictionary<string, CrawlFetchResult> results, string path) =>
@@ -331,6 +355,30 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
             }
 
             return Results.Bytes(buffer.ToArray(), "application/gzip");
+        });
+        static byte[] Gzip(byte[] bytes)
+        {
+            using var buffer = new MemoryStream();
+            using (var gzip = new GZipStream(buffer, CompressionLevel.Fastest, leaveOpen: true))
+            {
+                gzip.Write(bytes);
+            }
+
+            return buffer.ToArray();
+        }
+
+        app.MapGet("/declared/{variant}.xml.gz", (string variant, HttpContext http) =>
+        {
+            var xml = $"<?xml version=\"1.0\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>http://{http.Request.Host}/declared-page-{variant}</loc></url></urlset>";
+            var body = Gzip(Encoding.UTF8.GetBytes(xml));
+            if (variant == "encoded")
+            {
+                // A gzip file sent with Content-Encoding: gzip as well: the client takes off one layer, the parser the other.
+                http.Response.Headers.ContentEncoding = "gzip";
+                return Results.Bytes(Gzip(body), "application/x-gzip");
+            }
+
+            return Results.Bytes(body, variant switch { "gzip" => "application/gzip", "x-gzip" => "application/x-gzip", _ => "application/octet-stream" });
         });
         app.MapGet("/", () => Html(
             "<p>Start</p><a href=\"/a\">A</a><a href=\"/c\">C</a><a href=\"/privat/x\">P</a><a href=\"/kalender/2010\">K</a>"

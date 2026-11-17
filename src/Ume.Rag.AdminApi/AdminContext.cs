@@ -39,6 +39,12 @@ public sealed record AdminChange<T>(T Result, string Action, string EntityType, 
 public sealed record AuditAlso(string Action, string EntityType, object? EntityId, object? Before, object? After)
 {
     public Guid? DepartmentId { get; init; }
+
+    /// <summary>The entry's own level, when it is another object's (a share a department move adds, #811); else the change's.</summary>
+    public string? Classification { get; init; }
+
+    /// <summary>The entry's own reason; else the change's.</summary>
+    public string? Reason { get; init; }
 }
 
 /// <summary>
@@ -133,6 +139,7 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
                     {
                         Action = also.Action, EntityType = also.EntityType, EntityId = also.EntityId, Before = also.Before, After = also.After,
                         DepartmentId = also.DepartmentId ?? change.DepartmentId,
+                        Classification = also.Classification ?? change.Classification, Reason = also.Reason ?? change.Reason,
                     }, version));
                 }
 

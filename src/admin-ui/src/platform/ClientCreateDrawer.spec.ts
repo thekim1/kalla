@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { ApiKey, AssistantSummary, Client } from '@/api/types'
-import { assistantSummary } from '@/test/fixtures'
+import { useAuthStore } from '@/stores/auth'
+import { assistantSummary, bffUser } from '@/test/fixtures'
 import { COMMON, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientCreateDrawer from './ClientCreateDrawer.vue'
 
@@ -38,8 +40,14 @@ const assistant = (id: string, name: string, classification: AssistantSummary['c
 const assistants = [assistant('a1', 'Bygglov', 'public'), assistant('a2', 'Personal', 'internal', false), assistant('a3', 'Journal', 'sensitive')]
 const ticked = (wrapper: VueWrapper, id: string) => wrapper.get(`[data-test=assistant-${id}] input`).element as HTMLInputElement
 
+function signIn(openWebUi = true) {
+  setActivePinia(createPinia())
+  useAuthStore().user = bffUser({ roles: ['rag-platform-admin'], openWebUi: { enabled: openWebUi } })
+}
+
 describe('Add app (admin design §5.9, §5.9.1)', () => {
   beforeEach(() => {
+    signIn()
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: assistants, total: assistants.length })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([{ id: 'd1', name: 'Bygg', costCenterCode: '10', isActive: true, syncedAt: '2026-11-13T10:00:00Z', teams: [] }])
     vi.spyOn(api.clients, 'connection').mockResolvedValue({ apiBaseUrl: 'https://rag.example.se' })
@@ -64,6 +72,18 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     // Next without a kind stays on the step.
     await submit(wrapper)
     expect(wrapper.text()).toContain(L.kindRequired)
+    wrapper.unmount()
+  })
+
+  it('has no Open WebUI card when the deployment does not run Open WebUI', async () => {
+    signIn(false)
+    const wrapper = await open()
+    expect(wrapper.find('#client-new-kind-open-webui').exists()).toBe(false)
+    expect(wrapper.get('[data-test=kinds]').text()).not.toContain('Open WebUI')
+    expect(wrapper.get('[data-test=kinds]').text()).not.toContain(L.byDeployment)
+    for (const kind of ['integration', 'internal']) {
+      expect((wrapper.get(`#client-new-kind-${kind}`).element as HTMLInputElement).disabled).toBe(false)
+    }
     wrapper.unmount()
   })
 

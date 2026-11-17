@@ -193,6 +193,12 @@ public static class AdminErrorCodes
     /// <summary>V11: a link names more than 20 topics, or a topic outside the chunk tag format; <c>affected</c> lists the collections.</summary>
     public static AdminErrorCode TopicInvalid { get; } = new("topic_invalid", 409, "A topic is invalid: at most 20 per knowledge bank, each lower case letters, digits and hyphens, at most 50 characters.");
 
+    /// <summary>#811: a move without the token of its impact, or one whose impact changed since (admin design §3.2).</summary>
+    public static AdminErrorCode MoveNotConfirmed { get; } = new("move_not_confirmed", 409, "Check what moving it to the other department does and confirm.");
+
+    /// <summary>#811: a collection with live sources on a pipeline of another department cannot move; <c>affected</c> lists them.</summary>
+    public static AdminErrorCode MovePipelineDepartment { get; } = new("move_pipeline_department", 409, "Sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first.");
+
     /// <summary>V35: narrowing the sharing would cut off published assistants of other departments; <c>affected</c> lists them.</summary>
     public static AdminErrorCode CollectionSharedInUse { get; } = new("collection_shared_in_use", 409, "Assistants of other departments use the knowledge bank. They lose it if the sharing is narrowed.");
 
@@ -346,5 +352,5 @@ public static class AdminErrorCodes
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
             GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
-            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired];
+            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment];
 }

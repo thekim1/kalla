@@ -17,10 +17,12 @@ import { pollDelay } from '@/composables/useJobPoll'
 import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_STATE_LABEL } from '@/utils/labels'
+import { PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_PROGRESS, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
+import { runProgressText } from '@/utils/runs'
 
-// Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters while it runs (polled as §4.7), the crawl
+// Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters and progress while it runs (polled as §4.7,
+// derived from the items so far, #803; the documents table refreshes with them until the user pages), the crawl
 // report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
 // §6.6, and for a browser source the rendered pages, those with no main text, render failures and pages kept from their
 // last good content, §8.6), the deletion decision when the guard held deletions back, and the run's documents with their
@@ -30,6 +32,8 @@ const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
 const next = ref<number | null>(null)
 const onlyFailed = ref(false)
+// The user asked for more rows: a running poll no longer replaces the table's first page.
+const paged = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
 const started = Date.now()
 
@@ -39,6 +43,7 @@ const columns: Column[] = [
   { key: 'reason', label: RUN_PAGE.reason },
 ]
 const summary = computed(() => run.data.value?.run)
+const progress = computed(() => runProgressText(summary.value))
 const completeness = computed(() => run.data.value?.report?.completeness)
 // "www.umea.se: Fast · 20 requests a second · robots.txt ignored: own site, web team consent"
 const politeness = computed(() =>
@@ -57,6 +62,7 @@ const verdictReasons = computed(() =>
 )
 
 async function loadItems(append = false): Promise<void> {
+  if (append) paged.value = true
   const previous = append ? items.data.value : []
   await items.run(async () => {
     const page = await api.runs.items(props.id, { outcome: onlyFailed.value ? 'failed' : undefined, after: append ? next.value ?? undefined : undefined, limit: 50 })
@@ -70,11 +76,16 @@ async function load(): Promise<void> {
   if (timer) clearTimeout(timer)
   timer = null
   await run.run(() => api.runs.get(props.id))
-  if (summary.value?.state === 'running') timer = setTimeout(() => void load(), pollDelay(Date.now() - started))
-  else void loadItems()
+  if (summary.value?.state === 'running') {
+    timer = setTimeout(() => void load(), pollDelay(Date.now() - started))
+    if (!paged.value) void loadItems()
+  } else void loadItems()
 }
 
-watch(onlyFailed, () => void loadItems())
+watch(onlyFailed, () => {
+  paged.value = false
+  void loadItems()
+})
 onMounted(load)
 onBeforeUnmount(() => {
   if (timer) clearTimeout(timer)
@@ -89,6 +100,13 @@ onBeforeUnmount(() => {
         <RouterLink :to="{ name: 'source', params: { id: run.data.value.sourceId } }" class="text-accent-ink underline">{{ RUN_PAGE.back }}</RouterLink>
         <CancelRunButton :run-id="summary.id" :state="summary.state" @cancelled="load" />
       </PageHeader>
+      <UiCard v-if="progress" class="mb-6" data-test="progress">
+        <h2 class="mb-2 font-medium">{{ RUN_PROGRESS.title }}</h2>
+        <p class="tabular" aria-live="polite">{{ progress }}</p>
+        <p v-if="summary.progress?.limitHit" class="mt-2 text-warn">{{ RUN_PROGRESS.limitHit }}</p>
+        <p v-if="summary.progress?.seedsFailed" class="mt-2 text-warn">{{ RUN_PROGRESS.seedsFailed(summary.progress.seedsFailed, summary.progress.seeds ?? 0) }}</p>
+        <p class="mt-2 text-small text-fg-2">{{ RUN_PROGRESS.refreshing }}</p>
+      </UiCard>
       <div class="mb-6 grid grid-cols-5 gap-3 max-md:grid-cols-2" data-test="counts">
         <MetricTile :label="RUN_PAGE.added" :value="formatNumber(summary.added)" />
         <MetricTile :label="RUN_PAGE.updated" :value="formatNumber(summary.updated)" />
