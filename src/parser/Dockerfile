@@ -5,11 +5,11 @@
 # Nothing is downloaded at run time: the venv, the models and the Debian packages are all in the image.
 
 # uv 0.13.5 (released 2026-10-22).
-FROM ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 # Python 3.12.16 on Debian 13 (trixie), built 2026-11-05. The same base for both stages, so the venv's interpreter
 # links resolve in the runtime stage.
-FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS build
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -32,7 +32,7 @@ COPY ume_parser/model_manifest.json ume_parser/
 COPY scripts/download_models.py scripts/
 RUN python scripts/download_models.py --out /opt/models
 
-FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 # Debian packages from a dated snapshot at least 7 days old, the only apt source (the base's debian.sources is
 # removed). The base's own packages are upgraded from the same snapshot before the installs, so moving the date is the
 # security update for them too. The snapshot's Release files are past their Valid-Until, which is expected for an
