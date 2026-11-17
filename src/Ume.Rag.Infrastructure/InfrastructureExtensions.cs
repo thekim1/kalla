@@ -68,8 +68,12 @@ public static class InfrastructureExtensions
     /// Aspire's enrichment (context pooling, retries, health check, tracing). Production refuses the superuser and
     /// anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>. <paramref name="configure"/> adds a
     /// service's own data source settings to that one pool (rag-api: auto-prepare for the retrieval statements, knowledge §6.6).
+    /// <paramref name="admitAtStart"/> (rag-api, rag-admin, rag-worker; not the migration service) puts the
+    /// <see cref="SchemaAdmissionService"/> before every other hosted service, so a version the schema has moved past
+    /// stops before anything else touches the database (data-model §10).
     /// </summary>
-    public static IHostApplicationBuilder AddRagDatabase(this IHostApplicationBuilder builder, Action<NpgsqlDataSourceBuilder>? configure = null)
+    public static IHostApplicationBuilder AddRagDatabase(this IHostApplicationBuilder builder, Action<NpgsqlDataSourceBuilder>? configure = null,
+        bool admitAtStart = false)
     {
         ArgumentNullException.ThrowIfNull(builder);
         if (builder.Environment.IsProduction())
@@ -96,6 +100,12 @@ public static class InfrastructureExtensions
         // Its Npgsql tracing registers a tracer provider of its own: only when traces are exported (#503, ServiceDefaults).
         var exporting = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
         builder.EnrichNpgsqlDbContext<RagDbContext>(settings => settings.DisableTracing |= !exporting);
+        if (admitAtStart)
+        {
+            // Hosted services start in registration order: first, whatever was registered before this call.
+            builder.Services.Insert(0, ServiceDescriptor.Singleton<IHostedService, SchemaAdmissionService>());
+        }
+
         return builder;
     }
 

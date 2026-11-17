@@ -6,13 +6,29 @@ is a short, announced maintenance window whatever the answer. With two slots (`i
 release is updated without downtime by `deploy/rolling-update.sh` ([Updates without downtime](zero-downtime-updates.md)).
 Until the first production deployment releases may break compatibility (Decisions, "No backward compatibility before
 production"), so check the answer every time; from then on migrations are expand/contract only and "no" is the
-exception, with its own steps.
+exception.
+
+**A "no" release needs no manual stop on one slot.** From the release after 0.7.0, `rag-migrate` itself keeps the
+services a migration can't run beside out of the database until their new version starts: its log says *Migration …
+stops the services of role …*, the old container answers errors for the seconds until it is replaced, and the new one
+gets its access back when it starts. With two slots or on Kubernetes, stop or scale down those services first, as
+before. **An upgrade may skip releases** (from 0.5.1 on, which the release tests by booting that stack and applying
+the new file): read each skipped release's section for what it asks of you, and do the update once.
 
 `dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
 
 ## Unreleased
 
 - **Rolling update: yes** for Portainer and Kubernetes. No migration, no new variable, nothing to do.
+- **`rag-migrate` stops what a migration can't run beside** (above). Nothing to do: the first run creates the table
+  `public.ume_rag_service_fences` and the function `public.ume_rag_admit` in ragdb. **Rolling back** after a release
+  marked *Rolling update: no*: the previous version is refused at start (*The database's schema is newer than this
+  version can run beside*), as it should be; go back by restoring the backup, as before.
+- **Portainer: `UME_INTEGRATION_API_URL` has a default,** the stack's own `adminapi`
+  (`https://adminapi:8443/integration/v1`), so the cost and budget read-back needs no variable. A stack that sets it
+  keeps its value; set and empty turns the read-back off.
+- **Portainer: one upgrade section.** A stack on 0.5.x or 0.6.0 moves to this release in one update
+  ([portainer.md](portainer.md), *Upgrade*).
 - **Compose:** `init-deployment.sh` asks for no sign-in value: sign-in is set in the setup wizard
   (`https://<admin host>/setup`, the setup code in rag-admin's log), as on Portainer. Only with `--hardened` does an
   interactive run (no `--yes`) ask for the sign-in provider's address when neither `--oidc-authority` nor `deploy/.env`
@@ -57,7 +73,7 @@ exception, with its own steps.
 - **Before the update:** nothing must be added or changed. A deployment that sets its authority and
   `UME_RAG_OIDC_CLIENT_SECRET` never sees a setup wizard. Only a Portainer stack **without**
   `UME_INTEGRATION_MANIFEST` (keys issued by hand) decides first whether the gateway may create three new credential
-  keys from the stack file's default, or sets the variable empty (below, and `docs/portainer.md`, *Upgrade from 0.6.0*).
+  keys from the stack file's default, or sets the variable empty (below, and `docs/portainer.md`, *Upgrade*).
 - **After the update:** read the end of `rag-bootstrap`'s log (a retired variable the stack still sets is named
   there), and check that you sign in as before.
 - **`UME_DOMAIN` names Ume.Rag's hosts (setup wizard S0).** Rolling update, no migration. Portainer: `UME_DOMAIN`
@@ -89,7 +105,7 @@ exception, with its own steps.
     WebUI's start; they keep working as deployment values. `UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=open-webui` may go (it is
     the default; set, it locks the wizard's field). Without a client secret Open WebUI signs in as a public client
     (PKCE). A confidential client's secret stays in the stack, or is entered in the wizard's Open WebUI step after a re-open.
-  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade-from-060). In short: paste the new `compose.portainer.yaml` and update the stack (`rag-bootstrap` writes
+  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade). In short: paste the new `compose.portainer.yaml` and update the stack (`rag-bootstrap` writes
     `admin/Setup__Secret`, and Open WebUI's secret to rag-api's and rag-admin's secret files). A leftover
     `UME_RAG_OIDC_CLIENT_SECRET=CHANGE` declares a wrong secret and keeps the wizard closed: `rag-bootstrap`'s checklist
     names it; remove it.
@@ -148,7 +164,7 @@ exception, with its own steps.
     department of its own, code `ume-rag`, which a gateway admin moves to another team with its keys. Unset, the
     default applies; set, the stack's own manifest wins (0.6.0's, with an owner: nothing changes); set and empty,
     nothing is provisioned.
-  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade-from-060). A stack that sets
+  - **Portainer apply:** step by step in [portainer.md](portainer.md#upgrade). A stack that sets
     `UME_OIDC_AUTHORITY` and `UME_INTEGRATION_MANIFEST` (every 0.6.0 stack made from its `stack.env.example`) changes
     nothing: paste the new file and update the stack. **A stack without `UME_INTEGRATION_MANIFEST`** (keys issued by
     hand, kept from 0.5.x) gets the default from now on: the gateway creates the keys `rag-api`, `rag-admin` and
@@ -168,8 +184,9 @@ exception, with its own steps.
 
 ## 0.6.0
 
-- **Rolling update: no** from 0.5.x. Migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads:
-  stop the old rag-admin before `rag-migrate` runs, then start the new one (rag-api and rag-worker are not affected).
+- **Rolling update: no** from 0.5.x. Migration `RemoveWorkerConcurrency` drops a column the old rag-admin still reads.
+  With 0.6.0's or 0.7.0's own `rag-migrate`, stop the old rag-admin before it runs; a later release's `rag-migrate`
+  does it itself (the top of this guide). rag-api and rag-worker are not affected.
 - **Before the update:** give rag-api's and rag-admin's credential keys the residencies `OnPrem` and `Eu` in the
   gateway (C9, below). **Portainer:** paste the `v0.6.0` release's `compose.portainer.yaml` (gateway v0.10.3, Ume.Rag 0.6.0) and add
   `UME_INTEGRATION_API_URL` (C11); keep your `UME_RAG_*_GATEWAY_KEY` variables unless you move to the manifest (C7).
@@ -320,9 +337,9 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
 5. **Superuser steps**, only if the release lists them (below), all before step 6. Role caps and per-role settings
    run against the running database. With a new `RAG_POSTGRES_IMAGE`, first replace rag-postgres alone with
    `dc up -d --wait rag-postgres` (a short outage of every service), then update the extension.
-6. **Migrate and replace.** For a release marked *Rolling update: no*, first stop the services its section names
-   (`dc stop rag-api rag-admin`, or `dc stop rag-admin` for 0.6.0): `up` runs the migration while the old containers
-   are still running, and replaces them only afterwards.
+6. **Migrate and replace.** Nothing is stopped first, also for a release marked *Rolling update: no*: `up` runs the
+   migration while the old containers are still running, `rag-migrate` keeps the ones that can't run beside it out of
+   the database, and they are replaced right after.
 
    ```bash
    dc up -d --wait

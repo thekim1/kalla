@@ -28,7 +28,7 @@ builder.AddUmeWebDefaults(maxRequestBodySize: 1024 * 1024, errors =>
     // Database refusals are the caller's to resolve, each with its admin error code (admin design §4.1).
     errors.Translators.Add(AdminDatabaseFaults.Translate);
 });
-builder.AddRagDatabase();
+builder.AddRagDatabase(admitAtStart: true);
 // Admin actions enqueue worker jobs in their own transaction (H4, #28); the admin registers no rag_jobs listener.
 builder.AddRagJobQueue();
 // Upload batches (admin design §4.5): staged under tmp/, promoted to uploads/ at commit (BlobStore:Root).

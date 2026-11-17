@@ -37,8 +37,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   "Pilot containers" and "Deployment values across releases"); #808 (step 5: the operator guides; `--gateway-ca-file`
   copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
   form). **S1 is done.** #809 (S9's guides: the Portainer first deploy finishes without Open WebUI, *Adding Open
-  WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Open: S9's admin UI part
-  (#807, stream b's paths); S4b, S4c, S6, S8 in the proposal's order. S5 and S7 are proposals in the gateway's
+  WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Session 47: S4b and S4c in one pull
+  request (`rag-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
+  step, boot-tested from 0.5.1 in `release.yml`; `docs/portainer.md` has one *Upgrade* section; Decisions "Upgrades in
+  one step"), and S9's admin UI part (#816, closes #807). Open: S6, S8 in the proposal's order. S5 and S7 are proposals in the gateway's
   repository (thekim1/llmgateway#108, #109).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests

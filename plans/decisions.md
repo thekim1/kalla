@@ -264,6 +264,28 @@ In the Portainer stack (stage 2, one typed value, `UME_DOMAIN`):
 *From:* decided by user, 2026-11-15 (session 40, W1–W10; agreed after an independent review); the stage 2 points
 2026-11-16 (session 44).
 
+### Upgrades in one step
+
+An existing deployment moves to a new release in one step, from any release still supported, and stops nothing by
+hand on one slot.
+
+- **The migration step stops what it must itself.** A migration that the previous version of a service can't run
+  beside declares the service roles it stops; `rag-migrate` holds those roles out of the schemas until a version that
+  contains the migration starts (data-model §10, *Service fences*). The upgrade guide still marks the release
+  *Rolling update: no*: it means a short outage of those services, not a step for the operator.
+- **Two slots and Kubernetes** stop or scale down the old instances of such a release first (the grant is per role, so
+  an old instance beside an admitted new one would get access again).
+- **A release may be skipped.** The oldest release an upgrade is tested from is `UPGRADE_FROM` in `release.yml`
+  (0.5.1 today); the release boots that release's Portainer stack and applies the new file over it. The guides have
+  one upgrade section, not one per release; what a deployment from an older release must do by hand is a numbered
+  step there, and steps for releases before `UPGRADE_FROM` are dropped.
+- **The joined Portainer stack sets what it knows:** the Integration API's address is the stack's own `adminapi` by
+  default (`build-stack.sh` rewrites the gateway's line as it does the manifest's), so `UME_INTEGRATION_API_URL` is
+  typed by nobody.
+
+*From:* main session, 2026-11-17 (session 47; the user asked for M-22's remaining points with the recommended choices),
+`proposals/deploy-simplification.md` S4b and S4c.
+
 ### One deployment bootstrap
 
 Every deployment form gets its certificates, secrets and derived files from one script, `deploy/portainer/bootstrap.sh`

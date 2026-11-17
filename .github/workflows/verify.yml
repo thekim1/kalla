@@ -414,7 +414,7 @@ jobs:
         # and with neither the stack refuses to render, naming both.
         run: bash deploy/tests/portainer-hosts.sh
       - name: The Portainer stack renders with the previous release's variables
-        # docs/portainer.md, "Upgrade from 0.6.0": paste the new file, keep your variables. Offline: with v0.6.0's
+        # docs/portainer.md, "Upgrade": paste the new file, keep your variables. Offline: with v0.6.0's
         # variables the stack renders, the sign-in stays declared (no setup wizard) and every name and URL is unchanged.
         run: bash deploy/tests/portainer-upgrade.sh
       - name: The certificate expiry check warns 60 days ahead

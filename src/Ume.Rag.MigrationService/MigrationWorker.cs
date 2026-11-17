@@ -9,7 +9,8 @@ namespace Ume.Rag.MigrationService;
 /// <summary>
 /// Applies EF Core migrations (expand/contract, backwards compatible), then <c>app-roles.sql</c>
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
-/// roles) and the run-item partition maintenance, in Development the HNSW defaults on the database
+/// roles; with them, the service fences of <see cref="ServiceAdmission"/>, one log line per role fenced) and the run-item
+/// partition maintenance, in Development the HNSW defaults on the database
 /// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>), the
 /// test panel's client (<see cref="AdminConsoleClientSeeder"/>), the deployment's Open WebUI client (<see cref="OpenWebUiClientSeeder"/>) when
 /// <c>OpenWebUi:ApiKey</c> is set, and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
@@ -34,7 +35,11 @@ public sealed partial class MigrationWorker(
         {
             await using var scope = services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
-            await RagDatabaseMigrator.MigrateAsync(db, configuration["Migration:RolesSqlPath"], stoppingToken);
+            foreach (var fence in await RagDatabaseMigrator.MigrateAsync(db, configuration["Migration:RolesSqlPath"], stoppingToken))
+            {
+                LogFenced(logger, fence.Role, fence.Migration);
+            }
+
             if (environment.IsDevelopment())
             {
                 await DevDatabaseSettings.ApplyAsync(db, stoppingToken);
@@ -89,6 +94,10 @@ public sealed partial class MigrationWorker(
 
     [LoggerMessage(LogLevel.Information, "The deployment's Open WebUI client: {Outcome}")]
     private static partial void LogOpenWebUiClient(ILogger logger, OpenWebUiClientSeeder.Outcome outcome);
+
+    [LoggerMessage(LogLevel.Information,
+        "Migration {Migration} stops the services of role {Role}: their previous version has no schema access, and a version that contains the migration gets it back when it starts")]
+    private static partial void LogFenced(ILogger logger, string role, string migration);
 
     [LoggerMessage(LogLevel.Information, "Database schema is at migration {Migration}")]
     private static partial void LogMigrated(ILogger logger, string? migration);

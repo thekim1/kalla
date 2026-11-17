@@ -915,6 +915,22 @@ bytes share the raw blob and every stage output up to the first stage whose sett
   `dev-embedding` profile with its fixed id `01929b6e-0000-7000-8000-00000000b6e3`, model `bge-m3` of FakeGateway,
   1024 dimensions, ceiling `Eu`, and its index through `content.rag_ensure_profile_index`). The platform profile is
   created in the admin UI, not seeded (§2.1). Services wait for it as in the gateway compose files.
+- **Service fences: the migration service stops what a migration can't run beside** (Decisions "Upgrades in one
+  step"). A migration the previous version of a service can't run against (a dropped column it still reads, a changed
+  meaning) declares the service roles it stops: `[StopsServices(ServiceRoles.Admin)]` on the migration class
+  (`ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`). On an upgrade (at least one migration applied; a first install
+  fences nothing), before the migrations, the migration service records for each such role the greatest pending
+  migration that stops it in `public.ume_rag_service_fences` (`role`, `fence`, `admitted`, `schemas`; outside the EF
+  model, created on every run, no grant to a service role) and revokes the role's `USAGE` on the schemas; after
+  `app-roles.sql` it revokes it again from every role not admitted past its fence. The role's old containers then fail
+  every statement until they are replaced. rag-api, rag-admin and rag-worker call
+  `public.ume_rag_admit(<last migration compiled in>)` as their first hosted service (`SchemaAdmissionService`): a
+  build at or past the fence is admitted, gets the schemas back and keeps them through later runs; an older build is
+  refused (SQLSTATE `UR001`), logs one Critical line and does not start. **What it covers:** a deployment whose
+  containers are replaced stop-then-start (one slot: Compose, Portainer), where no old container is left once the new
+  one is admitted. With two slots or on Kubernetes an old instance of the role regains access when the first new one
+  is admitted, so there the old instances are stopped first (repo-and-deployment §7.3). The grant is per role, not per
+  connection.
 
 ## 11. Redis (P2, first multi-host deployment; mirrors `RedisKeys.cs`)
 
