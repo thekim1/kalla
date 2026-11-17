@@ -13,7 +13,7 @@ public static class TestPostgres
     /// image (hand-off H3).
     /// </summary>
     public const string DefaultImage =
-        "pgvector/pgvector:0.8.7-pg17-trixie@sha256:7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84";
+        "pgvector/pgvector:0.8.7-pg17-trixie@sha256:89947206f52eac3a9df9b663df7e76987cbdc623be6576b3a524953d568700d7";
 
     public static string Image =>
         Environment.GetEnvironmentVariable("UME_RAG_TEST_POSTGRES_IMAGE") is { Length: > 0 } image ? image : DefaultImage;

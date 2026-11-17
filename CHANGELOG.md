@@ -63,6 +63,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   release's `images.env` now names `RAG_*_IMAGE`). The host scripts (`escrow-keys.sh`, `cert-expiry.sh`, the backup
   and restore scripts, `rolling-update.sh`, the host firewall) read the volumes and use the service `rag-postgres`. A
   Compose installation made with the old files is installed again ([upgrade guide](docs/upgrade-guide.md)).
+- **Security updates of the .NET and Postgres images** (#818, from the first image scan): the services build on
+  `aspnet:10.0.15` (ASP.NET Core runtime advisories GHSA-67wp-ghc2-fw2g, GHSA-wr8v-9x5q-ggcm, GHSA-x33c-w48q-qrgc) with
+  the Microsoft packages at 10.0.15, the gateway's pins; `ume-rag/postgres` builds on a newer build of the same
+  pgvector image (PostgreSQL 17.12). **Rolling update: yes**; Postgres restarts once (a minor update, same data
+  directory).
 
 ## 0.7.0 (2026-11-16)
 
