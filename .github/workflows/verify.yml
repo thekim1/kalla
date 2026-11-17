@@ -34,7 +34,7 @@ jobs:
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: Changed paths belong to the branch's stream
@@ -50,9 +50,16 @@ jobs:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Section citations and links resolve
         run: python3 -I scripts/check-doc-refs.py
+      - name: Every action is pinned by commit SHA
+        # A tag can be moved to other code; the runners hold the release's and Azure's secrets (#506). The version is the
+        # comment after the SHA. Local reusable workflows (./.github/...) are this repository's own.
+        run: |
+          unpinned="$(grep -rnE '^\s*(- )?uses:' .github/workflows | grep -vE 'uses: \./' \
+            | grep -vE 'uses: [A-Za-z0-9._/-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+          if [ -n "$unpinned" ]; then echo "$unpinned"; echo "::error::pin each action as owner/name@<40-hex commit> # vX.Y.Z"; exit 1; fi
 
   changes:
     # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1). On a pull
@@ -67,7 +74,7 @@ jobs:
       renderer: ${{ steps.filter.outputs.renderer }}
       smoke: ${{ steps.filter.outputs.smoke }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - id: filter
@@ -116,8 +123,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.401
       - name: Build the Postgres image
@@ -158,8 +165,8 @@ jobs:
     if: needs.changes.outputs.smoke == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.401
       - name: Build the Postgres image
@@ -182,7 +189,7 @@ jobs:
     if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Build ume-rag/postgres
         run: |
           docker build -f images/postgres/Dockerfile -t ume-rag/postgres:ci --build-arg REVISION=${{ github.sha }} .
@@ -206,8 +213,8 @@ jobs:
     if: needs.changes.outputs.renderer == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.401
       - name: Build ume-rag/renderer
@@ -242,7 +249,7 @@ jobs:
     if: needs.changes.outputs.deploy == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Compose files are valid and pin every image
         env:
           UME_DOMAIN: example.se
@@ -445,8 +452,8 @@ jobs:
       run:
         working-directory: src/admin-ui
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
           cache: npm

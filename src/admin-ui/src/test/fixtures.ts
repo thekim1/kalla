@@ -15,6 +15,7 @@ export function bffUser(overrides: Partial<BffUser> = {}): BffUser {
     sessionExpiresAt: null,
     signIn: { configured: true },
     setup: { open: false },
+    openWebUi: { enabled: true },
     ...overrides,
   }
 }

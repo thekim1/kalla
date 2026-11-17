@@ -73,6 +73,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   collection_not_shared: 'A knowledge base belongs to another department and is not shared with yours.',
   topic_invalid: 'A topic is invalid. Use at most 20 topics per knowledge base, each in lower case letters, digits and hyphens.',
   collection_shared_in_use: 'Assistants of other departments use this knowledge base. They would lose it, so the sharing cannot be narrowed.',
+  move_not_confirmed: 'What the move does has changed, or it was not confirmed. Check it again and confirm.',
+  move_pipeline_department: 'Sources use a pipeline of the old department. Give them a platform pipeline or one of the new department first.',
   audience_above_ceiling: 'An app cannot show an assistant with the information class {level}.',
   client_stores_history: 'An assistant with the class Sensitive cannot be offered in an app that saves chat history.',
   query_steps_invalid: 'The setting {field} has an invalid value: use a whole number within the allowed range, or true/false for a switch.',

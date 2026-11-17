@@ -6,7 +6,7 @@
     Base image: digest-pinned chiseled-extra (non-root, no shell, ICU and time-zone data). Update tag and digest together.
   -->
   <PropertyGroup Condition="'$(UmeServiceContainer)' == 'true'">
-    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6558056b54d5c9dfefb7ff473728e022ff2bf1d976cbf8ee07b05ec594374</ContainerBaseImage>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5b962bfb786606def03d250c6a645cc98839095c89e806e4bd8978a68115b</ContainerBaseImage>
     <ContainerUser>1654</ContainerUser>
   </PropertyGroup>
 </Project>

@@ -136,7 +136,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Raised rules | CA2016, CA1848, CA1873, CA1304–CA1311, CA5394 as warnings (= errors) | `.editorconfig` |
 | Packages | `ManagePackageVersionsCentrally`, `CentralPackageTransitivePinningEnabled=false` | `Directory.Packages.props` |
 | Version | `0.0.0-local`; release overrides `-p:Version` from the tag | `Directory.Build.props`, `release.yml` |
-| Containers | SDK container publish (`-t:PublishContainer`), **no Dockerfiles for .NET**; base `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6…4374`, user 1654 | `Directory.Build.targets` |
+| Containers | SDK container publish (`-t:PublishContainer`), **no Dockerfiles for .NET**; base `mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…115b`, user 1654 | `Directory.Build.targets` |
 | Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.5` (ahead of the gateway's 13.6.1 at the user's request, #339), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
 
 ### 2.2 Initial `Directory.Packages.props`
@@ -151,7 +151,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Runtime (gateway) | `Microsoft.Extensions.Http.Resilience`, `Microsoft.Extensions.ServiceDiscovery` | 10.11.0 | gateway |
 | | `OpenTelemetry.Exporter.OpenTelemetryProtocol`, `OpenTelemetry.Extensions.Hosting` | 1.19.1 | gateway |
 | | `OpenTelemetry.Instrumentation.AspNetCore`, `.Http`, `.Runtime` | 1.19.0 | gateway |
-| | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.14 | gateway |
+| | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.15 | gateway |
 | | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | gateway |
 | | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.5 | gateway's family (#339) |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
@@ -168,7 +168,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
 | Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
-| Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.14, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
+| Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.15, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
 
 ### 2.3 Frontend (`src/admin-ui`)
@@ -442,12 +442,12 @@ vectors when we run against a real local gateway.
 
 | Image | Built by | Base | User | Root fs | Health probe | Expected size |
 |---|---|---|---|---|---|---|
-| `ume-rag/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Ume.Rag.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `UME_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
+| `ume-rag/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Ume.Rag.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `UME_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
 | `ume-rag/fake-gateway` | SDK container | `noble-chiseled` | 1654 | read-only | same | ~130 MB |
 | `ume-rag/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `ume-rag/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | budget ≤ 4.0 GB with the NER model (measured 2.88 GB; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`; parser design §12) |
 | `ume-rag/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4.6_base` (1.4 LTS, `_base` = no bundled signatures; digest-pinned; 1.4.6 from `v0.1.0`) | 1000 (the image's `clamav`; entrypoint `/init-unprivileged`) | read-only, volume `/var/lib/clamav`, tmpfs `/tmp` (clamd's local socket) | a real scan of a small file through clamd (`clamdscan`), not `--ping`: after a failed reload clamd still answers PONG with no engine (§5.5) | 223 MB (measured) + ~110 MB signatures in the volume |
-| `ume-rag/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.64.1-noble`, digest-pinned, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
+| `ume-rag/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.64.1-noble`, digest-pinned, its Ubuntu packages upgraded at build time (so a build is not reproducible bit for bit; the release records the digest and the SBOM), npm and yarn removed, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
 
 All Dockerfiles: digest-pinned `FROM`, multi-stage, `apt-get` versions from the pinned base only, no package caches,
 `LABEL org.opencontainers.image.source/version/revision`, `USER` numeric, no shell needed at runtime for the .NET

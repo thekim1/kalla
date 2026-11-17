@@ -571,10 +571,10 @@ public static class AssistantEndpoints
             : models.WarmKeyAsync(ceiling, assistant.GatewayKeyId, assistant.DepartmentId, ct));
     }
 
-    private static async Task<Assistant> LoadAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = true) =>
+    internal static async Task<Assistant> LoadAsync(AdminContext admin, Guid id, CancellationToken ct, bool tracked = true) =>
         await (tracked ? Scoped(admin) : Scoped(admin).AsNoTracking()).SingleOrDefaultAsync(a => a.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
 
-    private static async Task CheckTeamAsync(AdminContext admin, Guid departmentId, Guid? teamId, CancellationToken ct)
+    internal static async Task CheckTeamAsync(AdminContext admin, Guid departmentId, Guid? teamId, CancellationToken ct)
     {
         if (teamId is { } team && !await admin.Db.Teams.AnyAsync(t => t.Id == team && t.DepartmentId == departmentId, ct))
         {
@@ -582,7 +582,7 @@ public static class AssistantEndpoints
         }
     }
 
-    private static Task<List<Client>> AudienceClientsAsync(AdminContext admin, Guid assistantId, CancellationToken ct)
+    internal static Task<List<Client>> AudienceClientsAsync(AdminContext admin, Guid assistantId, CancellationToken ct)
     {
         var ids = admin.Db.AssistantAudiences.Where(a => a.AssistantId == assistantId && a.Kind == AssistantAudienceKinds.Client).Select(a => a.SubjectId);
         return admin.Db.Clients.AsNoTracking().Where(c => ids.Contains(c.Id)).ToListAsync(ct);
@@ -606,7 +606,7 @@ public static class AssistantEndpoints
         throw AdminFaults.Of(first.Code, first.Params, new Dictionary<string, object?> { ["problems"] = problems.Select(p => new { code = p.Code.Code, p.Params, p.Affected }).ToList(), ["affected"] = first.Affected });
     }
 
-    private static async Task<AssistantDto> DetailAsync(AdminContext admin, Assistant a, CancellationToken ct)
+    internal static async Task<AssistantDto> DetailAsync(AdminContext admin, Assistant a, CancellationToken ct)
     {
         var versions = await admin.Db.AssistantVersions.AsNoTracking().Where(v => v.Id == a.PublishedVersionId || v.Id == a.DraftVersionId)
             .Select(v => new { v.Id, v.Number, v.UpdatedAt, v.Version, v.QuerySteps }).ToListAsync(ct);

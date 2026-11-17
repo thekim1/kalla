@@ -5,13 +5,17 @@ import type { CollectionSetup } from '@/api/types'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useAuthStore } from '@/stores/auth'
 import { SETUP } from '@/utils/labels'
 
-// Kom igång (admin design §5.4, §5.5.2): the journey's steps from the source to Open WebUI, each linking to the page
-// that does it, computed from state by the API. The caller hides the card once `done`. `foldable` (Home, §5.5.1): a
-// checklist whose knowledge base is published starts folded to one line ("Name: 5 of 8 steps done") and unfolds on click.
-// The `actions` slot (Home's Hide) shows in both forms.
+// Kom igång (admin design §5.4, §5.5.2): the journey's steps from the source to an app that offers the assistant, each
+// linking to the page that does it, computed from state by the API. The caller hides the card once `done`. `foldable`
+// (Home, §5.5.1): a checklist whose knowledge base is published starts folded to one line ("Name: 5 of 8 steps done") and
+// unfolds on click. The `actions` slot (Home's Hide) shows in both forms. The last step is done, either way, once the
+// published assistant is offered to an app (`available`); without Open WebUI it names an app with a key and opens the
+// assistant's Audience tab, where the apps are ticked and a platform admin connects a new one.
 const props = defineProps<{ setup: CollectionSetup; showName?: boolean; foldable?: boolean }>()
+const auth = useAuthStore()
 const canFold = computed(() => !!props.foldable && props.setup.published)
 const folded = ref(canFold.value)
 
@@ -40,7 +44,12 @@ const steps = computed<Step[]>(() => {
       key: 'assistant-publish', label: s.assistantPublished ? SETUP.steps.assistantPublished : SETUP.steps.assistantPublish, state: state(s.assistantPublished),
       to: assistant,
     },
-    { key: 'available', label: SETUP.steps.available, state: state(s.available), to: assistant },
+    auth.openWebUiEnabled
+      ? { key: 'available', label: SETUP.steps.available, state: state(s.available), to: assistant }
+      : {
+          key: 'available', label: SETUP.steps.availableApp, state: state(s.available),
+          to: s.assistantId ? { name: 'assistant', params: { id: s.assistantId }, query: { tab: 'audience' } } : assistant,
+        },
   ]
 })
 

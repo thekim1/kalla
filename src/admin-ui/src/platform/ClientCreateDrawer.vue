@@ -9,6 +9,7 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
+import { useAuthStore } from '@/stores/auth'
 import { COMMON, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import AssistantPicker from './AssistantPicker.vue'
 import { useClientChoices } from './clientChoices'
@@ -18,13 +19,15 @@ import { assistantAllowed, AVAILABLE_KINDS, clientRequest, DEPLOYMENT_KINDS, fie
 
 // Add app (admin design §5.9, §5.9.1): the kind, that kind's fields, the assistants it offers and a first key, all made in
 // one transaction. The result is "How to connect". `assistantId` ticks one assistant (opened from its Who can use it tab).
+// Open WebUI's card (set up by the deployment) shows only while the deployment runs Open WebUI.
 const props = defineProps<{ open: boolean; assistantId?: string | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'created', client: Client): void }>()
 
 const L = PLATFORM_CLIENTS
 const STEPS = [L.steps.kind, L.steps.fields, L.steps.assistants, L.steps.firstKey]
 const LAST = STEPS.length
-const KINDS = [...AVAILABLE_KINDS, ...DEPLOYMENT_KINDS, ...LATER_KINDS]
+const auth = useAuthStore()
+const KINDS = [...AVAILABLE_KINDS, ...DEPLOYMENT_KINDS.filter((k) => k !== 'open-webui' || auth.openWebUiEnabled), ...LATER_KINDS]
 const unavailable = (k: ClientKind) => !AVAILABLE_KINDS.includes(k)
 const step = ref(1)
 const kind = ref('')

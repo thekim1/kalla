@@ -78,7 +78,7 @@ services:
   spike:
     <<: *hardened
     profiles: [run]
-    image: mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6558056b54d5c9dfefb7ff473728e022ff2bf1d976cbf8ee07b05ec594374
+    image: mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5b962bfb786606def03d250c6a645cc98839095c89e806e4bd8978a68115b
     user: "1654:1654"
     security_opt:
       - no-new-privileges:true

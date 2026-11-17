@@ -70,6 +70,42 @@ depends on are Apache-2.0. Leptonica is BSD-2-Clause style. The Debian copyright
 `/usr/share/doc/tesseract-ocr*/copyright`, `/usr/share/doc/libtesseract5/copyright` and
 `/usr/share/doc/libleptonica6/copyright`; their versions are in the Debian table.
 
+## LibreOffice
+
+LibreOffice 25.2.3 (`libreoffice-writer-nogui`, `-calc-nogui`, `-impress-nogui` and what they depend on: the other
+`libreoffice-*` packages, `libuno-*`, `uno-libs-private`, `ure` and `fonts-opensymbol`) is MPL-2.0, "Copyright 2000,
+2010 Oracle and/or its affiliates. Copyright (c) 2000, 2010 LibreOffice contributors and/or their affiliates." Some
+files include Apache-2.0 material (Apache Software Foundation), and smaller parts (icon themes, help pages, bundled
+third-party code) are Apache-2.0, LGPL-3.0-or-later, GPL-2.0-or-later, GPL-3.0-or-later, MIT, BSD, CC0-1.0 and
+CC-BY-SA-3.0, listed per file in `/usr/share/doc/libreoffice-common/copyright`. The parser runs it as a separate
+process (`soffice --headless --convert-to`, `ume_parser/legacy.py`); nothing of ours links to it. It is distributed
+unmodified, as built by Debian; its source is the Debian source package `libreoffice` at the snapshot named in the
+Written offer, and upstream `https://download.documentfoundation.org/libreoffice/src/`.
+
+Its copyleft and weak-copyleft libraries and tools, as their Debian copyright files give them:
+
+| Package | Licence |
+|---|---|
+| `coinor-libcbc3.1`, `coinor-libcgl1`, `coinor-libclp1`, `coinor-libosi1v5` (Calc's solver) | EPL-2.0 |
+| `coinor-libcoinutils3v5` | EPL-1.0 |
+| `coinor-libcoinmp0` | CPL-1.0 |
+| `libpoppler147` (PDF import) | GPL-2.0 or GPL-3.0 |
+| `gnupg`, `gpg`, `gpg-agent`, `gpgconf`, `gpgsm`, `dirmngr` (GnuPG) | GPL-3.0-or-later; some files LGPL-2.1-or-later, others LGPL-3.0-or-later or GPL-2.0-or-later |
+| `libgpgme11t64` | LGPL-2.1-or-later |
+| `libgpgmepp6t64` | LGPL-2.0-or-later |
+| `libhunspell-1.7-0` | MPL-1.1 or GPL-2.0 or LGPL-2.1 |
+| `libhyphen0` | GPL-2.0-or-later or LGPL-2.1-or-later or MPL-1.1-or-later |
+| `libwpd-0.10-10`, `libwpg-0.3-3`, `libwps-0.4-4` | MPL-2.0 or LGPL-2.1-or-later |
+| `libmwaw-0.3-3` | MPL-2.0 or LGPL-2.0-or-later |
+| `libabw-0.1-1`, `libcdr-0.1-1`, `libvisio-0.1-1`, `libe-book-0.1-1`, `librevenge-0.0-0`, `liborcus-0.18-0`, `liborcus-parser-0.18-0`, `libeot0` | MPL-2.0 |
+| `libclucene-core1t64`, `libclucene-contribs1t64` | LGPL-2.1 or Apache-2.0 |
+| `libraptor2-0` | LGPL-2.1-or-later (some files GPL-3.0-or-later; librdfa LGPL-2.1-or-later or GPL-2.0-or-later or Apache-2.0) |
+| `librasqal3t64` | LGPL-2.1-or-later or GPL-2.0-or-later or Apache-2.0-or-later |
+| `libnss3` | MPL-2.0 |
+
+`libmythes-1.2-0` (BSD-style; its WordNet data under Princeton University's licence) and `libxmlsec1t64`,
+`libxmlsec1t64-nss` (MIT) are permissive.
+
 ## Python packages (`/opt/venv`)
 
 Image `runtime` is the parser image; `test` is the test image only (the dev group).
@@ -186,7 +222,7 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 
 ## Debian packages
 
-From Debian main (trixie) at snapshot `20261109T000000Z` and the `python:3.12.16-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...) and `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract).
+From Debian main (trixie) at snapshot `20261109T000000Z` and the `python:3.12.16-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...), `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract) and LibreOffice with its libraries (MPL-2.0, EPL, CPL-1.0, GPL and LGPL; see LibreOffice).
 
 | Package | Version |
 |---|---|
@@ -466,9 +502,10 @@ From Debian main (trixie) at snapshot `20261109T000000Z` and the `python:3.12.16
 
 ## Written offer
 
-The GPL and LGPL components of this image (the Debian packages above, the libraries bundled in the Python wheels) are
-distributed unmodified. Their complete corresponding source is available from the upstream projects named above and,
-for the Debian packages, from `https://snapshot.debian.org/archive/debian/20261109T000000Z` and
+The GPL, LGPL, MPL, EPL and CPL components of this image (the Debian packages above, among them LibreOffice and its
+libraries; the libraries bundled in the Python wheels; `certifi` and `tqdm`) are distributed unmodified. Their
+complete corresponding source is available from the upstream projects named above and, for the Debian packages,
+from `https://snapshot.debian.org/archive/debian/20261109T000000Z` and
 `https://snapshot.debian.org/archive/debian-security/20261109T000000Z`. For three years after we distribute an image,
 Umeå kommun provides that source on request, on a medium customarily used for software interchange, for no more than
 the cost of making the copy.
