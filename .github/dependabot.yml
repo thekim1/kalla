@@ -1,0 +1,46 @@
+# Version bumps proposed as pull requests (A-27, #507): base images by digest, NuGet, npm, uv and the pinned GitHub
+# Actions. One grouped pull request per ecosystem and week, so a week's bumps are read and tested once.
+#
+# cooldown is the 7-day package rule (AGENTS.md): a release is proposed only once it is 7 days old. Security updates
+# ignore it (GitHub's rule), which is what we want. A bump is a proposal: whoever takes the pull request also moves the
+# same pin wherever it is repeated (a Dockerfile's uv image in parser.yml and audit.yml, the Playwright version in
+# images/renderer/package.json and tests/e2e, the renderer live check for a Chromium bump) before it is merged.
+# Not covered, bumped by hand: the .NET base image in Directory.Build.targets, the images pinned as defaults in
+# deploy/compose.rag.yaml, and the tools the workflows download by version and checksum (Syft, Grype, gh).
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories: [/images/clamav, /images/postgres, /images/renderer, /src/parser]
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    open-pull-requests-limit: 3
+    groups:
+      base-images: {patterns: ["*"]}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    open-pull-requests-limit: 2
+    groups:
+      actions: {patterns: ["*"]}
+  - package-ecosystem: nuget
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    open-pull-requests-limit: 3
+    groups:
+      nuget-minor: {patterns: ["*"], update-types: [minor, patch]}
+  - package-ecosystem: npm
+    directories: [/src/admin-ui, /tests/e2e, /images/renderer]
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor: {patterns: ["*"], update-types: [minor, patch]}
+  - package-ecosystem: uv
+    directory: /src/parser
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    open-pull-requests-limit: 2
+    groups:
+      parser-minor: {patterns: ["*"], update-types: [minor, patch]}
