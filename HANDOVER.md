@@ -42,7 +42,7 @@ order:
 | #819 | A-27: the image CVE scan in `audit.yml`, `dependabot.yml` (closes #507). **Stacked on #814** | merge after #814 |
 | #815 | `LICENSES.md`: the LibreOffice section, the wider written offer (closes #793) | `parser-image` runs the staleness test in the image |
 | #816 | The admin UI without Open WebUI (closes #807, M-22 S9's last part) | checks running |
-| #817 | **M-22 S4b and S4c: upgrades in one step** (below) | a release dry run was started after its checks |
+| #817 | **M-22 S4b and S4c: upgrades in one step** (below) | dry run green; `backend` re-run started (flaky under load) |
 | #820 | `chat."Messages"."ParentMessageId"` dropped (closes #792). **Stacked on #817** | merge after #817 |
 | this one | The handover, connectors design §5.2's sentence for #802 | |
 
@@ -65,10 +65,15 @@ check its diff is only its own.
   then the branch's file with 0.7.0's images: every service healthy, the schema from 33 to 41 migrations, the
   embedding profile, the CA, the pepper and the Data Protection certificate kept, the gateway from 0.10.1 to 0.11.0 in
   the same step. **The first boot of an upgraded stack anywhere.** That run had no fence (0.7.0's images).
-- **Not shown when the session ended:** the fence on real containers. The first dry run failed on two things that are
-  fixed on the branch (the API's SQL contract wants positional parameters; the upgrade step had no ghcr.io login in a
-  dry run); the second dry run was started by a background job. **Find it** (`gh run list --workflow release.yml`),
-  and if it is green, link it on #817; if not, fix the step alone with the boot-only run where the images allow.
+- **The fence on real containers:** release dry run
+  [43984531659](https://github.com/thekim1/ume-rag-platform/actions/runs/43984531659) from #817's branch is green:
+  0.5.1's stack, then the branch's file with the branch's images; `rag-migrate` stopped `ume_rag_admin` itself, the
+  new rag-admin was admitted and every service is healthy. (The first dry run failed on the API's SQL contract, which
+  wants positional parameters, and on a missing ghcr.io login in a dry run; both fixed.)
+- **Flaky under load:** with six pull requests' checks on the two runners, `backend` failed on #817 and #819 with
+  tests neither touches (`ChatApiTests.Every_call_of_a_turn_counts_…`, `ChatApiTests.A_failed_answer_call_still_writes_…`,
+  `RenderTests.The_real_renderer_reports_a_refused_ready_selector_…`); the test projects took twice their usual time.
+  Re-runs were started; check them.
 - **Guides:** `docs/portainer.md` has one *Upgrade* section (from 0.5.x or later); the joined stack defaults
   `UME_INTEGRATION_API_URL`. **The VM** (below) can go from 0.5.0 to the next release in one update once it exists.
 
@@ -94,7 +99,8 @@ directory at the first `up`. The design passages session 46 left as they are (`r
    management, `.npmrc` with `min-release-age`, digests with tags). A bump also moves the pin where it is repeated
    (`.github/dependabot.yml`'s header lists the places).
 3. **#821** (the other machine's, for #811: platform admins move a knowledge base or an assistant to another
-   department). The main session's review was in work when the session ended: check the pull request for it.
+   department). Reviewed, not approved: a move shares a knowledge base with a department whose link did not work
+   before (the review's finding 1), and four smaller points. Read their answer and approve when finding 1 is fixed.
 4. **M-22 S6.**
 
 Before a stream's paths: check for open `a/` or `b/` work and say so on the issue (handbook).
