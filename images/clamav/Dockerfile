@@ -7,9 +7,10 @@
 # Test: images/clamav/test.sh.
 
 # ClamAV 1.4.6 on Debian 13, "_base": without bundled signatures, as ClamAV advises when they live in a volume. 1.4.6
-# (released 2026-08-07) fixes CVE-2026-20339, -20345 and -20346. Its only image was pushed 2026-10-26, pinned on
-# 2026-10-31: the 7-day rule does not apply during development (user, Decisions table "7-day rule in development").
-FROM clamav/clamav-debian:1.4.6_base@sha256:06058d49cdd87e394660e7f78e2156236ce74c26133e2b4128c4827c0a4680aa
+# (released 2026-08-07) fixes CVE-2026-20339, -20345 and -20346. The tag's rebuild of 2026-11-16 (Debian's apt and
+# zlib fixes, issue #818), pinned on 2026-11-17: the 7-day rule does not apply during development (user, Decisions
+# table "7-day rule in development").
+FROM clamav/clamav-debian:1.4.6_base@sha256:3976f67ab16e8a96b802aedf7e6f930c38262b95fbcb571d2ec21aa62e547cbe
 
 COPY --chmod=0644 clamd.conf freshclam.conf /etc/clamav/
 

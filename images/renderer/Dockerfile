@@ -13,6 +13,13 @@ WORKDIR /srv/renderer
 # `npx playwright` would fetch it from npm, and the render network has no route out.
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund && rm -rf /root/.npm /tmp/*
+# The base's packages lag behind Ubuntu's security fixes (issue #818: apt, libc and others): upgraded at build time,
+# so each build takes the fixes released since. npm and yarn go afterwards: only node runs, and npm's bundled packages
+# (undici, brace-expansion) carry their own advisories.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /tmp/* \
+    && rm -rf /usr/lib/node_modules/npm /usr/lib/node_modules/yarn /usr/bin/npm /usr/bin/npx /usr/bin/yarn /usr/bin/yarnpkg
 # Only Chromium's headless shell is launched (headless: true): Firefox, WebKit and full Chromium go (about 1 GB). The
 # base leaves /ms-playwright world-writable; read-only for everyone but root here.
 RUN rm -rf /ms-playwright/firefox-* /ms-playwright/webkit-* /ms-playwright/chromium-[0-9]* \
