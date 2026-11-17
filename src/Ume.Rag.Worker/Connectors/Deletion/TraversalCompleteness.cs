@@ -56,8 +56,9 @@ public static class TraversalCompleteness
     /// <param name="rule">The seed rule.</param>
     /// <param name="incremental">An incremental run (§5.4): never a complete traversal.</param>
     /// <param name="continued">
-    /// A <c>continue</c> run (#804): it lists no seeds and sees only the part of the site the run it continues left, so it is
-    /// never a complete traversal either, and fails on its seeds only as an incremental run does.
+    /// A <c>continue</c> run (#804): it sees only the part of the site the run it continues left, so it is never a complete
+    /// traversal either. Its seeds are the carried depth-0 rows (often none); like an incremental run, it fails as
+    /// <c>crawl.seeds_unreachable</c> only when it had seeds and every one failed again.
     /// </param>
     public static TraversalVerdict Evaluate(CrawlRunRecord run, int openRows, bool cancelled, CompletenessRule rule, bool incremental, bool continued = false)
     {
