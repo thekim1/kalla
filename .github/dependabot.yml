@@ -3,12 +3,24 @@
 #
 # cooldown is the 7-day package rule (AGENTS.md): a release is proposed only once it is 7 days old. uv's is 8 days: the
 # parser's lock refuses files uploaded in the last 7 days (exclude-newer = "7 days"), and a release's files can be
-# uploaded after its date, so 7 would let Dependabot propose a version the lock then rejects (the first uv run, 2026-11-17). Security updates
-# ignore it (GitHub's rule), which is what we want. A bump is a proposal: whoever takes the pull request also moves the
-# same pin wherever it is repeated (a Dockerfile's uv image in parser.yml and audit.yml, the Playwright version in
-# images/renderer/package.json and tests/e2e, the renderer live check for a Chromium bump) before it is merged.
-# Not covered, bumped by hand: the .NET base image in Directory.Build.targets, the images pinned as defaults in
-# deploy/compose.rag.yaml, and the tools the workflows download by version and checksum (Syft, Grype, gh).
+# uploaded after its date, so 7 would let Dependabot propose a version the lock then rejects (the first uv run,
+# 2026-11-17). Security updates ignore it (GitHub's rule), which is what we want.
+#
+# A bump is a proposal: whoever takes the pull request also moves the same pin wherever it is repeated before it is
+# merged (a Dockerfile's uv image in parser.yml and audit.yml; the pgvector image in the AppHost and the TestKit; the
+# Python base in the renderer spike's fixture), and regenerates the parser's LICENSES.md in the image for a parser
+# bump (scripts/licences.py; tests/test_licences.py fails otherwise).
+#
+# Not proposed, bumped by hand (the first run's pull requests, 2026-11-17, #828-#837):
+# - Major versions of npm, NuGet and uv packages: each needs its own look (TypeScript 7 was refused by typescript-eslint,
+#   MessagePack 3 breaks Aspire, opencv-python-headless 5 is older than the 4.x pinned). GitHub Actions majors are
+#   still proposed: they come pinned by commit and change little.
+# - The parser's Python beyond 3.12: the lock requires 3.12 (requires-python), so only 3.12 patch releases.
+# - Playwright, everywhere: the renderer image, playwright-core in images/renderer, and Playwright in tests/e2e must
+#   be the same version (the client drives the image's browser build), with the renderer live check.
+# - NuGet packages the gateway also pins: AGENTS.md says to match the gateway's pin, which Dependabot cannot see.
+# - The .NET base image in Directory.Build.targets, the images pinned as defaults in deploy/compose.rag.yaml, and the
+#   tools the workflows download by version and checksum (Syft, Grype, gh).
 version: 2
 updates:
   - package-ecosystem: docker
@@ -16,6 +28,10 @@ updates:
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 7}
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: python
+        versions: [">=3.13"]
+      - dependency-name: playwright
     groups:
       base-images: {patterns: ["*"]}
   - package-ecosystem: github-actions
@@ -30,6 +46,30 @@ updates:
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 7}
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+      - dependency-name: Microsoft.Playwright
+      # Pinned by the gateway too (llmgateway's Directory.Packages.props, 2026-11-17): moved with the gateway's pin.
+      - dependency-name: "Aspire.*"
+      - dependency-name: "CommunityToolkit.Aspire.*"
+      - dependency-name: "Microsoft.AspNetCore.*"
+      - dependency-name: "Microsoft.EntityFrameworkCore.*"
+      - dependency-name: "Microsoft.Extensions.Hosting"
+      - dependency-name: "Microsoft.Extensions.Http.Resilience"
+      - dependency-name: "Microsoft.Extensions.ServiceDiscovery"
+      - dependency-name: "Microsoft.Extensions.TimeProvider.Testing"
+      - dependency-name: "Microsoft.NET.Test.Sdk"
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+      - dependency-name: "OpenTelemetry.*"
+      - dependency-name: "Testcontainers*"
+      - dependency-name: "xunit*"
+      - dependency-name: BenchmarkDotNet
+      - dependency-name: MessagePack
+      - dependency-name: NSubstitute
+      - dependency-name: Scalar.AspNetCore
+      - dependency-name: Shouldly
+      - dependency-name: WireMock.Net
     groups:
       nuget-minor: {patterns: ["*"], update-types: [minor, patch]}
   - package-ecosystem: npm
@@ -37,6 +77,12 @@ updates:
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 7}
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+      - dependency-name: playwright
+      - dependency-name: playwright-core
+      - dependency-name: "@playwright/test"
     groups:
       npm-minor: {patterns: ["*"], update-types: [minor, patch]}
   - package-ecosystem: uv
@@ -44,5 +90,8 @@ updates:
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 8}
     open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       parser-minor: {patterns: ["*"], update-types: [minor, patch]}
