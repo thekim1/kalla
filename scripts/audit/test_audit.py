@@ -1,6 +1,6 @@
 """Tests for audit.py against real reports in tests/fixtures/audit/ (a clean run of this repo and one vulnerable
 package each, Newtonsoft.Json 12.0.1 and minimist 1.2.5; grype-parser.json is a Grype report cut down to the fields
-audit.py reads). Standard library only:
+audit.py reads; npm-production-picomatch.json is the admin UI's production audit of 2026-11-18). Standard library only:
 
     python3 -I -m unittest discover -s scripts/audit -v
 """
@@ -209,6 +209,74 @@ class GrypeTests(Temp):
         self.assertIn("### Image scan, release 0.7.0", text)
         self.assertIn("| parser | 2 | 1 | 1 | 1 | 1 |", text)
         self.assertIn("<details><summary>parser: High and Critical with a fix</summary>", text)
+
+
+class NpmProductionTests(Temp):
+    REPORT = str(FIXTURES / "npm-production-picomatch.json")
+    PICOMATCH = "GHSA-fc5q-39xc-vjpf picomatch {day} vue-router's build-time plugin only\n"
+
+    def modules(self, *packages: str) -> str:
+        sources = ["../src/main.ts"] + [f"../node_modules/{p}/dist/index.js" for p in packages]
+        directory = self.dir / "modules" / "assets"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "index.js.map").write_text(json.dumps({"version": 3, "sources": sources}), encoding="utf-8")
+        return str(self.dir / "modules")
+
+    def prod(self, exceptions: str, modules: str, *extra: str) -> subprocess.CompletedProcess[str]:
+        path = self.write("prod-exceptions.txt", exceptions)
+        args = [self.REPORT, "--modules", modules, "--exceptions", path, "--today", "2026-11-18", *extra]
+        return run("npm-production", *args)
+
+    def test_advisory_without_exception_fails(self) -> None:
+        result = self.prod("", self.modules("vue-router", "@vue/shared"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("GHSA-fc5q-39xc-vjpf: picomatch (high): FAILS", result.stdout)
+
+    def test_current_exception_for_a_package_outside_the_bundle_passes(self) -> None:
+        result = self.prod(self.PICOMATCH.format(day="2026-11-18"), self.modules("vue-router", "@vue/shared"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("excepted until 2026-11-18, not in the bundle", result.stdout)
+
+    def test_exception_for_a_bundled_package_fails(self) -> None:
+        result = self.prod(self.PICOMATCH.format(day="2026-12-18"), self.modules("vue-router", "picomatch"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("FAILS: excepted, but the package is in the bundle", result.stdout)
+
+    def test_expired_exception_fails_and_warns(self) -> None:
+        result = self.prod(self.PICOMATCH.format(day="2026-11-17"), self.modules("vue-router"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("::warning::npm production exception GHSA-fc5q-39xc-vjpf (picomatch) expired", result.stdout)
+
+    def test_unused_exception_warns(self) -> None:
+        unused = "GHSA-aaaa-bbbb-cccc minimist 2026-12-18 x\n"
+        result = self.prod(self.PICOMATCH.format(day="2026-12-18") + unused, self.modules("vue-router"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "::warning::npm production exception GHSA-aaaa-bbbb-cccc (minimist) matched no advisory", result.stdout
+        )
+
+    def test_no_source_maps_fails(self) -> None:
+        (self.dir / "empty").mkdir()
+        result = self.prod(self.PICOMATCH.format(day="2026-12-18"), str(self.dir / "empty"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no source maps below", result.stderr)
+
+    def test_malformed_exception_fails(self) -> None:
+        result = self.prod("GHSA-fc5q-39xc-vjpf 2026-12-18 no package\n", self.modules("vue-router"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("expected '<GHSA id> <package> <YYYY-MM-DD> <reason>'", result.stderr)
+
+    def test_production_exception_applies_to_the_all_dependencies_audit(self) -> None:
+        prod = self.write("prod-exceptions.txt", self.PICOMATCH.format(day="2026-12-18"))
+        dev = self.write("dev-exceptions.txt", "")
+        args = ["--exceptions", dev, "--production-exceptions", prod, "--today", "2026-11-18"]
+        result = run("npm", self.REPORT, *args)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("GHSA-fc5q-39xc-vjpf: picomatch (high): excepted until 2026-12-18", result.stdout)
+
+    def test_repository_exceptions_file_parses(self) -> None:
+        result = run("npm-production", self.REPORT, "--modules", self.modules("vue-router"), "--today", "2026-11-18")
+        self.assertNotIn("expected", result.stderr)
 
 
 if __name__ == "__main__":
