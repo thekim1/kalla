@@ -40,7 +40,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Session 47: S4b and S4c in one pull
   request (`rag-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
   step, boot-tested from 0.5.1 in `release.yml`; `docs/portainer.md` has one *Upgrade* section; Decisions "Upgrades in
-  one step"), and S9's admin UI part (#816, closes #807). Open: S6, S8 in the proposal's order. S5 and S7 are proposals in the gateway's
+  one step"), and S9's admin UI part (#816, closes #807). S6 (one escrow set: `escrow-keys.sh` with the pepper, the blob keys, the passphrase, the database passwords, the conversation id keys, the Data Protection certificate and the CA, by `--env-file`, `--project` or directories, with `--restore`; repo-and-deployment §7.4). Open: S8 as each page is touched. S5 and S7 are proposals in the gateway's
   repository (thekim1/llmgateway#108, #109).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests

@@ -157,8 +157,8 @@
 #                             every name (SAN or wildcard), readable by uid 101; renewing it: replace both files and
 #                             restart rag-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
 #                             variables) and list the proxy as a trusted proxy in both admins (docs/portainer.md)
-# Back up rag-secrets/.pepper, rag-secrets/keys/rag-blob-internal and rag-certs/data-protection.pfx with the database:
-# without them a restored RAG database is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
+# Escrow the keys a restored RAG database needs with deploy/escrow-keys.sh --project <stack> from the release bundle
+# (docs/portainer.md): without them it is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
 # with pg_dump or volume snapshots.
 
 name: ume-gateway

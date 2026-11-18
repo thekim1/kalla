@@ -88,8 +88,8 @@ Each becomes a queue item when the main session picks it up.
   only what a process can't start without; C0–C12 merged (C7 and C12 on the gateway's v0.10.2, C11 in 0.6.0); C13 left.
 - **Deploy simplification** (user, 2026-11-16, `work/main.md` M-22, [`proposals/deploy-simplification.md`](proposals/deploy-simplification.md)):
   one bootstrap and one service file for Compose, Portainer and Kubernetes (built: #798, #800, #808), Open WebUI off
-  unless asked for (#806, #809; the admin UI's part is #807), the upgrade paths older than 0.5.x deleted (#799). Left:
-  upgrades without a manual stop and across a release, and one escrow set. Host hardening is an optional step (#810);
+  unless asked for (#806, #809; the admin UI's part is #807), the upgrade paths older than 0.5.x deleted (#799),
+  upgrades in one step (#817) and one escrow set (S6). Left: operator pages without project vocabulary (S8). Host hardening is an optional step (#810);
   one wizard hand-off and a first assigned key from the manifest are proposals to the gateway (llmgateway#108, #109).
 - **Connecting an app, the platform menu and the Settings page:** one guided flow without GUIDs, every platform page
   in the side menu, Settings as a page of sections (`work/main.md` M-16; admin §5.9.1, §5.10).

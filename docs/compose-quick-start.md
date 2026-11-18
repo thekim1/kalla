@@ -162,9 +162,10 @@ The script ends with the next steps, the setup wizard's address among them.
 
 ## 6. Before real use
 
-- **Escrow the keys** and take the secrets off the host: `sudo deploy/escrow-keys.sh /media/<escrow>`, and the files
-  [production-setup.md](production-setup.md#5-start) names in step 5 (`rag-secrets/.pepper` and
-  `rag-certs/data-protection.pfx`, read out of the volumes). A database restored without them is unusable. The gateway
+- **Escrow the keys:** `sudo deploy/escrow-keys.sh /media/<escrow>` writes one set with the pepper, the blob key, the
+  backup passphrase, the database passwords, the conversation id key, the Data Protection certificate and the internal
+  CA, and `--verify` reads it back (the runbook's
+  *Key escrow*). A database restored without them is unusable. The gateway
   has two of its own, in its directory (`deploy/secrets/.pepper` and `deploy/certs/data-protection.pfx` of the
   gateway's release).
 - **A real backup target, a reverse proxy with certificates from your PKI, and the proxy's addresses** under

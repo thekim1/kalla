@@ -198,9 +198,9 @@ missing=""
 for svc in api admin worker; do [ -s "$secrets/$svc/Gateway__Key" ] || missing="$missing $svc"; done
 [ -z "$missing" ] || echo "Gateway: no credential key for${missing}; a service without one has its model calls refused. Run \
 again with --gateway-credential-key-file SERVICE=FILE (docs/production-setup.md, Gateway credential keys)."
-echo "Back up $secrets/.pepper, $secrets/keys/rag-blob-internal and $certs/data-protection.pfx outside the cluster:"
-echo "without them a restored database is unusable (runbook, Key escrow). Keep $certs/ca.key offline between runs"
-echo "that issue a certificate."
+echo "Escrow the keys outside the cluster: without them a restored database is unusable (runbook, Key escrow):"
+echo "  deploy/escrow-keys.sh --secrets-dir $secrets --certs-dir $certs /media/<escrow>"
+echo "Keep $certs/ca.key offline between runs that issue a certificate."
 if [ ! -s "$secrets/admin/Oidc__ClientSecret" ]; then
   echo "Sign-in: no client secret here, so after deploy.sh set it up in the setup wizard: the setup code is in"
   echo "kubectl -n ${ns:-<namespace>} logs deploy/rag-admin (either pod), the wizard at https://${admin_host:-$api_host}/setup"
