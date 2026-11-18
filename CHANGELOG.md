@@ -6,19 +6,42 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
-- **A failed query embedding says why in the log** (#781): every failed call logs a warning with the profile, the
-  `degraded` reason and what happened (a time-out, the gateway's status, an unexpected answer), never the query. Before,
-  a time-out left nothing in the log while the search went keyword-only. The test hosts of rag-api get generous
-  embedding limits, as the service hosts have since #584: a first call on a busy runner passed the 2 s default and
-  turned an expected answer into "search unavailable" (it failed the first attempt of the 0.7.0 release run).
-- **The admin refuses a schedule the scheduler would not run** (to-verify 16): a source's schedule and
-  `Settings.DefaultSchedules` are parsed with the scheduler's own parser (Cronos, 5 fields). Before, an expression with
-  five tokens that does not parse (`60 2 * * *`) was saved and the source then never ran, without a word.
-- **A chat request over 2 MB answers 413 `request_too_large` in the OpenAI error shape** (to-verify 32; chat design
-  §3.6), not the host's own error format.
-- **Tests:** the request body limits per route on real Kestrel, the cron behaviour over the daylight-saving changes,
-  LibreOffice's shipped link and macro defaults and that no linked local file reaches a conversion's output, and a
-  browser spec for Open WebUI against rag-api (`tests/e2e`, project `openwebui`, run by hand).
+## 0.8.0 (2026-11-18)
+
+An upgrade is one step and a restore needs one escrow set (M-22): `rag-migrate` stops what a migration can't run
+beside, an upgrade may skip releases, and Compose, Portainer and Kubernetes share one service file and one bootstrap.
+Crawl runs can be continued and show their progress. The images get their security updates, and a daily scan watches
+them. **Rolling update: no** (the migration `DropMessageParentId`), which `rag-migrate` handles itself on one slot.
+
+### Added
+
+- **Continue a crawl run** (#804): a crawl run that failed, was cancelled, stopped at the page limit or left failed
+  pages can be continued from its run page or, for the latest run, beside *Sync now* on the source. The new run fetches
+  the pages the run left open or failed and follows their links, instead of starting again from the start addresses.
+  It checks those pages against the current scope and depth limit and proposes no *not seen* deletions. Its run page
+  says what it took over and what it left out.
+- **A running run shows its progress** (#803): the run page and the source's run list show live counters while a run
+  is running (processed, and for a crawl the pages admitted, the page limit, the start addresses and those that failed,
+  and the pages still waiting), derived on read as the finalizer counts them.
+- **Editors can enter a crawl source's sitemaps** (#801): *Add source* and *Edit source* have a *Sitemaps* field (one
+  address per line, at most 20) beside the start addresses, and the source page shows them. The errors
+  `sitemap.none`, `sitemap.unavailable` and `sitemap.invalid` point to the field. A change is a scope change and goes
+  through the impact confirmation. `.xml.gz` sitemaps are tested by type and encoding.
+- **Platform admins can move a knowledge base or an assistant to another department** (#811; Decisions "Moving to
+  another department"): a move shares knowledge bases so that every link keeps working.
+- **One escrow set** (M-22 S6): `deploy/escrow-keys.sh` writes everything a restored deployment needs that no backup
+  holds into one set: the pepper, the blob keys, the pgBackRest passphrase, the database roles' passwords, the
+  conversation id keys, the Data Protection certificate and the internal CA. It works the same for every form: a
+  Compose installation (`--env-file`), a Portainer stack (`--project <stack>`) and Kubernetes' directories
+  (`--secrets-dir`, `--certs-dir`). `--restore` writes a set into new volumes before the first start, and refuses to
+  replace a file that differs. It replaces the guides' separate backup of the pepper and the certificate, and the
+  runbook's hand-written restore commands.
+- **An upgrade is one step, from 0.5.x on** (M-22 S4b, S4c). `rag-migrate` keeps the services a migration can't run
+  beside out of the database until their new version starts (a migration declares the roles it stops; a service asks
+  for admission at start), so a release marked *Rolling update: no* needs no manual stop on one slot. An upgrade may
+  skip releases: the release boots 0.5.1's Portainer stack and applies the new file over it
+  (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
+  stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
 - **A first install with Docker Compose is shorter.** `init-deployment.sh --gateway-secrets-dir DIR` reads the three
   credential keys that a gateway on the same host created from Ume.Rag's manifest
   (`deploy/portainer/integration-manifest.json`, now in the release bundle), so no key is copied by hand. A run without
@@ -26,27 +49,13 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   reach only that provider, and without it the setup wizard's test sign-in failed. The wizard's message for a provider
   it cannot reach now says so. New: [`docs/compose-quick-start.md`](docs/compose-quick-start.md), the gateway and
   Ume.Rag on one host in six steps; it replaces `docs/gateway-host-setup.md`.
-- **Kubernetes gets its certificates and secrets from the stacks' bootstrap** (the first step of one bootstrap for
-  every deployment form, Decisions "One deployment bootstrap"). `deploy/kubernetes/create-secrets.sh` runs
-  `deploy/portainer/bootstrap.sh` on the operator's machine and uploads the result, so the install is one command
-  instead of `init-deployment.sh` and then `create-secrets.sh`, and it takes the host names, the credential keys, a
-  CA to trust, your own certificates, the backup repository and `--postgres-host` itself. `bootstrap.sh` takes its
-  paths and those inputs as variables; the Portainer stack sets none of them and behaves as before. An existing
-  installation keeps every secret ([upgrade guide](docs/upgrade-guide.md)).
-- **The install and upgrade guides were checked line by line against the scripts, the stack files and the releases**,
-  and corrected. What an operator would have tripped on: Docker Compose must be 2.33.1 or later (the guides said 2.24;
-  the Compose files use `gw_priority`); an upgrade with Portainer over several releases takes each release's own
-  `compose.portainer.yaml` in turn (the `v0.6.0` file for 0.5.x to 0.6.0, then the `v0.7.0` file), which
-  `docs/portainer.md` now says at each step; the single-slot procedure says to stop the old services first for a
-  release marked *Rolling update: no*; the 0.6.0 stack pins the gateway's `v0.10.3`, not `v0.10.2`. The release bundle
-  now carries the Portainer, Kubernetes, Keycloak, network and security-event pages and `deploy/keycloak/`, which its
-  guides link to.
-- **`restore-pitr.sh` stops the second slots too** (`rag-api-b`, `rag-admin-b` with `--rolling`): before, they kept
-  running through a restore.
-- **Open WebUI is easy to leave out** (not every installation needs a chat; some only serve the API). The Portainer
-  example's default profiles no longer include `openwebui` (Compose's never did), and without the profile
-  `rag-bootstrap` generates none of Open WebUI's secrets or its key for rag-api, and rag-api gets no key for Open
-  WebUI's user tokens. With the profile everything is as before; a stack that sets it keeps it.
+- **A daily scan of the released images and automated pin bumps** (A-27, A-20): `audit.yml` scans the last release's
+  eight images with Grype and fails on a High or Critical finding with a fix; Dependabot opens grouped weekly pull
+  requests for the base images, NuGet, npm, uv and GitHub Actions, with a cooldown. Every GitHub Action is pinned by
+  commit SHA, and `verify.yml` refuses one that is not.
+
+### Changed
+
 - **Docker Compose runs the Portainer stack's services and bootstrap** (Decisions "One deployment bootstrap", M-22 S1
   steps 2 and 3). `deploy/compose.rag.yaml` is the one Ume.Rag service file: Compose runs it directly (the project
   `ume-rag`), and `deploy/portainer/build-stack.sh` merges it with the gateway's file into `compose.portainer.yaml`,
@@ -64,20 +73,83 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
   release's `images.env` now names `RAG_*_IMAGE`). The host scripts (`escrow-keys.sh`, `cert-expiry.sh`, the backup
   and restore scripts, `rolling-update.sh`, the host firewall) read the volumes and use the service `rag-postgres`. A
   Compose installation made with the old files is installed again ([upgrade guide](docs/upgrade-guide.md)).
-- **An upgrade is one step, from 0.5.x on** (M-22 S4b, S4c). `rag-migrate` keeps the services a migration can't run
-  beside out of the database until their new version starts (a migration declares the roles it stops; a service asks
-  for admission at start), so a release marked *Rolling update: no* needs no manual stop on one slot. An upgrade may
-  skip releases: the release boots 0.5.1's Portainer stack and applies the new file over it
-  (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
-  stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
+- **Kubernetes gets its certificates and secrets from the stacks' bootstrap** (the first step of one bootstrap for
+  every deployment form, Decisions "One deployment bootstrap"). `deploy/kubernetes/create-secrets.sh` runs
+  `deploy/portainer/bootstrap.sh` on the operator's machine and uploads the result, so the install is one command
+  instead of `init-deployment.sh` and then `create-secrets.sh`, and it takes the host names, the credential keys, a
+  CA to trust, your own certificates, the backup repository and `--postgres-host` itself. `bootstrap.sh` takes its
+  paths and those inputs as variables; the Portainer stack sets none of them and behaves as before. An existing
+  installation keeps every secret ([upgrade guide](docs/upgrade-guide.md)).
+- **Open WebUI is easy to leave out** (not every installation needs a chat; some only serve the API). The Portainer
+  example's default profiles no longer include `openwebui` (Compose's never did), and without the profile
+  `rag-bootstrap` generates none of Open WebUI's secrets or its key for rag-api, and rag-api gets no key for Open
+  WebUI's user tokens. With the profile everything is as before; a stack that sets it keeps it.
+- **The admin UI shows no trace of Open WebUI when an installation has none** (#807): *Get started* ends at
+  connecting an app with a key, the feedback page has no import card, and *Add app* and *Check access* leave out Open
+  WebUI's options; texts that named it are worded to be true either way. `/bff/user` gains `openWebUi.enabled`.
+- **The Compose quick start installs without host hardening** (M-22 S2): the firewall, the ingestion slice and the
+  fixed subnets are its step 7, for a production host (`init-deployment.sh --hardened`).
+- **`chat."Messages"."ParentMessageId"` is dropped** (#792): nothing wrote or read it. Migration `DropMessageParentId`;
+  **Rolling update: no** (the previous rag-api and rag-admin map the column), which `rag-migrate` handles itself on
+  one slot.
+- **The install and upgrade guides were checked line by line against the scripts, the stack files and the releases**,
+  and corrected. What an operator would have tripped on: Docker Compose must be 2.33.1 or later (the guides said 2.24;
+  the Compose files use `gw_priority`); an upgrade with Portainer over several releases takes each release's own
+  `compose.portainer.yaml` in turn (the `v0.6.0` file for 0.5.x to 0.6.0, then the `v0.7.0` file), which
+  `docs/portainer.md` now says at each step; the single-slot procedure says to stop the old services first for a
+  release marked *Rolling update: no*; the 0.6.0 stack pins the gateway's `v0.10.3`, not `v0.10.2`. The release bundle
+  now carries the Portainer, Kubernetes, Keycloak, network and security-event pages and `deploy/keycloak/`, which its
+  guides link to.
+- **`LICENSES.md` has a LibreOffice section** (#793), and the written offer covers the MPL, EPL and CPL components; each
+  entry was checked against Debian's copyright file at the image's version.
+- **Tests:** the request body limits per route on real Kestrel, the cron behaviour over the daylight-saving changes,
+  LibreOffice's shipped link and macro defaults and that no linked local file reaches a conversion's output, and a
+  browser spec for Open WebUI against rag-api (`tests/e2e`, project `openwebui`, run by hand).
+- **Release notes are files** (`changes/`): a pull request adds `changes/<branch>.md` instead of appending to
+  *Unreleased*, so two pull requests no longer conflict there; `scripts/unreleased.py` checks the notes and folds them
+  in at a release. **CI:** the backend job also skips changes only to the parser, the renderer image, `infra/`, the
+  other workflows and the scripts it does not run.
+
+### Fixed
+
+- **A failed query embedding says why in the log** (#781): every failed call logs a warning with the profile, the
+  `degraded` reason and what happened (a time-out, the gateway's status, an unexpected answer), never the query. Before,
+  a time-out left nothing in the log while the search went keyword-only. The test hosts of rag-api get generous
+  embedding limits, as the service hosts have since #584: a first call on a busy runner passed the 2 s default and
+  turned an expected answer into "search unavailable" (it failed the first attempt of the 0.7.0 release run).
+- **The admin refuses a schedule the scheduler would not run** (to-verify 16): a source's schedule and
+  `Settings.DefaultSchedules` are parsed with the scheduler's own parser (Cronos, 5 fields). Before, an expression with
+  five tokens that does not parse (`60 2 * * *`) was saved and the source then never ran, without a word.
+- **A chat request over 2 MB answers 413 `request_too_large` in the OpenAI error shape** (to-verify 32; chat design
+  §3.6), not the host's own error format.
+- **`restore-pitr.sh` stops the second slots too** (`rag-api-b`, `rag-admin-b` with `--rolling`): before, they kept
+  running through a restore.
+- **Include, exclude and demote globs ignore a leading `http://` or `https://`** (#802): a pattern pasted from the
+  browser matched nothing, the start addresses included, and the run failed with nothing fetched. The include hint
+  says how to cover a section (the page itself and `/**`).
+- **A worker stopping after its dispatcher was disposed** no longer throws (#805): seen as a failed test teardown.
+
+### Security
+
 - **Security updates of the .NET and Postgres images** (#818, from the first image scan): the services build on
   `aspnet:10.0.15` (ASP.NET Core runtime advisories GHSA-67wp-ghc2-fw2g, GHSA-wr8v-9x5q-ggcm, GHSA-x33c-w48q-qrgc) with
   the Microsoft packages at 10.0.15, the gateway's pins; `ume-rag/postgres` builds on a newer build of the same
   pgvector image (PostgreSQL 17.12). **Rolling update: yes**; Postgres restarts once (a minor update, same data
   directory).
-- **`chat."Messages"."ParentMessageId"` is dropped** (#792): nothing wrote or read it. Migration `DropMessageParentId`;
-  **Rolling update: no** (the previous rag-api and rag-admin map the column), which `rag-migrate` handles itself on
-  one slot.
+- **Security updates of the ClamAV and renderer images** (#818): ClamAV on its base's rebuild of 2026-11-16, and the
+  renderer upgrades its Ubuntu packages and no longer ships npm and yarn (High or Critical with a fix: ClamAV 4 → 0,
+  renderer 8 → 0).
+- **Security update of the parser image** (#818): Python 3.12.16, a Debian snapshot of 2026-11-09, and the base's own
+  packages upgraded from it (Critical with a fix: 2 → 0).
+- **The image scan takes dated exceptions** (#818): `scripts/audit/image-scan-exceptions.txt` lists a finding by id,
+  image and package with a last day. The first are the High findings in the FFmpeg bundled in the parser's
+  `opencv-python-headless` wheel: Docling's TableFormer needs `cv2` only to resize images and never reaches FFmpeg, and
+  PyPI has no newer 4.x wheel. They apply until 2026-12-17. `audit.py grype` now reads the scan's reports.
+- **The admin UI's production npm audit takes dated exceptions, only for a package the bundle doesn't contain**
+  (#853): `scripts/audit/npm-production-exceptions.txt` lists an advisory by id and package with a last day, and
+  `audit.py npm-production` fails when an excepted package appears in the bundle, as listed by a build with source maps.
+  The first is picomatch's ReDoS (GHSA-fc5q-39xc-vjpf, no fixed version), which vue-router declares for its build-time
+  plugin. It applies until 2026-12-18.
 
 ## 0.7.0 (2026-11-16)
 

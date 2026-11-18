@@ -8,7 +8,7 @@ Until the first production deployment releases may break compatibility (Decision
 production"), so check the answer every time; from then on migrations are expand/contract only and "no" is the
 exception.
 
-**A "no" release needs no manual stop on one slot.** From the release after 0.7.0, `rag-migrate` itself keeps the
+**A "no" release needs no manual stop on one slot.** From 0.8.0, `rag-migrate` itself keeps the
 services a migration can't run beside out of the database until their new version starts: its log says *Migration …
 stops the services of role …*, the old container answers errors for the seconds until it is replaced, and the new one
 gets its access back when it starts. With two slots or on Kubernetes, stop or scale down those services first, as
@@ -21,6 +21,17 @@ A pull request does not edit *Unreleased* below: it adds `changes/<branch>.upgra
 and the release preparation folds the notes in here and writes the release's *Rolling update* line.
 
 ## Unreleased
+
+## 0.8.0
+
+- **Rolling update: no** (the migration `DropMessageParentId`, below); on one slot nothing to do, `rag-migrate` stops
+  the previous rag-api and rag-admin itself. The migration `ContinueRuns` only adds. From 0.5.x or 0.6.0 too, in one
+  update (Portainer: [portainer.md](portainer.md), *Upgrade*).
+- **Before the update:** back up as always, and check the escrow with the release you run now
+  (`escrow-keys.sh --verify`). A Compose installation made with the files of 0.7.0 or earlier is installed again (*Compose: no in-place upgrade*,
+  below).
+- **After the update:** escrow the keys again with the new `escrow-keys.sh` and verify the new set (*Escrow the keys
+  again*, below); read the end of `rag-bootstrap`'s log.
 
 - **Rolling update: no.** Migration `DropMessageParentId` drops `chat."Messages"."ParentMessageId"` (never written or
   read, #792), which the previous rag-api and rag-admin still map. On one slot (Compose, Portainer) there is nothing
@@ -71,6 +82,11 @@ and the release preparation folds the notes in here and writes the release's *Ro
   (`.pepper`, `postgres/`, `keys/`) and the `rag-certs` volume (`data-protection.pfx`), owned as `rag-bootstrap` leaves
   them; `up` then runs `rag-bootstrap`, which keeps them and copies them to each service. **This carry-over
   is written from how `rag-bootstrap` treats existing files and has not been run**: try it on a copy first.
+- **Escrow the keys again** after the update, with the new `deploy/escrow-keys.sh` (Portainer: `--project <stack>`,
+  from the release bundle), then `--verify` it. The new set also holds the pepper, the database roles' passwords, the
+  conversation id keys, the Data Protection certificate and the internal CA, in a new layout (`rag-secrets/…`,
+  `rag-certs/…`). `--verify` fails on a set made by an earlier release, so keep the old set until the new one prints
+  `PASS`. The pepper and certificate copies kept separately until now are in the set, and can go once it is sealed.
 
 ## 0.7.0
 
