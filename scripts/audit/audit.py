@@ -311,6 +311,8 @@ def main(argv: list[str]) -> int:
         append(args.summary, ["### npm audit, all dependencies", "", message])
         sys.exit(message)
     allowed = read_exceptions(args.exceptions)
+    # A production exception is taken here by its id alone, without the bundle check: run npm-production beside this
+    # check (both workflows do), or a production exception for a bundled package passes here unnoticed.
     for (ghsa, _), until in read_production_exceptions(args.production_exceptions).items():
         allowed[ghsa] = max(until, allowed.get(ghsa, until))
     advisories = npm(report, allowed, args.today)
