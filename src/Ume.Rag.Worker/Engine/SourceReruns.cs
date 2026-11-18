@@ -56,13 +56,16 @@ public sealed class SourceReruns(
     // What a continue run takes over from the run it continues (#804): that run's rows still open, and its rows whose latest
     // item failed (a failed fetch completes its row idle). Rows a later run admitted carry that run's id and are not taken.
     private const string CarriedSql = """
+        WITH last AS (
+            SELECT DISTINCT ON (i."Identity") i."Identity", i."Outcome"
+            FROM content."RunItems" i
+            WHERE i."RunId" = $3 AND i."Outcome" <> 'superseded'
+            ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC)
         SELECT f."Url", f."FetchUrl", f."Host", f."Depth", f."Leaf", f."RemovalCheck", f."SitemapLastMod", f."State" <> 'idle'
         FROM content."CrawlFrontier" f
+        LEFT JOIN last ON last."Identity" = f."Url"
         WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3
-          AND (f."State" <> 'idle' OR (
-              SELECT i."Outcome" FROM content."RunItems" i
-              WHERE i."RunId" = $3 AND i."Identity" = f."Url" AND i."Outcome" <> 'superseded'
-              ORDER BY i."CreatedAt" DESC, i."Id" DESC LIMIT 1) = 'failed')
+          AND (f."State" <> 'idle' OR last."Outcome" = 'failed')
         ORDER BY f."Depth", f."Url"
         """;
 

@@ -449,7 +449,8 @@ jobs:
   admin-ui:
     # The admin UI (repo-and-deployment §2.3, §8.2; admin design §10.2), as the gateway's "Verify UI" step: npm ci from
     # the lock only (src/admin-ui/.npmrc: ignore-scripts, min-release-age, allow-git=none; never npm install), npm audit
-    # failing on any advisory (dated, dev-only exceptions in scripts/audit/), lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
+    # failing on any advisory (dated exceptions in scripts/audit/: dev-only ones, and production ones only for a package
+    # the bundle doesn't contain), lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
     # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
     needs: changes
     if: needs.changes.outputs.adminui == 'true'
@@ -467,12 +468,12 @@ jobs:
       - name: Install from the lock
         run: npm ci
       - name: Audit dependencies
-        # Production dependencies: any advisory fails. All dependencies: any advisory fails, except the dated, dev-only
-        # exceptions in scripts/audit/npm-audit-exceptions.txt (e.g. lint toolchain fixes not yet 7 days old; issue
-        # #61). An exception stops applying after its date, so the job turns red again unless the fix has landed. The
-        # same check runs daily against main in audit.yml.
+        # All dependencies: any advisory fails, except the dated exceptions in scripts/audit/: dev-only ones
+        # (npm-audit-exceptions.txt, e.g. lint toolchain fixes not yet 7 days old; issue #61) and the production ones
+        # below. The production report is checked after the build. An exception stops applying after its date, so the
+        # job turns red again unless the fix has landed. The same checks run daily against main in audit.yml.
         run: |
-          npm audit --omit=dev --audit-level=low
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-production.json" || true
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
           python3 -I ../../scripts/audit/audit.py npm "$RUNNER_TEMP/audit.json"
       - name: Lint, typecheck, test and build
@@ -482,6 +483,13 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+      - name: Audit production dependencies against the bundle
+        # Any advisory fails, except a dated exception in scripts/audit/npm-production-exceptions.txt for a package the
+        # bundle doesn't contain (#853): a second build with source maps lists the bundle's packages.
+        run: |
+          npx vite build --sourcemap hidden --outDir "$RUNNER_TEMP/bundle-modules" --emptyOutDir --logLevel warn
+          python3 -I ../../scripts/audit/audit.py npm-production "$RUNNER_TEMP/audit-production.json" \
+            --modules "$RUNNER_TEMP/bundle-modules"
       - name: Size budget
         # Initial JS (shell + Översikt) <= 200 kB gzip, each lazy route <= 100 kB gzip (admin design §10.2).
         run: node ../../scripts/admin-ui-size-budget.mjs dist --landing OverviewView --initial-kb 200 --lazy-kb 100
