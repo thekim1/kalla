@@ -1,0 +1,9 @@
+# Dated npm audit exceptions for the production dependencies of src/admin-ui, read by scripts/audit/audit.py
+# (npm-production) in verify.yml (admin-ui) and audit.yml. Only for an advisory with no fixed version, against a package
+# the built bundle does not contain: the check reads the bundle's packages from its source maps and fails when an
+# excepted package is in it. A current exception here applies to the all-dependencies audit too.
+# One line per exception: <GHSA id> <package> <last day, YYYY-MM-DD> <reason>. After its last day it no longer applies.
+
+# #853: picomatch ReDoS, no patched version (4.0.7 is the newest). vue-router declares it for its build-time file
+# routing plugin (vue-router/vite, unplugin), which the admin UI doesn't use; the bundle holds vue-router's runtime only.
+GHSA-fc5q-39xc-vjpf picomatch 2026-12-18 #853 vue-router's build-time plugin only, not in the bundle

@@ -4,8 +4,9 @@ name: Audit
 # until the next such pull request; this workflow runs the same checks every morning and from the Actions tab
 # (workflow_dispatch). No push or pull request trigger. The checks are shared, not copied: scripts/audit/audit.py reads
 # the .NET and npm reports in both places, and the parser job repeats parser.yml's two pip-audit commands (pip-audit
-# itself decides; there is nothing to extract). The npm exceptions (dated, dev-only) live in
-# scripts/audit/npm-audit-exceptions.txt, the image scan's (dated, for code the image cannot reach) in
+# itself decides; there is nothing to extract). The npm exceptions live in scripts/audit/npm-audit-exceptions.txt
+# (dated, dev-only) and npm-production-exceptions.txt (dated, only for a package the bundle doesn't contain), the image
+# scan's (dated, for code the image cannot reach) in
 # scripts/audit/image-scan-exceptions.txt; .NET and Python have none. Every job runs on the self-hosted runner (labels
 # self-hosted, linux, x64) and writes what it audited and what it found to the run summary. The images job scans the
 # last release's images for known vulnerabilities (Grype).
@@ -44,7 +45,8 @@ jobs:
 
   admin-ui:
     # As the admin-ui job in verify.yml: npm ci from the lock only (src/admin-ui/.npmrc: ignore-scripts,
-    # min-release-age, allow-git=none), then npm audit, production dependencies without exceptions first.
+    # min-release-age, allow-git=none), then npm audit: the production dependencies against the bundle's packages (a
+    # build with source maps; production exceptions only for a package the bundle doesn't contain), then all of them.
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 15
     defaults:
@@ -63,8 +65,12 @@ jobs:
         # Both checks run and are summarised; the step fails if either fails.
         run: |
           status=0
-          if npm audit --omit=dev --audit-level=low; then prod="no advisories"; else prod="advisories, see the log"; status=1; fi
-          { echo "### npm audit, production dependencies"; echo; echo "$prod"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-production.json" || true
+          npx vite build --sourcemap hidden --outDir "$RUNNER_TEMP/bundle-modules" --emptyOutDir --logLevel warn
+          if ! python3 -I ../../scripts/audit/audit.py npm-production "$RUNNER_TEMP/audit-production.json" \
+              --modules "$RUNNER_TEMP/bundle-modules" --summary "$GITHUB_STEP_SUMMARY"; then
+            status=1
+          fi
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
           if ! python3 -I ../../scripts/audit/audit.py npm "$RUNNER_TEMP/audit.json" --summary "$GITHUB_STEP_SUMMARY"; then
             status=1

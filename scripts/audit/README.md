@@ -22,7 +22,7 @@ uvx ruff@0.17.2 format --check --config scripts/audit/ruff.toml scripts/audit
 dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > /tmp/dotnet.json
 python3 -I scripts/audit/audit.py dotnet /tmp/dotnet.json
 
-cd src/admin-ui && npm ci && npm audit --omit=dev --audit-level=low && { npm audit --json > /tmp/npm.json || true; }
+cd src/admin-ui && npm ci && { npm audit --json > /tmp/npm.json || true; }
 python3 -I ../../scripts/audit/audit.py npm /tmp/npm.json
 ```
 
@@ -31,11 +31,25 @@ workflows pass `$GITHUB_STEP_SUMMARY`).
 
 ## npm exceptions
 
-`npm-audit-exceptions.txt` holds the dated exceptions, one line each: `<GHSA id> <last day, YYYY-MM-DD> <reason>`.
-They apply only to the all-dependencies audit, so only to dev-only advisories (production dependencies are audited
-first, with no exceptions), and only for a fix that can't land yet (issue #61: lint toolchain fixes younger than 7
-days). After its last day an exception no longer applies and both workflows turn red until the fix lands. A malformed
-line fails the check. .NET and Python have no exceptions.
+`npm-audit-exceptions.txt` holds the dated exceptions for the all-dependencies audit, one line each: `<GHSA id> <last
+day, YYYY-MM-DD> <reason>`. Only for dev-only advisories whose fix can't land yet (issue #61: lint toolchain fixes
+younger than 7 days). After its last day an exception no longer applies and both workflows turn red until the fix
+lands. A malformed line fails the check.
+
+`npm-production-exceptions.txt` holds the production audit's, one line each: `<GHSA id> <package> <last day,
+YYYY-MM-DD> <reason>`. Only for an advisory with no fixed version, against a package the built bundle doesn't contain
+(#853: picomatch, which vue-router declares for its build-time plugin). `audit.py npm-production` reads the bundle's
+packages from the source maps of a second build (`vite build --sourcemap hidden --outDir …`), and fails when an
+excepted package is in it, or when there are no source maps. An expired exception, and one that matched no advisory,
+are workflow warnings. A current production exception also applies to the all-dependencies audit. .NET and Python
+have no exceptions.
+
+```bash
+cd src/admin-ui && npm ci
+npm audit --omit=dev --json > /tmp/prod.json || true
+npx vite build --sourcemap hidden --outDir /tmp/bundle-modules --emptyOutDir
+python3 -I ../../scripts/audit/audit.py npm-production /tmp/prod.json --modules /tmp/bundle-modules
+```
 
 ## Image scan exceptions
 
