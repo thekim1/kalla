@@ -190,7 +190,7 @@ metadata (no index, would break the rule that every filter runs on an index).
         "id": "0192…", "title": "Altan och uteplats", "display_name": null,
         "url": "https://www.umea.se/bygga/bygglov/altan", "download_url": null,
         "source_type": "web", "document_type": "page", "media_type": "text/html",
-        "modified": "2026-09-14T00:00:00Z", "language": "sv"
+        "modified": "2026-09-14T00:00:00Z", "checked": "2026-11-12T02:14:07Z", "language": "sv"
       }
     }
   ],
