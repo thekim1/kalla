@@ -6,7 +6,7 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
-## 0.8.0 (2026-11-18)
+## 0.8.0 (2026-11-19)
 
 An upgrade is one step and a restore needs one escrow set (M-22): `rag-migrate` stops what a migration can't run
 beside, an upgrade may skip releases, and Compose, Portainer and Kubernetes share one service file and one bootstrap.
