@@ -112,7 +112,7 @@ public static partial class KnowledgeEndpoints
 
         var c = CitationResponse.From(info.Citation, link);
         return TypedResults.Ok(new DocumentResponse(c.Id, c.Title, c.DisplayName, c.Url, c.DownloadUrl, c.SourceType, c.DocumentType, c.MediaType,
-            c.Modified, c.Language, info.PageCount, info.CollectionSlug));
+            c.Modified, c.Checked, c.Language, info.PageCount, info.CollectionSlug));
     }
 
     private static async Task<IResult> ContentAsync(string id, HttpContext http, KnowledgeCallers callers, KnowledgeService knowledge,

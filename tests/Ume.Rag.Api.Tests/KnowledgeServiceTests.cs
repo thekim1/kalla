@@ -56,6 +56,9 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public Guid UploadSlot { get; } = Guid.CreateVersion7();
     public static readonly byte[] UploadHash = Convert.FromHexString("ab" + new string('0', 62));
     public static readonly byte[] UploadBytes = "%PDF-1.7 taxa"u8.ToArray();
+    /// <summary>The crawl that last confirmed Altan, and the upload time of Taxa (knowledge §10.1).</summary>
+    public static readonly DateTimeOffset AltanChecked = new(2026, 11, 18, 4, 30, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset UploadedAt = new(2026, 2, 3, 9, 0, 0, TimeSpan.Zero);
     public const string KeyPepper = "knowledge-api-test-pepper-0123456789abcdef";
     public const string GrantKey = "knowledge-api-test-grant-key-0123456789abc";
     public string BlobRoot { get; } = Directory.CreateTempSubdirectory("ume-rag-api-blobs-").FullName;
@@ -90,11 +93,13 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, Title = "Altan och uteplats",
             Url = "https://www.umea.se/bygga/altan", MediaType = "text/html", Language = "sv", SourceModifiedAt = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero),
+            FetchedAt = AltanChecked,
         }, [new FixtureChunk("Du behöver bygglov för att bygga en altan som är högre än 1,2 meter.") { HeadingPath = "Bygglov › Altan", Tags = ["altan"] }]);
         Upload = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, IdentityKind = "upload",
             CanonicalIdentity = "upload:" + UploadSlot, Title = "Taxa 2026", DisplayName = "Bygglov/Taxor/taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
+            FetchedAt = UploadedAt,
         }, [new FixtureChunk("Avgiften för bygglov för en altan beräknas enligt taxan för 2026.")]);
         await writer.ExecuteAsync($"""UPDATE content."Documents" SET "ContentHash" = '\x{Convert.ToHexString(UploadHash)}' WHERE "Id" = '{Upload.Id}'""");
         var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = BlobRoot }), TimeProvider.System);
@@ -528,10 +533,12 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         altan.Scores.VectorRank.ShouldNotBeNull();
         altan.Scores.KeywordRank.ShouldNotBeNull();
         altan.Citation.ShouldBe(new Citation(db.Altan.Id, "Altan och uteplats", null, "https://www.umea.se/bygga/altan", null, "web", altan.Citation.DocumentType,
-            "text/html", "sv", new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)));
+            "text/html", "sv", new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero), KnowledgeFixture.AltanChecked));
         var upload = result.Results.Single(r => r.DocumentId == db.Upload.Id).Citation;
         // A folder upload's display name is its relative path (admin design §4.5); the title is the file name.
         (upload.Title, upload.DisplayName, upload.Url, upload.SourceType).ShouldBe(("taxa-bygglov-2026.pdf", "Bygglov/Taxor/taxa-bygglov-2026.pdf", null, "file"));
+        // §10.1 (Decisions "Source dates on citations"): a file that states no date is modified at its upload time and never checked.
+        (upload.Modified, upload.Checked).ShouldBe((KnowledgeFixture.UploadedAt, (DateTimeOffset?)null));
 
         service.MarkCited(result, [altan.Rank]);
         (await counter.FlushAsync(Ct)).ShouldBeGreaterThan(0);

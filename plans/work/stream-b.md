@@ -11,14 +11,14 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [ ] B-47 Source dates on every citation and related document (F4, #857)
+### [x] B-47 Source dates on every citation and related document (F4, #857)
 - **Do:** knowledge §10.1: `Citation.Modified` loses the `FetchedAt` fallback for `url` documents (it stays the upload
   time for `upload`), and `Citation` gets `Checked` (`Documents.FetchedAt` for `web`, null for `file`; the hydrator
   already reads `FetchedAt`), in the Knowledge API's `document` JSON as `checked`. `Citations.Label` takes the turn's
   language and writes the dates as knowledge §10.4 says (`(2026-03-02, kontrollerad 2026-11-18)`,
   `(kontrollerad …)` without a stated date, `checked` in English), for both the Open WebUI `source` events and the
   `url_citation` titles. `RelatedDocument` gets `modified` and `checked` (chat §9.7; ISO 8601 UTC, omitted when
-  null). The admin test panel shows what the label shows.
+  null).
 - **Paths:** `src/Ume.Rag.Domain/Retrieval/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Answering/**`,
   `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**` (only where it builds citations), `tests/**` (not
   `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).

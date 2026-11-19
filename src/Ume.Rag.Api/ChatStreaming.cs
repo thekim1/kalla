@@ -141,7 +141,7 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
             switch (piece)
             {
                 case AnswerPiece.FirstCitation first when openWebUi:
-                    await WriteAsync(response, SourceEvent(first.Source), ct);
+                    await WriteAsync(response, SourceEvent(first.Source, Plan.Language), ct);
                     break;
                 case AnswerPiece.Text text when text.Content.Length > 0 || text.Annotations.Count > 0:
                     if (openWebUi || text.Annotations.Count == 0)
@@ -167,10 +167,10 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
     }
 
     /// <summary>The Open WebUI <c>source</c> event of one document (§9.3): link and label; the first chunk's text as the snippet.</summary>
-    private static object SourceEvent(PromptSource source)
+    private static object SourceEvent(PromptSource source, string language)
     {
         var link = Citations.Link(source);
-        var label = Citations.Label(source);
+        var label = Citations.Label(source, language);
         var first = source.Chunks[0];
         var text = first.Text.Length > 1000 ? first.Text[..1000] : first.Text;
         return new

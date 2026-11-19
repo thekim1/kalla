@@ -31,13 +31,13 @@ public sealed record RetrieveResult(
 
 public sealed record ScoresResponse(double? Fused, double? VectorDistance, int? VectorRank, double? KeywordScore, int? KeywordRank);
 
-/// <summary>A citation (§10.1).</summary>
+/// <summary>A citation (§10.1): <c>modified</c> by the source's own date, <c>checked</c> the last crawl that confirmed a crawled page.</summary>
 public sealed record CitationResponse(
     Guid Id, string Title, string? DisplayName, string? Url, string? DownloadUrl, string SourceType, string? DocumentType, string? MediaType,
-    DateTimeOffset? Modified, string? Language)
+    DateTimeOffset? Modified, DateTimeOffset? Checked, string? Language)
 {
     public static CitationResponse From(Citation c, string? downloadUrl = null) =>
-        new(c.Id, c.Title, c.DisplayName, c.Url, downloadUrl ?? c.DownloadUrl, c.SourceType, c.DocumentType, c.MediaType, c.Modified, c.Language);
+        new(c.Id, c.Title, c.DisplayName, c.Url, downloadUrl ?? c.DownloadUrl, c.SourceType, c.DocumentType, c.MediaType, c.Modified, c.Checked, c.Language);
 }
 
 public sealed record SectionResponse(
@@ -53,4 +53,4 @@ public sealed record CollectionResponse(string Slug, string Name, string Classif
 /// <summary><c>GET /v1/documents/{id}</c> (§3.4): the citation plus the page count.</summary>
 public sealed record DocumentResponse(
     Guid Id, string Title, string? DisplayName, string? Url, string? DownloadUrl, string SourceType, string? DocumentType, string? MediaType,
-    DateTimeOffset? Modified, string? Language, int? PageCount, string Collection);
+    DateTimeOffset? Modified, DateTimeOffset? Checked, string? Language, int? PageCount, string Collection);

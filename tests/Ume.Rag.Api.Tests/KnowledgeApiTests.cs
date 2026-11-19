@@ -144,6 +144,10 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
         altan["document"]!["download_url"].ShouldBeNull();
         var upload = results.Single(r => r!["document"]!["id"]!.GetValue<Guid>() == db.Upload.Id)!;
         upload["document"]!["download_url"]!.GetValue<string>().ShouldStartWith($"/v1/documents/{db.Upload.Id}/content?grant=g1.k1.");
+        // Knowledge §10.1 (Decisions "Source dates on citations"): a crawled page is checked; an upload is modified at its upload time, never checked.
+        altan["document"]!["checked"]!.GetValue<DateTimeOffset>().ShouldBe(KnowledgeFixture.AltanChecked);
+        upload["document"]!["modified"]!.GetValue<DateTimeOffset>().ShouldBe(KnowledgeFixture.UploadedAt);
+        upload["document"]!["checked"].ShouldBeNull();
     }
 
     [Fact]

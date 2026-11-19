@@ -61,12 +61,14 @@ public sealed record RetrievalTimings(double PolicyMs, double KeywordMs, double 
 /// <summary>
 /// A citation (knowledge design §10.1, JSON <c>document</c>). <c>SourceType</c>: <c>web</c> (<c>url</c>), <c>file</c>
 /// (<c>upload</c>), <c>sharepoint</c> (P2). <c>DownloadUrl</c>: the grant link of a document without a public URL (§4.6),
-/// null for <c>url</c> documents. <c>Modified</c>: the chunk's <c>SourceModifiedAt</c>, else the document's, else
-/// <c>FetchedAt</c>.
+/// null for <c>url</c> documents. <c>Modified</c>: when the source last changed by its own date, the chunk's
+/// <c>SourceModifiedAt</c>, else the document's, else for an upload its upload time (<c>FetchedAt</c>); null for a crawled
+/// page that states no date. <c>Checked</c>: a crawled page's <c>FetchedAt</c>, the last crawl run that confirmed it; null
+/// for an upload (Decisions "Source dates on citations").
 /// </summary>
 public sealed record Citation(
     Guid Id, string Title, string? DisplayName, string? Url, string? DownloadUrl, string SourceType, string? DocumentType, string? MediaType,
-    string? Language, DateTimeOffset? Modified);
+    string? Language, DateTimeOffset? Modified, DateTimeOffset? Checked = null);
 
 /// <summary>One result (knowledge design §2.2): the chunk text without its heading prefix, scores and citation.</summary>
 public sealed record RetrievedChunk(
