@@ -955,7 +955,7 @@ clients render it as ordinary text. Counted in `AssistantDailyTotals.NotFound`. 
 | Case | First content | Then |
 |---|---|---|
 | keyword results present | caveat line (`Settings.Chat.Prompts.caveats.degraded`, defaults as here, V38): sv "*Sökningen fungerar just nu med begränsad precision; svaret bygger på en enklare textsökning.*", en "*Search is running with reduced precision right now; this answer is based on a simpler text search.*" | the model's answer with citations |
-| no results | sv "Sökningen är tillfälligt otillgänglig. Försök igen om en stund.", en "Search is temporarily unavailable. Please try again shortly." (+ the assistant's contact links) | nothing; `Outcome = unavailable` |
+| no results | sv "Sökningen är tillfälligt otillgänglig. Försök igen om en stund.", en "Search is temporarily unavailable. Please try again shortly." (+ the contact links, as §10.1 and §10.4: `NotFound.links`, else those of `Settings.Chat`) | nothing; `Outcome = unavailable` |
 
 The caveat is written **after** the §8.2 checks (no byte before them), as the first content chunk.
 
