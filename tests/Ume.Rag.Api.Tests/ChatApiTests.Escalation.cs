@@ -99,10 +99,10 @@ public sealed partial class ChatApiTests
     /// </summary>
     private WebApplicationFactory<Program> EscalationHost(ConcurrentQueue<GatewayCall> calls, FakeTimeProvider time, CapturingLoggerProvider logs,
         EscalationFault fault = EscalationFault.None, string? output = null, string? notFound = HelpLinks, string generalKnowledge = "off",
-        string chatSettings = "", bool condenseModel = true, params (string Key, string Value)[] settings)
+        string chatSettings = "", bool condenseModel = true, string embeddingModel = "bge-m3", params (string Key, string Value)[] settings)
     {
         var platform = condenseModel ? $$"""{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"{{chatSettings}}}""" : "{}";
-        var snapshot = Snapshot() with { ChatSettings = platform };
+        var snapshot = Snapshot(embeddingModel) with { ChatSettings = platform };
         snapshot = WithAssistant(snapshot, a => a with
         {
             Published = a.Published! with { QuerySteps = "{\"answer\":{\"generalKnowledge\":\"" + generalKnowledge + "\"}}", NotFound = notFound ?? "" },
@@ -282,6 +282,36 @@ public sealed partial class ChatApiTests
             using var client = Client(api, db.IntegrationKey);
             var (_, ume) = await UmeAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
             Contacts(ume.GetProperty("escalation")).ShouldBeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task An_unavailable_turn_ends_with_the_same_links_as_its_contacts_the_assistants_else_the_platforms()
+    {
+        // The embedding answer is discarded (residency above the profile's ceiling): keyword only; a question no keyword matches
+        // has no results, so the turn is unavailable (§10.2).
+        const string question = "Kvantgravitation xyzzy plutonium?";
+        const string platformLinks = ""","notFound":{"links":[{"title":"Kontaktcenter","url":"https://www.umea.se/kontakt"}]}""";
+        var calls = new ConcurrentQueue<GatewayCall>();
+        using var logs = new CapturingLoggerProvider();
+        (string? NotFound, string Title, string Url)[] cases =
+        [
+            ("""{"sv":"Inget svar."}""", "Kontaktcenter", "https://www.umea.se/kontakt"), // no links of its own: the platform's
+            (HelpLinks, "IT-support, 090-16 10 00", "https://www.umea.se/it"), // its own links win
+        ];
+        foreach (var (notFound, title, url) in cases)
+        {
+            await using var api = EscalationHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, notFound: notFound,
+                chatSettings: platformLinks, embeddingModel: "fake-wrong-residency-embed");
+            using var client = Client(api, db.IntegrationKey);
+
+            var (body, ume) = await UmeAnswerAsync(await AskUme(client, question, """{"escalation":true}"""));
+            ume.GetProperty("outcome").GetString().ShouldBe("unavailable");
+            var escalation = ume.GetProperty("escalation");
+            escalation.GetProperty("reason").GetString().ShouldBe("unavailable");
+            Contacts(escalation).ShouldBe([(title, url)]);
+            body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+                .ShouldBe(FixedTexts.UnavailableSv + $"\n\n- [{title}]({url})");
         }
     }
 
