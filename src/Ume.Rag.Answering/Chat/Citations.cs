@@ -17,7 +17,7 @@ public sealed record CitedAnswer(string Content, IReadOnlyList<UrlCitation> Anno
 /// </summary>
 public static partial class Citations
 {
-    public static CitedAnswer Apply(string text, IReadOnlyList<PromptSource> sources)
+    public static CitedAnswer Apply(string text, IReadOnlyList<PromptSource> sources, string language = LanguageGuess.Swedish)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(sources);
@@ -55,7 +55,7 @@ public static partial class Citations
                 var start = output.Length;
                 output.Append(CultureInfo.InvariantCulture, $"[{shown}]");
                 var source = byNumber[n];
-                annotations.Add(new UrlCitation(Link(source), Label(source), start, output.Length));
+                annotations.Add(new UrlCitation(Link(source), Label(source, language), start, output.Length));
             }
         }
 
@@ -72,8 +72,12 @@ public static partial class Citations
         return source.Citation.MediaType == "application/pdf" && page is not null && link.Length > 0 ? $"{link}#page={page}" : link;
     }
 
-    /// <summary>The label (knowledge §10.4): title, the heading path's last part, pages, modified date.</summary>
-    public static string Label(PromptSource source)
+    /// <summary>
+    /// The label (knowledge §10.4): title, the heading path's last part, pages, then the dates in brackets: <c>modified</c>, and
+    /// for a crawled page <c>checked</c> with the word in the turn's <paramref name="language"/> ("(2026-03-02, kontrollerad
+    /// 2026-11-18)"). Dates are UTC days.
+    /// </summary>
+    public static string Label(PromptSource source, string language = LanguageGuess.Swedish)
     {
         ArgumentNullException.ThrowIfNull(source);
         var first = source.Chunks[0];
@@ -90,8 +94,21 @@ public static partial class Citations
         }
 
         var label = string.Join(", ", parts);
-        return source.Citation.Modified is { } modified ? $"{label} ({modified.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)})" : label;
+        var dates = new List<string>(2);
+        if (source.Citation.Modified is { } modified)
+        {
+            dates.Add(Day(modified));
+        }
+
+        if (source.Citation.Checked is { } checkedAt)
+        {
+            dates.Add((language == LanguageGuess.English ? "checked " : "kontrollerad ") + Day(checkedAt));
+        }
+
+        return dates.Count > 0 ? $"{label} ({string.Join(", ", dates)})" : label;
     }
+
+    private static string Day(DateTimeOffset at) => at.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     [GeneratedRegex(@"\[(?:(?:Källa|Source)\s+)?\d+(?:\s*,\s*\d+)*\](?:\[\d+(?:\s*,\s*\d+)*\])*", RegexOptions.CultureInvariant)]
     private static partial Regex Marker();

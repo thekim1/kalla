@@ -18,7 +18,7 @@ data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completio
 
 data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"\u0026lt;source n=\u00221\u0022 title=\u0022Altan och uteplats\u0022 path=\u0022Bygglov \u203A Altan\u0022 modified=\u00222026-01-\u2026\u0022. Se "}}]}
 
-data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"[1].","annotations":[{"type":"url_citation","url_citation":{"url":"https://www.umea.se/bygga/altan","title":"Altan och uteplats \u2013 Altan (2026-01-15)","start_index":322,"end_index":325}}]}}]}
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"[1].","annotations":[{"type":"url_citation","url_citation":{"url":"https://www.umea.se/bygga/altan","title":"Altan och uteplats \u2013 Altan (2026-01-15, kontrollerad 2026-11-18)","start_index":322,"end_index":325}}]}}]}
 
 data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 

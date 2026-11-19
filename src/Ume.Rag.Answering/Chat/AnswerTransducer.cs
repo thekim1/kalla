@@ -30,11 +30,15 @@ public sealed partial class AnswerTransducer
     private readonly List<PromptSource> _cited = [];
     private readonly HashSet<string> _allowedHosts;
     private readonly StringBuilder _held = new();
+    private readonly string _language;
     private int _delivered;
     private char _lastDelivered;
 
-    public AnswerTransducer(IReadOnlyList<PromptSource> sources, IEnumerable<string> allowedLinkHosts)
+    /// <summary>A transducer over <paramref name="sources"/>, allowing links to <paramref name="allowedLinkHosts"/> and the cited
+    /// documents' own hosts; the citation labels' dates are worded in <paramref name="language"/> (knowledge §10.4).</summary>
+    public AnswerTransducer(IReadOnlyList<PromptSource> sources, IEnumerable<string> allowedLinkHosts, string language = LanguageGuess.Swedish)
     {
+        _language = language;
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(allowedLinkHosts);
         _byNumber = sources.ToDictionary(s => s.Number);
@@ -236,7 +240,7 @@ public sealed partial class AnswerTransducer
 
                 var start = _delivered + output.Length;
                 output.Append(CultureInfo.InvariantCulture, $"[{shown}]");
-                annotations.Add(new UrlCitation(Citations.Link(_byNumber[n]), Citations.Label(_byNumber[n]), start, _delivered + output.Length));
+                annotations.Add(new UrlCitation(Citations.Link(_byNumber[n]), Citations.Label(_byNumber[n], _language), start, _delivered + output.Length));
             }
         }
 

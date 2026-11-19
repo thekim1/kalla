@@ -162,6 +162,49 @@ public sealed class RelatedDocumentsTests
     [Fact]
     public void A_conversational_turn_has_no_retrieval_and_lists_nothing() => RelatedDocuments.For(ChatOutcome.Answered, null, [], 10).ShouldBeEmpty();
 
+    private static readonly DateTimeOffset Stated = new(2026, 3, 2, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Crawled = new(2026, 11, 18, 23, 30, 0, TimeSpan.FromHours(1));
+
+    private static PromptSource Dated(string sourceType, DateTimeOffset? modified, DateTimeOffset? checkedAt)
+    {
+        var chunk = Chunk(1, Altan, "Altan", url: sourceType == "web" ? "https://www.umea.se/bygga/altan" : null,
+            grant: sourceType == "file" ? "https://rag-api.umea.local/v1/documents/a/content?grant=g1" : null);
+        chunk = chunk with { Citation = chunk.Citation with { Modified = modified, Checked = checkedAt } };
+        return new PromptSource(1, chunk.Citation, [chunk]);
+    }
+
+    [Theory]
+    // Knowledge §10.4, Decisions "Source dates on citations": the stated date, then when a crawl last confirmed the page, in
+    // the turn's language; the dates are UTC days (Crawled is 2026-11-18 22:30 UTC).
+    [InlineData("web", true, true, "sv", "Altan (2026-03-02, kontrollerad 2026-11-18)")]
+    [InlineData("web", false, true, "sv", "Altan (kontrollerad 2026-11-18)")]
+    [InlineData("web", true, true, "en", "Altan (2026-03-02, checked 2026-11-18)")]
+    [InlineData("file", true, false, "sv", "Altan (2026-03-02)")]
+    [InlineData("web", false, false, "sv", "Altan")]
+    public void The_label_shows_the_stated_date_and_the_last_check(string sourceType, bool stated, bool crawled, string language, string expected) =>
+        Citations.Label(Dated(sourceType, stated ? Stated : null, crawled ? Crawled : null), language).ShouldBe(expected);
+
+    [Fact]
+    public void Each_entry_carries_its_documents_dates_in_utc_and_leaves_out_the_missing_ones()
+    {
+        var retrieval = Result(
+            Dated("web", null, Crawled).Chunks[0],
+            Chunk(2, Taxa, "Taxa 2026", grant: "https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m") is var taxa
+                ? taxa with { Citation = taxa.Citation with { Modified = Stated } } : null!);
+        var list = RelatedDocuments.For(ChatOutcome.Answered, retrieval, [], 10);
+
+        (list[0].Modified, list[0].Checked).ShouldBe(((DateTimeOffset?)null, Crawled));
+        list[0].Checked!.Value.Offset.ShouldBe(TimeSpan.Zero);
+        (list[1].Modified, list[1].Checked).ShouldBe((Stated, (DateTimeOffset?)null));
+
+        var json = JsonSerializer.Serialize(list);
+        using var parsed = JsonDocument.Parse(json);
+        parsed.RootElement[0].TryGetProperty("modified", out _).ShouldBeFalse();
+        parsed.RootElement[0].GetProperty("checked").GetString().ShouldBe("2026-11-18T22:30:00+00:00");
+        parsed.RootElement[1].GetProperty("modified").GetString().ShouldBe("2026-03-02T00:00:00+00:00");
+        parsed.RootElement[1].TryGetProperty("checked", out _).ShouldBeFalse();
+    }
+
     [Fact]
     public void The_ume_member_names_are_fixed_and_absent_members_are_left_out()
     {

@@ -44,7 +44,7 @@ public sealed class ChatAnswer : IDisposable
         _gateway = gateway;
         _stream = stream;
         _complete = complete;
-        _transducer = plan.Fixed is null ? new AnswerTransducer(plan.Prompt!.Sources, plan.Platform.AllowedLinkHosts) : null;
+        _transducer = plan.Fixed is null ? new AnswerTransducer(plan.Prompt!.Sources, plan.Platform.AllowedLinkHosts, plan.Language) : null;
     }
 
     public ChatPlan Plan { get; }

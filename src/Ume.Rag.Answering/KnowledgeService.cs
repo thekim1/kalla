@@ -551,7 +551,10 @@ public sealed partial class KnowledgeService(
             a.PageEnd, a.ChunkIds, a.Truncated))]);
     }
 
-    /// <summary>§10.1, §10.2: the title rule per identity kind, the modified-date fallbacks, and the download link for uploads.</summary>
+    /// <summary>
+    /// §10.1, §10.2: the title rule per identity kind, the dates (<c>modified</c> by the source's own date, the upload time
+    /// for an upload; <c>checked</c> the last crawl that confirmed a crawled page), and the download link for uploads.
+    /// </summary>
     private Citation Cite(RagPrincipal? who, HydratedDocument document, string? documentType, DateTimeOffset? chunkModified, CollectionEntry collection,
         Guid? assistantId, string? level = null)
     {
@@ -560,8 +563,10 @@ public sealed partial class KnowledgeService(
         var title = (upload ? ContentHeaders.FileName(document.DisplayName) ?? document.Title : document.Title) is { Length: > 0 } t ? t : "Dokument utan titel";
         var sourceType = document.IdentityKind switch { "url" => "web", "upload" => "file", var other => other };
         var downloadUrl = document.IdentityKind == "url" || who is null ? null : links.For(who, document.Id, collection.Id, assistantId, level ?? collection.Classification);
-        return new Citation(document.Id, title, upload ? document.DisplayName : null, document.IdentityKind == "url" ? document.Url : null, downloadUrl,
-            sourceType, documentType, document.MediaType, document.Language, chunkModified ?? document.SourceModifiedAt ?? document.FetchedAt);
+        var crawled = document.IdentityKind == "url";
+        return new Citation(document.Id, title, upload ? document.DisplayName : null, crawled ? document.Url : null, downloadUrl,
+            sourceType, documentType, document.MediaType, document.Language, chunkModified ?? document.SourceModifiedAt ?? (crawled ? null : document.FetchedAt),
+            crawled ? document.FetchedAt : null);
     }
 
     private static HydratedDocument ReadDocument(NpgsqlDataReader r) => new(

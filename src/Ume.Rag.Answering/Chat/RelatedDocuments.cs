@@ -5,7 +5,9 @@ namespace Ume.Rag.Answering.Chat;
 
 /// <summary>
 /// One entry of <c>ume.related_documents</c> (chat design §3.8, §9.7): the document, its title and link by the citation rule,
-/// its collection's slug, its 1-based position in the list, and whether the answer cites it with which display number.
+/// its collection's slug, its 1-based position in the list, whether the answer cites it with which display number, and the
+/// citation's dates (knowledge §10.1: <c>modified</c> by the source's own date, <c>checked</c> for a crawled page; each
+/// omitted when null).
 /// </summary>
 public sealed record RelatedDocument(
     [property: JsonPropertyName("document_id")] Guid DocumentId,
@@ -14,7 +16,9 @@ public sealed record RelatedDocument(
     [property: JsonPropertyName("collection")] string Collection,
     [property: JsonPropertyName("rank")] int Rank,
     [property: JsonPropertyName("cited")] bool Cited,
-    [property: JsonPropertyName("number"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number);
+    [property: JsonPropertyName("number"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number,
+    [property: JsonPropertyName("modified"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? Modified = null,
+    [property: JsonPropertyName("checked"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? Checked = null);
 
 /// <summary>
 /// The answer's <c>ume</c> member (chat design §3.8): the turn's outcome and whether its sources came from keyword search only,
@@ -78,7 +82,7 @@ public static class RelatedDocuments
                 var first = chunks[0];
                 int? number = numbers.TryGetValue(document.Key, out var n) ? n : null;
                 return new RelatedDocument(document.Key, first.Citation.Title, Citations.Link(new PromptSource(0, first.Citation, chunks)), first.CollectionSlug, i + 1,
-                    number is not null, number);
+                    number is not null, number, first.Citation.Modified?.ToUniversalTime(), first.Citation.Checked?.ToUniversalTime());
             }),
         ];
     }

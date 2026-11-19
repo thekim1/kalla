@@ -117,7 +117,7 @@ public sealed partial class AdminTestPanel(
                 answer = await gateway.CompleteAsync(version.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId,
                     "chat-answer", ct, usage: usage.Add);
                 latencyMs = Stopwatch.GetElapsedTime(call).TotalMilliseconds;
-                var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
+                var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts, plan.Language);
                 var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>();
                 delivered = (plan.Caveat ?? "") + string.Concat(pieces.Select(p => p.Content)) + plan.Trailer;
                 filtered = transducer.Filtered;
