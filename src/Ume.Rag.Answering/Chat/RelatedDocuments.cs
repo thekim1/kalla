@@ -22,29 +22,40 @@ public sealed record RelatedDocument(
 
 /// <summary>
 /// The answer's <c>ume</c> member (chat design §3.8): the turn's outcome and whether its sources came from keyword search only,
-/// then <c>related_documents</c> and <c>follow_ups</c> when asked for (absent otherwise). The names are fixed here, so the JSON
-/// answer and the stream's chunk write the same member whatever their serializer's naming policy.
+/// then <c>related_documents</c>, <c>follow_ups</c> and <c>escalation</c> when asked for (absent otherwise). The names are fixed
+/// here, so the JSON answer and the stream's chunk write the same member whatever their serializer's naming policy.
 /// </summary>
 public sealed record UmeAnswer(
     [property: JsonPropertyName("outcome")] string Outcome,
     [property: JsonPropertyName("degraded")] bool Degraded,
     [property: JsonPropertyName("related_documents"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RelatedDocument>? RelatedDocuments,
-    [property: JsonPropertyName("follow_ups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FollowUps)
+    [property: JsonPropertyName("follow_ups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FollowUps,
+    [property: JsonPropertyName("escalation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] EscalationMember? Escalation = null)
 {
     /// <summary>
     /// The <c>ume</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete), as the
     /// first <c>ume</c> chunk carries it (§3.8). Follow-up suggestions asked for are <c>[]</c> here when they are skipped before
     /// any call; with <paramref name="followUpsPending"/> the call is still to come and <c>follow_ups</c> is left for it.
+    /// <paramref name="escalation"/> is the escalation member when it goes in this chunk (null: not asked, or its summary call
+    /// is still to come).
     /// </summary>
-    public static UmeAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked, bool followUpsPending)
+    public static UmeAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked, bool followUpsPending, EscalationMember? escalation = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(asked);
         return new UmeAnswer(ChatOutcomes.Name(plan.Outcome), plan.Degraded,
             asked.RelatedDocuments > 0 ? Chat.RelatedDocuments.For(plan.Outcome, plan.Retrieval, cited, asked.RelatedDocuments) : null,
-            asked.FollowUps > 0 && !followUpsPending ? [] : null);
+            asked.FollowUps > 0 && !followUpsPending ? [] : null, escalation);
     }
 }
+
+/// <summary>
+/// The second <c>ume</c> chunk (§3.8 Delivery): the members whose calls ran after the answer, <c>follow_ups</c> (§9.8) and
+/// <c>escalation</c> (§9.9); each absent when it went in the first chunk or was not asked for.
+/// </summary>
+public sealed record UmeLater(
+    [property: JsonPropertyName("follow_ups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FollowUps,
+    [property: JsonPropertyName("escalation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] EscalationMember? Escalation);
 
 /// <summary>
 /// <c>ume.related_documents</c> (chat design §9.7), from the retrieval the answer was built from: no second search, no

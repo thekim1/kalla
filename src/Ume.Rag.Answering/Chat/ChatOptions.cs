@@ -6,7 +6,8 @@ namespace Ume.Rag.Answering.Chat;
 /// and a JSON answer's whole call, since its headers come only after the answer, #695), <c>Chat:MessagesPerMinutePerUser</c>
 /// (20) and <c>Chat:AllowedLinkHosts</c> (<c>umea.se</c>, <c>*.umea.se</c>). The last two move to <c>Settings.Chat</c> with
 /// part c of item 15. <c>Chat:CondenseTimeout</c> (1,200 ms) and <c>Chat:LongQuestionCondenseTimeout</c> (3 s) bound the condense calls,
-/// <c>Chat:FollowUpTimeout</c> (2 s; 0 = off) the follow-up call (§9.8).
+/// <c>Chat:FollowUpTimeout</c> (2 s; 0 = off) the follow-up call (§9.8), <c>Chat:EscalationTimeout</c> (2 s; 0 = off) the
+/// escalation summary's call (§9.9).
 /// </summary>
 public sealed class ChatOptions
 {
@@ -29,4 +30,11 @@ public sealed class ChatOptions
     /// most this long; zero switches follow-up suggestions off.
     /// </summary>
     public TimeSpan FollowUpTimeout { get; set; } = FollowUps.DefaultTimeout;
+
+    /// <summary>
+    /// How long the escalation summary's call may take before its <c>summary</c> is null (chat design §9.9): <c>[DONE]</c> waits
+    /// at most this long (the longer of it and the follow-up budget when both run); zero switches the summary off, and the
+    /// route (reason and contacts) still comes.
+    /// </summary>
+    public TimeSpan EscalationTimeout { get; set; } = Escalation.DefaultTimeout;
 }

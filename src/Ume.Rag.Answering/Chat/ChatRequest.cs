@@ -45,10 +45,10 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 /// <summary>
 /// The <c>ume</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
 /// questions to suggest (§9.8); 0 is none. <see cref="GeneralKnowledge"/> is a stricter general-knowledge level for the turn
-/// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). Any object, <c>{}</c> included, gives the
-/// answer's <c>ume</c> with its outcome.
+/// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). <see cref="Escalation"/> asks for the escalation
+/// hand-off (§9.9). Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
 /// </summary>
-public sealed record UmeRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null)
+public sealed record UmeRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false)
 {
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
@@ -206,7 +206,7 @@ public static partial class ChatRequestParser
 
     /// <summary>
     /// The <c>ume</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
-    /// 0–10 and <c>follow_ups</c> 0–5 as integers, and <c>general_knowledge</c> one of the level values or <c>null</c>, else 400
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c> a boolean, and <c>general_knowledge</c> one of the level values or <c>null</c>, else 400
     /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
     /// instead of doing nothing).
     /// </summary>
@@ -224,6 +224,7 @@ public static partial class ChatRequestParser
 
         var (related, followUps) = (0, 0);
         GeneralKnowledge? generalKnowledge = null;
+        var escalation = false;
         foreach (var member in ume.EnumerateObject())
         {
             switch (member.Name)
@@ -237,12 +238,20 @@ public static partial class ChatRequestParser
                 case "general_knowledge":
                     generalKnowledge = UmeLevel(member);
                     break;
+                case "escalation":
+                    escalation = member.Value.ValueKind switch
+                    {
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        _ => throw Invalid("ume.escalation must be true or false.", "ume.escalation"),
+                    };
+                    break;
                 default:
                     throw new ChatException(400, "unsupported_parameter", $"ume.{member.Name} is not supported.", "ume." + member.Name);
             }
         }
 
-        return new UmeRequest(related, followUps, generalKnowledge);
+        return new UmeRequest(related, followUps, generalKnowledge, escalation);
     }
 
     /// <summary><c>ume.general_knowledge</c>: <c>null</c> is none; a level value exactly as stored (lower case), else 400.</summary>

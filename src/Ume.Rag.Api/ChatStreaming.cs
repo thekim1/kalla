@@ -14,8 +14,8 @@ namespace Ume.Rag.Api;
 /// <c>source</c> event per cited document just before the text that first cites it, for other clients <c>delta.annotations</c>
 /// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. The events come from
 /// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. With <paramref name="ume"/> (§3.8) the first <c>ume</c> chunk
-/// follows the final chunk, made from the documents the answer cited, at once; with <paramref name="followUps"/> (§9.8) the writer
-/// keeps the delivered text and a second <c>ume</c> chunk with <c>follow_ups</c> follows when the follow-up call returns or its
+/// follows the final chunk, made from the documents the answer cited, at once; with <paramref name="later"/> (§9.8, §9.9) the writer
+/// keeps the delivered text and a second <c>ume</c> chunk with <c>follow_ups</c> and <c>escalation</c> follows when their calls return or their
 /// budget runs out; then the usage chunk and <c>[DONE]</c>. After the first byte an error is one error chunk and <c>[DONE]</c>,
 /// and no <c>ume</c> chunk; after a disconnect nothing more is written. A turn that ends in either of those calls
 /// <paramref name="aborted"/> instead of <paramref name="finished"/>, once the answer is disposed (its broken-off stream
@@ -23,7 +23,7 @@ namespace Ume.Rag.Api;
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
     Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, UmeAnswer>? ume = null,
-    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<IReadOnlyList<string>>>? followUps = null,
+    Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<UmeLater>>? later = null,
     Func<string, IReadOnlyList<PromptSource>, ValueTask>? aborted = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
@@ -51,8 +51,8 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
 
         // The per-token content events, written without a string or an object per token (#333 finding 4).
         using var content = new SseChunk();
-        // §9.8: the delivered text, kept only for the follow-up call.
-        var delivered = followUps is null ? null : new StringBuilder();
+        // §9.8: the delivered text, kept only when a call follows the answer (the follow-up call reads it).
+        var delivered = later is null ? null : new StringBuilder();
         var completed = false;
         // B-48 (§8.3, §12): a disconnect or the idle or total timeout ends the turn as cancelled; any other failure as error.
         var outcome = Domain.Entities.MessageOutcomes.Cancelled;
@@ -97,9 +97,9 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
                         await UmeAsync(response, id, created, ume(answer.Cited), ct);
                     }
 
-                    if (followUps is not null)
+                    if (later is not null)
                     {
-                        await UmeAsync(response, id, created, new { follow_ups = await followUps(answer.Cited, delivered!.ToString(), ct) }, ct);
+                        await UmeAsync(response, id, created, await later(answer.Cited, delivered!.ToString(), ct), ct);
                     }
 
                     await UsageAsync(response, id, created, end.PromptTokens, end.CompletionTokens, ct);

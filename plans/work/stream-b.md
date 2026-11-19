@@ -28,7 +28,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** Decisions "Source dates on citations"; knowledge §10.1, §10.4; chat §9.3, §9.7, §18.9.
 
-### [ ] B-48 Escalation hand-off: `ume.escalation` (F3, #857)
+### [x] B-48 Escalation hand-off: `ume.escalation` (F3, #857)
 - **Do:** chat §9.9: the request member `ume.escalation` (§3.8, `true`/`false`, 400 otherwise); for `not-found`,
   `answered-general` and `unavailable` the object `reason`, `contacts` (the version's `NotFound.links`, else
   `Settings.Chat`'s) and `summary`, `null` for `answered` and conversational turns; the summary call (`Escalation.cs`
