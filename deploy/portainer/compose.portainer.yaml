@@ -509,7 +509,7 @@ services:
 
   rag-postgres:
     <<: *hardened
-    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.7.0@sha256:1e7e6607174b6b7d0adb9aeb273afbefb6361d1b8714eaa335d87af3ac798003}
+    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -541,7 +541,7 @@ services:
 
   rag-migrate:
     <<: *hardened
-    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.7.0@sha256:3dc9451030ccd9a98e87eb62c51dde5e24ba4407d6d7aac662587135cbc1ce8a}
+    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -565,7 +565,7 @@ services:
 
   rag-api:
     <<: *hardened
-    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.7.0@sha256:f4d8f993e12be94963c03d8fe2351f1597dbb311a751568a4510af1721cadd61}
+    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -631,7 +631,7 @@ services:
 
   rag-admin:
     <<: *hardened
-    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.7.0@sha256:c03f7845d861e25812e6edcf9ab1170c4ae4a329c4bafcf3b575fdad346f49a8}
+    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -712,7 +712,7 @@ services:
 
   rag-worker:
     <<: *hardened
-    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.7.0@sha256:64cbd5faf5a1d5b3e9d70a68597fa8557bb04152a1a759f9c370ca4876c5d861}
+    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -774,7 +774,7 @@ services:
 
   rag-parser:
     <<: *hardened
-    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.7.0@sha256:d6424118f030e5b779783fe86ff08c0d4689b945a17ec787bf6408afe4fc978b}
+    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -799,7 +799,7 @@ services:
   rag-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.7.0@sha256:4cb589eac1c1e2f5c7ec46692ed0052964eb28f04c90bf57282c9ef37fbe6197}
+    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -818,7 +818,7 @@ services:
   rag-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.7.0@sha256:db7f67c52713a97fe4076d663ccd0ec1a008de3a2e3b038febfa3cad0b361957}
+    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]
