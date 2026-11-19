@@ -780,10 +780,10 @@ Each rule: what it requires, the problem code(s) it answers with, when it is re-
 
 #### V38 Chat prompt texts
 
-- **Rule:** `Settings.Chat.Prompts` (chat §7.3, Decisions "Chat prompt texts configurable"): each member optional (absent or empty = the built-in default); `identity`, `sourcesLabel`, the rule lines, `conversational`, `degraded` ≤ 1,000 characters each, `condense` and `followUps` ≤ 2,000, each caveat ≤ 500 per language; no `<sources`, `</sources`, `<source`, `</source`, `<skill_` or `<tool_result` (any case, spaces allowed, as chat §7.2's neutralisation); no C0/C1 controls except line breaks; `sourcesLabel` one line; placeholders: `{assistant}` only in `identity`, `{N}` only in `followUps`, any other `{…}` refused; unknown members refused
+- **Rule:** `Settings.Chat.Prompts` (chat §7.3, Decisions "Chat prompt texts configurable"): each member optional (absent or empty = the built-in default); `identity`, `sourcesLabel`, the rule lines, `conversational`, `degraded` ≤ 1,000 characters each, `condense`, `followUps` and `escalation` ≤ 2,000, each caveat ≤ 500 per language; no `<sources`, `</sources`, `<source`, `</source`, `<skill_` or `<tool_result` (any case, spaces allowed, as chat §7.2's neutralisation); no C0/C1 controls except line breaks; `sourcesLabel` one line; placeholders: `{assistant}` only in `identity`, `{N}` only in `followUps`, any other `{…}` refused; unknown members refused
 - **Code:** `prompt_text_invalid` (field = the member)
 - **Re-checked when:** settings save
-- **Source:** chat §5, §7.2–§7.3, §9.8, §10.2, §10.4
+- **Source:** chat §5, §7.2–§7.3, §9.8, §9.9, §10.2, §10.4
 
 #### V39 Gateway key
 

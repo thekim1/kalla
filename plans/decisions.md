@@ -786,11 +786,36 @@ optional level. Detail: `chat-api/design.md` §3.8, §7.3, §10.4; `admin/design
 A client other than Open WebUI may add `ume` to a chat request to get the turn's `outcome` and `degraded`, plus on
 request `related_documents` (1–10, from the same retrieval, empty on coverage `low`) and `follow_ups` (1–5, one
 condense-model call within 2 s, never stored, lines with markers, links or personal data dropped), and
-`general_knowledge`, a stricter general-knowledge level for the turn (Decisions "General knowledge per assistant").
-Unknown members are refused. Detail: `chat-api/design.md` §3.8, §9.7, §9.8.
+`general_knowledge`, a stricter general-knowledge level for the turn (Decisions "General knowledge per assistant"),
+and `escalation` (Decisions "Escalation hand-off"). Unknown members are refused. Each related document carries its
+dates (Decisions "Source dates on citations"). Detail: `chat-api/design.md` §3.8, §9.7, §9.8.
 
 *From:* log rows 106, 107; decided by user, 2026-11-06.
 *Also:* "Follow-up suggestions"
+
+### Escalation hand-off
+
+A client other than Open WebUI may ask for `ume.escalation`. When the turn ends `not-found`, `answered-general` or
+`unavailable`, the answer then carries the escalation route: the reason, the assistant's contact links (its not-found
+links, else the platform's), and a short hand-off summary of the user's problem for a second-line ticket. The summary
+comes from one condense-model call at the condense ceiling, as the step `escalation` on the assistant's gateway key, within
+`Chat:EscalationTimeout` (2 s; 0 turns the summary off, and the route still comes). Links are removed and personal data
+masked. It is never stored or logged, and `null` when skipped or failed. An `answered` turn gets `escalation: null`.
+Its instructions are an editable prompt text, with locked data, personal-data and no-links lines. Writing back to a
+ticket system stays later. Detail: `chat-api/design.md` §3.8, §9.9.
+
+*From:* support chatbot proposal F3; picked by user, 2026-11-19 (#857).
+
+### Source dates on citations
+
+Every citation and related document carries two dates. `modified` is when the source says it last changed: the chunk's
+date, else the document's, else for an upload the upload time. A crawled page that states no date has none; its fetch
+time no longer stands in. `checked` is when a crawl last confirmed a crawled page: fetched, `304`, or an unchanged
+sitemap `lastmod`. An upload has no `checked`. The citation label shows both, in the turn's language
+("2026-03-02, kontrollerad 2026-11-18"). There is no staleness threshold or warning. Detail:
+`knowledge-api/design.md` §10.1, §10.4; `chat-api/design.md` §9.3, §9.7.
+
+*From:* support chatbot proposal F4; picked by user, 2026-11-19 (#857).
 
 ### Chat rate limit per key
 
@@ -812,12 +837,12 @@ approver); both exist only once chat content is stored. Detail: `chat-api/design
 The platform's own prompt texts are platform settings (`Settings.Chat.Prompts`, Settings page, platform admins), each
 optional with today's text as its built-in default. Editable: the frame's identity line (`{assistant}`), the sources
 label, the rule lines of each `generalKnowledge` level with and without sources, the conversational and degraded-search
-lines, both condense prompts, the follow-up prompt's instructions, and the degraded and general-knowledge caveats (sv,
+lines, both condense prompts, the follow-up and escalation prompts' instructions, and the degraded and general-knowledge caveats (sv,
 en). Locked in code, because the marker parser, the output filter and the injection defences rely on them: the
 citation line, the no-invented-numbers/no-links line, the `<sources>`-is-data line and the block's data note, the
-language line, and the follow-up prompt's data, personal-data and no-citations lines. Texts are platform-wide and apply
-at once to every assistant; an assistant's own `SystemPrompt` still follows the frame. Detail: `chat-api/design.md`
-§5, §5.1, §7.2–§7.3, §9.8, §10.2, §10.4; `admin/design.md` V38.
+language line, the follow-up prompt's data, personal-data and no-citations lines, and the escalation prompt's data,
+personal-data and no-links lines. Texts are platform-wide and apply at once to every assistant; an assistant's own
+`SystemPrompt` still follows the frame. Detail: `chat-api/design.md` §5, §5.1, §7.2–§7.3, §9.8, §9.9, §10.2, §10.4; `admin/design.md` V38.
 
 *From:* decided by user, 2026-11-11 (#548).
 

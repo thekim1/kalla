@@ -11,6 +11,42 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
+### [ ] B-47 Source dates on every citation and related document (F4, #857)
+- **Do:** knowledge §10.1: `Citation.Modified` loses the `FetchedAt` fallback for `url` documents (it stays the upload
+  time for `upload`), and `Citation` gets `Checked` (`Documents.FetchedAt` for `web`, null for `file`; the hydrator
+  already reads `FetchedAt`), in the Knowledge API's `document` JSON as `checked`. `Citations.Label` takes the turn's
+  language and writes the dates as knowledge §10.4 says (`(2026-03-02, kontrollerad 2026-11-18)`,
+  `(kontrollerad …)` without a stated date, `checked` in English), for both the Open WebUI `source` events and the
+  `url_citation` titles. `RelatedDocument` gets `modified` and `checked` (chat §9.7; ISO 8601 UTC, omitted when
+  null). The admin test panel shows what the label shows.
+- **Paths:** `src/Ume.Rag.Domain/Retrieval/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Answering/**`,
+  `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**` (only where it builds citations), `tests/**` (not
+  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** chat §18.9's *Source dates* tests pass: a crawled page with and without a stated date, an English
+  turn and an upload, in both the label and the related-documents entry; the Knowledge API's `document` has
+  `checked` for a crawled page and none for an upload; the Open WebUI recorded fixture changes only in the label.
+- **Waits on:** nothing.
+- **Read:** Decisions "Source dates on citations"; knowledge §10.1, §10.4; chat §9.3, §9.7, §18.9.
+
+### [ ] B-48 Escalation hand-off: `ume.escalation` (F3, #857)
+- **Do:** chat §9.9: the request member `ume.escalation` (§3.8, `true`/`false`, 400 otherwise); for `not-found`,
+  `answered-general` and `unavailable` the object `reason`, `contacts` (the version's `NotFound.links`, else
+  `Settings.Chat`'s) and `summary`, `null` for `answered` and conversational turns; the summary call (`Escalation.cs`
+  beside `FollowUps.cs`: the condense model at the condense ceiling as the assistant's key, `x-ume-step: escalation`,
+  `max_tokens` 200, `Chat:EscalationTimeout` 2,000 ms, run at the same time as the follow-up call) with its input,
+  language and accept rule; the second `ume` chunk carries `follow_ups` and `escalation` (§3.8 Delivery);
+  `Settings.Chat.Prompts.escalation` with its locked lines (`PromptTexts`, V38 ≤ 2,000, the prompt texts endpoint's
+  section `escalation`, `labels.ts`'s section and member names); `rag.chat.escalation` and the `escalation` token
+  step (§17); the FakeGateway's script per step already covers `escalation`.
+- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/PromptText*.cs`,
+  `src/Ume.Rag.Domain/**` (b's), `src/admin-ui/src/utils/labels.ts`, `tests/**` (not
+  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Done when:** chat §18.9's *Escalation* tests pass, with a negative proof on the accept rule's masking; the
+  Settings page's Prompt texts panel shows the escalation section with its locked lines (API test and Vitest).
+- **Waits on:** nothing (B-47 first only to keep the two PRs apart on `ChatStreaming.cs`).
+- **Read:** Decisions "Escalation hand-off", "Chat prompt texts configurable"; chat §3.8, §9.8, §9.9, §10.1, §17,
+  §18.9; admin V15, V38; cost-attribution §4.1.
+
 ## Live (the live block, see the roadmap)
 
 
