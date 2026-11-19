@@ -8,12 +8,13 @@ Until the first production deployment releases may break compatibility (Decision
 production"), so check the answer every time; from then on migrations are expand/contract only and "no" is the
 exception.
 
-**A "no" release needs no manual stop on one slot.** From the release after 0.7.0, `rag-migrate` itself keeps the
+**A "no" release needs no manual stop on one slot.** From 0.8.0, `rag-migrate` itself keeps the
 services a migration can't run beside out of the database until their new version starts: its log says *Migration …
 stops the services of role …*, the old container answers errors for the seconds until it is replaced, and the new one
 gets its access back when it starts. With two slots or on Kubernetes, stop or scale down those services first, as
-before. **An upgrade may skip releases** (from 0.5.1 on, which the release tests by booting that stack and applying
-the new file): read each skipped release's section for what it asks of you, and do the update once.
+before. **An upgrade may skip releases** (from 0.5.1 on; each release tests it by booting an earlier release's
+stack, named in its section, and applying the new file): read each skipped release's section for what it asks of you,
+and do the update once.
 
 `dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
 
@@ -22,10 +23,24 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
-- **Rolling update: no.** Migration `DropMessageParentId` drops `chat."Messages"."ParentMessageId"` (never written or
-  read, #792), which the previous rag-api and rag-admin still map. On one slot (Compose, Portainer) there is nothing
-  to do: `rag-migrate` keeps both out of the database until their new version starts. With two slots or on
-  Kubernetes, stop or scale down rag-api and rag-admin before the migration. No new variable.
+## 0.8.0
+
+- **Rolling update: no** (the migration `DropMessageParentId`, below); on one slot nothing to do, `rag-migrate` stops
+  the previous rag-api and rag-admin itself. The migration `ContinueRuns` only adds. From 0.5.x or 0.6.0 too, in one
+  update (Portainer: [portainer.md](portainer.md), *Upgrade*). This release tests the update from 0.6.0's stack, not
+  0.5.1's: one of 0.5.1's images is no longer on ghcr.io (a 0.5.x stack that has its images keeps working).
+- **Before the update:** back up as always. Compose and Kubernetes: check the escrow with the release you run now
+  (`escrow-keys.sh --verify`). Portainer: a 0.7.x or earlier stack has no escrow set yet (that release's
+  `escrow-keys.sh` has no `--project`), so back up the three files of its *First deploy* instead
+  ([portainer.md](portainer.md), *Upgrade*, step 1). A Compose installation made with the files of 0.7.0 or earlier
+  is installed again (*Compose: no in-place upgrade*, below).
+- **After the update:** escrow the keys again with the new `escrow-keys.sh` and verify the new set (*Escrow the keys
+  again*, below); read the end of `rag-bootstrap`'s log.
+
+- **Migration `DropMessageParentId`** drops `chat."Messages"."ParentMessageId"` (never written or read, #792), which the
+  previous rag-api and rag-admin still map. On one slot (Compose, Portainer) there is nothing to do: `rag-migrate` keeps
+  both out of the database until their new version starts. With two slots or on Kubernetes, stop or scale down rag-api
+  and rag-admin before the migration. No new variable.
 - **`rag-migrate` stops what a migration can't run beside** (above). Nothing to do: the first run creates the table
   `public.ume_rag_service_fences` and the function `public.ume_rag_admit` in ragdb. **Rolling back** after a release
   marked *Rolling update: no*: the previous version is refused at start (*The database's schema is newer than this
@@ -56,8 +71,8 @@ and the release preparation folds the notes in here and writes the release's *Ro
   stack that has the profile keeps it: nothing to do.** A stack that ran without the profile changes in one way:
   rag-api no longer has a key to check Open WebUI's user tokens with, which nothing used. Turning the profile on later
   generates what is missing; turning it off keeps Open WebUI's store and keys for the next time.
-- **Portainer: nothing changes.** The stack file is generated from `deploy/compose.rag.yaml` now, with the same
-  services, volumes, networks and variables; update the stack as for any release.
+- **Portainer: the stack file changes nothing you set.** It is generated from `deploy/compose.rag.yaml` now, with the
+  same services, volumes, networks and variables; update the stack as for any release.
 - **Compose: no in-place upgrade; install again.** Compose runs `deploy/compose.rag.yaml` with the Portainer stack's
   names (`rag-postgres`, the volumes `rag-postgres-data`, `rag-certs`, `rag-secrets`, `rag-config`, the `RAG_*_IMAGE`
   variables), and `rag-bootstrap` keeps the certificates and secrets in volumes instead of `deploy/certs` and
@@ -71,6 +86,11 @@ and the release preparation folds the notes in here and writes the release's *Ro
   (`.pepper`, `postgres/`, `keys/`) and the `rag-certs` volume (`data-protection.pfx`), owned as `rag-bootstrap` leaves
   them; `up` then runs `rag-bootstrap`, which keeps them and copies them to each service. **This carry-over
   is written from how `rag-bootstrap` treats existing files and has not been run**: try it on a copy first.
+- **Escrow the keys again** after the update, with the new `deploy/escrow-keys.sh` (Portainer: `--project <stack>`,
+  from the release bundle), then `--verify` it. The new set also holds the pepper, the database roles' passwords, the
+  conversation id keys, the Data Protection certificate and the internal CA, in a new layout (`rag-secrets/…`,
+  `rag-certs/…`). `--verify` fails on a set made by an earlier release, so keep the old set until the new one prints
+  `PASS`. The pepper and certificate copies kept separately until now are in the set, and can go once it is sealed.
 
 ## 0.7.0
 

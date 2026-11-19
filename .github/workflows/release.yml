@@ -65,9 +65,9 @@ env:
   GH_CLI_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
   # Microsoft.Sbom.DotNetTool 4.1.13 (NuGet, 2026-09-22), the gateway's.
   SBOM_TOOL: Microsoft.Sbom.DotNetTool@4.1.13
-  # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh). 0.5.1, not 0.5.0:
-  # 0.5.0's stack asset does not pin the gateway's images.
-  UPGRADE_FROM: 0.5.1
+  # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh). 0.6.0: v0.5.1's
+  # stack asset pins an admin image digest ghcr.io no longer has, and 0.5.0's asset does not pin the gateway's images.
+  UPGRADE_FROM: 0.6.0
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
@@ -392,9 +392,9 @@ jobs:
         run: |
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
       - name: Upgrade the oldest supported release's Portainer stack
-        # docs/portainer.md, "Upgrade": v0.5.1's stack (its release asset, its variables) is booted, then this
-        # release's file is applied over it with nothing added, changed or stopped by hand. It skips 0.6.0 and 0.7.0
-        # and crosses RemoveWorkerConcurrency, for which rag-migrate must stop the old rag-admin itself.
+        # docs/portainer.md, "Upgrade": the UPGRADE_FROM stack (its release asset, its variables) is booted, then this
+        # release's file is applied over it with nothing added, changed or stopped by hand. From 0.6.0 it skips 0.7.0
+        # and crosses DropMessageParentId, for which rag-migrate must stop the old rag-api and rag-admin itself.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -404,7 +404,7 @@ jobs:
           bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
-            --version "${{ steps.version.outputs.version }}" --expect-fenced ume_rag_admin
+            --version "${{ steps.version.outputs.version }}" --expect-fenced ume_rag_api --expect-fenced ume_rag_admin
           if [ "$GITHUB_EVENT_NAME" != push ]; then docker logout ghcr.io; fi
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.
