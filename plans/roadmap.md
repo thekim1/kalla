@@ -17,7 +17,7 @@ lands or an input arrives.
 | `v0.5.1` (2026-11-13) | Easier deploys with Portainer: the gateway and Ume.Rag as one stack with every image pinned, Open WebUI in it, a variables file, a checklist of what is still missing, gateway keys that apply without restarts |
 | `v0.6.0` (2026-11-15) | A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys, the rest comes from the gateway, the admin UI or the stack; apps and keys connected in one go (M-16); the admin UI review (M-19); the fixes of the 2026-11-14 review (#694) |
 | `v0.7.0` (2026-11-16) | **The setup wizard** (M-20): sign-in set in the browser with a setup code and a test sign-in; a new Portainer stack needs one typed value, `UME_DOMAIN`, and no secret, with the gateway's wizard first (gateway `v0.11.0`); retired deployment variables named (M-21); three hot paths of #764 |
-| `v0.8.0` (2026-11-18) | **The deploy simplification** (M-22): one service file and one bootstrap for Compose, Portainer and Kubernetes, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for; continue a crawl run and its live progress; the images' security updates and a daily image scan (A-27, #818) |
+| `v0.8.0` (2026-11-19) | **The deploy simplification** (M-22): one service file and one bootstrap for Compose, Portainer and Kubernetes, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for; continue a crawl run and its live progress; the images' security updates and a daily image scan (A-27, #818) |
 
 Every code item of both stream queues is done. What is left before go-live is live work, and every step of it waits on
 an input from people.

@@ -150,7 +150,9 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 - **Requests longer than the shutdown timeout** (300 s for rag-api) are cut off. Raise `UME_RAG_SHUTDOWN_TIMEOUT_SECONDS`
   (and `stop_grace_period` in `compose.rolling.yaml`) if you have longer ones.
 - **Postgres** is a single instance: a new image is a short outage (`--with-postgres`).
-- **Releases marked "Rolling update: no"** (0.5.0 and 0.6.0 so far) need a planned stop.
+- **Releases marked "Rolling update: no"** (0.5.0, 0.6.0 and 0.8.0 so far) can't be rolled: with two slots, stop the
+  services the release's entry in the [upgrade guide](upgrade-guide.md) names before its migration. (On one slot
+  `rag-migrate` does that itself from 0.8.0.)
 - **The single-instance installation's first rolling update** stops instances that had no drain configured; a few POSTs
   can fail at that moment, later updates do not have this.
 

@@ -1,11 +1,11 @@
 # Handover
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.7.0`** (2026-11-16). **`v0.8.0` is prepared and merged (#856, `faa001dd`) but not tagged yet:** the
-tag waits for the user's go-ahead (*Start here*). `main` after it has stream b's B-47 and B-48 (#859, #860), which go
-into the next release. The user's VM runs 0.5.0. Repo `~/git/ume-rag-platform` (session 48's machine) or
-`~/research/rag` (the other one), branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (HTTPS
-through `gh auth git-credential`, handbook *Environment notes*).
+**Last release `v0.8.0`** (2026-11-19, the deploy simplification; tag on #856's merge commit `faa001dd`, on the
+gateway's `v0.11.0`). `main` after it has stream b's B-47 and B-48 (#859, #860), which go into the next release. The
+user's VM runs 0.5.0. Repo `~/git/ume-rag-platform` (session 48's machine) or `~/research/rag` (the other one), branch
+`main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (HTTPS through `gh auth git-credential`,
+handbook *Environment notes*).
 
 ## What this is
 
@@ -30,22 +30,18 @@ sink" monolith. Design and code live in this repo.
 
 **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an author
 cannot approve their own, never `gh pr merge --admin`). Everything, `plans/**` and this file included, goes through a
-`main-session/` branch; `thekim1` reviews the main session's pull requests. No pull request is open.
+`main-session/` branch; `thekim1` reviews the main session's pull requests.
 `thekim1` merged #858 to #860 with `--admin` on 2026-11-19, unreviewed; its review of #861 says the user allowed it
 that for green pull requests the same day. That is not a broken rule, and it does not extend to `ume-nichlas`.
 
-1. **Tag `v0.8.0`, once the user says go** (the tag publishes the release):
-   `git tag -a v0.8.0 faa001dd -m "Ume.Rag 0.8.0"` and push the tag. On the merge commit `faa001dd`, **not** `main`'s
-   head (B-47 and B-48 are after it and not in its notes). Then the pin pull request that `release.yml` opens: it
-   starts no checks, so close and reopen it, get it approved, merge. Then check that the daily Audit turns green: it
-   has been red since #819 because it scans the last release's images (0.7.0).
-   - The CHANGELOG dates 0.8.0 **2026-11-18** (the upgrade guide's `## 0.8.0` has no date) and the tag will be
-     later: change the CHANGELOG's date in the pin pull request. A fix before the tag would move the tag past B-47
-     and B-48. The release page is not affected (`release.yml` takes the notes from below the heading); the tagged
-     CHANGELOG keeps 11-18.
-   - The dry run from the release branch is green with the browser tests:
-     [44474768676](https://github.com/thekim1/ume-rag-platform/actions/runs/44474768676). What `faa001dd` changed
-     after it is notes and docs only (`thekim1`'s review of #856).
+1. **`v0.8.0` is released** (2026-11-19, [run
+   44609831965](https://github.com/thekim1/ume-rag-platform/actions/runs/44609831965), green; the pin pull request
+   #863 is merged, the CHANGELOG's date is 2026-11-19). **Left: check that the daily Audit is green.** It has been red
+   since #819 because it scanned 0.7.0's images; the run of 2026-11-20 04:17 UTC is the first that scans 0.8.0's.
+   - **Release tags are protected** ("Protect release tags", `refs/tags/v*`: creation, update and deletion, since
+     2026-11-16): `ume-nichlas` cannot push one (GH013). `thekim1` pushed `v0.8.0`; no workflow creates a tag. The
+     next release's tag is `thekim1`'s or the user's to push, on the release preparation's merge commit.
+   - **Open: #862**, #858's open ends (below) with the user's decision on the unavailable text and B-49 queued.
 2. **0.5.1's admin image is gone from ghcr.io.** The first dry run
    ([44350629158](https://github.com/thekim1/ume-rag-platform/actions/runs/44350629158)) failed pulling
    `ghcr.io/thekim1/ume-rag/admin:0.5.1@sha256:38c9e6de…` (*not found*); the same digest pulled in #817's run on
@@ -62,7 +58,6 @@ that for green pull requests the same day. That is not a broken rule, and it doe
 
 ### Waiting on the user
 
-- **The go-ahead for the `v0.8.0` tag** (above).
 - **The VM:** runs 0.5.0. With 0.8.0 released it moves in one update by `docs/portainer.md`, *Upgrade* (steps 2 to 4
   are the 0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups); step 1 backs up the three
   files (a 0.7.x or earlier stack has no escrow set), step 15 makes the first escrow set. Pulls that say "denied":
@@ -93,7 +88,8 @@ that for green pull requests the same day. That is not a broken rule, and it doe
    `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
    `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
    a reason, or drop the dependency.
-4. **#858's open ends** (design, the main session's):
+4. **#858's open ends** (design, the main session's; all three are in **#862**, and the third was decided by the
+   user on 2026-11-19: the unavailable text ends with the assistant's links, else the platform's, code in B-49):
    - `Chat:EscalationTimeout` (2 s, hard; 0 = no summary, chat §9.9) is missing from `repo-and-deployment.md`'s
      chat knob list, where `Chat:FollowUpTimeout` is.
    - `checked` is missing from knowledge §3.2's JSON example.
@@ -170,11 +166,12 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 ## How to
 
 - **A release:** the preparation as #788 did it (*Unreleased* in `CHANGELOG.md` and `docs/upgrade-guide.md` under the
-  version, `docs/portainer.md`'s version, the ticked queue items to `plans/archive/work/to-v<version>.md`, the roadmap's
-  table; `scripts/unreleased.py fold` moves `changes/` in), a dry run with `e2e=true`, an annotated tag on the merge
-  commit (with the user's go-ahead), then the pin pull request that `release.yml` opens: it starts no checks, so close
-  and reopen it before merging (handbook, *Release dry runs*). The upgrade boot test starts from `release.yml`'s
-  `UPGRADE_FROM` (0.6.0); its images must still be on ghcr.io.
+  version, `docs/portainer.md`'s version, the ticked queue items to `plans/archive/work/to-v<version>.md`, the
+  roadmap's table; `scripts/unreleased.py fold` moves `changes/` in), a dry run with `e2e=true`, an annotated tag on
+  the merge commit (with the user's go-ahead; pushed by `thekim1` or the user, *Start here* 1), then the pin pull
+  request that `release.yml` opens: it starts no checks, so close and reopen it before merging (handbook, *Release dry
+  runs*). The upgrade boot test starts from `release.yml`'s `UPGRADE_FROM` (0.6.0); its images must still be on
+  ghcr.io.
 - **Show a deploy change before a release:** a dry run from the branch (`gh workflow run release.yml --ref <branch>
   -f version=X.Y.Z-dryrun -f e2e=true`, about 30 minutes, with the runners idle). The boot-only run
   (`-f portainer_boot=X.Y.Z`) takes minutes but uses that version's images already on ghcr.io, so it only fits a change
@@ -198,8 +195,8 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 
 ## State
 
-- **Release:** `v0.7.0` published 2026-11-16 ([run 43865015500](https://github.com/thekim1/ume-rag-platform/actions/runs/43865015500)),
-  tag at `7a04001a`. **`v0.8.0` prepared at `faa001dd`, not tagged** (*Start here*); its notes are `CHANGELOG.md`'s
+- **Release:** `v0.8.0` published 2026-11-19 ([run 44609831965](https://github.com/thekim1/ume-rag-platform/actions/runs/44609831965)),
+  tag at `faa001dd`; `deploy/portainer/` on `main` pins its images (#863). Its notes are `CHANGELOG.md`'s
   `## 0.8.0` and the upgrade guide's: the deploy simplification (M-22: one service file and one bootstrap for every
   form, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for), continue a crawl run and
   its live progress, move to another department, the images' security updates and the daily image scan. Migrations
@@ -208,7 +205,7 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 - **On `main` after `faa001dd`, unreleased:** B-47 (source dates on citations) and B-48 (the escalation hand-off,
   `ume.escalation`), notes in `changes/`.
 - **Open issues that matter:** #781 (watch), #667 (M-16, the other machine's), #333 (the exact-scan and recall
-  checks on the test host), #511 (splitting the worker), #580 and #550 (decisions to record). No pull request open.
+  checks on the test host), #511 (splitting the worker), #580 and #550 (decisions to record). Open pull request: #862.
 - **Dependabot works:** its first grouped pull requests merged (#841 to #844); `.github/dependabot.yml`'s header lists
   where a pin is repeated.
 - **Ume.Rag on this machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in this WSL distro, so
