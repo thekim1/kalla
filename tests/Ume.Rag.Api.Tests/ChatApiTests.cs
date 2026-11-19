@@ -25,9 +25,9 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>The fixture's snapshot with the integration client in the assistant's audience as well.</summary>
-    private PolicySnapshot Snapshot()
+    private PolicySnapshot Snapshot(string embeddingModel = "bge-m3")
     {
-        var snapshot = db.Snapshot();
+        var snapshot = db.Snapshot(embeddingModel);
         var assistant = snapshot.Assistants[db.AssistantId];
         return snapshot with
         {

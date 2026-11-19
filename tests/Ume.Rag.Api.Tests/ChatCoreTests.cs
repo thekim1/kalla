@@ -147,6 +147,18 @@ public sealed class ChatCoreTests
         FixedTexts.NotFound(notFound, null, "sv").ShouldBe("Inget svar här.\n\n- [Kontaktcenter](https://www.umea.se/kontakt)");
         FixedTexts.NotFound(notFound, null, "en").ShouldStartWith(FixedTexts.DefaultNotFoundEn);
         FixedTexts.NotFound(null, null, "sv").ShouldBe(FixedTexts.DefaultNotFoundSv);
-        FixedTexts.Unavailable(null, "en").ShouldBe(FixedTexts.UnavailableEn);
+        FixedTexts.Unavailable(null, null, "en").ShouldBe(FixedTexts.UnavailableEn);
+    }
+
+    [Fact]
+    public void The_unavailable_text_ends_with_the_assistants_links_else_the_platforms()
+    {
+        const string own = """{"sv":"Inget svar här.","links":[{"title":"IT-support","url":"https://www.umea.se/it"}]}""";
+        const string platform = """{"links":[{"title":"Kontaktcenter","url":"https://www.umea.se/kontakt"}]}""";
+        FixedTexts.Unavailable(own, platform, "sv").ShouldBe(FixedTexts.UnavailableSv + "\n\n- [IT-support](https://www.umea.se/it)");
+        FixedTexts.Unavailable("""{"sv":"Inget svar här."}""", platform, "en")
+            .ShouldBe(FixedTexts.UnavailableEn + "\n\n- [Kontaktcenter](https://www.umea.se/kontakt)");
+        FixedTexts.Unavailable(null, platform, "sv").ShouldBe(FixedTexts.UnavailableSv + "\n\n- [Kontaktcenter](https://www.umea.se/kontakt)");
+        FixedTexts.Unavailable(null, null, "sv").ShouldBe(FixedTexts.UnavailableSv);
     }
 }

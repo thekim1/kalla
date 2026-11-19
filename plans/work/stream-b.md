@@ -47,7 +47,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Escalation hand-off", "Chat prompt texts configurable"; chat §3.8, §9.8, §9.9, §10.1, §17,
   §18.9; admin V15, V38; cost-attribution §4.1.
 
-### [ ] B-49 The unavailable text ends with the platform's links when the assistant has none (#860's deviation)
+### [x] B-49 The unavailable text ends with the platform's links when the assistant has none (#860's deviation)
 - **Do:** chat §10.2: the "search is temporarily unavailable" text ends with the contact links by §10.1's rule (the
   version's `NotFound.links`, else `Settings.Chat`'s), as the not-found and general-knowledge texts and as
   `ume.escalation`'s `contacts` (§9.9) already do. Today `FixedTexts.Unavailable` gets only the assistant's links,

@@ -165,7 +165,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
             if (retrieval.Coverage.Status == CoverageStatus.Unknown && retrieval.Results.Count == 0)
             {
-                return Plan(FixedTexts.Unavailable(assistant.Published.NotFound, language), ChatOutcome.Unavailable, null, retrieval, false);
+                return Plan(FixedTexts.Unavailable(assistant.Published.NotFound, platform.NotFound, language), ChatOutcome.Unavailable, null, retrieval, false);
             }
         }
 

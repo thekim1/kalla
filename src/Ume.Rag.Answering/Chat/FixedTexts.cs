@@ -39,8 +39,12 @@ public static class FixedTexts
 
     private static bool HasLinks(string? notFound) => Parse(notFound)?["links"] is JsonArray { Count: > 0 };
 
-    public static string Unavailable(string? assistantNotFound, string language) =>
-        Render(language == LanguageGuess.English ? UnavailableEn : UnavailableSv, assistantNotFound);
+    /// <summary>
+    /// The unavailable text (§10.2) in the language, then the assistant's links, else the platform's, as the not-found text and
+    /// <see cref="Contacts"/>.
+    /// </summary>
+    public static string Unavailable(string? assistantNotFound, string? platformNotFound, string language) =>
+        Render(language == LanguageGuess.English ? UnavailableEn : UnavailableSv, HasLinks(assistantNotFound) ? assistantNotFound : platformNotFound);
 
     private static string Render(string text, string? notFound)
     {
