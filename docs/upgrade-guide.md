@@ -12,8 +12,8 @@ exception.
 services a migration can't run beside out of the database until their new version starts: its log says *Migration …
 stops the services of role …*, the old container answers errors for the seconds until it is replaced, and the new one
 gets its access back when it starts. With two slots or on Kubernetes, stop or scale down those services first, as
-before. **An upgrade may skip releases** (from 0.5.1 on, which the release tests by booting that stack and applying
-the new file): read each skipped release's section for what it asks of you, and do the update once.
+before. **An upgrade may skip releases** (from 0.5.1 on; each release tests it by booting an earlier release's stack,
+named in its section, and applying the new file): read each skipped release's section for what it asks of you, and do the update once.
 
 `dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
 
@@ -26,7 +26,8 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 - **Rolling update: no** (the migration `DropMessageParentId`, below); on one slot nothing to do, `rag-migrate` stops
   the previous rag-api and rag-admin itself. The migration `ContinueRuns` only adds. From 0.5.x or 0.6.0 too, in one
-  update (Portainer: [portainer.md](portainer.md), *Upgrade*).
+  update (Portainer: [portainer.md](portainer.md), *Upgrade*). This release tests the update from 0.6.0's stack, not
+  0.5.1's: one of 0.5.1's images is no longer on ghcr.io (a 0.5.x stack that has its images keeps working).
 - **Before the update:** back up as always, and check the escrow with the release you run now
   (`escrow-keys.sh --verify`). A Compose installation made with the files of 0.7.0 or earlier is installed again (*Compose: no in-place upgrade*,
   below).

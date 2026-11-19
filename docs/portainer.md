@@ -304,7 +304,7 @@ From 0.5.x or later to this release, **in one update**: paste this release's sta
 the stack. No release in between has to be installed first, no variable has to be added, and nothing is stopped by
 hand: where a migration can't run beside the old version of a service (0.6.0's `RemoveWorkerConcurrency` and the old
 rag-admin), `rag-migrate` keeps that service out of the database until its new version starts. Plan a short window:
-every service restarts once, and the gateway moves to `v0.11.0`. The release tests this path by booting 0.5.1's stack
+every service restarts once, and the gateway moves to `v0.11.0`. The release tests this path by booting 0.6.0's stack
 with its variables and applying the new file over it. **Your stack keeps its variables and sees neither setup
 wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
 `UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Every change and why:
@@ -405,10 +405,11 @@ wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done 
 15. **Escrow Ume.Rag's keys** with this release's `deploy/escrow-keys.sh`, as *First deploy* step 11, and verify the
     set. From 0.7.x or earlier this is the first set; a set made by an earlier release doesn't pass `--verify`.
 
-**Tested and not:** the release boots 0.5.1's stack (its file and variables, `clamav` and `openwebui`, no gateway
+**Tested and not:** the release boots 0.6.0's stack (its file and variables, `clamav` and `openwebui`, no gateway
 keys, no identity provider) and applies the new file: every service comes back healthy on the new images, the
-database, the CA, the pepper and the Data Protection certificate are kept, and `rag-migrate` reports the role it
-stopped. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by hand are not part of that test,
+database, the CA, the pepper and the Data Protection certificate are kept, and `rag-migrate` reports the roles it
+stopped. The step from 0.5.1 was tested before this release (#817, 2026-11-17) but is not in 0.8.0's own
+run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by hand are not part of that test,
 and Portainer's own *Update the stack* is not run by it.
 
 **If rag-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
