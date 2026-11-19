@@ -908,7 +908,8 @@ the cost is only that paragraph breaks between two chunks are unknown (joined wi
 | `download_url` | §4.6 grant link (`Knowledge:PublicBaseUrl` = `UME_RAG_API_PUBLIC_URL`) | `upload`, `sharepoint` (P2); null for `url` |
 | `source_type` | `IdentityKind` `url` → `web`, `upload` → `file`, `sharepoint` (P2) → `sharepoint` | – |
 | `document_type`, `media_type`, `language` | chunk `DocumentType`, `Documents.MediaType`, `Documents.Language` | – |
-| `modified` | chunk `SourceModifiedAt`, else `Documents.SourceModifiedAt`, else `FetchedAt` | always shown with the citation (answered 4) |
+| `modified` | chunk `SourceModifiedAt`, else `Documents.SourceModifiedAt`; for `file`, else `FetchedAt` (the upload time) | when the source last changed by its own date; null for a crawled page that states none (Decisions "Source dates on citations"): its fetch time is `checked`, not a change date |
+| `checked` | `Documents.FetchedAt` | `web` only, null for `file`: the last crawl run that confirmed the page (fetched, `304`, or skipped on an unchanged sitemap `lastmod`; connectors §5.4, §12) |
 | `page`, `page_end`, `heading_path` | per result (§3.2) | always shown when present (answered 2) |
 | `collection` | per result | slug |
 
@@ -930,7 +931,10 @@ the prompt lists each document once with its sections (or chunk texts) and their
 the user sees is the order of the document's **first citation** in the answer (the chat role renumbers the streamed
 markers, so Open WebUI's `[k]` = k-th emitted source; uncited documents are never shown); `MessageSources` keeps
 `Rank` and the display `Number` (null if not cited). Rendered link: `url` (or `download_url`) plus `#page={page}` for PDFs, so the viewer opens
-at the cited page; label: title, heading path tail, "s. 12–13", modified date.
+at the cited page; label: title, heading path tail, "s. 12–13", then the dates in brackets: `modified`, then for `web`
+`checked` with the word in the turn's language ("(2026-03-02, kontrollerad 2026-11-18)", "(kontrollerad 2026-11-18)"
+without a stated date, "(checked …)" in English; dates as `yyyy-MM-dd`, UTC). At least one date is always shown for a
+crawled page (answered 4), and a file has `modified`.
 
 ## 11. Latency budget (chat time to first token)
 
