@@ -39,9 +39,9 @@ them. **Rolling update: no** (the migration `DropMessageParentId`), which `rag-m
 - **An upgrade is one step, from 0.5.x on** (M-22 S4b, S4c). `rag-migrate` keeps the services a migration can't run
   beside out of the database until their new version starts (a migration declares the roles it stops; a service asks
   for admission at start), so a release marked *Rolling update: no* needs no manual stop on one slot. An upgrade may
-  skip releases: the release boots an earlier release's Portainer stack (for 0.8.0, 0.6.0's) and applies the new file over it
-  (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the Portainer
-  stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
+  skip releases: the release boots an earlier release's Portainer stack (for 0.8.0, 0.6.0's) and applies the new
+  file over it (`deploy/tests/portainer-upgrade-boot.sh`), and `docs/portainer.md` has one *Upgrade* section. In the
+  Portainer stack `UME_INTEGRATION_API_URL` defaults to the stack's own `adminapi`.
 - **A first install with Docker Compose is shorter.** `init-deployment.sh --gateway-secrets-dir DIR` reads the three
   credential keys that a gateway on the same host created from Ume.Rag's manifest
   (`deploy/portainer/integration-manifest.json`, now in the release bundle), so no key is copied by hand. A run without
@@ -94,9 +94,7 @@ them. **Rolling update: no** (the migration `DropMessageParentId`), which `rag-m
   one slot.
 - **The install and upgrade guides were checked line by line against the scripts, the stack files and the releases**,
   and corrected. What an operator would have tripped on: Docker Compose must be 2.33.1 or later (the guides said 2.24;
-  the Compose files use `gw_priority`); an upgrade with Portainer over several releases takes each release's own
-  `compose.portainer.yaml` in turn (the `v0.6.0` file for 0.5.x to 0.6.0, then the `v0.7.0` file), which
-  `docs/portainer.md` now says at each step; the single-slot procedure says to stop the old services first for a
+  the Compose files use `gw_priority`); the single-slot procedure says to stop the old services first for a
   release marked *Rolling update: no*; the 0.6.0 stack pins the gateway's `v0.10.3`, not `v0.10.2`. The release bundle
   now carries the Portainer, Kubernetes, Keycloak, network and security-event pages and `deploy/keycloak/`, which its
   guides link to.
