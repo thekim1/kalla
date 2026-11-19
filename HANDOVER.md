@@ -31,14 +31,18 @@ sink" monolith. Design and code live in this repo.
 **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an author
 cannot approve their own, never `gh pr merge --admin`). Everything, `plans/**` and this file included, goes through a
 `main-session/` branch; `thekim1` reviews the main session's pull requests. No pull request is open.
+`thekim1` merged #858 to #860 with `--admin` on 2026-11-19, unreviewed; its review of #861 says the user allowed it
+that for green pull requests the same day. That is not a broken rule, and it does not extend to `ume-nichlas`.
 
 1. **Tag `v0.8.0`, once the user says go** (the tag publishes the release):
    `git tag -a v0.8.0 faa001dd -m "Ume.Rag 0.8.0"` and push the tag. On the merge commit `faa001dd`, **not** `main`'s
    head (B-47 and B-48 are after it and not in its notes). Then the pin pull request that `release.yml` opens: it
    starts no checks, so close and reopen it, get it approved, merge. Then check that the daily Audit turns green: it
    has been red since #819 because it scans the last release's images (0.7.0).
-   - The CHANGELOG and the upgrade guide date 0.8.0 **2026-11-18**; if the tag is later, change the date in the pin
-     pull request or a small one before it (ask the user which).
+   - The CHANGELOG dates 0.8.0 **2026-11-18** (the upgrade guide's `## 0.8.0` has no date) and the tag will be
+     later: change the CHANGELOG's date in the pin pull request. A fix before the tag would move the tag past B-47
+     and B-48. The release page is not affected (`release.yml` takes the notes from below the heading); the tagged
+     CHANGELOG keeps 11-18.
    - The dry run from the release branch is green with the browser tests:
      [44474768676](https://github.com/thekim1/ume-rag-platform/actions/runs/44474768676). What `faa001dd` changed
      after it is notes and docs only (`thekim1`'s review of #856).
@@ -52,7 +56,9 @@ cannot approve their own, never `gh pr merge --admin`). Everything, `plans/**` a
    `read:packages` (`gh auth refresh -s read:packages`, or ask `thekim1`). A 0.5.x stack that has its images keeps
    working; one that must pull them again (a new or pruned host) can't. The VM runs 0.5.0 with its images local.
 3. **Stream b's B-47 and B-48** (#857's F3 and F4, the support chatbot) merged on 2026-11-19 by the other machine,
-   after the release preparation; their notes are in `changes/`.
+   after the release preparation; their notes are in `changes/`. The design before them is **#858**: Decisions
+   "Escalation hand-off" and "Source dates on citations", chat §9.9, knowledge §10.1 and §10.4, to-verify V38. It
+   left three things for the main session (*What the main session can take without input*, 4).
 
 ### Waiting on the user
 
@@ -80,12 +86,19 @@ cannot approve their own, never `gh pr merge --admin`). Everything, `plans/**` a
 1. **M-22:** S6 is done (#851); S8 (operator pages without project vocabulary) as each page is touched. S5 and S7 are
    proposals in the gateway's repository (thekim1/llmgateway#108, #109). The queue item can close once the user
    agrees S8 runs as a standing rule.
-2. **Stream a's queue** (`plans/work/stream-a.md`): every item left is in the live block (A-L1 to A-L5) and waits on
-   its input; nothing is open without one.
+2. **Stream a's queue** (`plans/work/stream-a.md`): what is left is the live block (A-L1 to A-L10) and A-34
+   and A-35, whose code is merged with only their live checks open. Each waits on its input; nothing is open without
+   one.
 3. **The dated exceptions expire:** the scan's FFmpeg CVEs in the parser's opencv wheel (eleven, until 2026-12-17,
    `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
    `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
    a reason, or drop the dependency.
+4. **#858's open ends** (design, the main session's):
+   - `Chat:EscalationTimeout` (2 s, hard; 0 = no summary, chat §9.9) is missing from `repo-and-deployment.md`'s
+     chat knob list, where `Chat:FollowUpTimeout` is.
+   - `checked` is missing from knowledge §3.2's JSON example.
+   - Settle #860's design deviation: for `unavailable`, `contacts` falls back to the platform's links (§9.9), but
+     the unavailable text (§10.2, `FixedTexts.Unavailable`) shows only the assistant's. Align §10.2, or keep it.
 
 ### Watch
 
@@ -200,9 +213,9 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
   where a pin is repeated.
 - **Ume.Rag on this machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in this WSL distro, so
   stack and image tests run only in CI; `shellcheck` and `actionlint` are not installed. On the other machine
-  (`~/research/rag`) session 47's worktrees (`~/research/rag-small`, `.claude/worktrees/agent-*`) can go once their
-  pull requests are merged (all of #813 to #827 are); volumes `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and
-  `ume-rag-clamav-db` are kept there.
+  (`~/research/rag`) session 47's agent worktrees and the merged local branches were removed on 2026-11-19; what
+  remains is the main clone on `main` and `~/research/rag-small` (the second checkout). Volumes
+  `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept there.
 - **The gateway on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; merges and
   releases in the gateway are the user's). Worktrees `~/git/llmgateway`, `~/git/llmgateway-100`,
   `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull requests are all merged: they can
