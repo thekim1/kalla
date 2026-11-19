@@ -26,6 +26,7 @@ public sealed class PromptTextRulesTests(AdminDatabaseFixture database)
     [InlineData("""{"identity":"Du är {name}."}""", "identity", "unknown placeholder {name}")]
     [InlineData("""{"identity":"Ge {N} svar."}""", "identity", "unknown placeholder {N}")]
     [InlineData("""{"followUps":"Du är {assistant}."}""", "followUps", "unknown placeholder {assistant}")]
+    [InlineData("""{"escalation":"Sammanfatta {N} ärenden."}""", "escalation", "unknown placeholder {N}")]
     [InlineData("""{"tone":"vänlig"}""", "tone", "unknown member")]
     [InlineData("""{"rules":{"maybe":"x"}}""", "rules.maybe", "unknown member")]
     [InlineData("""{"rules":"x"}""", "rules", "not an object")]
@@ -88,7 +89,7 @@ public sealed class PromptTextRulesTests(AdminDatabaseFixture database)
         try
         {
             var sections = (await admin.GetFromJsonAsync<PromptTextSection[]>("/api/settings/chat/prompts", Ct))!;
-            sections.Select(s => s.Id).ShouldBe(["frame", "general", "conversational", "sources", "condense", "condenseLong", "followUps", "caveats"]);
+            sections.Select(s => s.Id).ShouldBe(["frame", "general", "conversational", "sources", "condense", "condenseLong", "followUps", "escalation", "caveats"]);
             var frame = sections[0].Lines;
             frame[0].ShouldBe(new PromptTextLine("identity", "Du är {assistant}, en assistent för Umeå kommun.", "Hej från {assistant}.", 1000, "{assistant}", false));
             frame.Where(l => l.Member is null).Select(l => l.Text).ShouldBe(
@@ -96,6 +97,10 @@ public sealed class PromptTextRulesTests(AdminDatabaseFixture database)
             var followUps = sections.Single(s => s.Id == "followUps").Lines;
             (followUps[0].Member, followUps[0].Value).ShouldBe(("followUps", "Ge {N} frågor."));
             followUps.Skip(1).ShouldAllBe(l => l.Member == null);
+            // §9.9: the escalation summary's editable block (≤ 2,000), then its locked lines and the language line.
+            var escalation = sections.Single(s => s.Id == "escalation").Lines;
+            (escalation[0].Member, escalation[0].MaxLength).ShouldBe(("escalation", 2000));
+            escalation.Skip(1).Select(l => l.Text).ShouldBe([.. PromptTexts.Locked.Escalation, PromptTexts.Locked.EscalationSwedish]);
             sections.SelectMany(s => s.Lines).Where(l => l.Member is not null).Select(l => l.Member).Distinct()
                 .ShouldBe(PromptTexts.Members.Select(m => m.Path), ignoreOrder: true);
         }

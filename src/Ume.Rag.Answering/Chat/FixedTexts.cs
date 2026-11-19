@@ -30,6 +30,13 @@ public static class FixedTexts
     public static string ContactLinks(string? assistantNotFound, string? platformNotFound) =>
         Render("", HasLinks(assistantNotFound) ? assistantNotFound : platformNotFound);
 
+    /// <summary>
+    /// The escalation route's contacts (§9.9): the assistant's not-found links, else the platform's; <c>[]</c> when neither has
+    /// any. A link without a title is titled by its URL, as the rendered list does.
+    /// </summary>
+    public static IReadOnlyList<EscalationContact> Contacts(string? assistantNotFound, string? platformNotFound) =>
+        [.. Links(HasLinks(assistantNotFound) ? assistantNotFound : platformNotFound).Select(l => new EscalationContact(l.Title ?? l.Url!, l.Url!))];
+
     private static bool HasLinks(string? notFound) => Parse(notFound)?["links"] is JsonArray { Count: > 0 };
 
     public static string Unavailable(string? assistantNotFound, string language) =>
@@ -37,10 +44,13 @@ public static class FixedTexts
 
     private static string Render(string text, string? notFound)
     {
-        var links = (Parse(notFound)?["links"] as JsonArray)?.Select(l => (Title: l?["title"]?.GetValue<string>(), Url: l?["url"]?.GetValue<string>()))
-            .Where(l => !string.IsNullOrWhiteSpace(l.Url)).ToList() ?? [];
+        var links = Links(notFound);
         return links.Count == 0 ? text : text + "\n\n" + string.Join('\n', links.Select(l => $"- [{l.Title ?? l.Url}]({l.Url})"));
     }
+
+    private static List<(string? Title, string? Url)> Links(string? notFound) =>
+        (Parse(notFound)?["links"] as JsonArray)?.Select(l => (Title: l?["title"]?.GetValue<string>(), Url: l?["url"]?.GetValue<string>()))
+            .Where(l => !string.IsNullOrWhiteSpace(l.Url)).ToList() ?? [];
 
     private static string? Text(string? json, string language) =>
         Parse(json)?[language] is JsonValue v && v.GetValueKind() == JsonValueKind.String && v.GetValue<string>() is { Length: > 0 } text ? text : null;

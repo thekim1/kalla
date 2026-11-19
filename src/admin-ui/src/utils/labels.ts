@@ -2344,6 +2344,7 @@ export const PROMPT_TEXTS = {
     condense: 'Rewriting a follow-up question',
     condenseLong: 'Rewriting a long question',
     followUps: 'Follow-up suggestions',
+    escalation: 'Hand-off summary for second-line support',
     caveats: 'Notices above an answer',
   } as Record<string, string>,
   members: {
@@ -2359,6 +2360,7 @@ export const PROMPT_TEXTS = {
     condense: 'Instructions',
     condenseLong: 'Instructions',
     followUps: 'Instructions',
+    escalation: 'Instructions',
     'caveats.degraded.sv': 'Simplified search, Swedish',
     'caveats.degraded.en': 'Simplified search, English',
     'caveats.general.sv': 'General knowledge answer, Swedish',

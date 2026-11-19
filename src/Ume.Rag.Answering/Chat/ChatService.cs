@@ -42,6 +42,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     private readonly Counter<long>? _followUps = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.chat.follow_ups", description: "Follow-up suggestion calls and skips by outcome");
 
+    private readonly Counter<long>? _escalation = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<long>("rag.chat.escalation", description: "Escalation hand-offs by reason and what became of the summary");
+
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
 
@@ -297,6 +300,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     /// </summary>
     public UmeAnswer Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked)
     {
+        ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(asked);
         var pending = FollowUpCount(plan, asked) > 0;
         if (asked.FollowUps > 0 && !pending)
@@ -304,8 +308,74 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             _followUps?.Add(1, new KeyValuePair<string, object?>("outcome", FollowUps.Skipped));
         }
 
-        return UmeAnswer.For(plan, cited, asked, pending);
+        // §9.9: null for a turn that needs no hand-off; the route without a summary when the call is skipped before it starts;
+        // left for the second chunk when the call follows.
+        EscalationMember? escalation = null;
+        if (asked.Escalation && !Escalation.Applies(plan.Outcome))
+        {
+            escalation = new EscalationMember(null);
+        }
+        else if (asked.Escalation && !EscalationPending(plan, asked))
+        {
+            CountEscalation(plan, Escalation.Skipped);
+            escalation = new EscalationMember(Route(plan, null));
+        }
+
+        return UmeAnswer.For(plan, cited, asked, pending, escalation);
     }
+
+    /// <summary>
+    /// Whether the escalation summary's call follows the answer (§9.9 "Summary call"): asked for, a turn that gets the hand-off
+    /// (<see cref="Escalation.Applies"/>), <c>Chat:EscalationTimeout</c> above zero, a condense model, and a ceiling above
+    /// <c>OnPrem</c> (no condense model there, §5).
+    /// </summary>
+    public bool EscalationPending(ChatPlan plan, UmeRequest? asked)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return asked is { Escalation: true } && Escalation.Applies(plan.Outcome) && options.Value.EscalationTimeout > TimeSpan.Zero &&
+            plan.Platform.CondenseModel is not null && plan.Ceiling != Residency.OnPrem;
+    }
+
+    /// <summary>
+    /// The escalation hand-off with its summary (§9.9): one call at the condense ceiling as the assistant's key with
+    /// <c>x-ume-step: escalation</c> and <c>max_tokens</c> 200, from the user's last <paramref name="question"/>, the search query
+    /// when condensed and the outcome's line, bounded by <c>Chat:EscalationTimeout</c>; then the accept rule. Timeout, error,
+    /// residency refusal or a rejected text give a null summary, counted, never retried; the route still comes. The summary
+    /// is never logged. The caller's cancellation (a disconnect) cancels the call and is thrown.
+    /// </summary>
+    public async Task<EscalationMember> EscalationAsync(ChatPlan plan, string question, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(question);
+        var messages = Escalation.Messages(plan.Outcome, plan.Language, question, plan.Query, plan.Platform.Texts);
+        using var acting = GatewayCallScope.Begin(Acting(plan.Assistant));
+        var (answer, failure) = await CallTaskModelAsync(messages, Escalation.Step, Escalation.MaxTokens, options.Value.EscalationTimeout,
+            plan.Platform, plan.Ceiling, plan.MessageId, plan.Usage, ct);
+        var summary = answer is null ? null : Escalation.Accept(answer.Text);
+        CountEscalation(plan, answer is null ? Condenser.OutcomeName(failure!.Value) : summary is null ? Escalation.Rejected : Escalation.Used);
+        return new EscalationMember(Route(plan, summary));
+    }
+
+    /// <summary>
+    /// The second <c>ume</c> chunk (§3.8 Delivery): the follow-up call (when <paramref name="followUps"/> is above zero) and the
+    /// escalation summary's call (when pending) at the same time, so the wait is the longer budget, not their sum.
+    /// </summary>
+    public async Task<UmeLater> LaterAsync(ChatPlan plan, UmeRequest? asked, string question, int followUps, string delivered,
+        IReadOnlyList<PromptSource> cited, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var suggestions = followUps > 0 ? FollowUpsAsync(plan, question, followUps, delivered, cited, ct) : null;
+        var escalation = EscalationPending(plan, asked) ? EscalationAsync(plan, question, ct) : null;
+        return new UmeLater(suggestions is null ? null : await suggestions, escalation is null ? null : await escalation);
+    }
+
+    /// <summary>The escalation route of <paramref name="plan"/> (§9.9 "Object"): its outcome, the contact links, the summary.</summary>
+    private static EscalationAnswer Route(ChatPlan plan, string? summary) =>
+        new(ChatOutcomes.Name(plan.Outcome), FixedTexts.Contacts(plan.Assistant.Published?.NotFound, plan.Platform.NotFound), summary);
+
+    /// <summary><c>rag.chat.escalation{reason, summary}</c> (§17).</summary>
+    private void CountEscalation(ChatPlan plan, string summary) =>
+        _escalation?.Add(1, new TagList { { "reason", ChatOutcomes.Name(plan.Outcome) }, { "summary", summary } });
 
     /// <summary>
     /// The follow-up suggestions (§9.8): one call at the condense ceiling with <c>x-ume-step: follow-ups</c> and <c>max_tokens</c>

@@ -60,6 +60,8 @@ public static class PromptTextEndpoints
             new("condenseLong", [Edit(PromptTexts.CondenseLong)]),
             // §9.8: the editable block, then the locked lines and the language line.
             new("followUps", [Edit(PromptTexts.FollowUps), .. PromptTexts.Locked.FollowUps.Select(Locked), Locked(PromptTexts.Locked.FollowUpsSwedish)]),
+            // §9.9: the escalation summary's editable block, then its locked lines and the language line.
+            new("escalation", [Edit(PromptTexts.Escalation), .. PromptTexts.Locked.Escalation.Select(Locked), Locked(PromptTexts.Locked.EscalationSwedish)]),
             new("caveats", [Edit(PromptTexts.CaveatDegradedSv), Edit(PromptTexts.CaveatDegradedEn), Edit(PromptTexts.CaveatGeneralSv), Edit(PromptTexts.CaveatGeneralEn)]),
         ];
     }

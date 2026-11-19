@@ -7,12 +7,12 @@ namespace Ume.Rag.FakeGateway;
 /// <summary>
 /// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker, the
 /// long-question condense and the follow-up suggestions: a chat call with <c>x-ume-step</c> <c>eval-generate</c>,
-/// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c> or <c>follow-ups</c> is answered from
+/// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c>, <c>follow-ups</c> or <c>escalation</c> is answered from
 /// <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order, cycling per step and process), after
 /// the usual key, ceiling and target checks. Without a script, built-in answers keep a dev run of <c>generate-set</c>, a
 /// reranking assistant, a long question and follow-up suggestions working (<see cref="DefaultRerank"/>: word overlap;
 /// <see cref="DefaultCondenseLong"/>: the message's first words; <see cref="DefaultFollowUps"/>: questions on the source titles;
-/// all deterministic). No header carries a script, so a caller cannot script the fake. Every other chat call stays the echo answer.
+/// <see cref="DefaultEscalation"/>: the ticket's first words in one sentence; all deterministic). No header carries a script, so a caller cannot script the fake. Every other chat call stays the echo answer.
 /// </summary>
 public sealed partial class FakeChatScripts(IConfiguration configuration)
 {
@@ -22,6 +22,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
     public const string RerankStep = "rerank";
     public const string CondenseLongStep = "condense-long";
     public const string FollowUpsStep = "follow-ups";
+    public const string EscalationStep = "escalation";
 
     /// <summary>How many of the message's words <see cref="DefaultCondenseLong"/> keeps.</summary>
     public const int CondenseLongWords = 12;
@@ -68,6 +69,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
             RerankStep => DefaultRerank(userText),
             CondenseLongStep => DefaultCondenseLong(userText),
             FollowUpsStep => DefaultFollowUps(userText),
+            EscalationStep => DefaultEscalation(userText),
             _ => null,
         };
     }
@@ -146,6 +148,21 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
             "Var hittar jag mer information?", "Hur lång tid tar det?"];
         return string.Join('\n', titles.Take(2).Select(t => $"Vad mer behöver jag veta om {(t.Length > 60 ? t[..60] : t)}?").Concat(general).Take(5));
     }
+
+    /// <summary>
+    /// An escalation summary (chat design §9.9): "Användaren behöver hjälp med: " and the first 20 words of the message's
+    /// <c>Ärende: </c> section, ending in a full stop. Deterministic.
+    /// </summary>
+    public static string DefaultEscalation(string userText)
+    {
+        ArgumentNullException.ThrowIfNull(userText);
+        var ticket = EscalationTicket().Match(userText) is { Success: true } m ? m.Groups[1].Value : userText;
+        var words = ticket.Split((char[])[' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Take(20);
+        return "Användaren behöver hjälp med: " + string.Join(' ', words).TrimEnd('.', '?', '!') + ".";
+    }
+
+    [GeneratedRegex(@"Ärende: (.*?)(?:\n\n|\z)", RegexOptions.Singleline)]
+    private static partial Regex EscalationTicket();
 
     [GeneratedRegex(@"<question>\s*(.*?)\s*</question>", RegexOptions.Singleline)]
     private static partial Regex RerankQuestion();
