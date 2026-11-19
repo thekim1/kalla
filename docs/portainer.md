@@ -408,9 +408,9 @@ wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done 
 **Tested and not:** the release boots 0.6.0's stack (its file and variables, `clamav` and `openwebui`, no gateway
 keys, no identity provider) and applies the new file: every service comes back healthy on the new images, the
 database, the CA, the pepper and the Data Protection certificate are kept, and `rag-migrate` reports the roles it
-stopped. The step from 0.5.1 was tested before this release (#817, 2026-11-17) but is not in 0.8.0's own
-run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by hand are not part of that test,
-and Portainer's own *Update the stack* is not run by it.
+stopped. The step from 0.5.1 was tested before this release (#817, 2026-11-17) but is not in 0.8.0's own run: one
+of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
+hand are not part of that test, and Portainer's own *Update the stack* is not run by it.
 
 **If rag-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
 `UME_RAG_OIDC_CLIENT_SECRET` is missing or empty. Either add it and update the stack, or use the wizard (*First deploy*
