@@ -276,7 +276,7 @@ class NpmProductionTests(Temp):
 
     def test_repository_exceptions_file_parses(self) -> None:
         result = run("npm-production", self.REPORT, "--modules", self.modules("vue-router"), "--today", "2026-11-18")
-        self.assertNotIn("expected", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

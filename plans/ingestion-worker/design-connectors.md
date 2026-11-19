@@ -121,6 +121,7 @@ run items are written by the runner.
 | Discovery | `fetch` | the page's stored outlinks become new frontier rows of the source (P1); P2: new claims for every source claiming the URL (§6.2) |
 | Reconcile | `sync`, phase `reconcile` | deletion candidates, guard, soft deletes (§13); enqueued by the finalizer when a run has no open jobs |
 | Retry | `sync` (`kind = retry-failed`) | `FromIdentity` for each failed item of the last run; no reconcile deletions |
+| Continue | `sync` (`kind = continue`, crawl only) | the frontier rows an earlier run left open or failed, admitted to a new run that goes on with link discovery (§5.4); reconcile with explicit `Gone` only |
 | Preflight, site profile | `preview` (kinds `preflight`; P2: `site-profile`) | interactive, highest priority; results in `Jobs.Result`; a URL-list preflight samples ≤ 20 URLs (admin design §4.7); P2: `site-profile` learns or checks a host's profile (§5.6) |
 
 ### 2.3 Checkpoints and resume
@@ -355,6 +356,19 @@ counter with an example pattern in the report.
   ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2.3), which feeds the profile's reliability flag. An
   incremental run on a host whose applied profile does not set `lastmodReliable` runs as a full traversal; it is not
   refused.
+- **Continue** run (#804; the user's answers of 2026-11-17): a new run of kind `continue` that names the run it goes
+  on from (`Runs.ContinuesRunId`) and takes over that run's frontier rows still `pending` or `released` and its rows
+  whose latest item in that run failed, each at its depth with its leaf and removal-check flags; it lists no seeds and
+  goes on with link discovery. Each row is checked again against the current scope, on the form it was found under
+  (`CrawlScope.CheckStored`), and against the current `maxDepth`; dropped rows are counted. Fetching uses the current
+  fetch mode and never revalidates; the run's `maxPages` budget starts at zero. It is **never a complete traversal**
+  (reason `crawl.continued`), so its reconcile deletes only on explicit `Gone`, and it is left out of
+  `consecutiveIncomplete`, the revalidate count and `SettingsEffects`, which read only `sync` runs. Its seeds are the
+  carried depth-0 rows: like an incremental run, it fails as `crawl.seeds_unreachable` only when it had seeds and
+  every one failed again. The report's `continued` section is `{ from, open, failed, dropped, admitted }` (`admitted`
+  is below `open + failed` when `maxPages` was reached). The admin offers Continue only on the source's latest crawl
+  run, once it ended and not while it waits for a deletion decision, and only when it left an open row or a failed page
+  (admin design §4.5, `POST /api/runs/{id}/continue`).
 - **Removal check**: a URL that **leaves the sitemap** (the listing clears the frontier row's `SitemapLastMod`, which
   was set before) is re-requested by `HEAD`, then `GET` if `HEAD` is refused (405/501), in the run whose **complete
   listing** finds the departure: the next incremental run, or the next full traversal for a source without
@@ -624,8 +638,8 @@ Traversals release fetches only inside the source's `crawlWindow` (default `22:0
 day; answered 4). A traversal not finished at 06:00 pauses and continues the next night; the run stays `running`
 and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes (umea.se's ≈ 14,100
 HTML and PDF URLs ~24 minutes); at 1 req/s an external one ~2.8 h, both inside one window. Manual "sync now" and URL
-lists (nightly by default) ignore the window; a `retry-failed` crawl run follows the window unless its trigger is
-`manual`. A host whose politeness profile says `crawlWindow: any` is crawled at any time (§6.6).
+lists (nightly by default) ignore the window; a `retry-failed` or `continue` crawl run follows the window unless its
+trigger is `manual` (the admin's Continue is manual). A host whose politeness profile says `crawlWindow: any` is crawled at any time (§6.6).
 
 ### 6.6 Politeness profiles per host (configurable)
 

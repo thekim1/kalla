@@ -480,7 +480,7 @@ Fleet-wide shares and caps come in P2 with code that reads them; `config."Settin
 |---|---|---|---|
 | `preview` | 2 | `kind` (`stage-preview`/`publish-plan`; 6b: `preflight`/`site-profile`), `pipelineVersionId`, `documentIds` or `urls` (a `preflight` of a URL list samples ≤ 20 URLs, admin design §4.7), `untilStage`, `basePreviewJobId` | §11, §12 |
 | `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `edit-eval-question`, `reprocess-document`, `cancel-run`, `release-hold`, `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile` (admin design §4.7) | 6a/6b/6c each own their kinds |
-| `sync` | 2 | `sourceId`, `runId` (absent on a run's first job), `kind` (`sync`/`retry-failed`/`reprocess`), `trigger` (`Runs.Trigger`, §10.1), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromStage`, `resumeFromCheckpoint` (bool: resume from the source's `run` row in `ConnectorCheckpoints`, 6b §2.3), `incremental` (crawl, 6b §5.4); uploads `batchId` | 6b (listing, reconcile), §9.2 |
+| `sync` | 2 | `sourceId`, `runId` (absent on a run's first job), `kind` (`sync`/`retry-failed`/`reprocess`/`continue`), `continuesRunId` (`continue`: the run it goes on from; required on its first job), `trigger` (`Runs.Trigger`, §10.1), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromStage`, `resumeFromCheckpoint` (bool: resume from the source's `run` row in `ConnectorCheckpoints`, 6b §2.3), `incremental` (crawl, 6b §5.4); uploads `batchId` | 6b (listing, reconcile), §9.2 |
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, `urlHash` (the source's `CrawlFrontier` row) or `uploadId` (the upload slot); `executionId` once known | 6b, then §7 |
 | `parse` | `min(Worker:Concurrency:parse, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `stage`, `inputKey`, `slice` | §7, §9.5 |
 | `embed` | 4 (fixed in P1; adaptive from P2, §18) | `documentId`, `level`, `executionId`, `pipelineVersionId`, `runId`, `inputKey` | §7, §14 |
@@ -547,7 +547,9 @@ deletions run in a **reconcile phase** after all fetches, enqueued by the finali
 4. The sync job ends when listing is done; the run stays `running` until the finalizer sees no open jobs (§10.4).
 
 `retry-failed` lists only the documents whose last run item failed (`IRetryFailedConnector`); `reprocess` (publish,
-site-profile change, §12) iterates the source's live documents and calls `EnsureCurrent`, never fetching.
+site-profile change, §12) iterates the source's live documents and calls `EnsureCurrent`, never fetching. `continue`
+(crawl only, 6b §5.4) lists no seeds: it takes over the frontier rows the run `continuesRunId` left open and those whose
+latest item in that run failed, and goes on from them with link discovery.
 
 ### 9.3 Dispatcher
 
@@ -663,12 +665,13 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 `running` → `succeeded` | `degraded` | `failed` | `awaiting-deletion-confirmation` (6b §13.2, set by the finalizer
 when the guard left `DeletionProposals` waiting) | `cancelled` (source paused or deleted, or `cancel-run` command).
 Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, site-profile change, drift sweep with `schedule`, §2.3;
-`reprocess-document`); `Trigger`: `schedule`, `manual`,
+`reprocess-document`), `continue` (a crawl run that goes on from an earlier one, `Runs.ContinuesRunId`; 6b §5.4); `Trigger`: `schedule`, `manual`,
 `upload`, `publish`, `rollback`, `site-profile`, `retry`, `config-change` (scope or identity edits, 6b §12.4), P2
 `notification` (SharePoint). The `cancel-run` command (`{"kind":"cancel-run","runId":…}`, dedup `cancel:{runId}`)
 cancels the run's queued and running jobs in one statement (`IJobQueue.CancelRunAsync`; a running job loses its lease
 and stops at its owner's next heartbeat without committing), sets `Runs.State = 'cancelled'` and returns
-`{"cancelledJobs":n}`. `Runs.Phase` (`list` → `fetch` → `reconcile` → `done`) tracks a sync run.
+`{"cancelledJobs":n}`. `Runs.Phase` (`list` → `fetch` → `reconcile` → `done`) tracks a sync run; a `continue` run goes through the same
+phases, reconcile included.
 
 ### 10.2 Outcomes
 
