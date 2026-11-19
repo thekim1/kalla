@@ -6,7 +6,7 @@ orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGEN
 [`HANDOVER.md`](HANDOVER.md).
 
 **Status: P1 (pilot), built and released; the live block is ahead.** The last release is
-[`v0.7.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.7.0) (2026-11-16), on the gateway's `v0.11.0`;
+[`v0.8.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.8.0) (2026-11-19), on the gateway's `v0.11.0`;
 [`CHANGELOG.md`](CHANGELOG.md) has every release. P1 was built on FakeGateway, fixtures and the dev Keycloak first; the
 live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold set, the pilot member, the test host)
 come as one block at the end. Built:

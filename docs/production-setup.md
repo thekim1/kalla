@@ -593,7 +593,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
    the release tag). It pins the gateway's images (the gateway release it was built from, `v0.11.0` for Ume.Rag
-   `0.7.0`) and Ume.Rag's by digest, so no image variable is needed.
+   `0.7.0` and `0.8.0`) and Ume.Rag's by digest, so no image variable is needed.
 2. **Registry:** Ume.Rag's images on `ghcr.io/thekim1/ume-rag/*` are private: add `ghcr.io` as a registry in Portainer
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
