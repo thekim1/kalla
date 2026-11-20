@@ -382,7 +382,10 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         run.Result.ShouldBeOfType<JobResult.Committed>();
         var row = await Sql.JobAsync(database.Connection(null), run.Job.Id);
         var result = ContractJson.Deserialize<CheckHnswIndexResult>(JsonDocument.Parse(row.Result!).RootElement);
-        result.ShouldBe(new CheckHnswIndexResult { Scopes = 1, Queries = 5, Recall = 1.0, Rebuilt = true, RecallAfter = 1.0 });
+        // The recall before the rebuild is the approximate index's own (0.98 on a CI run, #896); the floor of 1.01 rebuilds at any value.
+        result.Recall.ShouldNotBeNull();
+        result.Recall.Value.ShouldBeInRange(0.0, 1.0);
+        (result with { Recall = null }).ShouldBe(new CheckHnswIndexResult { Scopes = 1, Queries = 5, Recall = null, Rebuilt = true, RecallAfter = 1.0 });
         var audit = await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT concat_ws('|', "Actor", "Action", "EntityType", "Service", "Details" ->> 'index', "Details" ->> 'trigger', "Details" ->> 'recallAfter')
             FROM audit."AuditLog" WHERE "EntityId" = $1
