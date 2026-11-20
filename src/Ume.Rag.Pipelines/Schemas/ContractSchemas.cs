@@ -66,6 +66,8 @@ public static class ContractSchemas
         new("jobs/v1/command.deletion.result.schema.json", typeof(DeletionCommandResult), "confirm-deletion and reject-deletion command result"),
         new("jobs/v1/command.release-hold.payload.schema.json", typeof(ReleaseHoldCommand), "release-hold command payload"),
         new("jobs/v1/command.release-hold.result.schema.json", typeof(ReleaseHoldResult), "release-hold command result"),
+        new("jobs/v1/command.delete-source.payload.schema.json", typeof(DeleteSourceCommand), "delete-source command payload"),
+        new("jobs/v1/command.delete-source.result.schema.json", typeof(DeleteSourceResult), "delete-source command result"),
         new("jobs/v1/command.clear-pii-flag.payload.schema.json", typeof(ClearPiiFlagCommand), "clear-pii-flag command payload"),
         new("jobs/v1/command.clear-pii-flag.result.schema.json", typeof(ClearPiiFlagResult), "clear-pii-flag command result"),
         new("jobs/v1/command.reprocess-document.payload.schema.json", typeof(ReprocessDocumentCommand), "reprocess-document command payload"),

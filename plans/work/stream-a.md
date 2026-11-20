@@ -11,7 +11,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [ ] A-36 A deleted source's and knowledge base's documents leave the index (#878)
+### [x] A-36 A deleted source's and knowledge base's documents leave the index (#878)
 - **Do:** data-model §8 and admin §4.5: when a source is deleted (and so when its knowledge base is), the worker
   soft-deletes its documents as removed ones are (`Documents.DeletedAt`, `PurgeAfter` +14 days, `DeletedAt` on the
   chunks of each live set), tombstones an upload source's blobs, and cancels its running run. **Check first what
