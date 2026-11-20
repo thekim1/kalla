@@ -91,10 +91,10 @@ public sealed class DeleteSourceCommandTests(RagDatabaseFixture database) : IAsy
 
         // The purge: nothing within the grace; after it, the documents with their sets and chunks, and their raw blobs tombstoned.
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(13));
-        (await new DeletedSourcePurge(database.Database(RagDatabase.Worker), clock).RunAsync(Ct)).ShouldBe(0);
+        (await Purge(clock).RunAsync(Ct)).Purged.ShouldBe(0);
         var hash = await Sql.ScalarAsync<byte[]>(database.Connection(null), """SELECT "ContentHash" FROM content."Documents" WHERE "Id" = $1""", first);
         clock.Advance(TimeSpan.FromDays(2));
-        (await new DeletedSourcePurge(database.Database(RagDatabase.Worker), clock).RunAsync(Ct)).ShouldBe(2);
+        (await Purge(clock).RunAsync(Ct)).Purged.ShouldBe(2);
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Documents" WHERE "SourceId" = $1""", seed.SourceId))
             .ShouldBe(0);
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."ChunkSets" WHERE "Id" = ANY($1)""",
@@ -103,6 +103,28 @@ public sealed class DeleteSourceCommandTests(RagDatabaseFixture database) : IAsy
             $"raw/{Classification.Public}/{Convert.ToHexStringLower(hash)}")).ShouldBe(DeletedSourcePurge.TombstoneReason);
         (await CommandSeeds.VisibleChunksAsync(database, keptSet)).ShouldBe(2);
     }
+
+    [Fact]
+    public async Task The_nightly_step_queues_the_command_for_a_deleted_source_whose_content_is_still_live()
+    {
+        // A source deleted before the admin queued delete-source (or a lost command): only Sources.DeletedAt is set.
+        var seed = await EngineKit.SeedUploadAsync(database, Classification.Public);
+        var document = await CommandSeeds.DocumentAsync(database, seed, $"upload:{Guid.CreateVersion7():D}");
+        await CommandSeeds.SetAsync(database, seed, document, "live");
+        var live = await EngineKit.SeedUploadAsync(database, Classification.Public);
+        await CommandSeeds.DocumentAsync(database, live, $"upload:{Guid.CreateVersion7():D}");
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "DeletedAt" = now() WHERE "Id" = $1""", seed.SourceId);
+
+        // Other tests' deleted sources may be queued too; this one is queued once: the dedup key holds while it waits.
+        (await Purge(TimeProvider.System).RunAsync(Ct)).Queued.ShouldBeGreaterThanOrEqualTo(1);
+        (await Purge(TimeProvider.System).RunAsync(Ct)).Queued.ShouldBe(0);
+        (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Jobs" WHERE "DedupKey" = $1 AND "State" = 'queued'""",
+            JobDedupKeys.DeleteSource(seed.SourceId))).ShouldBe(1);
+        (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Jobs" WHERE "DedupKey" = $1""",
+            JobDedupKeys.DeleteSource(live.SourceId))).ShouldBe(0);
+    }
+
+    private DeletedSourcePurge Purge(TimeProvider clock) => new(database.Database(RagDatabase.Worker), database.Queue(RagDatabase.Worker), clock);
 
     /// <summary>A live upload slot of the source for the document; returns its id and hash.</summary>
     private async Task<(Guid Slot, byte[] Sha)> SlotAsync(SourceSeed seed, Guid document)

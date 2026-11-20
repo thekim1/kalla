@@ -1,5 +1,9 @@
 using Npgsql;
+using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
@@ -10,10 +14,25 @@ namespace Ume.Rag.Worker.Engine;
 /// <see cref="Commands.DeleteSourceHandler"/> set) are deleted, their chunk sets and chunks with them (the keys cascade), in
 /// batches of 1,000. Each document's raw blobs are tombstoned (<c>document.purged</c>), so <see cref="BlobPurgeSweep"/>
 /// removes them after the blob purge delay unless another document still has that content. Part of the nightly
-/// <see cref="Jobs.MaintenanceService"/>.
+/// <see cref="Jobs.MaintenanceService"/>. First it queues <c>delete-source</c> for every deleted source that still has a
+/// document or an upload slot that is not deleted (one deleted before the admin queued the command, or a command lost), with
+/// the command's dedup key, so no deleted source keeps live content for longer than a night.
 /// </summary>
-public sealed class DeletedSourcePurge(JobDatabase database, TimeProvider time)
+public sealed class DeletedSourcePurge(JobDatabase database, IJobQueue queue, TimeProvider time)
 {
+    /// <summary>What one run did.</summary>
+    public sealed record Outcome(int Queued, long Purged);
+
+    // The job's department and level as the admin's command has them: the collection's department, the source's level.
+    private const string MissedSql = """
+        SELECT s."Id", c."DepartmentId", s."Classification"
+          FROM config."Sources" s JOIN config."Collections" c ON c."Id" = s."CollectionId"
+         WHERE s."DeletedAt" IS NOT NULL
+           AND (EXISTS (SELECT 1 FROM content."Documents" d WHERE d."SourceId" = s."Id" AND d."DeletedAt" IS NULL)
+                OR EXISTS (SELECT 1 FROM content."Uploads" u WHERE u."SourceId" = s."Id" AND u."DeletedAt" IS NULL))
+         LIMIT $1
+        """;
+
     public const int BatchSize = 1000;
 
     /// <summary>The tombstone reason of a purged document's raw blobs.</summary>
@@ -41,8 +60,29 @@ public sealed class DeletedSourcePurge(JobDatabase database, TimeProvider time)
         SELECT count(*)::int FROM gone
         """;
 
-    /// <summary>Purges every due document, batch by batch; returns how many.</summary>
-    public async Task<long> RunAsync(CancellationToken cancellationToken)
+    /// <summary>Queues the missed commands, then purges every due document, batch by batch.</summary>
+    public async Task<Outcome> RunAsync(CancellationToken cancellationToken)
+    {
+        var requests = new List<JobRequest>();
+        await using (var connection = await database.OpenAsync(cancellationToken))
+        await using (var command = new NpgsqlCommand(MissedSql, connection) { Parameters = { Db.P(BatchSize) } })
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var sourceId = reader.GetGuid(0);
+                requests.Add(new JobRequest(JobClasses.Command, reader.GetGuid(1), reader.GetString(2), ContractJson.Serialize(new DeleteSourceCommand { SourceId = sourceId }))
+                {
+                    DedupKey = JobDedupKeys.DeleteSource(sourceId),
+                });
+            }
+        }
+
+        var queued = requests.Count == 0 ? 0 : (await queue.EnqueueAsync(requests, null, cancellationToken)).Count;
+        return new Outcome(queued, await PurgeAsync(cancellationToken));
+    }
+
+    private async Task<long> PurgeAsync(CancellationToken cancellationToken)
     {
         long purged = 0;
         while (true)

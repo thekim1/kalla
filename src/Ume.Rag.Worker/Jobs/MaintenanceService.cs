@@ -91,7 +91,8 @@ public sealed partial class MaintenanceService(
         {
             try
             {
-                LogSourceDocumentsPurged(logger, await sourcePurge.RunAsync(cancellationToken));
+                var outcome = await sourcePurge.RunAsync(cancellationToken);
+                LogSourceDocumentsPurged(logger, outcome.Queued, outcome.Purged);
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -173,8 +174,8 @@ public sealed partial class MaintenanceService(
     [LoggerMessage(LogLevel.Information, "Removed {Count} chunk sets never swapped or past the rollback window")]
     private static partial void LogOrphansSwept(ILogger logger, long count);
 
-    [LoggerMessage(LogLevel.Information, "Purged {Count} documents of deleted sources past their grace")]
-    private static partial void LogSourceDocumentsPurged(ILogger logger, long count);
+    [LoggerMessage(LogLevel.Information, "Deleted sources: {Queued} delete-source commands queued for content left live, {Purged} documents purged past their grace")]
+    private static partial void LogSourceDocumentsPurged(ILogger logger, int queued, long purged);
 
     [LoggerMessage(LogLevel.Information, "Blob purge: {Purged} blobs purged, {Kept} tombstones dropped for keys referenced again")]
     private static partial void LogPurged(ILogger logger, long purged, long kept);
