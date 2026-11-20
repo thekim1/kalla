@@ -1,8 +1,7 @@
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.TestKit;
-using Ume.Rag.Worker.Jobs;
-using Ume.Rag.Worker.Tests.CommandJobs;
+using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Tests.Engine;
 using Ume.Rag.Worker.Tests.Processing;
 
@@ -10,7 +9,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 
 /// <summary>
 /// A-38 (processing design §13.3): a question whose expected document is gone (its source deleted, the documents
-/// soft-deleted by <c>delete-source</c>) is left out of every run and counted as <c>documentGone</c>, so recall@10 and MRR are
+/// soft-deleted as <c>delete-source</c> does) is left out of every run and counted as <c>documentGone</c>, so recall@10 and MRR are
 /// those of the set without it; the run makes a <c>human</c> one <c>stale</c> (not retired) and leaves a <c>generated</c> one
 /// to the next top-up; a revived document makes the <c>stale</c> human question active again at the next run.
 /// </summary>
@@ -59,13 +58,11 @@ public sealed class EvaluationGoneDocumentTests(RagDatabaseFixture database, Fak
         var added = await OnDemandAsync(fixture);
         (added.QuestionCount, added.DocumentGone).ShouldBe((without.QuestionCount + 2, 0), "both questions run while their document is there");
 
-        // The admin's delete sets Sources.DeletedAt and queues delete-source, which soft-deletes the source's documents.
+        // The admin's delete sets Sources.DeletedAt, and delete-source soft-deletes the source's documents. The documents are
+        // soft-deleted here directly, as delete-source does (IndexWriter), not through the job queue: the nightly purge's
+        // re-queue of delete-source for a deleted source with live content (#884) raced the queued command on CI (#896).
         await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "DeletedAt" = now() WHERE "Id" = $1""", sourceId);
-        await using (var runner = new CommandRunner(database))
-        {
-            (await runner.RunAsync(new DeleteSourceCommand { SourceId = sourceId }, fixture.Seed.DepartmentId, fixture.Seed.Classification)).Result
-                .ShouldBeOfType<JobResult.Committed>();
-        }
+        (await new IndexWriter(database.Database(RagDatabase.Worker)).SoftDeleteDocumentsAsync([document.Id], DateTimeOffset.UtcNow, Ct)).ShouldBe(1);
 
         var gone = await OnDemandAsync(fixture);
         (gone.QuestionCount, gone.Found, gone.RecallAtK, gone.Mrr).ShouldBe((without.QuestionCount, without.Found, without.RecallAtK, without.Mrr),
