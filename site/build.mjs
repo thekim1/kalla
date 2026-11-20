@@ -193,8 +193,8 @@ function homePage() {
   return `
 <section class="hero wrap" aria-labelledby="hero-h">
   <span class="pill"><span class="dot" aria-hidden="true"></span>Open source · .NET 10 · Built in Umeå</span>
-  <h1 id="hero-h">Answers from your own sources, with the source on every claim.</h1>
-  <p class="lead">Ume.Rag crawls your websites and documents, keeps them current, and answers questions in chat with a citation and a date for every claim. Every model call goes through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, under a residency ceiling.</p>
+  <h1 id="hero-h">Chat assistants that answer from your own websites and documents.</h1>
+  <p class="lead">Ume.Rag collects your organisation's web pages and documents, keeps them up to date, and lets assistants answer questions about them. Every answer shows the pages it is based on and how recent they are. Models are called through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, so you decide where your data may go.</p>
   <div class="actions"><a class="btn btn-primary" href="${url('start/')}">Get started${icon('arrow_forward')}</a><a class="btn btn-ghost" href="${url('docs/')}">Read the docs</a></div>
 </section>
 <div class="wrap pt-64"><div class="frame frame-lg">${shot('overview-desktop', 'The admin UI\'s home page: an assistant\'s questions, not-found answers, feedback and cost this week, and the platform\'s health', 'r-20')}</div></div>
@@ -212,13 +212,15 @@ function homePage() {
       <p class="body-l">Swedish keyword search and vector search run together and their ranks are fused, with an optional reranker on top. A question that the sources do not cover gets a plain "not found" and the right contact, not an invented answer. Every answer is checked against the sources it cites before it is sent.</p>
       <a class="more" href="${url('docs/')}">How it fits together${icon('arrow_forward')}</a>
     </div>
-    <div class="term"><span class="mute">Q:</span> Hur ansöker jag om bygglov för en altan?
-<span class="mute">A:</span> … the answer, with a marker after
-   every claim it takes from a source <span class="mute">[1]</span> <span class="mute">[2]</span>
+    <div class="term"><span class="mute">Fråga:</span> Behöver jag bygglov för en altan?
 
-<span class="mute">[1] Altan och uteplats (2026-09-14, kontrollerad 2026-11-12)
-[2] Ansök om bygglov (2026-10-02, kontrollerad 2026-11-12)
-    the page's date, and when it was last checked</span></div>
+<span class="mute">Svar:</span>  Det beror på hur hög altanen är och hur nära
+       tomtgränsen den ligger <span class="mute">[1]</span>. Du ansöker om
+       bygglov i kommunens e-tjänst <span class="mute">[2]</span>.
+
+<span class="mute">Källor:
+[1] Bygglov för altan (2026-09-14, kontrollerad 2026-11-12)
+[2] Ansök om bygglov (2026-10-02, kontrollerad 2026-11-12)</span></div>
   </div>
 </section>
 <section class="wrap pt-120" aria-labelledby="sdk-h">
