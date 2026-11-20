@@ -2,10 +2,10 @@
 # Writes deploy/.env for Docker Compose: the variables of deploy/compose.rag.yaml (the Portainer stack's names) and
 # COMPOSE_FILE with the overlays in use. It generates no certificate or secret: rag-bootstrap does, in the volumes, at
 # the first `up`, and ends its log with what is still missing and the setup wizard's address. Sign-in is set in the
-# setup wizard (https://<admin host>/setup, the setup code in rag-admin's log); only with --hardened is the provider's
-# address asked for, since the host firewall lets rag-admin reach that provider alone. A re-run changes what its
-# options name and keeps every other line. A secret it is given (a key file, S3 credentials) is kept in deploy/.env,
-# mode 600, as Portainer keeps it in the stack's variables.
+# setup wizard (https://<admin host>:9543/setup without a proxy, the setup code in rag-admin's log); only with
+# --hardened is the provider's address asked for, since the host firewall lets rag-admin reach that provider alone. A
+# re-run changes what its options name and keeps every other line. A secret it is given (a key file, S3 credentials)
+# is kept in deploy/.env, mode 600, as Portainer keeps it in the stack's variables.
 #
 #   deploy/init-deployment.sh                       # asks for the domain and the gateway's address
 #   deploy/init-deployment.sh --domain example.se --gateway-url https://llm.example.se --backup-target /mnt/backup --yes
@@ -49,7 +49,11 @@ env_file="$here/.env"; yes=0; overlays_given=""; add=(); sets=()
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 readable() { [ -r "$1" ] && [ -f "$1" ] || die "cannot read $1"; }
-dir_of() { [ -d "$1" ] || die "no directory $1"; }
+# dir_of DIR: a directory this user can enter (#874: a gateway's integration-secrets is the services' uid's, mode 700).
+dir_of() {
+  [ -d "$1" ] || die "no directory $1"
+  [ -x "$1" ] || die "cannot enter $1 as $(id -un): run deploy/init-deployment.sh as root (sudo) or as the directory's owner"
+}
 
 declare -A val=(); order=()
 put() { [ -n "${val[$1]+x}" ] || order+=("$1"); val[$1]="$2"; }
@@ -181,7 +185,15 @@ tmp="$(mktemp "$env_file.XXXXXX")"
 chmod 600 "$tmp"; mv -f "$tmp" "$env_file"
 
 admin="$(get UME_RAG_ADMIN_HOST)"; [ -n "$admin" ] || admin="${val[UME_DOMAIN]:+rag-admin.$(get UME_DOMAIN)}"
-admin="${admin:-$(get UME_RAG_API_HOST)}"
+api="$(get UME_RAG_API_HOST)"; [ -n "$api" ] || api="${val[UME_DOMAIN]:+rag.$(get UME_DOMAIN)}"
+# The setup wizard's address, as rag-bootstrap gives it (#874): through the TLS proxy (profile proxy) when rag-admin has
+# a host name of its own, else on rag-admin's port.
+if [[ ",$(get COMPOSE_PROFILES)," == *,proxy,* ]] && [ -n "$admin" ] && [ "$admin" != "$api" ]; then
+  port="$(get UME_RAG_PROXY_PORT)"; port="${port:-443}"
+else
+  port="$(get UME_RAG_ADMIN_PORT)"; port="${port:-9543}"
+fi
+admin="${admin:-$api}"; [ "$port" = 443 ] || admin="$admin:$port"
 dc="docker compose --env-file $env_file"
 echo "Wrote $env_file (mode 600). Next:"
 [[ "$overlays" != *" hardened "* ]] || echo "  sudo $here/host/install.sh    # before the first up: the slice, the firewall, the timers"

@@ -11,7 +11,7 @@
 #   - rag-api: /v1/models = 401 without a key           (a 404 is reported as not built, any other answer fails)
 #   - rag-admin: / = 200 with the admin UI's index.html
 #   - the setup wizard (Decisions "Setup wizard"), as deploy/tests/portainer-boot.sh checks it: rag-bootstrap's log
-#     points at https://rag-admin.smoke.test/setup, rag-admin's output has a setup code (never printed: masked in GitHub
+#     points at https://rag-admin.smoke.test:<admin port>/setup, rag-admin's output has a setup code (never printed: masked in GitHub
 #     Actions and cut from the logs a failure prints), and /bff/user says sign-in is not configured and setup is open
 #   - a Swedish compound query through the API          (no query endpoint exists yet; reported, not run)
 #   - pgbackrest stanza-create and check in rag-postgres
@@ -157,9 +157,9 @@ ok "rag-admin / = 200 (the admin UI)"
 
 echo "== the setup wizard (identity design §19)"
 dc logs --no-color --no-log-prefix rag-bootstrap \
-  | grep -q '^rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin\.smoke\.test/setup, ' \
-  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.smoke.test/setup"
-ok "rag-bootstrap points at the setup wizard (https://rag-admin.smoke.test/setup); no sign-in value was given"
+  | grep -qF "rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin.smoke.test:$admin_port/setup " \
+  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.smoke.test:$admin_port/setup"
+ok "rag-bootstrap points at the setup wizard (https://rag-admin.smoke.test:$admin_port/setup); no sign-in value was given"
 setup_code() {
   dc logs --no-color --no-log-prefix rag-admin 2>/dev/null | sed -n 's/^rag-admin: setup mode is open until .*\. Setup code: //p' | tail -n 1
 }

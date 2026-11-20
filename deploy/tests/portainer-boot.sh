@@ -26,7 +26,7 @@
 #     code (400 setup_code_invalid) and gives a setup session for the right one; GET /bff/setup/state answers first_run,
 #     the redirect URI for llm-admin.boot.test and every sign-in value from the code's defaults (no authority)
 #   - then rag-admin's setup wizard (identity design §19): no Oidc value either, so setup is open. rag-bootstrap's last
-#     lines point at https://rag-admin.boot.test/setup; rag-admin's output has the setup code; through rag-proxy,
+#     lines point at https://rag-admin.boot.test:<proxy port>/setup; rag-admin's output has the setup code; through rag-proxy,
 #     /bff/user says sign-in is not configured and setup is open; the setup session as for the gateway; GET
 #     /bff/setup/state answers first_run, the redirect URI for rag-admin.boot.test, every sign-in value from the code's
 #     defaults (no authority), the gateway's block once rag-admin has read its context (no suggested authority, since
@@ -221,9 +221,9 @@ grep -q '^rag-bootstrap: every setting it checks is in place$' <<< "$log" \
   || { sed -n '/^rag-bootstrap: still to do/,$p' <<< "$log" | sed 's/^/  /'; fail "rag-bootstrap's checklist is not empty"; }
 ok "rag-bootstrap's checklist is empty: the gateway credential keys came from the manifest (M-17 C7), nothing pasted"
 # No client secret in the stack: rag-bootstrap can't see the database, so it points at the wizard on every run.
-grep -q '^rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin\.boot\.test/setup, ' <<< "$log" \
-  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.boot.test/setup"
-ok "rag-bootstrap points at the setup wizard (https://rag-admin.boot.test/setup); no client secret was typed into the stack"
+grep -qF "rag-bootstrap: sign-in is set in the setup wizard: https://rag-admin.boot.test:$proxy_port/setup, " <<< "$log" \
+  || fail "rag-bootstrap's log does not point at the setup wizard on https://rag-admin.boot.test:$proxy_port/setup"
+ok "rag-bootstrap points at the setup wizard (https://rag-admin.boot.test:$proxy_port/setup, through rag-proxy); no client secret was typed into the stack"
 
 echo "== the gateway credential keys from the manifest (M-17 C7)"
 # Neither variables file sets UME_INTEGRATION_MANIFEST, so the gateway's bootstrap got the stack file's default.

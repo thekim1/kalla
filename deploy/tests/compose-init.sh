@@ -42,7 +42,7 @@ jq -e '.services["rag-admin"].environment | [to_entries[] | select((.key | start
 jq -e '.services | has("rag-clamav") and (has("rag-renderer") | not) and (has("rag-openwebui") | not)' "$work/c.json" >/dev/null \
   || fail "the first run's services are not the default profile's"
 jq -e '.services["rag-api"].environment.Gateway__BaseUrl == "https://llm.example.se"' "$work/c.json" >/dev/null || fail "Gateway__BaseUrl"
-grep -q "https://rag-admin.example.se/setup" "$work/init.log" || fail "the closing lines do not name the setup wizard"
+grep -q "https://rag-admin.example.se:9543/setup" "$work/init.log" || fail "the closing lines do not name the setup wizard"
 ok "deploy/.env, mode 600, renders with the clamav profile and no sign-in value; the next steps end at the wizard"
 
 echo "== a re-run keeps every line"
