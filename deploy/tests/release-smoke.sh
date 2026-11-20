@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test of a release bundle (plans/platform/repo-and-deployment.md §8.1, release.yml): unpacks the bundle, runs its
-# init-deployment.sh non-interactively with test-host options (deploy/compose.rag.yaml with compose.backup.yaml, no
-# sign-in value), starts it with the images the bundle pins (`up --wait`: rag-bootstrap and rag-migrate completed,
-# every service with a health check healthy), then checks:
+# init-deployment.sh non-interactively with test-host options (deploy/compose.rag.yaml with compose.backup.yaml, host
+# names without --domain as in the Compose quick start, no sign-in value), starts it with the images the bundle pins
+# (`up --wait`: rag-bootstrap and rag-migrate completed, every service with a health check healthy), then checks:
 #
 #   - api, admin and worker each have their gateway credential key (placeholders, set as variables; rag-bootstrap
 #     writes them to rag-secrets/<service>/Gateway__Key)
@@ -93,9 +93,11 @@ trap cleanup EXIT
 mkdir -p "$work/keys"
 for svc in api admin worker; do printf 'smoke-%s-key\n' "$svc" > "$work/keys/$svc"; done
 
-# init-deployment.sh with the test host's options plus "$@"; the extra Compose files after its COMPOSE_FILE.
+# init-deployment.sh with the test host's options plus "$@"; the extra Compose files after its COMPOSE_FILE. Host names
+# and no --domain, as the Compose quick start gives them: then the gateway admin's address renders empty, which
+# rag-admin must take as unset (#865); the Compose bootstrap test and the Portainer boot test cover the domain form.
 init_deployment() {
-  "$deploy/init-deployment.sh" --domain smoke.test --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
+  "$deploy/init-deployment.sh" --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
     --gateway-url https://llm.smoke.test \
     --gateway-credential-key-file api="$work/keys/api" --gateway-credential-key-file admin="$work/keys/admin" \
     --gateway-credential-key-file worker="$work/keys/worker" \
