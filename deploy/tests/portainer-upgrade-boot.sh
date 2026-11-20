@@ -44,6 +44,8 @@
 # run's stack of the same project is removed first, volumes included. Exit 0 when every check passed.
 set -euo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 old=""; new=""; from_env=""; version=""; offset=12000; project=kalla-portainer-upgrade
 wait_timeout=900; keep=0; files=(); fenced=(); rename=0
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
