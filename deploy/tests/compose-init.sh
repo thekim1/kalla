@@ -21,7 +21,7 @@ work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 cp -R "$repo/deploy" "$work/"; rm -f "$work/deploy/.env"
 d="$work/deploy"; env="$d/.env"
 # deploy/.env is under test: an inherited variable would override it.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME_|RAG_|COMPOSE_)' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(KALLA_|FORS_|UME_|RAG_|COMPOSE_)' || true)
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 init() { bash "$d/init-deployment.sh" "$@" < /dev/null > "$work/init.log" 2>&1 || { cat "$work/init.log"; fail "init-deployment.sh $* failed"; }; }

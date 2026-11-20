@@ -16,7 +16,7 @@
 #   - kalla-api: /health/ready = 200 (TLS verified against kalla-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key and 200 with Open WebUI's key, which the stack generated and registered by itself
 #   - all five host names come from FORS_DOMAIN alone (llm., llm-admin., rag., rag-admin. and chat.boot.test; no
-#     UME_*_HOST): adminapi's Gateway__BaseUrl is https://llm.boot.test; kalla-api's public URL is https://rag.boot.test
+#     FORS_*_HOST): adminapi's Gateway__BaseUrl is https://llm.boot.test; kalla-api's public URL is https://rag.boot.test
 #     for citation links and for kalla-admin; Open WebUI's WEBUI_URL is https://chat.boot.test
 #   - kalla-admin: / = 200 with the admin UI's index.html
 #   - the gateway's setup wizard (its docs/identity-and-roles.md, "Setup mode"): the stack sets no sign-in value
@@ -91,7 +91,7 @@ if [ -z "$stack" ] || [ ! -r "$stack" ]; then usage 1; fi
 for tool in docker curl jq; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 
 # The stack's pins and the variables file are under test: an inherited variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^UME_|^COMPOSE_PROFILES$' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^KALLA_|^FORS_|^UME_|^COMPOSE_PROFILES$' || true)
 
 work="$(mktemp -d)"
 gateway_port=$((8443 + offset)); gateway_admin_port=$((9443 + offset)); gateway_data_port=$((10443 + offset))

@@ -59,11 +59,11 @@ if [ -z "$bundle" ] || [ ! -r "$bundle" ]; then usage 1; fi
 for tool in docker curl jq tar; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 
 # The bundle's pins and deploy/.env are under test: an inherited variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^UME_|^COMPOSE_' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^KALLA_|^FORS_|^UME_|^COMPOSE_' || true)
 
 name="$(tar -tzf "$bundle" | sed -n 1p)"; name="${name%%/*}"
-version="${name#ume-rag-}"
-[[ "$name" =~ ^ume-rag-[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "error: $bundle is not an kalla-X.Y.Z bundle" >&2; exit 1; }
+version="${name#kalla-}"
+[[ "$name" =~ ^kalla-[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "error: $bundle is not a kalla-X.Y.Z bundle" >&2; exit 1; }
 if [ -z "$work" ]; then work="$(mktemp -d)"; else mkdir -p "$work"; work="$(cd "$work" && pwd)"; fi
 tar -xzf "$bundle" -C "$work"
 deploy="$work/$name/deploy"
