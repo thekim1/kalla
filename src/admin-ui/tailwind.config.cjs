@@ -29,8 +29,8 @@ module.exports = {
       focus: v('focus'),
     },
     fontFamily: {
-      sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-      mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
+      sans: ['"Geist Variable"', 'Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      mono: ['"Geist Mono Variable"', '"Geist Mono"', 'ui-monospace', 'monospace'],
       icon: ['"Material Symbols Rounded"'],
     },
     fontSize: {
