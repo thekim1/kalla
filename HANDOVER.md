@@ -40,11 +40,21 @@ sink" monolith. Design and code live in this repo.
   `thekim1`'s or the user's, on the release preparation's merge commit.
 - **On the user's machine the session cannot approve a pull request:** `gh pr review --approve` on #882 was stopped
   by Claude Code's permission check. Review as a comment and say so; the approval is the user's or `thekim1`'s.
+- **Which GitHub account the session is, is not settled. Ask the user first.** `gh` on the user's machine has two
+  accounts, `ume-nichlas` (the main session's until now) and `Crotalus` (the user's own). The active one changed to
+  `Crotalus` on 2026-11-20 between 07:07 and 08:53 UTC, not by the session: the review of #884 and this handover's
+  pull request (#887) are under it, everything earlier under `ume-nichlas`. The user was asked whether it was on
+  purpose and which account to work as, and had not answered when the session ended. Run `gh auth status` before
+  anything is pushed or posted. A pull request the session opens as one account is never approved by the session
+  as the other.
 
-**Nothing is open:** no pull request, and no item of the main session waits on anything but the user. In order:
+**Open when the session ended:** #887 (this file, with A-37, A-38 and B-53) and `thekim1`'s **#888** (a new
+`docs/how-it-works.md` and its place on the website; not read by the main session). No item of the main session
+waits on anything but the user. In order:
 
 1. **The daily Audit has not run since the release.** Its last run (2026-11-19 13:18 UTC) failed on 0.7.0's images,
-   as every run since #819. The schedule says 04:17 UTC, the runs come around 13:00. The first run after
+   as every run since #819; none had come by 2026-11-20 11:20 UTC. The schedule says 04:17 UTC, the runs come
+   around 13:00. The first run after
    2026-11-19 20:55 UTC scans 0.8.0's images and should be green; if it is not, its findings are the work (#818's
    way: update, or a dated exception in `scripts/audit/image-scan-exceptions.txt`).
 2. **The next release (0.9.0) has its content** (*State*): the support chatbot's F3 and F4, deletes, the demo seed,
@@ -225,7 +235,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   live block), M-16, M-17.
 - **Open issues that matter:** #878 (deletes: the three leftovers are A-37, A-38 and B-53), #874, #781 (watch),
   #667 (M-16, `thekim1`'s machine), #333 (the exact-scan and recall checks on the test host), #511 (splitting the
-  worker), #580 and #550 (decisions to record). No pull request is open.
+  worker), #580 and #550 (decisions to record). Open pull requests: #887, #888.
 - **Dependabot works:** its first grouped pull requests merged (#841 to #844); `.github/dependabot.yml`'s header lists
   where a pin is repeated.
 - **The user's machine (`~/research/rag`):** the main clone on `main` and `~/research/rag-small` (the second
@@ -234,8 +244,8 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   dev data and are kept. The quick start's test installation is torn down; the gateway's 0.11.0 images stay in the
   local Docker. **Docker's default address pools are full there** (about 25 unused networks of other projects): a
   new Compose project needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper
-  case and does not resolve inside containers. `gh` has two accounts, `ume-nichlas` (active) and `Crotalus` (the
-  user's own; not to be switched to without being asked); neither token has `read:packages`, so Ume.Rag's images
+  case and does not resolve inside containers. `gh` has two accounts, `ume-nichlas` and `Crotalus` (the user's
+  own; which is active: *Start here*); neither token has `read:packages`, so Ume.Rag's images
   cannot be pulled there. `actionlint` is installed (`/snap/bin/actionlint`; it hung once without `-shellcheck=
   -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). Playwright's
   Chromium and Firefox are in `~/.cache/ms-playwright`; Edge needs sudo to install. The Aspire CLI is at
