@@ -156,7 +156,7 @@ The script ends with the next steps, the setup wizard's address among them.
 2. **Create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. For a model that shortens its vectors, such as
    `text-embedding-3-large`, tick *Request dimensions* and give the size (1024 in the pilot).
-3. **In the gateway's admin**, move the integration to your own team (*Access → Integrations → Källa*, *Edit*), and
+3. **In the gateway's admin**, move the integration to your own team (*Access → Integrations → Kalla*, *Edit*), and
    create the **assigned keys** that knowledge bases and assistants run on: one or more per department, in the
    integration, with role *Assigned*.
 4. **Follow *Get started*** on Källa's *Home*: create a knowledge base, add a source, run the first fetch, write test

@@ -6,6 +6,111 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.9.0 (2026-11-20)
+
+Ume.Rag is now **Källa**, and the gateway is now **Fors**. Every name changes (variables, services, volumes, database
+roles, images, the repository), and the licence is **Apache-2.0**. Källa needs **Fors 0.12.1** or later, and its
+Portainer stack runs it. What an installation has encrypted stays readable, and keys issued before the rename keep
+working. Knowledge bases, sources and assistants can be deleted in the admin UI, and what they held leaves the
+database on its own. The chat API gets source dates on citations, an escalation hand-off and narrowing by topic.
+**Rolling update: no** (the rename, whose database roles are renamed by hand once; the migrations
+`CollectionSlugUniqueAmongLive`, `AssistantsDeletedAt` and `PurgeDeletedSourcesAndCollections`). See the
+[upgrade guide](docs/upgrade-guide.md#090), and Portainer's [*Upgrade*](docs/portainer.md#upgrade).
+
+### Changed
+
+- **Ume.Rag is now Källa** (#899, Decisions "Product names"): the platform is called Källa (Kalla in ASCII) and the
+  gateway Fors. The projects are `Kalla.*` (`Kalla.slnx`), the images `ghcr.io/thekim1/kalla/*`, the variables
+  `KALLA_*` (the gateway's `FORS_*`), the services, volumes and networks `kalla-*`, the database roles `kalla_*`, and
+  the repository thekim1/kalla (`https://thekim1.github.io/kalla/`). The chat extension is `kalla` (`kalla.topics`,
+  `kalla.related_documents`, …) and its metric `rag.chat.kalla`. New keys are `kalla-sk-…` and `kalla-pk-…`; keys
+  issued before the rename (`ume-rag-sk-…`) keep working. Källa calls the gateway with the `x-fors-*` headers and
+  `/v1/fors/context` and reads the `fors` model facts, so it needs **Fors 0.12.1** or later (0.12.0 loses the
+  gateway's stored secrets on its upgrade from 0.11, thekim1/fors#116). Examples and the demo
+  content stay Umeå kommun.
+- **Licence:** Apache-2.0, copyright Kim Vallén and Nichlas Löfdahl. Releases up to and including 0.8.0 were published
+  under EUPL-1.2.
+- **The Portainer stack runs Fors 0.12.1** (`deploy/portainer/compose.portainer.yaml`, the gateway's images pinned by
+  digest). 0.12.1 keeps the gateway's Data Protection names from before the rename, so a gateway upgraded from 0.11
+  still reads its provider credentials and the sign-in client secret saved in its setup wizard (thekim1/fors#116,
+  #117). The gateway contract is unchanged.
+- **The guides ask for one DNS record:** a wildcard record and a wildcard certificate for a sub-domain of the
+  installation's own cover every host name (`docs/portainer.md`, *What you need*; `docs/production-setup.md`,
+  *Reverse proxy and PKI*). Each service keeps a host name of its own; a test host needs only its own name.
+- **The "search is temporarily unavailable" text ends with the platform's contact links** when the assistant has none
+  of its own, as the not-found text does, so it always matches `kalla.escalation`'s `contacts` (chat §10.2).
+- **The setup wizard's test stack starts without the demo content** (#877 review): `Setup:Try` stands for a first
+  install, so the AppHost leaves the demo seed out there.
+- **kalla-bootstrap names the setup wizard's address with its port** (#874): without the TLS proxy serving kalla-admin's
+  host name, the closing line gives `https://<admin host>:<KALLA_ADMIN_PORT, 9543>/setup` (and the form behind a
+  reverse proxy of your own), with it the proxy's address. kalla-bootstrap now gets `KALLA_ADMIN_PORT` and
+  `KALLA_PROXY_PORT` for it. `init-deployment.sh`'s next steps name the same address.
+- **The Compose quick start says the cost and budget read-back is off after it** (#874), and points at
+  production-setup.md's *Cost and budget read-back*.
+
+### Added
+
+- **Delete a knowledge base or a source in the admin UI** (#878): *Delete* on the knowledge base's and the source's page
+  (department and platform admins) asks for the name to be typed. A knowledge base still used by an assistant or
+  holding sources names them instead. A deleted knowledge base's name is free for a new one at once.
+- **A deleted source's documents are removed** (#878): the worker's new command `delete-source` cancels the source's
+  running run, soft-deletes its documents and their chunks, and deletes its upload files, whose stored copies go after
+  the blob purge delay. The nightly maintenance then removes the documents for good after 14 days. Searching already
+  left a deleted source out.
+- **Deleting a source in the admin UI takes its content out at once** (#878): the delete queues the worker's
+  `delete-source` command in the same change.
+- **Delete an assistant** (#878): *Delete* on the assistant's page (department and platform admins), from any
+  state, asks for its name and shows the apps it is offered to and its questions of the last 7 days. No app lists
+  or reaches it from then on, and its name is free for a new assistant at once. Its conversations and statistics
+  stay their own time, and the row is removed 30 days later once no conversation names it. A deleted assistant no
+  longer keeps a knowledge base in use.
+- **Deleted sources and knowledge bases leave the database** (#878): the nightly retention removes a deleted
+  source's row once its documents are purged (14 days after the delete) and its upload blobs are purged (the blob
+  purge delay), and a deleted knowledge base's row, with its shares, once its last source's row is gone.
+- **Documents a source no longer has are removed for good** (#878): a document removed from a source that still exists
+  was soft-deleted but never purged. The nightly maintenance now deletes it with its chunks 14 days after the removal,
+  unless a later run found it again in the meantime, and its stored raw copy goes after the blob purge delay unless
+  another document has the same content.
+- **A deleted document no longer lowers the evaluation scores** (#878): an evaluation question whose expected document
+  was deleted (removed from its source, or its source deleted) is left out of every retrieval run and counted as
+  `documentGone` in the run's result instead of as a miss. A human question becomes `stale` at the run that finds it,
+  until an editor points it at other documents or retires it, and turns `active` again when its document comes back
+  within its 14 days. A generated question is still retired at the next top-up.
+- **Source dates on every citation** (#857, F4): a citation's label reads "(2026-03-02, kontrollerad 2026-11-18)": the
+  date the source states, then when a crawl last confirmed the page, in the turn's language. A crawled page that states
+  no date no longer shows its fetch time as its change date. The Knowledge API's `document` and each
+  `kalla.related_documents` entry carry `modified` and the new `checked`; an upload has `modified` (its upload time when
+  the file states none) and no `checked`.
+- **Escalation hand-off** (#857, F3): a client other than Open WebUI may add `"escalation": true` to the chat request's
+  `kalla`. A `not-found`, `answered-general` or `unavailable` turn then carries `kalla.escalation`: the reason, the
+  assistant's contact links (else the platform's) and a short summary of the user's problem for a second-line ticket.
+  The summary comes from one condense-model call within `Chat:EscalationTimeout` (2 s; 0 turns it off), with links
+  removed and personal identity numbers, e-mail addresses and phone numbers masked; it is never stored. An `answered`
+  turn gets `"escalation": null`. The instructions are a new prompt text on *Settings → Prompt texts*.
+- **Narrow a chat turn by topic** (F8): a client other than Open WebUI may send `kalla.topics` (1–20 topics in the
+  tag format) to search only chunks with one of those topics, inside what the assistant's links allow: a link with
+  topics keeps the common ones and is left out when none is, a link without topics is searched for the asked ones.
+  The answer's `kalla.topics` lists the asked topics a link searched; a turn with no link left ends `not-found`
+  without a search. Open WebUI's requests ignore it.
+- **The dev stack starts with its demo content** (#873): on an empty database with the FakeGateway, the migration
+  service seeds the public knowledge base *Umeå kommun – exempel* with the 13 smoke documents as an upload (the worker
+  indexes them on the first start), its department and team from the fake catalog, and *Demo-assistent*, published and
+  offered to the Open WebUI (dev) client. A later start adds the 30 smoke questions as its evaluation set, once the
+  documents are searchable.
+
+### Fixed
+
+- **kalla-admin starts on a Compose install without a domain** (#865): an empty `Admin:GatewayAdminUrl` or
+  `Admin:ApiPublicUrl`, as the one service file renders them when no host or domain is set, counts as unset instead of
+  failing the URL check at start.
+- **The admin UI shows its own font** (#869): the tokens and the Tailwind config name the bundled `Geist Variable` and
+  `Geist Mono Variable` first, so a machine without Geist installed no longer falls back to Segoe UI or DejaVu. The same
+  change as the gateway's (thekim1/fors#111).
+- **Clickable table rows meet the 24 px target size** (WCAG 2.5.8): the row button of a one-line row was 20 px tall
+  (the audit log), and now has a minimum height of 24 px.
+- **`init-deployment.sh` says to run as root when it cannot enter `--gateway-secrets-dir`** (#874), instead of a bare
+  `cd: Permission denied`.
+
 ## 0.8.0 (2026-11-19)
 
 An upgrade is one step and a restore needs one escrow set (M-22): `rag-migrate` stops what a migration can't run

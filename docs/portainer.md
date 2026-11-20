@@ -1,6 +1,6 @@
-# Deploying and upgrading with Portainer (0.8.x)
+# Deploying and upgrading with Portainer (0.9.x)
 
-How to run Källa with Fors `v0.11.0` as one Portainer stack: a first deploy on a new VM, and the upgrade
+How to run Källa with Fors `v0.12.1` as one Portainer stack: a first deploy on a new VM, and the upgrade
 of a `0.5.x` or later stack in one update (an older one: *Upgrade from before 0.5.0*). The stack is configured only
 through environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list:
 the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -13,9 +13,9 @@ the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/co
 
 ## Which file
 
-Use the **`compose.portainer.yaml` asset of the `v0.8.0` release** (or later), or the same file in the repository at
+Use the **`compose.portainer.yaml` asset of the `v0.9.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
+(`v0.12.1` in the `v0.9.0` asset; `v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
 and Källa's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0`
 asset predates both: it has no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be
 set by hand. The one typed
@@ -124,9 +124,9 @@ read the CA only at start.
    Leave `FORS_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `FORS_INTEGRATION_API_URL` as the file
    has it. The stack file then gives the gateway its default manifest,
    [`deploy/portainer/integration-manifest.json`](../deploy/portainer/integration-manifest.json): the gateway creates
-   the integration `Källa` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
+   the integration `Kalla` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
    C11). The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
-   named `Källa` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
+   named `Kalla` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
    your own team in step 7. Two other choices:
    - **Your own team at once:** set `FORS_INTEGRATION_MANIFEST` to the default manifest on one line, with an `"owner"`
      in `"integration"`: `{"teamCode":…,"teamName":…,"departmentCode":…,"departmentName":…}`. The team is found by
@@ -139,7 +139,7 @@ read the CA only at start.
    a variable: you set it up in steps 4 and 5. To set it in the stack instead, see *Declaring sign-in instead* below.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `kalla-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
-   creates the integration `Källa` and its keys `kalla-api`, `kalla-admin` and `kalla-worker` from the manifest and writes
+   creates the integration `Kalla` and its keys `rag-api`, `rag-admin` and `rag-worker` from the manifest and writes
    their secrets to the volume `<stack>_integration-secrets`, from which `kalla-bootstrap` gives each service its key; the
    services start. With the default manifest, `migrations`' log has the warning
    `Integration 'Källa' names no owner in the manifest, so it is placed in the team 'Källa' (code 'kalla') …`
@@ -199,16 +199,16 @@ read the CA only at start.
 6. **Open WebUI is not part of this path.** To give users the chat, now or later: *Adding Open WebUI*, below.
 7. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field): **move the integration to your own team** (skip it if your manifest names an owner): *Access →
-   Integrations → Källa*, *Edit*, the owner team. The team must be active, in an active department. Every credential
+   Integrations → Kalla*, *Edit*, the owner team. The team must be active, in an active department. Every credential
    key of the integration that is not revoked moves with it; usage already recorded stays with the team `kalla`, and
-   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Källa*, check the
+   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Kalla*, check the
    three credential keys (residencies `OnPrem` and `Eu`: Källa's ceiling, register M2), then create the **assigned
    keys** the assistants and knowledge bases will run on, one or more per department, in the integration with role
    *Assigned*. The manifest never changes a key that exists: change one here. **Rotate** a credential key here (with a
    grace period), then delete its file `Kalla/rag-<service>` in `<stack>_integration-secrets` and update the stack;
    the gateway writes the new secret and the service picks it up within seconds.
 8. **Keys issued by hand instead** (`FORS_INTEGRATION_MANIFEST` set empty, or the gateway runs elsewhere): create the
-   integration `Källa` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
+   integration `Kalla` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
    `KALLA_ADMIN_GATEWAY_KEY` and `KALLA_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and
    update the stack. The services pick them up within seconds. **Address list** of a credential key: the services reach
    the gateway over the stack's internal network `llm`, whose subnet Docker chose
@@ -307,23 +307,29 @@ and kalla-api accepts no Open WebUI user without the profile.
 
 ## Upgrade
 
-From 0.5.x or later to this release, **in one update**: paste this release's stack file over the old one and update
-the stack. No release in between has to be installed first, no variable has to be added, and nothing is stopped by
-hand: where a migration can't run beside the old version of a service (0.6.0's `RemoveWorkerConcurrency` and the old
-kalla-admin), `kalla-migrate` keeps that service out of the database until its new version starts. Plan a short window:
-every service restarts once, and the gateway moves to `v0.11.0`. The release tests this path by booting 0.6.0's stack
-with its variables and applying the new file over it. **Your stack keeps its variables and sees neither setup
-wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
+From 0.5.x or later to this release, **in one update**, with the rename to Källa and Fors in it: stop the stack,
+rename its variables, paste this release's stack file over the old one and update the stack, rename the database roles
+in a console, and redeploy. No release in between has to be installed first. Where a migration can't run beside the old
+version of a service (0.6.0's `RemoveWorkerConcurrency` and the old admin), `kalla-migrate` keeps that service out of
+the database until its new version starts. Plan a window of about half an hour: the stack is down from step 7 to
+step 9, and the gateway moves to Fors `v0.12.1`. The release tests this path by booting 0.6.0's stack with its
+variables, renaming them as in step 7 and applying the new file over it.
+
+**Names in this section:** steps 2 to 6 name the variables by their new names; until step 7 your stack still has
+the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old services and volumes `rag-*`,
+`ume-certs` and `ume-secrets`.
+
+**Your stack sees neither setup wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
 `KALLA_OIDC_CLIENT_SECRET` beside it kalla-admin does the same. Every change and why:
 [upgrade-guide.md](upgrade-guide.md), and the gateway's
 [upgrade guide](https://github.com/thekim1/fors/blob/main/docs/upgrade-guide.md).
 
 **Before the update**
 
-1. **Back up** both databases, the gateway's two files (`fors-secrets/.pepper`, `fors-certs/data-protection.pfx`) and
-   Källa's: from 0.7.x or earlier the three files its *First deploy* asked for (`kalla-secrets/.pepper`,
-   `kalla-secrets/keys/rag-blob-internal`, `kalla-certs/data-protection.pfx`); from 0.8.0 on, check its escrow set
-   (`sudo deploy/escrow-keys.sh --project <stack> --verify /media/<escrow>` prints `PASS`).
+1. **Back up** both databases, the gateway's two files (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`) and
+   Ume.Rag's: from 0.7.x or earlier the three files its *First deploy* asked for (`rag-secrets/.pepper`,
+   `rag-secrets/keys/rag-blob-internal`, `rag-certs/data-protection.pfx`); from 0.8.0, check its escrow set with
+   0.8.0's script (`sudo deploy/escrow-keys.sh --project <stack> --verify /media/<escrow>` prints `PASS`).
 2. **From 0.5.x, the gateway keys' residencies:** in the gateway's admin, give `kalla-api`'s and `kalla-admin`'s credential
    keys the residencies **`OnPrem` and `Eu` only** (the worker's already are). From 0.6.0 each service's ceiling is its
    key's residencies; a key that allows every residency would let a public assistant answer at `External`. Each
@@ -343,32 +349,51 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
    - a token-shape variable you changed (`KALLA_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`, `_GROUP_CLAIM`,
      `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS`, `_CLIENT_ID`): keep the line. The new file passes each only when
      it is set; unset, the code's default applies, which is the old file's default;
+   - **The integration's name:** the stack file's default manifest names the integration `Kalla` (up to 0.8.0
+     `Ume.Rag`). Where `FORS_INTEGRATION_MANIFEST` is not set and your integration came from the old default, rename
+     it from `Ume.Rag` to `Kalla` in the gateway's admin now (*Access → Integrations → Ume.Rag*, *Edit*): its keys
+     keep their names, so nothing is created. Where it is set, leave the name as your manifest has it;
    - **`FORS_INTEGRATION_MANIFEST` set** (a stack made from 0.6.0's `stack.env.example`, with an `owner`): keep it. A set
      value wins over the new stack file's default, and the integration and keys it made exist, so nothing is created
      or changed;
    - **`FORS_INTEGRATION_MANIFEST` not set** (a stack upgraded from 0.5.x that kept its keys issued by hand): the new
      stack file's default manifest applies from this update on. The gateway looks for the integration by its name,
-     `Källa`, and for each credential key by its name within it, creates what is missing and never changes what
-     exists. Keys issued by hand under other names (0.5.0's `Källa api`, …) don't count, so the gateway creates
-     three new credential keys `rag-api`, `kalla-admin` and `kalla-worker` in your integration `Källa` and writes their
+     `Kalla`, and for each credential key by its name within it, creates what is missing and never changes what
+     exists. Keys issued by hand under other names (0.5.0's `Ume.Rag api`, …) don't count, so the gateway creates
+     three new credential keys `rag-api`, `rag-admin` and `rag-worker` in your integration `Kalla` and writes their
      secrets to `<stack>_integration-secrets`; if your integration has another name, it also creates a second
-     integration `Källa`, in a new team and department `kalla`. Your services keep their keys: a
+     integration `Kalla`, in a new team and department `kalla`. Your services keep their keys: a
      `KALLA_*_GATEWAY_KEY` that is set wins over the manifest's. The new keys stay unused. **To create nothing,** add
      `FORS_INTEGRATION_MANIFEST` with an empty value now: set and empty, the default doesn't apply. Or let them be
-     created and revoke them afterwards (*After the update*, step 14).
+     created and revoke them afterwards (*After the update*, step 15).
 
 **The update**
 
-7. **Edit the stack:** paste the new file over the old one (keep the stack name). **No variable has to be added or
-   changed** (the empty `FORS_INTEGRATION_MANIFEST` of step 6 is your choice; the Integration API's address for the
-   cost and budget read-back is the stack's default). The host names stay as they are: `FORS_DOMAIN` is for new
-   stacks, or for the one-value form later (*Optional, afterwards*, below). Tidying, since a leftover is ignored and
-   `kalla-bootstrap`'s log names it: `KALLA_OPENWEBUI_API_KEY`, `KALLA_OPENWEBUI_CLIENT_ID`,
-   `KALLA_OPENWEBUI_ADMIN_API_KEY`, `KALLA_OPENWEBUI_PASSWORD_AUTH`, `KALLA_OPENWEBUI_BASE_URL`,
-   `KALLA_CLAMAV_MODE`, `KALLA_EMBEDDING_MODEL` and the other `KALLA_EMBEDDING_*`,
+7. **Stop the stack and rename its variables** (in Portainer's *Advanced mode* the variables are one text to edit):
+   every `UME_RAG_*` becomes `KALLA_*`, every `RAG_*_IMAGE` becomes `KALLA_*_IMAGE`, then every `UME_*` becomes
+   `FORS_*`, in that order, so that none becomes `FORS_RAG_*`. Write the old defaults you relied on as values: a stack
+   that declares Källa's sign-in (`KALLA_OIDC_CLIENT_SECRET`) and names no `KALLA_OIDC_CLIENT_ID` adds
+   `KALLA_OIDC_CLIENT_ID=ume-rag-admin`; one that sets `FORS_OIDC_AUTHORITY` and names no `FORS_OIDC_CLIENT_ID` adds
+   `FORS_OIDC_CLIENT_ID=ume-admin`; and add `FORS_DATA_AUDIENCE=ume-data-api` unless it is set (the gateway's guide,
+   *0.12.0*, *Portainer*). No other variable has to be added or changed (the empty `FORS_INTEGRATION_MANIFEST` of step 6 is your choice; the
+   Integration API's address for the cost and budget read-back is the stack's default). The host names stay as they
+   are: `FORS_DOMAIN` is for new stacks, or for the one-value form later (*Optional, afterwards*, below). Tidying,
+   since a leftover is ignored and `kalla-bootstrap`'s log names it: `KALLA_OPENWEBUI_API_KEY`,
+   `KALLA_OPENWEBUI_CLIENT_ID`, `KALLA_OPENWEBUI_ADMIN_API_KEY`, `KALLA_OPENWEBUI_PASSWORD_AUTH`,
+   `KALLA_OPENWEBUI_BASE_URL`, `KALLA_CLAMAV_MODE`, `KALLA_EMBEDDING_MODEL` and the other `KALLA_EMBEDDING_*`,
    `KALLA_GATEWAY_MAX_RESIDENCY`, `KALLA_GATEWAY_INTEGRATION_API_URL`, `FORS_ORGANISATION_NAME` and the four group
    variables of step 4 (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN` stays).
-8. **Update the stack** (*Re-pull image and redeploy* on). In order: the gateway's `bootstrap`, which also writes
+8. **Edit the stack:** paste the new file over the old one (keep the stack name) and update it with *Re-pull image
+   and redeploy* and *Prune services* on. The gateway's `bootstrap` copies `ume-certs` and `ume-secrets` into
+   `fors-certs` and `fors-secrets` once, and `kalla-bootstrap` copies `rag-certs`, `rag-secrets`, `rag-blobs`,
+   `rag-openwebui-data` and `rag-postgres-data` into the `kalla-*` volumes once; its log says *copied the database;
+   rename its roles before kalla-migrate can sign in*. The gateway's `migrations` and `kalla-migrate` then fail to sign
+   in, because the roles don't have their new names yet: that is expected.
+9. **Rename the roles and redeploy.** Open a console (`/bin/sh`) on `kalla-postgres` and run
+   `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -f -`, paste the content
+   of [`deploy/upgrade/0.9-rename-roles.sql`](../deploy/upgrade/0.9-rename-roles.sql) and end with Ctrl-D. Do the
+   same on the gateway's `postgres` with the statement of the gateway's guide (*0.12.0*, *Portainer*, step 3). Then
+   redeploy the stack. In order: the gateway's `bootstrap`, which also writes
    `adminapi/Setup__Secret`; the gateway's `migrations` (its migrations, then the integration manifest);
    `kalla-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files for kalla-api and
    kalla-admin; `kalla-migrate` (from 0.5.x eight migrations, from 0.6.0 three; it creates the managed clients *Open
@@ -379,22 +404,22 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
 
 **After the update**
 
-9. **Read the end of `kalla-bootstrap`'s log:** it lists what is still missing and each variable that is no longer read,
+10. **Read the end of `kalla-bootstrap`'s log:** it lists what is still missing and each variable that is no longer read,
    and says *sign-in to Källa's admin is declared by the stack's variables …, so the setup wizard stays closed*.
-10. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
+11. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
     stack's variables (FORS_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and no line
     `bootstrap: FORS_OIDC_CLIENT_SECRET is left out: …` after it.
-11. **From 0.5.x, Open WebUI's client** (step 3): in *Apps and keys*, open *Open WebUI* (*Managed by the deployment*),
+12. **From 0.5.x, Open WebUI's client** (step 3): in *Apps and keys*, open *Open WebUI* (*Managed by the deployment*),
     set the class, history and feedback days to the old client's and tick the same assistants; save. Then disable the
     hand-made client and revoke its key.
-12. **From 0.5.x,** if you noted groups in step 4, enter them under *Settings → Role groups*.
-13. **Check:**
+13. **From 0.5.x,** if you noted groups in step 4, enter them under *Settings → Role groups*.
+14. **Check:**
     - `adminapi`'s log has, once, the record
       `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (in the JSON line's
       `Message`), and **no** line with `Setup code`; kalla-admin's log has *The deployment declares the sign-in* once,
       and **no** line with *Setup code*; you sign in to both admins as before;
     - each of `kalla-api`, `kalla-admin` and `kalla-worker` logs *the credential key's ceiling: Eu* at start;
-    - `migrations`' log has `… 'Källa' applied, 0 of 3 credential keys created` when your keys came from a manifest
+    - `migrations`' log has `… 'Kalla' applied, 0 of 3 credential keys created` when your keys came from a manifest
       (`3 of 3` for a stack of step 6 without one; no such line with an empty value);
     - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
     - `kalla-openwebui`'s log has *starting with OIDC sign-in from kalla-api's sign-in settings*, Open WebUI's sign-in page
@@ -403,20 +428,24 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
     - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
     - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them;
     - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
-14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Källa*,
-    revoke `kalla-api`, `kalla-admin` and `kalla-worker` (the manifest never creates a revoked key again). Or move to them
+15. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Kalla*,
+    revoke `rag-api`, `rag-admin` and `rag-worker` (the manifest never creates a revoked key again). Or move to them
     instead: give them the settings of your keys (models, address list), remove the three `KALLA_*_GATEWAY_KEY`
     variables and update the stack, so `kalla-bootstrap` hands each service its new key from the volume; once *Models*
     shows a recent organisation sync again, revoke your old keys.
 
-15. **Escrow Källa's keys** with this release's `deploy/escrow-keys.sh`, as *First deploy* step 11, and verify the
+16. **Escrow Källa's keys** with this release's `deploy/escrow-keys.sh`, as *First deploy* step 11, and verify the
     set. From 0.7.x or earlier this is the first set; a set made by an earlier release doesn't pass `--verify`.
+17. **Remove the old volumes** once the stack runs and the escrow set verifies: `<stack>_rag-certs`,
+    `<stack>_rag-secrets`, `<stack>_rag-blobs`, `<stack>_rag-openwebui-data`, `<stack>_rag-postgres-data`, and the
+    gateway's `<stack>_ume-certs` and `<stack>_ume-secrets` (they stay declared in the gateway's file, empty, until
+    Fors 0.13).
 
 **Tested and not:** the release boots 0.6.0's stack (its file and variables, `clamav` and `openwebui`, no gateway
-keys, no identity provider) and applies the new file: every service comes back healthy on the new images, the
-database, the CA, the pepper and the Data Protection certificate are kept, and `kalla-migrate` reports the roles it
-stopped. The step from 0.5.1 was tested before this release (#817, 2026-11-17) but is not in 0.8.0's own run: one
-of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
+keys, no identity provider), stops it, renames its variables as in step 7, applies the new file, renames the roles in
+both databases as in step 9 and redeploys: every service comes back healthy on the new images, and the database, the
+CA, the pepper and the Data Protection certificate are kept in the new volumes. The step from 0.5.1 was tested before
+0.8.0 (#817, 2026-11-17) but is in no release's own run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
 hand are not part of that test, and Portainer's own *Update the stack* is not run by it.
 
 **If kalla-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or

@@ -363,10 +363,10 @@ never holds another service's key. The three keys come about in one of three way
 - **By hand**, field by field, in the gateway's admin UI. The manifest and the preset carry these settings, with an
   empty address list:
 
-1. **The integration.** Under *Access → Integrations*, create `Källa` with its owner team. Calls made as a credential
+1. **The integration.** Under *Access → Integrations*, create `Kalla` with its owner team. Calls made as a credential
    key are charged to that team: the organisation and model syncs, the embedding canary, model checks, and every call
    of an assistant or knowledge base that has no key of its own.
-2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Källa`,
+2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Kalla`,
    role *Credential*. Name them so the usage report tells them apart, for example `Källa api`, `Källa admin` and
    `Källa worker`. Each key has:
    - **`RequireMaxResidency` on**: the gateway refuses a request without the ceiling header (`400 invalid_request`).
@@ -592,8 +592,8 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 **On a new VM** (Docker and Portainer installed, nothing else):
 
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
-   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.11.0` for Källa
-   `0.7.0` and `0.8.0`) and Källa's by digest, so no image variable is needed.
+   the release tag). It pins the gateway's images (the gateway release it was built from: Fors `v0.12.1` for Källa
+   `0.9.0`, `v0.11.0` for `0.7.0` and `0.8.0`) and Källa's by digest, so no image variable is needed.
 2. **Registry:** Källa's images on `ghcr.io/thekim1/kalla/*` are private: add `ghcr.io` as a registry in Portainer
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
