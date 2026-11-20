@@ -29,7 +29,7 @@ flowchart LR
     proxy["Municipal reverse proxy<br/>(TLS)"]
 
     subgraph data_plane["Data plane zone"]
-        api["rag-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Ume.Rag.Answering + Ume.Rag.Retrieval<br/>in-process tool hub (P2)"]
+        api["rag-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Kalla.Answering + Kalla.Retrieval<br/>in-process tool hub (P2)"]
     end
 
     subgraph control_plane["Control plane zone"]
@@ -121,7 +121,7 @@ sequenceDiagram
     autonumber
     participant U as Open WebUI
     participant C as rag-api chat role
-    participant K as Knowledge core (Ume.Rag.Answering)
+    participant K as Knowledge core (Kalla.Answering)
     participant P as Postgres
     participant G as LLM gateway
     participant W as Background writer
@@ -167,7 +167,7 @@ flowchart TD
         publish["Publish: re-process every document (P1),<br/>plan from changed parameters (P2)"]
         decide{"Owner: keep or roll back<br/>(previous chunk sets kept 14 days)"}
         cfg[("config tables<br/>+ outbox, version bump")]
-        judge["Nightly answer judge (P2)<br/>Ume.Rag.Answering + on-prem judge"]
+        judge["Nightly answer judge (P2)<br/>Kalla.Answering + on-prem judge"]
     end
 
     subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
@@ -218,7 +218,7 @@ with their tools visible from step 1, and `search_knowledge` is prefetched with 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as Agent loop (Ume.Rag.Answering, chat role)
+    participant M as Agent loop (Kalla.Answering, chat role)
     participant G as LLM gateway
     participant H as Tool hub (in-process, chat role)
     participant S as Hosted MCP server

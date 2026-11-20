@@ -2,7 +2,7 @@ import { PII_RULES } from '@/utils/labels'
 
 /**
  * `Settings.PiiFlagRules` as the Settings page edits it (processing design §9.4; `PiiFlagRules` in
- * `Ume.Rag.Pipelines/Processing/PersonalData.cs`). Stored as `{ types: { <type>: { flag, min } }, listLike: { minNames,
+ * `Kalla.Pipelines/Processing/PersonalData.cs`). Stored as `{ types: { <type>: { flag, min } }, listLike: { minNames,
  * minContacts } | null }`; an empty object means the defaults below. A type the stored `types` leave out never flags.
  */
 

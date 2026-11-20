@@ -39,7 +39,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UmeContext"
+                  "$ref": "#/components/schemas/ForsContext"
                 }
               }
             },
@@ -426,7 +426,7 @@
           "External"
         ]
       },
-      "UmeContext": {
+      "ForsContext": {
         "type": "object",
         "required": [
           "object",

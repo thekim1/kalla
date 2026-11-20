@@ -18,4 +18,4 @@ Ume.Rag includes or uses third-party components under their own licences:
 - This software is based in part on the work of the Independent JPEG Group.
 - FFmpeg (in opencv-python-headless) and libiconv (in lxml): LGPL-2.1; source: ffmpeg.org, gnu.org/software/libiconv.
 - Swedish word list "Den stora svenska ordlistan" 2.42, Copyright © 2003-19 Göran Andersson: LGPL-3.0-only
-  (src/Ume.Rag.Retrieval/Text/sv_SE/).
+  (src/Kalla.Retrieval/Text/sv_SE/).

@@ -3,7 +3,7 @@ text-layer.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish
 scanned.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text rendered to a 200 dpi JPEG, no text layer)",CC0-1.0,no
 corrupt.pdf,"synthetic: src/parser/scripts/make_fixtures.py (PDF header + seeded random bytes)",CC0-1.0,no
 legacy.doc,"synthetic: src/parser/scripts/make_fixtures.py (OLE signature + zero header: no known application, refused as format_deferred)",CC0-1.0,no
-cases.json,"hand-written: the requests of Ume.Rag.ContractTests and scripts/update_goldens.py",CC0-1.0,no
+cases.json,"hand-written: the requests of Kalla.ContractTests and scripts/update_goldens.py",CC0-1.0,no
 golden/*.json,"generated: src/parser/scripts/update_goldens.py against the parser image",CC0-1.0,no
 legacy.rtf,"synthetic: src/parser/scripts/make_fixtures.py (a two-line RTF document; converted by LibreOffice)",CC0-1.0,no
 legacy.msg,"synthetic: src/parser/scripts/make_fixtures.py (OLE header and the stream names of an Outlook message; refused as format_deferred)",CC0-1.0,no

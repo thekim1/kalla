@@ -19,7 +19,7 @@ uvx ruff@0.17.2 format --check --config scripts/audit/ruff.toml scripts/audit
 ## Running it
 
 ```bash
-dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > /tmp/dotnet.json
+dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > /tmp/dotnet.json
 python3 -I scripts/audit/audit.py dotnet /tmp/dotnet.json
 
 cd src/admin-ui && npm ci && { npm audit --json > /tmp/npm.json || true; }

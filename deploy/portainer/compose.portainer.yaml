@@ -625,7 +625,7 @@ services:
       rag-data: {}
       llm: {gw_priority: 1}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
+      test: [CMD, dotnet, Kalla.Api.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
@@ -706,7 +706,7 @@ services:
       # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
       edge: {}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
+      test: [CMD, dotnet, Kalla.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
@@ -768,7 +768,7 @@ services:
       rag-render: {}
       rag-crawl: {gw_priority: 1}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
+      test: [CMD, dotnet, Kalla.Worker.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
@@ -936,7 +936,7 @@ services:
     # nginx.conf (deploy/proxy/nginx.portainer.conf.template) and the two CA certificates into rag-config/proxy.
     <<: *hardened
     profiles: [proxy]
-    # nginx 1.31.6, as the browser tests' fixture site (src/Ume.Rag.AppHost); the index digest.
+    # nginx 1.31.6, as the browser tests' fixture site (src/Kalla.AppHost); the index digest.
     image: ${RAG_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
     user: "101:101"
     restart: unless-stopped

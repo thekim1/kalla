@@ -70,7 +70,7 @@ Check that the profile renders with `docker compose --env-file .env --profile op
 
 Nothing in the repository changes. You set values in one of two places:
 
-| Value | AppHost (user secrets, `dotnet user-secrets --project src/Ume.Rag.AppHost set ...`) | Pilot stack (`init-deployment.sh` options, written to `deploy/.env`, or rag-admin's setup wizard) |
+| Value | AppHost (user secrets, `dotnet user-secrets --project src/Kalla.AppHost set ...`) | Pilot stack (`init-deployment.sh` options, written to `deploy/.env`, or rag-admin's setup wizard) |
 |---|---|---|
 | The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--gateway-ca-file`) |
 | Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
@@ -125,7 +125,7 @@ All values go in the AppHost's user secrets, never in the repository. Use a Post
 FakeGateway data stays as it is and the pilot profile is the only (and default) profile:
 
 ```bash
-p=src/Ume.Rag.AppHost
+p=src/Kalla.AppHost
 dotnet user-secrets --project $p set DevelopmentVolumes:Postgres ume-rag-m1-postgres     # now
 dotnet user-secrets --project $p set FakeGateway:Enabled false                           # now
 dotnet user-secrets --project $p set Gateway:BaseUrl https://<gateway host>              # now
@@ -163,7 +163,7 @@ and the save's test embedding is stored as the canary. It is the only profile, s
 In the Aspire dashboard (`https://localhost:17470`), check that `migrations` completed and that no `fake-gateway`
 resource runs. Copy the `ragdb` connection string from the `postgres` resource (Host `localhost`, the mapped port,
 user `postgres`, the generated password); keep it out of transcripts. For the API key (§4.4) also copy the
-`key-pepper` parameter (the dashboard's Parameters, or `dotnet user-secrets --project src/Ume.Rag.AppHost list`, key
+`key-pepper` parameter (the dashboard's Parameters, or `dotnet user-secrets --project src/Kalla.AppHost list`, key
 `Parameters:key-pepper`): rag-api hashes keys with it (`Security:KeyPepper`).
 
 **On Linux or WSL** (no PowerShell needed), use the Aspire CLI with the same switches; `aspire` is the CLI from the
@@ -171,8 +171,8 @@ NuGet cache (`~/.nuget/packages/aspire.cli.linux-x64/<version>/tools/net10.0/lin
 
 ```bash
 export Seed__Enabled=false
-aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive   # prints the dashboard login URL
-aspire describe --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj                    # resource states
+aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive   # prints the dashboard login URL
+aspire describe --apphost src/Kalla.AppHost/Kalla.AppHost.csproj                    # resource states
 ```
 
 With WSL's mirrored networking the Windows browser reaches every `localhost` port. If `https://localhost:5174` shows
@@ -189,7 +189,7 @@ after #172 begins with an empty database: run the seed (§4.4) again.
 secrets hold its key: put a whole `ume-rag-sk-` key of your choice (the prefix and 43 letters or digits) in
 `Parameters:openwebui-api-key` and restart the AppHost. `rag-migrate` registers it as the deployment's own Open WebUI
 client (identity design §5.2, M-17 C4); no client is made by hand. Publish an assistant with that client in its
-audience; it then appears as a model in Open WebUI. `dotnet run --project src/Ume.Rag.AppHost` runs the Debug build even with `-c Release`, so build
+audience; it then appears as a model in Open WebUI. `dotnet run --project src/Kalla.AppHost` runs the Debug build even with `-c Release`, so build
 Debug first.
 
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
@@ -303,7 +303,7 @@ Stop the AppHost, then remove the milestone's switches; the FakeGateway database
 left it:
 
 ```bash
-p=src/Ume.Rag.AppHost
+p=src/Kalla.AppHost
 for k in DevelopmentVolumes:Postgres FakeGateway:Enabled Gateway:BaseUrl \
          Gateway:Services:api:Key Gateway:Services:admin:Key Gateway:Services:worker:Key; do
   dotnet user-secrets --project $p remove $k

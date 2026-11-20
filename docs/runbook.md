@@ -825,7 +825,7 @@ open it again; the next re-open needs another new value.
 
 ## Incidents
 
-- **Security events** go to the SIEM under `Ume.Rag.Security`; what each one means and which alerts to set up is in
+- **Security events** go to the SIEM under `Kalla.Security`; what each one means and which alerts to set up is in
   [security-events.md](security-events.md).
 - **Who to tell:** the service owner `<owner>` and on-call `<owner>` first; the data protection officer `<owner>` for
   any suspected personal-data breach (the GDPR breach assessment: a notifiable breach is reported within 72 hours of

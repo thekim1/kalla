@@ -47,9 +47,9 @@ R3 is new and rules out option E (§5).
 ### 3.1 What exists
 
 - A key belongs to a **client**, has an optional **team**, and `Scopes.AssistantIds` / `Scopes.CollectionIds` narrow
-  it (`src/Ume.Rag.Domain/Entities/KeyEntities.cs`; identity §4.3 step 6, a miss is 404 `key_scope`).
+  it (`src/Kalla.Domain/Entities/KeyEntities.cs`; identity §4.3 step 6, a miss is 404 `key_scope`).
 - Per key: `AllowedIpRanges`, `RequestsPerMinute`, expiry, rotation (immediate or 24 h grace), audited reveal, revoke
-  (`src/Ume.Rag.AdminApi/KeyEndpoints.cs`; identity §6.4).
+  (`src/Kalla.AdminApi/KeyEndpoints.cs`; identity §6.4).
 - V23 limits scopes to assistants and collections of the key team's department (admin §4.6).
 - The support-assistant case plans one `integration` client and one key scoped to its assistant
   (`plans/cases/support-assistant/05-frontend-integration.md`).
@@ -60,7 +60,7 @@ R3 is new and rules out option E (§5).
 |---|---|---|
 | I1 | No key UI on the assistant page. Keys are only in the generic platform form (`/plattform/keys`), where the admin picks a client and enters assistant ids | `src/admin-ui/src/platform/resources.ts`; no key code in `src/admin-ui/src/views/AssistantView.vue` |
 | I2 | A department admin may manage keys of own teams, but a key needs a client, and clients are platform-admin objects | identity §6.4; admin §5.8 |
-| I3 | Usage is recorded per day, assistant and **client**, not per key | `AssistantDailyTotals`; no key id found in `src/Ume.Rag.Domain/Entities/ChatEntities.cs` or `src/Ume.Rag.Api/ConversationWriter.cs` (grep only, not a full read) |
+| I3 | Usage is recorded per day, assistant and **client**, not per key | `AssistantDailyTotals`; no key id found in `src/Kalla.Domain/Entities/ChatEntities.cs` or `src/Kalla.Api/ConversationWriter.cs` (grep only, not a full read) |
 
 ### 3.3 Options
 

@@ -1,9 +1,9 @@
-/** The admin API's types (Ume.Rag.AdminApi). JSON is camelCase; dates are ISO-8601 with offset. */
+/** The admin API's types (Kalla.AdminApi). JSON is camelCase; dates are ISO-8601 with offset. */
 
 /** ISO-8601 timestamp with offset. */
 export type IsoDateTime = string
 
-/** Admin roles (identity design §1.3), as `Ume.Rag.Domain.Admin.RagRoles`. */
+/** Admin roles (identity design §1.3), as `Kalla.Domain.Admin.RagRoles`. */
 export const ROLES = [
   'rag-platform-admin',
   'rag-department-admin',

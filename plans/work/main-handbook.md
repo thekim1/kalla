@@ -28,7 +28,7 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   report is a claim: read the diff, re-run the tests, check CI's test totals, check live, spot-check line numbers.
   Splitting a feature into an API agent and a UI agent against a contract written first in the design worked well
   (#532); integrate on one branch and check both sides agree.
-- **Shared files** (`Directory.Packages.props`, `README.md`, `UmeRag.slnx`, `.gitignore`): small PR, append-only.
+- **Shared files** (`Directory.Packages.props`, `README.md`, `Kalla.slnx`, `.gitignore`): small PR, append-only.
 - **Release notes are files, not edits** (user, 2026-11-17): a pull request adds `changes/<branch>.md` (CHANGELOG) and,
   when an operator has something to do, `changes/<branch>.upgrade.md` (upgrade guide) instead of appending to
   *Unreleased*, where any two pull requests conflicted (#817 and #827). `scripts/unreleased.py` checks and folds them. Secrets never go into the repo, a log or a chat. Verify claims against real sources.
@@ -49,12 +49,12 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   #599): `export FakeGateway__Enabled=true Seed__Enabled=false Parser__Mode=off Render__Mode=off
   OpenWebUi__Enabled=false DevelopmentVolumes__Postgres=<a throwaway volume name>` (add `ClamAv__Mode=off` to skip
   ClamAV), then `aspire start …`; afterwards `aspire stop --all` and `docker volume rm` the volume.
-- Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
+- Start: `export Seed__Enabled=false; aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj
   --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
   `aspire resource worker restart --apphost … --non-interactive`.
 - **E2E locally without pwsh:** `aspire stop --all`; `docker volume rm ume-rag-e2e-postgres`; export
   `DevelopmentVolumes__Postgres=ume-rag-e2e-postgres Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`;
-  `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`; `aspire wait admin-ui
+  `aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive`; `aspire wait admin-ui
   --apphost …`; in `tests/e2e`: `npm ci`, `npx playwright install chromium`, `npx playwright test` (9 tests, ~10 min).
 - Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
   `aspire logs worker --non-interactive`; `aspire describe --apphost …` shows resource states.
@@ -222,7 +222,7 @@ main session needs:
   in session 40 ("a new database has no settings row"; the first "declared deployment" rule) and came back as built.
 
 - **A slow test project: compare one process with two before adding collections** (session 41, #775).
-  `Ume.Rag.AdminApi.Tests` took the same 4 minutes with four and with eight database collections; a class took 29 s
+  `Kalla.AdminApi.Tests` took the same 4 minutes with four and with eight database collections; a class took 29 s
   alone and 66 s beside three others; two processes side by side took 148 s. The collections of one process wait for
   one another (not CPU, thread pool, `fsync` or GC), so CI runs the project as five processes
   (`scripts/ci/backend-tests.sh`). Measure with the test executable itself: `-xml <file>` gives every test's time,
@@ -246,9 +246,9 @@ main session needs:
 - **`main` is protected since 2026-11-16** (ruleset "Protect main"): every change is a pull request with one
   approving review; the main session can't approve its own or bypass. Never `gh pr merge --admin`. Design and handover
   changes go on a `main-session/` branch; a design line that belongs to a code change goes into that pull request.
-- **SQL in `src/Ume.Rag.Infrastructure/` uses positional parameters** (`$1`), also in new non-EF code: the API's SQL
+- **SQL in `src/Kalla.Infrastructure/` uses positional parameters** (`$1`), also in new non-EF code: the API's SQL
   contract prepares every string constant there and reads `@name` as a column (session 47; run
-  `tests/Ume.Rag.Api.Tests` `SqlSchemaContractTests`, regenerate with `UME_RAG_UPDATE_CONTRACTS=1`).
+  `tests/Kalla.Api.Tests` `SqlSchemaContractTests`, regenerate with `UME_RAG_UPDATE_CONTRACTS=1`).
 - **The runners have no `gh`:** a workflow step downloads a release asset with `scripts/ci/release-asset.sh`.
 - **A boot test's fixture is the earlier release's own example file with real-looking values:** 0.5.1's rag-admin
   refuses a platform-admin group that doesn't start with `rag-` and restarts for ever (session 47).

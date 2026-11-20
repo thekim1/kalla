@@ -5,8 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using RendererSpike;
-using Ume.Rag.Worker.Connectors;
-using Ume.Rag.Worker.Connectors.Egress;
+using Kalla.Worker.Connectors;
+using Kalla.Worker.Connectors.Egress;
 
 // Renderer spike (A-9). Commands: checks | measure [concurrency] | lightpanda | versions. See README.md.
 var command = args.FirstOrDefault() ?? "checks";

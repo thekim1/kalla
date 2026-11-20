@@ -3,7 +3,7 @@
 Detail step 7 of the Ume.Rag design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
 states every rule, the plan's answered questions in §19) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
-[`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Ume.Rag.Retrieval` and
+[`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Kalla.Retrieval` and
 the evaluator of [`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) (§5–§6, §11,
 §13.5); uploads of
 [`../ingestion-worker/design-connectors.md`](../ingestion-worker/design-connectors.md) (§3.4, §9.4); the
@@ -36,14 +36,14 @@ Moved to [`../archive/design-history/knowledge-api.md`](../archive/design-histor
 
 | Project | Owns | Used by |
 |---|---|---|
-| `Ume.Rag.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
-| `Ume.Rag.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `IReranker` (§6.7), `RetrievalSettingsResolver`, `QueryNormalizer`, `SwedishDecompounder` (query side, or in `Ume.Rag.Text`, platform §3), `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Ume.Rag.Api` (knowledge role), `Ume.Rag.Worker` (evaluator, processing §13.5), `Ume.Rag.AdminApi` (test panel) |
-| `Ume.Rag.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `ISharedCache` and `IRateLimitStore` (in-memory implementations; Redis implementations and `RedisKeys` used when `ConnectionStrings:redis` is set, P2) | all |
-| `Ume.Rag.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Ume.Rag.Api` (knowledge role), `Ume.Rag.AdminApi` (test panel) |
-| `Ume.Rag.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
+| `Kalla.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
+| `Kalla.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `IReranker` (§6.7), `RetrievalSettingsResolver`, `QueryNormalizer`, `SwedishDecompounder` (query side, or in `Kalla.Text`, platform §3), `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Kalla.Api` (knowledge role), `Kalla.Worker` (evaluator, processing §13.5), `Kalla.AdminApi` (test panel) |
+| `Kalla.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `ISharedCache` and `IRateLimitStore` (in-memory implementations; Redis implementations and `RedisKeys` used when `ConnectionStrings:redis` is set, P2) | all |
+| `Kalla.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Kalla.Api` (knowledge role), `Kalla.AdminApi` (test panel) |
+| `Kalla.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
 
 The evaluator calls `RetrievalEngine` directly with a `Collections` scope over the full collection (processing
-§13.5) and no policy; the API wraps the same engine with policy and hydration. Nothing in `Ume.Rag.Retrieval` reads
+§13.5) and no policy; the API wraps the same engine with policy and hydration. Nothing in `Kalla.Retrieval` reads
 `config` or knows about principals: it receives a resolved `SearchScope`, so the evaluator and the API cannot drift
 apart except in what they pass in (contract test, §16.3). No API route includes an unpublished collection; only the
 admin host passes them to the shared core (test panel, §4.5).
@@ -52,11 +52,11 @@ admin host passes them to the shared core (test panel, §4.5).
 
 While the chat role runs only with the knowledge role in its process, the chat code calls `KnowledgeService`'s methods
 below directly: the `IRetriever` interface was removed while it had a single implementation (#411), and the records
-moved to `Ume.Rag.Domain/Retrieval/RetrievalContract.cs`. The interface returns with `HttpRetriever` when the roles are
+moved to `Kalla.Domain/Retrieval/RetrievalContract.cs`. The interface returns with `HttpRetriever` when the roles are
 split; `IRetriever` in this document names that port and, until then, `KnowledgeService`'s methods.
 
 ```csharp
-// Ume.Rag.Domain
+// Kalla.Domain
 public interface IRetriever
 {
     Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct);
@@ -223,7 +223,7 @@ metadata (no index, would break the rule that every filter runs on an index).
 | `degraded` | null \| `embedding_unavailable` \| `embedding_residency` \| `rerank_unavailable` (P2) | §5.5, §6.7 |
 | `config_version` | int | snapshot the decision was made at (R7) |
 
-Headers: `Cache-Control: no-store` (gateway `UseUmeSecurityHeaders` with `NoStorePrefixes` `/v1`,
+Headers: `Cache-Control: no-store` (gateway `UseKallaSecurityHeaders` with `NoStorePrefixes` `/v1`,
 `src/Ume.LlmGateway.DataApi/Program.cs:47`, `WebDefaults.cs:26`), `x-request-id`. No timing headers outside
 Development (they would let a caller time-probe sizes of other scopes).
 
@@ -271,7 +271,7 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 
 ### 3.6 Errors (problem details)
 
-Knowledge routes answer RFC 9457 problem details exactly like the gateway's Data API: `AddUmeWebDefaults` +
+Knowledge routes answer RFC 9457 problem details exactly like the gateway's Data API: `AddKallaWebDefaults` +
 `ApiExceptionHandler` turn an `ApiFaultException(status, detail, extensions)` into `Results.Problem`
 (`src/Ume.LlmGateway.ServiceDefaults/ApiExceptionHandler.cs:30-55`, `ApiFaultException.cs:1-34`), validation faults
 into `ValidationProblem` with field errors, and anything else into a 500 that logs only the exception type
@@ -326,7 +326,7 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 | Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2), and a chat request's `ume.topics` narrows the links further for that turn (`RetrievalRequest.Topics`; chat §3.8: a link with topics keeps those also asked for and leaves the scope when none is, a link without topics gets the asked ones), so the topic links of §6.2, the coverage counts and the floor all see the narrowed links; a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
-| Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
+| Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Kalla.Answering`) on `Kalla.Retrieval` |
 | Download grant | exactly the grant's collection (§4.6) |
 
 At most 20 collections per query (an assistant with more is refused on save by the admin API).
@@ -426,7 +426,7 @@ download path, binding the download to the user.
 
 ### 5.1 Normalisation
 
-`QueryNormalizer` (in `Ume.Rag.Retrieval`, used by API and evaluator): Unicode **NFC** (as chunks, processing §11),
+`QueryNormalizer` (in `Kalla.Retrieval`, used by API and evaluator): Unicode **NFC** (as chunks, processing §11),
 C0/C1 control characters → space, whitespace runs → one space, trim. No lower-casing (the embedding models'
 tokenizers are cased), no instruction prefix (processing §11; *to verify* §20), no rewriting (answered 3). The normalised string is
 both what is embedded and what the cache key is computed from, so equal keys always mean equal inputs. The keyword
@@ -520,7 +520,7 @@ answer (chat step 8: it must not claim "no information" from a degraded search).
   `EmbeddingProfiles.CanaryEmbedding` (cosine ≥ 0.999, as the worker, processing §11); a mismatch marks
   `/health/ready` degraded and alerts: queries would be embedded in another vector space than the chunks. The same
   call checks the residency and PII headers of §5.2.
-- Development and CI: `Ume.Rag.FakeGateway` serves 1024-dim feature-hashing vectors (repo-and-deployment §4.3); against
+- Development and CI: `Kalla.FakeGateway` serves 1024-dim feature-hashing vectors (repo-and-deployment §4.3); against
   a real local gateway, FakeLlm `fake-embed-1024` behind the profile's model alias (gateway design §6). Fault models
   `fake-fail-500`, `fake-slow`, `fake-wrong-residency` drive the §5.5 tests.
 
@@ -688,7 +688,7 @@ HNSW applies the `CollectionId` filter **after** the graph walk; with `relaxed_o
 walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Iterative Index Scans",
 `src/hnsw.c:102-104`). For a small collection inside a large shared index that means poor recall or a long walk. So:
 
-- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
+- `ScopeSizeCache` (in `Kalla.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
   `SELECT "EmbeddingProfileId", "CollectionId", "Tags", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND
   "Kind" = 'child' GROUP BY 1, 2, 3` every 10 minutes, so a scope's share *s* of its profile's index is known. The
   count stays in rag-api (#499 step 2): it is cheap (116 ms at 1M chunks as `ume_rag_api`, B-25) and runs with its own
@@ -784,7 +784,7 @@ knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the values above
 
 Rerank is **optional everywhere**: with no model configured for an assistant's reranker there is no call, no
 `rerank_unavailable` and nothing degraded, and the assistant's switch is disabled with a hint. `IReranker.ScoreAsync`
-in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
+in `Kalla.Retrieval`, routed by `RerankerKind`:
 
 | Reranker | Call | Model setting | Time limit | Cost |
 |---|---|---|---|---|
@@ -953,7 +953,7 @@ crawled page (answered 4), and a file has `modified`.
 Chat TTFT = chat overhead (< 10 ms, chat plan §4) + condense (optional LLM call) + retrieval + the answer model's TTFT
 through the gateway; retrieval should stay below ~15 % of it.
 
-**Measured by**: micro-benchmarks (`tests/Ume.Rag.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
+**Measured by**: micro-benchmarks (`tests/Kalla.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
 gateway's `PipelineBenchmarks`: fusion + diversity over 200 candidates, section assembly, citations and grants;
 allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); a warm retrieval's **3 Postgres round
 trips** (K, V, H+D) and 0 config queries are the design, checked in the R1 test (the gateway-style interaction audit
@@ -1009,7 +1009,7 @@ filters hash, queryMac)`).
 
 ## 13. OpenSearch seam (O1)
 
-`ISearchIndex` (`Ume.Rag.Retrieval`) has `KeywordAsync(scope, query, filters, limit)` and `VectorAsync(scope, vector,
+`ISearchIndex` (`Kalla.Retrieval`) has `KeywordAsync(scope, query, filters, limit)` and `VectorAsync(scope, vector,
 filters, limit, options)`, both returning `Candidate(ChunkId, DocumentId, ChunkSetId, Ordinal, TextHash, CollectionId,
 Level, Distance?, KeywordScore?, IdentityKey)`; `PostgresSearchIndex` (§6.2) is the only implementation. Only candidate generation could move: fusion, dedup, diversity and coverage stay in
 `RetrievalEngine`, and hydration, sections, citations and downloads stay on Postgres, the master copy (plan §3), which
@@ -1030,7 +1030,7 @@ With the halfvec index (§6.4) a 64 GB host keeps 10M chunks below the first tri
 
 ## 14. MCP exposure (P2 outline)
 
-**Later (P2):** `/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only. In `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
+**Later (P2):** `/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only. In `Kalla.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
 2026-07-28; tools design §7.1),
 `MapMcp("/mcp")`, tools as `[McpServerTool(Name = "search_knowledge", ReadOnly = true, Idempotent = true,
 OpenWorld = false, UseStructuredContent = true)]` methods calling `IRetriever` in process with `Purpose = Mcp`.
@@ -1106,7 +1106,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 ## 16. Tests
 
-### 16.1 Unit (`tests/Ume.Rag.Retrieval.Tests`, new; `Ume.Rag.Api.Tests` for the role)
+### 16.1 Unit (`tests/Kalla.Retrieval.Tests`, new; `Kalla.Api.Tests` for the role)
 
 - `RrfFusion`: hand-computed RRF values, weights, missing ranks, tie-breaks, modes; multi-profile fusion; age decay
   (half-life arithmetic, kinds, missing `SourceModifiedAt`, per-collection settings in a multi-collection query) and
@@ -1126,7 +1126,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - `DownloadGrants`: round trip, tamper of every field, expiry, unknown `kid`, rotation overlap, constant-time compare.
 - Cache keys: HMAC derivation, `sensitive` never yields an L2 key.
 
-### 16.2 Integration (`Ume.Rag.IntegrationTests`, Testcontainers: the stock pgvector image, Keycloak; Redis from P2)
+### 16.2 Integration (`Kalla.IntegrationTests`, Testcontainers: the stock pgvector image, Keycloak; Redis from P2)
 
 - Statements: every variant prepared; `EXPLAIN` under `SET plan_cache_mode = force_generic_plan` shows the HNSW partial
   index for approximate V, the B-tree `IX_Chunks_CollectionId` and no HNSW for exact V, the partial GIN index for K;
@@ -1142,10 +1142,10 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - Keycloak (P2): app token with `Knowledge.Read.All` retrieves only client-audience collections; a user token with the
   app role by mistake is refused (identity §13.4).
 
-### 16.3 API and contract (`Ume.Rag.Api.Tests`, WebApplicationFactory + FakeGateway)
+### 16.3 API and contract (`Kalla.Api.Tests`, WebApplicationFactory + FakeGateway)
 
 - In-process chat path and `HttpRetriever` (roles split) return identical results.
-- **Contract test evaluator == API** (processing §13.5; in `Ume.Rag.Worker.Tests`, which hosts rag-api too, §16.4): the
+- **Contract test evaluator == API** (processing §13.5; in `Kalla.Worker.Tests`, which hosts rag-api too, §16.4): the
   smoke fixture collection; for each of the 30 questions the evaluator's `RetrievalEngine` call (`Collections` scope,
   hybrid, k = 10, no filters) and `POST /v1/retrieve` (`rag-internal`, `expand: none`) return the same chunk ids in the
   same order. FakeGateway embeddings are
@@ -1164,7 +1164,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - `verify.yml` **evaluation-smoke** (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
   embedding quality. The smoke collection's own `coverageMaxDistance` is 0.85 (FakeGateway distances, §7); the
-  evaluator == API contract test (§16.3) runs over the smoke set; both live in `Ume.Rag.Worker.Tests`, which hosts
+  evaluator == API contract test (§16.3) runs over the smoke set; both live in `Kalla.Worker.Tests`, which hosts
   rag-api too. Only the smoke itself carries the `EvaluationSmoke` trait and runs in that job; the contract test runs
   in the `backend` job.
 - `evaluation.yml` nightly (P1, before the pilot) on the test host with the pilot's real embedding model through the

@@ -1,6 +1,6 @@
 -- Dev seed: a public URL-list source in the local AppHost database (P1a item 18, milestone 1), until the admin's set-up
 -- endpoints (J7) exist. Run it through seed_url_list.py, which refuses a non-local database and sets the parameters;
--- tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs runs this same file against TestPostgres.
+-- tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs runs this same file against TestPostgres.
 --
 -- Parameters, as session settings (set_config) before this file runs:
 --   ume_seed.urls             JSON array of absolute http(s) URLs (required)

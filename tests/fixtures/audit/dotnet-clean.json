@@ -6,67 +6,67 @@
   ],
   "projects": [
     {
-      "path": "/repo/src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj"
+      "path": "/repo/src/Kalla.AppHost/Kalla.AppHost.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.ServiceDefaults/Ume.Rag.ServiceDefaults.csproj"
+      "path": "/repo/src/Kalla.ServiceDefaults/Kalla.ServiceDefaults.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.AdminApi/Ume.Rag.AdminApi.csproj"
+      "path": "/repo/src/Kalla.AdminApi/Kalla.AdminApi.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Answering/Ume.Rag.Answering.csproj"
+      "path": "/repo/src/Kalla.Answering/Kalla.Answering.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Api/Ume.Rag.Api.csproj"
+      "path": "/repo/src/Kalla.Api/Kalla.Api.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Domain/Ume.Rag.Domain.csproj"
+      "path": "/repo/src/Kalla.Domain/Kalla.Domain.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.FakeGateway/Ume.Rag.FakeGateway.csproj"
+      "path": "/repo/src/Kalla.FakeGateway/Kalla.FakeGateway.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Infrastructure/Ume.Rag.Infrastructure.csproj"
+      "path": "/repo/src/Kalla.Infrastructure/Kalla.Infrastructure.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.MigrationService/Ume.Rag.MigrationService.csproj"
+      "path": "/repo/src/Kalla.MigrationService/Kalla.MigrationService.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Pipelines/Ume.Rag.Pipelines.csproj"
+      "path": "/repo/src/Kalla.Pipelines/Kalla.Pipelines.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Retrieval/Ume.Rag.Retrieval.csproj"
+      "path": "/repo/src/Kalla.Retrieval/Kalla.Retrieval.csproj"
     },
     {
-      "path": "/repo/src/Ume.Rag.Worker/Ume.Rag.Worker.csproj"
+      "path": "/repo/src/Kalla.Worker/Kalla.Worker.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.AdminApi.Tests/Ume.Rag.AdminApi.Tests.csproj"
+      "path": "/repo/tests/Kalla.AdminApi.Tests/Kalla.AdminApi.Tests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.Api.Tests/Ume.Rag.Api.Tests.csproj"
+      "path": "/repo/tests/Kalla.Api.Tests/Kalla.Api.Tests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.ContractTests/Ume.Rag.ContractTests.csproj"
+      "path": "/repo/tests/Kalla.ContractTests/Kalla.ContractTests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.Domain.Tests/Ume.Rag.Domain.Tests.csproj"
+      "path": "/repo/tests/Kalla.Domain.Tests/Kalla.Domain.Tests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.IntegrationTests/Ume.Rag.IntegrationTests.csproj"
+      "path": "/repo/tests/Kalla.IntegrationTests/Kalla.IntegrationTests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.Pipelines.Tests/Ume.Rag.Pipelines.Tests.csproj"
+      "path": "/repo/tests/Kalla.Pipelines.Tests/Kalla.Pipelines.Tests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.Retrieval.Tests/Ume.Rag.Retrieval.Tests.csproj"
+      "path": "/repo/tests/Kalla.Retrieval.Tests/Kalla.Retrieval.Tests.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.TestKit/Ume.Rag.TestKit.csproj"
+      "path": "/repo/tests/Kalla.TestKit/Kalla.TestKit.csproj"
     },
     {
-      "path": "/repo/tests/Ume.Rag.Worker.Tests/Ume.Rag.Worker.Tests.csproj"
+      "path": "/repo/tests/Kalla.Worker.Tests/Kalla.Worker.Tests.csproj"
     }
   ]
 }

@@ -18,7 +18,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   happens today:** the admin's `DELETE /api/sources/{id}` only sets `Sources.DeletedAt`, and the main session found
   no worker code that removes the source's documents from the index (grep, 2026-11-20; not run). If they stay
   searchable, that is a bug to say so on #878.
-- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Paths:** `src/Kalla.Worker/**`, `tests/Kalla.Worker.Tests/**`.
 - **Done when:** a test deletes a source with indexed documents and a search of its knowledge base finds none of
   them; the documents are purged after the 14 days and an upload source's blobs after the blob purge delay.
 - **Waits on:** nothing.
@@ -31,7 +31,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   blobs tombstoned, as `DeletedSourcePurge` does for a deleted source's. Designed, never built (#884's design
   deviation). It meets revival (a document seen again inside the 14 days comes back, `EngineStore`), the deletion
   proposals and the evaluation questions that expect the document (A-38).
-- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Paths:** `src/Kalla.Worker/**`, `tests/Kalla.Worker.Tests/**`.
 - **Done when:** a test removes a document from a live source and shows it purged after the 14 days and not
   before, a revival inside them, and its raw blob tombstoned unless another document has the content.
 - **Waits on:** nothing.
@@ -43,7 +43,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   result, and sets a `human` one to `State = stale` (and back to `active` when the document is revived); `generated`
   ones keep their retirement at the top-up. The admin's line ("Its expected document was deleted", admin §7.1) is
   stream b's: open an issue for it with the run result's field.
-- **Paths:** `src/Ume.Rag.Worker/Evaluation/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Paths:** `src/Kalla.Worker/Evaluation/**`, `tests/Kalla.Worker.Tests/**`.
 - **Done when:** a test deletes a source whose document a human and a generated question expect: the next run's
   recall@10 is the same as without those questions, both are counted as `documentGone`, the human one is `stale`;
   a revived document makes it `active` again.
@@ -125,8 +125,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired` the same with `gateway.key_unavailable`;
   a missing or different echo fatal `gateway.delegation_not_applied` with 5011 and nothing stored; the key's `429` as
   any `429`.
-- **Paths:** `src/Ume.Rag.Worker/**` (not `Processing/Pii/**`, `Engine/HnswIndexHealth.cs`),
-  `tests/Ume.Rag.Worker.Tests/**`.
+- **Paths:** `src/Kalla.Worker/**` (not `Processing/Pii/**`, `Engine/HnswIndexHealth.cs`),
+  `tests/Kalla.Worker.Tests/**`.
 - **Done when:** against the FakeGateway with `act-as-key`: a sync of a collection with a key sends every embedding
   call as that key; a collection without a key sends none; with `BudgetExceeded: Key` the job's `AvailableAt` is the
   next full hour and the run item ends `failed` `gateway.budget_exhausted` after `MaxAttempts`; a disabled key gives

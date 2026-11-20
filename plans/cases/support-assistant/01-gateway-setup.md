@@ -40,7 +40,7 @@ a manual mirror row for `gpt-6-luna` to try the decided condense model, or run t
 
 Gateway side: providers and models are added as in `~/git/llmgateway/docs/providers-and-models.md` (rerank:
 section "Reranking (optional)"). Ume.Rag side, after any model change: a platform admin runs the model sync
-(`POST /api/gateway/sync`, `src/Ume.Rag.AdminApi/GatewayEndpoints.cs:144`) and, for an embedding change, the embedding
+(`POST /api/gateway/sync`, `src/Kalla.AdminApi/GatewayEndpoints.cs:144`) and, for an embedding change, the embedding
 canary (`POST /api/gateway/canary-check`; Decisions "Embedding canary on demand"). Rerank models are set in
 `PUT /api/settings/retrieval` ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Rerank
 (optional)").

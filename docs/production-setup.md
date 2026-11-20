@@ -116,7 +116,7 @@ docker build -t ume-rag/renderer:latest images/renderer
 docker build -t ume-rag/parser:latest src/parser
 (cd src/admin-ui && npm ci && npm run build)
 for p in Api Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
-dotnet publish src/Ume.Rag.AdminApi -c Release -t:PublishContainer -p:PublishAdminUi=true
+dotnet publish src/Kalla.AdminApi -c Release -t:PublishContainer -p:PublishAdminUi=true
 ```
 
 The image defaults in `deploy/compose.rag.yaml` are the released pins, so images built on the host or elsewhere are set
@@ -678,7 +678,7 @@ request),
 and a request that arrives with a sampled parent is always recorded. Logs and metrics are not sampled. The
 backup scripts write Prometheus text files to `/var/lib/ume-rag/` (runbook, *Backups*).
 
-Security events (logger category `Ume.Rag.Security`, [security-events.md](security-events.md)) go to the SIEM through a
+Security events (logger category `Kalla.Security`, [security-events.md](security-events.md)) go to the SIEM through a
 collector: [`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) keeps only that
 category and sends it as syslog (RFC 5424), with Splunk, Elastic and Sentinel alternatives, as the gateway's does. One
 collector can serve both products.

@@ -1,6 +1,6 @@
 {
   "appHost": {
-    "path": "src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj",
+    "path": "src/Kalla.AppHost/Kalla.AppHost.csproj",
     "language": "csharp"
   }
 }

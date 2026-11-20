@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Kalla.Domain\Kalla.Domain.csproj" />
+    <ProjectReference Include="..\Kalla.Retrieval\Kalla.Retrieval.csproj" />
+    <ProjectReference Include="..\Kalla.Infrastructure\Kalla.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

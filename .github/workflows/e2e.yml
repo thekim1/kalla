@@ -85,7 +85,7 @@ jobs:
         if: failure() && steps.specs.outputs.present == 'true'
         run: |
           for r in adminapi admin-ui api worker open-webui; do
-            echo "::group::$r"; aspire logs "$r" --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj 2>&1 | tail -n 300 || true; echo "::endgroup::"
+            echo "::group::$r"; aspire logs "$r" --apphost src/Kalla.AppHost/Kalla.AppHost.csproj 2>&1 | tail -n 300 || true; echo "::endgroup::"
           done
       - name: Start the setup wizard's stack
         id: setup-stack
@@ -98,7 +98,7 @@ jobs:
         # are not shown in the log.
         run: |
           for _ in $(seq 1 30); do
-            code=$(aspire logs adminapi --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive 2>/dev/null \
+            code=$(aspire logs adminapi --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive 2>/dev/null \
               | grep -o 'Setup code: [0-9A-Z-]*' | tail -n 1 | cut -d' ' -f3 || true)
             if [ -n "$code" ]; then echo "::add-mask::$code"; break; fi
             sleep 2
@@ -125,7 +125,7 @@ jobs:
         run: |
           for r in adminapi admin-ui keycloak; do
             echo "::group::$r"
-            aspire logs "$r" --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj 2>&1 | tail -n 300 | sed -E 's/(Setup code: )[0-9A-Za-z-]+/\1[redacted]/' || true
+            aspire logs "$r" --apphost src/Kalla.AppHost/Kalla.AppHost.csproj 2>&1 | tail -n 300 | sed -E 's/(Setup code: )[0-9A-Za-z-]+/\1[redacted]/' || true
             echo "::endgroup::"
           done
       - name: Stop the test stack

@@ -33,8 +33,8 @@ The plan ahead: [`plans/roadmap.md`](plans/roadmap.md). Overview for stakeholder
 ## Build and test
 
 ```bash
-dotnet build UmeRag.slnx -c Release --nologo
-dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+dotnet build Kalla.slnx -c Release --nologo
+dotnet test --solution Kalla.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
 ```
 
 `--filter-not-trait` skips tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does. The integration
@@ -48,10 +48,10 @@ registry name): the worker's tests use ClamAV and the renderer, the contract tes
 docker build -t ume-rag.local/clamav:dev images/clamav
 docker build -t ume-rag.local/renderer:dev images/renderer
 UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:dev \
-  dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build
+  dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build
 docker build -t ume-rag.local/parser:ci src/parser
 UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
-  dotnet test --project tests/Ume.Rag.ContractTests -c Release --no-build
+  dotnet test --project tests/Kalla.ContractTests -c Release --no-build
 ```
 
 The pre-commit hook runs the admin UI lint and the parser's ruff check on staged changes. Enable it once per clone:
@@ -63,7 +63,7 @@ git config core.hooksPath .githooks
 ## Run locally
 
 ```bash
-aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
+aspire run      # or: dotnet run --project src/Kalla.AppHost
 ```
 
 The Aspire dashboard opens at `https://localhost:17470`. The AppHost starts postgres (stock pgvector image), keycloak,
@@ -74,13 +74,13 @@ worker, adminapi, the admin UI (`https://localhost:5174`) and Open WebUI (`http:
 them as AppHost user secrets:
 
 ```bash
-dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
+dotnet user-secrets --project src/Kalla.AppHost set Parser:Mode off
 ```
 
 To run against the interim gateway instead of FakeGateway, see [`docs/p1a-local-run.md`](docs/p1a-local-run.md).
 Addresses and keys go only in user secrets or secret files, never in the repository.
 
-On Linux or WSL, `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj` runs the same stack in the
+On Linux or WSL, `aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj` runs the same stack in the
 background (`aspire describe`, `aspire logs <resource>`, `aspire stop`); `Seed__Enabled=false` in the environment starts
 it without demo data.
 

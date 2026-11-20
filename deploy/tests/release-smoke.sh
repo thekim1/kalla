@@ -187,7 +187,7 @@ done
 ok "rag-bootstrap made /data/blobs/rag and the worker's spool 1654:1654 0750; rag-upload-backup (uid 1654) reads them"
 
 echo "== parser from the worker"
-dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Ume.Rag.Worker.dll --health-check \
+dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Kalla.Worker.dll --health-check \
   || fail "the worker could not reach the parser's /v1/info"
 ok "parser /v1/info answered 2xx to the worker (HTTPS, internal CA)"
 

@@ -193,14 +193,14 @@ allow-listed endpoints that resolve to the host (a gateway or Keycloak on the sa
 
 Sources: `deploy/host/docker-user-firewall.sh` (allow-lists, DNS, `private=`, `INPUT`), `deploy/compose.rag.yaml`
 and `deploy/compose.backup.yaml` (members, `gw_priority`), `deploy/compose.hardened.yaml` (subnets),
-`src/Ume.Rag.Worker/Connectors/Egress/EgressGuard.cs` (schemes and ports of the crawler).
+`src/Kalla.Worker/Connectors/Egress/EgressGuard.cs` (schemes and ports of the crawler).
 
 **The organisation and model syncs.** rag-admin reads the organisation, its assigned gateway keys and the model list
 from the gateway itself, `GET /v1/ume/context` and `GET /v1/models` at `Gateway:BaseUrl`, with its credential key, which
 holds the scope `organisation.read` ([production-setup.md](production-setup.md), *Gateway credential keys*;
-`src/Ume.Rag.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`). They take the gateway's row of `llm` above. The
+`src/Kalla.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`). They take the gateway's row of `llm` above. The
 only other gateway service RAG calls is the gateway's Admin API, for rag-admin's cost and budget read-back
-(`/integration/v1`, with the same credential key and its scope `usage.read`; `src/Ume.Rag.AdminApi/IntegrationApiClient.cs`),
+(`/integration/v1`, with the same credential key and its scope `usage.read`; `src/Kalla.AdminApi/IntegrationApiClient.cs`),
 and only while the gateway's context names its address (`integration_api_url`).
 
 ### 3.2 From the host itself
@@ -251,7 +251,7 @@ listeners of §2) and `ss -ltnp`.
 | `rag-proxy` | 8443 | HTTPS | `rag-edge` | only through its published host port of §2 | `deploy/compose.rag.yaml` |
 | `rag-migrate` | – | one-shot client of rag-postgres | `rag-data` | – | `deploy/compose.rag.yaml` |
 | `rag-bootstrap`, `rag-upload-backup` | – | no network (`network_mode: none`) | – | – | `deploy/compose.rag.yaml`, `deploy/compose.backup.yaml` |
-| Redis | – | none in the production Compose files (P2; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Ume.Rag.AppHost/Program.cs` |
+| Redis | – | none in the production Compose files (P2; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Kalla.AppHost/Program.cs` |
 
 Docker keeps the bridge networks apart, and members of one network reach each other on it (the firewall returns
 traffic within a subnet). `rag-data`, `rag-ingestion`, `rag-parser` and `rag-render` are `internal: true`, so they have

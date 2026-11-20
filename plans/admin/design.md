@@ -16,7 +16,7 @@ flags and evaluation sets of [`../ingestion-worker/design-processing.md`](../ing
 [`../chat-api/design.md`](../chat-api/design.md) (§8.2, §9.4, §10, §13–§14); skills, tool servers, approvals, grants,
 drift, policy, agent limits and `GatewayModels` of [`../tools/design.md`](../tools/design.md) (§3–§6, §9); projects,
 build, images, networks, CI and observability of [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md).
-Where the code exists (`src/Ume.Rag.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
+Where the code exists (`src/Kalla.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
 elsewhere: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); `AdminApi/` = `src/Ume.LlmGateway.AdminApi/`,
@@ -61,12 +61,12 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 | Project | Owns (admin) | Notes |
 |---|---|---|
-| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8); P2 `AnswerEvaluationService` (run kind `answers`, processing §14.8), `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
-| `Ume.Rag.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker) | shared with the worker |
-| `Ume.Rag.Retrieval` | retrieval core | test panel |
-| **`Ume.Rag.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
-| `Ume.Rag.Tools` (P2) | in-process hub and MCP client (tools §2.1) | discovery, connection test, drift leader, test-panel tool calls |
-| `Ume.Rag.Domain` | `RagRole`, `AdminPolicy`, `PermissionMatrix` (data, §3.4), `ValidationCode`, `IAccessPolicy` (pure; used by explain access) | pure |
+| `Kalla.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8); P2 `AnswerEvaluationService` (run kind `answers`, processing §14.8), `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
+| `Kalla.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker) | shared with the worker |
+| `Kalla.Retrieval` | retrieval core | test panel |
+| **`Kalla.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
+| `Kalla.Tools` (P2) | in-process hub and MCP client (tools §2.1) | discovery, connection test, drift leader, test-panel tool calls |
+| `Kalla.Domain` | `RagRole`, `AdminPolicy`, `PermissionMatrix` (data, §3.4), `ValidationCode`, `IAccessPolicy` (pure; used by explain access) | pure |
 | `src/admin-ui` | Vue 3.5 + Vite 8 + Tailwind 4 + Pinia + vue-router (gateway `package.json`), copied shell, design system, client, composables (§5.1) | port 5174 |
 
 ### 2.2 Hosting, slots and background work
@@ -87,7 +87,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 | `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
-| `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the judge at the assistant's ceiling (processing §14.8) |
+| `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Kalla.Answering` and the judge at the assistant's ceiling (processing §14.8) |
 | `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Run test questions** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Run again** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
@@ -129,7 +129,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 | Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
 | `IKeyProvider` | chat master keys (file provider in the pilot), once A1 allows stored content (weakness review §4) | comment and conversation decryption (§8) |
 | Gateway | the admin's credential key `Gateway__Key`, acting as an assistant's or knowledge base's assigned key from phase 2 (identity §4.7); from phase 3 the Integration API with the same key's `usage.read`; the same key's `organisation.read` for the organisation sync (§4.10) | test panel embedding + answer, `/v1/models` validation (§4.6 V8, V39), answer-level evaluation and assistant test questions with the judge, P2 skill gate, cost and budget status, §4.10 |
-| Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
+| Hosted MCP servers (P2) | in-process `Kalla.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
 ## 3. Roles and permissions
 
@@ -255,7 +255,7 @@ or a grant through the platform team's normal intake; there is no request flow i
 
 ### 3.4 API actions per policy
 
-The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint authorisation and generated tests (§11.2).
+The matrix is data (`PermissionMatrix` in `Kalla.Domain`), used for endpoint authorisation and generated tests (§11.2).
 
 | Policy | Actions (department-scoped unless noted) |
 |---|---|
@@ -483,7 +483,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
 | `GET /api/assistants/{id}/stats?from=&to=` | Read | `AssistantDailyTotals` |
 | `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | writes the draft's `QuerySteps.agent`; V14 |
-| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Ume.Rag.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
+| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Kalla.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
 
 **Skills and tool servers (P2)** — rules as tools design §3.5–§3.7, §4.4–§4.5 and §9.2: `/api/skills` (draft, validate,
 publish → skill gate (run in the admin, tools §3.7), gate report, serve, rollback, retire, share list, re-run the gate), `/api/tool-servers`
@@ -846,7 +846,7 @@ What the commands do (engine design §9.1, §12):
 
 Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
 worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,
-§2.2), which needs `Ume.Rag.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
+§2.2), which needs `Kalla.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
 state.
 
 The UI polls `GET /api/jobs/{id}` (or the run/evaluation it created) every 2 s, every 5 s after 30 s, every 15 s after 5
@@ -865,7 +865,7 @@ through the §4.2 table.
 
 ### 4.9 Test panel
 
-Runs `Ume.Rag.Answering` in the admin process (identity §4.8): principal `admin-console` with the admin's `oid`, access
+Runs `Kalla.Answering` in the admin process (identity §4.8): principal `admin-console` with the admin's `oid`, access
 by the admin's role scope (assistant's department ∈ caller's departments), assistant audiences ignored, **collections
 not yet published included**, every call as the assistant's gateway key (`GatewayKeyId`, from gateway phase 2;
 cost-attribution §4.1; knowledge §4.2, §4.5), residency ceiling at the assistant's level (with test history: chat §8.2's rule if the assistant has a history-resending client in its
@@ -879,7 +879,7 @@ data-model §2.3), upserted by `rag-admin` after the answer with the same per-st
 writer (chat §12.2), never in `AssistantDailyTotals` (test turns are not chat statistics; cost-attribution §5 C2). A
 failed write is logged and dropped; the test answer is unaffected. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
 key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
-panel ships in the same P1 release as the chat role, so it never runs a different `Ume.Rag.Answering` than chat does.
+panel ships in the same P1 release as the chat role, so it never runs a different `Kalla.Answering` than chat does.
 
 | Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
 |---|---|
@@ -1395,7 +1395,7 @@ pages treat that as a first-class case, not as a crawl source without a crawl:
    assistants that use the knowledge base. *Replace* and *Delete* are there too.
 
 The main session owns this feature's code (user, 2026-11-09), on `main-session/` branches, in stream b's paths
-(`src/admin-ui/**`, `src/Ume.Rag.AdminApi/**`).
+(`src/admin-ui/**`, `src/Kalla.AdminApi/**`).
 
 ### 5.6 Empty and error states
 
@@ -1728,7 +1728,7 @@ form library and no browser-side validator: the server validates.
 
 A template parameter's label is the UI's own text when `labels.ts` has one (`PIPELINE.params`, §5.7), else the
 template's `x-labels` (`en`, then `sv`), else the parameter name; templates set `x-labels` where the name says too
-little (`pathRules` is labelled Topics / Ämnen, tested in `Ume.Rag.Pipelines.Tests`).
+little (`pathRules` is labelled Topics / Ämnen, tested in `Kalla.Pipelines.Tests`).
 
 ### 6.4 Preview
 
@@ -1853,7 +1853,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
   measured against the same questions; copying an assistant copies its set.
 - **When**: after every publish and restore (on the new published version), and on demand with **Run test questions** on
   the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
-- **How**: `AssistantTestRunner` in `rag-admin` (§2.2) runs each question once through `Ume.Rag.Answering` exactly as
+- **How**: `AssistantTestRunner` in `rag-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
   the test panel does (principal `admin-console`, the target version's definition, residency at the assistant's level,
   temperature as configured, `x-ume-step: assistant-test`), then:
   - **expected document**: cited or not (deterministic, from the answer's citations);
@@ -2082,7 +2082,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 ## 11. Tests
 
-### 11.1 Unit (`Ume.Rag.AdminApi.Tests`, `Ume.Rag.Domain.Tests`, `Ume.Rag.Pipelines.Tests`)
+### 11.1 Unit (`Kalla.AdminApi.Tests`, `Kalla.Domain.Tests`, `Kalla.Pipelines.Tests`)
 
 - `ConfigRules`: one table-driven test per active V-rule (pass, fail, boundary; the re-check triggers of §4.6).
 - `PermissionMatrix` invariants: `Admin` never implies `Review`/`FeedbackComments`; every endpoint has a policy.
@@ -2129,7 +2129,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 - **Owner-team scoping (P2)**: with `EditOwnerTeamOnly` an editor outside the owner team gets 403 `owner_team_only`
   on assistant, collection, source and skill writes and still reads them; a department admin is unaffected.
 
-### 11.3 Worker in the loop (`Ume.Rag.IntegrationTests`)
+### 11.3 Worker in the loop (`Kalla.IntegrationTests`)
 
 Admin-enqueued preview (with site-profile before/after on the umea.se fixture pages), publish plan, re-process and
 post-publish evaluation, deletion confirm, PII clear, site-profile rollback and upload commit consumed by a real worker;

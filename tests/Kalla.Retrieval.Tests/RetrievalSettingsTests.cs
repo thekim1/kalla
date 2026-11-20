@@ -1,0 +1,121 @@
+using Microsoft.Extensions.Time.Testing;
+using Kalla.Domain.Retrieval;
+using Kalla.Retrieval.Postgres;
+using static Kalla.Retrieval.Tests.Make;
+
+namespace Kalla.Retrieval.Tests;
+
+/// <summary>Settings resolution (knowledge design §12.1), the chunk-count cache (§6.4) and the statement variants (§6.2).</summary>
+public sealed class RetrievalSettingsTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public void Collection_values_override_platform_defaults_which_override_the_built_in_ones()
+    {
+        var platform = RetrievalSettingsResolver.Platform("""
+            { "keywordWeight": 0.5, "coverageMaxDistance": 0.45, "exactScanMaxChunks": 5000, "minHnswSelectivity": 0.01, "someP2Key": 1 }
+            """);
+        platform.ExactScanMaxChunks.ShouldBe(5000);
+        platform.MinHnswSelectivity.ShouldBe(0.01);
+        platform.Defaults.KeywordWeight.ShouldBe(0.5);
+        platform.Defaults.VectorWeight.ShouldBe(1.0);
+
+        var collection = RetrievalSettingsResolver.Collection(platform, """
+            { "maxChunksPerDocument": 2, "coverageMinKeywordScore": 0.1, "recency": { "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] } }
+            """);
+        collection.MaxChunksPerDocument.ShouldBe(2);
+        collection.KeywordWeight.ShouldBe(0.5);
+        collection.CoverageMaxDistance.ShouldBe(0.45);
+        collection.CoverageMinKeywordScore.ShouldBe(0.1);
+        collection.Recency.ShouldNotBeNull().Kinds.ShouldBe(["pdf"]);
+
+        RetrievalSettingsResolver.Collection(platform, """{ "coverageMinKeywordScore": null }""").CoverageMinKeywordScore.ShouldBeNull();
+        RetrievalSettingsResolver.Collection(RetrievalSettingsResolver.Platform(null), "{}").ShouldBe(RetrievalSettings.Default);
+    }
+
+    [Theory]
+    [InlineData("""{ "maxChunksPerDocument": 11 }""")]
+    [InlineData("""{ "candidates": 10 }""")]
+    [InlineData("""{ "vectorWeight": "high" }""")]
+    [InlineData("""[1]""")]
+    public void Out_of_range_or_mistyped_values_are_refused(string json) =>
+        Should.Throw<Exception>(() => RetrievalSettingsResolver.Collection(RetrievalPlatformSettings.Default, json));
+
+    [Fact]
+    public async Task Chunk_counts_are_cached_and_refreshed_after_the_interval()
+    {
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 5)] };
+        var time = new FakeTimeProvider();
+        using var cache = new ScopeSizeCache(index, time);
+
+        (await cache.SizeAsync(OneCollection(), Ct)).ShouldBe(new ScopeSize(5, 5));
+        index.Counts = [new(Profile, CollectionA, 50_000)];
+        (await cache.SizeAsync(OneCollection(), Ct)).ScopeChunks.ShouldBe(5);
+        time.Advance(TimeSpan.FromMinutes(10));
+        (await cache.SizeAsync(OneCollection(), Ct)).ScopeChunks.ShouldBe(50_000);
+        (await cache.SizeAsync(Scope((CollectionB, RetrievalSettings.Default)), Ct)).ShouldBe(new ScopeSize(0, 50_000)); // unknown = empty
+    }
+
+    [Fact]
+    public void The_no_decompounder_statement_k_differs_from_production_only_in_the_search_vector()
+    {
+        for (var mask = FilterFragments.None; mask <= FilterFragments.All; mask++)
+        {
+            var stored = RetrievalStatements.Keyword(Profile, 100, mask);
+            var computed = RetrievalStatements.Keyword(Profile, 100, mask, KeywordVector.WithoutDecompounder);
+            computed.ShouldNotBe(stored);
+            RetrievalStatements.Keyword(Profile, 100, mask, KeywordVector.WithoutDecompounder).ShouldBeSameAs(computed, "cached per variant");
+
+            // The stored GIN index still preselects; the computed vector then matches and ranks.
+            var v = RetrievalStatements.WithoutDecompounderSearchVector;
+            computed.Replace($"\n      AND {v} @@ q.tsq", "", StringComparison.Ordinal)
+                .Replace($"ts_rank_cd({v}, q.tsq)", """ts_rank_cd(c."SearchVector", q.tsq)""", StringComparison.Ordinal)
+                .ShouldBe(stored);
+        }
+
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldNotContain("to_tsvector('swedish'::regconfig");
+    }
+
+    [Fact]
+    public void Every_statement_variant_is_distinct_and_numbers_its_filters_in_order()
+    {
+        var texts = new HashSet<string>(StringComparer.Ordinal);
+        for (var mask = FilterFragments.None; mask <= FilterFragments.All; mask++)
+        {
+            texts.Add(RetrievalStatements.Keyword(Profile, 100, mask)).ShouldBeTrue();
+            texts.Add(RetrievalStatements.VectorExact(Profile, 1024, 100, mask)).ShouldBeTrue();
+            texts.Add(RetrievalStatements.VectorApproximate(Profile, 1024, 100, mask)).ShouldBeTrue();
+        }
+
+        texts.Count.ShouldBe(48);
+        var all = RetrievalStatements.VectorExact(Profile, 1024, 100, FilterFragments.All);
+        all.ShouldContain("""c."Tags" && $4""");
+        all.ShouldContain("""c."DocumentType" = ANY ($5)""");
+        all.ShouldContain("""c."SourceModifiedAt" >= $6""");
+        all.ShouldContain("""AND (c."CollectionId" <> ALL ($7::uuid[]) OR EXISTS (SELECT 1 FROM unnest($7::uuid[], $8::text[]) AS l(cid, tag) WHERE l.cid = c."CollectionId" AND l.tag = ANY (c."Tags")))""");
+        all.ShouldContain("""c."CollectionId" = ANY ($2)""");
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.Topics).ShouldContain("unnest($5::uuid[], $6::text[])");
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.ModifiedAfter).ShouldContain("""c."SourceModifiedAt" >= $5"""); // $4: the stop list
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldContain("ts_delete(to_tsvector('swedish', $1), $4::text[])");
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldNotContain("IS NULL OR");
+        all.ShouldContain($"""c."EmbeddingProfileId" = '{Profile}'::uuid""");
+        RetrievalStatements.FragmentsOf(OneCollection(), new RetrievalFilters(Tags: [], DocumentTypes: ["pdf"])).ShouldBe(FilterFragments.DocumentTypes);
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldBeSameAs(RetrievalStatements.Keyword(Profile, 100, FilterFragments.None));
+    }
+
+    [Fact]
+    public void Only_collections_linked_with_topics_add_topic_pairs_and_the_topics_fragment()
+    {
+        var scope = new SearchScope(Profile, 3,
+        [
+            new CollectionInScope(CollectionA, RetrievalSettings.Default) { Topics = ["avfall", "taxa", "avfall"] },
+            new CollectionInScope(CollectionB, RetrievalSettings.Default),
+        ], ["public"], RetrievalPlatformSettings.Default);
+
+        scope.CollectionIds.ShouldBe([CollectionA, CollectionB]);
+        scope.TopicLinks.ShouldBe([(CollectionA, "avfall"), (CollectionA, "taxa")]);
+        RetrievalStatements.FragmentsOf(scope, null).ShouldBe(FilterFragments.Topics);
+        RetrievalStatements.FragmentsOf(OneCollection(), null).ShouldBe(FilterFragments.None);
+    }
+}

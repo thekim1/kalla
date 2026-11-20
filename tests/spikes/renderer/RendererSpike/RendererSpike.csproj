@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Renderer spike (A-9). Not in UmeRag.slnx; throwaway. -->
+  <!-- Renderer spike (A-9). Not in Kalla.slnx; throwaway. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>RendererSpike</RootNamespace>
@@ -11,6 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <!-- The worker's egress guard and DNS-pinned client (connectors design §7), reused as they are; AngleSharp comes with it. -->
-    <ProjectReference Include="..\..\..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Kalla.Worker\Kalla.Worker.csproj" />
   </ItemGroup>
 </Project>

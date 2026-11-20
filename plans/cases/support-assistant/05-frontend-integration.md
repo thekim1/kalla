@@ -17,12 +17,12 @@ staff browser ──────── citation links ──────▶ rag-
 
 | Rule | Why | Reference |
 |---|---|---|
-| The app calls rag-api **from its own backend**, never from the browser | the key is a secret; rag-api has no CORS (no `AddCors`/`UseCors` in `src/Ume.Rag.Api/Program.cs`), so browser calls fail anyway | identity §6 |
-| One Ume.Rag client of kind **`integration`** and one `ume-rag-sk-` key for it | `integration` accepts a secret key (`src/Ume.Rag.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Ume.Rag.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
+| The app calls rag-api **from its own backend**, never from the browser | the key is a secret; rag-api has no CORS (no `AddCors`/`UseCors` in `src/Kalla.Api/Program.cs`), so browser calls fail anyway | identity §6 |
+| One Ume.Rag client of kind **`integration`** and one `ume-rag-sk-` key for it | `integration` accepts a secret key (`src/Kalla.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Kalla.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
 | Staff sign in to **the app**, not to Ume.Rag | rag-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
-| The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Ume.Rag.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
-| The rate limit is the app key's own | for a key subject the chat limit is the key's `RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser` (`ChatRateLimiter.LimitFor`, `src/Ume.Rag.Api/ChatStreaming.cs:250-257`); the platform admin sets it on the app key (§2, §7) | chat §4.1 step 4 |
-| Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Ume.Rag.Domain/Services/KeyChecks.cs:38`, `src/Ume.Rag.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, rag-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Ume.Rag.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
+| The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Kalla.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
+| The rate limit is the app key's own | for a key subject the chat limit is the key's `RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser` (`ChatRateLimiter.LimitFor`, `src/Kalla.Api/ChatStreaming.cs:250-257`); the platform admin sets it on the app key (§2, §7) | chat §4.1 step 4 |
+| Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, rag-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Kalla.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
 
 **Sign-in for the app.** The app gets its own OIDC client in Keycloak realm `ume` (the realm shared with the gateway;
 Decisions "P1 pilot sign-in", "Gateway release 1 …"). It is the app's client, not one of RAG's: the realm's
@@ -34,14 +34,14 @@ in … in P1 is not settled").
 
 | Step | Who | How |
 |---|---|---|
-| Register the client: kind `integration`, ceiling `internal`, `StoresHistory` true if the app keeps chats (then `ClientRetentionDays`), `PortalUrl` = the app's address | platform admin | `POST /api/clients` (`src/Ume.Rag.AdminApi/ClientEndpoints.cs:33`) |
-| Create its key, scoped to the support assistant (`Scopes.AssistantIds`), with an expiry, `requestsPerMinute` for the whole app (e.g. 200 for twenty staff) and `allowedIpRanges` = the app backend's addresses | platform admin | `POST /api/keys`, edit with `PUT /api/keys/{id}` (`src/Ume.Rag.AdminApi/KeyEndpoints.cs:41`, `:66`; fields `:240-245`, `requestsPerMinute` 1–100,000); rotate with `POST /api/keys/{id}/rotate`, which copies both (`src/Ume.Rag.Domain/Services/KeyRotation.cs:43-44`) |
+| Register the client: kind `integration`, ceiling `internal`, `StoresHistory` true if the app keeps chats (then `ClientRetentionDays`), `PortalUrl` = the app's address | platform admin | `POST /api/clients` (`src/Kalla.AdminApi/ClientEndpoints.cs:33`) |
+| Create its key, scoped to the support assistant (`Scopes.AssistantIds`), with an expiry, `requestsPerMinute` for the whole app (e.g. 200 for twenty staff) and `allowedIpRanges` = the app backend's addresses | platform admin | `POST /api/keys`, edit with `PUT /api/keys/{id}` (`src/Kalla.AdminApi/KeyEndpoints.cs:41`, `:66`; fields `:240-245`, `requestsPerMinute` 1–100,000); rotate with `POST /api/keys/{id}/rotate`, which copies both (`src/Kalla.Domain/Services/KeyRotation.cs:43-44`) |
 | Hand the key over once, through a secret channel | platform admin → frontend team | never in a repository or ticket |
 | Make the assistant available to the client | department admin | assistant page, *Audience* (`PUT /api/assistants/{id}/audiences`) |
-| Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Ume.Rag.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
+| Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Kalla.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
 | Route the app's backend host to rag-api | operator | reverse proxy and firewall: `/v1/models`, `/v1/chat/completions`, `/v1/feedback` from the app's backend only; `/v1/documents/*` from the staff network (identity §5.3; knowledge §4.6) |
 | Absolute citation links | operator | `Knowledge:PublicBaseUrl` = rag-api's staff-network address (set from `UME_RAG_API_PUBLIC_URL`, `deploy/compose.prod.yaml:157`) |
-| Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Ume.Rag.Api/ChatEndpoints.cs:19`); the generated proxy configuration and the printed routes allow it since #552 ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"); a proxy configured before 0.3.1/0.4.0 needs `client_max_body_size 2m` on the api host |
+| Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Kalla.Api/ChatEndpoints.cs:19`); the generated proxy configuration and the printed routes allow it since #552 ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"); a proxy configured before 0.3.1/0.4.0 needs `client_max_body_size 2m` on the api host |
 
 The proxy and the firewall still restrict the routes; the key's allow-list is the second line, so a leaked key is
 useless outside the app's backend.
@@ -52,7 +52,7 @@ All chat routes answer errors in the OpenAI shape and send `Cache-Control: no-st
 
 ### 3.1 `GET /v1/models`
 
-The assistants this key may use (`src/Ume.Rag.Api/ChatEndpoints.cs:26-48`):
+The assistants this key may use (`src/Kalla.Api/ChatEndpoints.cs:26-48`):
 
 ```json
 { "object": "list",
@@ -77,15 +77,15 @@ The assistants this key may use (`src/Ume.Rag.Api/ChatEndpoints.cs:26-48`):
 | Rule | Value | Reference |
 |---|---|---|
 | `model` | the assistant's slug; unknown or not allowed → 404 `model_not_found` | chat §3.2 |
-| `messages` | 1–1,000; the **last must be `user`**; `system`/`developer` messages are ignored (the assistant's instructions decide); text only, attachments → 400 `attachments_not_supported` | `src/Ume.Rag.Answering/Chat/ChatRequest.cs:68-160` |
+| `messages` | 1–1,000; the **last must be `user`**; `system`/`developer` messages are ignored (the assistant's instructions decide); text only, attachments → 400 `attachments_not_supported` | `src/Kalla.Answering/Chat/ChatRequest.cs:68-160` |
 | Last user message (the question) | **1–16,000 characters** after normalisation, else 400 `question_too_long`; other messages ≤ 32,000 characters. Paste the whole ticket: over 2,000 characters it is condensed into the search query, and the answer model reads it in full with its line breaks (§6) | `ChatRequest.cs:57-60`, `:140-142`; chat §3.2, §5.1 |
 | `ume` | optional: `related_documents` 0–10 (documents to list, §5), `follow_ups` 0–5 (suggestions, §5) and `general_knowledge` `off`/`supplement`/`fallback`/`open` (a stricter general-knowledge level for this turn, [`04-assistant.md`](04-assistant.md) §4: the turn runs at the stricter of it and the assistant's own, so it never loosens the assistant; absent or `null`: the assistant's level); `{}` gives only `outcome` and `degraded` (§3.5). Not an object, a count out of range or another level value → 400 `invalid_request`, `param` `ume.<name>`; an unknown member → 400 `unsupported_parameter`, `param` `ume.<name>`. Absent: no `ume` in the answer | `ChatRequest.cs:207-259`; chat §3.8 |
-| Body | ≤ 2 MB | `src/Ume.Rag.Api/ChatEndpoints.cs:19` |
+| Body | ≤ 2 MB | `src/Kalla.Api/ChatEndpoints.cs:19` |
 | History | the app sends the whole conversation every turn; it is the authoritative history. Ume.Rag uses the last `history.maxMessages` within `history.maxTokens` | chat §11.3 |
 | `max_tokens` / `max_completion_tokens` | may lower, never raise, the assistant's limit | chat §3.2 |
 | `temperature`, `top_p`, `user`, `metadata`, … | ignored | chat §3.2 |
 | `tools`, JSON `response_format`, `n` > 1, `logprobs` | refused with 400 | `ChatRequest.cs:68-101` |
-| Header `x-rag-conversation-id` | send back the value the first answer returned; a foreign or forged id is 404 `conversation_not_found` | `src/Ume.Rag.Api/ChatEndpoints.cs:130-152`; chat §11.1 |
+| Header `x-rag-conversation-id` | send back the value the first answer returned; a foreign or forged id is 404 `conversation_not_found` | `src/Kalla.Api/ChatEndpoints.cs:130-152`; chat §11.1 |
 
 ### 3.3 Response without streaming
 
@@ -110,7 +110,7 @@ The assistants this key may use (`src/Ume.Rag.Api/ChatEndpoints.cs:26-48`):
     "follow_ups": [ "Hur installerar jag om VPN-klienten?", "Vilka portar måste vara öppna för VPN?" ] } }
 ```
 
-(Shape from `src/Ume.Rag.Api/ChatEndpoints.cs:182-208`, golden file `tests/Ume.Rag.Api.Tests/Golden/chat/json-ume-cited.txt`;
+(Shape from `src/Kalla.Api/ChatEndpoints.cs:182-208`, golden file `tests/Kalla.Api.Tests/Golden/chat/json-ume-cited.txt`;
 values illustrative, `ume` from chat §3.8.) `ume` is present only when the request sent one; it is written when the
 follow-up call has returned or its 2-second budget has run out, so asking for follow-ups delays a JSON answer by at
 most that. `id` is `chatcmpl-` + the message id,
@@ -119,7 +119,7 @@ plans an `x-request-id` header; none was found in the code, but every error body
 
 ### 3.4 Streaming
 
-`text/event-stream`, one `data: {…}` line per event, in this order (`src/Ume.Rag.Api/ChatStreaming.cs:22-114`):
+`text/event-stream`, one `data: {…}` line per event, in this order (`src/Kalla.Api/ChatStreaming.cs:22-114`):
 
 1. A role chunk: `delta: { "role": "assistant", "content": "" }`.
 2. Optionally a caveat line as its own content chunk: degraded search, or a general-knowledge answer (chat §10.2,
@@ -138,7 +138,7 @@ plans an `x-request-id` header; none was found in the code, but every error body
 9. `data: [DONE]`.
 
 The tail of a streamed answer that asked for both (golden file
-`tests/Ume.Rag.Api.Tests/Golden/chat/sse-ume-follow-ups.txt`, shortened):
+`tests/Kalla.Api.Tests/Golden/chat/sse-ume-follow-ups.txt`, shortened):
 
 ```text
 data: {"id":"chatcmpl-0193…","object":"chat.completion.chunk","created":1793952123,"model":"support","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
@@ -169,7 +169,7 @@ These come back as ordinary completions; `ume.outcome` and `ume.degraded` tell t
 | General answer (`fallback`/`open`, coverage `Low`) | `answered-general` | `false` | the caveat line, the model's answer, the contact links | none | `[]` |
 | Search unavailable | `unavailable` | `false` | a fixed "try again shortly" text plus contact links | none | `[]` |
 
-(chat §3.8, §10; `src/Ume.Rag.Answering/Chat/ChatService.cs:103-121`; names in `src/Ume.Rag.Answering/Chat/ChatPlan.cs:22-28`;
+(chat §3.8, §10; `src/Kalla.Answering/Chat/ChatService.cs:103-121`; names in `src/Kalla.Answering/Chat/ChatPlan.cs:22-28`;
 golden files `json-ume-not-found.txt`, `sse-ume-degraded.txt`.) Suggested UI: offer the escalation route on
 `not-found`, mark an `answered-general` answer as not resting on the knowledge base. A refusal is an HTTP error (§7)
 and has no outcome.
@@ -182,7 +182,7 @@ and has no outcome.
 
 `rating` 1 or −1; `reason` one of `incorrect`, `incomplete`, `wrong_sources`, `not_relevant`, `other`. 204 on success;
 repeating it updates the rating. **Send no `comment`**: every assistant runs in history mode `none`, and a comment is
-refused with 400 `comment_not_stored` (`src/Ume.Rag.Api/FeedbackEndpoints.cs:123-128`). Ratings feed the admin's
+refused with 400 `comment_not_stored` (`src/Kalla.Api/FeedbackEndpoints.cs:123-128`). Ratings feed the admin's
 feedback page and daily totals (admin §8.1).
 
 ### 3.7 Conversations
@@ -193,19 +193,19 @@ keeps its own chat history if it shows one, which makes it a `StoresHistory` cli
 ## 4. Citations: opening and downloading the page (requirement 3)
 
 Each `url_citation` has a `url` and a `title` (the label: title, last heading, pages, modified date;
-`src/Ume.Rag.Answering/Chat/Citations.cs:75-94`). Markers in the text are renumbered `[1]`, `[2]`… in order of first
+`src/Kalla.Answering/Chat/Citations.cs:75-94`). Markers in the text are renumbered `[1]`, `[2]`… in order of first
 citation; one document keeps one number.
 
 | Document | `url` | Opening it |
 |---|---|---|
 | Crawled page or crawled file | the page's or file's own URL (intranet), plus `#page=N` for PDFs | opens the live page in the staff browser |
-| Uploaded file | `<Knowledge:PublicBaseUrl>/v1/documents/{id}/content?grant=g1.…`, plus `#page=N` for PDFs (`Citations.cs:67-73`; `src/Ume.Rag.Answering/DownloadGrants.cs:120`) | PDF, PNG and JPEG open inline, other types download with their file name (`src/Ume.Rag.Answering/DocumentContentReader.cs:76-89`). Valid **7 days** (`internal`), re-checked on every use, reachable from the staff network only; an expired link shows a short "ask again" page (knowledge §4.6) |
+| Uploaded file | `<Knowledge:PublicBaseUrl>/v1/documents/{id}/content?grant=g1.…`, plus `#page=N` for PDFs (`Citations.cs:67-73`; `src/Kalla.Answering/DownloadGrants.cs:120`) | PDF, PNG and JPEG open inline, other types download with their file name (`src/Kalla.Answering/DocumentContentReader.cs:76-89`). Valid **7 days** (`internal`), re-checked on every use, reachable from the staff network only; an expired link shows a short "ask again" page (knowledge §4.6) |
 
 The grant link also unlocks the document's metadata: `GET /v1/documents/{id}?grant=…` with the same grant returns
-title, display name, media type, modified date, language and page count (`src/Ume.Rag.Api/KnowledgeEndpoints.cs:97-116`).
+title, display name, media type, modified date, language and page count (`src/Kalla.Api/KnowledgeEndpoints.cs:97-116`).
 The document id is the path segment of the link. Crawled pages have no grant and no served content
 (`content_not_served`; serving crawled HTML from rag-api's origin would be an XSS vector,
-`src/Ume.Rag.Answering/KnowledgeService.cs:180-191`).
+`src/Kalla.Answering/KnowledgeService.cs:180-191`).
 
 Suggested UI: render the answer's Markdown, turn each `[n]` (by the annotation's indices) into a link, and list the
 cited documents under the answer with their labels. Do not forward grant links outside the organisation: anyone on
@@ -217,8 +217,8 @@ Both come in `ume` when the request asks for them (§3.2):
 
 | Member | What it holds | Rule |
 |---|---|---|
-| `related_documents` | up to N documents from the search the answer was built from, one entry per document, best first: `document_id`, `title`, `url` (as citations: the page's URL, or a grant link for uploads, §4), `collection`, `rank`, `cited`, and `number` (its `[n]` in the answer) when cited | only for `answered`; `[]` otherwise. No second search; the list holds only what this key's search through the assistant found (chat §9.7; `src/Ume.Rag.Answering/Chat/RelatedDocuments.cs:59-62`) |
-| `follow_ups` | up to N short questions in the turn's language | for `answered` and `answered-general`; `[]` for fixed texts or when the call fails or takes over 2 s. Never stored (chat §9.8; `src/Ume.Rag.Answering/Chat/FollowUps.cs`) |
+| `related_documents` | up to N documents from the search the answer was built from, one entry per document, best first: `document_id`, `title`, `url` (as citations: the page's URL, or a grant link for uploads, §4), `collection`, `rank`, `cited`, and `number` (its `[n]` in the answer) when cited | only for `answered`; `[]` otherwise. No second search; the list holds only what this key's search through the assistant found (chat §9.7; `src/Kalla.Answering/Chat/RelatedDocuments.cs:59-62`) |
+| `follow_ups` | up to N short questions in the turn's language | for `answered` and `answered-general`; `[]` for fixed texts or when the call fails or takes over 2 s. Never stored (chat §9.8; `src/Kalla.Answering/Chat/FollowUps.cs`) |
 
 Suggested UI: show the entries with `cited: true` as "Sources" (with their `[n]`) and the rest as "Related"; show the
 follow-ups as chips that send their text as the next user message. A clicked suggestion is an ordinary question.
@@ -267,7 +267,7 @@ own parser are not checked yet (chat §22).
 
 Staff paste the whole ticket as the question, up to 16,000 characters (chat §3.2). Over 2,000 characters the condense
 model writes the search query (chat §5.1); when it fails or takes over its budget, the first 2,000 characters, cut at
-a word boundary, are searched instead (`src/Ume.Rag.Answering/Chat/Condenser.cs:150-171`). The answer model reads the
+a word boundary, are searched instead (`src/Kalla.Answering/Chat/Condenser.cs:150-171`). The answer model reads the
 full text with its line breaks (`ChatRequest.cs:164-167`). A longer ticket gets 400 `question_too_long`: the app
 checks the length before sending and tells the user, never cutting the text silently.
 
@@ -285,13 +285,13 @@ checks the length before sending and tells the user, never cutting the text sile
 | 502 | `upstream_error` | retry once, then show an error |
 | 503 | `config_unconfirmed`, `search_unavailable`, `upstream_unavailable` | wait `Retry-After`, retry |
 
-(chat §3.6; `src/Ume.Rag.Api/ChatEndpoints.cs:224-260`; `address_not_allowed` from `src/Ume.Rag.Api/KnowledgeCallers.cs:64-71`.)
+(chat §3.6; `src/Kalla.Api/ChatEndpoints.cs:224-260`; `address_not_allowed` from `src/Kalla.Api/KnowledgeCallers.cs:64-71`.)
 
 **Rate limits.** With one key, every staff member is the same subject, so the whole app shares one window per minute.
 Its size is the key's `RequestsPerMinute` (§2; e.g. 200), or, when unset, the platform's
-`Settings.Chat.messagesPerMinutePerUser` (20; `src/Ume.Rag.Api/ChatStreaming.cs:202-257`; chat §4.1 step 4). A new
+`Settings.Chat.messagesPerMinutePerUser` (20; `src/Kalla.Api/ChatStreaming.cs:202-257`; chat §4.1 step 4). A new
 value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads: 120 a minute per client address
-(`src/Ume.Rag.Api/Program.cs:48-59`), the staff member's own address once the trusted proxies are set (§2).
+(`src/Kalla.Api/Program.cs:48-59`), the staff member's own address once the trusted proxies are set (§2).
 
 ## 8. Developing against Ume.Rag
 
@@ -300,7 +300,7 @@ value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads
   assistant. The FakeGateway answers deterministically, so the app's parsing and rendering can be tested without
   model cost.
 - **API reference:** rag-api publishes an OpenAPI document and a Scalar page when `Knowledge:PublishApiReference` is
-  on (default on; `src/Ume.Rag.Api/Program.cs:60-71`, `:138-144`). It is titled "Ume.Rag Knowledge API"; whether the
+  on (default on; `src/Kalla.Api/Program.cs:60-71`, `:138-144`). It is titled "Ume.Rag Knowledge API"; whether the
   chat routes appear in it is unverified. This file and chat §3 are the contract until then.
 - **Test host:** the same routes as production, with the app's backend host routed by the operator.
 

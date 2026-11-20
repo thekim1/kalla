@@ -42,7 +42,7 @@ export async function typeSecret(field: Locator, value: string): Promise<void> {
   }, value)
 }
 
-const appHostProject = fileURLToPath(new URL('../../src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj', import.meta.url))
+const appHostProject = fileURLToPath(new URL('../../src/Kalla.AppHost/Kalla.AppHost.csproj', import.meta.url))
 
 /**
  * The setup code rag-admin wrote to its output (identity design §19) on the stack of `scripts/Start-E2E.ps1 -Setup`: from

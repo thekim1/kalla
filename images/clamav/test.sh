@@ -104,7 +104,7 @@ if $online; then
   start
 else
   # HDB signature: MD5 and size of the EICAR file. Written by the image's own user into the fresh volume.
-  printf '44d88612fea8a8f36de82e1278abb02f:68:Ume.Rag.Test.EICAR\n' |
+  printf '44d88612fea8a8f36de82e1278abb02f:68:Kalla.Test.EICAR\n' |
     docker run --rm -i -v "$volume:/var/lib/clamav" --entrypoint sh "$image" -c 'cat > /var/lib/clamav/test.hdb'
   start --entrypoint clamd -- --foreground
 fi

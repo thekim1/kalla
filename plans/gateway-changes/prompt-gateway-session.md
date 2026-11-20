@@ -66,7 +66,7 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   upgrade-guide entry.
 
 Done when: release 1 is tagged by this repo's release practice. A RAG-side contract check passes: RAG's
-`Ume.Rag.FakeGateway` (in the RAG repo) enforces the same header semantics, so compare the two and list any
+`Kalla.FakeGateway` (in the RAG repo) enforces the same header semantics, so compare the two and list any
 difference.
 
 ## 2. Shared Keycloak (decided 2026-10-30)

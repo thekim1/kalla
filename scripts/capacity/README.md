@@ -74,11 +74,11 @@ ceiling that is not the key's level, answers with `x-ume-residency`), which the 
 does not do yet. Its numbers test the script only: label such runs `--smoke` and never record them as results.
 
 ```bash
-dotnet build src/Ume.Rag.FakeGateway -c Release
+dotnet build src/Kalla.FakeGateway -c Release
 FakeGateway__Keys__OnPrem="$(cat onprem.key)" \
 FakeGateway__Latency__FirstTokenMs=300 FakeGateway__Latency__PrefillMsPer1kInputTokens=60 \
 FakeGateway__Latency__TokenIntervalMs=10 FakeGateway__Latency__AnswerWords=150 FakeGateway__Latency__JitterPercent=20 \
-  dotnet run --project src/Ume.Rag.FakeGateway -c Release --no-build --no-launch-profile --urls http://127.0.0.1:18900
+  dotnet run --project src/Kalla.FakeGateway -c Release --no-build --no-launch-profile --urls http://127.0.0.1:18900
 python3 -I scripts/capacity/capacity.py all --base-url http://127.0.0.1:18900 --key-file onprem.key \
   --duration 15 --warmup 3 --smoke
 ```

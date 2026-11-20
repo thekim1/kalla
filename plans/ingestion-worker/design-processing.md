@@ -252,7 +252,7 @@ insufficient) cuts sections above 1,500 tokens into parent windows at block boun
 - `Microsoft.ML.Tokenizers` 2.0.1 (MIT, stable; the KM report already chose it for counting,
   `../../platforms/kernel-memory-and-dotnet.md:183`), `SentencePieceTokenizer.Create(stream, addBeginOfSentence:
   false, addEndOfSentence: false)` over BGE-M3's `sentencepiece.bpe.model` (5.07 MB, MIT), embedded as a resource in
-  `Ume.Rag.Worker` with its SHA-256 checked at startup. The model is Unigram with `nmt_nfkc` (checked, see preamble);
+  `Kalla.Worker` with its SHA-256 checked at startup. The model is Unigram with `nmt_nfkc` (checked, see preamble);
   2.0.1 contains the Unigram model and precompiled-charsmap normaliser. Counting needs no ids, so the fairseq id
   offset of XLM-R does not matter; the gateway adds `<s>`/`</s>` (2 tokens).
 - Parity test: 1,000 Swedish and English passages from the fixture corpus, counts equal to Hugging Face
@@ -382,7 +382,7 @@ counts and flag **on the chunk set** (6a §14). Every execution that produces a 
 produces its state. Text is NFC with NBSP and soft hyphens already normalised (§4.2), which matters for phone numbers
 and names.
 
-### 9.1 Patterns (.NET, `Ume.Rag.Worker/Pii`)
+### 9.1 Patterns (.NET, `Kalla.Worker/Pii`)
 
 | Type | Candidate (regex, with `\b`-style boundaries: no digit, letter or `-` directly before/after, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
 |---|---|---|
@@ -675,7 +675,7 @@ gateway's `x-ume-cost-usd` or an estimate (engine §10.6), so the real cost show
 
 ### 13.5 Running retrieval as the Knowledge API does
 
-- Shared project **`Ume.Rag.Retrieval`** (used by `Ume.Rag.Api`, the worker and the admin test panel): runs the
+- Shared project **`Kalla.Retrieval`** (used by `Kalla.Api`, the worker and the admin test panel): runs the
   keyword and vector candidate statements (knowledge design §6.2) with the collection's `RetrievalSettings` and
   profile literal, the same `SwedishDecompounder` on the query, then fuses in .NET (RRF, then the age decay and
   `demote` multipliers, weakness review §3) and applies the same dedup by
@@ -797,14 +797,14 @@ exists.
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
 - **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through
-  `Ume.Rag.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
+  `Kalla.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
   assistant's ceiling, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
   rate from live chat is shown next to them (chat design). At most 100 questions per assistant and night (the
   `human` layer first, then the newest generated questions), and the run records its cost. Run kind `answers`; it
-  runs in **`rag-admin`**, which already runs `Ume.Rag.Answering` for the test panel and holds the gateway keys of
-  every level. The worker runs only retrieval evaluation (through `Ume.Rag.Retrieval`) and references neither
-  `Ume.Rag.Answering` nor `Ume.Rag.Tools`.
+  runs in **`rag-admin`**, which already runs `Kalla.Answering` for the test panel and holds the gateway keys of
+  every level. The worker runs only retrieval evaluation (through `Kalla.Retrieval`) and references neither
+  `Kalla.Answering` nor `Kalla.Tools`.
 
 ## 15. Observability
 
@@ -849,16 +849,16 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 
 | Kind | Project / location | Content |
 |---|---|---|
-| Golden per stage and version | `Ume.Rag.Worker.Tests`, `tests/fixtures/processing/` | input → expected output for `detect`, parse planning (signals → plan), HTML extraction (presets and profiles), `plain-text`, `csv-table`, `clean`, split, `chunk` (incl. breadcrumb prefix and `SearchText`), metadata, quality facts, `personal-data` (with a fake NER client); a changed output without a version bump fails (6a §19) |
+| Golden per stage and version | `Kalla.Worker.Tests`, `tests/fixtures/processing/` | input → expected output for `detect`, parse planning (signals → plan), HTML extraction (presets and profiles), `plain-text`, `csv-table`, `clean`, split, `chunk` (incl. breadcrumb prefix and `SearchText`), metadata, quality facts, `personal-data` (with a fake NER client); a changed output without a version bump fails (6a §19) |
 | umea.se acceptance (P1) | `tests/fixtures/umea/` (20 saved HTML pages and 1 PDF with goldens and `MANIFEST.csv`, byte-identical to what umea.se served, to-verify #138) | the example page (simplification pass §13.2) extracts to exactly its main text without share widget, short-URL line and child-link list, breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar, verksamheter › Teknik och fastighet" (as on the live page), date 2026-01-15; the set is a regression corpus |
 | Tokenizer parity | same | 1,000 passages, counts equal to the Hugging Face tokenizer (§6.1) |
 | Swedish fixture corpus | `tests/fixtures/processing/` (public or synthetic, `MANIFEST.csv` as parser §15.3) | umea.se pages with deep navigation and contact blocks; a protokoll with `§` items and justering block; föreskrifter with `kap.`/`§`/`Bilaga`; a taxa with fee tables across pages; a report with TOC, footnotes and `1.2.3` numbering; hyphenation and suspended compounds; a PDF whose layout headings have wrong levels; a page with only headings; a 300-row XLSX; a two-column newsletter |
-| Planner | `Ume.Rag.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
+| Planner | `Kalla.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
 | PII precision/recall | `tests/fixtures/pii/` (synthetic only) | generated Swedish texts with Skatteverket test personnummer and samordningsnummer, organisationsnummer, OCR references, bankgiro, case numbers, phone numbers in every §9.1 format, obfuscated emails, names from SCB statistics in running text, tables, all caps, genitive and hyphenated forms; **targets**: personnummer/samordningsnummer precision and recall ≥ 0.99, email ≥ 0.99, phone ≥ 0.95, names (NER) recall ≥ 0.85 and precision ≥ 0.80; the NER model is accepted for P1 only if it reaches them (answered 18) |
-| NER gating and client | `Ume.Rag.Worker.Tests`, `Ume.Rag.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
-| Flag lifecycle | `Ume.Rag.Worker.Tests` (`PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
-| Noise | `Ume.Rag.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
-| Evaluation reproducibility | `tests/Ume.Rag.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`) with FakeGateway (deterministic embeddings and LLM answers): every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
+| NER gating and client | `Kalla.Worker.Tests`, `Kalla.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
+| Flag lifecycle | `Kalla.Worker.Tests` (`PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
+| Noise | `Kalla.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
+| Evaluation reproducibility | `tests/Kalla.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`) with FakeGateway (deterministic embeddings and LLM answers): every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
 
 ## 18. Milestones
 

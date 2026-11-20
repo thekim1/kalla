@@ -32,11 +32,11 @@ Moved to [`../archive/design-history/chat-api.md`](../archive/design-history/cha
 
 | Project | Owns (chat) | Notes |
 |---|---|---|
-| `Ume.Rag.Domain` | `ChatTurn`, `AssistantChatSettings` (parsed `QuerySteps`), `AnswerEvent`, `IAnswerStrategy`, `ConversationKey`, `Language` | pure; table-driven unit tests |
-| `Ume.Rag.Infrastructure` | `IGatewayClient.OpenChatStreamAsync` / `CompleteChatAsync` (shared with the worker, 6a §7.7), `ResidencyCeilingHandler` (`DelegatingHandler`, §8.1), `SseReader` + `SseEvent` (copied, `ProviderModels.cs:200-238`, `:277-335`), `ChatCipher` (AES-GCM rows, data-model §7), `IKeyProvider`, `GatewayKeySource` (the service's credential key; the pilot team's keys per level until gateway phase 1), `RateLimiter` (Lua, gateway pattern) | `Microsoft.Extensions.AI.OpenAI` is **not** used by chat: its streaming API hides the response headers the residency check needs (§20) |
-| `Ume.Rag.Answering` (admin design §2.1) | chat answer core: `RagAnswerStrategy`, `MessageKind` (conversational check), `Condenser`, `PromptBuilder`, `TokenBudget`, `AnswerFilter` (markers, images, links), `CitationEmitter`, `LanguageGuess` (P2 `AgentAnswerStrategy`) | no HTTP; referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi`, so the admin test panel runs the exact chat path in process |
-| `Ume.Rag.Api` role `chat` | endpoint group, `ChatPipeline`, `ChatStreamWriter`, `ConversationWriter` (BackgroundService), `FeedbackImporter` (BackgroundService), `ConversationIds` | OpenAPI document `chat` |
-| `Ume.Rag.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Ume.Rag.Answering`) | called in process (knowledge §2.1–§2.2) |
+| `Kalla.Domain` | `ChatTurn`, `AssistantChatSettings` (parsed `QuerySteps`), `AnswerEvent`, `IAnswerStrategy`, `ConversationKey`, `Language` | pure; table-driven unit tests |
+| `Kalla.Infrastructure` | `IGatewayClient.OpenChatStreamAsync` / `CompleteChatAsync` (shared with the worker, 6a §7.7), `ResidencyCeilingHandler` (`DelegatingHandler`, §8.1), `SseReader` + `SseEvent` (copied, `ProviderModels.cs:200-238`, `:277-335`), `ChatCipher` (AES-GCM rows, data-model §7), `IKeyProvider`, `GatewayKeySource` (the service's credential key; the pilot team's keys per level until gateway phase 1), `RateLimiter` (Lua, gateway pattern) | `Microsoft.Extensions.AI.OpenAI` is **not** used by chat: its streaming API hides the response headers the residency check needs (§20) |
+| `Kalla.Answering` (admin design §2.1) | chat answer core: `RagAnswerStrategy`, `MessageKind` (conversational check), `Condenser`, `PromptBuilder`, `TokenBudget`, `AnswerFilter` (markers, images, links), `CitationEmitter`, `LanguageGuess` (P2 `AgentAnswerStrategy`) | no HTTP; referenced by `Kalla.Api` and `Kalla.AdminApi`, so the admin test panel runs the exact chat path in process |
+| `Kalla.Api` role `chat` | endpoint group, `ChatPipeline`, `ChatStreamWriter`, `ConversationWriter` (BackgroundService), `FeedbackImporter` (BackgroundService), `ConversationIds` | OpenAPI document `chat` |
+| `Kalla.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Kalla.Answering`) | called in process (knowledge §2.1–§2.2) |
 
 The chat role maps its routes only when `Rag:Roles` contains `chat` (repo-and-deployment §3). With the roles split,
 `IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes. `HttpRetriever` does not exist yet, so startup refuses `chat` without `knowledge` in
@@ -46,7 +46,7 @@ for chat the access policy decides per assistant.
 ### 2.2 The answer seam (P1 RAG, P2 agent)
 
 ```csharp
-// Ume.Rag.Domain
+// Kalla.Domain
 public interface IAnswerStrategy
 {
     AssistantMode Mode { get; }                                            // Rag, Agent (P2); derived, never stored
@@ -70,7 +70,7 @@ public sealed record ChatContext(
 
 `AssistantSnapshot` is the assistant's **published version** (data-model §2.1: the api reads only the view
 `config."PublishedAssistantVersions"`, so a draft never reaches chat; drafts run only in the admin test panel through
-the same `Ume.Rag.Answering` core), and each turn records it (`Messages.AssistantVersionId`). Its `Mode` is derived when
+the same `Kalla.Answering` core), and each turn records it (`Messages.AssistantVersionId`). Its `Mode` is derived when
 the snapshot is built: `Agent` iff the published version links a skill whose served version has a tool not in that
 link's `excludedToolIds` (P2), else `Rag`; there is no mode field to edit.
 `ChatPipeline` (§4) selects the strategy by `AssistantSnapshot.Mode`, feeds its events through `AnswerFilter` and
@@ -86,7 +86,7 @@ write tools (tools design §5.5). No P2 code is written in P1; the seam is the i
 ## 3. API contract
 
 All chat routes answer errors in the OpenAI shape (identity §4.4), `Cache-Control: no-store` (gateway
-`UseUmeSecurityHeaders`, knowledge §3.2) and `x-request-id` (server-generated, as `RequestIdMiddleware`,
+`UseKallaSecurityHeaders`, knowledge §3.2) and `x-request-id` (server-generated, as `RequestIdMiddleware`,
 `Pipeline/GatewayErrors.cs:271-290`).
 
 ### 3.1 `GET /v1/models`
@@ -842,7 +842,7 @@ cited ones and the next-best ones, so staff can open a neighbouring article the 
 
 | Topic | Rule |
 |---|---|
-| Source | the turn's `RetrievalResult` the prompt was built from (`ChatPlan.Retrieval`): **no second retrieval**, no embedding, no SQL statement, no model call. Every result already carries its citation with the title and, for uploads, the grant link (knowledge §10; `src/Ume.Rag.Answering/KnowledgeService.cs:526-535`) |
+| Source | the turn's `RetrievalResult` the prompt was built from (`ChatPlan.Retrieval`): **no second retrieval**, no embedding, no SQL statement, no model call. Every result already carries its citation with the title and, for uploads, the grant link (knowledge §10; `src/Kalla.Answering/KnowledgeService.cs:526-535`) |
 | Selection | results grouped by `DocumentId`, one entry per document, ordered by the document's best (lowest) rank; the first N (`ume.related_documents`, ≤ 10; with `retrieval.topK` 10 there are at most 10 documents). Documents the token budget left out of the prompt are listed too: they were retrieved for this question |
 | Entry | `document_id`; `title` (`Citation.Title`, the knowledge §10.2 title rule); `url` by the citation link rule (`Citations.Link`): a crawled page's or file's own URL, an uploaded file's grant link (knowledge §4.6: the caller's client and key, same lifetime), plus `#page=` with the best-ranked chunk's page for PDFs; `collection` (the collection's slug); `rank` (1-based position in this list); `cited` (`true` when the delivered answer cites the document); `number` (its display number `[n]` in the answer, §9.2; omitted when not cited); `modified` and `checked` (the best-ranked chunk's citation dates, knowledge §10.1, ISO 8601 UTC; each omitted when null; Decisions "Source dates on citations") |
 | Outcome `answered` | listed, degraded answers (§10.2) and `Low` after a failed condense (§6.2) included: the answer was built from these results |
@@ -1270,7 +1270,7 @@ retrieval) + (time our first content byte is flushed − time the gateway's firs
 
 ### 16.2 How it is measured
 
-1. **Micro-benchmarks** (`tests/Ume.Rag.Benchmarks/ChatTurnBenchmarks.cs` and `ChatStreamBenchmarks.cs`, local
+1. **Micro-benchmarks** (`tests/Kalla.Benchmarks/ChatTurnBenchmarks.cs` and `ChatStreamBenchmarks.cs`, local
    only, BenchmarkDotNet as the gateway's `PipelineBenchmarks`): request parsing (Open WebUI body with 40 messages),
    `PromptBuilder` with 10 documents and 8,000 tokens, `TokenBudget`, `AnswerFilter` over a 2 KB answer fed in chunks
    of 1, 7 and 50 characters, chunk re-serialisation, `LanguageGuess`; allocation per message is the regression gate
@@ -1343,7 +1343,7 @@ totals).
 
 ## 18. Tests
 
-### 18.1 Unit (`Ume.Rag.Api.Tests`, `Ume.Rag.Domain.Tests`)
+### 18.1 Unit (`Kalla.Api.Tests`, `Kalla.Domain.Tests`)
 
 - Request parsing table: every field of §3.2 (accepted, ignored, refused), content parts, sizes, last-message rule.
 - `MessageKind`: greetings and thanks (sv/en) conversational; short questions with one content word (`bygglov?`) not;
@@ -1433,12 +1433,12 @@ The `ume` extension adds no Postgres statement and no Redis command to a turn (�
 ### 18.8 Answer-level evaluation (P2, weakness review §1)
 
 Nightly, per assistant: up to 50 questions (proposed) from its collections' evaluation sets (processing §13) run
-through the answer core of `Ume.Rag.Answering` (same frame, prompt, filter and renumbering as chat; nothing stored)
+through the answer core of `Kalla.Answering` (same frame, prompt, filter and renumbering as chat; nothing stored)
 with the assistant's model and ceiling; an on-prem judge (`Settings.EvaluationJudgeModel`, `OnPrem` ceiling) scores
 **faithfulness** (claims supported by the cited sources) and **citation precision** (cited documents that support the
 sentence citing them). Advisory: shown on the assistant's page next to the previous run, no gate. Run kind `answers`,
 hosted by `rag-admin`, which already runs the answer core for the test panel and holds the keys of every level; the
-worker runs only retrieval evaluation and references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` (processing
+worker runs only retrieval evaluation and references neither `Kalla.Answering` nor `Kalla.Tools` (processing
 §14.8). From live traffic, the `uncited_answer` rate per assistant comes from `AssistantDailyTotals.UncitedAnswers`
 (§20); `rag.chat.citations{kind=uncited_answer}` stays the platform-wide counter.
 
@@ -1452,7 +1452,7 @@ waits for or depends on it.
 
 ### 18.9 Support-assistant extensions (§3.8, §4.1 step 4, §5.1, §9.7, §9.8, §9.9)
 
-Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers per `x-ume-step`, `FakeGateway:ChatScripts:<step>`):
+Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per `x-ume-step`, `FakeGateway:ChatScripts:<step>`):
 
 - **Rate limit per key**: an integration key with `RequestsPerMinute` 60 gets 60 messages a minute and 429
   `rate_limited` with `Retry-After` on the 61st; a key without a value gets `Settings.Chat.messagesPerMinutePerUser`;

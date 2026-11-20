@@ -232,7 +232,7 @@ runs only where the malware scan is on (Decisions "Malware scan optional"). Deta
 
 ### Repo and deployment
 
-`Ume.Rag.Api` is one binary with roles; tests use `Ume.Rag.FakeGateway`. Production Compose has resource zones and
+`Kalla.Api` is one binary with roles; tests use `Kalla.FakeGateway`. Production Compose has resource zones and
 fixed networks with firewall egress rules; releases ship a digest-pinned bundle. Detail: `platform/repo-and-deployment.md` §3,
 §4.3, §6, §7.
 
@@ -738,7 +738,7 @@ Published municipal content is public information. .NET patterns run on every ch
 
 ### Knowledge API (step 7)
 
-Retrieval is hybrid in the shared `Ume.Rag.Retrieval` engine, used unchanged by the knowledge API, the evaluator and
+Retrieval is hybrid in the shared `Kalla.Retrieval` engine, used unchanged by the knowledge API, the evaluator and
 the test panel: keyword and vector candidates, RRF in .NET, then per-collection age decay (off by default) and source
 `demote` patterns, at most 3 chunks per document by default (1–10). Top-k is 10 (max 50), the query is used as given, results are not
 cached, query text is never stored, and a failed embedding degrades to keyword-only. Detail: `knowledge-api/design.md`

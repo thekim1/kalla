@@ -17,7 +17,7 @@ param([switch]$Stop, [switch]$Keep, [switch]$Setup)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$apphost = [IO.Path]::Combine($root, 'src', 'Ume.Rag.AppHost', 'Ume.Rag.AppHost.csproj')
+$apphost = [IO.Path]::Combine($root, 'src', 'Kalla.AppHost', 'Kalla.AppHost.csproj')
 # The AppHost registers admin-ui only when src/admin-ui/package.json exists (P0 checklist #11).
 $last = if (Test-Path ([IO.Path]::Combine($root, 'src', 'admin-ui', 'package.json'))) { 'admin-ui' } else { 'adminapi' }
 $normalVolume = 'ume-rag-e2e-postgres'

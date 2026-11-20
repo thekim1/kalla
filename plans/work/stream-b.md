@@ -19,9 +19,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   `(kontrollerad …)` without a stated date, `checked` in English), for both the Open WebUI `source` events and the
   `url_citation` titles. `RelatedDocument` gets `modified` and `checked` (chat §9.7; ISO 8601 UTC, omitted when
   null).
-- **Paths:** `src/Ume.Rag.Domain/Retrieval/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Answering/**`,
-  `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**` (only where it builds citations), `tests/**` (not
-  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Paths:** `src/Kalla.Domain/Retrieval/**`, `src/Kalla.Retrieval/**`, `src/Kalla.Answering/**`,
+  `src/Kalla.Api/**`, `src/Kalla.AdminApi/**` (only where it builds citations), `tests/**` (not
+  `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** chat §18.9's *Source dates* tests pass: a crawled page with and without a stated date, an English
   turn and an upload, in both the label and the related-documents entry; the Knowledge API's `document` has
   `checked` for a crawled page and none for an upload; the Open WebUI recorded fixture changes only in the label.
@@ -38,9 +38,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   `Settings.Chat.Prompts.escalation` with its locked lines (`PromptTexts`, V38 ≤ 2,000, the prompt texts endpoint's
   section `escalation`, `labels.ts`'s section and member names); `rag.chat.escalation` and the `escalation` token
   step (§17); the FakeGateway's script per step already covers `escalation`.
-- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/PromptText*.cs`,
-  `src/Ume.Rag.Domain/**` (b's), `src/admin-ui/src/utils/labels.ts`, `tests/**` (not
-  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Paths:** `src/Kalla.Answering/**`, `src/Kalla.Api/**`, `src/Kalla.AdminApi/PromptText*.cs`,
+  `src/Kalla.Domain/**` (b's), `src/admin-ui/src/utils/labels.ts`, `tests/**` (not
+  `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** chat §18.9's *Escalation* tests pass, with a negative proof on the accept rule's masking; the
   Settings page's Prompt texts panel shows the escalation section with its locked lines (API test and Vitest).
 - **Waits on:** nothing (B-47 first only to keep the two PRs apart on `ChatStreaming.cs`).
@@ -52,7 +52,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   version's `NotFound.links`, else `Settings.Chat`'s), as the not-found and general-knowledge texts and as
   `ume.escalation`'s `contacts` (§9.9) already do. Today `FixedTexts.Unavailable` gets only the assistant's links,
   so the text and `contacts` differ when only the platform has links.
-- **Paths:** `src/Ume.Rag.Answering/**`, `tests/**`.
+- **Paths:** `src/Kalla.Answering/**`, `tests/**`.
 - **Done when:** a test shows an unavailable turn of an assistant without links ending with the platform's links,
   and its `contacts` equal to the links in the text; one of an assistant with its own links shows those.
 - **Waits on:** nothing.
@@ -64,7 +64,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   dialog (the counts, the name typed; for a knowledge base in use the `collection_in_use` list and no button). The
   unique index on `config."Collections"."Slug"` becomes partial (`WHERE "DeletedAt" IS NULL`), and `slug_taken`
   looks only at knowledge bases that are not deleted. `collection_in_use` ignores deleted assistants once B-51 is in.
-- **Paths:** `src/admin-ui/**` (b's), `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Infrastructure/**` (the index and its
+- **Paths:** `src/admin-ui/**` (b's), `src/Kalla.AdminApi/**`, `src/Kalla.Infrastructure/**` (the index and its
   migration), `tests/**`.
 - **Done when:** tests show a knowledge base created with the name of a deleted one, the delete of one in use
   refused with its list, and both dialogs (Vitest); a browser check by hand of both deletes, named in the PR.
@@ -80,8 +80,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   the last 7 days, the name typed); statistics and feedback pages read *Deleted assistant* where the row is gone
   (`labels.ts`); `config.rag_retention_config_step` purges the row 30 days after `DeletedAt` once no conversation
   names it (data-model §8).
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Domain/**`
-  (b's), `src/Ume.Rag.Infrastructure/**`, `src/Ume.Rag.MigrationService/**` (b's), `src/admin-ui/**` (b's),
+- **Paths:** `src/Kalla.AdminApi/**`, `src/Kalla.Api/**`, `src/Kalla.Answering/**`, `src/Kalla.Domain/**`
+  (b's), `src/Kalla.Infrastructure/**`, `src/Kalla.MigrationService/**` (b's), `src/admin-ui/**` (b's),
   `tests/**`.
 - **Done when:** tests show: a deleted assistant gone from `GET /v1/models` and refused in chat with 404 for a
   client that had it; a new assistant with its name; its knowledge base deletable; its conversations and daily
@@ -97,7 +97,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   (a link with topics: the common ones, out of the turn when none; a link without: the asked ones), passed as
   `RetrievalRequest.Topics` so the topic links, the coverage counts and the floor see the narrowed links
   (knowledge §4.2, §6.2); a turn with no link left ends `not-found` without a search.
-- **Paths:** `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Domain/**` (b's), `tests/**`; the
+- **Paths:** `src/Kalla.Api/**`, `src/Kalla.Answering/**`, `src/Kalla.Domain/**` (b's), `tests/**`; the
   OpenAPI document and `docs/` where the `ume` members are listed.
 - **Done when:** chat §18.9's *Topics per request* tests pass, with the negative proof that a request cannot
   reach a tag its link does not have; the Open WebUI recorded fixture is unchanged.
@@ -110,7 +110,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
   `content."Documents"` row of the source remains and none of its blob tombstones waits for its purge, and a
   `Collections` row with `DeletedAt` once its sources are gone. Deletion proposals, frontier and run rows of the
   source go by their own retention, as for a live source (settled on #884).
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Infrastructure/**`, `tests/**`.
+- **Paths:** `src/Kalla.AdminApi/**`, `src/Kalla.Infrastructure/**`, `tests/**`.
 - **Done when:** a test shows a deleted source's row kept while a document or a tombstone of it is left and
   purged after, and its knowledge base's row after its last source.
 - **Waits on:** nothing.
@@ -120,7 +120,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Do:** admin §7.1: a `stale` human question (`State = 'stale'`, `RetiredAt` null) says "Its expected document was
   deleted" in the questions table, with re-point (edit) and retire; the report card (§7.2) shows the run result's
   `documentGone` ("N questions left out: their documents were deleted"). The fields are listed on #893.
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**` (not `src/platform/**`), `tests/**` (the names as they are
+- **Paths:** `src/Kalla.AdminApi/**`, `src/admin-ui/**` (not `src/platform/**`), `tests/**` (the names as they are
   after the rename).
 - **Done when:** an API test for the stale state and the count; the table and the card shown in a browser.
 - **Waits on:** the rename (user, 2026-11-20).
@@ -140,8 +140,8 @@ tables in one migration of its own (no backward compatibility before production)
   instructions, not-found texts with links and query steps copied into the first draft, never linked; the field
   emptied keeps P1's start from `Settings.Chat.defaultSystemPrompt`). Write the two new presets' instructions in
   Swedish in the style of the default prompt and show them in the PR.
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Infrastructure/**` (b's), `src/Ume.Rag.Domain/**` (b's),
-  `src/Ume.Rag.MigrationService/` (not `Templates/**`), `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Paths:** `src/Kalla.AdminApi/**`, `src/Kalla.Infrastructure/**` (b's), `src/Kalla.Domain/**` (b's),
+  `src/Kalla.MigrationService/` (not `Templates/**`), `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
 - **Done when:** API tests for the endpoints and roles; a seeded database has the three templates and a second start
   doesn't add or restore one; an assistant created from *Intern policy* has its instructions in the first draft and
   keeps them when the template changes later; the drawer shown in a browser.
@@ -174,14 +174,14 @@ tables in one migration of its own (no backward compatibility before production)
 ### [ ] B-57 Test questions per assistant
 - **Do:** admin §7.4: `config."AssistantTestQuestions"` (data-model), `GET/POST/PUT/DELETE
   /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in rag-admin (each question through
-  `Ume.Rag.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
+  `Kalla.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
   judge `Settings.EvaluationJudgeModel` at the assistant's level, `x-ume-step: assistant-test`), the
   `EvaluationRuns`/`EvaluationResults` rows of kind `assistant-tests` and `AssistantVersions.TestRunId`, the run after
   every publish and restore and **Run test questions** on demand (one run per assistant at a time), the cost shown
   before, the report card (§7.2) with **Keep** and **Restore the previous version**, **Save as test question** in the
   test panel, the last 20 runs kept (data-model §8), `rag.admin.assistant_tests{outcome}`. The FakeGateway answers the
   judge (its script per step).
-- **Paths:** as B-54, and `src/Ume.Rag.Answering/**`, `src/Ume.Rag.FakeGateway/**` where the judge step needs it.
+- **Paths:** as B-54, and `src/Kalla.Answering/**`, `src/Kalla.FakeGateway/**` where the judge step needs it.
 - **Done when:** admin §11.2's assistant-test cases: a publish starts a run, a question with each check passes and
   fails as specified, a run compares with the previous version's, results are readable only within the assistant's
   scope; the tab and the report shown in a browser.
@@ -191,7 +191,7 @@ tables in one migration of its own (no backward compatibility before production)
 
 ### [ ] B-58 The nightly answer run
 - **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in rag-admin, nightly per published assistant: the
-  evaluation sets of its collections answered through `Ume.Rag.Answering` with the published version's settings, the
+  evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
   judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-ume-step: eval-answer`) rating faithfulness
   and citation precision; run kind `answers` with results per question; the assistant's Statistics tab shows the
   latest run's counts beside the live `uncited_answer` rate; `rag.evaluation.llm_tokens{step=answer}`; at most 100
@@ -216,7 +216,7 @@ tables in one migration of its own (no backward compatibility before production)
 
 
 ### [ ] B-42 Gateway phase 2: every api and admin call as the object's key, the echo check, the FakeGateway acting (#580, cost-attribution B5)
-- **Do:** in the shared client (`src/Ume.Rag.Infrastructure/Gateway/`): each service reads `gateway.features` from its
+- **Do:** in the shared client (`src/Kalla.Infrastructure/Gateway/`): each service reads `gateway.features` from its
   own `GET /v1/ume/context` with its credential key, at start and every 5 minutes with `If-None-Match`, held in memory
   (identity §4.7); the call's object key travels on the request and `ResidencyCeilingHandler` sets
   `x-ume-on-behalf-of` from it only while the features contain `act-as-key`; on every `2xx`/`304` answer the echo is
@@ -237,10 +237,10 @@ tables in one migration of its own (no backward compatibility before production)
   (`Key`, `Team`, `Department`: `402 budget_exceeded` with the gateway's message); each served request recorded with
   the key it ran as, its `x-ume-run-id`, `x-ume-step`, tokens and cost (for B-45). `docs/security-events.md`'s 5011 row
   to the key form (it still names a team).
-- **Paths:** `src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Retrieval/**`,
-  `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**` (`AssistantTestEndpoints.cs`, `TestRetrievalEndpoints.cs`, the
-  gateway registration), `src/Ume.Rag.FakeGateway/**`, `docs/security-events.md`, `tests/**` (not
-  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Paths:** `src/Kalla.Infrastructure/Gateway/**`, `src/Kalla.Answering/**`, `src/Kalla.Retrieval/**`,
+  `src/Kalla.Api/**`, `src/Kalla.AdminApi/**` (`AssistantTestEndpoints.cs`, `TestRetrievalEndpoints.cs`, the
+  gateway registration), `src/Kalla.FakeGateway/**`, `docs/security-events.md`, `tests/**` (not
+  `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** against the FakeGateway with `act-as-key`: every call of a chat turn (condense, query embedding,
   rerank, answer, follow-ups) and of a test-panel turn carries the assistant's key id and the FakeGateway records it
   under that key; an assistant without a key, or a FakeGateway without `act-as-key`, sends no header; with
@@ -266,9 +266,9 @@ tables in one migration of its own (no backward compatibility before production)
   (`gateway_key_required`, 409), and a knowledge base without one keeps saving and indexing on the credential key with
   its page's note (cost-attribution §4.2); `GET /api/gateway/status` adds one acted `/v1/models` call's echo (the first
   usable mirrored key). The publish dialog and the key picker show the new refusals (`messages.ts`).
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `contracts/admin/**`, `src/admin-ui/src/views/**`,
+- **Paths:** `src/Kalla.AdminApi/**`, `contracts/admin/**`, `src/admin-ui/src/views/**`,
   `src/admin-ui/src/components/**`, `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/**` (not
-  `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+  `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** against the FakeGateway with `act-as-key`: V39 refuses a key whose `/v1/models` lacks the condense
   model, naming it, though the admin's own list has it; a disabled key gives `gateway_key_invalid`; with
   `DropOnBehalfOfEcho` the save gives `gateway_unavailable` and 5011; publishing an assistant without a key gives
@@ -289,10 +289,10 @@ tables in one migration of its own (no backward compatibility before production)
   reason. rag-admin: the `[Unavailable]` badge with its reason on the assistant's and knowledge base's pages, derived
   from the mirror (admin §5.5.4, §5.5.2), and from B-45's budgets once there; the attention-list source of admin
   §5.5.1 (the list itself comes with P2's `GET /api/overview`; until then the badge is the signal).
-- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.AdminApi/**`,
+- **Paths:** `src/Kalla.Answering/**`, `src/Kalla.Api/**`, `src/Kalla.Retrieval/**`, `src/Kalla.AdminApi/**`,
   `contracts/admin/**`, `src/admin-ui/src/views/**`, `src/admin-ui/src/components/**`,
-  `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/**` (not `tests/Ume.Rag.ContractTests/**`,
-  `tests/Ume.Rag.Worker.Tests/**`).
+  `src/admin-ui/src/utils/labels.ts`, `messages.ts`, `tests/**` (not `tests/Kalla.ContractTests/**`,
+  `tests/Kalla.Worker.Tests/**`).
 - **Done when:** against the FakeGateway: a key with `BudgetExceeded: Department` gives 402 `budget_exceeded` with the
   department's message before the first byte and an `unavailable` turn in the totals; a disabled key in the mirror
   gives 503 `assistant_unavailable` and the FakeGateway saw no call; a key the FakeGateway refuses (`403
@@ -316,8 +316,8 @@ tables in one migration of its own (no backward compatibility before production)
   of the integration; `budgets` from `FakeGateway:AssignedKeys:<n>:Budgets`; `usage.read` on the admin's dev
   credential key only (`401` for a key that is not a credential key, `403` without the scope); the AppHost passes the
   dev `Gateway:IntegrationApiUrl`. The contract test checks both answers against the pinned `integrations.json`.
-- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.FakeGateway/**`, `src/Ume.Rag.AppHost/**`, `contracts/admin/**`,
-  `tests/**` (not `tests/Ume.Rag.ContractTests/**`, `tests/Ume.Rag.Worker.Tests/**`).
+- **Paths:** `src/Kalla.AdminApi/**`, `src/Kalla.FakeGateway/**`, `src/Kalla.AppHost/**`, `contracts/admin/**`,
+  `tests/**` (not `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** against the FakeGateway, after chat turns on two keys: `GET /api/gateway/keys/{id}/usage` returns per
   step that key's tokens and cost only, by day and by month; `/budget` returns an exhausted department budget with
   `exhausted: true`; rag-api's credential key gets `403` from the FakeGateway's `/integration/v1`; with

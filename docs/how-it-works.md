@@ -205,7 +205,7 @@ and no backup script includes them, so Open WebUI's own settings decide how long
 | What | Where | Kept |
 |---|---|---|
 | **Service logs** (rag-api, rag-admin, rag-worker and the others) | JSON on each container's standard output: `docker compose logs <service>`. With `UME_OTEL_ENDPOINT` set, also sent with metrics and traces to your OpenTelemetry collector ([production setup](production-setup.md), *Telemetry*); traces are sampled, a tenth of the requests by default. | As Docker's log driver keeps them on the host (set rotation in `/etc/docker/daemon.json`), or as the collector's backend keeps them |
-| **Security events** (refused keys and sign-ins, access denials, malware and personal-data findings, admin changes) | Log records under the category `Ume.Rag.Security`, which the collector sends on to the SIEM ([security events](security-events.md)) | As the SIEM keeps them |
+| **Security events** (refused keys and sign-ins, access denials, malware and personal-data findings, admin changes) | Log records under the category `Kalla.Security`, which the collector sends on to the SIEM ([security events](security-events.md)) | As the SIEM keeps them |
 | **Audit log** (every change made in the admin UI or the admin API, with who made it and the values before and after) | The database, schema `audit`; *Audit log* in the admin UI | 2 years by default (`Settings.AuditRetentionDays`, at least 90 days) |
 | **Backup metrics** | Prometheus text files in `/var/lib/ume-rag/` on the host | Overwritten at each run |
 

@@ -17,11 +17,11 @@ on a schedule. For uploaded files it follows an admin's action. Nothing reacts t
 
 **Schedule.** `Sources.Schedule` (cron, Europe/Stockholm) or the platform default by type: crawl weekly, Saturday
 01:00; URL list nightly, 02:00; both with a per-source jitter of up to 90 minutes
-(`src/Ume.Rag.Worker/Engine/EngineSettings.cs:20-27`; `src/Ume.Rag.Worker/Engine/SyncScheduler.cs:21`). Missed
+(`src/Kalla.Worker/Engine/EngineSettings.cs:20-27`; `src/Kalla.Worker/Engine/SyncScheduler.cs:21`). Missed
 occurrences collapse into one run.
 
 **Crawl window.** A traversal fetches only inside `crawlWindow` (default `22:00-06:00`); equal start and end mean
-always open (`src/Ume.Rag.Worker/Connectors/Crawl/CrawlWindow.cs:5-9`). Manual "sync now" ignores it
+always open (`src/Kalla.Worker/Connectors/Crawl/CrawlWindow.cs:5-9`). Manual "sync now" ignores it
 (connectors §6.5).
 
 **Incremental runs** (only changed sitemap entries) need the host's site profile to mark `lastmod` reliable, which
@@ -38,10 +38,10 @@ open) works, but needs the intranet web team's consent: daytime crawling is an e
 
 **Urgent edits** today, without code:
 
-- *Sync now* on the source (`POST /api/sources/{id}/sync`, `src/Ume.Rag.AdminApi/SourceEndpoints.cs:158`) runs the whole
+- *Sync now* on the source (`POST /api/sources/{id}/sync`, `src/Kalla.AdminApi/SourceEndpoints.cs:158`) runs the whole
   source at once.
 - *Reprocess* one document from stage `fetch` re-fetches that page alone (`POST /api/documents/{id}/reprocess`,
-  `src/Ume.Rag.AdminApi/DocumentEndpoints.cs:144`; payload `fromStage`,
+  `src/Kalla.AdminApi/DocumentEndpoints.cs:144`; payload `fromStage`,
   `contracts/jobs/v1/command.reprocess-document.payload.schema.json`). It needs the `Manage` policy and the document
   must already be known; a new page arrives with the next run.
 
@@ -59,7 +59,7 @@ open) works, but needs the intranet web team's consent: daytime crawling is an e
 | Action | How | Effect |
 |---|---|---|
 | Add | upload in the source's file list | a new slot and document |
-| Edit | **Replace** on the file's row: picks the new file and sends it with `X-Upload-Id` (`src/admin-ui/src/components/files/FileUpload.vue:167-185`; `src/Ume.Rag.AdminApi/UploadEndpoints.cs:251-257`) | same document id, new version; byte-identical bytes are `unchanged` (connectors §9.3) |
+| Edit | **Replace** on the file's row: picks the new file and sends it with `X-Upload-Id` (`src/admin-ui/src/components/files/FileUpload.vue:167-185`; `src/Kalla.AdminApi/UploadEndpoints.cs:251-257`) | same document id, new version; byte-identical bytes are `unchanged` (connectors §9.3) |
 | Delete | delete entries in a batch | soft delete, exempt from the guard; a platform admin restores it from the file list within 14 days (B-24, #489; connectors §9.3) |
 
 **Pitfall:** uploading an edited file as a new file (not *Replace*) creates a **second** document. Only byte-identical
@@ -67,14 +67,14 @@ duplicates are skipped (`upload.duplicate`, connectors §9.3). The old version s
 it, and the assistant may cite either. The editors' routine must be "Replace", or gap SA-11 (replace by name) closes
 it.
 
-Upload sources have no schedule (`src/Ume.Rag.Worker/Engine/SyncScheduler.cs:120`): nothing re-reads a file that was
+Upload sources have no schedule (`src/Kalla.Worker/Engine/SyncScheduler.cs:120`): nothing re-reads a file that was
 edited elsewhere.
 
 ## 4. Markdown in Git or on a file share
 
 No connector watches a repository or a folder (gap SA-10; the roadmap lists "a Git/Markdown connector" as an open
 product call), and the admin API accepts only a signed-in admin's session (cookie and antiforgery,
-`src/Ume.Rag.AdminApi/AdminAuthentication.cs:104-115`), so a script cannot upload either (gap SA-9).
+`src/Kalla.AdminApi/AdminAuthentication.cs:104-115`), so a script cannot upload either (gap SA-9).
 
 Without code: publish the files as an intranet site and crawl it ([`02-knowledge-base.md`](02-knowledge-base.md) §4,
 route 1). The repository's CI rebuilds the site on merge; the next crawl picks the change up; a removed file becomes

@@ -118,7 +118,7 @@ cd ume-rag-platform
 (cd src/admin-ui && npm ci)
 git config core.hooksPath .githooks` },
       { title: 'Start the stack', body: 'Aspire starts Postgres, Keycloak, the fake gateway, the parser, ClamAV, the renderer, the services, the admin UI and Open WebUI. Demo data is on by default.', shell: 'PowerShell', code: `.\\scripts\\Start-Dev.ps1          # with demo data
-.\\scripts\\Start-Dev.ps1 -Empty   # empty database, only the test users`, note: 'Or run aspire run (or dotnet run --project src/Ume.Rag.AppHost). The Aspire dashboard is at https://localhost:17470.' },
+.\\scripts\\Start-Dev.ps1 -Empty   # empty database, only the test users`, note: 'Or run aspire run (or dotnet run --project src/Kalla.AppHost). The Aspire dashboard is at https://localhost:17470.' },
       { title: 'Sign in to the admin UI', body: 'Open https://localhost:5174 and sign in as one of the Keycloak test users. Their password is the dev-user-password parameter in the AppHost\'s user secrets; the dashboard shows it.' },
       { title: 'Ask a question', body: 'Open WebUI is at http://localhost:7410, with the demo assistants as models. The fake gateway answers instantly, so you see the whole path: search, citations and the answer.' },
     ] },

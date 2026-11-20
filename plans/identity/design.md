@@ -70,15 +70,15 @@ to it.
 - Audit actor = **`oid`**, else `sub`, else name (adapted from `AdminContext.cs:76-79`, which uses `sub`; `oid` is the
   same user id in every registration of the tenant, §1.6); actor context (name, roles, departments, address,
   session, request id, user agent) from `AdminActor` (`AdminActivity.cs:18-57`). Built as
-  `AdminActor.SubjectOf` (`src/Ume.Rag.AdminApi/AdminActor.cs:38-40`), used by `AdminContext.Actor`
-  (`src/Ume.Rag.AdminApi/AdminContext.cs:54-55`). **P1 (Keycloak):** Keycloak issues no `oid`, so the actor is `sub`, the Keycloak user id;
+  `AdminActor.SubjectOf` (`src/Kalla.AdminApi/AdminActor.cs:38-40`), used by `AdminContext.Actor`
+  (`src/Kalla.AdminApi/AdminContext.cs:54-55`). **P1 (Keycloak):** Keycloak issues no `oid`, so the actor is `sub`, the Keycloak user id;
   it is the same in every client of realm `ume`, so it equals the gateway's actor (`sub`) for the same person. It changes
   when the provider changes (P2 Entra `oid`; possibly with LDAP federation, §16), so one person can appear under two
   actor ids in the audit log.
 
 ### 1.2 Class map
 
-| Gateway (`Ume.LlmGateway.AdminApi`) | Ume.Rag (`Ume.Rag.AdminApi`) | How |
+| Gateway (`Ume.LlmGateway.AdminApi`) | Ume.Rag (`Kalla.AdminApi`) | How |
 |---|---|---|
 | `AdminAuthentication.ApplyClaimMapping`, `CopyClaims` (`AdminAuthentication.cs:18-65`) | same | copy |
 | `AdminAuthentication.AddAdminAuthentication` (`:71-174`) | same | adapt: cookie names (below), policies for `rag-*` roles, `OnTokenValidated` adds §1.7 and §2.3 |
@@ -89,7 +89,7 @@ to it.
 | `AdminAntiforgeryMiddleware` (`:281-305`) | same | copy |
 | `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
 | `AdminOptions` (`AdminOptions.cs:7-51`) | same | adapt: keep `RequestsPerMinute`, `MaxSessionHours`, `AuditSourceAddress`; drop price/release settings |
-| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1`; sign-in-time item `.ume-rag.signedIn` (the gateway's is `.ume.signedIn`), so a ticket from one system never reads as the other's |
+| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Kalla.AdminApi.Session.v1`; sign-in-time item `.ume-rag.signedIn` (the gateway's is `.ume.signedIn`), so a ticket from one system never reads as the other's |
 | `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`), `RedisAdminSessionStore`, `InMemoryAdminSessionStore` | `IAdminSessionStore`, `PostgresAdminSessionStore` | adapt: Postgres implementation over `config."AdminSessions"` (§1.1); the Redis one is not copied |
 | `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy; `AdminClientAddresses` reads `Settings.TrustedProxies` (the `network` settings section, admin design §4.5) at most every 30 s, so `SourceAddress` is the client's address behind a trusted proxy and the connection address otherwise (`docs/security-events.md`) |
 | `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles; actor `oid` (§1.1) |
@@ -154,7 +154,7 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | the break-glass for the first platform admin: `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
 | *(no variable)* | `Settings.Identity.RoleGroups` (database, *Settings → Role groups*) | – | the groups of `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-editor` and `rag-viewer` (`rag-skill-editor` from P2); the same `rag-`-or-object-id rule, refused by the admin API on save; merged with the row above (M-17 C10) |
 | `UME_RAG_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
-| `UME_RAG_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7). **Unset in P1**: Keycloak tokens carry no `tid`, so a set value refuses every sign-in (`src/Ume.Rag.AdminApi/TenantCheck.cs:19-23`); set with Entra in P2 |
+| `UME_RAG_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7). **Unset in P1**: Keycloak tokens carry no `tid`, so a set value refuses every sign-in (`src/Kalla.AdminApi/TenantCheck.cs:19-23`); set with Entra in P2 |
 | `UME_RAG_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | **new** (§1.7); harmless on Keycloak (no-op) |
 | – | `Admin:MaxSessionHours` | 12 | copy (`AdminOptions.cs:19-20`) |
 | – | `Admin:RequestsPerMinute` | 120 | copy (`AdminOptions.cs:12-13`) |
@@ -209,9 +209,9 @@ The same two checks guard RAG API tokens (§7.1) and, in the gateway, admin sign
 release 2, P2, gateway design §4.6; weakness review §5).
 
 **P1 (shared Keycloak): both checks are no-ops.** Keycloak emits none of `tid`, `acct`, `idp`, so `Oidc:TenantId` and
-`RagApi:TenantId` stay unset (a set value would refuse every Keycloak user, `src/Ume.Rag.AdminApi/TenantCheck.cs:19-23`) and
-`Oidc:RefuseGuests` finds nothing to refuse (`src/Ume.Rag.AdminApi/TenantCheck.cs:30-41`). The code (`TenantCheck.cs`,
-called before claim mapping at `src/Ume.Rag.AdminApi/AdminAuthentication.cs:83`) stays and takes effect with Entra in P2. What the tenant boundary does
+`RagApi:TenantId` stay unset (a set value would refuse every Keycloak user, `src/Kalla.AdminApi/TenantCheck.cs:19-23`) and
+`Oidc:RefuseGuests` finds nothing to refuse (`src/Kalla.AdminApi/TenantCheck.cs:30-41`). The code (`TenantCheck.cs`,
+called before claim mapping at `src/Kalla.AdminApi/AdminAuthentication.cs:83`) stays and takes effect with Entra in P2. What the tenant boundary does
 on Entra is done in P1 by the realm: only accounts in realm `ume` can sign in, and there are no guest or brokered
 accounts (local accounts only; LDAP federation later adds no brokered identity provider). The realm is shared, so a
 gateway-only account can complete sign-in to our admin: it has no `rag-*` role, so every `/api` call is 403 (§1.3). Who
@@ -290,7 +290,7 @@ token does not show adds nothing.
   as names. In the shared realm the claim lists every group of the account, the gateway's included; only names
   entered as member groups count (§2.3 step 3). No overage limit applies. Because a role group named like a gateway
   group would grant an Ume.Rag role by accident, every role group (`Oidc:RoleGroups` and `Settings.Identity.RoleGroups`) is a `rag-` name (case-insensitive,
-  longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Ume.Rag.AdminApi/AdminOptions.cs`)
+  longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Kalla.AdminApi/AdminOptions.cs`)
   refuses to start otherwise, and `PUT /api/settings/identity` refuses to save one, and the gateway gives none of its groups a `rag-` name (`deploy/keycloak/README.md`,
   *Group names*). Member groups are not checked: they give department scope only, never a role, and are the
   gateway's groups on purpose (§2.1). AD FS role groups need `rag-` names too.
@@ -336,7 +336,7 @@ the principal and the options), so the class can be copied either way.
 
 ## 3. Principal model
 
-Every data-plane request becomes one `RagPrincipal` (in `Ume.Rag.Domain`, built by `Ume.Rag.Api` authentication
+Every data-plane request becomes one `RagPrincipal` (in `Kalla.Domain`, built by `Kalla.Api` authentication
 handlers; the admin API keeps the gateway's `ClaimsPrincipal` + `AdminContext` model).
 
 ```csharp
@@ -434,7 +434,7 @@ hardware or another provider (accepted risk, Decisions table "P1a plan answers")
 
 ### 4.2 Interface
 
-`IAccessPolicy` lives in `Ume.Rag.Domain` and is **pure**: no I/O, no clock reads beyond an injected `now`, so the
+`IAccessPolicy` lives in `Kalla.Domain` and is **pure**: no I/O, no clock reads beyond an injected `now`, so the
 policy matrix is a table-driven unit test.
 
 ```csharp
@@ -626,7 +626,7 @@ admin design V8, V39).
 - **Admin test panel**: runs in the admin process, builds a `RagPrincipal` for client `admin-console` with the
   admin's `oid` (fallback `sub`), and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
   not with assistant audiences. Answers are not stored as conversations. It runs the real chat path in process through
-  the `Ume.Rag.Answering` library on the assistant's **draft** (or a chosen version), so drafts are tried only here and
+  the `Kalla.Answering` library on the assistant's **draft** (or a chosen version), so drafts are tried only here and
   in the admin's assistant test runs, under the same principal (admin design §2.1, §4.9, §7.4). P2 agent test calls go to the hub as `admin-console`
   (needs `ToolPolicy = read` on that client, tools design §2.2).
 - **`rag-internal`**: the chat role sends `assistantId` and the already-made decision's level; the knowledge role
@@ -1002,7 +1002,7 @@ token.
 
 ## 10. Security events
 
-Copied pattern: one static partial `SecurityEvents` class in `Ume.Rag.Infrastructure`, category `Ume.Rag.Security`,
+Copied pattern: one static partial `SecurityEvents` class in `Kalla.Infrastructure`, category `Kalla.Security`,
 `[LoggerMessage(id, level, …, EventName = …)]` with level as constructor argument for CA1873
 (`SecurityEvents.cs:63-114`), `Printable()` on every client-supplied value (`:30-49`), names and attributes only ever
 added (`:7-11`, `docs/data-access.md:58-62`). Never logged: key material, tokens, JWTs, passwords, prompts, emails,
@@ -1130,10 +1130,10 @@ since keycloak-config-cli replaces a client's URI lists rather than merging them
 `ume-rag-api` is the audience client only. Password and brute-force values are the gateway's (the same as RAG's).
 
 **What P1 relies on in the code** (no change needed): the BFF and claim mapping are OIDC-generic
-(`src/Ume.Rag.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks
+(`src/Kalla.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks
 are no-ops (§1.7), and `Oidc:Authority`, `Oidc:ClientId`, `Oidc:ClientSecret` point the admin at the shared realm
 (§1.4). Locally, the AppHost already points the admin at any external authority when `Oidc:Authority` is set in its
-user secrets and then does not start the bundled Keycloak (`src/Ume.Rag.AppHost/Program.cs:45-50`, `:231-238`).
+user secrets and then does not start the bundled Keycloak (`src/Kalla.AppHost/Program.cs:45-50`, `:231-238`).
 
 **Later: LDAP federation** to the municipal AD when IT provides a read-only bind account (Decisions table): a user
 federation provider in the realm, with an LDAP *user-attribute-mapper* for `departmentCodes` and a *role-ldap-mapper*
@@ -1292,13 +1292,13 @@ membership of the pilot groups is maintained by IT, not by IaC.
 
 | Gateway test | Ours | Notes |
 |---|---|---|
-| `OidcClaimMappingTests` (`tests/Ume.LlmGateway.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Ume.Rag.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
+| `OidcClaimMappingTests` (`tests/Ume.LlmGateway.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Kalla.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
 | `AdminSessionTests` (`AdminSessionTests.cs:38`, `:57`, `:73`, `:97`) | same | ticket store, 12 h limit; plus a `PostgresAdminSessionStore` test (expired row not returned, sign-out deletes the row) |
-| `AuthFailureThrottleTests` (`tests/Ume.LlmGateway.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Ume.Rag.Api.Tests` | unchanged |
-| Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Ume.Rag.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
-| `DataApiKeyTests` (`tests/Ume.LlmGateway.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Ume.Rag.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
+| `AuthFailureThrottleTests` (`tests/Ume.LlmGateway.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Kalla.Api.Tests` | unchanged |
+| Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Kalla.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
+| `DataApiKeyTests` (`tests/Ume.LlmGateway.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Kalla.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
 
-### 13.2 Unit (`Ume.Rag.Domain.Tests`, `Ume.Rag.AdminApi.Tests`)
+### 13.2 Unit (`Kalla.Domain.Tests`, `Kalla.AdminApi.Tests`)
 
 - **Policy matrix** (table-driven, one row per combination): subject kind × client kind × credential × resource level ×
   ceiling × audience kind × membership known/unknown × key scope → expected reason and status. Must include: Open WebUI
@@ -1326,7 +1326,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
   `Teams.Code`; off ⇒ unchanged.
 - Key hasher: both prefixes, wrong prefix for the stored kind, gateway key shape refused, display prefix length.
 
-### 13.3 Integration (`Ume.Rag.Api.Tests`, `Ume.Rag.AdminApi.Tests`, `Ume.Rag.IntegrationTests` with Keycloak and Postgres containers)
+### 13.3 Integration (`Kalla.Api.Tests`, `Kalla.AdminApi.Tests`, `Kalla.IntegrationTests` with Keycloak and Postgres containers)
 
 - Sign in as each Keycloak user; `/bff/user` shows the expected roles, departments and sources (P0 checklist #9).
 - **P1 realm additions** (P1 item 16): the `deploy/keycloak/` file imports into a Keycloak 26.8.1 test container (the gateway's pin, B-15) next

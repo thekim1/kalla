@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-CEILINGS = ("OnPrem", "Eu", "External")  # ordered: OnPrem < Eu < External (Ume.Rag.Domain.Residency)
+CEILINGS = ("OnPrem", "Eu", "External")  # ordered: OnPrem < Eu < External (Kalla.Domain.Residency)
 DEFAULT_OUT = Path(__file__).resolve().parent / "results"
 CONNECT_TIMEOUT_S = 10.0
 HEADERS_TIMEOUT_S = 15.0  # Chat:GatewayHeadersTimeout (chat-api design §8.3)

@@ -1,7 +1,7 @@
 """Tests for seed_url_list.py that need no database: the connection-string parsing, the localhost-only guard (a
 non-local database is refused before psql runs), the URL checks, the psql input (with the source's piiMode) and the
 --api-key handling (key format, hash, pepper from the environment only, the key printed once). The SQL itself, and
-rag-api accepting the key, are tested against TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs.
+rag-api accepting the key, are tested against TestPostgres by tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs.
 Standard library only:
 
     python3 -I -m unittest discover -s scripts/dev -v

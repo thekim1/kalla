@@ -4,9 +4,9 @@
     <IsPackable>false</IsPackable>
     <!--
       Every project here is a test project except the shared test kit, a library the test projects reference, and the
-      benchmarks, a console app run by hand (tests/Ume.Rag.Benchmarks/README.md).
+      benchmarks, a console app run by hand (tests/Kalla.Benchmarks/README.md).
     -->
-    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Ume.Rag.TestKit' and '$(MSBuildProjectName)' != 'Ume.Rag.Benchmarks'">true</IsTestProject>
+    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Kalla.TestKit' and '$(MSBuildProjectName)' != 'Kalla.Benchmarks'">true</IsTestProject>
     <OutputType Condition="'$(IsTestProject)' == 'true'">Exe</OutputType>
     <!-- Test-only suppressions, one reason each (on top of the repository-wide ones). -->
     <!-- Underscores in test names (Does_this_when_that). -->

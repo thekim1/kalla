@@ -76,6 +76,6 @@ gateway's conventions for names, config keys, claims, key format and security ev
 - **Language:** code, comments, docs and commits are in English. Admin UI text is English and lives only in
   `labels.ts` and `messages.ts`, so a Swedish translation can be added later (Decisions, "Admin UI in English").
 - **Every model call goes through the gateway** with an explicit residency ceiling. Locally and in tests that means
-  `Ume.Rag.FakeGateway`.
+  `Kalla.FakeGateway`.
 
 Build, test and run commands are in `README.md`; operating the platform is in `docs/`.

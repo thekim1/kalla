@@ -263,7 +263,7 @@ ok "the context names the Integration API at https://adminapi:8443/integration/v
 jq -e '.oidc_authority == null and .admin_url == null and (.features | index("oidc-authority")) != null' >/dev/null <<< "$gateway_context" \
   || fail "the context's gateway block: $(jq -c '{oidc_authority, admin_url, features}' <<< "$gateway_context")"
 ok "the context announces oidc-authority with none set, and no admin_url"
-probe_admin() { dc exec -T -e "UME_HEALTHCHECK_URL=$1" rag-admin dotnet Ume.Rag.AdminApi.dll --health-check; }
+probe_admin() { dc exec -T -e "UME_HEALTHCHECK_URL=$1" rag-admin dotnet Kalla.AdminApi.dll --health-check; }
 probe_admin https://adminapi:8443/health/live || fail "rag-admin could not reach the gateway's adminapi (the edge network, the gateway's CA)"
 ok "rag-admin reaches https://adminapi:8443 (the gateway's edge network)"
 
@@ -310,7 +310,7 @@ grep -q '<div id="app">' "$work/admin-index.html" || fail "rag-admin / is not th
 ok "rag-admin / = 200 (the admin UI)"
 
 echo "== the gateway and the parser from rag-worker"
-probe() { dc exec -T -e "UME_HEALTHCHECK_URL=$1" rag-worker dotnet Ume.Rag.Worker.dll --health-check; }
+probe() { dc exec -T -e "UME_HEALTHCHECK_URL=$1" rag-worker dotnet Kalla.Worker.dll --health-check; }
 probe https://gateway:8443/health/ready || fail "rag-worker could not reach the gateway's /health/ready"
 ok "the gateway's /health/ready answered 2xx to rag-worker (the llm network, the gateway's CA)"
 wait_for "$wait_timeout" probe https://rag-parser:8000/v1/info || fail "rag-worker could not reach the parser's /v1/info within ${wait_timeout}s"

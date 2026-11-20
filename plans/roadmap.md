@@ -78,7 +78,7 @@ Each becomes a queue item when the main session picks it up.
   public IT guides (2026-11-15). U1 is the largest loss: 18 % of the text is inside screenshots (19–76 % in
   step-by-step guides), none of it kept. U5 and U7 cost little. The same script (`scripts/upload-gaps/measure.py`)
   runs on DoIT's files at T6.
-- **CI:** `backend` takes 4 min 53 s on a pull request (was 7 min 40 s) since #775: `Ume.Rag.AdminApi.Tests` runs as
+- **CI:** `backend` takes 4 min 53 s on a pull request (was 7 min 40 s) since #775: `Kalla.AdminApi.Tests` runs as
   five processes, and a pull request with only admin UI or browser-test changes skips the job. Left: what the test
   collections of one process wait for (not CPU, thread pool, disk or GC; a profiler would say), and one
   `WebApplicationFactory` per class (#580 note to stream b).

@@ -243,7 +243,7 @@ jobs:
 
       - name: Build the admin UI
         # Built from the lock only (src/admin-ui/.npmrc), as in verify.yml. The admin publish below adds dist/ as
-        # wwwroot/ with -p:PublishAdminUi=true (the gateway's switch, #66); Ume.Rag.AdminApi serves it.
+        # wwwroot/ with -p:PublishAdminUi=true (the gateway's switch, #66); Kalla.AdminApi serves it.
         working-directory: src/admin-ui
         run: |
           npm ci

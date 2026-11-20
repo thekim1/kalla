@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
-    <ProjectReference Include="..\Ume.Rag.Retrieval\Ume.Rag.Retrieval.csproj" />
-    <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
-  </ItemGroup>
-</Project>

@@ -3,7 +3,7 @@ cannot drift (plans/platform/repo-and-deployment.md §8.2, §8.4). Standard libr
 package manager wrote and never runs it.
 
 Usage:
-  dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > dotnet.json
+  dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > dotnet.json
   python3 -I scripts/audit/audit.py dotnet dotnet.json [--summary FILE]
 
   npm audit --json > npm.json || true          # in src/admin-ui, after npm ci

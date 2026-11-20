@@ -55,7 +55,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Do, in order** (each one PR or less):
   1. **API** (admin §5.9.1): `assistantIds` on `POST /api/clients`, `PUT /api/clients/{id}/assistants`, `slug` and
      `classification` on `ClientDto.assistants`, `GET /api/clients/connection` (`Admin:ApiPublicUrl`), `lastUsedAt` on
-     `KeyDto` and `ClientSummary`. Paths: `src/Ume.Rag.AdminApi/**`, `tests/Ume.Rag.AdminApi.Tests/**`,
+     `KeyDto` and `ClientSummary`. Paths: `src/Kalla.AdminApi/**`, `tests/Kalla.AdminApi.Tests/**`,
      `src/admin-ui/src/api/**`.
   2. **Deploy:** rag-admin gets `Admin__ApiPublicUrl` from `UME_RAG_API_PUBLIC_URL` in the Compose, Kubernetes and
      Portainer templates. Paths: `deploy/**`.

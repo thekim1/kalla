@@ -24,19 +24,19 @@ git config core.hooksPath .githooks
 .\scripts\Start-Dev.ps1 -Empty   # empty database, only the Keycloak test users
 ```
 
-The script sets `Seed__Enabled`, runs `aspire start` on `src/Ume.Rag.AppHost`, then `aspire wait` for the admin UI, or
+The script sets `Seed__Enabled`, runs `aspire start` on `src/Kalla.AppHost`, then `aspire wait` for the admin UI, or
 for `adminapi` while `src/admin-ui` does not exist yet. You can run the same commands yourself, or start the AppHost
 directly:
 
 ```bash
-aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
+aspire run      # or: dotnet run --project src/Kalla.AppHost
 ```
 
 The Aspire dashboard is at `https://localhost:17470` (the AppHost's `https` launch profile). It is for development
 only: production never runs it. To stop the stack:
 
 ```bash
-aspire stop --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive
+aspire stop --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive
 ```
 
 Stop **this** AppHost before you build the backend or edit the AppHost (as in the gateway).
@@ -59,12 +59,12 @@ value when you need it.
 
 ## AppHost switches
 
-The resource graph is in [`src/Ume.Rag.AppHost/Program.cs`](../src/Ume.Rag.AppHost/Program.cs) and
+The resource graph is in [`src/Kalla.AppHost/Program.cs`](../src/Kalla.AppHost/Program.cs) and
 [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.1. Set a switch in the AppHost
 user secrets, for example:
 
 ```bash
-dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
+dotnet user-secrets --project src/Kalla.AppHost set Parser:Mode off
 ```
 
 | Setting | Default | Effect |
@@ -129,7 +129,7 @@ Clients: `ume-rag-admin` (the admin BFF, code + PKCE), `ume-rag-api-dev` (client
 
 ## Fake gateway
 
-Every model call goes through the gateway; locally that is `Ume.Rag.FakeGateway`
+Every model call goes through the gateway; locally that is `Kalla.FakeGateway`
 ([`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.3). It serves 1024-dimension embeddings,
 chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and `/v1/ume/context` (the
 organisation and the assigned keys, which the admin's syncs read). Like the real gateway it requires `x-ume-max-residency` and answers
@@ -138,7 +138,7 @@ with `x-ume-residency`. Each service has its own dev credential key, as the gate
 admin's at every ceiling and the worker's up to `Eu`, narrowing a higher ceiling to the key's residencies as the gateway
 does. Only the admin's holds the scope `organisation.read`.
 
-Its models are in [`src/Ume.Rag.FakeGateway/appsettings.json`](../src/Ume.Rag.FakeGateway/appsettings.json), including
+Its models are in [`src/Kalla.FakeGateway/appsettings.json`](../src/Kalla.FakeGateway/appsettings.json), including
 fault models for tests: `fake-fail-500` (502 `all_providers_failed`, as the gateway answers when every target within
 the ceiling fails; there is no circuit-open 503), `fake-fail-timeout` (504 `all_providers_failed`),
 `fake-fail-fallback` (its `OnPrem` target fails: 502 at `OnPrem`, an answer from `Eu` at `Eu`), `fake-slow`,
@@ -183,15 +183,15 @@ provider with `bge-m3`. Every credential key must have PII policy `Off` or `Allo
 ## Build and test
 
 ```bash
-dotnet build UmeRag.slnx -c Release --nologo
-dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+dotnet build Kalla.slnx -c Release --nologo
+dotnet test --solution Kalla.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
 ```
 
 `--filter-not-trait` skips the tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does; plain
-`dotnet test --solution UmeRag.slnx` runs them too. A flaky mark is a to-do: say why next to the trait and fix the test.
+`dotnet test --solution Kalla.slnx` runs them too. A flaky mark is a to-do: say why next to the trait and fix the test.
 
-CI runs the same tests with `scripts/ci/backend-tests.sh` (after `dotnet build UmeRag.slnx -c Release`): every test
-project as a process of its own and `Ume.Rag.AdminApi.Tests` as five, which takes about half the time of
+CI runs the same tests with `scripts/ci/backend-tests.sh` (after `dotnet build Kalla.slnx -c Release`): every test
+project as a process of its own and `Kalla.AdminApi.Tests` as five, which takes about half the time of
 `dotnet test --solution`. It works locally too and prints each process's totals; a failed process's output follows.
 
 The integration tests start Postgres with Testcontainers, so Docker must be running. By default they use the same
@@ -200,7 +200,7 @@ image, build it and name it in `UME_RAG_TEST_POSTGRES_IMAGE`:
 
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:dev .
-UME_RAG_TEST_POSTGRES_IMAGE=ume-rag.local/postgres:dev dotnet test --solution UmeRag.slnx -c Release
+UME_RAG_TEST_POSTGRES_IMAGE=ume-rag.local/postgres:dev dotnet test --solution Kalla.slnx -c Release
 ```
 
 **Name local images with a registry part that has a dot** (`ume-rag.local/...`). When
@@ -208,12 +208,12 @@ UME_RAG_TEST_POSTGRES_IMAGE=ume-rag.local/postgres:dev dotnet test --solution Um
 Testcontainers puts the prefix in front of every image without a registry, so `ume-rag/postgres:dev` would be pulled as
 `mirror.gcr.io/ume-rag/postgres:dev` and not found.
 
-The contract tests (`tests/Ume.Rag.ContractTests`) run the worker's parser client against a parser image. Without
+The contract tests (`tests/Kalla.ContractTests`) run the worker's parser client against a parser image. Without
 `UME_RAG_TEST_PARSER_IMAGE` the tests that need the image skip:
 
 ```bash
 docker build -t ume-rag.local/parser:ci src/parser
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project tests/Ume.Rag.ContractTests
+UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project tests/Kalla.ContractTests
 ```
 
 **Image tests.** Each image has a test script that runs it hardened, as Compose does:
@@ -349,12 +349,12 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
   DIR`, then the TRX's `<Message>` elements.
 - **Two open PRs with an EF migration each:** the second to merge regenerates its own. Keep a copy of the migration's
   `.cs`, remove it and its designer, restore `RagDbContextModelSnapshot.cs` from `main`, `dotnet ef migrations add
-  <Name> --project src/Ume.Rag.Infrastructure --startup-project src/Ume.Rag.Infrastructure --output-dir
+  <Name> --project src/Kalla.Infrastructure --startup-project src/Kalla.Infrastructure --output-dir
   Persistence/Migrations`, compare the new `.cs` with the copy (it should differ only by the header and hand-written
   SQL) and put the copy back under the new timestamp. The file needs `// <auto-generated />` as its first line or the
   build fails on style rules. A new worktree needs `dotnet restore` first. Tell the other stream on its PR.
-- **SQL in `src/Ume.Rag.Infrastructure/` is in the API's SQL contract** (`tests/Ume.Rag.Api.Tests/sql-shapes.json`),
-  not only the worker's: an agent that adds a statement there must also run `tests/Ume.Rag.Api.Tests` (regenerate with
+- **SQL in `src/Kalla.Infrastructure/` is in the API's SQL contract** (`tests/Kalla.Api.Tests/sql-shapes.json`),
+  not only the worker's: an agent that adds a statement there must also run `tests/Kalla.Api.Tests` (regenerate with
   `UME_RAG_UPDATE_CONTRACTS=1`). A-39's agent ran only the worker tests and CI failed.
 
 **Shell.** `pkill -f <pattern>` kills its own shell when the pattern appears in its command line: use

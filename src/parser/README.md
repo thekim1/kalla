@@ -77,12 +77,12 @@ uv run python -m scripts.compare_paths --urls pdfs.txt --url http://localhost:80
 `models.py` is the contract. After changing it, run `uv run python -m scripts.export_schema` and commit
 `contracts/parser/v1/`; CI fails when they differ. Changes to `/v1` are additive only (design §7.7).
 
-`tests/Ume.Rag.ContractTests` runs the worker's client (`src/Ume.Rag.Worker/Parsing/`) against the image, for the
+`tests/Kalla.ContractTests` runs the worker's client (`src/Kalla.Worker/Parsing/`) against the image, for the
 cases in `tests/fixtures/parser/cases.json`, and compares with the goldens:
 
 ```bash
 docker build -t ume-rag.local/parser:ci .
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project ../../tests/Ume.Rag.ContractTests
+UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project ../../tests/Kalla.ContractTests
 ```
 
 The fixtures are synthetic (`MANIFEST.csv`): change them in `scripts/make_fixtures.py` and rerun it. When a

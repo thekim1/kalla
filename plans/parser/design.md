@@ -602,7 +602,7 @@ traces and metrics below are **P2**.
   timings back over the pipe and the supervisor records child spans (`parser.docling`, `parser.text_layer`,
   `parser.signals`) with explicit start and end times, so slot processes need no exporter. Span attributes: format,
   page count, range, pipeline, OCR mode, table mode, slot, outcome code, bytes. **Never** file names, titles or text.
-- **Metrics** (P2; meter `Ume.Rag.Parser`, names in the platform's `rag.` style):
+- **Metrics** (P2; meter `Kalla.Parser`, names in the platform's `rag.` style):
 
 | Metric | Type | Dimensions |
 |---|---|---|
@@ -664,7 +664,7 @@ confirm: 2 × 2 gives more pages per hour, 1 × 4 lower latency per document; th
 | NER | label mapping, limits, `busy`, code-point offsets with emoji and combining characters, windows over 512 tokens, quantised vs fp32 agreement (processing design §17) |
 | Schema | `export_schema.py` writes `convert-request`, `convert-result`, `inspect-result`, `ner-request`, `ner-result`, `info`, `error` schemas from the pydantic models; CI fails on `git diff` in `contracts/` (repo-and-deployment §8.2) |
 
-### 15.2 Contract tests (.NET, `tests/Ume.Rag.ContractTests`)
+### 15.2 Contract tests (.NET, `tests/Kalla.ContractTests`)
 
 - Start the parser image (Testcontainers), convert every fixture with the worker's real client, read the multipart
   response, validate `result.json` against `contracts/parser/v1/convert-result.schema.json` (in P0 a small test-only

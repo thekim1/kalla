@@ -139,7 +139,7 @@ jobs:
         # below (it would then pull mirror.gcr.io/ume-rag/postgres) and uses the local image.
         run: docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
       - name: Build the ClamAV image
-        # The worker's ClamAV client test (tests/Ume.Rag.Worker.Tests, connectors design §18) talks to clamd as built from
+        # The worker's ClamAV client test (tests/Kalla.Worker.Tests, connectors design §18) talks to clamd as built from
         # this commit, with an offline test signature; the dotted registry part keeps Testcontainers on the local image.
         run: docker build -t ume-rag.local/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
       - name: Build and test backend
@@ -150,13 +150,13 @@ jobs:
           UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
           UME_RAG_TEST_CLAMAV_IMAGE: ume-rag.local/clamav:ci
         run: |
-          dotnet build UmeRag.slnx -c Release --nologo
+          dotnet build Kalla.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here;
           # the evaluation smoke test has a job of its own (evaluation-smoke). The script runs every test project as a
-          # process of its own, all at once, and Ume.Rag.AdminApi.Tests as five (its collections wait for one another
+          # process of its own, all at once, and Kalla.AdminApi.Tests as five (its collections wait for one another
           # inside one process and set this job's time); it prints each process's totals and their sum.
           scripts/ci/backend-tests.sh Release
-          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
+          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
           # The same check runs daily against main in audit.yml.
           python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json"
 
@@ -165,7 +165,7 @@ jobs:
     # through the worker (an upload batch; Markdown is parsed in the worker, so no parser or ClamAV image) into
     # ume-rag/postgres as built from this commit, then the 30 questions through rag-api in process on the FakeGateway:
     # recall@10 >= 0.8 on POST /v1/retrieve and a citation on every chat answer (EvaluationSmokeTests in
-    # tests/Ume.Rag.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
+    # tests/Kalla.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
     # prints the recall numbers.
     needs: changes
     if: needs.changes.outputs.smoke == 'true'
@@ -183,8 +183,8 @@ jobs:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
           UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
         run: |
-          dotnet build tests/Ume.Rag.Worker.Tests -c Release --nologo
-          dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" --output Detailed
+          dotnet build tests/Kalla.Worker.Tests -c Release --nologo
+          dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" --output Detailed
 
   images:
     # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
@@ -213,7 +213,7 @@ jobs:
 
   renderer:
     # ume-rag/renderer (repo-and-deployment §5.4) with its image test, then the worker rendering a fixture SPA through
-    # that image (RendererContainerTests in tests/Ume.Rag.Worker.Tests, connectors design §8.3), which the backend job
+    # that image (RendererContainerTests in tests/Kalla.Worker.Tests, connectors design §8.3), which the backend job
     # skips because it does not set UME_RAG_TEST_RENDERER_IMAGE.
     needs: changes
     if: needs.changes.outputs.renderer == 'true'
@@ -240,9 +240,9 @@ jobs:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
           UME_RAG_TEST_RENDERER_IMAGE: ume-rag.local/renderer:ci
         run: |
-          dotnet build tests/Ume.Rag.Worker.Tests -c Release --nologo
-          dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build \
-            --filter-class "Ume.Rag.Worker.Tests.Connectors.RendererContainerTests" --fail-skips on --minimum-expected-tests 1
+          dotnet build tests/Kalla.Worker.Tests -c Release --nologo
+          dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build \
+            --filter-class "Kalla.Worker.Tests.Connectors.RendererContainerTests" --fail-skips on --minimum-expected-tests 1
 
   deploy-checks:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): deploy/compose.rag.yaml with every supported

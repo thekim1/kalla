@@ -1,0 +1,29 @@
+<Solution>
+  <Folder Name="/Aspire/">
+    <Project Path="src/Kalla.AppHost/Kalla.AppHost.csproj" />
+    <Project Path="src/Kalla.ServiceDefaults/Kalla.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Kalla.AdminApi/Kalla.AdminApi.csproj" />
+    <Project Path="src/Kalla.Answering/Kalla.Answering.csproj" />
+    <Project Path="src/Kalla.Api/Kalla.Api.csproj" />
+    <Project Path="src/Kalla.Domain/Kalla.Domain.csproj" />
+    <Project Path="src/Kalla.FakeGateway/Kalla.FakeGateway.csproj" />
+    <Project Path="src/Kalla.Infrastructure/Kalla.Infrastructure.csproj" />
+    <Project Path="src/Kalla.MigrationService/Kalla.MigrationService.csproj" />
+    <Project Path="src/Kalla.Pipelines/Kalla.Pipelines.csproj" />
+    <Project Path="src/Kalla.Retrieval/Kalla.Retrieval.csproj" />
+    <Project Path="src/Kalla.Worker/Kalla.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kalla.AdminApi.Tests/Kalla.AdminApi.Tests.csproj" />
+    <Project Path="tests/Kalla.Api.Tests/Kalla.Api.Tests.csproj" />
+    <Project Path="tests/Kalla.ContractTests/Kalla.ContractTests.csproj" />
+    <Project Path="tests/Kalla.Domain.Tests/Kalla.Domain.Tests.csproj" />
+    <Project Path="tests/Kalla.IntegrationTests/Kalla.IntegrationTests.csproj" />
+    <Project Path="tests/Kalla.Pipelines.Tests/Kalla.Pipelines.Tests.csproj" />
+    <Project Path="tests/Kalla.Retrieval.Tests/Kalla.Retrieval.Tests.csproj" />
+    <Project Path="tests/Kalla.TestKit/Kalla.TestKit.csproj" />
+    <Project Path="tests/Kalla.Worker.Tests/Kalla.Worker.Tests.csproj" />
+  </Folder>
+</Solution>

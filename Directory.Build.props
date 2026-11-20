@@ -11,7 +11,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <Authors>Umeå kommun</Authors>
-    <Product>Ume Rag</Product>
+    <Product>Källa</Product>
     <!-- Local placeholder only; release.yml overrides -p:Version=X.Y.Z from the pushed git tag. -->
     <Version>0.0.0-local</Version>
     <ContainerImageTag>latest</ContainerImageTag>

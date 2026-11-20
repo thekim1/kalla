@@ -62,13 +62,13 @@ Moved to [`../archive/design-history/tools.md`](../archive/design-history/tools.
 
 | Project | Owns (tools) | Notes |
 |---|---|---|
-| `Ume.Rag.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
-| **`Ume.Rag.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
-| `Ume.Rag.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
-| `Ume.Rag.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
-| `Ume.Rag.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
-| `Ume.Rag.AdminApi` | skill editor, publish/serve/rollback, share lists, `SkillGateRunner` (§3.7, read-only tools through the in-process hub), tool-server registration, discovery and connection test (in-process MCP client), approvals, pre-registrations, grants, drift leader; `GatewayModels` sync from P1 (admin design §4.10) | – |
-| `templates/mcp-server/` | `dotnet new ume-mcp-server` template (§8.1) | packaged as `Ume.Rag.Templates` |
+| `Kalla.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
+| **`Kalla.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Kalla.Api` and `Kalla.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
+| `Kalla.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
+| `Kalla.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
+| `Kalla.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
+| `Kalla.AdminApi` | skill editor, publish/serve/rollback, share lists, `SkillGateRunner` (§3.7, read-only tools through the in-process hub), tool-server registration, discovery and connection test (in-process MCP client), approvals, pre-registrations, grants, drift leader; `GatewayModels` sync from P1 (admin design §4.10) | – |
+| `templates/mcp-server/` | `dotnet new ume-mcp-server` template (§8.1) | packaged as `Kalla.Templates` |
 
 The skills runtime is in the chat role: skills are configuration the chat role already holds in its snapshot (`api`
 has `SELECT` on `Skills`, `SkillVersions`, `SkillVersionLinks`, data-model §1.2), and `load_skill` must not cost a
@@ -97,7 +97,7 @@ credentials and egress belong in one process again (§16).
 ### 2.3 Interfaces
 
 ```csharp
-// Ume.Rag.Domain
+// Kalla.Domain
 public interface IToolHub
 {
     Task<ToolCallOutcome> CallAsync(ToolCallRequest request, CancellationToken ct);
@@ -284,7 +284,7 @@ skill (the list is shown).
 
 ### 3.7 Skill gate (`GateKind.SkillPublish`, advisory)
 
-Runs in **`rag-admin`** (R1: never on the data plane), which already runs `Ume.Rag.Answering` for the test panel and
+Runs in **`rag-admin`** (R1: never on the data plane), which already runs `Kalla.Answering` for the test panel and
 holds the gateway keys of every level. Publishing a version starts the run as a
 background task of the admin (one run per version, under `pg_try_advisory_xact_lock` on the version id; a run left
 unfinished by a restart is started again); results in `EvaluationRuns` with the version id (`Trigger =
@@ -294,7 +294,7 @@ no part.
 - **Models**: every distinct `GatewayModel` of the published versions of active assistants linking the skill (on publish of a first version,
   `Settings.Tools.SkillGateModel`, on-prem and tool-capable), each at the residency ceiling of the linking assistant's
   level.
-- **End to end**: each question runs through `Ume.Rag.Answering` exactly as the assistant would (the agent loop with
+- **End to end**: each question runs through `Kalla.Answering` exactly as the assistant would (the agent loop with
   the skill included or loaded when the version under test carries tools, otherwise the RAG path), **executing the skill's read-only tools** through the
   admin's in-process hub (hosted servers, §2.2); `x-ume-step: skill-gate`, temperature 0. Tool calls are audited with
   `SubjectKind = service` and count against the tools' per-tool rate limits.
@@ -377,7 +377,7 @@ manifest is dropped with a warning) (unresolved → dropped with a
   warning). The result is a **draft** that a `rag-platform-admin` must approve (a person reads the body; audited
   `skill.import.approve`) before it can be published (plan §6 rule 7).
 
-## 4. Tool hub (`Ume.Rag.Tools`, in process)
+## 4. Tool hub (`Kalla.Tools`, in process)
 
 ### 4.1 Registry and snapshot
 
@@ -599,7 +599,7 @@ under the run's `IAccessPolicy` decisions) and never reach a tool server. No lay
 ### 5.2 One function for listing and calling
 
 ```csharp
-// Ume.Rag.Domain, pure
+// Kalla.Domain, pure
 public static class ToolPolicy
 {
     public static IReadOnlyList<ToolBinding> Visible(RunPolicyState run, PolicySnapshot config);   // the model's tools
@@ -892,7 +892,7 @@ app.MapMcp("/mcp").RequireAuthorization("McpUse");
 
 ### 8.1 .NET template (answered 3: .NET only)
 
-`dotnet new ume-mcp-server -n Ume.Mcp.Kommun` from `templates/mcp-server/` (package `Ume.Rag.Templates`):
+`dotnet new ume-mcp-server -n Ume.Mcp.Kommun` from `templates/mcp-server/` (package `Kalla.Templates`):
 
 ```
 Ume.Mcp.Kommun/
@@ -1049,7 +1049,7 @@ histograms; tool ids appear in logs and the audit).
 
 ## 11. Tests
 
-### 11.1 Unit (`Ume.Rag.Domain.Tests`, `Ume.Rag.Tools.Tests`, `Ume.Rag.Api.Tests`)
+### 11.1 Unit (`Kalla.Domain.Tests`, `Kalla.Tools.Tests`, `Kalla.Api.Tests`)
 
 - **Policy matrix** (table-driven): every layer of §5.1 × client kinds × levels × grants × approvals × drift state ×
   static/progressive; property test: `Authorize(name) ≠ null ⇔ name ∈ Visible()`.
@@ -1070,7 +1070,7 @@ histograms; tool ids appear in logs and the audit).
 
 ### 11.2 Integration (Testcontainers: Postgres, Keycloak, Redis for the multi-host rate limits; FakeGateway; `FakeMcpServer`)
 
-`FakeMcpServer` (in `Ume.Rag.TestKit`, built on the SDK 2.3.0 server) has modes: normal, slow (> timeout), huge
+`FakeMcpServer` (in `Kalla.TestKit`, built on the SDK 2.3.0 server) has modes: normal, slow (> timeout), huge
 (> 256 KiB), `isError`, image/audio/resource-link content, changed definition after N lists, added/removed tool,
 401/403, invalid JSON-RPC, redirect. FakeGateway gains **scripted tool modes** (per-step assistant messages with
 `tool_calls` streamed in deltas, or text), so loop tests are deterministic.

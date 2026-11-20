@@ -79,7 +79,7 @@ platform; Decisions "Gold set drafted by the main session, reviewed by DoIT" sho
 
 | # | Step | Detail |
 |---|---|---|
-| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Ume.Rag.AdminApi/EvaluationEndpoints.cs:71`); admin §7.1; processing §13.4 |
+| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Kalla.AdminApi/EvaluationEndpoints.cs:71`); admin §7.1; processing §13.4 |
 | 4.2 | Run retrieval evaluation; compare hybrid with rerank (`hybrid-rerank-gateway` with the Foundry `Cohere-rerank-v5-fast` alias, `hybrid-rerank` with the chat-model reranker) if a rerank model is set | processing §14; `scripts/evaluation/rerank.sh` ([`../../../scripts/evaluation/README.md`](../../../scripts/evaluation/README.md)) |
 | 4.3 | Set the not-found thresholds from answerable and unanswerable questions | Decisions "Weakness review 2"; knowledge §7 |
 | 4.4 | Generate answers for the gold set and have the support reviewers grade them | the go-live gate below |

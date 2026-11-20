@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>ume-rag-api</UserSecretsId>
+    <ContainerRepository>ume-rag/api</ContainerRepository>
+    <KallaServiceContainer>true</KallaServiceContainer>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kalla.Infrastructure\Kalla.Infrastructure.csproj" />
+    <ProjectReference Include="..\Kalla.ServiceDefaults\Kalla.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Kalla.Answering\Kalla.Answering.csproj" />
+  </ItemGroup>
+</Project>

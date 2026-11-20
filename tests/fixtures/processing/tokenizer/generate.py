@@ -6,7 +6,7 @@ Run once, by hand, from an isolated environment:
 
     python3 -m venv venv && venv/bin/pip install tokenizers==0.22.1
     curl -L -o tokenizer.json https://huggingface.co/BAAI/bge-m3/resolve/5617a9f61b028005a4858fdac845db406aefb181/tokenizer.json
-    venv/bin/python -I generate.py tokenizer.json ../../../../src/Ume.Rag.Retrieval/Text/sv_SE/sv_SE.dic
+    venv/bin/python -I generate.py tokenizer.json ../../../../src/Kalla.Retrieval/Text/sv_SE/sv_SE.dic
 
 Passages: 500 seeded word sequences from the sv_SE word list (compounds, inflections), 300 windows over the prose below,
 200 edge cases (numbers, dates, personnummer shapes, URLs, e-mail, punctuation, NBSP and other spaces, ligatures,

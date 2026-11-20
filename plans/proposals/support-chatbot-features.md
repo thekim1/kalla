@@ -39,7 +39,7 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** pasted tickets carry `0x80070005`, `AADSTS50076`, `KB5034441`, printer models and app versions. The
   document that names that exact code is the best answer, and the Swedish stemmer and embeddings may both blur it.
-- **Fit:** in `Ume.Rag.Retrieval`, a third candidate list next to keyword and vector. Identifier-shaped tokens
+- **Fit:** in `Kalla.Retrieval`, a third candidate list next to keyword and vector. Identifier-shaped tokens
   (regex: hex codes, letter+digit runs, versions) are extracted from the query and matched on a `simple`-config or
   trigram index over chunk text. The worker adds the index. The list joins `RrfFusion` with its own weight, and
   `CoverageEvaluator` may count an exact hit as coverage. Measure first: how the `swedish` config tokenises such codes
@@ -51,7 +51,7 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** with the answer, the app gets `{category, system, urgency_hint, missing: ["device", "error text"]}`.
   The frontend pre-fills the ticket fields and asks for the missing facts.
-- **Fit:** in `Ume.Rag.Answering`, one call on the condense model, run like `FollowUps.cs` (its own budget, second
+- **Fit:** in `Kalla.Answering`, one call on the condense model, run like `FollowUps.cs` (its own budget, second
   `ume` chunk, `[]` on failure, never stored). It uses the same personal-data and no-link filters, with a category list
   set per assistant version. It runs on the assistant's gateway key, so its cost is attributed per step.
 - **Eneo:** has no structured answer metadata in the conversation API (grep `triage`: only a help-assistant template;

@@ -13,7 +13,7 @@
 #   --port N             FakeGateway's port on 127.0.0.1 [5480]
 #   --out DIR            [results/<UTC time>-dry-run-<mode>]
 #
-# Builds src/Ume.Rag.FakeGateway (Release) and starts it with a throwaway Eu key; needs the .NET SDK besides what
+# Builds src/Kalla.FakeGateway (Release) and starts it with a throwaway Eu key; needs the .NET SDK besides what
 # run.sh needs. Exit code: run.sh's.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,7 +45,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== building FakeGateway"
-dotnet build "$root/src/Ume.Rag.FakeGateway" -c Release --nologo -v quiet -o "$work/fake"
+dotnet build "$root/src/Kalla.FakeGateway" -c Release --nologo -v quiet -o "$work/fake"
 head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | sed 's/^/ume-rag-dry-run-/' > "$work/key"
 
 echo "== starting FakeGateway on 127.0.0.1:$port (FirstTokenMs=400, TokenIntervalMs=25, JitterPercent=30, 200 words)"
@@ -53,7 +53,7 @@ FakeGateway__Keys__Eu="$(cat "$work/key")" \
 FakeGateway__Latency__FirstTokenMs=400 FakeGateway__Latency__TokenIntervalMs=25 \
 FakeGateway__Latency__JitterPercent=30 FakeGateway__Latency__AnswerWords=200 \
 ASPNETCORE_URLS="http://127.0.0.1:$port" Logging__LogLevel__Default=Warning OTEL_SDK_DISABLED=true \
-  dotnet "$work/fake/Ume.Rag.FakeGateway.dll" --contentRoot "$work/fake" > "$out/fake-gateway.log" 2>&1 &
+  dotnet "$work/fake/Kalla.FakeGateway.dll" --contentRoot "$work/fake" > "$out/fake-gateway.log" 2>&1 &
 fake_pid=$!
 for _ in $(seq 1 60); do
   [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/" || true)" = 200 ] && break

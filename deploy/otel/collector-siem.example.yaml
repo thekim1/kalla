@@ -6,7 +6,7 @@
 # (Compose; the host firewall then allows it), OTEL_EXPORTER_OTLP_ENDPOINT in a Kubernetes overlay. The gateway and
 # RAG can share one collector: add the gateway's category to the filter below.
 # Security events are the log records whose logger category (exported as the instrumentation scope) is
-# "Ume.Rag.Security". Everything else is operational telemetry and is not sent to the SIEM here.
+# "Kalla.Security". Everything else is operational telemetry and is not sent to the SIEM here.
 #
 # Pick ONE exporter for the security pipeline and remove or comment out the others. Check the exporter options
 # against the collector version you run; this file was validated with otel/opentelemetry-collector-contrib 0.120.0.
@@ -24,7 +24,7 @@ processors:
     error_mode: ignore
     logs:
       log_record:
-        - instrumentation_scope.name != "Ume.Rag.Security"
+        - instrumentation_scope.name != "Kalla.Security"
 
   # Syslog needs an app name and a message; the record body is the formatted event text and the event's fields
   # stay available as attributes (Reason, KeyId, SourceAddress, Count, ...; docs/security-events.md lists them).

@@ -132,10 +132,10 @@ ready for one. OTP is not set here either.
 
 ## Tested
 
-`tests/Ume.Rag.AdminApi.Tests/RealmAdditionsTests.cs` starts Keycloak 26.8.1 (the gateway's digest) and runs
+`tests/Kalla.AdminApi.Tests/RealmAdditionsTests.cs` starts Keycloak 26.8.1 (the gateway's digest) and runs
 keycloak-config-cli against it as the gateway's `realm-import` job does: the same image and digest, client-credentials
 sign-in with the secret from a config tree, `$(env:...)` substitution and `no-delete`. The base realm is a minimal
-stand-in for `realm/10-gateway.json` (`tests/Ume.Rag.AdminApi.Tests/Keycloak/10-gateway.json`: the realm settings,
+stand-in for `realm/10-gateway.json` (`tests/Kalla.AdminApi.Tests/Keycloak/10-gateway.json`: the realm settings,
 the user profile, the client `ume-admin` and two gateway roles). The tests check:
 
 - The additions import after the base realm and leave its settings, user profile and browser flow alone.

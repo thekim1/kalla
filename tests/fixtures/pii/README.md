@@ -1,6 +1,6 @@
 # Personal-data fixtures (synthetic only)
 
-Used by `tests/Ume.Rag.Worker.Tests/Processing/PiiTargetTests.cs` (processing design §17, PII precision/recall).
+Used by `tests/Kalla.Worker.Tests/Processing/PiiTargetTests.cs` (processing design §17, PII precision/recall).
 
 | File | Content | Source | Licence |
 |---|---|---|---|
@@ -14,5 +14,5 @@ fixed seed. SCB name statistics for the NER prefilter's gazetteer are not used y
 `ner-names.jsonl`: 70 synthetic Swedish sentences, 55 with their gold person names (66 names: running text, hyphenated,
 `von`/`af` particles, genitive, ALL CAPS, table rows) and 15 sentences without persons (places and streets named after
 people, surnames that are nouns). Written for this repository; the names are common Swedish names, not real people in
-these roles. Used by `tests/Ume.Rag.ContractTests/NerTargetTests.cs` against the parser image (processing design §17
+these roles. Used by `tests/Kalla.ContractTests/NerTargetTests.cs` against the parser image (processing design §17
 NER targets).

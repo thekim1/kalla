@@ -536,15 +536,15 @@ Privatpersoner: 328 kr/timme
       </div>
       <div class="card">
         <h3>Lokalt mot testgatewayen</h3>
-        <pre class="cmd">dotnet user-secrets --project src/Ume.Rag.AppHost \
+        <pre class="cmd">dotnet user-secrets --project src/Kalla.AppHost \
   set Gateway:BaseUrl https://&lt;gateway&gt;
-dotnet user-secrets --project src/Ume.Rag.AppHost \
+dotnet user-secrets --project src/Kalla.AppHost \
   set Gateway:Services:api:Key &lt;api-nyckel&gt;
-dotnet user-secrets --project src/Ume.Rag.AppHost \
+dotnet user-secrets --project src/Kalla.AppHost \
   set Gateway:Services:admin:Key &lt;admin-nyckel&gt;
-dotnet user-secrets --project src/Ume.Rag.AppHost \
+dotnet user-secrets --project src/Kalla.AppHost \
   set Gateway:Services:worker:Key &lt;worker-nyckel&gt;
-dotnet user-secrets --project src/Ume.Rag.AppHost \
+dotnet user-secrets --project src/Kalla.AppHost \
   set FakeGateway:Enabled false</pre>
         <p class="note">Adresser och nycklar finns bara i användarhemligheter eller hemliga filer, aldrig i koden. Fullständiga
           steg kommer i <code>docs/p1a-local-run.md</code> när milstolpe 1 är klar att köras.</p>

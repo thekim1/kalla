@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Hot-path benchmarks (BenchmarkDotNet), run by hand only: not in Kalla.slnx, so no pipeline builds or runs them.
+    See README.md for when to run them and how.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <!-- BenchmarkDotNet needs public, non-sealed benchmark classes and instance methods (as the gateway's benchmarks). -->
+    <NoWarn>$(NoWarn);CA1001;CA1707;CA1515;CA1812;CA1852;CA2000;CA5394;CA1861;CA2234;CA1822;CA1849</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Kalla.Retrieval\Kalla.Retrieval.csproj" />
+    <ProjectReference Include="..\..\src\Kalla.Answering\Kalla.Answering.csproj" />
+    <ProjectReference Include="..\..\src\Kalla.Worker\Kalla.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Kalla.Api\Kalla.Api.csproj" />
+    <ProjectReference Include="..\Kalla.TestKit\Kalla.TestKit.csproj" />
+  </ItemGroup>
+</Project>

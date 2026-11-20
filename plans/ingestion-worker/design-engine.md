@@ -117,7 +117,7 @@ hashing and validation. A pipeline version is immutable once published.
 
 ### 3.2 Templates and the stage manifest
 
-A **template** (`src/Ume.Rag.MigrationService/Templates/{name}.v{n}.json`, schema
+A **template** (`src/Kalla.MigrationService/Templates/{name}.v{n}.json`, schema
 `contracts/pipeline/v2/template.schema.json`, seeded insert-if-absent; a changed template is a new version) names its
 source type and its stages with their code versions and declares its parameters:
 
@@ -145,7 +145,7 @@ source type and its stages with their code versions and declares its parameters:
 - `labels` (optional) names a parameter whose name says too little (`pathRules`: `en` Topics, `sv` Ämnen); the
   catalog serves it as `x-labels` in `paramsSchema`, and a label for an unknown parameter fails the template check.
   The form takes a parameter's label from `labels.ts` by name first (AGENTS.md), then from `x-labels` (admin §6.3).
-- `TemplateCatalog.BuiltIn` (`Ume.Rag.Pipelines`) embeds the template files as resources, so the admin and the
+- `TemplateCatalog.BuiltIn` (`Kalla.Pipelines`) embeds the template files as resources, so the admin and the
   worker validate against the same versions without reading the database. The migration service seeds them into
   `config` (§13.1).
 - `stage` is the parameter's **effect tag**: the first stage its change affects. `appliesTo` narrows it to a route
@@ -190,7 +190,7 @@ does not force a re-parse when only chunking changes.
 
 ## 4. Validation
 
-Run by `PipelineValidator` (`Ume.Rag.Pipelines`) in the admin on save and publish, and **again by the worker** when it
+Run by `PipelineValidator` (`Kalla.Pipelines`) in the admin on save and publish, and **again by the worker** when it
 loads a published version (fail closed: an invalid published version is not run; event 5105, §17).
 
 | # | Rule | On |
@@ -210,7 +210,7 @@ stages.
 
 ## 5. Stage interface and manifest
 
-### 5.1 C# sketch (`Ume.Rag.Worker/Pipelines`)
+### 5.1 C# sketch (`Kalla.Worker/Pipelines`)
 
 ```csharp
 public interface IPipelineNode                                // one stage; the name stays for continuity
@@ -493,7 +493,7 @@ deployment values too: `Worker:HeartbeatSeconds` (10), `Worker:InstanceTimeoutSe
 (10), `Worker:IdleWaitSeconds` (30) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4).
 
 **Payload contracts**: one schema per class and kind in `contracts/jobs/v1/` (`{class}.{kind}.payload.schema.json`, with results beside them), generated from the
-records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
+records in `Kalla.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
 `reject-site-profile` command: P2).
 - The `sync` payload carries `trigger` because `Jobs` has no column for it. It refers to the checkpoint by
   `resumeFromCheckpoint`, because `ConnectorCheckpoints` rows have no id (PK `SourceId`, `Kind`).
@@ -577,8 +577,8 @@ Fairness is per instance and approximate. **Later (P2):** at 20+ departments the
 recursive-CTE loose index scan builds the department list every 5 s, shared per instance, with a per-department cap of
 `max(1, ⌈slots ÷ departments⌉)` per instance (to-verify #9).
 
-Queue access goes through the **`IJobQueue`** seam (`Ume.Rag.Domain/Ports`, Postgres implementation in
-`Ume.Rag.Infrastructure/Jobs` = the data-model §4.2 SQL). Its members: `EnqueueAsync` and `CompleteAsync` take the
+Queue access goes through the **`IJobQueue`** seam (`Kalla.Domain/Ports`, Postgres implementation in
+`Kalla.Infrastructure/Jobs` = the data-model §4.2 SQL). Its members: `EnqueueAsync` and `CompleteAsync` take the
 caller's `DbTransaction`; `ReadyDepartmentsAsync`; `DequeueAsync` returns one job; `HeartbeatAsync` renews every
 running job of the instance; `FailAsync`, `ReleaseAsync` and `CancelRunAsync`. Wake-ups (`JobWakeUps`) live in
 Infrastructure. The queue stays in Postgres; a broker comes only behind the performance pass's §6 trigger, then
@@ -838,8 +838,8 @@ back directly (§2.3).
 ### 13.1 P1 templates
 
 Platform templates (`Pipelines.DepartmentId = null`; data-model §2.1 has no `IsTemplate` column), seeded by the
-migration service from `src/Ume.Rag.MigrationService/Templates/*.json` (§3.2). The three files below are embedded in
-`Ume.Rag.Pipelines` (`TemplateCatalog.BuiltIn`). All three share the `pathRules` subschema (≤ 100 rules); on `files`
+migration service from `src/Kalla.MigrationService/Templates/*.json` (§3.2). The three files below are embedded in
+`Kalla.Pipelines` (`TemplateCatalog.BuiltIn`). All three share the `pathRules` subschema (≤ 100 rules); on `files`
 a rule matches the upload's folder path (admin §5.5.7). Only `website` has `collectionDefaults`.
 
 Seeding: the migration service's `PipelineTemplateSeeder` runs in every environment after the migrations. Per template name it inserts one platform `Pipelines` row if absent (`Name` = `TemplateId` =
@@ -1080,12 +1080,12 @@ scale test are in [`../archive/passes/performance-pass.md`](../archive/passes/pe
 
 | Level | Project | What |
 |---|---|---|
-| Unit | `Ume.Rag.Pipelines.Tests` | schema validation; every §4 rule with a failing and a passing definition; stage keys: a changed parameter changes exactly its stage's key and the later ones; effect tags and routes give the documented plans; templates validate |
-| Unit | `Ume.Rag.Worker.Tests` | stage order; routing inside `parse`; result mapping table §7.3 (each parser and gateway code); cache keys; `OutputHash` chain; segment cutting and continuation payloads; cost estimates; scheduler with `FakeTimeProvider` (DST change days, jitter stability, catch-up collapse); AIMD limiter; preview context refuses DB and non-preview blob paths |
-| Golden | `Ume.Rag.Worker.Tests` | per stage and version: fixture input → expected output (`tests/fixtures/`); a changed output without a version bump fails |
-| Integration (Testcontainers, stock pgvector image) | `Ume.Rag.IntegrationTests` | dequeue under `SKIP LOCKED` with 8 parallel consumers (no double lease); dedup under concurrency with the partial unique index; heartbeat and lease expiry; reaper incl. early reclaim of a dead instance without an attempt, dead-letter after 3 reclaims; requeue without attempt; fence: superseded and lease-lost swaps roll back; index writer: invisible batches not returned by K or V, swap, swap-back within 14 days, re-key, `held` for a flagged set in a `public` collection, orphan sweep; snapshot test (a concurrent reader sees old or new set only); finalizer counters; manifest immutability and support check; preview leaves `content` unchanged (row counts and `xmin` of every table except `Jobs`, `CrawlHosts`) |
-| Crash recovery | `Ume.Rag.IntegrationTests` (worker in-process, killed by cancellation without `StopAsync`, and as a container with `docker kill`) | kill during fetch, during a parse range, between chunk batches, between embed and swap; restart; assert every document ends current, no duplicate live sets, no attempts consumed by the kills, run counters exact: **"worker restart loses no work"** |
-| Contract | `Ume.Rag.ContractTests` | parser client vs parser image error fixtures (parser §15.2) mapped per §7.3; FakeGateway residency and 402/429 answers; the gateway client refuses a call without a ceiling |
+| Unit | `Kalla.Pipelines.Tests` | schema validation; every §4 rule with a failing and a passing definition; stage keys: a changed parameter changes exactly its stage's key and the later ones; effect tags and routes give the documented plans; templates validate |
+| Unit | `Kalla.Worker.Tests` | stage order; routing inside `parse`; result mapping table §7.3 (each parser and gateway code); cache keys; `OutputHash` chain; segment cutting and continuation payloads; cost estimates; scheduler with `FakeTimeProvider` (DST change days, jitter stability, catch-up collapse); AIMD limiter; preview context refuses DB and non-preview blob paths |
+| Golden | `Kalla.Worker.Tests` | per stage and version: fixture input → expected output (`tests/fixtures/`); a changed output without a version bump fails |
+| Integration (Testcontainers, stock pgvector image) | `Kalla.IntegrationTests` | dequeue under `SKIP LOCKED` with 8 parallel consumers (no double lease); dedup under concurrency with the partial unique index; heartbeat and lease expiry; reaper incl. early reclaim of a dead instance without an attempt, dead-letter after 3 reclaims; requeue without attempt; fence: superseded and lease-lost swaps roll back; index writer: invisible batches not returned by K or V, swap, swap-back within 14 days, re-key, `held` for a flagged set in a `public` collection, orphan sweep; snapshot test (a concurrent reader sees old or new set only); finalizer counters; manifest immutability and support check; preview leaves `content` unchanged (row counts and `xmin` of every table except `Jobs`, `CrawlHosts`) |
+| Crash recovery | `Kalla.IntegrationTests` (worker in-process, killed by cancellation without `StopAsync`, and as a container with `docker kill`) | kill during fetch, during a parse range, between chunk batches, between embed and swap; restart; assert every document ends current, no duplicate live sets, no attempts consumed by the kills, run counters exact: **"worker restart loses no work"** |
+| Contract | `Kalla.ContractTests` | parser client vs parser image error fixtures (parser §15.2) mapped per §7.3; FakeGateway residency and 402/429 answers; the gateway client refuses a call without a ceiling |
 | Performance | `perf.yml`, BenchmarkDotNet | R1 test (§18); benchmarks for key computation, validation and the dequeue query plan |
 
 ## 20. Milestones

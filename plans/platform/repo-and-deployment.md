@@ -16,28 +16,28 @@ marked **copy** (as-is apart from names), **adapt** (same structure, our content
 Code lives in the design repository `ume-rag-platform` (decided 2026-10-30): the tree below sits at the repo root beside
 `plans/`, `platforms/` and the numbered design documents, `docs/` holds both the design-side `stakeholder-report.html`
 and the operations documents, and `verify.yml` ignores changes under `plans/**`, `platforms/**` and the root `*.md`
-files. Solution `UmeRag.slnx` (gateway: `UmeLlmGateway.slnx`),
+files. Solution `Kalla.slnx` (gateway: `UmeLlmGateway.slnx`),
 namespaces and assembly names `Ume.Rag.*`, image repositories `ume-rag/<service>`, Compose project `ume-rag`.
 
 ```
 .editorconfig  .gitattributes  .gitignore  global.json  Directory.Build.props  Directory.Build.targets
-Directory.Packages.props  dotnet-tools.json  aspire.config.json  UmeRag.slnx  README.md  CHANGELOG.md
+Directory.Packages.props  dotnet-tools.json  aspire.config.json  Kalla.slnx  README.md  CHANGELOG.md
 .githooks/pre-commit                 admin UI lint (copy) + parser ruff check (new)
 .github/workflows/                   verify.yml parser.yml release.yml entra.yml perf.yml evaluation.yml audit.yml e2e.yml; P2, not built: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
 src/
-  Ume.Rag.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, IJobQueue, IReranker)
-  Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list shipped as files, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
-  Ume.Rag.Answering/                 knowledge core (KnowledgeService without HTTP) and chat answer core (RagAnswerStrategy, PromptBuilder, TokenBudget, Condenser, AnswerFilter, CitationEmitter, LanguageGuess); referenced by Api and AdminApi only (never the worker), so the test panel runs the real chat path (admin design §2.1) and the admin runs the P2 answer-level judge (`answers` runs) and the P2 skill gate; P2: AgentAnswerStrategy, AgentPromptBuilder, BuiltInTools, ToolCallStreamParser, SkillFileCache (tools design §2.1)
-  Ume.Rag.Pipelines/                 fixed pipeline templates per source type, versioned parameter sets, validator, per-stage cache keys, re-processing plan (every document in P1; from effect tags in P2, weakness review §1) (admin + worker; engine design §4)
-  Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, `IRateLimitStore`/`ISharedCache` (in-memory; Redis from P2) and RedisKeys, Postgres admin session store, gateway client, blob stores, key providers, SecurityEvents
-  Ume.Rag.ServiceDefaults/           copy of the gateway's (OpenTelemetry, health, ShutdownDrain, WebDefaults, problem responses)
-  Ume.Rag.Api/                       data plane: Knowledge, Chat, MCP endpoint groups (Rag:Roles)
-  Ume.Rag.Worker/                    ingestion: connectors, fixed pipelines, site profiles, scheduler, retrieval evaluator (recall/MRR through Ume.Rag.Retrieval), retention + partition jobs
-  Ume.Rag.AdminApi/                  control plane BFF; serves admin-ui/dist as wwwroot
-  Ume.Rag.MigrationService/          one-shot migrator, app-roles.sql, dev seeder
-  Ume.Rag.FakeGateway/               OpenAI-compatible fake gateway (chat, 1024-dim embeddings, residency headers, catalog)
-  Ume.Rag.AppHost/                   Aspire orchestration
-  Ume.Rag.Tools/                     P2: tool hub library (IToolHub), hosted in-process by Ume.Rag.Api's chat role and by Ume.Rag.AdminApi (skill gate, discovery, drift polling): registry snapshot, MCP client, credential resolver, policy re-check, audit (tools design §2.1)
+  Kalla.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, IJobQueue, IReranker)
+  Kalla.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list shipped as files, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
+  Kalla.Answering/                 knowledge core (KnowledgeService without HTTP) and chat answer core (RagAnswerStrategy, PromptBuilder, TokenBudget, Condenser, AnswerFilter, CitationEmitter, LanguageGuess); referenced by Api and AdminApi only (never the worker), so the test panel runs the real chat path (admin design §2.1) and the admin runs the P2 answer-level judge (`answers` runs) and the P2 skill gate; P2: AgentAnswerStrategy, AgentPromptBuilder, BuiltInTools, ToolCallStreamParser, SkillFileCache (tools design §2.1)
+  Kalla.Pipelines/                 fixed pipeline templates per source type, versioned parameter sets, validator, per-stage cache keys, re-processing plan (every document in P1; from effect tags in P2, weakness review §1) (admin + worker; engine design §4)
+  Kalla.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, `IRateLimitStore`/`ISharedCache` (in-memory; Redis from P2) and RedisKeys, Postgres admin session store, gateway client, blob stores, key providers, SecurityEvents
+  Kalla.ServiceDefaults/           copy of the gateway's (OpenTelemetry, health, ShutdownDrain, WebDefaults, problem responses)
+  Kalla.Api/                       data plane: Knowledge, Chat, MCP endpoint groups (Rag:Roles)
+  Kalla.Worker/                    ingestion: connectors, fixed pipelines, site profiles, scheduler, retrieval evaluator (recall/MRR through Kalla.Retrieval), retention + partition jobs
+  Kalla.AdminApi/                  control plane BFF; serves admin-ui/dist as wwwroot
+  Kalla.MigrationService/          one-shot migrator, app-roles.sql, dev seeder
+  Kalla.FakeGateway/               OpenAI-compatible fake gateway (chat, 1024-dim embeddings, residency headers, catalog)
+  Kalla.AppHost/                   Aspire orchestration
+  Kalla.Tools/                     P2: tool hub library (IToolHub), hosted in-process by Kalla.Api's chat role and by Kalla.AdminApi (skill gate, discovery, drift polling): registry snapshot, MCP client, credential resolver, policy re-check, audit (tools design §2.1)
   admin-ui/                          Vue 3 + Pinia + Vue Router, design system copied from the gateway
   parser/                            Python sidecar (FastAPI + Docling), own Dockerfile, own tests
 contracts/pipeline/v2/               definition.schema.json (template id + parameter set, engine design §3.1)
@@ -48,24 +48,24 @@ images/
   postgres/Dockerfile                stock pgvector image (digest-pinned) + PGDG `pgbackrest` package and `pgbackrest.conf` (§5.2)
   renderer/Dockerfile                Playwright run-server + Chromium (connectors design §8)
   clamav/Dockerfile                  ClamAV + freshclam updating directly from database.clamav.net (decided: no mirror, §5.5); clamd.conf, freshclam.conf, test.sh (image test)
-templates/mcp-server/                P2: `dotnet new ume-mcp-server` template, packaged as `Ume.Rag.Templates` (contents: tools design §8.1)
+templates/mcp-server/                P2: `dotnet new ume-mcp-server` template, packaged as `Kalla.Templates` (contents: tools design §8.1)
 infra/entra/                         Bicep (Graph extension) for RAG's own app registrations, applied by entra.yml (§8.1)
 tests/
   Directory.Build.props              copy
-  Ume.Rag.TestKit/                   TestPostgres (stock pgvector image), TestSecrets, TestClock, CapturingLoggerProvider, TestCategory (copy + adapt); `FakeMcpServer` (P2, tools design §11.2)
-  Ume.Rag.Domain.Tests/              access policy, classification, residency matrix, cache keys
-  Ume.Rag.Api.Tests/                 WebApplicationFactory + FakeGateway: chat, knowledge, keys, fail-closed config
-  Ume.Rag.Worker.Tests/              pipeline stages (golden fixtures), site profiles (umea.se regression corpus), queue, SSRF guard, ClamAV client
-  Ume.Rag.AdminApi.Tests/            BFF, OIDC claim mapping (copy of OidcClaimMappingTests), audit, outbox
-  Ume.Rag.Tools.Tests/               P2: tool hub (normaliser, resolvers, drift, policy re-check; tools design §11.1)
-  Ume.Rag.Pipelines.Tests/           parameter validation, cache keys, re-processing plan, template validity (engine design §19)
-  Ume.Rag.Retrieval.Tests/           fusion, diversity, coverage, section assembly, query normalisation, SwedishDecompounder cases (knowledge design §16.1)
-  Ume.Rag.IntegrationTests/          migrations, DatabaseRoleTests, SwedishTextSearchTests (a decompounded part matches through Postgres), RunItems partitions, job dedup, retrieval statements
-  Ume.Rag.ContractTests/             worker parser client vs parser image (golden responses)
+  Kalla.TestKit/                   TestPostgres (stock pgvector image), TestSecrets, TestClock, CapturingLoggerProvider, TestCategory (copy + adapt); `FakeMcpServer` (P2, tools design §11.2)
+  Kalla.Domain.Tests/              access policy, classification, residency matrix, cache keys
+  Kalla.Api.Tests/                 WebApplicationFactory + FakeGateway: chat, knowledge, keys, fail-closed config
+  Kalla.Worker.Tests/              pipeline stages (golden fixtures), site profiles (umea.se regression corpus), queue, SSRF guard, ClamAV client
+  Kalla.AdminApi.Tests/            BFF, OIDC claim mapping (copy of OidcClaimMappingTests), audit, outbox
+  Kalla.Tools.Tests/               P2: tool hub (normaliser, resolvers, drift, policy re-check; tools design §11.1)
+  Kalla.Pipelines.Tests/           parameter validation, cache keys, re-processing plan, template validity (engine design §19)
+  Kalla.Retrieval.Tests/           fusion, diversity, coverage, section assembly, query normalisation, SwedishDecompounder cases (knowledge design §16.1)
+  Kalla.IntegrationTests/          migrations, DatabaseRoleTests, SwedishTextSearchTests (a decompounded part matches through Postgres), RunItems partitions, job dedup, retrieval statements
+  Kalla.ContractTests/             worker parser client vs parser image (golden responses)
   e2e/                               Playwright TypeScript browser tests (copy of the gateway's setup)
   evaluation/smoke/                  fixture collection (documents) + 30 questions, used by CI
   fixtures/                          documents for parser and node tests (Swedish PDFs, DOCX, scanned pages); `processing/`, `pii/` (processing design §17); `umea/` (≈ 20 saved umea.se pages, HTML and PDF: the site-profile regression corpus, simplification pass §13.2)
-  Ume.Rag.Benchmarks/                BenchmarkDotNet, local only (not in the solution): Retrieval, PostgresRetrieval, ChatStream, ChatTurn (chat design §16.2), Access and Ingestion benchmarks, baselines in `results/` (knowledge design §11)
+  Kalla.Benchmarks/                BenchmarkDotNet, local only (not in the solution): Retrieval, PostgresRetrieval, ChatStream, ChatTurn (chat design §16.2), Access and Ingestion benchmarks, baselines in `results/` (knowledge design §11)
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
 deploy/
@@ -104,16 +104,16 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 |---|---|---|---|
 | `global.json` | same | copy | – |
 | `Directory.Build.props` | same | adapt | `<Product>Ume Rag</Product>`; same suppressions |
-| `Directory.Build.targets` | same | copy | same `UmeServiceContainer` opt-in and digest-pinned base image |
+| `Directory.Build.targets` | same | copy | same `KallaServiceContainer` opt-in and digest-pinned base image |
 | `Directory.Packages.props` | same | adapt | §2.2 |
 | `.editorconfig`, `.gitattributes` | same | copy | `.gitattributes` adds `images/**` and `src/parser/**/*.sh` |
 | `dotnet-tools.json` | same | copy | `dotnet-ef` 10.0.12 |
-| `aspire.config.json` | same | adapt | path `src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj` |
+| `aspire.config.json` | same | adapt | path `src/Kalla.AppHost/Kalla.AppHost.csproj` |
 | `tests/Directory.Build.props` | same | copy | TestKit name |
-| `src/*.ServiceDefaults/*` | `Ume.Rag.ServiceDefaults` | copy | `TelemetryName = "Ume.Rag"` |
-| `src/*.FakeLlm/FakeLatency.cs` | `Ume.Rag.FakeGateway` | copy | rest new (§4.3) |
-| `src/*.MigrationService/*` | `Ume.Rag.MigrationService` | adapt | `RunItems` partition maintenance (data-model §10) |
-| `src/*.AppHost/Program.cs` | `Ume.Rag.AppHost` | adapt | §4.1 |
+| `src/*.ServiceDefaults/*` | `Kalla.ServiceDefaults` | copy | `TelemetryName = "Ume.Rag"` |
+| `src/*.FakeLlm/FakeLatency.cs` | `Kalla.FakeGateway` | copy | rest new (§4.3) |
+| `src/*.MigrationService/*` | `Kalla.MigrationService` | adapt | `RunItems` partition maintenance (data-model §10) |
+| `src/*.AppHost/Program.cs` | `Kalla.AppHost` | adapt | §4.1 |
 | `scripts/Start-Dev.ps1`, `Start-E2E.ps1` | same | adapt | wait for `admin-ui`; volume `ume-rag-e2e-postgres` |
 | `dev/keycloak/ume-realm.json` | same name (Keycloak's directory import needs `<realm>-realm.json`) | adapt | §4.2 |
 | `deploy/*` | `deploy/*` | adapt | §6, §7 |
@@ -163,10 +163,10 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2, worker only (SharePoint). The P2 Graph member-group lookup needs no SDK: the admin copies the gateway's plain `GraphTokenClient` + `HttpClient` (identity design §2.4, gateway design §4.4) |
 | | `Microsoft.Playwright` | same as renderer image (§5.4) | the worker's renderer client; exact match with the server required (to-verify #29) |
 | | `Cronos` | 0.13.0 (2026-04-29; syntax and DST tests with the scheduler) | schedules (worker) |
-| Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Ume.Rag.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
-| Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | content files of `Ume.Rag.Retrieval` (`Text/sv_SE/`: `.aff`, `.dic` and the licence texts), copied to `dictionaries/sv_SE` next to the application and replaceable: `Text:SwedishWordListDirectory` names another directory (data-model §3.1) |
+| Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Kalla.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
+| Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | content files of `Kalla.Retrieval` (`Text/sv_SE/`: `.aff`, `.dic` and the licence texts), copied to `dictionaries/sv_SE` next to the application and replaceable: `Text:SwedishWordListDirectory` names another directory (data-model §3.1) |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
-| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
+| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Kalla.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
 | Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.15, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
@@ -222,19 +222,19 @@ src/parser/
 
 | Project | SDK | References | Image | Runs as |
 |---|---|---|---|---|
-| `Ume.Rag.Domain` | `Microsoft.NET.Sdk` | – (no packages except `Microsoft.Extensions.AI.Abstractions` types if needed) | – | – |
-| `Ume.Rag.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql EF/Redis (no `Aspire.Npgsql`: the plain data sources, e.g. for LISTEN, come from Npgsql's `NpgsqlDataSourceBuilder`), DataProtection EF, M.E.AI.OpenAI (not on the chat path: `IGatewayClient` uses a raw `HttpClient`, chat design §2.1) | – | – |
-| `Ume.Rag.ServiceDefaults` | `Microsoft.NET.Sdk`, `IsAspireSharedProject` | OTel, resilience, service discovery | – | – |
-| `Ume.Rag.Retrieval` | `Microsoft.NET.Sdk` | Domain, Infrastructure; Pgvector (knowledge design §2.1) | – | – |
-| `Ume.Rag.Pipelines` | `Microsoft.NET.Sdk` | Domain; JSON Schema validator (§2.2) (engine design §4) | – | – |
-| `Ume.Rag.Answering` | `Microsoft.NET.Sdk` | Domain, Retrieval, Infrastructure | – | – |
-| `Ume.Rag.Api` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering; JwtBearer, OpenApi, Scalar, MCP SDK and `Ume.Rag.Tools` (P2) | `ume-rag/api` | `rag-api` (+ `rag-api-b` from P2) |
-| `Ume.Rag.Worker` | `Microsoft.NET.Sdk.Web` (health + metrics endpoint) | Infrastructure, ServiceDefaults, Pipelines, Retrieval (retrieval evaluator, decompounder; neither `Ume.Rag.Answering` nor `Ume.Rag.Tools`); AngleSharp, SmartReader, Graph (P2), Playwright (P2, only with the renderer), Cronos, Tokenizers | `ume-rag/worker` | `rag-worker` |
-| `Ume.Rag.AdminApi` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering, Pipelines, `Ume.Rag.Tools` (P2); OIDC, OpenApi, Scalar (the P2 Graph member-group lookup uses a plain `HttpClient`, §2.2) | `ume-rag/admin` (`PublishAdminUi=true`) | `rag-admin` (+ `rag-admin-b` from P2) |
-| `Ume.Rag.MigrationService` | `Microsoft.NET.Sdk.Worker` | Infrastructure, ServiceDefaults | `ume-rag/migrations` | `rag-migrate` |
-| `Ume.Rag.FakeGateway` | `Microsoft.NET.Sdk.Web`, `ContainerFamily noble-chiseled` (as FakeLlm) | ServiceDefaults | `ume-rag/fake-gateway` (tests, R1 test) | dev/CI only |
-| `Ume.Rag.AppHost` | `Aspire.AppHost.Sdk/13.6.5` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
-| `Ume.Rag.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `ume-rag/api`; its own host `rag-tools` only with the first external, OBO or write tool, P3) | chat role of `rag-api`; `rag-admin` |
+| `Kalla.Domain` | `Microsoft.NET.Sdk` | – (no packages except `Microsoft.Extensions.AI.Abstractions` types if needed) | – | – |
+| `Kalla.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql EF/Redis (no `Aspire.Npgsql`: the plain data sources, e.g. for LISTEN, come from Npgsql's `NpgsqlDataSourceBuilder`), DataProtection EF, M.E.AI.OpenAI (not on the chat path: `IGatewayClient` uses a raw `HttpClient`, chat design §2.1) | – | – |
+| `Kalla.ServiceDefaults` | `Microsoft.NET.Sdk`, `IsAspireSharedProject` | OTel, resilience, service discovery | – | – |
+| `Kalla.Retrieval` | `Microsoft.NET.Sdk` | Domain, Infrastructure; Pgvector (knowledge design §2.1) | – | – |
+| `Kalla.Pipelines` | `Microsoft.NET.Sdk` | Domain; JSON Schema validator (§2.2) (engine design §4) | – | – |
+| `Kalla.Answering` | `Microsoft.NET.Sdk` | Domain, Retrieval, Infrastructure | – | – |
+| `Kalla.Api` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering; JwtBearer, OpenApi, Scalar, MCP SDK and `Kalla.Tools` (P2) | `ume-rag/api` | `rag-api` (+ `rag-api-b` from P2) |
+| `Kalla.Worker` | `Microsoft.NET.Sdk.Web` (health + metrics endpoint) | Infrastructure, ServiceDefaults, Pipelines, Retrieval (retrieval evaluator, decompounder; neither `Kalla.Answering` nor `Kalla.Tools`); AngleSharp, SmartReader, Graph (P2), Playwright (P2, only with the renderer), Cronos, Tokenizers | `ume-rag/worker` | `rag-worker` |
+| `Kalla.AdminApi` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults, Answering, Pipelines, `Kalla.Tools` (P2); OIDC, OpenApi, Scalar (the P2 Graph member-group lookup uses a plain `HttpClient`, §2.2) | `ume-rag/admin` (`PublishAdminUi=true`) | `rag-admin` (+ `rag-admin-b` from P2) |
+| `Kalla.MigrationService` | `Microsoft.NET.Sdk.Worker` | Infrastructure, ServiceDefaults | `ume-rag/migrations` | `rag-migrate` |
+| `Kalla.FakeGateway` | `Microsoft.NET.Sdk.Web`, `ContainerFamily noble-chiseled` (as FakeLlm) | ServiceDefaults | `ume-rag/fake-gateway` (tests, R1 test) | dev/CI only |
+| `Kalla.AppHost` | `Aspire.AppHost.Sdk/13.6.5` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
+| `Kalla.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `ume-rag/api`; its own host `rag-tools` only with the first external, OBO or write tool, P3) | chat role of `rag-api`; `rag-admin` |
 
 Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(args)) return;`, then
 `AddDeploymentSecrets()` (key-per-file from `Security:SecretsDirectory`; rag-api also reads `Security:ExtraSecretsDirectory`, a
@@ -244,12 +244,12 @@ directory another job writes, and takes only `OpenWebUi__AdminApiKey` from it), 
 
 | Setting | Values | Default | Effect |
 |---|---|---|---|
-| `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.rag.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
-| `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Ume.Rag.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `ume-rag-sk-` service key |
-| `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
-| `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:IdleWaitSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 30, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
+| `Rag:Roles` (env `Rag__Roles`) on `Kalla.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.rag.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
+| `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Kalla.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `ume-rag-sk-` service key |
+| `Worker:Classes` on `Kalla.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
+| `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:IdleWaitSeconds`, `Worker:StopGraceSeconds` on `Kalla.Worker` | seconds | 10, 30, 10, 30, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
 | `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
-| `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps; each batch is idempotent under `pg_try_advisory_xact_lock(<step>)`, so the P2 a/b slots share or skip work; `false` is an off switch ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
+| `Admin:Retention` on `Kalla.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps; each batch is idempotent under `pg_try_advisory_xact_lock(<step>)`, so the P2 a/b slots share or skip work; `false` is an off switch ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
 
 Splitting Chat from Knowledge later is a Compose change: a second `rag-api` service with `Rag__Roles=chat`,
 `Retrieval__Mode=Http`; no code change (plan §1).
@@ -319,7 +319,7 @@ it to the same database) and
 
 ## 4. Local development
 
-### 4.1 AppHost resource graph (`src/Ume.Rag.AppHost/Program.cs`)
+### 4.1 AppHost resource graph (`src/Kalla.AppHost/Program.cs`)
 
 Same structure as the gateway's `Program.cs`: `AddDockerComposeEnvironment("compose").WithDashboard(false)`, generated
 persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`WaitForCompletion(migrations)`,
@@ -330,7 +330,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `postgres` + database `ragdb` | `AddPostgres("postgres").WithImage("pgvector/pgvector", <pinned tag>)` `.WithDataVolume(DevelopmentVolumes:Postgres)` | – | the stock pgvector image `ume-rag/postgres` is built from (§5.2; pgBackRest is not needed in dev), superuser in dev as in the gateway |
 | `redis` | `AddRedis("redis", password: Secret("redis-password", 48))` | `Redis:Enabled` (default false: the pilot shape, in-memory `IRateLimitStore`/`ISharedCache`) | P2 path: sets `ConnectionStrings:redis`; prefix `ume-rag:` |
 | `keycloak` | `AddKeycloak("keycloak").WithRealmImport("../../dev/keycloak")` | off when `Oidc:Authority` is set | env `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_API_CLIENT_SECRET` |
-| `fake-gateway` | `AddProject<Projects.Ume_Rag_FakeGateway>` | `FakeGateway:Enabled` (default true) | §4.3; `FakeGateway:Latency:*` passed through as in the gateway |
+| `fake-gateway` | `AddProject<Projects.Kalla_FakeGateway>` | `FakeGateway:Enabled` (default true) | §4.3; `FakeGateway:Latency:*` passed through as in the gateway |
 | `ollama` | `AddOllama("ollama").AddModel("bge-m3")` | `Ollama:Enabled` (default false, dev only, throws in publish mode as the gateway does) | real BGE-M3 embeddings behind the fake gateway |
 | `parser` | `AddDockerfile("parser", "../parser")` | `Parser:Mode` = `container` (default) / `local` (`AddUvicornApp` from `Aspire.Hosting.Python`, hot reload) / `off` | internal endpoint only |
 | `clamav` | `AddDockerfile("clamav", "../../images/clamav").WithVolume("ume-rag-clamav-db")` | `ClamAv:Mode` = `on` (default) / `off` (no container; the worker gets `ClamAv__Mode=off` and stores files unscanned, connectors design §11) | dev freshclam uses the public mirror |
@@ -373,7 +373,7 @@ pilot hosts, no test users. It is imported into realm `ume` by the gateway's Key
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
 
 The gateway's FakeLlm cannot be reused: its `/v1/embeddings` returns **8-dimensional** vectors (`Vector()` takes 8
-hash bytes) and it sends no `x-ume-residency` header. `Ume.Rag.FakeGateway` copies `FakeLatency.cs` and the chat
+hash bytes) and it sends no `x-ume-residency` header. `Kalla.FakeGateway` copies `FakeLatency.cs` and the chat
 streaming code, and adds:
 
 | Endpoint / behaviour | Purpose |
@@ -394,7 +394,7 @@ streaming code, and adds:
 | Scripted tool modes (P2): a fixture lists the assistant messages per step (`tool_calls` with ids and arguments, streamed in deltas, or text) | deterministic agent-loop tests (tools design §11.2) |
 | **Throughput model** (P1, not built yet): `Embed:TokensPerSecond` (a token bucket emulating a GPU-served embedding model), `Embed:Replicas`, `Embed:MaxQueue` (beyond it `429` with `Retry-After`), `Embed:QueryLane` (a separate bucket for query embeddings); chat keeps the latency profile (`FirstTokenMs` 400, `TokenIntervalMs` 25, `JitterPercent` 30, as the gateway's `benchmarks/compare`) | the embedding caps, the query-lane trigger and the scale test (`scale.yml`, §8.1; reasoning: performance pass §7) |
 
-**Contract test** (`tests/Ume.Rag.ContractTests`): the FakeGateway's answers to `/v1/ume/context`, `/v1/models`, an
+**Contract test** (`tests/Kalla.ContractTests`): the FakeGateway's answers to `/v1/ume/context`, `/v1/models`, an
 acted request and a streamed request with the stream cost are validated against the pinned OpenAPI document, so the
 fake cannot drift from the gateway's contract; the pin is bumped with each gateway integration phase.
 
@@ -911,7 +911,7 @@ cannot, since it is not superuser) → `run --rm rag-migrate` → services. The 
 operator's own that lists both ports of each service (`deploy/proxy/nginx.conf.example`, the lines marked `#rolling`):
 the stack's `rag-proxy` (profile `proxy`) knows one slot of each. **Pilot (one slot)**: `rag-api` and `rag-admin`
 are replaced together in a short announced maintenance window (`release.yml` ships them from the same release: the
-admin test panel and answer judge run the same `Ume.Rag.Answering` as the api). **From P2 (a/b slots)**: replace `rag-api`/`rag-api-b`, then
+admin test panel and answer judge run the same `Kalla.Answering` as the api). **From P2 (a/b slots)**: replace `rag-api`/`rag-api-b`, then
 `rag-admin`/`rag-admin-b`, each only while the other is healthy (gateway logic). Always: **worker stop-then-start** (no
 overlap: its pool would exceed the role's connection limit, and job leases make a short pause harmless) → parser and
 clamav recreated if their image changed (the worker retries the in-flight range).
@@ -1010,14 +1010,14 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 | `flake-hunt.yml` | P2 | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `parser-robustness.yml` | P2 | weekly, nightly once stable; dispatch | new | Atheris fuzzing of our own parser code (zip pre-check, sniffing, name sanitiser; the attachment splitter with email), 10 minutes each, and the mutation run against the container (parser design §15.4) |
 | `perf.yml` | P1 (before the pilot) | weekly + before each release (dispatch) | new | R1 release test (§8.3) |
-| `scale.yml` | P2 | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §7): `tests/scale/Ume.Rag.FakeSites` (synthetic multi-host site), `tests/scale/Ume.Rag.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
+| `scale.yml` | P2 | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §7): `tests/scale/Kalla.FakeSites` (synthetic multi-host site), `tests/scale/Kalla.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
 | `evaluation.yml` | P1 (before the pilot) | nightly, dispatch | new | evaluation sets against the **test** deployment with that deployment's own embedding profile (EU-hosted `text-embedding-3-large` in the pilot; on-prem BGE-M3 once it exists; runner on the test host, §12.4) |
 | `audit.yml` | P1 | daily 04:17, dispatch; no push or PR trigger (as built; no decision names it, it is CI practice) | new | the dependency audits of `main` (§8.4): `dotnet list … --vulnerable`, `npm audit` and `pip-audit` (`parser.yml`'s two commands), so an advisory against unchanged code is found without waiting for a PR; the .NET and npm reports are read by `scripts/audit/audit.py`, shared with `verify.yml` (npm exceptions, dated: dev-only ones in `scripts/audit/npm-audit-exceptions.txt`; production ones in `npm-production-exceptions.txt`, only for a package the built bundle doesn't contain, checked against a source-map build's packages, #853); runs on the self-hosted runner, so its schedule is on |
 | `entra.yml` | P0 (package 1) | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/`, which owns **only RAG's own registrations** (`ume-rag-admin` and the API registration; never the gateway's); deployer identity `Application.ReadWrite.OwnedBy`, plus `Group.Create` or `Group.ReadWrite.All` for the groups (open for P2, H7; identity design §12.4), so admin consent, role assignments and client secrets stay manual steps (identity design §12) |
 
 ### 8.2 What runs on every PR (`verify.yml`, `parser.yml`)
 
-Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/`, `deploy/`, the admin UI's sources (`src/admin-ui/`) and the browser tests (`tests/e2e/`), where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `backend` runs its tests through `scripts/ci/backend-tests.sh`: every test project as a process of its own, all at once, and `Ume.Rag.AdminApi.Tests` as five processes (the classes of its database collections `admin-db-N` by collection, the rest in a fifth), because its collections wait for one another inside one process (measured 2026-11-15: 234–259 s as one process, 148 s as two); `images` runs only when `images/postgres/`, `images/clamav/` or
+Pull requests stay lean (user, 2026-11-05): `backend` runs unless the pull request changes only design documents, `docs/`, `deploy/`, the admin UI's sources (`src/admin-ui/`) and the browser tests (`tests/e2e/`), where it still runs for the files its tests read (`deploy/postgres/`, `deploy/keycloak/`, `docs/security-events.md`, `docs/openapi/`); `backend` runs its tests through `scripts/ci/backend-tests.sh`: every test project as a process of its own, all at once, and `Kalla.AdminApi.Tests` as five processes (the classes of its database collections `admin-db-N` by collection, the rest in a fifth), because its collections wait for one another inside one process (measured 2026-11-15: 234–259 s as one process, 148 s as two); `images` runs only when `images/postgres/`, `images/clamav/` or
 `deploy/postgres/` changed, `evaluation-smoke` only when the code on its path (worker, retrieval, answering, api,
 infrastructure, pipelines, domain), `tests/evaluation/`, the Postgres image or the package and build files changed, and
 the parser jobs only when the parser changed; `e2e` runs only by hand (dispatch) or from `release.yml` when asked
@@ -1029,13 +1029,13 @@ run every other job. Locally, a change runs the test projects it touches; the fu
 |---|---|---|
 | deploy-checks | `docker compose … config --quiet` for `compose.rag.yaml` alone and with each supported combination of its overlays (backup, hardened, both, the 24 GB and ClamAV confs overlays, rolling, all of them), each also with every profile; every image pinned by digest; each optional service only with its profile; the Kubernetes manifests render; `build-stack.sh --check` (the committed Portainer stack is what `compose.rag.yaml` gives); the release bundle's pins; `deploy/tests/kubernetes-secrets.sh` (`create-secrets.sh` on the stacks' bootstrap, run twice); `deploy/tests/compose-init.sh` (`init-deployment.sh`: a first run, a re-run, the options and their overlays, the refusals, and the host firewall's rules and subnets against `compose.hardened.yaml`); `deploy/tests/compose-bootstrap.sh` (rag-bootstrap in its Compose form run twice on the same volumes keeps every secret, owner and mode; `escrow-keys.sh` and `cert-expiry.sh` read the volumes); `deploy/tests/pilot-stack.sh` (the caps and limits of §6.2, Open WebUI's restrictions, the upload copy); the Portainer stack's `rag-bootstrap` run twice (`deploy/tests/portainer-rerun.sh`, #697), its host names (`portainer-hosts.sh`) and the previous release's variables (`portainer-upgrade.sh`); the certificate expiry check; `shellcheck` on the deployment scripts and `systemd-analyze verify` on the host units | gateway |
 | images (when an image changed) | build `ume-rag/postgres` from `images/postgres/Dockerfile` and run `deploy/postgres/test.sh` (pgvector version, HNSW build, `pg_stat_statements`, `wal_compression=lz4`, `archive-push` from inside the image, §5.2); build `ume-rag/clamav` and run `images/clamav/test.sh` (§5.5). The parser image is built in `parser.yml` | new |
-| backend | `dotnet build UmeRag.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against `ume-rag/postgres` built from the commit** (the job builds `images/postgres/Dockerfile` as `ume-rag.local/postgres:ci` and sets `UME_RAG_TEST_POSTGRES_IMAGE`, read by `TestPostgres.Image`; it builds `ume-rag.local/clamav:ci` the same way for the ClamAV client test) and, for the P2 Redis implementations of `IRateLimitStore`/`ISharedCache`, Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
+| backend | `dotnet build Kalla.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against `ume-rag/postgres` built from the commit** (the job builds `images/postgres/Dockerfile` as `ume-rag.local/postgres:ci` and sets `UME_RAG_TEST_POSTGRES_IMAGE`, read by `TestPostgres.Image`; it builds `ume-rag.local/clamav:ci` the same way for the ClamAV client test) and, for the P2 Redis implementations of `IRateLimitStore`/`ISharedCache`, Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
 | base-image scan (`audit.yml`, `images`) | Grype on the last release's eight images, daily (A-27, #507); `scripts/audit/audit.py grype` fails on a High or Critical finding with a fix, except one listed with a last day in `scripts/audit/image-scan-exceptions.txt` (only for code the image cannot reach, #818; an expired or unused exception is a warning) | gateway (extended) |
 | admin-ui | `npm ci`, `npm audit` (any advisory fails, except the dated exceptions in `scripts/audit/`; a production one only for a package a source-map build shows is not in the bundle), `lint`, `typecheck`, `test`, `build`, the size budget (§2.3; initial JS includes the landing route `OverviewView`) in `src/admin-ui`; design-system drift report (warning). `tests/e2e` joins this job once it exists (named `admin-ui`, not `ui`) | gateway |
 | parser (`parser.yml`) | `uv lock --check`, `ruff check`, `pytest` (incl. supervisor tests with a fake converter and `test_offline.py` with network disabled), `export_schema.py` + `git diff --exit-code contracts/` , `pip-audit` | new |
 | parser-image (`parser.yml`) | builds the parser image's `test` target, whose tests run during the build with no network; built without `REVISION`, so an unchanged parser reuses the cached test result (re-running the job does not re-run the tests) | new |
-| contract (`parser.yml`) | `Ume.Rag.ContractTests` start the parser image (built with `REVISION`) (Testcontainers) and convert `tests/fixtures/parser/*` with the worker's client; compare structure to golden JSON (tolerant to timings and versions); responses and error fixtures validated against `contracts/parser/v1/` | new |
-| evaluation-smoke (when its path changed) | AppHost-free, the trait `Category=EvaluationSmoke` in `Ume.Rag.Worker.Tests` (it hosts the worker and rag-api in process, with FakeGateway and Testcontainers Postgres), which `backend` leaves out: ingest `tests/evaluation/smoke` (13 pages, through the worker as one `public` upload batch; no parser or ClamAV image), run the 30 questions through rag-api; recall@10 ≥ 0.8 and every answer has a citation; the smoke collection uses `{"coverageMaxDistance":0.85}` (`SmokeSet.RetrievalSettings`), because the FakeGateway's feature-hashing embeddings put the best chunk at cosine distance 0.33–0.78; with it the job also checks that the worker's evaluator and `POST /v1/retrieve` return the same chunks in the same order | new |
+| contract (`parser.yml`) | `Kalla.ContractTests` start the parser image (built with `REVISION`) (Testcontainers) and convert `tests/fixtures/parser/*` with the worker's client; compare structure to golden JSON (tolerant to timings and versions); responses and error fixtures validated against `contracts/parser/v1/` | new |
+| evaluation-smoke (when its path changed) | AppHost-free, the trait `Category=EvaluationSmoke` in `Kalla.Worker.Tests` (it hosts the worker and rag-api in process, with FakeGateway and Testcontainers Postgres), which `backend` leaves out: ingest `tests/evaluation/smoke` (13 pages, through the worker as one `public` upload batch; no parser or ClamAV image), run the 30 questions through rag-api; recall@10 ≥ 0.8 and every answer has a citation; the smoke collection uses `{"coverageMaxDistance":0.85}` (`SmokeSet.RetrievalSettings`), because the FakeGateway's feature-hashing embeddings put the best chunk at cosine distance 0.33–0.78; with it the job also checks that the worker's evaluator and `POST /v1/retrieve` return the same chunks in the same order | new |
 | e2e | browser tests (gateway `tests/e2e` setup): the admin **pilot journey** (admin design §5.4, §11.4) run with mouse and keyboard only, against a static fixture site container (nginx, Swedish pages and PDFs); the extended accessibility spec (axe, target size, reflow; zero CSP violations); role journeys | gateway (release and dispatch, not every PR: the gateway only checks types on PR; no schedule; Decisions "E2E only on release or by hand") |
 | sbom (in `release.yml` only, not on a PR) | `dotnet publish` + `Microsoft.Sbom.DotNetTool@4.1.13`, artifact `ume-rag-spdx`; Syft SBOMs for the non-.NET images (Syft v1.55.0 in `release.yml`; to-verify #91 resolved) | gateway (extended) |
 
@@ -1074,7 +1074,7 @@ p50/p95/p99).
 - **No content in telemetry** (plan §8a): no prompts, chunk text, document titles or URLs of `sensitive` sources;
   query strings stripped (gateway); the worker's trace filter also removes `url.full` and `server.address` from fetch
   spans (connectors design §16). A unit test scans captured telemetry from a test chat for the test content.
-- **Security events**: category `Ume.Rag.Security` (`SecurityEvents` copied from the gateway, `Printable()` included),
+- **Security events**: category `Kalla.Security` (`SecurityEvents` copied from the gateway, `Printable()` included),
   same collector rules (`deploy/otel/collector-siem.example.yaml`, filter extended to both categories). Gateway ids are
   1001–3003 (2008, 3003 added by gateway release 2; 2007 with the P2 Graph lookup); ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
   `5004 rag.config.stale_refused`, `5005 rag.ceiling.refused`, `5101 rag.egress.blocked` (SSRF), `5102
@@ -1154,13 +1154,13 @@ pilot's models are EU-hosted through the gateway.
 | # | Task (each a small, verifiable deliverable) | Done when | Refs |
 |---|---|---|---|
 | 1 | Add the code layout to this repo (§1); copy `global.json`, `Directory.Build.*`, `.editorconfig`, `.gitattributes`, `dotnet-tools.json`, `aspire.config.json`, `.githooks/pre-commit` | `dotnet build` of an empty solution passes with warnings as errors | plan §11.1 |
-| 2 | Projects from §3 (empty endpoints; P2 `Ume.Rag.Tools` and the MCP template not yet), incl. the `Ume.Rag.Retrieval`, `Ume.Rag.Pipelines` and `Ume.Rag.Answering` skeletons, `UmeRag.slnx`, `tests/` projects and `TestKit` | `dotnet test` runs (0 tests is fine) | plan §11.1, knowledge design §17, engine design §20 |
+| 2 | Projects from §3 (empty endpoints; P2 `Kalla.Tools` and the MCP template not yet), incl. the `Kalla.Retrieval`, `Kalla.Pipelines` and `Kalla.Answering` skeletons, `Kalla.slnx`, `tests/` projects and `TestKit` | `dotnet test` runs (0 tests is fine) | plan §11.1, knowledge design §17, engine design §20 |
 | 3 | `verify.yml` (backend, admin-ui, deploy-checks, images) | green PR in GitHub | plan §11.1 |
-| 4 | `Ume.Rag.ServiceDefaults` copied; health `/health/live`, `/health/ready`, `/version`, `--health-check` in every service | probe exits 0/1 in a container; OTLP traces visible in the Aspire dashboard | plan §11.2 |
+| 4 | `Kalla.ServiceDefaults` copied; health `/health/live`, `/health/ready`, `/version`, `--health-check` in every service | probe exits 0/1 in a container; OTLP traces visible in the Aspire dashboard | plan §11.2 |
 | 5 | Postgres: `ume-rag/postgres` (pinned stock pgvector image + PGDG `pgbackrest`) + `deploy/postgres/test.sh`; `SwedishDecompounder` with the `sv_SE` word list and its unit tests; P0 comparison against Postgres `ispell` recorded | `bygglovsansökan` → `bygglov`, `ansökan` passes; image test green; comparison recorded (data-model §14) | plan §11.3, knowledge P0 |
-| 6 | `deploy/postgres/init.sql`, `pg_hba.conf`, `app-roles.sql` from data-model §1; `Ume.Rag.MigrationService` with schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, day-partitioned `RunItems`, `rag_partition_maintain()`; role defaults `hnsw.ef_search`/`hnsw.iterative_scan`/`hnsw.max_scan_tuples`; `content.rag_or_query`; `DatabaseRoleTests`, connection caps and `statement_timeout` asserted; `SwedishTextSearchTests` (a part matches through Postgres); pool sizes measured | integration tests green against the pinned image; pool measurement recorded | plan §11.3, knowledge design §17 |
+| 6 | `deploy/postgres/init.sql`, `pg_hba.conf`, `app-roles.sql` from data-model §1; `Kalla.MigrationService` with schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, day-partitioned `RunItems`, `rag_partition_maintain()`; role defaults `hnsw.ef_search`/`hnsw.iterative_scan`/`hnsw.max_scan_tuples`; `content.rag_or_query`; `DatabaseRoleTests`, connection caps and `statement_timeout` asserted; `SwedishTextSearchTests` (a part matches through Postgres); pool sizes measured | integration tests green against the pinned image; pool measurement recorded | plan §11.3, knowledge design §17 |
 | 7 | Config-version library (`ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, grace window `Config:MaxUnconfirmedSeconds`) and log scope; serialised config writes (`FOR UPDATE` on the version row) | tests: a revoked key is refused as soon as the notification arrives; keyed requests get 503 after the window without confirmation; readiness stays green within it; two concurrent saves cannot both pass a cross-rule | plan §4, §11.2 |
-| 8 | `Ume.Rag.FakeGateway` (1024-dim embeddings, residency headers, per-level dev keys, `400` without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met` and 503 `Retry-After` modes, `/v1/models` filtered by the ceiling, rerank fake, catalog); gateway client `DelegatingHandler` that refuses a call without an explicit ceiling or with a key of another level | API tests use it; a wrong-residency answer is aborted; the handler test covers every call site that exists | README P0 (fake gateway), plan §6 |
+| 8 | `Kalla.FakeGateway` (1024-dim embeddings, residency headers, per-level dev keys, `400` without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met` and 503 `Retry-After` modes, `/v1/models` filtered by the ceiling, rerank fake, catalog); gateway client `DelegatingHandler` that refuses a call without an explicit ceiling or with a key of another level | API tests use it; a wrong-residency answer is aborted; the handler test covers every call site that exists | README P0 (fake gateway), plan §6 |
 | 9 | `dev/keycloak/ume-realm.json` (incl. `rag-reviewer`, admin design §12); OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); `OidcClaimMappingTests` copied; audit actor `oid` | sign-in to the empty admin UI as each test user shows the right roles and departments (incl. a department from a group claim) | identity §8 P0 |
 | 10 | Keys in gateway style (`ume-rag-sk-`, HMAC + pepper, prefix, rotation grace) in `config."Keys"` | key auth tests copied from the gateway's `KeyTests` pass | README P0 (keys) |
 | 11 | Admin UI skeleton with the copied design system in Swedish (`labels.ts`/`messages.ts` skeleton), Vite on 5174, `design-system.lock`; admin API write path (`AdminContext`: change + outbox + audit in one transaction), `PermissionMatrix` role tests, org sync against the FakeGateway catalogue, `contracts/admin/v1/error-codes.json` export | lint/typecheck/test/build green; shell looks like the gateway's; a saved change bumps the config version with one audit entry; synced departments visible | admin P0 (admin design §12) |
@@ -1195,7 +1195,7 @@ decided form of the simplification pass (2026-10-30).
 
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|
-| 1 | FakeLlm reuse (plan §1 "or reuse gateway FakeLlm") | FakeLlm embeddings are 8-dim and it sends no residency header | Own `Ume.Rag.FakeGateway` (§4.3), copying `FakeLatency.cs`; update plan §1 wording |
+| 1 | FakeLlm reuse (plan §1 "or reuse gateway FakeLlm") | FakeLlm embeddings are 8-dim and it sends no residency header | Own `Kalla.FakeGateway` (§4.3), copying `FakeLatency.cs`; update plan §1 wording |
 | 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Delivered in gateway release 1 (`../gateway-changes/design.md` §6: `dimensions`, `fake-embed-1024`; weakness review §5); before it, Ollama `bge-m3` in the gateway |
 | 3 | Connection caps vs rolling slots (data-model §1.1) | Two slots double a role's connections | Smaller pools (api 12 with `Retrieval:MaxConcurrentSearches` 4, admin 5, worker 10 per instance (the worker sets `Maximum Pool Size=10` when its connection string names none); `max_connections` 100), limits with room for the P2 b slots; worker stop-then-start (§7.3); measured in P0, confirmed in the R1 test |
 | 4 | Self-hosted runner | The test host and its gateway are on the municipal network; GitHub-hosted runners cannot reach them | The self-hosted runners `ume-rag` and `ume-rag2` run every workflow (§8). **Open: IT security must approve** a runner on the test host for `perf.yml`/`evaluation.yml`. Fallback: run both manually on the test host with a script |

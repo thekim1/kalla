@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Ume.Rag.Worker.Connectors.Egress;
+using Kalla.Worker.Connectors.Egress;
 
 namespace RendererSpike;
 

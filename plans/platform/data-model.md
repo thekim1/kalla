@@ -5,7 +5,7 @@ Detail round, step 1. Covers every table, role, index, queue, key and blob path 
 something the plans leave open, or found two plans disagreeing, the choice is listed in §12 with a recommendation.
 Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md))
 and §15 (reasoning: [`../archive/passes/weakness-review.md`](../archive/passes/weakness-review.md)); the rest of the document does not mention them.
-Where the schema is built, the EF model and migrations (`src/Ume.Rag.Infrastructure/Persistence`) are the source;
+Where the schema is built, the EF model and migrations (`src/Kalla.Infrastructure/Persistence`) are the source;
 this document describes them and the parts still to build.
 
 **Gateway conventions mirrored** (`~/git/llmgateway`, user decision: be as compatible as possible):
@@ -166,7 +166,7 @@ referenced **by id without a FK**.
 | `Collections` | Search scope, access and classification | `Id`, `Slug varchar(100)`, `Name`, `DepartmentId`, `OwnerTeamId`, `GatewayKeyId uuid NULL` (the gateway's id of the assigned key its indexing, re-embedding and evaluation run as; null = the worker's credential key; cost-attribution §4), `Classification`, `EmbeddingProfileId` FK, `RetrievalSettings jsonb` (`vectorWeight`, `keywordWeight`, `candidates`, `maxChunksPerDocument`, `recency` (`null` = off or `{ halfLifeDays, weight, kinds }`, age decay after fusion; the `website` template sets 730 / 0.15 / `["pdf"]`; weakness review §3), `coverageMaxDistance`, `coverageMinKeywordScore`, `expandMaxTokens`; unset values fall back to `Settings.Retrieval`; top-k is per request, not here; knowledge design §12.1), `PublishedAt timestamptz NULL` (null = not yet published by its owner, invisible to retrieval except the admin test panel), `SharedWith varchar(20) NOT NULL DEFAULT 'department'` (`department` = only the owning department, `selected` = also the departments in `CollectionShares`, `municipality` = every active department; admin design §3.2), `ContactName varchar(200)`, `ContactEmail varchar(254)` (the responsible person or a functional mailbox, shown to departments that may link it), `DeletedAt` | U `Slug` WHERE `DeletedAt` IS NULL (a deleted one's name is free at once, Decisions "Deleting knowledge bases, sources and assistants"); IX `DepartmentId`; `CK_Collections_SharedWith`; no FK on `GatewayKeyId` (a revoked key leaves `GatewayKeys`) | ≥ every source's level (validated on save); `GatewayKeyId` per V39 (below) |
 | `CollectionShares` | Departments a collection is shared with when `SharedWith = 'selected'` (rows are kept but unused at the other levels) | `CollectionId` FK (Cascade), `DepartmentId` FK (Restrict), `SharedBy`, `SharedAt`; no `Id`, so its outbox rows carry no `EntityId` | PK (`CollectionId`, `DepartmentId`) | – |
 | `Sources` | One connector instance; belongs to exactly one collection | `Id`, `CollectionId` FK (**immutable**: chunks copy it, §2.2; moving a source = a new source), `Type` (`url-list`/`crawl`/`upload`/`sharepoint`), `Name`, `Classification`, `Settings jsonb` (fields tagged identity/scope/behaviour/cosmetic), `DemoteRules jsonb GENERATED ALWAYS AS ("Settings" -> 'demote') STORED` (crawl `demote` URL patterns with factors, read by retrieval without granting `Settings`; when several patterns match a URL the lowest factor applies, knowledge design §6.5; reasoning: weakness review §3), `Schedule varchar(100)` (cron), `PipelineId` FK, `ContainsThirdPartyText bool NOT NULL DEFAULT true` (set at approval; drives untrusted labelling, tools design §6), `State` (`active`/`paused`), `CreatedAt timestamptz NOT NULL DEFAULT now()` (the scheduler counts a new source's first run from it), `DeletedAt` | IX `CollectionId`; IX `PipelineId` | ≤ collection level |
-| `Pipelines` | Parameter set for a source type's fixed pipeline (template); platform rows are the defaults | `Id`, `DepartmentId` (null = platform default), `Name`, `TemplateId varchar(50)` (one linear template per source type; stages in code, `Ume.Rag.Pipelines`), `PublishedVersionId` FK → `PipelineVersions` (nullable) | U (`DepartmentId`, `Name`) | – |
+| `Pipelines` | Parameter set for a source type's fixed pipeline (template); platform rows are the defaults | `Id`, `DepartmentId` (null = platform default), `Name`, `TemplateId varchar(50)` (one linear template per source type; stages in code, `Kalla.Pipelines`), `PublishedVersionId` FK → `PipelineVersions` (nullable) | U (`DepartmentId`, `Name`) | – |
 | `PipelineVersions` | Immutable once published: (template id, parameter set) as versioned JSON | `Id`, `PipelineId` FK, `Number int`, `State` (`draft`/`published`/`superseded`; the re-processing plan and the evaluation report are job results, engine design §12), `Definition jsonb` (template id, template version and parameters, `contracts/pipeline/v2/definition.schema.json`, engine design §3.1; validated against the template's parameter schema; each parameter carries effect tags, from which publish computes the re-processing plan), `CreatedBy`, `PublishedAt`, `EvaluationRunId uuid` (→ content, no FK; the newest succeeded `publish-report` for the version, linked by the admin from the job result so it outlives job retention; not audited. A version published in several collections keeps one; every collection's report stays in `EvaluationRuns`) | U (`PipelineId`, `Number`) | – |
 | `Assistants` | Assistant = OpenAI model: identity, owner, audiences, retention and the version pointers; the versioned settings are in `AssistantVersions` (simplification pass §15) | `Id`, `Slug varchar(100)` (model name), `Name`, `Description varchar(500)` and `ContactName varchar(200)`, `ContactEmail varchar(254)` (the contact owner: a person or a functional mailbox; both shown where a client can display them, chat design §3.1), `DepartmentId`, `OwnerTeamId`, `GatewayKeyId uuid NULL` (the gateway's id of the assigned key every call of its turns and its test panel run as; null = the service's credential key; cost-attribution §4), `Classification`, `HistoryMode`, `RetentionDays int`, `AllowedOrigins text[]`, `State` (`active`/`archived`), `PublishedVersionId uuid NULL` FK → `AssistantVersions` (the version chat serves; null = never published, not listed), `DraftVersionId uuid NULL` FK → `AssistantVersions` (the one open draft), `DeletedAt timestamptz NULL` (deleted: served to nobody and never restored, purged by §8). No `Mode` column: the mode is derived (below) | U `Slug` WHERE `DeletedAt` IS NULL; no FK on `GatewayKeyId` (a revoked key leaves `GatewayKeys`) | `GatewayKeyId` per V39 (below); ≥ the published version's collections, skills and tool servers' **result level**; ≤ every reachable tool server's **clearance** (tools design §5.3); history/retention within the level's policy; checked on publish and whenever a linked object's level changes |
 | `AssistantVersions` | Versioned settings: one open draft and one published version per assistant; published and superseded rows are immutable | `Id`, `AssistantId` FK (Cascade), `Number int`, `State` (`draft`/`published`/`superseded`), `GatewayModel` (validated against the gateway's `/v1/models` at the level's ceiling on save and on publish), `SystemPrompt text` (the instructions), `QuerySteps jsonb` (`{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: "off" (`off`/`chat`/`gateway`, absent = `off`; knowledge §6.7) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens?: null (unset: the model's `ContextWindow`, else 16,384), maxOutputTokens?: null (unset: the model's `MaxOutputTokens`, chat design §6.3), temperature?: null (unset: not sent), language: "auto", generalKnowledge: "off" }, attachments: { enabled: false } }`, `attachments` P2; chat design §5–§6, §10.3, §15.2; an assistant that uses tools (below) adds `agent: { maxToolCalls: 8, maxSeconds: 60, maxCostUsd: 0.05, maxParallelCalls: 4 }` and `answer.contextTokens` default 32,768 when the model's window is unknown, tools design §6.5, §6.9), `NotFound jsonb` (`sv`, `en`, `links[]{title,url}` = the contact links; empty texts fall back to `Settings.Chat`; chat design §10.1), `CollectionLinks jsonb NOT NULL DEFAULT '[]'` (`[{ collectionId, tags[] }]`: the direct collections, ≤ 20, each with ≤ 20 topic tags in the chunk tag format, processing §7; empty `tags` = the whole collection; the assistant's only knowledge, knowledge design §4.2), `Skills jsonb NOT NULL DEFAULT '[]'` (P2: `[{ skillId, excludedToolIds[] }]`, ≤ 20, always the skill's served version; tools design §5.1 layer 3), `RestoredFromVersionId uuid NULL`, `TestRunId uuid NULL` (the latest `assistant-tests` run, advisory; → `content."EvaluationRuns"`, no FK), `CreatedBy`, `CreatedAt`, `UpdatedAt`, `UpdatedBy`, `PublishedBy`, `PublishedAt` | U (`AssistantId`, `Number`); partial U (`AssistantId`) `WHERE "State" = 'draft'`; partial U (`AssistantId`) `WHERE "State" = 'published'` | links within the assistant's level (row above); collections of the assistant's own department or shared with it (`SharedWith`, `CollectionShares`; admin design §3.2) |
@@ -190,7 +190,7 @@ referenced **by id without a FK**.
 | `Keys` | Gateway-style keys | as gateway `VirtualKey`: `Id`, `ClientId` FK, `TeamId` FK → `Teams` (restrict; teams are deactivated, never deleted), `Kind` (`sk`/`pk`), `Name`, `Prefix varchar(20)` (`ume-rag-sk-AbC1`), `KeyHash varchar(64)` (hex HMAC-SHA256, pepper `Security__KeyPepper`), `EncryptedSecret`, `Scopes jsonb` (assistants/collections), `AllowedOrigins`, `AllowedIpRanges`, `RequestsPerMinute` (`int NULL`, 1–100,000: chat messages per minute when the key itself is the subject, null = `Settings.Chat.messagesPerMinutePerUser`; chat design §4.1 step 4), `IsEnabled`, `CreatedAt`, `CreatedBy`, `ExpiresAt`, `RevokedAt`, `GraceUntil`, `RotatedToKeyId` | U `KeyHash`; concurrency tokens `RotatedToKeyId`, `RevokedAt` (as gateway) | key's client ceiling applies |
 | `KeyLastUse` | `LastUsedAt` split out so key use never bumps the config version | `KeyId` PK, `LastUsedAt` | – | – |
 | `DataProtectionKeys` | ASP.NET Data Protection key ring | EF standard | – | – |
-| `AdminSessions` | Admin BFF sessions (`PostgresAdminSessionStore`; replaces the gateway's Redis store, simplification pass §14) | `SessionId varchar(64)` (the cookie's random id), `Value bytea` (ticket, Data-Protection-encrypted with purpose `Ume.Rag.AdminApi.Session.v1`, so a writer cannot forge a session), `ExpiresAt timestamptz` (≤ 8 h per sign-in or extension, never past `Admin:MaxSessionHours` 12 h) | PK `SessionId`; IX `ExpiresAt` | – (no content; a read ignores expired rows; sign-out deletes the row) |
+| `AdminSessions` | Admin BFF sessions (`PostgresAdminSessionStore`; replaces the gateway's Redis store, simplification pass §14) | `SessionId varchar(64)` (the cookie's random id), `Value bytea` (ticket, Data-Protection-encrypted with purpose `Kalla.AdminApi.Session.v1`, so a writer cannot forge a session), `ExpiresAt timestamptz` (≤ 8 h per sign-in or extension, never past `Admin:MaxSessionHours` 12 h) | PK `SessionId`; IX `ExpiresAt` | – (no content; a read ignores expired rows; sign-out deletes the row) |
 | `ConfigVersion`, `ConfigOutbox` | R7 (§5) | | | |
 
 The gateway keys a service authenticates with (one credential key per service from the gateway's integration phase 1,
@@ -404,13 +404,13 @@ P2 attachment chunks reach these tables through the API's internal route (chat d
 | `AuthFailures` | Refused credentials, aggregated per 10 s bucket (identity design §6.3) | gateway `AuthFailure` columns + `Credential varchar(20)`, `ClientId uuid`; never the presented value | IX `FirstSeen` |
 | `ToolDefinitionObservations` | Tool hub saw a definition differing from the pinned one (tool disabled in memory at once, re-approval shown in admin) | `Id bigint identity`, `ToolServerId`, `ToolId` (null for `added`/`instructions-changed`), `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`, tools design §4.4), `ObservedHash bytea`, `Definition jsonb`, `ObservedAt` | IX (`ToolId`, `ObservedAt`) |
 
-Security events are not stored: like the gateway (ADR 015) they go to OpenTelemetry in `Ume.Rag.Security`.
+Security events are not stored: like the gateway (ADR 015) they go to OpenTelemetry in `Kalla.Security`.
 
 ## 3. Search indexes and the retrieval statements
 
 ### 3.1 Swedish text search: .NET decompounder + built-in `swedish`
 
-Compounds are split in .NET by `SwedishDecompounder` (`Ume.Rag.Retrieval`, used by the worker and the query side):
+Compounds are split in .NET by `SwedishDecompounder` (`Kalla.Retrieval`, used by the worker and the query side):
 driven by the `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit, LGPL-3.0; separate,
 replaceable files next to the application with their licence texts, repo-and-deployment §5.2). Linking morphemes
 (`s`, vowel elision) come from the list's own suffix rules and compound-only stems, not
@@ -472,7 +472,7 @@ requires recomputing `SearchText` (worker command `reindex-fts`, in batches; a r
 
 ### 3.3 Retrieval statements (three short statements, knowledge design §6)
 
-The statements are defined once, in knowledge design §6.2–§6.3 (owned by `Ume.Rag.Retrieval`'s `PostgresSearchIndex`
+The statements are defined once, in knowledge design §6.2–§6.3 (owned by `Kalla.Retrieval`'s `PostgresSearchIndex`
 and the knowledge role); this section only summarises the rules this schema must support, so two copies of the SQL
 cannot drift:
 
@@ -499,7 +499,7 @@ cannot drift:
   `LiveChunkSetId` as a safety net (non-live sets are already invisible through `DeletedAt`, §2.2); the documents of
   the hits with their `DisplayName`.
 - RRF fusion, age decay and `demote` (knowledge design §6.5), `(DocumentId, TextHash)` dedup, the per-document cap, the optional reranker (`IReranker`), coverage and
-  the final top-k run in .NET (`Ume.Rag.Retrieval`, knowledge design §6.5–§8). There is no parent join (flat chunks;
+  the final top-k run in .NET (`Kalla.Retrieval`, knowledge design §6.5–§8). There is no parent join (flat chunks;
   sections come from neighbouring chunks, knowledge design §9). `hnsw.ef_search`, `hnsw.iterative_scan` and
   `hnsw.max_scan_tuples` are role defaults (§1.1), not per-query `SET LOCAL`.
 
@@ -586,10 +586,10 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
   the department may take), buffered non-fenced completions (flushed within 100 ms by one `UPDATE … FROM unnest`;
   fenced completions stay in their transaction) and the recursive-CTE loose index scan in place of the `GROUP BY`
   (to-verify #9) come in P2 behind the same `IJobQueue` seam (performance pass §3.4).
-- **`IJobQueue`** (`Ume.Rag.Domain/Ports/IJobQueue.cs`, the code is the reference): enqueue (optionally inside the
+- **`IJobQueue`** (`Kalla.Domain/Ports/IJobQueue.cs`, the code is the reference): enqueue (optionally inside the
   caller's `DbTransaction`), ready departments per class, dequeue of one job, per-instance heartbeat over the running
   leases, complete (optionally in a transaction, for fenced writes), fail, release and cancel a run's open jobs; the wake-ups
-  (`JobWakeUps`) live in `Ume.Rag.Infrastructure`.
+  (`JobWakeUps`) live in `Kalla.Infrastructure`.
 
 ```sql
 -- Ready departments, and how long until the class's next not-yet-ready job (the idle lane's wait, #505).
@@ -701,7 +701,7 @@ CREATE TRIGGER "TR_Keys_ConfigChanged" AFTER INSERT OR UPDATE OR DELETE ON confi
   version and commits after it. (A sequence would not: version 6 could commit before 5, and a reader at 6 would never
   see 5.) Config writes are rare, so serialising them costs nothing.
 - One version per transaction; identical `NOTIFY` payloads in one transaction are folded by Postgres.
-- **Readers** (`ConfigVersionMonitor` in `Ume.Rag.Infrastructure`, on every instance of every service): load a snapshot tagged with its version; on
+- **Readers** (`ConfigVersionMonitor` in `Kalla.Infrastructure`, on every instance of every service): load a snapshot tagged with its version; on
   `NOTIFY` or a 2 s poll of `SELECT "Version" FROM config."ConfigVersion"`, read `ConfigOutbox WHERE "Version" > @cached`,
   reload the affected entity types and swap the snapshot atomically. If the cached version is older than the oldest
   outbox row, reload everything. A per-instance config-lag metric (cached against current version) is still to
@@ -767,7 +767,7 @@ requests, and no service keeps a decrypted copy on disk. `sensitive` content is 
 The blob master keys are long-lived keys, escrowed offline with the other long-lived keys (repo-and-deployment §7.4);
 only chat shred keys (above) follow the shred rule instead.
 
-**Blob envelope, implementation** (`Ume.Rag.Infrastructure/Blobs/`):
+**Blob envelope, implementation** (`Kalla.Infrastructure/Blobs/`):
 - `IBlobEnvelope` over the plain store and an `EnvelopeBlobStore` that replaces `IBlobStore` (`AddRagBlobEnvelope`),
   with `IKeyProvider` and the pilot's `FileKeyProvider` in `Infrastructure/Blobs/`. `KeyProvider:Directory` names the
   key directory, default `/run/keys` (the Compose mount). A key file holds the base64 of 32 bytes, as `init-deployment.sh` writes it; file keys have version `1` only.
@@ -974,7 +974,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|
 | 1 | Identifier casing | Plans write `content.node_manifest` (snake case); the gateway uses EF's quoted PascalCase | PascalCase as here (`content."NodeManifest"`); update worker §4 wording |
-| 2 | Admin writes to `content` | Plan §3 says `content` is written by the worker, but the admin enqueues preview/sync/eval, clears PII flags, confirms deletions, approves parse rules and site profiles, edits human questions | Admin gets `INSERT` on `Jobs`; decisions are `command` jobs applied by the worker (adds class `command` to worker §2). The one exception: `rag-admin` runs the answer-level judge and the P2 skill gate itself (it holds `Ume.Rag.Answering` and the keys of every level), so it gets `INSERT`/`UPDATE` on `EvaluationRuns` and `EvaluationResults` (§1.2) |
+| 2 | Admin writes to `content` | Plan §3 says `content` is written by the worker, but the admin enqueues preview/sync/eval, clears PII flags, confirms deletions, approves parse rules and site profiles, edits human questions | Admin gets `INSERT` on `Jobs`; decisions are `command` jobs applied by the worker (adds class `command` to worker §2). The one exception: `rag-admin` runs the answer-level judge and the P2 skill gate itself (it holds `Kalla.Answering` and the keys of every level), so it gets `INSERT`/`UPDATE` on `EvaluationRuns` and `EvaluationResults` (§1.2) |
 | 3 | Retrieval statistics | Knowledge API counts retrievals but has read-only `content` | `content.rag_count_retrievals(day, document ids, text hashes, collection ids, levels, retrieved counts, cited counts)` `SECURITY DEFINER` upsert of aggregated counters, flushed every 30 s off the request path (knowledge design §4.7; keyed by text hash so counts survive re-chunking) |
 | 4 | Tool hub writes | Tool-call audit and definition drift need a writer | `audit."ToolCallEvents"` and `audit."ToolDefinitionObservations"`, `INSERT` for `api` (chat) and `admin` (skill gate, discovery, drift polling), where the in-process hub runs in P2; not the worker |
 | 5 | Crypto-shredding vs backups | Deleting a wrapped key in the live database does not reach backups | Bucket keys per (level, expiry month); destroying per-month shred keys reaches backups, switched on only after A1 (§7); check Key Vault purge protection (7–90 days) and OpenBao key deletion settings then |

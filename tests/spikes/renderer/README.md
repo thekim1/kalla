@@ -1,7 +1,7 @@
 # Renderer spike (A-9, to-verify #29)
 
 Throwaway code that proves the risky parts of the renderer design (connectors design §8, repo-and-deployment §5.4)
-before it is built, and measures them. Not in `UmeRag.slnx`, not shipped. Results: `plans/work/results-a.md` row 29.
+before it is built, and measures them. Not in `Kalla.slnx`, not shipped. Results: `plans/work/results-a.md` row 29.
 
 ## What runs where
 
@@ -13,7 +13,7 @@ before it is built, and measures them. Not in `UmeRag.slnx`, not shipped. Result
 | `lightpanda` (profile `lightpanda`) | `render` only | `lightpanda/browser:1.0.3` by digest, CDP on 9222 |
 
 The renderer can reach only the spike; the spike's fetches go through the worker's real `EgressGuard` and
-`CrawlHttpClient` (project reference to `src/Ume.Rag.Worker`, `Crawl:AllowedPrivateRanges` = the fixture subnet);
+`CrawlHttpClient` (project reference to `src/Kalla.Worker`, `Crawl:AllowedPrivateRanges` = the fixture subnet);
 `RenderFetcher` adds what `HttpFetcher` lacks for a browser (method, request headers and body forwarded, response
 headers returned). Spike-only shortcut: `https://*.test` is fetched over plain HTTP, so a page can be a secure context.
 
