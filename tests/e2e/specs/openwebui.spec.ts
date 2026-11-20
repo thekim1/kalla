@@ -98,8 +98,10 @@ test.beforeAll(async ({ request }) => {
   const models = await request.get(`${apiUrl}/v1/models`, { headers: { Authorization: `Bearer ${devClientKey()}` } })
   expect(models.status()).toBe(200)
   const listed = (await models.json()).data as RagModel[]
-  expect(listed.length, 'rag-api lists an assistant to the dev client: run the pilot project first').toBeGreaterThan(0)
-  assistant = listed[0]
+  // The dev seed's Demo-assistent (DemoSeeder) answers from uploads; the checks below need the pilot's, which cites the fixture website.
+  const pilot = listed.filter(m => m.id !== 'demo-assistent')
+  expect(pilot.length, 'rag-api lists the pilot\'s assistant to the dev client: run the pilot project first').toBeGreaterThan(0)
+  assistant = pilot[0]
   token = await signUp(request)
 })
 
