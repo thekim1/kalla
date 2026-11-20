@@ -116,6 +116,16 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** data-model §8; Decisions "Deleting knowledge bases, sources and assistants"; #884.
 
+### [ ] B-60 The admin shows evaluation questions whose documents were deleted (#893, A-38's admin part)
+- **Do:** admin §7.1: a `stale` human question (`State = 'stale'`, `RetiredAt` null) says "Its expected document was
+  deleted" in the questions table, with re-point (edit) and retire; the report card (§7.2) shows the run result's
+  `documentGone` ("N questions left out: their documents were deleted"). The fields are listed on #893.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**` (not `src/platform/**`), `tests/**` (the names as they are
+  after the rename).
+- **Done when:** an API test for the stale state and the count; the table and the card shown in a browser.
+- **Waits on:** the rename (user, 2026-11-20).
+- **Read:** admin §7.1, §7.2; processing §13.3; #893.
+
 ## P2 wave 1: assistants and answer quality (Decisions "P2 starts before go-live")
 
 Start these once `v0.9.0` is tagged (the roadmap's *P2 Broaden*); B-52 and B-53 above go first. Each adds its
