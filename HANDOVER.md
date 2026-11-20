@@ -2,10 +2,10 @@
 
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.8.0`** (2026-11-19, the deploy simplification; tag on #856's merge commit `faa001dd`, on the
-gateway's `v0.11.0`). `main` after it has stream b's B-47 and B-48 (#859, #860), which go into the next release. The
-user's VM runs 0.5.0. Repo `~/git/ume-rag-platform` (session 48's machine) or `~/research/rag` (the other one), branch
-`main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (HTTPS through `gh auth git-credential`,
-handbook *Environment notes*).
+gateway's `v0.11.0`). `main` after it has a release's worth of work (*State*). The user's VM runs 0.5.0. Two
+machines work on it: `~/research/rag` (the user's, where session 49 ran) and `~/git/ume-rag-platform` (`thekim1`'s,
+stream b and often stream a). Branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (HTTPS
+through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
 
@@ -26,63 +26,65 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 49)
+## Start here (session 50)
 
-**`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an author
-cannot approve their own, never `gh pr merge --admin`). Everything, `plans/**` and this file included, goes through a
-`main-session/` branch; `thekim1` reviews the main session's pull requests.
-`thekim1` merged #858 to #860 with `--admin` on 2026-11-19, unreviewed; its review of #861 says the user allowed it
-that for green pull requests the same day. That is not a broken rule, and it does not extend to `ume-nichlas`.
+**The rules of the repository:**
+- **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an
+  author cannot approve their own, never `gh pr merge --admin` as `ume-nichlas`). Everything, `plans/**` and this
+  file included, goes through a `main-session/` branch; `thekim1` reviews the main session's pull requests.
+  `thekim1` merges its own green pull requests with `--admin`, which its review of #861 says the user allowed on
+  2026-11-19; #877 was merged before the main session's review was read, and the review was then answered in a
+  follow-up (#879).
+- **Release tags are protected** ("Protect release tags", `refs/tags/v*`: creation, update and deletion):
+  `ume-nichlas` cannot push one (GH013), and no workflow creates one. `thekim1` pushed `v0.8.0`; the next tag is
+  `thekim1`'s or the user's, on the release preparation's merge commit.
+- **On the user's machine the session cannot approve a pull request:** `gh pr review --approve` on #882 was stopped
+  by Claude Code's permission check. Review as a comment and say so; the approval is the user's or `thekim1`'s.
+- **Which GitHub account the session is, is not settled. Ask the user first.** `gh` on the user's machine has two
+  accounts, `ume-nichlas` (the main session's until now) and `Crotalus` (the user's own). The active one changed to
+  `Crotalus` on 2026-11-20 between 07:07 and 08:53 UTC, not by the session: the review of #884 and this handover's
+  pull request (#887) are under it, everything earlier under `ume-nichlas`. The user was asked whether it was on
+  purpose and which account to work as, and had not answered when the session ended. Run `gh auth status` before
+  anything is pushed or posted. A pull request the session opens as one account is never approved by the session
+  as the other.
 
-1. **`v0.8.0` is released** (2026-11-19, [run
-   44609831965](https://github.com/thekim1/ume-rag-platform/actions/runs/44609831965), green; the pin pull request
-   #863 is merged, the CHANGELOG's date is 2026-11-19). **Left: check that the daily Audit is green.** It has been red
-   since #819 because it scanned 0.7.0's images; the run of 2026-11-20 04:17 UTC is the first that scans 0.8.0's.
-   - **Release tags are protected** ("Protect release tags", `refs/tags/v*`: creation, update and deletion, since
-     2026-11-16): `ume-nichlas` cannot push one (GH013). `thekim1` pushed `v0.8.0`; no workflow creates a tag. The
-     next release's tag is `thekim1`'s or the user's to push, on the release preparation's merge commit.
-2. **0.5.1's admin image is gone from ghcr.io.** The first dry run
-   ([44350629158](https://github.com/thekim1/ume-rag-platform/actions/runs/44350629158)) failed pulling
-   `ghcr.io/thekim1/ume-rag/admin:0.5.1@sha256:38c9e6de…` (*not found*); the same digest pulled in #817's run on
-   2026-11-17, and no workflow here deletes package versions. #856 moved `release.yml`'s `UPGRADE_FROM` to **0.6.0**
-   (with `--expect-fenced ume_rag_api --expect-fenced ume_rag_admin`: from 0.6.0 the upgrade crosses
-   `DropMessageParentId`); the guides say 0.8.0 tests the upgrade from 0.6.0 and that the step from 0.5.1 was last
-   shown by #817. **Not known:** who deleted it, and whether other 0.5.x images went too. The local `gh` token has no
-   `read:packages` (`gh auth refresh -s read:packages`, or ask `thekim1`). A 0.5.x stack that has its images keeps
-   working; one that must pull them again (a new or pruned host) can't. The VM runs 0.5.0 with its images local.
-3. **Stream b's B-47 and B-48** (#857's F3 and F4, the support chatbot) merged on 2026-11-19 by the other machine,
-   after the release preparation; their notes are in `changes/`. The design before them is **#858**: Decisions
-   "Escalation hand-off" and "Source dates on citations", chat §9.9, knowledge §10.1 and §10.4, to-verify V38. It
-   left three things for the main session, all done: #862 (the knob list, `checked` in the example, the user's
-   decision that the unavailable text ends with the assistant's links, else the platform's) and B-49 (#866).
-4. **The Compose quick start was run end to end** (2026-11-19, on `~/research/rag`'s machine, gateway 0.11.0 and
-   Ume.Rag 0.8.0 as two Compose projects, no proxy, the gateway bundle's Keycloak as provider). Passed: the
-   gateway's install and wizard, the manifest's three keys, Ume.Rag's install, its wizard (the provider suggested
-   from the gateway), sign-in, *Models* (the gateway's version, both syncs), the backup stanza, `escrow-keys.sh`
-   with `--verify`. **Not run:** a provider and models in the gateway, so nothing from the embedding profile on
-   (step 5.2 to 5.4); `deploy/host/install.sh` and step 7 (no root here).
-   - **The run was not the guide as written:** Ume.Rag's images were built from the `v0.8.0` tag (no ghcr login;
-     the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in containers, both projects got a host
-     entry (the machine's name does not resolve in containers) and Ume.Rag's networks explicit subnets (Docker's
-     default pools were full).
-   - **Found:** #865, rag-admin did not start without a domain or a gateway admin address (fixed: #867, and the
-     smoke test runs the host-only form, #872). **Open: #874** (the bootstrap's wizard address has no port; the
-     setup script's bare error without root; the quick start does not say the cost read-back is off) and, in the
-     gateway's repository, **thekim1/llmgateway#112** (`realm-import` cannot read its trust store after
-     `init-keycloak.sh`, and `up --wait` reports success) and **#113** (the bundle has no `docs/`).
-5. **Host names (Decisions "Host names", user, 2026-11-20; #875, open):** each service keeps a host name of its
-   own; the guides recommend one wildcard record and certificate for a sub-domain of the installation's own, and
-   one name with ports for a test host. Paths under one name are not built (the roadmap's open calls). The gateway's
-   own guides do not say this yet.
+**Open when the session ended:** #887 (this file, with A-37, A-38 and B-53) and `thekim1`'s **#888** (a new
+`docs/how-it-works.md` and its place on the website; not read by the main session). No item of the main session
+waits on anything but the user. In order:
+
+1. **The daily Audit has not run since the release.** Its last run (2026-11-19 13:18 UTC) failed on 0.7.0's images,
+   as every run since #819; none had come by 2026-11-20 11:20 UTC. The schedule says 04:17 UTC, the runs come
+   around 13:00. The first run after
+   2026-11-19 20:55 UTC scans 0.8.0's images and should be green; if it is not, its findings are the work (#818's
+   way: update, or a dated exception in `scripts/audit/image-scan-exceptions.txt`).
+2. **The next release (0.9.0) has its content** (*State*): the support chatbot's F3 and F4, deletes, the demo seed,
+   the host-only Compose fix. It needs the preparation, a dry run with `e2e=true` (the browser tests ran on
+   `thekim1`'s machine after the demo seed, #882, not in CI), and the user's go-ahead for the tag.
+3. **Open queue items without an input:** stream b's **B-52** (`ume.topics`, F8) and **B-53** (the purge of deleted
+   sources' and knowledge bases' rows); stream a's **A-37** (the 14-day purge of documents removed from a living
+   source, designed and never built) and **A-38** (evaluation questions whose expected documents are gone, which
+   starts with what the design says). `thekim1`'s machine has been taking both streams' items; say on the issue
+   before starting one.
+4. **#874**, the quick start's three smaller findings (stream a's paths): the bootstrap's wizard address has no
+   port, the setup script's bare error without root, the quick start does not say the cost read-back is off.
+5. **The gateway's repository:** thekim1/llmgateway#112 (`realm-import` cannot read its trust store after
+   `init-keycloak.sh`, and `up --wait` reports success) and #113 (the release bundle has no `docs/`), both from the
+   quick start run; the wildcard DNS advice of Decisions "Host names" is not in the gateway's guides yet (a pull
+   request there; merges are the user's).
 
 ### Waiting on the user
 
-- **The VM:** runs 0.5.0. With 0.8.0 released it moves in one update by `docs/portainer.md`, *Upgrade* (steps 2 to 4
-  are the 0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups); step 1 backs up the three
-  files (a 0.7.x or earlier stack has no escrow set), step 15 makes the first escrow set. Pulls that say "denied":
-  `docker logout ghcr.io`. Portainer's own *Update the stack* has never been run on an upgraded stack.
-- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3 and F4 are built (#857); the
-  rest is the user's pick (the suggestion was F8 and F10 next).
+- **The VM:** runs 0.5.0. It moves to 0.8.0 in one update by `docs/portainer.md`, *Upgrade* (steps 2 to 4 are the
+  0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups); step 1 backs up the three files
+  (a 0.7.x or earlier stack has no escrow set), step 15 makes the first escrow set. Pulls that say "denied":
+  `docker logout ghcr.io`. Portainer's own *Update the stack* has never been run on an upgraded stack, and the
+  one-step upgrade only in CI, so this is the step with the most to learn. **0.5.1's admin image is gone from
+  ghcr.io** (found 2026-11-18; who deleted it and whether other 0.5.x images went is not known; the local `gh`
+  tokens have no `read:packages`): the VM has its 0.5.0 images locally, a host that must pull them again cannot.
+- **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
+  umea.se inventory) first.
+- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3 and F4 are built, F8 is
+  designed and queued (the user picked F8 only, 2026-11-20). The rest is the user's pick when F8 is in.
 - **The roadmap's T0 row** says *open* though T1, which depends on it, is deployed: the user knows its state.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
 - **To-verify row 110, a question to KB** (the user's call; the main session would send it before go-live): *"We
@@ -95,25 +97,12 @@ that for green pull requests the same day. That is not a broken rule, and it doe
 - **The Eneo report PDF** is only at `/mnt/c/temp/eneo-vs-ume-rag.pdf`; the user hasn't said whether to keep it in the
   repo.
 
-### What the main session can take without input
-
-1. **M-22:** S6 is done (#851); S8 (operator pages without project vocabulary) as each page is touched. S5 and S7 are
-   proposals in the gateway's repository (thekim1/llmgateway#108, #109). The queue item can close once the user
-   agrees S8 runs as a standing rule.
-2. **Stream a's queue** (`plans/work/stream-a.md`): what is left is the live block (A-L1 to A-L10) and A-34
-   and A-35, whose code is merged with only their live checks open. Each waits on its input; nothing is open without
-   one.
-3. **The dated exceptions expire:** the scan's FFmpeg CVEs in the parser's opencv wheel (eleven, until 2026-12-17,
-   `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
-   `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
-   a reason, or drop the dependency.
-4. **#874**'s three points (stream a's paths; say so on the issue first), and the wildcard advice in the gateway's
-   guides (a pull request there; merges are the user's).
-5. **#873:** the dev seed has no demo knowledge base or assistant though repo-and-deployment §4.4 says so; build it
-   (stream b) or change the design (main).
-
 ### Watch
 
+- **The dated exceptions expire:** the scan's FFmpeg CVEs in the parser's opencv wheel (eleven, until 2026-12-17,
+  `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
+  `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
+  a reason, or drop the dependency.
 - **#781, the flaky "search unavailable" answer in `ChatApiTests`:** open until 2026-11-30; if it recurs, the job's log
   has *The query embedding of profile … is unavailable (…)*, which names the cause.
 - **`IntegrationReadbackTests.A_keys_usage_per_step_…` failed once** on #814 (the fake gateway answered 401,
@@ -122,26 +111,43 @@ that for green pull requests the same day. That is not a broken rule, and it doe
   the change didn't touch (`ChatApiTests`, `RenderTests.The_real_renderer_…`); run alone they pass.
 - **`gh pr edit` fails** on this repository with GitHub's *Projects (classic) is being deprecated* error and changes
   nothing; edit a pull request's body with `gh api -X PATCH repos/thekim1/ume-rag-platform/pulls/<n> -F body=@file`.
+- **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882); a
+  change of `DemoSeeder`'s slug brings its old failure back.
 
-## What session 48 did (2026-11-17 to 19)
+## What session 49 did (2026-11-19 to 20)
 
-On `~/git/ume-rag-platform`, as the main session and stream a. All merged after `thekim1`'s review:
+On `~/research/rag`, as the main session, beside `thekim1`'s machine building stream b's and stream a's items.
 
-- **#847 reviewed** (changes requested; it merged anyway), fixed in **#850**: a continue run reads the earlier run's
-  last items in one `DISTINCT ON` pass, and a continue run whose carried seeds all fail again is unreachable.
-  **#855** wrote the continue run kind into the design (connectors §2.2, §5.4, §6.5; engine §9.1, §9.2, §10.1;
-  data-model `Runs`; admin §4.5).
-- **#818 decided:** **#848** gives the image scan dated exceptions (`audit.py grype`), the opencv wheel's FFmpeg CVEs
-  until 2026-12-17; #855 added five more.
-- **#853:** **#854** gives the admin UI's production npm audit dated exceptions, only for a package the bundle doesn't
-  contain (`audit.py npm-production` reads the bundle's packages from a second build's source maps).
-- **M-22 S6, one escrow set (#851):** `deploy/escrow-keys.sh` writes, `--verify`s and `--restore`s one set with every
-  key a restore needs (the pepper, the blob and chat keys, the backup passphrase, the database roles' passwords, the
-  conversation id keys, the CA and the Data Protection certificate), chosen by `--env-file`, `--project` or
-  `--secrets-dir` with `--certs-dir`; boot-tested in `compose-bootstrap.sh` and `kubernetes-secrets.sh`
-  (repo-and-deployment §7.4). `thekim1` added the role passwords and the conversation id keys.
-- **#506 closed** (A-20 done in #814). **Release 0.8.0 prepared (#856)**, dry run green after the move to 0.6.0
-  (*Start here*).
+- **`v0.8.0` released** (2026-11-19): #861's handover reviewed and corrected, the tag pushed by `thekim1` after the
+  ruleset refused `ume-nichlas`, the pin #863; #864 brought the README, the roadmap and two guides' stale lines up
+  to the release.
+- **#858's open ends** (#862) with the user's decision that the unavailable text ends with the assistant's links,
+  else the platform's (B-49, #866).
+- **The Compose quick start run end to end** (gateway 0.11.0 and Ume.Rag 0.8.0 as two Compose projects on one host,
+  no proxy, the gateway bundle's Keycloak as provider). Passed: the gateway's install and wizard, the manifest's
+  three keys, Ume.Rag's install and wizard (the provider suggested from the gateway), sign-in, *Models*, the backup
+  stanza, `escrow-keys.sh` with `--verify`. Not run: a provider and models, so nothing from the embedding profile
+  on; `deploy/host/install.sh` and the hardening (no root). Not the guide as written: Ume.Rag's images were built
+  from the `v0.8.0` tag (no ghcr login; the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in
+  containers, both projects got a host entry and Ume.Rag's networks explicit subnets. Found: **#865** (rag-admin did
+  not start without a domain or a gateway admin address; fixed in #867, tested in #872), **#874**, and the
+  gateway's **#112** and **#113**.
+- **How easy the setup is** (asked by the user; read in both repositories): Portainer is close to one typed value;
+  what is left is sign-in (two hand-made clients, two wizards, two codes from logs), DNS and TLS before any wizard,
+  and hand work after "healthy" that no page asks for (the gateway's provider and models, moving the integration,
+  assigned keys per department: the gateway's #108 and #109 would take most of it).
+- **Decisions "Host names"** (#875): each service keeps a host name of its own; one wildcard record and certificate
+  for a sub-domain of the installation's own; one name with ports for a test host; paths under one name not built
+  (the roadmap's open calls).
+- **Decisions "Deleting knowledge bases, sources and assistants"** (#880, for #878; six questions to the user):
+  built the same day on `thekim1`'s machine as B-50 (#883), A-36 (#884, #886) and B-51 (#885). Reviewed #884: the
+  nightly step now also takes sources that were already deleted. A deleted source was never searchable (the API's
+  snapshot leaves it out); what was missing was the cleanup.
+- **Decisions "Topics per request"** (#881): F8's design, B-52.
+- **M-22 closed** (user, 2026-11-20): its S8 is a standing rule in `plans/work/main.md`.
+- **#873, the dev seed's demo content:** built on `thekim1`'s machine as designed (#877, #879) while the user was
+  being asked which way to go; reviewed, and the browser tests then run there (#882).
+- **Housekeeping on the user's machine:** seven agent worktrees and 29 merged local branches removed.
 
 ## Known gaps, documented, not fixed
 
@@ -158,8 +164,8 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 - **A hardened Compose host's firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it
   the wizard's test can't reach a provider there. `init-deployment.sh --hardened` asks for it in an interactive run,
   and its closing lines say when it is missing. A host without the hardening has no such limit.
-- **The Compose quick start (`docs/compose-quick-start.md`) was run once, by hand, not as written** (*Start here*
-  4): with locally built images, without root, and without a provider, so its steps 5.2 to 5.4, the host timers
+- **The Compose quick start (`docs/compose-quick-start.md`) was run once, by hand, not as written** (*What session
+  49 did*): with locally built images, without root, and without a provider, so its steps 5.2 to 5.4, the host timers
   and the hardening are still only read. No test runs the two products' Compose projects together; the release
   smoke test boots `compose.rag.yaml` with the backup overlay against the fake gateway (since #872 also in the
   host-only form).
@@ -185,7 +191,8 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 - **A release:** the preparation as #788 did it (*Unreleased* in `CHANGELOG.md` and `docs/upgrade-guide.md` under the
   version, `docs/portainer.md`'s version, the ticked queue items to `plans/archive/work/to-v<version>.md`, the
   roadmap's table; `scripts/unreleased.py fold` moves `changes/` in), a dry run with `e2e=true`, an annotated tag on
-  the merge commit (with the user's go-ahead; pushed by `thekim1` or the user, *Start here* 1), then the pin pull
+  the merge commit (with the user's go-ahead; pushed by `thekim1` or the user: release tags are protected, *Start
+  here*), then the pin pull
   request that `release.yml` opens: it starts no checks, so close and reopen it before merging (handbook, *Release dry
   runs*). The upgrade boot test starts from `release.yml`'s `UPGRADE_FROM` (0.6.0); its images must still be on
   ghcr.io.
@@ -213,37 +220,43 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 ## State
 
 - **Release:** `v0.8.0` published 2026-11-19 ([run 44609831965](https://github.com/thekim1/ume-rag-platform/actions/runs/44609831965)),
-  tag at `faa001dd`; `deploy/portainer/` on `main` pins its images (#863). Its notes are `CHANGELOG.md`'s
-  `## 0.8.0` and the upgrade guide's: the deploy simplification (M-22: one service file and one bootstrap for every
-  form, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for), continue a crawl run and
-  its live progress, move to another department, the images' security updates and the daily image scan. Migrations
-  `DropMessageParentId` (stops the old rag-api and rag-admin) and `ContinueRuns` (additive); *Rolling update: no*.
+  tag at `faa001dd`; `deploy/portainer/` on `main` pins its images (#863). Migrations `DropMessageParentId` (stops
+  the old rag-api and rag-admin) and `ContinueRuns` (additive); *Rolling update: no*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`UME_DOMAIN`, no secret).
-- **On `main` after `faa001dd`, unreleased:** B-47 (source dates on citations), B-48 (the escalation hand-off,
-  `ume.escalation`), B-49 (#866), #867 and #872 (#865), and the other machine's website (GitHub Pages, #868, #870)
-  and font fix (#871); notes in `changes/`.
-- **Open issues that matter:** #781 (watch), #667 (M-16, the other machine's), #333 (the exact-scan and recall
-  checks on the test host), #511 (splitting the worker), #580 and #550 (decisions to record), #873 and #874. Open
-  pull request: #875.
+- **On `main` after `faa001dd`, unreleased** (notes in `changes/`, 13 files): source dates on citations (B-47) and
+  the escalation hand-off `ume.escalation` (B-48), with the unavailable text's links (B-49); delete a knowledge
+  base, a source (B-50, A-36: the worker's `delete-source` and the nightly purge) and an assistant (B-51), names
+  free at once; the dev seed's demo knowledge base and *Demo-assistent* (#877); rag-admin starting without a domain
+  (#865); the Geist fonts (#871); the wildcard guidance. Also the website (GitHub Pages, #868, #870). **Migrations
+  since the release are not listed here:** B-50 and B-51 change the slug indexes and add `Assistants.DeletedAt`;
+  read them at the release preparation for the *Rolling update* line.
+- **Queues:** stream a: A-37, A-38, then the live block (A-L1 to A-L10) and A-34 and A-35 with only their live
+  checks open. Stream b: B-52, B-53, then B-42 to B-46 (the gateway phases) and its live items. Main: M-4 (the
+  live block), M-16, M-17.
+- **Open issues that matter:** #878 (deletes: the three leftovers are A-37, A-38 and B-53), #874, #781 (watch),
+  #667 (M-16, `thekim1`'s machine), #333 (the exact-scan and recall checks on the test host), #511 (splitting the
+  worker), #580 and #550 (decisions to record). Open pull requests: #887, #888.
 - **Dependabot works:** its first grouped pull requests merged (#841 to #844); `.github/dependabot.yml`'s header lists
   where a pin is repeated.
-- **Ume.Rag on this machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in this WSL distro, so
-  stack and image tests run only in CI; `shellcheck` and `actionlint` are not installed. On the other machine
-  (`~/research/rag`) session 47's agent worktrees and the merged local branches were removed on 2026-11-19; what
-  remains is the main clone on `main` and `~/research/rag-small` (the second checkout). Volumes
-  `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept there. The quick start's test
-  installation is torn down (containers, its volumes, the built images); the gateway's 0.11.0 images stay in the
-  local Docker, and Docker's default address pools are full there (about 25 unused networks of other projects): a
-  new Compose project needs explicit subnets or a `docker network prune` by the user.
-- **The gateway on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; merges and
-  releases in the gateway are the user's). Worktrees `~/git/llmgateway`, `~/git/llmgateway-100`,
-  `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull requests are all merged: they can
-  go, or `~/git/llmgateway` can move to `main`. Local images `ume-llm-gateway/*:setup-test` predate the release and can
-  go. Ports 5000 and 5173 are held by something else: the gateway's IntegrationTests need
-  `ASPNETCORE_URLS=http://127.0.0.1:0`. The gateway's own rules: draft pull requests (drafts run no CI), the checks run
-  locally first, squash-merge.
-- **Tools here:** the Aspire CLI is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire`
-  (not on PATH). On the other machine `actionlint` is installed (`/snap/bin/actionlint`; it hung once without
-  `-shellcheck= -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). The
-  local `gh` token can't read ghcr packages: live stack tests run on the runner. Playwright's Chromium and Firefox are
-  in `~/.cache/ms-playwright`; Edge needs sudo to install.
+- **The user's machine (`~/research/rag`):** the main clone on `main` and `~/research/rag-small` (the second
+  checkout, on whatever branch was last worked on); no other worktree. Docker works without sudo (the `docker`
+  group); there is no sudo. Volumes `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are the
+  dev data and are kept. The quick start's test installation is torn down; the gateway's 0.11.0 images stay in the
+  local Docker. **Docker's default address pools are full there** (about 25 unused networks of other projects): a
+  new Compose project needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper
+  case and does not resolve inside containers. `gh` has two accounts, `ume-nichlas` and `Crotalus` (the user's
+  own; which is active: *Start here*); neither token has `read:packages`, so Ume.Rag's images
+  cannot be pulled there. `actionlint` is installed (`/snap/bin/actionlint`; it hung once without `-shellcheck=
+  -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). Playwright's
+  Chromium and Firefox are in `~/.cache/ms-playwright`; Edge needs sudo to install. The Aspire CLI is at
+  `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
+- **`thekim1`'s machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in its WSL distro, so stack
+  and image tests run only in CI there; `shellcheck` and `actionlint` are not installed.
+- **The gateway on the user's machine:** `gh` as `ume-nichlas` can push to both repositories; merges and releases
+  in the gateway are the user's. Worktrees `~/git/llmgateway` (on `feat/98-99-domain-and-context-authority`),
+  `~/git/llmgateway-100`, `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull
+  requests are all merged: they can go, or `~/git/llmgateway` can move to `main` (read `origin/main` with `git
+  show` until then). Local images `ume-llm-gateway/*:setup-test` predate the release and can go. Ports 5000 and
+  5173 are held by something else: the gateway's IntegrationTests need `ASPNETCORE_URLS=http://127.0.0.1:0`. The
+  gateway's own rules: draft pull requests (drafts run no CI), the checks run locally first, squash-merge. Its pull
+  request #110 (a benchmark against Bifrost) is open.
