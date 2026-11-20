@@ -22,7 +22,7 @@ UNITS = {"B": 1 / 2**20, "KiB": 1 / 1024, "MiB": 1, "GiB": 1024, "kB": 1 / 1000,
 
 
 def services() -> dict[str, tuple[float, float]]:
-    """Name -> (RSS MB, CPU seconds) of the Ume.Rag processes on the host."""
+    """Name -> (RSS MB, CPU seconds) of the Källa processes on the host."""
     found: dict[str, tuple[float, float]] = {}
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():

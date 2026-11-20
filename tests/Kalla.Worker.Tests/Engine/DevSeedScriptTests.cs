@@ -29,7 +29,7 @@ namespace Kalla.Worker.Tests.Engine;
 /// P1a item 18's dev seed (<c>scripts/dev/seed-url-list.sql</c>, run by <c>seed_url_list.py</c>): the same SQL file, with
 /// its parameters as session settings, yields a public URL-list source on the platform url-list pipeline that a worker with
 /// the FakeGateway syncs into live chunks from the test site; a re-run finds what it created; the config triggers bump the
-/// config version. The source's <c>piiMode</c> is <c>report</c> unless <c>ume_seed.pii_mode</c> says <c>hold</c>. With a key (<c>--api-key</c>), kalla-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
+/// config version. The source's <c>piiMode</c> is <c>report</c> unless <c>kalla_seed.pii_mode</c> says <c>hold</c>. With a key (<c>--api-key</c>), kalla-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
 /// collection. The localhost-only guard, the key generation and the pepper handling are the Python script's
 /// (<c>scripts/dev/test_seed_url_list.py</c>).
 /// </summary>
@@ -116,13 +116,13 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         await EnsurePlatformPipelineAsync();
         await EnsureProfileAsync();
         var settings = Settings([new Uri("http://site.test/p/a"), new Uri("http://site.test/p/b")]);
-        settings["ume_seed.enqueue"] = "false";
+        settings["kalla_seed.enqueue"] = "false";
         var seed = await SourceSeedAsync(await SeedAsync(settings));
         try
         {
             (await PiiModeAsync(seed.SourceId)).ShouldBe(PiiMode.Report);
-            settings["ume_seed.urls"] = """["http://site.test/p/c"]""";
-            settings["ume_seed.pii_mode"] = "hold";
+            settings["kalla_seed.urls"] = """["http://site.test/p/c"]""";
+            settings["kalla_seed.pii_mode"] = "hold";
 
             var rerun = await SeedAsync(settings);
 
@@ -146,13 +146,13 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     {
         await EnsurePlatformPipelineAsync();
         var settings = Settings([new Uri("http://site.test/p/a")]);
-        settings["ume_seed.profile"] = "no-such-profile-" + Guid.NewGuid().ToString("N");
+        settings["kalla_seed.profile"] = "no-such-profile-" + Guid.NewGuid().ToString("N");
 
         var error = await Should.ThrowAsync<PostgresException>(() => SeedAsync(settings));
 
         error.MessageText.ShouldStartWith("seed-url-list: no active embedding profile no-such-profile-");
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM config."Collections" WHERE "Slug" = $1""",
-            settings["ume_seed.collection_slug"])).ShouldBe(0);
+            settings["kalla_seed.collection_slug"])).ShouldBe(0);
     }
 
     [Fact]
@@ -161,13 +161,13 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         await EnsurePlatformPipelineAsync();
         await EnsureProfileAsync();
         var settings = Settings([new Uri("http://site.test/p/a")]);
-        settings["ume_seed.pii_mode"] = "off";
+        settings["kalla_seed.pii_mode"] = "off";
 
         var error = await Should.ThrowAsync<PostgresException>(() => SeedAsync(settings));
 
-        error.MessageText.ShouldBe("seed-url-list: ume_seed.pii_mode must be hold or report, not off");
+        error.MessageText.ShouldBe("seed-url-list: kalla_seed.pii_mode must be hold or report, not off");
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM config."Collections" WHERE "Slug" = $1""",
-            settings["ume_seed.collection_slug"])).ShouldBe(0);
+            settings["kalla_seed.collection_slug"])).ShouldBe(0);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
 
         first["level_policy"].ShouldStartWith("public (");
         first["client"].ShouldEndWith("(created, internal, ceiling public)");
-        first["api_key"].ShouldNotBeNull().ShouldContain("(created, scoped to " + settings["ume_seed.collection_slug"]);
+        first["api_key"].ShouldNotBeNull().ShouldContain("(created, scoped to " + settings["kalla_seed.collection_slug"]);
         first["api_key_state"].ShouldBe("created");
         var seed = await SourceSeedAsync(first);
         var clientId = Guid.Parse(first["client_id"].ShouldNotBeNull());
@@ -219,12 +219,12 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
             using var http = api.CreateHttpsClient();
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key.PlainText);
             using var response = await http.PostAsync(new Uri("/v1/retrieve", UriKind.Relative),
-                JsonContent.Create(new { query = "bygglov " + marker, collections = new[] { settings["ume_seed.collection_slug"] }, top_k = 5 }), Ct);
+                JsonContent.Create(new { query = "bygglov " + marker, collections = new[] { settings["kalla_seed.collection_slug"] }, top_k = 5 }), Ct);
 
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
             var results = JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["results"]!.AsArray();
             results.ShouldNotBeEmpty();
-            results.ShouldAllBe(r => r!["collection"]!.GetValue<string>() == settings["ume_seed.collection_slug"]);
+            results.ShouldAllBe(r => r!["collection"]!.GetValue<string>() == settings["kalla_seed.collection_slug"]);
 
             var rerun = await SeedAsync(WithKey(settings, Hasher(KeyPepper).Generate(), out _));
 
@@ -246,7 +246,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         await EnsurePlatformPipelineAsync();
         await EnsureProfileAsync();
         var settings = Settings([new Uri("http://site.test/p/a")]);
-        settings["ume_seed.enqueue"] = "false";
+        settings["kalla_seed.enqueue"] = "false";
         var wrong = Hasher("not-the-apphost-pepper-0123456789abcdef").Generate();
         var seeded = await SeedAsync(WithKey(settings, wrong, out _));
         var seed = await SourceSeedAsync(seeded);
@@ -259,7 +259,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
             using var http = api.CreateHttpsClient();
             http.DefaultRequestHeaders.Add("x-api-key", wrong.PlainText);
             using var response = await http.PostAsync(new Uri("/v1/retrieve", UriKind.Relative),
-                JsonContent.Create(new { query = "bygglov", collections = new[] { settings["ume_seed.collection_slug"] } }), Ct);
+                JsonContent.Create(new { query = "bygglov", collections = new[] { settings["kalla_seed.collection_slug"] } }), Ct);
 
             response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
             JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["code"]!.GetValue<string>().ShouldBe(KeyChecks.InvalidKey);
@@ -274,7 +274,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     [Fact]
     public void The_key_hasher_matches_the_python_scripts_test_vector() =>
         Hasher("dev-seed-vector-pepper-0123456789abcdef").Hash("kalla-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg")
-            .ShouldBe("f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf");
+            .ShouldBe("f6e1028b728aa3791542efce5c0beba5b6e0da3b03f7da70be7b5f1cf72bb194");
 
     /// <summary>The script's parameters with names unique to the test.</summary>
     private static Dictionary<string, string> Settings(IEnumerable<Uri> urls)
@@ -282,13 +282,13 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         var suffix = Guid.NewGuid().ToString("N")[..12];
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["ume_seed.urls"] = System.Text.Json.JsonSerializer.Serialize(urls.Select(u => u.AbsoluteUri)),
-            ["ume_seed.profile"] = ProfileName,
-            ["ume_seed.department_name"] = "Seed " + suffix,
-            ["ume_seed.collection_slug"] = "seed-" + suffix,
-            ["ume_seed.collection_name"] = "Seed " + suffix,
-            ["ume_seed.source_name"] = "Seed URL list " + suffix,
-            ["ume_seed.enqueue"] = "true",
+            ["kalla_seed.urls"] = System.Text.Json.JsonSerializer.Serialize(urls.Select(u => u.AbsoluteUri)),
+            ["kalla_seed.profile"] = ProfileName,
+            ["kalla_seed.department_name"] = "Seed " + suffix,
+            ["kalla_seed.collection_slug"] = "seed-" + suffix,
+            ["kalla_seed.collection_name"] = "Seed " + suffix,
+            ["kalla_seed.source_name"] = "Seed URL list " + suffix,
+            ["kalla_seed.enqueue"] = "true",
         };
     }
 
@@ -389,9 +389,9 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     private static Dictionary<string, string> WithKey(Dictionary<string, string> settings, GeneratedKey generated, out GeneratedKey key)
     {
         key = generated;
-        settings["ume_seed.key_hash"] = generated.Hash;
-        settings["ume_seed.key_prefix"] = generated.Prefix;
-        settings["ume_seed.client_name"] = "Seed client " + settings["ume_seed.collection_slug"];
+        settings["kalla_seed.key_hash"] = generated.Hash;
+        settings["kalla_seed.key_prefix"] = generated.Prefix;
+        settings["kalla_seed.client_name"] = "Seed client " + settings["kalla_seed.collection_slug"];
         return settings;
     }
 

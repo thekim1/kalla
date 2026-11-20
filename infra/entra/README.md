@@ -13,7 +13,7 @@ registration, and it requests no Graph application permission for RAG.
 | its service principal | `admin.bicep` | `appRoleAssignmentRequired = true` |
 | `kalla-open-webui` registration | `open-webui.bicep` | single tenant; Web redirect URI `https://<open webui host>/oauth/oidc/login/callback`; optional ID-token claims `email`, `acct`; delegated Microsoft Graph `openid profile email` |
 | its service principal | `open-webui.bicep` | `appRoleAssignmentRequired = true` |
-| security groups | `main.bicep` | `Ume.Rag pilot users`, `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names to agree with IT) |
+| security groups | `main.bicep` | `Källa pilot users`, `Källa platform admins`, `Källa department admins – <pilot department>` (names to agree with IT) |
 
 App role ids are derived from the role values (`guid('kalla-admin', value)`), so they never change between runs. The
 identity that applies the templates is made an owner of every object, so it can update them on the next run. Package 2

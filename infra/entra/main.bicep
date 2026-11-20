@@ -46,20 +46,20 @@ var groups = [
   {
     key: 'pilotUsers'
     uniqueName: 'kalla-pilot-users'
-    displayName: 'Ume.Rag pilot users'
-    description: 'Ume.Rag: may sign in to the pilot Open WebUI.'
+    displayName: 'Källa pilot users'
+    description: 'Källa: may sign in to the pilot Open WebUI.'
   }
   {
     key: 'platformAdmins'
     uniqueName: 'kalla-platform-admins'
-    displayName: 'Ume.Rag platform admins'
-    description: 'Ume.Rag: app role rag-platform-admin on kalla-admin.'
+    displayName: 'Källa platform admins'
+    description: 'Källa: app role rag-platform-admin on kalla-admin.'
   }
   {
     key: 'departmentAdmins'
     uniqueName: 'kalla-department-admins-${pilotDepartmentKey}'
-    displayName: 'Ume.Rag department admins – ${pilotDepartmentName}'
-    description: 'Ume.Rag: app role rag-department-admin on kalla-admin, for ${pilotDepartmentName}.'
+    displayName: 'Källa department admins – ${pilotDepartmentName}'
+    description: 'Källa: app role rag-department-admin on kalla-admin, for ${pilotDepartmentName}.'
   }
 ]
 

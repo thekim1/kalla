@@ -105,9 +105,9 @@ class MainTests(unittest.TestCase):
         self.assertEqual(PASSWORD, kwargs["env"]["PGPASSWORD"])
         self.assertEqual("54321", kwargs["env"]["PGPORT"])
         stdin = kwargs["input"]
-        self.assertIn("SELECT set_config('ume_seed.urls', '[\"https://example.org/a\"]', false);", stdin)
-        self.assertIn("SELECT set_config('ume_seed.enqueue', 'true', false);", stdin)
-        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'report', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.urls', '[\"https://example.org/a\"]', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.enqueue', 'true', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.pii_mode', 'report', false);", stdin)
         self.assertTrue(stdin.endswith(seed_url_list.SQL_FILE.read_text(encoding="utf-8")))
         self.assertIn("  source: abc (created)", out.getvalue())
         self.assertNotIn("source_id", out.getvalue())
@@ -119,7 +119,7 @@ class MainTests(unittest.TestCase):
                 ["--connection", LOCAL, "--profile", "p", "--pii-mode", "hold", "https://example.org/a"]
             )
         self.assertEqual(0, code)
-        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'hold', false);", run.call_args.kwargs["input"])
+        self.assertIn("SELECT set_config('kalla_seed.pii_mode', 'hold', false);", run.call_args.kwargs["input"])
 
         with (
             mock.patch("subprocess.run") as run,
@@ -183,7 +183,7 @@ class ApiKeyTests(unittest.TestCase):
         # The same vector is asserted against KeyHasher.Hash in DevSeedScriptTests.
         key = "kalla-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
         self.assertEqual(
-            "f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf",
+            "f6e1028b728aa3791542efce5c0beba5b6e0da3b03f7da70be7b5f1cf72bb194",
             seed_url_list.key_hash("dev-seed-vector-pepper-0123456789abcdef", key),
         )
 
@@ -197,8 +197,8 @@ class ApiKeyTests(unittest.TestCase):
         stdin, env, command = run.call_args.kwargs["input"], run.call_args.kwargs["env"], run.call_args.args[0]
         self.assertNotIn(key, stdin)
         self.assertNotIn(PEPPER, stdin)
-        self.assertIn(f"SELECT set_config('ume_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
-        self.assertIn(f"SELECT set_config('ume_seed.key_prefix', '{key[:15]}', false);", stdin)
+        self.assertIn(f"SELECT set_config('kalla_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
+        self.assertIn(f"SELECT set_config('kalla_seed.key_prefix', '{key[:13]}', false);", stdin)
         self.assertNotIn("KALLA_DEV_KEY_PEPPER", env)
         self.assertNotIn(PEPPER, " ".join(command))
         self.assertNotIn("api_key_state", out)
@@ -225,7 +225,7 @@ class ApiKeyTests(unittest.TestCase):
         with mock.patch("subprocess.run", return_value=completed) as run, redirect_stdout(out):
             code = seed_url_list.main(["--connection", LOCAL, "--profile", "p", "https://example.org/a"])
         self.assertEqual(0, code)
-        self.assertIn("SELECT set_config('ume_seed.key_hash', '', false);", run.call_args.kwargs["input"])
+        self.assertIn("SELECT set_config('kalla_seed.key_hash', '', false);", run.call_args.kwargs["input"])
         self.assertNotIn("kalla-sk-", out.getvalue())
 
 

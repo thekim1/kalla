@@ -6,7 +6,7 @@ gateway (<https://github.com/thekim1/fors>, local clone `~/git/llmgateway`). Wha
 
 ## 1. Goal
 
-Give the municipality a base platform for **retrieval (RAG), crawling and chatbots**, the way the LLM gateway is the base
+Give the municipality a base platform for **retrieval (RAG), crawling and chatbots**, the way Fors is the base
 platform for model access, keys and budgets:
 
 - Departments add **specific URLs / websites**, **SharePoint** sites and libraries and **files** as knowledge sources.

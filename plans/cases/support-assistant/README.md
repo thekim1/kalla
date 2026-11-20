@@ -86,7 +86,7 @@ The open questions of the first draft, answered:
 | 6 | Related documents and follow-up suggestions | **Both built before the pilot** (SA-1, SA-3) | Chat design §3.8, §9.7, §9.8; built in #433 (M-7, with the outcome of SA-2) and #434 (M-8) |
 | 7 | Per-user identity | **One shared app key** for the pilot | SA-5 waits; the per-key limit `Keys.RequestsPerMinute` (SA-6) is built in #430 (M-5), the key's IP allow-list (SA-7, #424) in #432 |
 | 8 | Where the Markdown files live | **Local now, a Git repository later** | Upload by hand for the pilot; SA-10 (Git connector) **after the pilot** |
-| 10 | Conversation history | **The frontend keeps it** and sends it each turn; Ume.Rag stores none (`none`, as today) | No A1 dependency; the frontend's store belongs in the DPIA |
+| 10 | Conversation history | **The frontend keeps it** and sends it each turn; Källa stores none (`none`, as today) | No A1 dependency; the frontend's store belongs in the DPIA |
 | 11 | Ticket length | **Varies; fix the hard 2,000-character limit before the pilot** (SA-4) by **condensing a long ticket into a search query**: long messages are accepted (up to the chat request's own limit), a task model writes the search query, and the answer model gets the full text | Chat design §3.2, §5.1; built in #431 (M-6) |
 
 ## Before the pilot

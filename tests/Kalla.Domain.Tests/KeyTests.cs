@@ -42,12 +42,12 @@ public class KeyHasherTests
         // Decisions "Product names": kalla-sk-/kalla-pk- keys keep working; the hash is the whole key's, so only the
         // shape check needs to know the old prefix. No key is issued with it.
         var random = new string('A', 43);
-        var legacy = "kalla-sk-" + random;
+        var legacy = "ume-rag-sk-" + random;
         KeyHasher.KindOf(legacy).ShouldBe(KeyKinds.Secret);
-        KeyHasher.KindOf("kalla-pk-" + random).ShouldBe(KeyKinds.Public);
+        KeyHasher.KindOf("ume-rag-pk-" + random).ShouldBe(KeyKinds.Public);
         Hasher.Verify(legacy, Hasher.Hash(legacy)).ShouldBeTrue();
         Hasher.Verify(legacy, Hasher.Hash("kalla-sk-" + random)).ShouldBeFalse();
-        KeyHasher.LooksLikeKey("kalla-sk-" + random[..42]).ShouldBeFalse();
+        KeyHasher.LooksLikeKey("ume-rag-sk-" + random[..42]).ShouldBeFalse();
         KeyHasher.LooksLikeKey("ume-sk-" + random).ShouldBeFalse(); // a gateway key of the old format, never ours
     }
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: copy new uploads to the backup target (repo-and-deployment §7.4)
+Description=Källa: copy new uploads to the backup target (repo-and-deployment §7.4)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service

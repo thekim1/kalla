@@ -4,7 +4,7 @@
 `GatewayModels` sync (admin design §4.10), and its assistants have instructions and directly linked collections, no
 skills or tools.
 
-Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
+Detail step 9 of the Källa design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
 §10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (archived: history, not binding; this design states
 every rule, the plan's answered questions and its recommendation for question 1 in §14) and the Decisions table in
 [`../decisions.md`](../decisions.md). All of it is **P2 scope** unless marked (OBO, write tools,
@@ -1017,7 +1017,7 @@ changed without a pre-registration), 5013 bursts, any 5015 `level_refused`, repe
 
 ## 10. Observability
 
-Meter and activity source `Ume.Rag` (repo-and-deployment §9); low-cardinality dimensions only (no tool names on hot
+Meter and activity source `Källa` (repo-and-deployment §9); low-cardinality dimensions only (no tool names on hot
 histograms; tool ids appear in logs and the audit).
 
 | Metric | Type | Dimensions |

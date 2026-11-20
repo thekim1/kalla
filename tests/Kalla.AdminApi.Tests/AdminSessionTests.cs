@@ -28,7 +28,7 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
     {
         web.UseEnvironment("Development");
         web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
-        web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
+        web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/fors");
         web.UseSetting("Oidc:ClientSecret", "test-secret");
         // The shared database's mirror is seeded by the tests: the gateway syncs, which start with any host that has a
         // gateway key, stay off here (OrganisationSyncTests and GatewayClientTests run them on databases of their own).

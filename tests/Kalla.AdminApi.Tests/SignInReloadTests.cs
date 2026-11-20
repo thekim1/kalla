@@ -32,9 +32,9 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup1.Name)]
 public sealed class SignInReloadTests(AdminDatabaseFixture database)
 {
-    private const string Deployed = "https://idp.invalid/realms/ume";
-    private const string WizardA = "https://wizard-a.invalid/realms/ume";
-    private const string WizardB = "https://wizard-b.invalid/realms/ume";
+    private const string Deployed = "https://idp.invalid/realms/fors";
+    private const string WizardA = "https://wizard-a.invalid/realms/fors";
+    private const string WizardB = "https://wizard-b.invalid/realms/fors";
     private const string WizardSecret = "wizard-secret-0c4d7e";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -197,9 +197,9 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
 
         // As a reloaded key-per-file secret or a changed value: the configuration is read at each challenge.
         var configuration = factory.Services.GetRequiredService<IConfiguration>();
-        configuration["Oidc:Authority"] = "https://reloaded.invalid/realms/ume";
+        configuration["Oidc:Authority"] = "https://reloaded.invalid/realms/fors";
         configuration["Oidc:ClientId"] = "reloaded-client";
-        ShouldGoTo(await ChallengeAsync(factory), "https://reloaded.invalid/realms/ume", "reloaded-client");
+        ShouldGoTo(await ChallengeAsync(factory), "https://reloaded.invalid/realms/fors", "reloaded-client");
 
         // A changed secret alone rebuilds the options too.
         var built = LiveOptions(factory);
@@ -341,9 +341,9 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
                 new OidcWizardValues(), () => secret ?? StoredSecretValue.NotSet, null, 3, null), requireHttps);
 
         Snapshot(true).NotConfiguredReason.ShouldBe(SignInNotConfiguredReasons.NoAuthority);
-        Snapshot(true, null, ("Oidc:Authority", "http://idp.example/realms/ume")).NotConfiguredReason.ShouldBe(SignInNotConfiguredReasons.InvalidAuthority);
+        Snapshot(true, null, ("Oidc:Authority", "http://idp.example/realms/fors")).NotConfiguredReason.ShouldBe(SignInNotConfiguredReasons.InvalidAuthority);
         Snapshot(false, null, ("Oidc:Authority", "idp.example")).NotConfiguredReason.ShouldBe(SignInNotConfiguredReasons.InvalidAuthority);
-        Snapshot(false, null, ("Oidc:Authority", "http://localhost:8080/realms/ume")).IsConfigured.ShouldBeTrue();
+        Snapshot(false, null, ("Oidc:Authority", "http://localhost:8080/realms/fors")).IsConfigured.ShouldBeTrue();
         Snapshot(true, StoredSecretValue.Unreadable, ("Oidc:Authority", Deployed)).NotConfiguredReason.ShouldBe(SignInNotConfiguredReasons.UnreadableClientSecret);
 
         var one = Snapshot(true, null, ("Oidc:Authority", Deployed), ("Oidc:ClientSecret", "secret-1"));
@@ -363,8 +363,8 @@ public sealed class SignInReloadTests(AdminDatabaseFixture database)
         production.Validate(null, new OidcOptions()).Succeeded.ShouldBeTrue();
         production.Validate(null, new OidcOptions { Authority = " " }).Succeeded.ShouldBeTrue();
         production.Validate(null, new OidcOptions { Authority = Deployed }).Succeeded.ShouldBeTrue();
-        production.Validate(null, new OidcOptions { Authority = "http://idp.example/realms/ume" }).Failed.ShouldBeTrue();
-        development.Validate(null, new OidcOptions { Authority = "http://localhost:8080/realms/ume" }).Succeeded.ShouldBeTrue();
+        production.Validate(null, new OidcOptions { Authority = "http://idp.example/realms/fors" }).Failed.ShouldBeTrue();
+        development.Validate(null, new OidcOptions { Authority = "http://localhost:8080/realms/fors" }).Succeeded.ShouldBeTrue();
         development.Validate(null, new OidcOptions { Authority = "idp.example" }).Failed.ShouldBeTrue();
     }
 

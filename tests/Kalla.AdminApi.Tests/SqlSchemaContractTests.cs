@@ -22,7 +22,7 @@ public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClas
     [Fact]
     public async Task Every_admin_statement_prepares_and_returns_the_shape_its_reader_expects()
     {
-        var statements = SqlContract.Statements(typeof(OrganisationSync).Assembly, "Källa.");
+        var statements = SqlContract.Statements(typeof(OrganisationSync).Assembly, "Kalla.");
         statements.Count.ShouldBeGreaterThan(10);
 
         var described = await SqlContract.DescribeAsync(database.Connection(null), statements, ParameterTypes, Ct);

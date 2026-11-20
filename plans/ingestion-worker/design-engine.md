@@ -1,6 +1,6 @@
 # Ingestion worker, part A: pipeline engine, stages, jobs, runs, preview and publish
 
-Detail step 6a of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
+Detail step 6a of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
 this design states every rule, the plan's answered items in §22) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. The engine runs fixed
@@ -23,7 +23,7 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 | Options classes with `SectionName`, data annotations, `ValidateDataAnnotations().ValidateOnStart()` | `src/Fors.AdminApi/RetentionService.cs:11-26`, `InfrastructureExtensions.cs:57-58` | `WorkerOptions` (`Worker:*`) |
 | Local schedule in Europe/Stockholm via `BudgetPeriods.Stockholm` | `src/Fors.Domain/Services/BudgetPeriods.cs:11`, `RetentionService.cs:44-62` | cron evaluation (§9.6) |
 | One instance does a periodic job: `pg_try_advisory_xact_lock` inside an execution-strategy transaction | `src/Fors.AdminApi/ModelListSync.cs:148-153` | reaper, scheduler, finalizer and maintenance leadership |
-| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Fors.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Ume.Rag`, `rag.*` names (repo-and-deployment §9) |
+| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Fors.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Källa`, `rag.*` names (repo-and-deployment §9) |
 
 ## 1. Summary of decisions
 
@@ -1003,7 +1003,7 @@ round trips use `NpgsqlBatch` (to-verify #19, #20); `Multiplexing` is not used.
 
 ## 17. Observability
 
-Meter `Ume.Rag` and activity source `Ume.Rag` (repo-and-deployment §9). New metrics (low-cardinality dimensions only;
+Meter `Källa` and activity source `Källa` (repo-and-deployment §9). New metrics (low-cardinality dimensions only;
 never source names, URLs or titles):
 
 | Metric | Type | Dimensions |

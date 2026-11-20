@@ -4,7 +4,7 @@ Paste everything below the line into a new agent session started in the repo roo
 
 ---
 
-You are the implementer of **stream B** in the Ume.Rag repo: the serving side: schema, retrieval, chat, the admin API and every admin page. Stream A works in parallel; the main
+You are the implementer of **stream B** in the Källa repo: the serving side: schema, retrieval, chat, the admin API and every admin page. Stream A works in parallel; the main
 session reviews and settles the design.
 
 **Set-up:** work in your own worktree (`git worktree add ../rag-b main` if you are not in one). Each item's branch is

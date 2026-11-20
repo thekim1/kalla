@@ -29,8 +29,8 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
     private const string TypedSecret = "owui-typed-secret-8e2d41";
     private const string AdminSecret = "admin-typed-secret-0123456789abcdef";
     private const string ProviderUrl = FakeProvider.Authority + "/.well-known/openid-configuration";
-    private const string OtherProviderUrl = "https://idp2.test/realms/ume/.well-known/openid-configuration";
-    private const string TokenPath = "/realms/ume/token";
+    private const string OtherProviderUrl = "https://idp2.test/realms/fors/.well-known/openid-configuration";
+    private const string TokenPath = "/realms/fors/token";
     private const string PublicUrl = "https://chat.test";
     private const string RedirectUri = PublicUrl + "/oauth/oidc/login/callback";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -151,7 +151,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
 
         // The defaults: the provider from kalla-admin's effective authority, the deployment's before the wizard's.
         var byDeployedAuthority = OpenWebUiSignIn.Resolve(Configuration(("Oidc:Authority", FakeProvider.Authority + "/")), new OpenWebUiOidcValues(),
-            "https://wizard.test/realms/ume", () => StoredSecretValue.NotSet, null);
+            "https://wizard.test/realms/fors", () => StoredSecretValue.NotSet, null);
         byDeployedAuthority.ProviderUrl.ShouldBe(new OpenWebUiSignInValue(ProviderUrl, SignInSources.Default));
         byDeployedAuthority.ClientId.ShouldBe(new OpenWebUiSignInValue(OpenWebUiSignIn.DefaultClientId, SignInSources.Default));
         byDeployedAuthority.ProviderName.ShouldBe(new OpenWebUiSignInValue(OpenWebUiSignIn.DefaultProviderName, SignInSources.Default));
@@ -159,8 +159,8 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         (byDeployedAuthority.Configured, byDeployedAuthority.ProviderUrlFromDeployment).ShouldBe((true, true)); // a public client
 
         var byWizardAuthority = OpenWebUiSignIn.Resolve(Configuration(), new OpenWebUiOidcValues(),
-            OpenWebUiSignIn.AuthorityOf("""{"authority":"https://wizard.test/realms/ume"}"""), () => StoredSecretValue.NotSet, null);
-        byWizardAuthority.ProviderUrl.ShouldBe(new OpenWebUiSignInValue("https://wizard.test/realms/ume/.well-known/openid-configuration", SignInSources.Default));
+            OpenWebUiSignIn.AuthorityOf("""{"authority":"https://wizard.test/realms/fors"}"""), () => StoredSecretValue.NotSet, null);
+        byWizardAuthority.ProviderUrl.ShouldBe(new OpenWebUiSignInValue("https://wizard.test/realms/fors/.well-known/openid-configuration", SignInSources.Default));
         byWizardAuthority.ProviderUrlFromDeployment.ShouldBeFalse();
 
         // No provider address at all, or a stored secret the key ring cannot read: not configured.
@@ -220,7 +220,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         var form = provider.LastTokenForm!;
         (form["grant_type"], form["client_id"], form["client_secret"], form["redirect_uri"]).ShouldBe(("authorization_code", "open-webui", TypedSecret, RedirectUri));
         form["code"].Length.ShouldBe(43);
-        provider.Requested.Select(u => u.AbsolutePath).ShouldBe(["/realms/ume/.well-known/openid-configuration", "/realms/ume/certs", TokenPath]);
+        provider.Requested.Select(u => u.AbsolutePath).ShouldBe(["/realms/fors/.well-known/openid-configuration", "/realms/fors/certs", TokenPath]);
 
         // The wizard's view: Open WebUI runs here, the redirect URI to register, and this test as the latest.
         var state = await StateAsync(session);
@@ -281,17 +281,17 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         await using (var host = Host(provider))
         {
             using var session = await SessionAsync(host, Admin);
-            // The document of another realm path names the issuer of /realms/ume: not this address's issuer.
+            // The document of another realm path names the issuer of /realms/fors: not this address's issuer.
             (await RefusalAsync(session, Values(providerUrl: "https://idp.test/realms/other/.well-known/openid-configuration"))).ShouldBe(SetupTestReasons.IssuerMismatch);
-            provider.Overrides["/realms/ume/.well-known/openid-configuration"] = () => FakeProvider.Json(FakeProvider.Discovery(issuer: "https://other.test/" + FakeProvider.LeakMarker));
+            provider.Overrides["/realms/fors/.well-known/openid-configuration"] = () => FakeProvider.Json(FakeProvider.Discovery(issuer: "https://other.test/" + FakeProvider.LeakMarker));
             (await RefusalAsync(session, Values())).ShouldBe(SetupTestReasons.IssuerMismatch);
             // An issuer with a trailing slash names the same document.
-            provider.Overrides["/realms/ume/.well-known/openid-configuration"] = () => FakeProvider.Json(FakeProvider.Discovery(issuer: FakeProvider.Authority + "/"));
+            provider.Overrides["/realms/fors/.well-known/openid-configuration"] = () => FakeProvider.Json(FakeProvider.Discovery(issuer: FakeProvider.Authority + "/"));
             (await TestAsync(session, Values())).GetProperty("status").GetString().ShouldBe("passed");
-            provider.Overrides["/realms/ume/.well-known/openid-configuration"] = () =>
+            provider.Overrides["/realms/fors/.well-known/openid-configuration"] = () =>
                 new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("https://internal.test/x") } };
             (await RefusalAsync(session, Values())).ShouldBe(SetupTestReasons.Redirected);
-            provider.Overrides.Remove("/realms/ume/.well-known/openid-configuration");
+            provider.Overrides.Remove("/realms/fors/.well-known/openid-configuration");
 
             var before = provider.Requested.Count;
             (await RefusalAsync(session, Values(providerUrl: ProviderUrl + "?appid=x"))).ShouldBe(SetupTestReasons.ProviderUrlInvalid);
@@ -302,7 +302,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         await using var staging = Host(provider, environment: "Staging");
         using var stagingSession = await SessionAsync(staging, Admin);
         var count = provider.Requested.Count;
-        (await RefusalAsync(stagingSession, Values(providerUrl: "http://idp.test/realms/ume/.well-known/openid-configuration"))).ShouldBe(SetupTestReasons.ProviderUrlInvalid);
+        (await RefusalAsync(stagingSession, Values(providerUrl: "http://idp.test/realms/fors/.well-known/openid-configuration"))).ShouldBe(SetupTestReasons.ProviderUrlInvalid);
         provider.Requested.Count.ShouldBe(count);
     }
 
@@ -462,7 +462,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         var test = await TestAsync(session, Values(providerUrl: null));
         (test.GetProperty("status").GetString(), test.GetProperty("result").GetProperty("clientAccepted").GetBoolean()).ShouldBe(("passed", true));
         test.GetProperty("values").GetProperty("providerUrl").ValueKind.ShouldBe(JsonValueKind.Null);
-        provider.Requested.Skip(count).Select(u => u.AbsolutePath).ShouldBe(["/realms/ume/.well-known/openid-configuration", "/realms/ume/certs", TokenPath]);
+        provider.Requested.Skip(count).Select(u => u.AbsolutePath).ShouldBe(["/realms/fors/.well-known/openid-configuration", "/realms/fors/certs", TokenPath]);
 
         // Saved as null, so it keeps following the sign-in provider once Finish saves the authority. Saving needs the session's latest
         // kalla-admin test to have passed, so it is passed again first.
@@ -555,7 +555,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         (openWebUi.GetProperty("enabled").GetBoolean(), openWebUi.GetProperty("redirectUri").GetString()).ShouldBe((true, RedirectUri));
         var signIn = openWebUi.GetProperty("signIn");
         signIn.GetProperty("providerName").GetProperty("source").GetString().ShouldBe(SignInSources.Wizard);
-        signIn.GetProperty("providerUrl").GetProperty("value").GetString().ShouldBe("https://idp.invalid/realms/ume/.well-known/openid-configuration");
+        signIn.GetProperty("providerUrl").GetProperty("value").GetString().ShouldBe("https://idp.invalid/realms/fors/.well-known/openid-configuration");
         signIn.GetProperty("providerUrl").GetProperty("source").GetString().ShouldBe(SignInSources.Default);
         signIn.GetProperty("clientSecret").GetProperty("set").GetBoolean().ShouldBeFalse();
 

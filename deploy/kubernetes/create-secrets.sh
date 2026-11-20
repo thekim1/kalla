@@ -16,7 +16,7 @@
 #                      the public host names when they are not the domain's defaults (the admin's defaults to kalla-api's
 #                      without --domain); they go into the two services' certificates
 #   --gateway-credential-key-file SERVICE=FILE
-#                      SERVICE's credential key of the gateway integration Ume.Rag (api, admin or worker; repeat the
+#                      SERVICE's credential key of the gateway integration Källa (api, admin or worker; repeat the
 #                      option), issued by a gateway admin: the secret file Gateway__Key
 #   --ca-file FILE     a CA certificate the services trust besides the internal CA (the gateway's, the sign-in
 #                      provider's, your PKI chain); repeat the option. Give it on every run
@@ -41,10 +41,10 @@
 #   --certs-dir DIR [deploy/certs], --secrets-dir DIR [deploy/secrets]
 #   --generate-only    write the files and create no Kubernetes secret (needs no kubectl)
 #
-# Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb, the gateway
+# Secrets: kalla-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb, the gateway
 # credential key Gateway__Key of api, admin and worker, kalla-admin's setup secret Setup__Secret and, when sign-in is
 # declared instead of set in the setup wizard, its client secret Oidc__ClientSecret) and
-# ume-rag-<service>-certs (TLS certificate, the CAs it trusts, Data Protection certificate) for api, admin, worker and
+# kalla-<service>-certs (TLS certificate, the CAs it trusts, Data Protection certificate) for api, admin, worker and
 # migrations, kalla-parser-certs, and kalla-blob-key (the blob master key). The connection strings point at the
 # host "postgres" (--postgres-host for your own database) and are written again on every run from
 # <secrets dir>/postgres/<role>_password.
@@ -175,8 +175,8 @@ if [ "$generate_only" = 0 ]; then
     apply "$1" "${args[@]}"
   }
   for svc in api admin migrations; do
-    secret "ume-rag-$svc-secrets" "$secrets/$svc"
-    secret "ume-rag-$svc-certs" "$certs/$svc"
+    secret "kalla-$svc-secrets" "$secrets/$svc"
+    secret "kalla-$svc-certs" "$certs/$svc"
   done
   # ClamAv__Mode is the stack's (it follows a Compose profile); here the mode is the overlay's kalla-worker-config.
   secret kalla-worker-secrets "$secrets/worker" ClamAv__Mode

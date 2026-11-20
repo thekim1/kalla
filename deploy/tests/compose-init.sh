@@ -77,7 +77,7 @@ init --set-file KALLA_OIDC_CLIENT_SECRET="$work/secret" --set KALLA_OIDC_CLIENT_
 json | jq -e '.services["kalla-bootstrap"].environment.KALLA_OIDC_CLIENT_SECRET == "client-secret"
   and .services["kalla-admin"].environment.Oidc__ClientId == "kalla-admin"' >/dev/null || fail "--set-file and --set"
 init --set KALLA_OIDC_CLIENT_ID= --yes; ! grep -q '^KALLA_OIDC_CLIENT_ID=' "$env" || fail "--set NAME= keeps the line"
-init --hardened --oidc-authority https://192.0.2.10/realms/ume --proxy-address 10.1.2.3 --profiles clamav,openwebui \
+init --hardened --oidc-authority https://192.0.2.10/realms/fors --proxy-address 10.1.2.3 --profiles clamav,openwebui \
   --gateway-url https://192.0.2.20 --backup-target local --yes
 grep -q "compose.hardened.yaml" "$env" || fail "--hardened"
 grep -q "deploy/host/install.sh" "$work/init.log" || fail "--hardened does not name install.sh"

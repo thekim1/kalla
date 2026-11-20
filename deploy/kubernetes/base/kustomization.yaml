@@ -1,4 +1,4 @@
-# Ume Rag on Kubernetes: kalla-api, kalla-admin, the kalla-migrate Job, the blob volume and the NetworkPolicies of every
+# Källa on Kubernetes: kalla-api, kalla-admin, the kalla-migrate Job, the blob volume and the NetworkPolicies of every
 # service (default deny). Postgres comes from your platform or from components/datastores; the worker and parser from
 # components/ingestion; ClamAV from components/clamav; the renderer from components/renderer; the Ingress controller's
 # way in from components/ingress-controller. Do not edit this base: make an overlay (start from ../example) and see

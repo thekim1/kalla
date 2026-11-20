@@ -434,7 +434,7 @@ export const PLATFORM_RULE_MESSAGES: Record<string, string> = {
  */
 export const SETUP_TEST_MESSAGES: Record<string, string> = {
   authority_invalid:
-    'The provider address is not valid. Enter the full https address of the provider, without a query or #, for example https://login.example.org/realms/ume.',
+    'The provider address is not valid. Enter the full https address of the provider, without a query or #, for example https://login.example.org/realms/fors.',
   authority_unreachable:
     'kalla-admin could not reach the provider address. Check the address, and that kalla-admin can reach the provider through the network and any proxy. On a Docker Compose host with the host firewall, kalla-admin reaches only the provider the deployment names: run init-deployment.sh again with --oidc-authority and this address, then the host firewall.',
   tls: 'kalla-admin does not trust the provider’s certificate. Add the provider’s certificate authority to kalla-admin’s trusted certificates, or check the address.',
@@ -463,7 +463,7 @@ export const SETUP_TEST_MESSAGES: Record<string, string> = {
   deployment_secret_without_authority:
     'The deployment sets the client secret but not the provider address, so that secret is not sent to an address typed here. Set the provider address in the deployment too, or remove the deployment’s secret.',
   provider_url_invalid:
-    'The provider address is not valid. Enter the full https address of the provider’s discovery document, without a query or #, for example https://login.example.org/realms/ume/.well-known/openid-configuration.',
+    'The provider address is not valid. Enter the full https address of the provider’s discovery document, without a query or #, for example https://login.example.org/realms/fors/.well-known/openid-configuration.',
   client_refused: 'The provider refused this client ID or client secret. Check both at the provider and check again.',
   client_unverified: 'The provider’s answer did not say whether it accepts this client ID and client secret.',
   browser_mismatch: 'The sign-in finished in another browser than the one that started the test. Test again, and sign in in the window the test opens.',

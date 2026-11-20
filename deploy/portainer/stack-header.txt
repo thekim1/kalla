@@ -1,6 +1,6 @@
 #
-# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
-# The same stack also runs Ume Rag: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
+# ---- Källa (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
+# The same stack also runs Källa: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
 # kalla-parser and, with their profiles in COMPOSE_PROFILES, kalla-clamav (clamav) and kalla-renderer (render). Its one-shot
 # kalla-bootstrap creates RAG's certificates and secrets in the volumes <stack>_kalla-certs and <stack>_kalla-secrets on first
 # start. Keep the stack name: the gateway's volumes are found by it.
@@ -16,7 +16,7 @@
 #                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
 # Set by the stack file or stack.env.example, nothing to type
-#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
+#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Källa with its three
 #                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
 #                             its own (kalla) that a gateway admin can move. The gateway's migrations create what is
 #                             missing (never change what exists) and write each new key to the volume
@@ -24,7 +24,7 @@
 #                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
 #                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
 #   KALLA_API_GATEWAY_KEY, KALLA_ADMIN_GATEWAY_KEY, KALLA_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
+#                             each service's credential key of the gateway integration Källa; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
 #                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
 #                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
@@ -56,7 +56,7 @@
 #                             residencies in the gateway (register M2: OnPrem and Eu)
 #   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see kalla-renderer)
 #   Open WebUI is optional: without the openwebui profile nothing of it is created (no secrets, no client in RAG's
-#                             admin, no chat host name in the proxy), and Ume.Rag serves its API to your applications.
+#                             admin, no chat host name in the proxy), and Källa serves its API to your applications.
 #   COMPOSE_PROFILES=clamav,openwebui  also kalla-openwebui, Open WebUI as the chat for users, on plain HTTP at
 #                             KALLA_OPENWEBUI_BIND (127.0.0.1):KALLA_OPENWEBUI_PORT (3000) for a TLS proxy in front
 #                             (it sets Secure cookies, so users reach it over HTTPS only). It calls kalla-api inside the

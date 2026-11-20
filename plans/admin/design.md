@@ -1,6 +1,6 @@
 # Admin API and admin UI: detailed design
 
-Detail step 10 of the Ume.Rag design. The rules of the weakness review and the simplification, performance and
+Detail step 10 of the Källa design. The rules of the weakness review and the simplification, performance and
 consistency passes are stated here (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §2, §5,
 §7–§10, §13, §15). Details [`../archive/area-plans/admin.md`](../archive/area-plans/admin.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §14) and the Decisions table
 in [`../decisions.md`](../decisions.md). Consumes, without redesigning: the BFF, claim mapping,
@@ -900,9 +900,9 @@ send `If-None-Match` with the last `ETag`, and write nothing on a `304`.
 | Sync | Source | Rule |
 |---|---|---|
 | Gateway context | `GET /v1/fors/context` (gateway integration phase 1) | `gateway.features` and `version` held in memory and shown on the *Gateway* page (`act-as-key` switches on the admin's acting as keys and V39's publish rule; the api and the worker read their own context for it, identity §4.7; `stream-cost` the stream cost comment, chat §8.3); `gateway.admin_url` for the links (§2.3); `assigned_keys` → `GatewayKeys` (data-model §2.1, `usable` included) upserted by id, only changed rows written, a key no longer listed (revoked) deleted. A key that turns unusable (not `Active`, owner inactive, gone) or loses a model or residency an object relies on raises the attention item of §5.5.1 for the objects that use it |
-| Departments | the context's `departments` (same call; the admin's credential key holds `organisation.read`, gateway-changes §5.5) | taken only when `gateway.features` contains `organisation` and `key.integration_scopes` contains `organisation.read`; otherwise departments and teams are left as they are and the *Gateway* page and health show `degraded` with the reason (without the scope the context lists only the assigned keys' departments, which would deactivate the rest). Upsert by id, `is_active` copied; only changed rows written; a department missing from the context → `IsActive = false`; member groups replace the stored array from `member_groups` when `features` contains `member-groups` (gateway v0.10.0; identity §2.1); they are never edited in Ume.Rag |
+| Departments | the context's `departments` (same call; the admin's credential key holds `organisation.read`, gateway-changes §5.5) | taken only when `gateway.features` contains `organisation` and `key.integration_scopes` contains `organisation.read`; otherwise departments and teams are left as they are and the *Gateway* page and health show `degraded` with the reason (without the scope the context lists only the assigned keys' departments, which would deactivate the rest). Upsert by id, `is_active` copied; only changed rows written; a department missing from the context → `IsActive = false`; member groups replace the stored array from `member_groups` when `features` contains `member-groups` (gateway v0.10.0; identity §2.1); they are never edited in Källa |
 | Teams | the context's `teams` (`code` included) | as departments, under the same condition |
-| Models | `GET /v1/models` at the platform ceiling | `GatewayModels` row per chat/embedding/rerank model: `Kind = model`, `ModelKind` from `fors.kind` (`chat`/`embedding`/`rerank`), `Residencies` from `fors.residency`, prices from `fors.pricing`, `ContextWindow`, `MaxOutputTokens` and `SupportsTools` from `fors.context_window`, `fors.max_output_tokens` and `fors.features` (`tools`); while the gateway sends a null limit the manual value is kept (Decisions "Answer length from the model"), and the manual fields go once it sends them; the rows of models no longer listed are deleted (`GatewayModels` has no "disabled" column), so an assistant that still names one is refused by V34/V8 on its next publish. Ume.Rag's assumption: the admin's credential key has no model allow-list, so the list is the gateway's whole catalogue within the ceiling |
+| Models | `GET /v1/models` at the platform ceiling | `GatewayModels` row per chat/embedding/rerank model: `Kind = model`, `ModelKind` from `fors.kind` (`chat`/`embedding`/`rerank`), `Residencies` from `fors.residency`, prices from `fors.pricing`, `ContextWindow`, `MaxOutputTokens` and `SupportsTools` from `fors.context_window`, `fors.max_output_tokens` and `fors.features` (`tools`); while the gateway sends a null limit the manual value is kept (Decisions "Answer length from the model"), and the manual fields go once it sends them; the rows of models no longer listed are deleted (`GatewayModels` has no "disabled" column), so an assistant that still names one is refused by V34/V8 on its next publish. Källa's assumption: the admin's credential key has no model allow-list, so the list is the gateway's whole catalogue within the ceiling |
 | Route aliases | the aliases on `GET /v1/models` (`fors.residencies`) | `Kind = route`, `Residencies` = its targets' residencies, `Source = catalog`; servable at a ceiling when any target is within it. Until phase 1 they are manual rows (`Source = manual`). Multi-target model names are routes |
 
 The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is the authoritative check, because it
@@ -1934,7 +1934,7 @@ What assistants and knowledge bases cost, finer than the gateway shows (cost-att
 `chat."AssistantDailyUsage"` (every model call of chat, chat §8.3, and of the test panel, §4.9) and
 `content."CollectionDailyUsage"` (the worker's indexing and evaluation calls, engine §10.6), data-model §2.2, §2.3.
 **Reporting only**: no budget, limit or stop is set here; a per-assistant budget is its gateway key's (cost-attribution
-§4.2), and the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see). The
+§4.2), and the gateway is the record for charging (it also counts fallbacks and retries Källa does not see). The
 gateway's cost and the estimated cost (calls without a gateway cost, priced from the model mirror) are always shown apart.
 
 | Method and path | Policy | Returns |
@@ -1965,7 +1965,7 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   and returns per period and step `requests`, `successfulRequests`, `inputTokens`, `cachedInputTokens`,
   `outputTokens`, `costUsd`, cached 5 minutes per key and query (the gateway allows 60 requests a minute per key), at
   most 366 days (else 400 `period_too_long`); and the budget status (`GET /api/gateway/keys/{id}/budget`, §4.5). The
-  gateway's figures are the key's: when several objects share a key the card says so. Ume.Rag's stored figures are
+  gateway's figures are the key's: when several objects share a key the card says so. Källa's stored figures are
   never overwritten by the gateway's. Without the read-back each view links to the gateway's usage report
   (`admin_url`). How to read the two side by side is in `docs/runbook.md` (cost-attribution §5 C6).
 
@@ -2073,7 +2073,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 - Copied: `AdminActivityMiddleware` (6006 throttled), 6001–6007, log scopes incl. `ConfigVersion`, `RequestId`; no
   content in telemetry (test-panel questions, comments, conversation text, URLs of `sensitive` sources never logged).
-- Metrics (meter `Ume.Rag`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
+- Metrics (meter `Källa`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
   kind}`, `rag.admin.sync{kind,outcome}`, `rag.admin.test_panel{outcome}` + `.duration`,
   `rag.admin.conversation_access{scope,level}`, `rag.admin.uploads{outcome}` + `.bytes`, `rag.admin.publish{kind,
   outcome}`, `rag.admin.config_lock.wait` (histogram, s; one per config write attempt, the two syncs included), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),

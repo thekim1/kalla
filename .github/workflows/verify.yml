@@ -119,8 +119,8 @@ jobs:
           # moves with the image) or the container test changed, the evaluation smoke only when the code on its path
           # (ingestion, retrieval, answering) or the smoke set changed. A dispatch and release.yml run everything.
           images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
-          renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Ume\.Rag\.Worker/Connectors/Render/|src/Ume\.Rag\.Worker/Connectors/Http/PageFetcher\.cs$|tests/Ume\.Rag\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
-          smoke="$(git diff --name-only "$range" | grep -E '^(src/Ume\.Rag\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Ume\.Rag\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
+          renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Kalla\.Worker/Connectors/Render/|src/Kalla\.Worker/Connectors/Http/PageFetcher\.cs$|tests/Kalla\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
+          smoke="$(git diff --name-only "$range" | grep -E '^(src/Kalla\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Kalla\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
             echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
 
@@ -156,9 +156,9 @@ jobs:
           # process of its own, all at once, and Kalla.AdminApi.Tests as five (its collections wait for one another
           # inside one process and set this job's time); it prints each process's totals and their sum.
           scripts/ci/backend-tests.sh Release
-          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
+          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/kalla-package-audit.json"
           # The same check runs daily against main in audit.yml.
-          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json"
+          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/kalla-package-audit.json"
 
   evaluation-smoke:
     # Knowledge design §16.4, repo-and-deployment §8.2: without the AppHost, the 13 pages of tests/evaluation/smoke go
@@ -373,8 +373,8 @@ jobs:
           echo "$out"
           grep -q 'KALLA_PARSER_IMAGE=kalla/parser:latest is not pinned' <<< "$out"
           bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/bundle"
-          tar -xzf "$RUNNER_TEMP/bundle/ume-rag-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
-          b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
+          tar -xzf "$RUNNER_TEMP/bundle/kalla-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
+          b="$RUNNER_TEMP/bundle/kalla-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "RAG_${v}_IMAGE"; done
           images="$(docker compose -f "$b/compose.rag.yaml" -f "$b/compose.backup.yaml" -f "$b/compose.hardened.yaml" \

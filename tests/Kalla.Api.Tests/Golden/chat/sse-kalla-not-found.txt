@@ -10,7 +10,7 @@ data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completio
 
 data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 
-data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[],"ume":{"outcome":"not-found","degraded":false}}
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[],"kalla":{"outcome":"not-found","degraded":false}}
 
 data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}
 

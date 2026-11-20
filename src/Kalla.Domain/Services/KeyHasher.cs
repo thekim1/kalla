@@ -19,8 +19,8 @@ public sealed class KeyHasher
     public const string PublicPrefix = "kalla-pk-";
 
     /// <summary>The prefixes of keys issued before the rename, still accepted (never issued).</summary>
-    public const string LegacySecretPrefix = "kalla-sk-";
-    public const string LegacyPublicPrefix = "kalla-pk-";
+    public const string LegacySecretPrefix = "ume-rag-sk-";
+    public const string LegacyPublicPrefix = "ume-rag-pk-";
 
     private const string Base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private const int RandomChars = 43;

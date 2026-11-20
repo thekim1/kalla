@@ -55,7 +55,7 @@ configMapGenerator:
       #   it shows the redirect URIs, takes the client secret and tests the sign-in before saving;
       # - declared: each Oidc__ literal set is the deployment's value, locked in the wizard. With Oidc__Authority and the
       #   client secret (init-deployment.sh --oidc-client-secret-file, in kalla-admin-secrets) the wizard never opens.
-      # - Oidc__Authority=https://idp.example.se/realms/ume
+      # - Oidc__Authority=https://idp.example.se/realms/fors
       # - Oidc__ClientId=kalla-admin
       # - Oidc__TenantId=<Entra tenant id>
       # - Oidc__RefuseGuests=false

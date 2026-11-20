@@ -110,7 +110,7 @@ function codeBlock(code, label, extra = '') {
 
 // ---------- Layout ----------
 
-const BRAND = 'Ume Rag'
+const BRAND = 'Källa'
 const NAV = [['home', 'Product', ''], ['start', 'Getting started', 'start/'], ['docs', 'Docs', 'docs/']]
 const THEMES = [['light', 'Light', 'light_mode'], ['dark', 'Dark', 'dark_mode'], ['lumen', 'Lumen', 'auto_awesome']]
 const ghMark = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>'
@@ -163,7 +163,7 @@ ${body}
 </main>
 <footer class="foot">
   <div class="foot-in">
-    <div class="foot-about"><span class="b">${BRAND}</span><span>© 2026 Kim Vallén, Nichlas Löfdahl and Umeå kommun. Open source under EUPL-1.2. A pilot, not a production approval, legal compliance attestation or WCAG certification.</span></div>
+    <div class="foot-about"><span class="b">${BRAND}</span><span>© 2026 Kim Vallén and Nichlas Löfdahl. Open source under Apache-2.0. A pilot, not a production approval, legal compliance attestation or WCAG certification.</span></div>
     ${footer.map(([t, links]) => `<div class="foot-col"><span class="b">${t}</span>${links.map(([l, h]) => `<a href="${h}">${l}</a>`).join('')}</div>`).join('\n    ')}
   </div>
 </footer>
@@ -194,13 +194,13 @@ function homePage() {
 <section class="hero wrap" aria-labelledby="hero-h">
   <span class="pill"><span class="dot" aria-hidden="true"></span>Open source · .NET 10 · Built in Umeå</span>
   <h1 id="hero-h">Chat assistants that answer from your own websites and documents.</h1>
-  <p class="lead">Ume.Rag collects your organisation's web pages and documents, keeps them up to date, and lets assistants answer questions about them. Every answer shows the pages it is based on and how recent they are. Models are called through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, so you decide where your data may go.</p>
+  <p class="lead">Källa collects your organisation's web pages and documents, keeps them up to date, and lets assistants answer questions about them. Every answer shows the pages it is based on and how recent they are. Models are called through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, so you decide where your data may go.</p>
   <div class="actions"><a class="btn btn-primary" href="${url('start/')}">Get started${icon('arrow_forward')}</a><a class="btn btn-ghost" href="${url('docs/')}">Read the docs</a></div>
 </section>
 <div class="wrap pt-64"><div class="frame frame-lg">${shot('overview-desktop', 'The admin UI\'s home page: an assistant\'s questions, not-found answers, feedback and cost this week, and the platform\'s health', 'r-20')}</div></div>
 <section class="wrap pt-80" aria-label="At a glance">
   <div class="proof">${C.PROOF.map(p => `<div><span class="big">${p.value}</span><span class="b">${p.label}</span><span class="sub">${p.sub}</span></div>`).join('')}</div>
-  <p class="fine">Ume.Rag is in its pilot phase (P1): built and released, with the live block (the real gateway, the umea.se crawl and the gold set) ahead. <a href="${url('docs/changelog/')}">What each release added</a></p>
+  <p class="fine">Källa is in its pilot phase (P1): built and released, with the live block (the real gateway, the umea.se crawl and the gold set) ahead. <a href="${url('docs/changelog/')}">What each release added</a></p>
 </section>
 <section class="wrap pt-120 stack-40" aria-labelledby="pillars-h">
   <div class="intro">${eyebrow('Made for the public sector')}<h2 id="pillars-h" class="h-xl">A chatbot that shows its work, on knowledge you control.</h2></div>
@@ -266,7 +266,7 @@ function startPage() {
   ]
   return `
 <div class="wrap-960 pt-64 stack-40">
-  <header class="stack-12">${eyebrow('Getting started')}<h1 class="h-page">From zero to your first cited answer.</h1><p class="lead-s">Try it on your own machine with demo data, or install a release next to the LLM gateway. You can switch paths at any time.</p></header>
+  <header class="stack-12">${eyebrow('Getting started')}<h1 class="h-page">From zero to your first cited answer.</h1><p class="lead-s">Try it on your own machine with demo data, or install a release next to Fors. You can switch paths at any time.</p></header>
   <div data-tabs class="stack-40"><div role="tablist" aria-label="Path" class="paths">${tabs}</div>${panels}</div>
 
   <section class="stack-16" aria-labelledby="connect-h">
@@ -320,7 +320,7 @@ const out = []
 const write = (path, html) => out.push([path, html])
 
 write('index.html', layout({ page: 'home', title: BRAND, path: '', description: 'An open-source RAG and chat platform for the public sector: crawled and uploaded sources, cited answers with source dates, and every model call through the Ume AI Gateway.', body: homePage() }))
-write('start/index.html', layout({ page: 'start', title: 'Getting started', path: 'start/', description: 'Run Ume.Rag locally with demo data, or install a release next to the LLM gateway, and get your first cited answer.', body: startPage() }))
+write('start/index.html', layout({ page: 'start', title: 'Getting started', path: 'start/', description: 'Run Källa locally with demo data, or install a release next to Fors, and get your first cited answer.', body: startPage() }))
 const rendered = new Map(docs.map(d => [d, renderMarkdown(d.source)]))
 for (const d of docs) write(`${d.slug ? `docs/${d.slug}/` : 'docs/'}index.html`, layout({ page: 'docs', title: d.title, path: d.slug ? `docs/${d.slug}/` : 'docs/', description: d.lead, body: docPage(d, rendered.get(d)) }))
 write('404.html', layout({ page: '', title: 'Page not found', path: '404.html', description: 'Page not found.', body: `<div class="wrap-960 pt-64 stack-16"><h1 class="h-page">Page not found.</h1><p class="lead-s">The page may have moved. Try the <a href="${url('docs/')}">documentation</a> or the <a href="${url('')}">home page</a>.</p></div>` }))

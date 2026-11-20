@@ -1,6 +1,6 @@
 # Ingestion worker, part B: connectors, crawl frontier, change detection, deletion guard
 
-Detail step 6b of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (archived: history, not binding; this design
+Detail step 6b of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (archived: history, not binding; this design
 states every rule, the plan's answered items in §21)
 and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): fetch stages `http-fetch`, `crawl` and
 `upload`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift sweep (§2.3),
@@ -1199,7 +1199,7 @@ applies this traversal verdict from `Runs.Report.verdict`.
 
 ## 16. Observability
 
-New metrics (meter `Ume.Rag`; dimensions low-cardinality; **never** host names, URLs, file names or titles):
+New metrics (meter `Källa`; dimensions low-cardinality; **never** host names, URLs, file names or titles):
 
 | Metric | Type | Dimensions |
 |---|---|---|

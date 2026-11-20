@@ -1,5 +1,5 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM:-fors)",
   "clients": [
     {
       "clientId": "kalla-admin",

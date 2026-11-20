@@ -1,15 +1,15 @@
 # Keycloak
 
-Ume Rag's admin UI signs in with OIDC (`Oidc:*`, client `kalla-admin`). Any OIDC provider works; this page covers
+Källa's admin UI signs in with OIDC (`Oidc:*`, client `kalla-admin`). Any OIDC provider works; this page covers
 Keycloak, which the gateway can run for both products. Keycloak itself (the Compose project, production settings,
 two-factor sign-in, brokering Entra ID or AD, accounts, backup) is operated as in the gateway's
-[Keycloak guide](https://github.com/thekim1/fors/blob/main/docs/keycloak.md): Ume Rag adds realm files to it, it
+[Keycloak guide](https://github.com/thekim1/fors/blob/main/docs/keycloak.md): Källa adds realm files to it, it
 does not run its own. The realm files and their placeholders are described in
 [`deploy/keycloak/README.md`](../deploy/keycloak/README.md).
 
 | Your setup | What to do |
 |---|---|
-| **The gateway's Keycloak, shared realm `fors`** (the pilot, Decisions "Gateway release 1 and shared Keycloak as built") | Copy `deploy/keycloak/rag-additions.json` from the Ume Rag release into the gateway's Keycloak additions directory, set its placeholders, and run the gateway's Keycloak `up` again (README, *Shared realm*). Then kalla-admin's setup wizard takes the realm `https://<keycloak host>/realms/ume` and the client secret (Compose with `--hardened`: also `init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume`, for the host firewall) |
+| **The gateway's Keycloak, shared realm `fors`** (the pilot, Decisions "Gateway release 1 and shared Keycloak as built") | Copy `deploy/keycloak/rag-additions.json` from the Källa release into the gateway's Keycloak additions directory, set its placeholders, and run the gateway's Keycloak `up` again (README, *Shared realm*). Then kalla-admin's setup wizard takes the realm `https://<keycloak host>/realms/fors` and the client secret (Compose with `--hardened`: also `init-deployment.sh --oidc-authority https://<keycloak host>/realms/fors`, for the host firewall) |
 | **Gateway and RAG in one Portainer stack** | The same additions file in the gateway's Keycloak; in the stack, `KALLA_OIDC_AUTHORITY` defaults to the gateway's `FORS_OIDC_AUTHORITY`, and without either kalla-admin's setup wizard suggests the realm saved in the gateway's wizard (runbook, *Portainer and other hosts without shell access*) |
 | **A Keycloak of RAG's own** (standalone) | `deploy/keycloak/standalone/10-rag-realm.json` in place of the gateway's base realm file, then `rag-additions.json`, applied with keycloak-config-cli (README, *Standalone*). Run Keycloak with the gateway's `deploy/keycloak` project |
 | **Entra ID or AD FS directly**, no Keycloak | Register `kalla-admin` there and enter its authority in kalla-admin's setup wizard (Compose with `--hardened`: also `init-deployment.sh --oidc-authority`); Entra needs its tenant ID, in the wizard or as `KALLA_OIDC_TENANT_ID` (production setup, *Sign-in*) |

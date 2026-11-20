@@ -5,7 +5,7 @@ import {
   openWebUiCompleteRequestOf, openWebUiTestRequestOf, presetOf, secretOf, testRequestOf, valuesOf,
 } from './setupValues'
 
-const AUTHORITY = 'https://idp.example.org/realms/ume'
+const AUTHORITY = 'https://idp.example.org/realms/fors'
 
 describe('setup values (admin design §5.11, identity design §19)', () => {
   it('sends only what is typed: every field left at its default is null', () => {

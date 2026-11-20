@@ -39,14 +39,14 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
     {
         var wizard = new OidcWizardValues
         {
-            Authority = "https://wizard.example/realms/ume", ClientId = "wizard-client", RoleClaim = "wizard-roles", ExtraScopes = ["groups"], TenantId = "wizard-tenant",
+            Authority = "https://wizard.example/realms/fors", ClientId = "wizard-client", RoleClaim = "wizard-roles", ExtraScopes = ["groups"], TenantId = "wizard-tenant",
             RefuseGuests = false,
         };
         var effective = Resolve(Configuration(
-            ("Oidc:Authority", "https://deploy.example/realms/ume"), ("Oidc:ClientId", "  "), ("Oidc:RoleClaim", ""), ("Oidc:ExtraScopes:0", " "),
+            ("Oidc:Authority", "https://deploy.example/realms/fors"), ("Oidc:ClientId", "  "), ("Oidc:RoleClaim", ""), ("Oidc:ExtraScopes:0", " "),
             ("Oidc:TenantId", "deploy-tenant"), ("Oidc:RefuseGuests", "true")), wizard);
 
-        effective.Authority.ShouldBe(new SignInValue<string?>("https://deploy.example/realms/ume", SignInValueSources.Deployment));
+        effective.Authority.ShouldBe(new SignInValue<string?>("https://deploy.example/realms/fors", SignInValueSources.Deployment));
         effective.TenantId.ShouldBe(new SignInValue<string?>("deploy-tenant", SignInValueSources.Deployment));
         effective.RefuseGuests.ShouldBe(new SignInValue<bool>(true, SignInValueSources.Deployment));
         // Blank deployment values are unset, so the wizard's apply.
@@ -132,11 +132,11 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         await using var factory = database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting("Oidc:ClientSecret", ""));
         var saved = await SaveAsync(factory, new OidcWizardValues
         {
-            Authority = " https://wizard.example/realms/ume ", ClientId = "wizard-client", ExtraScopes = ["groups", " "], ClientSecretExpiresOn = new DateOnly(2027, 6, 30),
+            Authority = " https://wizard.example/realms/fors ", ClientId = "wizard-client", ExtraScopes = ["groups", " "], ClientSecretExpiresOn = new DateOnly(2027, 6, 30),
         }, WizardSecret);
 
         // The deployment's authority wins; the wizard's client id and secret apply, the latter decrypted for server-side callers.
-        saved.Authority.ShouldBe(new SignInValue<string?>("https://idp.invalid/realms/ume", SignInValueSources.Deployment));
+        saved.Authority.ShouldBe(new SignInValue<string?>("https://idp.invalid/realms/fors", SignInValueSources.Deployment));
         saved.ClientId.ShouldBe(new SignInValue<string>("wizard-client", SignInValueSources.Wizard));
         saved.ExtraScopes.Value.ShouldBe(["groups"]);
         saved.ExtraScopes.Source.ShouldBe(SignInValueSources.Wizard);
@@ -149,7 +149,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         row.Version.ShouldBe(saved.Version);
         row.IdentityOidcEncryptedClientSecret.ShouldNotBeNullOrEmpty();
         row.IdentityOidcEncryptedClientSecret.ShouldNotContain(WizardSecret);
-        row.IdentityOidc.ShouldContain("https://wizard.example/realms/ume");
+        row.IdentityOidc.ShouldContain("https://wizard.example/realms/fors");
         row.IdentityOidc.ShouldNotContain(WizardSecret);
 
         var audit = await db.AuditLog.AsNoTracking().Where(a => a.EntityType == AuditEntityTypes.Settings && a.EntityId == SignInSettings.AuditEntityId)
@@ -186,7 +186,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         }
 
         var json = JsonDocument.Parse(text).RootElement;
-        Value(json, "authority").ShouldBe(("https://idp.invalid/realms/ume", SignInValueSources.Deployment));
+        Value(json, "authority").ShouldBe(("https://idp.invalid/realms/fors", SignInValueSources.Deployment));
         Value(json, "clientId").ShouldBe(("wizard-client", SignInValueSources.Wizard));
         Value(json, "tenantId").ShouldBe(("wizard-tenant", SignInValueSources.Wizard));
         Value(json, "roleClaim").ShouldBe((new OidcOptions().RoleClaim, SignInValueSources.Default));

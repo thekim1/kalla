@@ -1,6 +1,6 @@
 # Deploying and upgrading with Portainer (0.8.x)
 
-How to run Ume.Rag with the LLM gateway `v0.11.0` as one Portainer stack: a first deploy on a new VM, and the upgrade
+How to run Källa with Fors `v0.11.0` as one Portainer stack: a first deploy on a new VM, and the upgrade
 of a `0.5.x` or later stack in one update (an older one: *Upgrade from before 0.5.0*). The stack is configured only
 through environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list:
 the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -16,7 +16,7 @@ the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/co
 Use the **`compose.portainer.yaml` asset of the `v0.8.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
 (`v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
-and Ume.Rag's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0`
+and Källa's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0`
 asset predates both: it has no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be
 set by hand. The one typed
 value, the two setup wizards and the default integration manifest of *First deploy* need a file built from the
@@ -26,15 +26,15 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 
 - A VM with Docker (Compose v2) and Portainer. Sizing: 4 vCPU, 16 GB RAM and 100 GB SSD for a pilot (floor 4 vCPU,
   8 GB, 50 GB; R1 sets the final numbers); ClamAV alone takes about 1 GB of RAM.
-- **Registry access:** Ume.Rag's images on `ghcr.io/thekim1/kalla/*` are private. In Portainer, *Registries → Add
+- **Registry access:** Källa's images on `ghcr.io/thekim1/kalla/*` are private. In Portainer, *Registries → Add
   registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
-  (`ume-admin`) and Ume.Rag's admin (`kalla-admin`). The clients must exist
+  (`fors-admin`) and Källa's admin (`kalla-admin`). The clients must exist
   before you set up sign-in. Their redirect URIs: `https://llm-admin.<domain>/signin-oidc` and
-  `/signout-callback-oidc` for `ume-admin`, `https://kalla-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
+  `/signout-callback-oidc` for `fors-admin`, `https://kalla-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
   `kalla-admin` (the two setup wizards show them,
   ready to copy). The client secrets are entered in the setup wizards, not in the stack.
-- **Host names** and **real certificates** for the gateway API, the gateway admin, kalla-api and Ume.Rag's admin. The
+- **Host names** and **real certificates** for the gateway API, the gateway admin, kalla-api and Källa's admin. The
   services serve certificates from their own internal CAs, so something in front
   terminates TLS: your own reverse proxy (routes and body sizes:
   [production-setup.md](production-setup.md#reverse-proxy-and-pki)), or the stack's optional **proxy profile** (*TLS
@@ -68,7 +68,7 @@ to the services and verifies them against their internal CAs, so nothing else ne
 3. Bind the other published ports to loopback (`FORS_GATEWAY_BIND`, `FORS_ADMIN_BIND`, `KALLA_API_BIND`,
    `KALLA_ADMIN_BIND` = `127.0.0.1`), so only the proxy is reachable.
 4. After the first deploy, list the proxy as a trusted proxy in both admins (the gateway's *Settings → Trusted proxies*,
-   Ume.Rag's *Settings → Network*): its address on the stack's `edge` and `kalla-edge` networks (Portainer: *Networks*),
+   Källa's *Settings → Network*): its address on the stack's `edge` and `kalla-edge` networks (Portainer: *Networks*),
    or the clients' addresses are the proxy's.
 
 **Renewing the certificate:** replace both files and restart `kalla-proxy` (*Containers*, select, *Restart*).
@@ -96,7 +96,7 @@ the host, run `deploy/host/cert-expiry.sh --certs-dir /var/lib/docker/volumes/<s
 
 **Replacing the CA** (the checklist names it 60 days before it expires): delete `ca.pem` and `ca.key` in `kalla-certs`
 (`docker run --rm -v <stack>_kalla-certs:/c alpine rm /c/ca.pem /c/ca.key`) and update the stack. `kalla-bootstrap`
-creates a new CA and re-issues every service certificate; then restart every Ume.Rag service and `kalla-proxy`, which
+creates a new CA and re-issues every service certificate; then restart every Källa service and `kalla-proxy`, which
 read the CA only at start.
 
 ## First deploy
@@ -112,21 +112,21 @@ read the CA only at start.
    ```
 
    `FORS_DOMAIN` gives the host names: the gateway API `llm.<domain>` (its public URL `https://llm.<domain>`), the
-   gateway's admin `llm-admin.<domain>`, kalla-api `rag.<domain>` (its public URL `https://rag.<domain>`) and Ume.Rag's
+   gateway's admin `llm-admin.<domain>`, kalla-api `rag.<domain>` (its public URL `https://rag.<domain>`) and Källa's
    admin `kalla-admin.<domain>`. To use another name for one, set `FORS_GATEWAY_HOST`,
    `FORS_ADMIN_HOST`, `KALLA_API_HOST` or `KALLA_ADMIN_HOST`; for a public address with a
-   port, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_PUBLIC_URL` (Ume.Rag's admin links to the gateway's admin there) or
+   port, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_PUBLIC_URL` (Källa's admin links to the gateway's admin there) or
    `KALLA_API_PUBLIC_URL`. The file lists each, commented out. A stack that sets the names and no `FORS_DOMAIN` works
-   as before: it needs `FORS_GATEWAY_HOST` and `KALLA_API_HOST` then, and Ume.Rag's admin shares kalla-api's name unless
+   as before: it needs `FORS_GATEWAY_HOST` and `KALLA_API_HOST` then, and Källa's admin shares kalla-api's name unless
    `KALLA_ADMIN_HOST` is set. `COMPOSE_PROFILES=clamav` (the malware scan) is already in the file; Open WebUI is one
    more profile (*Adding Open WebUI*).
 
    Leave `FORS_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `FORS_INTEGRATION_API_URL` as the file
    has it. The stack file then gives the gateway its default manifest,
    [`deploy/portainer/integration-manifest.json`](../deploy/portainer/integration-manifest.json): the gateway creates
-   the integration `Ume.Rag` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
+   the integration `Källa` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
    C11). The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
-   named `Ume.Rag` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
+   named `Källa` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
    your own team in step 7. Two other choices:
    - **Your own team at once:** set `FORS_INTEGRATION_MANIFEST` to the default manifest on one line, with an `"owner"`
      in `"integration"`: `{"teamCode":…,"teamName":…,"departmentCode":…,"departmentName":…}`. The team is found by
@@ -139,25 +139,25 @@ read the CA only at start.
    a variable: you set it up in steps 4 and 5. To set it in the stack instead, see *Declaring sign-in instead* below.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `kalla-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
-   creates the integration `Ume.Rag` and its keys `kalla-api`, `kalla-admin` and `kalla-worker` from the manifest and writes
+   creates the integration `Källa` and its keys `kalla-api`, `kalla-admin` and `kalla-worker` from the manifest and writes
    their secrets to the volume `<stack>_integration-secrets`, from which `kalla-bootstrap` gives each service its key; the
    services start. With the default manifest, `migrations`' log has the warning
-   `Integration 'Ume.Rag' names no owner in the manifest, so it is placed in the team 'Ume.Rag' (code 'kalla') …`
+   `Integration 'Källa' names no owner in the manifest, so it is placed in the team 'Källa' (code 'kalla') …`
    (step 7 moves it). **The end of `kalla-bootstrap`'s log lists what is still missing** (example values left in, Open
    WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place. Its last
    lines point at the setup wizard on every deploy, since `kalla-bootstrap` can't see whether setup is done: skip that
    when you can already sign in. The end of the gateway's `bootstrap` log does the same for the gateway's wizard:
    `bootstrap: sign-in to the admin console is set in the setup wizard: https://llm-admin.example.se:9443/setup …`.
 4. **Set up the gateway's sign-in first.** With no `FORS_OIDC_AUTHORITY` in the stack, the gateway's admin opens its own
-   setup wizard on its first start and prints a setup code. Do it before Ume.Rag's: kalla-admin's wizard then offers the
+   setup wizard on its first start and prints a setup code. Do it before Källa's: kalla-admin's wizard then offers the
    provider address you save here.
    - **Find the code:** *Containers → adminapi → Logs*, the line
      `adminapi: setup mode is open until 2026-11-20 14:05 UTC. Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. It is valid
      for one hour and is worth a gateway admin while setup is open: its holder chooses the gateway's sign-in provider.
      If the hour ends before you finish, restart adminapi: a setup that was never finished opens again with a new code.
    - **Open** `https://llm-admin.<domain>/setup` (with `:9443` when no proxy is in front) and enter the code.
-   - **The wizard** shows the redirect URI and the post-logout redirect URI to register on the `ume-admin` client, then
-     takes the provider address, the client ID (default `ume-admin`), the client secret (none for a public client) and,
+   - **The wizard** shows the redirect URI and the post-logout redirect URI to register on the `fors-admin` client, then
+     takes the provider address, the client ID (default `fors-admin`), the client secret (none for a public client) and,
      under *Claims and scopes*, the claim names. **Test sign-in** opens the provider in a window of its own: sign in
      there. **Save and close setup** is offered only after a passed test by someone who comes out as `gateway-admin`
      (the role in the token, or a group in `FORS_OIDC_GROUPS_GATEWAY_ADMIN`).
@@ -165,7 +165,7 @@ read the CA only at start.
    The gateway's own steps and failure cases:
    [its runbook](https://github.com/thekim1/fors/blob/main/docs/runbook.md#first-start-without-an-authority-the-setup-wizard),
    *First start without an authority: the setup wizard*.
-5. **Set up Ume.Rag's sign-in.** kalla-admin opens its setup wizard on the first start and prints a setup code.
+5. **Set up Källa's sign-in.** kalla-admin opens its setup wizard on the first start and prints a setup code.
    - **Find the code:** *Containers → kalla-admin → Logs*, the line
      `kalla-admin: setup mode is open until 2026-11-20 14:05 UTC. Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. The code
      is valid for one hour. Treat it like a password: whoever holds it chooses the sign-in provider while setup is open.
@@ -199,28 +199,28 @@ read the CA only at start.
 6. **Open WebUI is not part of this path.** To give users the chat, now or later: *Adding Open WebUI*, below.
 7. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field): **move the integration to your own team** (skip it if your manifest names an owner): *Access →
-   Integrations → Ume.Rag*, *Edit*, the owner team. The team must be active, in an active department. Every credential
+   Integrations → Källa*, *Edit*, the owner team. The team must be active, in an active department. Every credential
    key of the integration that is not revoked moves with it; usage already recorded stays with the team `kalla`, and
-   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Ume.Rag*, check the
-   three credential keys (residencies `OnPrem` and `Eu`: Ume.Rag's ceiling, register M2), then create the **assigned
+   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Källa*, check the
+   three credential keys (residencies `OnPrem` and `Eu`: Källa's ceiling, register M2), then create the **assigned
    keys** the assistants and knowledge bases will run on, one or more per department, in the integration with role
    *Assigned*. The manifest never changes a key that exists: change one here. **Rotate** a credential key here (with a
-   grace period), then delete its file `Ume.Rag/rag-<service>` in `<stack>_integration-secrets` and update the stack;
+   grace period), then delete its file `Kalla/rag-<service>` in `<stack>_integration-secrets` and update the stack;
    the gateway writes the new secret and the service picks it up within seconds.
 8. **Keys issued by hand instead** (`FORS_INTEGRATION_MANIFEST` set empty, or the gateway runs elsewhere): create the
-   integration `Ume.Rag` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
+   integration `Källa` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
    `KALLA_ADMIN_GATEWAY_KEY` and `KALLA_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and
    update the stack. The services pick them up within seconds. **Address list** of a credential key: the services reach
    the gateway over the stack's internal network `llm`, whose subnet Docker chose
    (`docker network inspect <stack>_llm`); allow that subnet, or leave the list empty.
-9. **Check** in Ume.Rag's admin (`https://kalla-admin.example.se`): *Models* (side menu) shows the gateway's
+9. **Check** in Källa's admin (`https://kalla-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
    embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
    `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
    must allow the model. The first profile is the default, which new knowledge bases use.
-10. **First content:** follow *Get started* on Ume.Rag's *Home* (a knowledge base, a source, the first fetch, test
+10. **First content:** follow *Get started* on Källa's *Home* (a knowledge base, a source, the first fetch, test
     questions, an assistant). Your applications call kalla-api with an app and its key from *Apps and keys*.
 11. **Escrow the keys** on the Docker host, with `escrow-keys.sh` from the release bundle (`deploy/`): it writes one
     set with everything a restored database needs that no backup holds (the pepper, the blob key, the database passwords,
@@ -248,7 +248,7 @@ and a re-open shows those values locked.
 
 - **The gateway:** `FORS_OIDC_AUTHORITY` declares the provider of the gateway's admin and keeps the gateway's wizard
   closed. It is kalla-admin's provider too, locked in both wizards, unless `KALLA_OIDC_AUTHORITY` names another one for
-  kalla-admin. Optionally `FORS_OIDC_CLIENT_ID` (default `ume-admin`) and, for a confidential client,
+  kalla-admin. Optionally `FORS_OIDC_CLIENT_ID` (default `fors-admin`) and, for a confidential client,
   `FORS_OIDC_CLIENT_SECRET`: the gateway's `bootstrap` writes the secret only together with the authority, and without
   one its log says `bootstrap: FORS_OIDC_CLIENT_SECRET is left out: it is used only with FORS_OIDC_AUTHORITY. …`. The
   claim names (`FORS_OIDC_ROLE_CLAIM` and the others in the file's header) lock their fields in the gateway's wizard
@@ -267,7 +267,7 @@ databases instead.
 ## Adding Open WebUI
 
 Open WebUI is the chat for users. It is optional: without the profile `openwebui` the stack creates nothing for it (no
-secrets, no client in Ume.Rag's admin, no `chat.` host name in the TLS proxy) and Ume.Rag's admin has no Open WebUI
+secrets, no client in Källa's admin, no `chat.` host name in the TLS proxy) and Källa's admin has no Open WebUI
 step in its setup wizard. The steps are the same at a first deploy and on a running installation.
 
 1. **At the sign-in provider,** create the client `open-webui` (confidential, code + PKCE) with the redirect URI
@@ -292,10 +292,10 @@ step in its setup wizard. The steps are the same at a first deploy and on a runn
    saving is still allowed). **Save**, or **Skip for now** and open setup again later. Without a secret Open WebUI
    signs in as a public client (PKCE). Its log says what it started with:
    `kalla-openwebui: starting with OIDC sign-in from kalla-api's sign-in settings`.
-5. **Choose its assistants:** Open WebUI connects by itself. Its client is shown in Ume.Rag's admin under *Apps and
+5. **Choose its assistants:** Open WebUI connects by itself. Its client is shown in Källa's admin under *Apps and
    keys* as *Managed by the deployment*; open it there to choose the assistants it offers (an assistant's *Who can use
    it* works too). Users sign in through OIDC and get the role `user`.
-6. **The feedback import** (thumbs and comments into Ume.Rag) needs nothing: the one-shot `kalla-openwebui-setup` mints
+6. **The feedback import** (thumbs and comments into Källa) needs nothing: the one-shot `kalla-openwebui-setup` mints
    the feedback service account's key once Open WebUI runs (password sign-in stays off) and keeps it while it works,
    and kalla-api finds Open WebUI in the stack by itself. Its log says *minted* or *kept*. A new key: delete
    `kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey` and update the stack.
@@ -321,19 +321,19 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
 **Before the update**
 
 1. **Back up** both databases, the gateway's two files (`fors-secrets/.pepper`, `fors-certs/data-protection.pfx`) and
-   Ume.Rag's: from 0.7.x or earlier the three files its *First deploy* asked for (`kalla-secrets/.pepper`,
+   Källa's: from 0.7.x or earlier the three files its *First deploy* asked for (`kalla-secrets/.pepper`,
    `kalla-secrets/keys/rag-blob-internal`, `kalla-certs/data-protection.pfx`); from 0.8.0 on, check its escrow set
    (`sudo deploy/escrow-keys.sh --project <stack> --verify /media/<escrow>` prints `PASS`).
 2. **From 0.5.x, the gateway keys' residencies:** in the gateway's admin, give `kalla-api`'s and `kalla-admin`'s credential
    keys the residencies **`OnPrem` and `Eu` only** (the worker's already are). From 0.6.0 each service's ceiling is its
    key's residencies; a key that allows every residency would let a public assistant answer at `External`. Each
    published assistant also needs a gateway key that reaches both its chat model and its embedding model.
-3. **From 0.5.x, if Open WebUI is on and its client was made by hand:** in Ume.Rag's admin, *Apps and keys*, open that
+3. **From 0.5.x, if Open WebUI is on and its client was made by hand:** in Källa's admin, *Apps and keys*, open that
    client and note its assistants, information class, history and feedback days. After the update Open WebUI uses a
    client the deployment makes, and the hand-made one is no longer trusted.
 4. **From 0.5.x,** if you set any of `KALLA_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` or
    `_VIEWER`, note their groups (with the shared Keycloak the roles come in the token and there is nothing to note).
-5. Optional: set the organisation's name in the gateway's admin console (branding); Ume.Rag's header and sign-in page
+5. Optional: set the organisation's name in the gateway's admin console (branding); Källa's header and sign-in page
    show it.
 6. **Look through the stack's variables:**
    - `FORS_OIDC_AUTHORITY` holds your provider's address, as it must in a working stack: it keeps the gateway's
@@ -348,11 +348,11 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
      or changed;
    - **`FORS_INTEGRATION_MANIFEST` not set** (a stack upgraded from 0.5.x that kept its keys issued by hand): the new
      stack file's default manifest applies from this update on. The gateway looks for the integration by its name,
-     `Ume.Rag`, and for each credential key by its name within it, creates what is missing and never changes what
-     exists. Keys issued by hand under other names (0.5.0's `Ume.Rag api`, …) don't count, so the gateway creates
-     three new credential keys `rag-api`, `kalla-admin` and `kalla-worker` in your integration `Ume.Rag` and writes their
+     `Källa`, and for each credential key by its name within it, creates what is missing and never changes what
+     exists. Keys issued by hand under other names (0.5.0's `Källa api`, …) don't count, so the gateway creates
+     three new credential keys `rag-api`, `kalla-admin` and `kalla-worker` in your integration `Källa` and writes their
      secrets to `<stack>_integration-secrets`; if your integration has another name, it also creates a second
-     integration `Ume.Rag`, in a new team and department `kalla`. Your services keep their keys: a
+     integration `Källa`, in a new team and department `kalla`. Your services keep their keys: a
      `KALLA_*_GATEWAY_KEY` that is set wins over the manifest's. The new keys stay unused. **To create nothing,** add
      `FORS_INTEGRATION_MANIFEST` with an empty value now: set and empty, the default doesn't apply. Or let them be
      created and revoke them afterwards (*After the update*, step 14).
@@ -380,7 +380,7 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
 **After the update**
 
 9. **Read the end of `kalla-bootstrap`'s log:** it lists what is still missing and each variable that is no longer read,
-   and says *sign-in to Ume.Rag's admin is declared by the stack's variables …, so the setup wizard stays closed*.
+   and says *sign-in to Källa's admin is declared by the stack's variables …, so the setup wizard stays closed*.
 10. **Read the end of the gateway's `bootstrap` log:** `bootstrap: sign-in to the admin console is declared by the
     stack's variables (FORS_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and no line
     `bootstrap: FORS_OIDC_CLIENT_SECRET is left out: …` after it.
@@ -394,7 +394,7 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
       `Message`), and **no** line with `Setup code`; kalla-admin's log has *The deployment declares the sign-in* once,
       and **no** line with *Setup code*; you sign in to both admins as before;
     - each of `kalla-api`, `kalla-admin` and `kalla-worker` logs *the credential key's ceiling: Eu* at start;
-    - `migrations`' log has `… 'Ume.Rag' applied, 0 of 3 credential keys created` when your keys came from a manifest
+    - `migrations`' log has `… 'Källa' applied, 0 of 3 credential keys created` when your keys came from a manifest
       (`3 of 3` for a stack of step 6 without one; no such line with an empty value);
     - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
     - `kalla-openwebui`'s log has *starting with OIDC sign-in from kalla-api's sign-in settings*, Open WebUI's sign-in page
@@ -403,13 +403,13 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
     - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
     - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them;
     - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
-14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Ume.Rag*,
+14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Källa*,
     revoke `kalla-api`, `kalla-admin` and `kalla-worker` (the manifest never creates a revoked key again). Or move to them
     instead: give them the settings of your keys (models, address list), remove the three `KALLA_*_GATEWAY_KEY`
     variables and update the stack, so `kalla-bootstrap` hands each service its new key from the volume; once *Models*
     shows a recent organisation sync again, revoke your old keys.
 
-15. **Escrow Ume.Rag's keys** with this release's `deploy/escrow-keys.sh`, as *First deploy* step 11, and verify the
+15. **Escrow Källa's keys** with this release's `deploy/escrow-keys.sh`, as *First deploy* step 11, and verify the
     set. From 0.7.x or earlier this is the first set; a set made by an earlier release doesn't pass `--verify`.
 
 **Tested and not:** the release boots 0.6.0's stack (its file and variables, `clamav` and `openwebui`, no gateway
@@ -441,7 +441,7 @@ stored encrypted. In one go per product, because sign-in is incomplete in betwee
    new value (for example today's date) and update the stack.
 2. Open `https://<admin host>/setup` with the setup code from kalla-admin's log, type the secrets, test the sign-in and
    finish. Keep `FORS_OIDC_AUTHORITY`: the gateway shares it, and it stays locked in the wizard.
-3. The gateway's (a confidential `ume-admin` only): remove `FORS_OIDC_CLIENT_SECRET`, set `FORS_SETUP_REOPEN` to a new
+3. The gateway's (a confidential `fors-admin` only): remove `FORS_OIDC_CLIENT_SECRET`, set `FORS_SETUP_REOPEN` to a new
    value and update the stack. Open `https://<gateway admin host>/setup` with the setup code from `adminapi`'s log,
    type the secret, test the sign-in and save. The provider stays declared and locked.
 
@@ -487,7 +487,7 @@ new one only changes future codes).
 **The gateway's wizard** re-opens the same way with its own variable: set `FORS_SETUP_REOPEN` to a new value and update
 the stack; `adminapi` prints a new setup code in its log, valid for an hour, for `https://llm-admin.<domain>/setup`.
 The gateway's current sign-in keeps working meanwhile, and values the stack sets stay locked. Empty `FORS_SETUP_REOPEN`
-before restoring the gateway's database. `KALLA_SETUP_REOPEN` opens only Ume.Rag's wizard, `FORS_SETUP_REOPEN` only
+before restoring the gateway's database. `KALLA_SETUP_REOPEN` opens only Källa's wizard, `FORS_SETUP_REOPEN` only
 the gateway's.
 
 ## When something fails
@@ -496,14 +496,14 @@ the gateway's.
 |---|---|
 | The stack won't deploy: `pull access denied` for `ghcr.io/thekim1/kalla/...` | the `ghcr.io` registry in Portainer and its token's `read:packages`; pick it on the stack |
 | `kalla-bootstrap` exits non-zero | its log; `the gateway's CA is missing` means the gateway's `bootstrap` didn't run first (keep the stack name) |
-| Ume.Rag's services log `gateway_key_missing` or the gateway answers `401` | the three `KALLA_*_GATEWAY_KEY` variables and `kalla-bootstrap`'s checklist; update the stack (`0.5.0`'s images: restart the service) |
-| The gateway answers `403` to Ume.Rag | the credential key's address list (the `llm` subnet) and its integration role *Credential* |
+| Källa's services log `gateway_key_missing` or the gateway answers `401` | the three `KALLA_*_GATEWAY_KEY` variables and `kalla-bootstrap`'s checklist; update the stack (`0.5.0`'s images: restart the service) |
+| The gateway answers `403` to Källa | the credential key's address list (the `llm` subnet) and its integration role *Credential* |
 | *Models* shows `degraded` or `scope_missing` | `organisation.read` (and `usage.read` for the read-back) on the admin's credential key |
 | Uploads wait with `clamav.unavailable` | `clamav` in `COMPOSE_PROFILES`, `kalla-clamav` healthy (its first signature download takes minutes) |
 | `kalla-openwebui` restarts | its log: a restart after *sign-in settings changed* is expected; otherwise the wrapper's secret files in `kalla-secrets/openwebui/`, the CA bundle, write access to its volume |
 | Open WebUI lists no models | *Apps and keys*: the Open WebUI app managed by the deployment offers assistants, and they are published; `kalla-migrate`'s log names the client |
 | No setup code in `adminapi`'s log | The stack sets `FORS_OIDC_AUTHORITY` (the gateway's `bootstrap` log says sign-in *is declared by the stack's variables*), or the gateway's setup is done already (to change it, a new `FORS_SETUP_REOPEN` value) |
-| Ume.Rag's wizard suggests no provider address and links to the gateway's wizard | The gateway's setup isn't finished (*First deploy* step 4), or kalla-admin hasn't read the gateway's context since: it reads it with its credential key, so check `kalla-bootstrap`'s checklist for a missing key. Or type the address |
+| Källa's wizard suggests no provider address and links to the gateway's wizard | The gateway's setup isn't finished (*First deploy* step 4), or kalla-admin hasn't read the gateway's context since: it reads it with its credential key, so check `kalla-bootstrap`'s checklist for a missing key. Or type the address |
 | No setup code in kalla-admin's log | Setup is done already (sign in; to change sign-in, re-open). Or the stack declares an authority and `KALLA_OIDC_CLIENT_SECRET` (the log says *The deployment declares the sign-in*), or a placeholder such as `CHANGE` is left in that variable (`kalla-bootstrap`'s checklist names it). Or the log says *the setup secret (Setup__Secret …) is missing*: update the stack, so `kalla-bootstrap` writes it, then restart kalla-admin. *The settings row is missing*: `kalla-migrate` didn't complete (its log) |
 | The wizard says *Too many attempts* | More than 20 wrong codes a minute reached kalla-admin. The right code still works at once: paste it again, exactly. If it wasn't you, someone is guessing: security event 6009 has the address ([security-events.md](security-events.md)) |
 | *The setup window has ended* | The hour is over. Setup never finished: restart kalla-admin for a new code. After a finished setup: a new `KALLA_SETUP_REOPEN` value |

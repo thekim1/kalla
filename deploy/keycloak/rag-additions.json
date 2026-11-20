@@ -1,5 +1,5 @@
 {
-  "realm": "$(env:FORS_KEYCLOAK_REALM)",
+  "realm": "$(env:FORS_KEYCLOAK_REALM:-fors)",
   "roles": {
     "realm": [
       {
@@ -30,7 +30,7 @@
   "clients": [
     {
       "clientId": "kalla-admin",
-      "name": "Ume.Rag admin (kalla-admin BFF)",
+      "name": "Källa admin (kalla-admin BFF)",
       "description": "The admin UI and admin API (identity design 11.2). Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json, for test realms only).",
       "enabled": true,
       "protocol": "openid-connect",
@@ -128,7 +128,7 @@
     },
     {
       "clientId": "kalla-api",
-      "name": "Ume.Rag API (audience)",
+      "name": "Källa API (audience)",
       "description": "The audience of RAG API tokens (RagApi:Audience, identity design 7.1). No flow of its own: P1 chat goes through Open WebUI with a key and a user JWT.",
       "enabled": true,
       "protocol": "openid-connect",

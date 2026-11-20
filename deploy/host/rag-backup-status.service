@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: backup and WAL archive metrics (repo-and-deployment §7.4 rule 5)
+Description=Källa: backup and WAL archive metrics (repo-and-deployment §7.4 rule 5)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service

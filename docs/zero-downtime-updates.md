@@ -1,6 +1,6 @@
 # Updates without downtime
 
-By default Ume Rag runs one instance of each service, and an update stops `kalla-api` and `kalla-admin`, migrates the
+By default Källa runs one instance of each service, and an update stops `kalla-api` and `kalla-admin`, migrates the
 database and starts the new version: a minute or two in which Open WebUI, MCP clients and the admin UI get errors. If
 they must keep working through an update, run two instances of `kalla-api` and `kalla-admin` behind the reverse proxy and
 replace them one at a time. It is opt-in, as in the gateway (whose

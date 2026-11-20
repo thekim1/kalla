@@ -277,7 +277,7 @@ jobs:
               mkdir -p "$components/$(basename "$p")/obj"
               cp "$p/obj/project.assets.json" "$components/$(basename "$p")/obj/"
             done
-            dotnet dnx "$SBOM_TOOL" -y -- generate -b "$publish" -bc "$components" -pn "ume-rag-$name" -pv "$VERSION" \
+            dotnet dnx "$SBOM_TOOL" -y -- generate -b "$publish" -bc "$components" -pn "kalla-$name" -pv "$VERSION" \
               -ps "Umea kommun" -nsb https://www.umea.se/kalla -V Warning
             mv "$publish/_manifest/spdx_2.2/manifest.spdx.json" "sbom/kalla-$name-$VERSION.spdx.json"
             rm -rf "$publish/_manifest"
@@ -383,11 +383,11 @@ jobs:
         # deploy/compose.rag.yaml with the backup overlay; no sudo needed (kalla-bootstrap owns the files inside the
         # volumes). --render boots with the renderer, then switches it off, so one boot covers both (#505).
         run: |
-          bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
+          bash deploy/tests/release-smoke.sh "dist/kalla-${{ steps.version.outputs.version }}.tar.gz" \
             --work-dir "$RUNNER_TEMP/smoke" --render
       - name: Boot the Portainer stack
         # The release's compose.portainer.yaml asset, started as Portainer starts it: the stack file and variables
-        # only, the gateway's images from the release it pins, Ume.Rag's from this run, with clamav and openwebui
+        # only, the gateway's images from the release it pins, Källa's from this run, with clamav and openwebui
         # (deploy-configuration plan, step C0). After the smoke test, which has removed its own stack by now.
         run: |
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
@@ -489,13 +489,13 @@ jobs:
             cat release/images.env
             echo '```'
             echo
-            echo "The bundle's Compose files default to these digests. SBOMs: \`ume-rag-<image>-$version.spdx.json\`."
+            echo "The bundle's Compose files default to these digests. SBOMs: \`kalla-<image>-$version.spdx.json\`."
             echo
             echo "## Deploy with Docker Compose"
             echo
             echo '```bash'
-            echo "curl -fsSLO https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/ume-rag-$version.tar.gz"
-            echo "tar -xzf ume-rag-$version.tar.gz && cd ume-rag-$version"
+            echo "curl -fsSLO https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/kalla-$version.tar.gz"
+            echo "tar -xzf kalla-$version.tar.gz && cd kalla-$version"
             echo "./deploy/init-deployment.sh"
             echo "docker compose --env-file deploy/.env up -d --wait"
             echo '```'
@@ -503,7 +503,7 @@ jobs:
             echo "Then docs/production-setup.md in the bundle (stanza, escrow, host units) and docs/upgrade-guide.md."
           } > notes.md
           prerelease=""; case "$version" in *-*) prerelease="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Ume Rag $version" --notes-file notes.md $prerelease \
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Källa $version" --notes-file notes.md $prerelease \
             release/dist/*
       - name: Open the pull request that pins the Portainer stack to this release
         # deploy/compose.rag.yaml and deploy/portainer/ on main then name this release's images, as the release's
@@ -523,7 +523,7 @@ jobs:
           sh deploy/portainer/build-stack.sh --images release/images.env current
           if git diff --quiet -- deploy/compose.rag.yaml deploy/portainer; then echo "deploy/ already names $version"; exit 0; fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Portainer stack pinned to Ume.Rag $version's images" -- deploy/compose.rag.yaml deploy/portainer
+            commit -q -m "Portainer stack pinned to Källa $version's images" -- deploy/compose.rag.yaml deploy/portainer
           git push origin "$branch"
-          gh pr create --base main --head "$branch" --title "Portainer stack pinned to Ume.Rag $version's images" \
+          gh pr create --base main --head "$branch" --title "Portainer stack pinned to Källa $version's images" \
             --body "Opened by the release of \`$GITHUB_REF_NAME\`: \`deploy/portainer/build-stack.sh --images images.env current\`, so \`deploy/compose.rag.yaml\` and \`compose.portainer.yaml\` name the release's images, as the release's \`compose.portainer.yaml\` asset does. Close and reopen this pull request to start its checks."

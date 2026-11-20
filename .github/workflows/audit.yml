@@ -40,8 +40,8 @@ jobs:
         run: dotnet restore Kalla.slnx --nologo
       - name: Audit .NET packages
         run: |
-          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
-          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json" --summary "$GITHUB_STEP_SUMMARY"
+          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/kalla-package-audit.json"
+          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/kalla-package-audit.json" --summary "$GITHUB_STEP_SUMMARY"
 
   admin-ui:
     # As the admin-ui job in verify.yml: npm ci from the lock only (src/admin-ui/.npmrc: ignore-scripts,

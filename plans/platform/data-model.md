@@ -1,6 +1,6 @@
 # Platform data model and storage: detailed design
 
-Detail round, step 1. Covers every table, role, index, queue, key and blob path of Ume.Rag. Builds on
+Detail round, step 1. Covers every table, role, index, queue, key and blob path of Källa. Builds on
 [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) §2–4, §6, §8, §8a and §9 and the data parts of every service plan. Where this document had to choose
 something the plans leave open, or found two plans disagreeing, the choice is listed in §12 with a recommendation.
 Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md))
@@ -234,7 +234,7 @@ agent rules for every linking assistant (admin design V14, V18).
 **Organisation mirror.** The admin API syncs `Departments`, `Teams` and `GatewayKeys` from the gateway's
 `GET /v1/fors/context` (its credential key holds `organisation.read`; admin design §4.10) every 5 minutes and on demand;
 only changed rows are written, so a sync without changes does not bump the config version. `MemberGroups` comes from
-the context's `member_groups` (feature `member-groups`, gateway v0.10.0; identity §2.1) and is never edited in Ume.Rag.
+the context's `member_groups` (feature `member-groups`, gateway v0.10.0; identity §2.1) and is never edited in Källa.
 
 **Schema details of the built `config` tables** (where they are narrower or more specific than the table above):
 - **`Settings`**: scalars are columns and groups (`DefaultSchedules`, `Crawl`, `PiiFlagRules`,

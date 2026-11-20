@@ -55,7 +55,7 @@ ENV_PEPPER = "KALLA_DEV_KEY_PEPPER"
 KEY_PREFIX = "kalla-sk-"  # KeyHasher.SecretPrefix
 KEY_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"  # KeyHasher's base62
 KEY_RANDOM_CHARS = 43
-KEY_DISPLAY_PREFIX = 15  # "kalla-sk-" + 4 characters
+KEY_DISPLAY_PREFIX = 13  # "kalla-sk-" + 4 characters
 MIN_PEPPER_BYTES = 32  # KeyHasher and Security:KeyPepper
 NPGSQL_KEYS = {
     "host": "host",
@@ -157,18 +157,18 @@ def script(args: argparse.Namespace, urls: list[str], key: str | None = None, pe
     """The parameters as session settings, then seed-url-list.sql: what psql reads on stdin. Of a key, only its hash
     and display prefix."""
     settings = {
-        "ume_seed.urls": json.dumps(urls),
-        "ume_seed.profile": args.profile,
-        "ume_seed.department_id": args.department_id or "",
-        "ume_seed.department_name": args.department_name,
-        "ume_seed.collection_slug": args.collection_slug,
-        "ume_seed.collection_name": args.collection_name,
-        "ume_seed.source_name": args.source_name,
-        "ume_seed.pii_mode": args.pii_mode,
-        "ume_seed.enqueue": "false" if args.no_sync else "true",
-        "ume_seed.client_name": args.client_name,
-        "ume_seed.key_hash": key_hash(pepper, key) if key and pepper else "",
-        "ume_seed.key_prefix": key[:KEY_DISPLAY_PREFIX] if key else "",
+        "kalla_seed.urls": json.dumps(urls),
+        "kalla_seed.profile": args.profile,
+        "kalla_seed.department_id": args.department_id or "",
+        "kalla_seed.department_name": args.department_name,
+        "kalla_seed.collection_slug": args.collection_slug,
+        "kalla_seed.collection_name": args.collection_name,
+        "kalla_seed.source_name": args.source_name,
+        "kalla_seed.pii_mode": args.pii_mode,
+        "kalla_seed.enqueue": "false" if args.no_sync else "true",
+        "kalla_seed.client_name": args.client_name,
+        "kalla_seed.key_hash": key_hash(pepper, key) if key and pepper else "",
+        "kalla_seed.key_prefix": key[:KEY_DISPLAY_PREFIX] if key else "",
     }
     lines = [f"SELECT set_config({sql_literal(k)}, {sql_literal(v)}, false);" for k, v in settings.items()]
     return "\n".join(lines) + "\n" + SQL_FILE.read_text(encoding="utf-8")

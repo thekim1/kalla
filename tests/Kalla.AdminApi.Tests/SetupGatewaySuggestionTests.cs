@@ -26,7 +26,7 @@ namespace Kalla.AdminApi.Tests;
 public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) : IAsyncLifetime
 {
     private const string ContextKey = "sk-ume-setup-gateway-000000000000";
-    private const string GatewayAuthority = "https://idp.example.se/realms/ume";
+    private const string GatewayAuthority = "https://idp.example.se/realms/fors";
     private const string GatewayAdmin = "https://llm-admin.example.se";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -109,20 +109,20 @@ public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) :
     [Fact]
     public async Task A_deployment_authority_stays_in_force_beside_the_suggestion()
     {
-        var (host, gateway) = await HostAsync(GatewayAuthority, settings: ("Oidc:Authority", "https://deployed.example.se/realms/ume"));
+        var (host, gateway) = await HostAsync(GatewayAuthority, settings: ("Oidc:Authority", "https://deployed.example.se/realms/fors"));
         await using var disposeGateway = gateway;
         await using var disposeHost = host;
 
         var state = await StateAsync(host);
         state.GetProperty("gateway").GetProperty("suggestedAuthority").GetString().ShouldBe(GatewayAuthority);
-        Authority(state.GetProperty("signIn")).ShouldBe(("https://deployed.example.se/realms/ume", SignInValueSources.Deployment));
+        Authority(state.GetProperty("signIn")).ShouldBe(("https://deployed.example.se/realms/fors", SignInValueSources.Deployment));
     }
 
     [Theory]
     [InlineData(null)] // the gateway's sign-in is not set up yet
-    [InlineData("http://idp.example.se/realms/ume")]
-    [InlineData("idp.example.se/realms/ume")]
-    [InlineData("https://user:pass@idp.example.se/realms/ume")]
+    [InlineData("http://idp.example.se/realms/fors")]
+    [InlineData("idp.example.se/realms/fors")]
+    [InlineData("https://user:pass@idp.example.se/realms/fors")]
     [InlineData("javascript:alert(1)")]
     public async Task A_gateway_with_the_feature_but_without_a_usable_https_address_suggests_none(string? oidcAuthority)
     {
@@ -227,7 +227,7 @@ public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) :
     public async Task With_an_authority_from_the_deployment_or_the_wizard_the_state_reads_no_context(bool deployment)
     {
         // The suggestion is unused then, so the gateway is not asked.
-        const string authority = "https://own.example.se/realms/ume";
+        const string authority = "https://own.example.se/realms/fors";
         if (!deployment)
         {
             await using var db = TestPostgres.Context(Admin);

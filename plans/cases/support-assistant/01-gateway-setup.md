@@ -1,11 +1,11 @@
 # Gateway setup
 
-What the LLM gateway operator provides for this case. The deployed gateway is v0.9.1 (residency ceiling, optional
+What Fors operator provides for this case. The deployed gateway is v0.9.1 (residency ceiling, optional
 rerank, rerankers on Azure AI Foundry, shared Keycloak; verified live, B-L4, #441; Decisions "Gateway release 1 and
-shared Keycloak as built"); v0.9.2 (2026-11-07) adds Keycloak groups shared with Ume.Rag and changes nothing for the case. Ume.Rag needs no gateway change for the
+shared Keycloak as built"); v0.9.2 (2026-11-07) adds Keycloak groups shared with Källa and changes nothing for the case. Källa needs no gateway change for the
 case: every need below is an existing gateway feature.
 
-If Ume.Rag is already deployed against the gateway for the pilot ([`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md)),
+If Källa is already deployed against the gateway for the pilot ([`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md)),
 §1–§3 are checks, not new work: the support assistant reuses the deployment's keys and embedding profile.
 
 ## 1. Models
@@ -16,7 +16,7 @@ If Ume.Rag is already deployed against the gateway for the pilot ([`../../../doc
 | Condense (rewrites follow-up turns and long tickets into a search query; writes the follow-up suggestions) | a small chat model in `Settings.Chat.condenseModel`; **`gpt-6-luna`** (Decisions "Condense on the EU route"; user, 2026-11-06), with the budgets below | `Eu` | Decisions "Condense on the EU route"; chat §5, §5.1, §9.8 |
 | Embedding | `text-embedding-3-large` at 1024 dimensions, the platform's pilot embedding profile | `Eu` | Decisions "Pilot embedding model, U-b". The knowledge base uses the platform profile; a different model would re-embed everything |
 | Evaluation (question generation, judge) | any chat model in `Settings.EvaluationModel` / `EvaluationJudgeModel` | the collection's ceiling, `Eu` today | Decisions "Evaluation models at the collection's ceiling" |
-| Rerank (optional) | `Cohere-rerank-v5-fast` on Azure AI Foundry (EU), chosen by the user instead of Berget AI `bge-reranker-v2-m3` (2026-11-06; Ume.Rag #421); or a small chat model for the interim chat-model reranker | `Eu` | Decisions "Rerank pulled forward", "Gateway release 1 …": optional everywhere, off by default |
+| Rerank (optional) | `Cohere-rerank-v5-fast` on Azure AI Foundry (EU), chosen by the user instead of Berget AI `bge-reranker-v2-m3` (2026-11-06; Källa #421); or a small chat model for the interim chat-model reranker | `Eu` | Decisions "Rerank pulled forward", "Gateway release 1 …": optional everywhere, off by default |
 
 **The condense model.** It makes up to two calls per turn for this case: the long-ticket condense (budget 3 s) and
 the follow-up suggestions (budget 2 s). Measured on the interim gateway (chat §22, 2026-11-06, three runs each):
@@ -39,7 +39,7 @@ a manual mirror row for `gpt-6-luna` to try the decided condense model, or run t
 `claude-haiku-5-5` (the measured faster alternative above) with the default budgets.
 
 Gateway side: providers and models are added as in `~/git/llmgateway/docs/providers-and-models.md` (rerank:
-section "Reranking (optional)"). Ume.Rag side, after any model change: a platform admin runs the model sync
+section "Reranking (optional)"). Källa side, after any model change: a platform admin runs the model sync
 (`POST /api/gateway/sync`, `src/Kalla.AdminApi/GatewayEndpoints.cs:144`) and, for an embedding change, the embedding
 canary (`POST /api/gateway/canary-check`; Decisions "Embedding canary on demand"). Rerank models are set in
 `PUT /api/settings/retrieval` ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Rerank
@@ -51,7 +51,7 @@ workaround is no longer needed:
 
 1. Gateway admin UI: the model `Cohere-rerank-v5-fast` under the existing Foundry provider, of kind *Rerank*, with its
    residency `Eu` (the residency is per model since v0.9.1).
-2. Ume.Rag: model sync, then `Settings.Retrieval.gatewayRerankModel` = that model's alias (`PUT /api/settings/retrieval`).
+2. Källa: model sync, then `Settings.Retrieval.gatewayRerankModel` = that model's alias (`PUT /api/settings/retrieval`).
 
 It was measured live on `turkos` (B-16, #421, #438); `Retrieval:GatewayRerankTimeout` defaults to 1.5 s for it
 (Decisions "Gateway rerank time limit 1.5 s").
@@ -69,16 +69,16 @@ shows a gain ([`04-assistant.md`](04-assistant.md) §5). The chat-model reranker
 
 The support assistant's chat traffic runs on the **api** key, shared with every other assistant on the deployment.
 Gateway budgets and usage therefore show it under the RAG team's key, not under the support department (see
-question 1 in [`README.md`](README.md)). The frontend team gets **no** gateway key: it calls Ume.Rag, never the
+question 1 in [`README.md`](README.md)). The frontend team gets **no** gateway key: it calls Källa, never the
 gateway ("Every model call goes through the gateway", `AGENTS.md`).
 
 ## 3. Residency ceiling
 
-Ume.Rag sends `x-fors-max-residency` on every model call, derived from the level of the data in the call (identity
+Källa sends `x-fors-max-residency` on every model call, derived from the level of the data in the call (identity
 §4.7), capped by the service's credential key's residencies from the gateway's context (M-17 C9): give `kalla-api`'s and
 `kalla-admin`'s keys `OnPrem` and `Eu`. An
 `internal` assistant therefore calls at most `Eu`. The gateway refuses with `403 max_residency_not_met` when no
-target within the ceiling exists, and answers `503 no_eligible_provider` when in-ceiling targets are drained; Ume.Rag
+target within the ceiling exists, and answers `503 no_eligible_provider` when in-ceiling targets are drained; Källa
 retries only with the same ceiling (Decisions "Gateway release 1 …"; gateway ADR 018 in
 `~/git/llmgateway/docs/adr.md`).
 
@@ -100,7 +100,7 @@ Trade-offs to bring to it:
   including the query embedding of every question (which uses the same key; harmless for retrieval, since a
   personnummer never helps a search).
 - `Redact` keeps names (the gateway does not detect names).
-- Ume.Rag stores no chat text in P1 (history mode `none`, Decisions "Weakness review 4"), so the gateway and the
+- Källa stores no chat text in P1 (history mode `none`, Decisions "Weakness review 4"), so the gateway and the
   EU provider are where pasted ticket text travels; the frontend's own store is the other place (question 10).
 
 ## 5. Gateway-side checklist
@@ -108,7 +108,7 @@ Trade-offs to bring to it:
 - [ ] Answer and condense models within `Eu` listed by the gateway (condense: `gpt-6-luna` with the case budgets, §1);
       prices set (the model mirror shows cost).
 - [ ] `text-embedding-3-large` within `Eu`; the platform embedding profile's canary passes.
-- [ ] `api`, `admin`, `worker` credential keys of the integration *Ume.Rag*, the worker's capped at `OnPrem` + `Eu`,
+- [ ] `api`, `admin`, `worker` credential keys of the integration *Källa*, the worker's capped at `OnPrem` + `Eu`,
       `kalla-admin`'s with `organisation.read`; no Data API key.
 - [ ] PII policy on the api key decided in the DPIA.
 - [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker under the Foundry provider (kind Rerank, residency `Eu`;

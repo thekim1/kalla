@@ -1,8 +1,8 @@
 # RAG's part of the shared Keycloak realm
 
-The pilot's Keycloak realm `fors` is shared with the LLM gateway (identity design §11.2, Decisions "Gateway release 1
+The pilot's Keycloak realm `fors` is shared with Fors (identity design §11.2, Decisions "Gateway release 1
 and shared Keycloak as built"). The gateway repo owns the Keycloak project (`deploy/keycloak` there, Keycloak 26.8.1)
-and the base realm file `realm/10-gateway.json`. Ume.Rag delivers one additions file. The gateway's `realm-import`
+and the base realm file `realm/10-gateway.json`. Källa delivers one additions file. The gateway's `realm-import`
 job (keycloak-config-cli) applies the base file and then every file in the operator's additions directory, in name
 order, on every `docker compose up`. Every resource type is imported with `no-delete`: a file adds and updates, and
 never removes what another file or an administrator made. The gateway's `docs/keycloak.md` (*Realm files*) describes
@@ -10,10 +10,10 @@ the job.
 
 | File | What it holds | Where it goes |
 |---|---|---|
-| `rag-additions.json` | `"realm": "$(env:FORS_KEYCLOAK_REALM)"` (Fors 0.12: `fors` in a new Keycloak, `ume` in one kept from before the rename); the 7 `rag-*` realm roles; the clients `kalla-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, callback `/oauth/oidc/login/callback`: Open WebUI v0.12.5, which still serves the legacy `/oauth/oidc/callback` too) and `kalla-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `kalla-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
+| `rag-additions.json` | `"realm": "$(env:FORS_KEYCLOAK_REALM:-fors)"` (`fors` unless `FORS_KEYCLOAK_REALM` says otherwise: `ume` in a Keycloak kept from before the rename); the 7 `rag-*` realm roles; the clients `kalla-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, callback `/oauth/oidc/login/callback`: Open WebUI v0.12.5, which still serves the legacy `/oauth/oidc/callback` too) and `kalla-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `kalla-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
 | `rag-additions.local.json` | **Test or dev realms only:** the two sign-in clients again, with the pilot URIs plus the local AppHost redirect URIs, web origins and post-logout URIs (issue #95 part 3) | A test realm's additions directory, next to `rag-additions.json`. **Never in production** |
 | `examples/site-groups.json` | **An example, not an additions file:** the operator's shared groups with role mappings for both products (#468, *One group for both products* below) | Copy, adapt and name it so it sorts after `rag-additions.json` |
-| `standalone/10-rag-realm.json` | **A standalone Ume.Rag realm only:** the realm itself, with the realm-wide settings the gateway's base file holds in the shared realm (password policy, brute-force protection, no self-registration, the user profile with `departmentCodes` and `teamCodes`) | In place of the gateway's base file, see *Standalone* |
+| `standalone/10-rag-realm.json` | **A standalone Källa realm only:** the realm itself, with the realm-wide settings the gateway's base file holds in the shared realm (password policy, brute-force protection, no self-registration, the user profile with `departmentCodes` and `teamCodes`) | In place of the gateway's base file, see *Standalone* |
 
 The additions declare no realm settings and no `userProfile`. keycloak-config-cli replaces the whole user profile with
 a file's `userProfile`, so declaring one here would wipe the gateway's. `departmentCodes` and `teamCodes` come from the
@@ -24,7 +24,7 @@ and MFA returns with brokered Entra ID/AD.
 
 For the gateway operator, on the gateway host:
 
-1. Copy `rag-additions.json` from a tagged Ume.Rag release into the additions directory
+1. Copy `rag-additions.json` from a tagged Källa release into the additions directory
    (`deploy/keycloak/additions/`, or the directory `FORS_KEYCLOAK_ADDITIONS_DIR` names). Copy no other file from here.
 2. Put the values of its placeholders in the env file that `FORS_KEYCLOAK_IMPORT_ENV` names. Keep it with the
    gateway's secrets, readable only by the operator:
@@ -36,7 +36,7 @@ For the gateway operator, on the gateway host:
    KALLA_OPENWEBUI_OIDC_CLIENT_SECRET=<Open WebUI's OIDC client secret>
    ```
 
-   The secrets must equal the ones Ume.Rag's deployment uses (`deploy/.env` and its secret files). Never commit them.
+   The secrets must equal the ones Källa's deployment uses (`deploy/.env` and its secret files). Never commit them.
 3. Run `docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --wait`. Only the import
    job runs again. A placeholder without a value fails the import at this file; the files before it stay applied.
 
@@ -57,14 +57,14 @@ replaces the two clients' URI lists with its own, which keep the pilot URIs and 
 **Group names (#413).** `kalla-admin`'s `groups` mapper sends every group of the account by its short name
 (*Full group path* off, identity design §2.5), the gateway's groups included, as the gateway's own mapper does.
 Group names are therefore shared across the realm:
-- **Role groups** (`Oidc:RoleGroups:<role>`) grant an Ume.Rag role. Each one must be named
+- **Role groups** (`Oidc:RoleGroups:<role>`) grant an Källa role. Each one must be named
   `rag-…` (case-insensitive) or be an Entra object id, and the admin API refuses to start otherwise. A gateway group
-  can't grant an Ume.Rag role by sharing its name. Don't give a gateway group a `rag-` name.
+  can't grant an Källa role by sharing its name. Don't give a gateway group a `rag-` name.
 - **Member groups** on a department (*Organisation* page) give department scope only, never a role. They are meant to
   be the same groups the gateway uses (identity design §2.1), so a gateway group of that name counts on purpose.
 
 **One group for both products** (Decisions "Shared sign-in with the gateway", #468). A person gets the roles of the
-gateway and of Ume.Rag through one group membership: a Keycloak group that carries realm-role mappings for **both**
+gateway and of Källa through one group membership: a Keycloak group that carries realm-role mappings for **both**
 systems, for example `fors-admins` → `gateway-admin` + `rag-platform-admin`. The groups are the operator's data, made in
 the admin console (*Groups* → *Role mapping*) or in a **site file** next to the additions, never in `rag-additions.json`.
 `examples/site-groups.json` is a starting point:
@@ -74,7 +74,7 @@ the admin console (*Groups* → *Role mapping*) or in a **site file** next to th
   "realm": "$(env:FORS_KEYCLOAK_REALM)",
   "groups": [
     { "name": "fors-admins", "realmRoles": ["gateway-admin", "rag-platform-admin"] },
-    { "name": "ume-department-admins", "realmRoles": ["department-admin", "rag-department-admin"] },
+    { "name": "fors-department-admins", "realmRoles": ["department-admin", "rag-department-admin"] },
     { "name": "fors-viewers", "realmRoles": ["viewer", "rag-viewer"] }
   ]
 }
@@ -84,7 +84,7 @@ the admin console (*Groups* → *Role mapping*) or in a **site file** next to th
   the files in name order, and a group can only name realm roles that already exist: a file named `90-groups.json`
   comes before `rag-additions.json` and fails with *Cannot find realm role 'rag-platform-admin'*.
 - Each client still carries only its own roles: `kalla-admin`'s `roles` claim has the `rag-*` roles and the
-  gateway's `ume-admin` only gateway roles (full scope allowed is off on both). Department scope still comes from the
+  gateway's `fors-admin` only gateway roles (full scope allowed is off on both). Department scope still comes from the
   user's `departmentCodes` attribute, and a department admin needs it in both products.
 - The `rag-` rule above stays: a group that grants a RAG role through `Oidc:RoleGroups` is named `rag-…`. Shared groups
   like `fors-admins` grant roles through Keycloak's role mappings instead, so they need no `Oidc:RoleGroups` entry.
@@ -92,11 +92,11 @@ the admin console (*Groups* → *Role mapping*) or in a **site file** next to th
   roles (`rag-platform-admin`, …, and the gateway's `gateway-admin`, …), and the **same security group** assigned in both.
 - The gateway documents the same model in its `docs/keycloak.md` (*Realm files*, *One group for several systems*;
   thekim1/llmgateway#79).
-- **Standalone Ume.Rag** (its own Keycloak, below) uses the same site file with only the `rag-*` roles.
+- **Standalone Källa** (its own Keycloak, below) uses the same site file with only the `rag-*` roles.
 
 `RealmAdditionsTests.One_shared_group_gives_each_system_its_own_role_and_no_other` imports `examples/site-groups.json`
 after the additions and checks that a member of `fors-admins` (with no direct role) gets `rag-platform-admin` from
-`kalla-admin` and `gateway-admin` from `ume-admin`, and nothing else.
+`kalla-admin` and `gateway-admin` from `fors-admin`, and nothing else.
 
 **PKCE on `open-webui`** is not required yet. Requiring it in Keycloak (`pkce.code.challenge.method` `S256`) only works
 once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together. `kalla-admin`
@@ -104,7 +104,7 @@ already requires S256.
 
 ## Standalone
 
-Ume.Rag can later run with its own Keycloak (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag
+Källa can later run with its own Keycloak (Decisions "Identity providers: AD and Entra ID through Keycloak, Källa
 standalone later"). Then `standalone/10-rag-realm.json` takes the place of the gateway's base file and the same
 `rag-additions.json` follows, applied by the same keycloak-config-cli image with the same settings as the gateway's
 `realm-import` job:
@@ -136,13 +136,13 @@ ready for one. OTP is not set here either.
 keycloak-config-cli against it as the gateway's `realm-import` job does: the same image and digest, client-credentials
 sign-in with the secret from a config tree, `$(env:...)` substitution and `no-delete`. The base realm is a minimal
 stand-in for `realm/10-gateway.json` (`tests/Kalla.AdminApi.Tests/Keycloak/10-gateway.json`: the realm settings,
-the user profile, the client `ume-admin` and two gateway roles). The tests check:
+the user profile, the client `fors-admin` and two gateway roles). The tests check:
 
 - The additions import after the base realm and leave its settings, user profile and browser flow alone.
 - A second import deletes nothing: not a client or role made by hand, not the base file's or RAG's clients, not users
   or their role grants.
 - A user with `gateway-admin` and two `rag-*` roles gets only the `rag-*` roles plus `departmentCodes` in the
-  `kalla-admin` token, only `gateway-admin` in the `ume-admin` token, and no roles in the `open-webui` token.
+  `kalla-admin` token, only `gateway-admin` in the `fors-admin` token, and no roles in the `open-webui` token.
 - Admins and editors sign in through the admin BFF with the password alone, without OTP.
 - The additions hold only `realm`, `roles`, `clients` and `scopeMappings`, use only `$(env:...)` placeholders, and
   `rag-additions.json` holds no localhost URI.

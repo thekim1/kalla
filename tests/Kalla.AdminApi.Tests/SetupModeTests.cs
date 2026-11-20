@@ -298,7 +298,7 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
 
         using var logs = new CapturingLoggerProvider();
         var output = new SetupOutput();
-        await using var host = Host(output, logs, settings: [("Oidc:Authority", "https://idp.invalid/realms/ume"), ("Oidc:ClientSecret", "deployed-secret")]);
+        await using var host = Host(output, logs, settings: [("Oidc:Authority", "https://idp.invalid/realms/fors"), ("Oidc:ClientSecret", "deployed-secret")]);
         using var client = await ClientAsync(host);
         (await SetupOpenAsync(client)).ShouldBeFalse();
         (await RowAsync(Admin)).ShouldBeNull(); // not even the declaring deployment's branch creates it
@@ -313,7 +313,7 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
         await ResetAsync(Admin, completed: false);
         // The Portainer stage-1 case: the authority from the deployment, the client id only by default, no secret yet.
         using var logs = new CapturingLoggerProvider();
-        await using (var authorityOnly = Host(logs: logs, settings: ("Oidc:Authority", "https://idp.invalid/realms/ume")))
+        await using (var authorityOnly = Host(logs: logs, settings: ("Oidc:Authority", "https://idp.invalid/realms/fors")))
         {
             using var client = await ClientAsync(authorityOnly);
             (await SetupOpenAsync(client)).ShouldBeTrue();
@@ -323,7 +323,7 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
 
         // With the secret too, an open first run closes at the start and never opens again.
         var output = new SetupOutput();
-        await using var declared = Host(output, settings: [("Oidc:Authority", "https://idp.invalid/realms/ume"), ("Oidc:ClientSecret", "deployed-secret")]);
+        await using var declared = Host(output, settings: [("Oidc:Authority", "https://idp.invalid/realms/fors"), ("Oidc:ClientSecret", "deployed-secret")]);
         using var declaredClient = await ClientAsync(declared);
         (await SetupOpenAsync(declaredClient)).ShouldBeFalse();
         var row = (await RowAsync(Admin))!;

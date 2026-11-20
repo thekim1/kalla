@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: check for unhealthy labelled containers every minute
+Description=Källa: check for unhealthy labelled containers every minute
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

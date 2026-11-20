@@ -153,7 +153,7 @@ if [ "$mode" = export ]; then
   mkdir -m 0700 "$set_dir"
   (cd "$current" && cp --parents "${files[@]}" "$set_dir/")
   {
-    echo "Ume Rag key escrow (repo-and-deployment §7.4)"
+    echo "Källa key escrow (repo-and-deployment §7.4)"
     echo "project:  $project"
     echo "host:     $(hostname -f 2>/dev/null || hostname)"
     echo "created:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"

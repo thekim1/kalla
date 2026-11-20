@@ -17,7 +17,7 @@ Code lives in the design repository `kalla-platform` (decided 2026-10-30): the t
 `plans/`, `platforms/` and the numbered design documents, `docs/` holds both the design-side `stakeholder-report.html`
 and the operations documents, and `verify.yml` ignores changes under `plans/**`, `platforms/**` and the root `*.md`
 files. Solution `Kalla.slnx` (gateway: `Fors.slnx`),
-namespaces and assembly names `Ume.Rag.*`, image repositories `kalla/<service>`, Compose project `kalla`.
+namespaces and assembly names `Källa.*`, image repositories `kalla/<service>`, Compose project `kalla`.
 
 ```
 .editorconfig  .gitattributes  .gitignore  global.json  Directory.Build.props  Directory.Build.targets
@@ -69,7 +69,7 @@ tests/
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
 deploy/
-  compose.rag.yaml                   the one Ume.Rag service file, with the `rag-` names: kalla-bootstrap, kalla-postgres, kalla-migrate, the services and the profiles `clamav`, `render`, `openwebui` and `proxy`; Compose runs it directly and `portainer/build-stack.sh` merges it into the Portainer stack (§7.1). Open WebUI (profile `openwebui`): env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
+  compose.rag.yaml                   the one Källa service file, with the `rag-` names: kalla-bootstrap, kalla-postgres, kalla-migrate, the services and the profiles `clamav`, `render`, `openwebui` and `proxy`; Compose runs it directly and `portainer/build-stack.sh` merges it into the Portainer stack (§7.1). Open WebUI (profile `openwebui`): env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
   compose.backup.yaml                overlay: WAL archiving and pgBackRest inside kalla-postgres, the `backup` network, the upload copy `rag-upload-backup` (§7.4)
   compose.hardened.yaml              overlay: fixed subnets for the host firewall, the ingestion slice, the CPU weights, the restart-unhealthy labels, the renderer's seccomp profile (§6.1, §6.2)
   compose.host-24g.yaml              overlay for the 24 GB host profile (§6.2)
@@ -89,7 +89,7 @@ deploy/
   keycloak/                          RAG's realm additions for the shared Keycloak, the standalone realm, examples (§4.2)
   openwebui/                         start-with-sign-in.py (Open WebUI's entrypoint), feedback-key-setup.py
   empty/                             an empty directory: the default of compose.rag.yaml's optional host directories (§7.1)
-  portainer/                         bootstrap.sh (`kalla-bootstrap`: the one bootstrap of every deployment form), build-stack.sh, stack-header.txt, compose.portainer.yaml (generated: the gateway and Ume.Rag as one stack), stack.env.example, integration-manifest.json (§7.1)
+  portainer/                         bootstrap.sh (`kalla-bootstrap`: the one bootstrap of every deployment form), build-stack.sh, stack-header.txt, compose.portainer.yaml (generated: the gateway and Källa as one stack), stack.env.example, integration-manifest.json (§7.1)
   tests/                             compose-init.sh, compose-bootstrap.sh, kubernetes-secrets.sh, pilot-stack.sh, compose-rolling-e2e.sh, release-smoke.sh, portainer-{boot,upgrade,rerun,hosts}.sh
 dev/keycloak/fors-realm.json          realm `fors` with the gateway's claims + rag-* roles
 docs/                                local-development, p1a-local-run, compose-quick-start, production-setup, portainer,
@@ -103,14 +103,14 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Gateway file | Here | Mode | Change |
 |---|---|---|---|
 | `global.json` | same | copy | – |
-| `Directory.Build.props` | same | adapt | `<Product>Ume Rag</Product>`; same suppressions |
+| `Directory.Build.props` | same | adapt | `<Product>Källa</Product>`; same suppressions |
 | `Directory.Build.targets` | same | copy | same `KallaServiceContainer` opt-in and digest-pinned base image |
 | `Directory.Packages.props` | same | adapt | §2.2 |
 | `.editorconfig`, `.gitattributes` | same | copy | `.gitattributes` adds `images/**` and `src/parser/**/*.sh` |
 | `dotnet-tools.json` | same | copy | `dotnet-ef` 10.0.12 |
 | `aspire.config.json` | same | adapt | path `src/Kalla.AppHost/Kalla.AppHost.csproj` |
 | `tests/Directory.Build.props` | same | copy | TestKit name |
-| `src/*.ServiceDefaults/*` | `Kalla.ServiceDefaults` | copy | `TelemetryName = "Ume.Rag"` |
+| `src/*.ServiceDefaults/*` | `Kalla.ServiceDefaults` | copy | `TelemetryName = "Källa"` |
 | `src/*.FakeLlm/FakeLatency.cs` | `Kalla.FakeGateway` | copy | rest new (§4.3) |
 | `src/*.MigrationService/*` | `Kalla.MigrationService` | adapt | `RunItems` partition maintenance (data-model §10) |
 | `src/*.AppHost/Program.cs` | `Kalla.AppHost` | adapt | §4.1 |
@@ -382,7 +382,7 @@ streaming code, and adds:
 | `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
 | Stream modes (chat design §18.4): configurable usage-only final chunk (on/off), broken stream mid-way, stall (> idle timeout), missing `[DONE]`, empty deltas, `finish_reason: length`; echoes `x-fors-session` | streaming edge cases |
 | `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names); lists only models with a target within the request's `x-fors-max-residency`, as the gateway does from release 1 for every key (gateway design §3.4) | model validation on assistant save (plan §6) |
-| Response header `x-fors-residency`; honours `x-fors-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`; the switch `FakeGateway:RequireMaxResidency`, default on); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal, kept until Ume.Rag moves to credential keys (gateway design §3, §13.4) | fail-closed and key-layer tests (plan §6, §7) |
+| Response header `x-fors-residency`; honours `x-fors-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`; the switch `FakeGateway:RequireMaxResidency`, default on); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal, kept until Källa moves to credential keys (gateway design §3, §13.4) | fail-closed and key-layer tests (plan §6, §7) |
 | The organisation in `GET /v1/fors/context`: with the scope `organisation.read` on the admin's dev credential key, every department and team (an inactive one included, `is_active: false`; department 3000 with its teams); without it only the assigned keys' and the owner team's | organisation sync without the gateway |
 | **Gateway integration** (gateway-changes §5; built against the gateway's OpenAPI document `docs/openapi/integrations.json`, pinned with its gateway commit in `contracts/gateway/`): `GET /v1/fors/context` in the gateway's snake_case shape (`gateway.features` from `FakeGateway:Features`, so a test runs as gateway phase 1 or 2; `admin_url`; departments, teams and assigned keys from `appsettings.json`, an active, a disabled and an expired key in department 3000), with an `ETag` and `304` on `If-None-Match`; the `kalla` fields on `GET /v1/models` (`kind`, `residency`/`residencies`, `context_window`, `max_output_tokens`, `features`, `pricing`), the same `ETag` rule | the admin's context, key and model sync; the key picker; V39 |
 | **Acting as a key**: one dev credential key per service; `x-fors-on-behalf-of` resolved as the gateway does (gateway-changes §5.2: `400 invalid_request` malformed or repeated, `403 delegation_not_allowed` for an id that is not an assigned key of the integration or shares no residency with the credential key, `403 key_disabled` for a disabled one, `403 key_revoked` or `403 key_expired` for a revoked or expired one, as gateway v0.10.1), the request then served under the assigned key's models and its residencies within the credential key's, and the id echoed in the `D` form on every later answer, errors included; `/v1/models` with the header lists the assigned key's models; modes `FakeGateway:DropOnBehalfOfEcho` (an older instance during a rolling update: the header ignored, the credential key served, no echo) and a per-key spent budget (`FakeGateway:AssignedKeys:<n>:BudgetExceeded` = `Key`, `Team` or `Department`: `402 budget_exceeded` with the gateway's message for that scope) | echo fail-closed, unavailable-assistant and V39 tests |
@@ -443,7 +443,7 @@ vectors when we run against a real local gateway.
 
 | Image | Built by | Base | User | Root fs | Health probe | Expected size |
 |---|---|---|---|---|---|---|
-| `kalla/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Ume.Rag.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `FORS_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
+| `kalla/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Källa.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `FORS_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
 | `kalla/fake-gateway` | SDK container | `noble-chiseled` | 1654 | read-only | same | ~130 MB |
 | `kalla/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `kalla/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | budget ≤ 4.0 GB with the NER model (measured 2.88 GB; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`; parser design §12) |
@@ -695,7 +695,7 @@ and `WEBSOCKET_MANAGER=redis` with its own Redis.
 
 The services read their secrets and certificates as files, never from their environment (gateway `compose.prod.yaml`). kalla-bootstrap generates them, or writes them from its own variables (a gateway key issued by hand, a declared client secret, the backup target's S3 credentials: values kept in `deploy/.env`, mode 600, as Portainer keeps them in the stack's variables), into the volumes `kalla-secrets` and `kalla-certs` (§7.1). The client secrets typed in the setup wizard are settings encrypted with Data Protection instead (Decisions "Setup wizard", identity §19), and `Setup__Secret` (kalla-admin; the setup code's key) is one more generated file. Each service mounts its own sub-path, read-only: `kalla-secrets/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis` (P2, multi-host only; without it the in-memory `IRateLimitStore`/`ISharedCache` are used), `Security__KeyPepper`,
-`Gateway__Key` (the service's credential key of the gateway integration *Ume.Rag*, gateway-changes §5.1; the worker's allows `OnPrem` and `Eu` only, and its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by kalla-bootstrap; P2 also: HMAC of host names in the Redis crawl leases, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6), `ClamAv__Mode` and `Render__Endpoint` (worker; they follow the profiles, §5.5, §5.4), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `KeyProvider__*` (with a key service, K1),
+`Gateway__Key` (the service's credential key of the gateway integration *Källa*, gateway-changes §5.1; the worker's allows `OnPrem` and `Eu` only, and its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by kalla-bootstrap; P2 also: HMAC of host names in the Redis crawl leases, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6), `ClamAv__Mode` and `Render__Endpoint` (worker; they follow the profiles, §5.5, §5.4), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `KeyProvider__*` (with a key service, K1),
 `Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` (api; chat design §11.1; the feedback import's `OpenWebUi__AdminApiKey` is in `kalla-secrets/openwebui-feedback`, §7.1), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
 to the api's internal route, chat design §15.2; issued in the admin UI)), `kalla-certs/<service>` →
 `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`; P2: the tool identity's Entra client-credentials certificate for
@@ -771,7 +771,7 @@ missing one stops the run. The script's header (`--help`) is the option list and
 | `--api-host HOST`, `--admin-host HOST` | `KALLA_API_HOST`, `KALLA_ADMIN_HOST` | a name of its own instead; without the domain, kalla-admin's name defaults to kalla-api's. The names go into the two services' certificates |
 | `--gateway-url URL` | `KALLA_GATEWAY_URL` | required, an `https://` URL |
 | `--gateway-ca-file FILE` | `KALLA_GATEWAY_CA_DIR` (`deploy/gateway-ca`) | the gateway's CA certificate (a gateway on this host: `deploy/certs/ca.pem` of its directory), copied alone to `deploy/gateway-ca/ca.pem`; a file that holds a private key is refused, and the gateway's certificate directory, which holds its keys, is never mounted. Not needed for a gateway with a public certificate |
-| `--gateway-secrets-dir DIR` | `KALLA_GATEWAY_SECRETS_DIR` | a gateway on the same host: the directory its migration writes a manifest's keys to (`deploy/portainer/integration-manifest.json`), read as `DIR/Ume.Rag/rag-{api,admin,worker}` |
+| `--gateway-secrets-dir DIR` | `KALLA_GATEWAY_SECRETS_DIR` | a gateway on the same host: the directory its migration writes a manifest's keys to (`deploy/portainer/integration-manifest.json`), read as `DIR/Kalla/rag-{api,admin,worker}` |
 | `--gateway-credential-key-file SERVICE=FILE` (`api`, `admin`, `worker`) | `KALLA_<SERVICE>_GATEWAY_KEY` | a credential key issued by a gateway admin (gateway-changes §5.1); it wins over the manifest's |
 | `--profiles LIST` | `COMPOSE_PROFILES` | `clamav`, `render`, `openwebui`, `proxy`; a first run writes `clamav` (§5.5) |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | `KALLA_BACKUP_TARGET`; adds `compose.backup.yaml` | IT's backup storage (S3-compatible or a mounted share; decided with IT). A mounted share gives `DIR/pgbackrest` (`KALLA_BACKUP_DIR`) and `DIR/uploads` (`KALLA_UPLOAD_BACKUP_DIR`); S3 needs `--backup-s3-credentials-file` (`KALLA_BACKUP_S3_KEY`, `KALLA_BACKUP_S3_KEY_SECRET`; `--backup-s3-region`) and sets `KALLA_BACKUP_ENDPOINT` for the firewall, and the upload copy to S3 is not built; `local` = two Docker volumes (test hosts only: not off the host). kalla-bootstrap writes pgBackRest's `repo1` settings from it (§7.4) |
@@ -846,7 +846,7 @@ lines say that kalla-admin reaches no provider yet), because the host firewall (
 lets kalla-admin reach only that provider, so the wizard's test sign-in can't reach one the deployment doesn't name.
 `compose.rag.yaml` and the Kubernetes base set no `Oidc__*` default.
 **P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): the provider's address is realm `fors`
-(`https://<keycloak host>/realms/ume`), and the redirect URIs are registered on the Keycloak clients `kalla-admin`
+(`https://<keycloak host>/realms/fors`), and the redirect URIs are registered on the Keycloak clients `kalla-admin`
 and `open-webui` (realm additions, §4.2).
 The embedding profile has no deployment knobs: a platform admin creates it in the admin UI after the first sign-in
 (admin design §4.5, Decisions "Deploy configuration").
@@ -855,7 +855,7 @@ are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap
 cannot starve chat's query embeddings. A separate query-embedding route/replica follows only when its trigger fires
 (query embedding p95 during ingestion > 2 × idle).
 
-**The Portainer stack** (M-17, `deploy/portainer/`; operators' guide `docs/portainer.md`): the gateway and Ume.Rag as
+**The Portainer stack** (M-17, `deploy/portainer/`; operators' guide `docs/portainer.md`): the gateway and Källa as
 one stack, configured only through variables, with no script run on the host.
 - **Built, not hand-edited:** `build-stack.sh` joins the gateway release's own `compose.portainer.yaml` (images pinned
   by digest; unchanged but for one line, the default of its `FORS_INTEGRATION_MANIFEST`, which becomes
@@ -1063,8 +1063,8 @@ p50/p95/p99).
 
 ## 9. Observability
 
-- **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Ume.Rag")`, ASP.NET Core,
-  HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Ume.Rag")`, health filtered, `url.query` removed);
+- **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Källa")`, ASP.NET Core,
+  HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Källa")`, health filtered, `url.query` removed);
   JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`FORS_OTEL_ENDPOINT`) is set.
   Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser writes JSON logs to
   stdout only in P1 (no OTel, no OTLP egress; Decisions "Parser telemetry is logs only in P1", #453); the worker's
@@ -1086,7 +1086,7 @@ p50/p95/p99).
 - **Log scopes** (`BeginScope` in middleware and job runner): `ConfigVersion` (every service, every request and job),
   `RunId`, `JobId`, `JobClass`, `DocumentId`, `SourceId` (worker), `AssistantId`, `ClientId`, `Classification`,
   `ConversationId` hash (api).
-- **Metrics** (meter `Ume.Rag`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`, `rag.retrieval.coverage` with near-threshold distances (never query text),
+- **Metrics** (meter `Källa`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`, `rag.retrieval.coverage` with near-threshold distances (never query text),
   `rag.gateway.request.duration` and `rag.gateway.residency_refusals`, `rag.jobs.queued` / `rag.jobs.age` by class,
   `rag.parse.duration_per_page`, `rag.clamav.detections`, `rag.config.version` per instance, `rag.config.lag` and `rag.config.unconfirmed_seconds` (grace window),
   `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.backup.age` (from `pgbackrest info`) and `rag.backup.wal_archive_age` (from `pg_stat_archiver`; §7.4), `rag.ingest.incomplete_runs` per source, `rag.evaluation.recall_at_10` by collection;

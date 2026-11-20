@@ -1,9 +1,9 @@
 # Network and ports
 
 This page is for the infrastructure and security teams that open ports and write firewall and proxy rules for
-Ume.Rag. It lists every listener, every outbound destination and every container-internal port, per supported setup,
+Källa. It lists every listener, every outbound destination and every container-internal port, per supported setup,
 and says where each one is configured. Each rule cites the file it comes from. Where the repository doesn't set a
-value, the page says **not set by Ume.Rag; agree with infra**.
+value, the page says **not set by Källa; agree with infra**.
 
 Installation is in [production-setup.md](production-setup.md), operation (including the host firewall's commands) in
 the [runbook](runbook.md), the units on the host in [`deploy/host/README.md`](../deploy/host/README.md). The design is
@@ -14,10 +14,10 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 
 ## 1. Components and hosts
 
-| Component | Where | What it is to Ume.Rag |
+| Component | Where | What it is to Källa |
 |---|---|---|
 | **RAG host** | one Linux host, Docker Compose project `kalla` (`deploy/compose.rag.yaml` and its overlays) | `kalla-postgres`, `kalla-api`, `kalla-admin`, `kalla-worker`, `kalla-parser`; `kalla-clamav` (profile `clamav`, on by default); with the profile `render`, `kalla-renderer`; with the profile `openwebui`, `kalla-openwebui`; with the profile `proxy`, `kalla-proxy` |
-| **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call, and the admin's organisation and model syncs), and in the pilot the **shared Keycloak** (realm `fors`). Ume.Rag reaches each by URL only |
+| **Gateway host** | Fors's host, run by the gateway team | the gateway (every model call, and the admin's organisation and model syncs), and in the pilot the **shared Keycloak** (realm `fors`). Källa reaches each by URL only |
 | **Reverse proxy** | in front of the RAG host (and the gateway host): the municipal one, or the stack's own `kalla-proxy` (profile `proxy`) | terminates public TLS and re-encrypts to the RAG listeners |
 | **Identity provider** | the shared Keycloak (pilot), a standalone Keycloak, or Entra ID / AD FS directly | OIDC for the admin UI and Open WebUI |
 | **Crawled sites** | municipal hosts (private ranges) and public web sites | read by `kalla-worker` over HTTP(S) |
@@ -145,10 +145,10 @@ needs `KALLA_OPENWEBUI_BIND` set to an address the proxy reaches.
 listeners (through the proxy, or on the host with `curl --cacert rag-ca.pem https://localhost:8543/...`, the internal
 CA read out of the `kalla-certs` volume as [production-setup.md](production-setup.md#5-start) shows).
 The backup scripts write Prometheus text files to `/var/lib/kalla/` for a local collector (`deploy/host/README.md`);
-that collector's port (for example node_exporter's) is not set by Ume.Rag; agree with infra. Telemetry is pushed out
+that collector's port (for example node_exporter's) is not set by Källa; agree with infra. Telemetry is pushed out
 over OTLP (§3), never scraped.
 
-**Host administration** (SSH and the like) is not set by Ume.Rag; agree with infra.
+**Host administration** (SSH and the like) is not set by Källa; agree with infra.
 
 ## 3. Outbound
 
@@ -206,7 +206,7 @@ and only while the gateway's context names its address (`integration_api_url`).
 ### 3.2 From the host itself
 
 These leave from the host, not from a Compose network, so `docker-user-firewall.sh` doesn't filter them. Ports and
-rules are not set by Ume.Rag; agree with infra:
+rules are not set by Källa; agree with infra:
 
 - the backup share mounted on the host (`KALLA_BACKUP_DIR`, `KALLA_UPLOAD_BACKUP_DIR`), with its protocol (NFS,
   SMB);
@@ -267,7 +267,7 @@ address (the host) answers at the IP level (connectors design §8.3).
 Decisions "P1 pilot sign-in" and "Gateway release 1 and shared Keycloak as built": Keycloak runs on the gateway's
 host, realm `fors`, and RAG's clients come from `deploy/keycloak/rag-additions.json`.
 
-- `KALLA_OIDC_AUTHORITY=https://<keycloak host>/realms/ume`; `KALLA_GATEWAY_URL=https://<gateway host>`.
+- `KALLA_OIDC_AUTHORITY=https://<keycloak host>/realms/fors`; `KALLA_GATEWAY_URL=https://<gateway host>`.
 - RAG host egress: `llm` → `<gateway host>:443` and `<keycloak host>:443`; `kalla-crawl` → `<gateway host>:443`;
   `kalla-edge` → `<keycloak host>:443` (with Open WebUI). All derived by the firewall from `deploy/.env`.
 - Browsers: admins and staff → `<keycloak host>:443` and the proxy's RAG host names.
@@ -277,18 +277,18 @@ host, realm `fors`, and RAG's clients come from `deploy/keycloak/rag-additions.j
   the RAG networks reach them ([compose-quick-start.md](compose-quick-start.md#when-something-fails) has the
   check). RAG's `8543`/`9543` don't clash with the gateway's `8443`/`9443`/`10443`/`11443`.
 
-### 5.2 Standalone Ume.Rag with its own Keycloak
+### 5.2 Standalone Källa with its own Keycloak
 
-Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later". The repository ships only
+Decisions "Identity providers: AD and Entra ID through Keycloak, Källa standalone later". The repository ships only
 the realm file (`deploy/keycloak/standalone/10-rag-realm.json`, applied with keycloak-config-cli as in
 [`deploy/keycloak/README.md`](../deploy/keycloak/README.md#standalone)); it has no Compose file for Keycloak. Its
-host, port, proxy route and database are **not set by Ume.Rag; agree with infra**.
+host, port, proxy route and database are **not set by Källa; agree with infra**.
 
 - Point `KALLA_OIDC_AUTHORITY` (and Open WebUI's provider URL, which follows it) at that Keycloak; the firewall
   rules of §3 follow the new host. If it runs on the RAG host and its name resolves there, the `INPUT` exception covers
   it.
 - Brokered Entra ID or AD (Keycloak as the broker): RAG's rules don't change. Keycloak's own egress (to
-  `login.microsoftonline.com`, AD FS or LDAP) leaves from Keycloak's host: not set by Ume.Rag; agree with infra.
+  `login.microsoftonline.com`, AD FS or LDAP) leaves from Keycloak's host: not set by Källa; agree with infra.
 
 ### 5.3 Entra ID or AD FS directly through `Oidc:*`
 
@@ -300,10 +300,10 @@ Switching is configuration, not code (production-setup.md, *Sign-in (OIDC)*).
   `deploy/compose.rag.yaml`). The firewall then
   allows `login.microsoftonline.com:443` from `llm` and `kalla-edge`. It is a CDN-served name: the firewall resolves it
   every 15 minutes, and an address change can block sign-in until the next run (`deploy/host/README.md`). The browsers
-  need `login.microsoftonline.com` and whatever else Microsoft's sign-in pages load: not set by Ume.Rag; agree with
+  need `login.microsoftonline.com` and whatever else Microsoft's sign-in pages load: not set by Källa; agree with
   infra.
 - **AD FS:** the authority is the AD FS issuer URL; the firewall allows its host and port. Its form is not set by
-  Ume.Rag; agree with infra.
+  Källa; agree with infra.
 - The discovery document names the JWKS and token endpoints. If one is on another host than the authority, add it
   with `--allow llm=<host>` (and `--allow kalla-edge=<host>`).
 - **No Microsoft Graph** in this release: Graph comes with P2 for the member-group lookup (repo-and-deployment §6.1,
@@ -423,7 +423,7 @@ what its options name and keeps the rest of `deploy/.env`. After a change of `de
 | clamd 3310 | fixed | `images/clamav/clamd.conf` (`TCPSocket`), `ClamAv__Port` in `deploy/compose.rag.yaml` | kalla-worker |
 | Renderer 3000 and its secret path | fixed port; the path generated once by `kalla-bootstrap` (`kalla-secrets/.render-ws-path`) | `images/renderer/launch-server.json` (`port`), `kalla-secrets/renderer/ws-path` (the renderer's entrypoint passes it on as `KALLA_RENDER_WS_PATH`), `kalla-secrets/worker/Render__Endpoint` | kalla-renderer, kalla-worker |
 | Gateway URL | `--gateway-url` | `KALLA_GATEWAY_URL` | `Gateway__BaseUrl` (api, admin, worker), the firewall (`llm`, `kalla-crawl`) |
-| Gateway Admin API (cost and budget read-back) | the gateway's `FORS_INTEGRATION_API_URL` (its context's `integration_api_url`); `docker-user-firewall.sh --allow llm=HOST:PORT` | none in Ume.Rag | kalla-admin's Integration API client, the firewall (`llm`, by `--allow`) |
+| Gateway Admin API (cost and budget read-back) | the gateway's `FORS_INTEGRATION_API_URL` (its context's `integration_api_url`); `docker-user-firewall.sh --allow llm=HOST:PORT` | none in Källa | kalla-admin's Integration API client, the firewall (`llm`, by `--allow`) |
 | OIDC authority | `--oidc-authority`, or the setup wizard | `KALLA_OIDC_AUTHORITY` (the wizard's: the database) | `Oidc__Authority` (admin; api for Open WebUI's default provider URL), the firewall (`llm`, and `kalla-edge` without a provider URL; only `KALLA_OIDC_AUTHORITY`) |
 | Open WebUI's OIDC provider | `--set KALLA_OPENWEBUI_OIDC_PROVIDER_URL=URL`, or the setup wizard | `KALLA_OPENWEBUI_OIDC_PROVIDER_URL` (empty: the setup wizard's, else the default) | `OpenWebUi__Oidc__ProviderUrl` (api, admin), which kalla-api serves to Open WebUI's start wrapper as `OPENID_PROVIDER_URL`; the firewall (`kalla-edge`) |
 | Open WebUI's sign-in internal route | fixed | none | kalla-api's `/internal/openwebui/sign-in` (the managed Open WebUI client's key only); Open WebUI's `KALLA_SIGN_IN_URL`, `https://kalla-api:8443/...` inside the stack |

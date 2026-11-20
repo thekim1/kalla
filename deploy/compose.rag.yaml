@@ -1,4 +1,4 @@
-# Ume.Rag's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
+# Källa's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
 # runs this file directly, as the project kalla:
 #
 #   deploy/init-deployment.sh ...                       # deploy/.env: the domain, the gateway, the optional parts
@@ -129,7 +129,7 @@ services:
       #@joined # The credential keys the gateway's migrations created from FORS_INTEGRATION_MANIFEST (M-17 C7).
       #@joined - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
       # Host directories, each deploy/empty while unset: the gateway's CA (its ca.pem), the credential keys a gateway  #@alone
-      # on this host wrote from Ume.Rag's manifest (Ume.Rag/rag-<service>), more CAs to trust (*.pem: a sign-in  #@alone
+      # on this host wrote from Källa's manifest (Kalla/rag-<service>), more CAs to trust (*.pem: a sign-in  #@alone
       # provider's or a database's) and your own certificates for kalla-api and kalla-admin (api.crt and api.key,  #@alone
       # admin.crt and admin.key), used instead of the internal CA's.  #@alone
       - {type: bind, source: "${KALLA_GATEWAY_CA_DIR:-./empty}", target: /gateway-certs, read_only: true, bind: {create_host_path: false}}  #@alone
@@ -576,13 +576,13 @@ services:
     image: ${KALLA_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
     user: "101:101"
     restart: unless-stopped
-    command: [nginx, -c, /etc/nginx/ume/nginx.conf, -g, "daemon off;"]
+    command: [nginx, -c, /etc/nginx/kalla/nginx.conf, -g, "daemon off;"]
     cpus: 0.5
     mem_limit: 128m
     pids_limit: 128
     ports: ["${KALLA_PROXY_BIND:-0.0.0.0}:${KALLA_PROXY_PORT:-443}:8443"]
     volumes:
-      - {type: volume, source: kalla-config, target: /etc/nginx/ume, read_only: true, volume: {subpath: proxy}}
+      - {type: volume, source: kalla-config, target: /etc/nginx/kalla, read_only: true, volume: {subpath: proxy}}
       # The operator's certificate: a host directory, not created when missing (the container then does not start).
       - type: bind
         source: ${KALLA_PROXY_CERTS_DIR:-/etc/kalla/proxy-certs}
@@ -649,7 +649,7 @@ networks:
   kalla-render: {driver: bridge, internal: true}
   kalla-crawl: {driver: bridge}
   kalla-mirror: {driver: bridge}
-  # The gateway's network in the Portainer stack; here Ume.Rag's own, which holds the default route of kalla-api and  #@alone
+  # The gateway's network in the Portainer stack; here Källa's own, which holds the default route of kalla-api and  #@alone
   # kalla-admin: they reach the gateway (KALLA_GATEWAY_URL) and the sign-in provider through it.  #@alone
   llm: {driver: bridge}  #@alone
 

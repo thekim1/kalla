@@ -10,7 +10,7 @@ var graph = loadJsonContent('graph.json')
 
 resource app 'Microsoft.Graph/applications@v1.0' = {
   uniqueName: 'kalla-open-webui'
-  displayName: 'Umeå kommun – Ume.Rag Open WebUI'
+  displayName: 'Umeå kommun – Källa Open WebUI'
   signInAudience: 'AzureADMyOrg'
   web: {
     redirectUris: [

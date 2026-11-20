@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: upload copy every 10 minutes (an upload reaches the backup target within 15)
+Description=Källa: upload copy every 10 minutes (an upload reaches the backup target within 15)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

@@ -64,11 +64,11 @@ In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_
 `rag_upload_backup_last_success_timestamp_seconds` within the last 30 minutes (not with an S3 target). These are the
 thresholds of the proposed alerts below; anything else: *Where to look first*.
 
-## Reading Ume.Rag's cost beside the gateway's
+## Reading Källa's cost beside the gateway's
 
-Ume.Rag meters its own model calls so editors can see what each assistant and knowledge base costs, per step and
+Källa meters its own model calls so editors can see what each assistant and knowledge base costs, per step and
 client. That is reporting only: **the gateway's usage report is the record for internal charging**, and the two never
-agree to the cent. This section says where Ume.Rag's figures come from and names every reason they differ from the
+agree to the cent. This section says where Källa's figures come from and names every reason they differ from the
 gateway's for the same key and day. The design is `plans/platform/cost-attribution.md` §5 and admin design §8.6.
 
 ### Where the figures come from
@@ -116,7 +116,7 @@ row's department is the object's department when the call was made, so a moved o
 was. The CSV names objects, not gateway keys: note which key each assistant and knowledge base runs as (its page shows
 the key) before comparing with the gateway's export, which is per key.
 
-### The gateway's figures beside Ume.Rag's
+### The gateway's figures beside Källa's
 
 When kalla-admin's gateway context names the Integration API (`integration_api_url`, the gateway's
 `FORS_INTEGRATION_API_URL`) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
@@ -124,7 +124,7 @@ key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=s
 
 - a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-fors-step`;
 - a line "The AI gateway counted … in … requests for the key." The requests include failed and cancelled ones, so
-  compare Ume.Rag's calls with the gateway's successful requests, not with this figure;
+  compare Källa's calls with the gateway's successful requests, not with this figure;
 - the note that the gateway's figures are the key's: if other assistants or knowledge bases share the key, their calls
   are in the gateway's column too (the note shows only when more than one assistant or knowledge base holds the key);
 - the key's budgets (*Budgets in the AI gateway*) at the top of the assistant page and in the knowledge base's state
@@ -132,7 +132,7 @@ key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=s
 
 The gateway's rows are Europe/Stockholm days too, cached 5 minutes per key and period. A gateway row without a step
 (another system using the key, or months older than the gateway's kept records, which have only monthly totals) is in
-the line's total but in no step row. Ume.Rag never overwrites its own figures with the gateway's.
+the line's total but in no step row. Källa never overwrites its own figures with the gateway's.
 
 Without the read-back (the setting unset, the scope missing, the gateway refusing or rate-limiting), the card shows
 **See the key's usage in the AI gateway** instead, a link to the gateway's usage page. The reason shows under
@@ -147,27 +147,27 @@ A platform admin also sees it in `integration.lastError` of `GET /api/gateway/st
 
 ### Why the totals differ
 
-Compare the same key, the same day and Ume.Rag's gateway part plus its estimate. The differences, in the order they
+Compare the same key, the same day and Källa's gateway part plus its estimate. The differences, in the order they
 usually matter:
 
-1. **Calls Ume.Rag never sees answered.** kalla-api retries a `502`/`504` once, and a connection failure once; the gateway
+1. **Calls Källa never sees answered.** kalla-api retries a `502`/`504` once, and a connection failure once; the gateway
    has already tried its fallbacks before it answers `502`/`504`. The failed attempts are requests in the gateway
-   (usually at no cost, since no provider answered) and nothing in Ume.Rag; a fallback inside the gateway is one
-   request there, with its fallback count. A non-streamed call that Ume.Rag gives up on (a condense or follow-up
-   timeout) records nothing in Ume.Rag, but the gateway accounts for what it had used. A worker job attempt that
+   (usually at no cost, since no provider answered) and nothing in Källa; a fallback inside the gateway is one
+   request there, with its fallback count. A non-streamed call that Källa gives up on (a condense or follow-up
+   timeout) records nothing in Källa, but the gateway accounts for what it had used. A worker job attempt that
    fails is counted in `CollectionDailyUsage`, but a crash between the job queue's write and the usage write, or a lost
    lease, loses that attempt's usage: an undercount, never a double count. These make the gateway's figure the higher.
-2. **Estimated calls.** An estimate uses the model list's prices, which may lag the gateway's, and Ume.Rag's own token
+2. **Estimated calls.** An estimate uses the model list's prices, which may lag the gateway's, and Källa's own token
    counts. The CSV's `estimated_calls` and `estimated_cost_usd` say how much of a figure is estimated.
 3. **Aborted streams and cancelled turns.** When a user leaves, or the idle (`Chat:StreamIdleTimeout`) or total
-   (`Chat:MaxAnswerDuration`) timeout cuts an answer, the stream ends without usage or cost comment. Ume.Rag records the
+   (`Chat:MaxAnswerDuration`) timeout cuts an answer, the stream ends without usage or cost comment. Källa records the
    turn (the user's message, the partial answer, the day's `Cancelled` count in `AssistantDailyTotals`) and the answer call at its prompt estimate
    as input, no output, estimated. The gateway accounts the same request as `ClientCancelled` (499) with its own
    figures, so the two estimates differ and the gateway counts it as a request but not a successful one.
 4. **Calls only the gateway counts.**
    - Query embeddings of Knowledge API callers without an assistant (integration keys, token callers, MCP). They run as
      the first searched knowledge base's key, so they show in that knowledge base's **Gateway** column under
-     *Query embedding* with nothing beside them in Ume.Rag.
+     *Query embedding* with nothing beside them in Källa.
    - The admin's own calls outside the test panel: the retrieval test (on the knowledge base's key), and the embedding
      canary, embedding profile test and status checks (on kalla-admin's credential key).
 5. **The test panel.** Its calls run as the assistant's key and are counted under the client `admin-console`, so they
@@ -178,7 +178,7 @@ usually matter:
    dc logs --since 24h kalla-admin | grep "Test panel usage"   # "Test panel usage of assistant <id> not written (<n> calls): no admin-console client row of kind internal"
    ```
 
-6. **Days.** Ume.Rag's days are Europe/Stockholm days: a chat turn is dated when it starts, a worker call when it is
+6. **Days.** Källa's days are Europe/Stockholm days: a chat turn is dated when it starts, a worker call when it is
    answered. The gateway dates a usage record when the request ends. A turn that starts just before midnight can land
    on the next day in the gateway. Which day the gateway's views use (gateway v0.10.1):
    - the Integration API (the Cost card's **Gateway** column) and the Usage dashboard's day buckets: Europe/Stockholm;
@@ -209,11 +209,11 @@ Every call carries `x-fors-step` (the step names above) and `x-fors-run-id`, whi
 | set generation and preview | the job's id |
 
 - **Per step:** the Cost card's **Gateway** column is the gateway's sum per `x-fors-step` for the key and period; set it
-  beside Ume.Rag's row of the same step.
+  beside Källa's row of the same step.
 - **Per run or turn:** in the gateway's usage page, filter the request list by the key and a time range around the run
   or turn, and open a request: its *Run* row shows the run id and step. At gateway v0.10.1 the request list has no
   filter or column for the run, so for a large run compare per step and day instead. The Integration API's `runId=`
-  filter exists, but Ume.Rag's admin does not ask it.
+  filter exists, but Källa's admin does not ask it.
 
 ### What a rising estimated share means
 
@@ -238,14 +238,14 @@ One day, 2026-11-12, of the department Stadsbyggnad: two assistants, *Bygglov* (
 that day, opens each object's Cost card, and in the gateway reads the usage per key for 2026-11-12 (Integration API
 column or the usage page with the browser in Swedish time).
 
-| Key | Ume.Rag (gateway part + estimate) | Gateway | Difference and why |
+| Key | Källa (gateway part + estimate) | Gateway | Difference and why |
 |---|---|---|---|
 | `bygg-chat` | 1.9859 + 0.0105 = 1.9964 USD, 1,327 calls (3 estimated) | 2.0012 USD, 1,336 requests, 1,327 successful | +0.0026 the gateway's own figures for the 3 aborted answers (item 3); +0.0004 two follow-ups that timed out in kalla-api (item 1); +0.0018 a turn started at 23:59:58 on 11 November, whose calls the gateway dates the 12th (item 6). Requests: 4 retried `502`s, 3 cancelled answers, 2 cancelled follow-ups (items 1, 3) |
 | `plan-chat` | 0.6120 + 0 = 0.6120 USD, 402 calls | 0.6330 USD, 407 successful | +0.0210 five test-panel calls not written; kalla-admin logged "Test panel usage of assistant … not written (5 calls)", there is no `admin-console` client row (item 5) |
 | `bygg-kb` | `embed` 0.0820 + 0 USD, 530 calls | `embed` 0.0820 USD; *Query embedding* 0.0035 USD | `embed` agrees, the 530 calls include 12 documents' first attempts that failed and were retried (item 1; the run's own `Runs.CostUsd` is 0.0790). The 0.0035 are query embeddings of Knowledge API callers without an assistant and two retrieval tests (item 4) |
 
 Every difference has a name, so the day is reconciled. A difference with no name, or one that grows from day to day on
-the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a call it should count.
+the gateway part (not the estimate), is worth an issue: Källa may be missing a call it should count.
 
 ## Backups
 
@@ -544,7 +544,7 @@ journalctl -u rag-restart-unhealthy.service --since today
 
 ## Portainer and other hosts without shell access
 
-`deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
+`deploy/portainer/compose.portainer.yaml` runs the gateway and Källa as **one** Portainer stack, configured only
 through environment variables, for hosts without shell access. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged but for the default of its `FORS_INTEGRATION_MANIFEST` (below), plus RAG's
 services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `rag-…`): kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker, kalla-parser and,
@@ -559,8 +559,8 @@ that can read packages.
 | Variable | |
 |---|---|
 | `FORS_DOMAIN`, `KALLA_API_PUBLIC_URL` | `FORS_DOMAIN` is required, and the one value a new stack types (without it, `FORS_GATEWAY_HOST` and `KALLA_API_HOST`): the host names default to `llm.<domain>` and `llm-admin.<domain>` (the gateway's), `rag.<domain>` (kalla-api), `kalla-admin.<domain>` and `chat.<domain>` (Open WebUI); `FORS_GATEWAY_HOST`, `FORS_ADMIN_HOST`, `KALLA_API_HOST`, `KALLA_ADMIN_HOST` and `KALLA_OPENWEBUI_HOST` override one each. kalla-api's public URL is `https://<host>` unless `KALLA_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
-| `FORS_INTEGRATION_MANIFEST` | the gateway's; unset, the stack file's default, `deploy/portainer/integration-manifest.json`: the gateway creates the integration *Ume.Rag* and its three credential keys (in a team and department `kalla` that a gateway admin can move) and `kalla-bootstrap` gives each service its key. Set, your own manifest wins; set and empty, nothing is created |
-| `KALLA_API_GATEWAY_KEY`, `KALLA_ADMIN_GATEWAY_KEY`, `KALLA_WORKER_GATEWAY_KEY` | optional: each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says (an empty manifest, or a gateway elsewhere); set, it wins over the manifest's. Without a key that service's model calls are refused |
+| `FORS_INTEGRATION_MANIFEST` | the gateway's; unset, the stack file's default, `deploy/portainer/integration-manifest.json`: the gateway creates the integration *Källa* and its three credential keys (in a team and department `kalla` that a gateway admin can move) and `kalla-bootstrap` gives each service its key. Set, your own manifest wins; set and empty, nothing is created |
+| `KALLA_API_GATEWAY_KEY`, `KALLA_ADMIN_GATEWAY_KEY`, `KALLA_WORKER_GATEWAY_KEY` | optional: each service's credential key of the gateway integration *Källa*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says (an empty manifest, or a gateway elsewhere); set, it wins over the manifest's. Without a key that service's model calls are refused |
 | `COMPOSE_PROFILES` | `clamav`: `kalla-clamav`, the malware scan; `clamav,render` adds the renderer; `openwebui` the chat. `kalla-bootstrap` sets the worker's malware scan from it: on with `clamav`, else off, which stores files without a scan, marked so ([production-setup.md](production-setup.md), *Malware scan*) |
 | `KALLA_OIDC_GROUPS_PLATFORM_ADMIN` | optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: this is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
 
@@ -757,9 +757,9 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 
 | Symptom | Meaning | Fix |
 |---|---|---|
-| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-fors-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
-| Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
-| Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
+| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Källa discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-fors-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
+| Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Källa* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
+| Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Källa |
 | Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T kalla-postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
 | A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service |
 | kalla-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no `internal` client managed by the deployment (`admin-console`), so test-panel cost is not recorded (the panel still answers) | kalla-migrate creates it on every run (production-setup.md, *The admin test panel's client*): check that `kalla-migrate` completed (`dc logs kalla-migrate`: "The admin test panel's client admin-console: …"), and run it again. Turns made before it are not recovered |
@@ -768,7 +768,7 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
 `GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
 `at` when the last read gave nothing; kalla-admin also logs "The gateway's Integration API refused or failed (HTTP …,
-reason); no read-back this time". The *Cost* cards then show Ume.Rag's figures only, and a used-up budget shows no
+reason); no read-back this time". The *Cost* cards then show Källa's figures only, and a used-up budget shows no
 badge (the gateway still refuses the calls).
 
 | `configured` / `reason` | Meaning | Fix |
@@ -777,7 +777,7 @@ badge (the gateway still refuses the calls).
 | `scope_missing` (403) | kalla-admin's credential key lacks the scope `usage.read` | The gateway admin adds `usage.read` to that key; the next read picks it up (only answers are cached), no restart needed |
 | `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
 | `unauthorized` (401) | kalla-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
-| `not_found` (404) | The key is not one of the integration *Ume.Rag*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
+| `not_found` (404) | The key is not one of the integration *Källa*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
 | `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate kalla-admin does not trust, or a timeout | Check the gateway's `FORS_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `KALLA_TRUST_DIR` for the Admin API's CA |
 | `failed` | Any other answer (a `5xx`, a `400`) | kalla-admin's log has the status; ask the gateway team |
 
@@ -881,7 +881,7 @@ open it again; the next re-open needs another new value.
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
 - **The gateway credential keys** (`kalla-secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway
-  integration *Ume.Rag*, from `KALLA_*_GATEWAY_KEY` or the gateway's manifest keys): a gateway admin issues and
+  integration *Källa*, from `KALLA_*_GATEWAY_KEY` or the gateway's manifest keys): a gateway admin issues and
   rotates them; rotate one with the gateway's 24-hour grace period, re-run
   `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d`, and restart that service
   ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway

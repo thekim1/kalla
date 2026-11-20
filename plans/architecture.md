@@ -1,6 +1,6 @@
 # Architecture diagrams
 
-Mermaid views of the Ume.Rag design as it stands after the simplification pass
+Mermaid views of the Källa design as it stands after the simplification pass
 ([`archive/passes/simplification-pass.md`](archive/passes/simplification-pass.md)) and the P1 split of the
 [weakness review §1](archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
 [§5](archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show the gateway's integration phase 2; in P1 the keys are the pilot team's and no

@@ -46,7 +46,7 @@ and `--hardened`:
   --gateway-credential-key-file worker=kalla-worker.key \
   --set KALLA_CRAWL_ALLOW=<municipal ranges> --backup-target /mnt/backup/kalla-test \
   --host-memory 24 --freshclam-proxy <proxy host>:<port> \
-  --hardened --oidc-authority https://<keycloak host>/realms/ume --proxy-address <the proxy's addresses> --yes
+  --hardened --oidc-authority https://<keycloak host>/realms/fors --proxy-address <the proxy's addresses> --yes
 ```
 
 `/etc/kalla/trust` holds the municipal CA as a `*.pem` file, which the services trust besides the internal CA (the

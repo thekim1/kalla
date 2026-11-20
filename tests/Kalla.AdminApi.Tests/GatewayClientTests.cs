@@ -57,7 +57,7 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
         {
             web.UseEnvironment("Development");
             web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
-            web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
+            web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/fors");
             web.UseSetting("OrgSync:IntervalMinutes", "1440");
             web.UseSetting("Admin:Retention", "false");
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
@@ -113,7 +113,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
 
         var fromGateway = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == "fors/chat-eu");
         (fromGateway.ContextWindow, fromGateway.MaxOutputTokens, fromGateway.LimitsSource).ShouldBe((128_000, 16_384, GatewayModelSources.Catalog));
-        using (var refused = await platform.PutAsJsonAsync("/api/gateway/models/ume/chat-eu", new { contextWindow = 1000 }, Ct))
+        using (var refused = await platform.PutAsJsonAsync("/api/gateway/models/fors/chat-eu", new { contextWindow = 1000 }, Ct))
         {
             refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
             var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Ct);

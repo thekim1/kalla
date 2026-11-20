@@ -11,14 +11,14 @@ export const GATEWAY_SITE = 'https://thekim1.github.io/fors/'
  */
 export const DOCS = [
   { group: 'Get started', items: [
-    { slug: '', title: 'Introduction', source: 'docs/introduction.md', lead: 'What Ume.Rag does, how it sits on the LLM gateway, and where to go next.' },
+    { slug: '', title: 'Introduction', source: 'docs/introduction.md', lead: 'What Källa does, how it sits on Fors, and where to go next.' },
     { slug: 'how-it-works', title: 'How it fits together', source: 'docs/how-it-works.md', lead: 'Knowledge bases, assistants, apps and keys, gateway keys and sign-in, and how a request is checked.' },
-    { slug: 'compose-quick-start', title: 'Quick start with Compose', source: 'docs/compose-quick-start.md', lead: 'From an empty Linux host to a first knowledge base: the gateway and Ume.Rag on one machine.' },
+    { slug: 'compose-quick-start', title: 'Quick start with Compose', source: 'docs/compose-quick-start.md', lead: 'From an empty Linux host to a first knowledge base: the gateway and Källa on one machine.' },
     { slug: 'local-development', title: 'Local development', source: 'docs/local-development.md', lead: 'Run the full stack with Aspire, demo data, the fake gateway and the test users, and run the tests.' },
   ] },
   { group: 'Deploy', items: [
     { slug: 'production-setup', title: 'Production setup', source: 'docs/production-setup.md', lead: 'The pilot host with Docker Compose: services, sizing, certificates, backups and the reverse proxy.' },
-    { slug: 'portainer', title: 'Portainer', source: 'docs/portainer.md', lead: 'Ume.Rag and the gateway as one Portainer stack: a first deploy and the upgrade in one update.' },
+    { slug: 'portainer', title: 'Portainer', source: 'docs/portainer.md', lead: 'Källa and the gateway as one Portainer stack: a first deploy and the upgrade in one update.' },
     { slug: 'kubernetes', title: 'Kubernetes', source: 'docs/kubernetes.md', lead: 'Kustomize manifests with the same services, settings and secrets as the Compose setup.' },
     { slug: 'keycloak', title: 'Keycloak', source: 'docs/keycloak.md', lead: 'The admin UI\'s OIDC client and roles in Keycloak.' },
     { slug: 'network-and-ports', title: 'Network and ports', source: 'docs/network-and-ports.md', lead: 'Every listener, outbound destination and internal port per setup, for the firewall and proxy teams.' },
@@ -85,7 +85,7 @@ export const ENDPOINTS = ['/v1/chat/completions', '/v1/models', '/v1/feedback', 
 
 export const PROOF = [
   { value: 'Every', label: 'answer cited', sub: 'Numbered sources, each with its date and when it was last checked' },
-  { value: '1', label: 'way to a model', sub: 'Every model call goes through the LLM gateway, under a residency ceiling' },
+  { value: '1', label: 'way to a model', sub: 'Every model call goes through Fors, under a residency ceiling' },
   { value: '14 days', label: 'to roll back', sub: 'A published knowledge base can go back to its previous version' },
   { value: 'Nightly', label: 'evaluation', sub: 'Test questions run every night, with an alert when recall@10 drops' },
 ]
@@ -104,8 +104,8 @@ export const UI_SHOTS = [
 ]
 
 export const DEPLOYS = [
-  { icon: 'deployed_code', title: 'Docker Compose', body: 'One service file and one bootstrap. The gateway and Ume.Rag on one host, from two downloads and two setup wizards.', meta: 'deploy/compose.rag.yaml', href: 'docs/compose-quick-start/' },
-  { icon: 'web', title: 'Portainer', body: 'Ume.Rag and the gateway as one stack, every image pinned by digest. A new stack needs one typed value.', meta: 'compose.portainer.yaml', href: 'docs/portainer/' },
+  { icon: 'deployed_code', title: 'Docker Compose', body: 'One service file and one bootstrap. The gateway and Källa on one host, from two downloads and two setup wizards.', meta: 'deploy/compose.rag.yaml', href: 'docs/compose-quick-start/' },
+  { icon: 'web', title: 'Portainer', body: 'Källa and the gateway as one stack, every image pinned by digest. A new stack needs one typed value.', meta: 'compose.portainer.yaml', href: 'docs/portainer/' },
   { icon: 'hub', title: 'Kubernetes', body: 'Kustomize manifests with the same services, settings and secrets, and the same bootstrap.', meta: 'deploy/kubernetes', href: 'docs/kubernetes/' },
 ]
 
@@ -122,18 +122,18 @@ git config core.hooksPath .githooks` },
       { title: 'Sign in to the admin UI', body: 'Open https://localhost:5174 and sign in as one of the Keycloak test users. Their password is the dev-user-password parameter in the AppHost\'s user secrets; the dashboard shows it.' },
       { title: 'Ask a question', body: 'Open WebUI is at http://localhost:7410, with the demo assistants as models. The fake gateway answers instantly, so you see the whole path: search, citations and the answer.' },
     ] },
-  { id: 'production', title: 'Deploy a release', body: 'A Linux Docker host, the LLM gateway and your own login provider.', icon: 'dns',
-    prereqs: ['Linux + Docker 28+', 'Compose 2.33.1+', '8 cores, 20 GB RAM (with the gateway)', 'An OIDC provider', 'The LLM gateway'],
+  { id: 'production', title: 'Deploy a release', body: 'A Linux Docker host, Fors and your own login provider.', icon: 'dns',
+    prereqs: ['Linux + Docker 28+', 'Compose 2.33.1+', '8 cores, 20 GB RAM (with the gateway)', 'An OIDC provider', 'Fors'],
     steps: [
-      { title: 'Set up the gateway', body: 'Ume.Rag calls every model through the Ume AI Gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
+      { title: 'Set up the gateway', body: 'Källa calls every model through the Ume AI Gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
 tar -xzf fors-X.Y.Z.tar.gz && cd fors-X.Y.Z
 sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0 --yes
 sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait` },
-      { title: 'Download Ume.Rag and let the gateway create its keys', body: 'The release ships a manifest that the gateway applies: an integration with the three credential keys rag-api, kalla-admin and kalla-worker call it with.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/kalla-X.Y.Z.tar.gz
+      { title: 'Download Källa and let the gateway create its keys', body: 'The release ships a manifest that the gateway applies: an integration with the three credential keys rag-api, kalla-admin and kalla-worker call it with.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/kalla-X.Y.Z.tar.gz
 tar -xzf kalla-X.Y.Z.tar.gz
 sudo install -m 644 kalla-X.Y.Z/deploy/portainer/integration-manifest.json \\
-  fors-X.Y.Z/deploy/integration-manifests/kalla.json`, note: 'Ume.Rag\'s images on ghcr.io are private: sudo docker login ghcr.io with a token that holds read:packages.' },
-      { title: 'Start Ume.Rag', body: 'The script writes deploy/.env; the first start creates the certificates and secrets and lists what is still missing.', shell: 'bash', code: `cd kalla-X.Y.Z
+  fors-X.Y.Z/deploy/integration-manifests/kalla.json`, note: 'Källa\'s images on ghcr.io are private: sudo docker login ghcr.io with a token that holds read:packages.' },
+      { title: 'Start Källa', body: 'The script writes deploy/.env; the first start creates the certificates and secrets and lists what is still missing.', shell: 'bash', code: `cd kalla-X.Y.Z
 sudo ./deploy/init-deployment.sh --api-host <host> --admin-host <host> \\
   --gateway-url https://<host>:8443 --gateway-ca-file ../fors-X.Y.Z/deploy/certs/ca.pem \\
   --gateway-secrets-dir ../fors-X.Y.Z/deploy/integration-secrets --backup-target local

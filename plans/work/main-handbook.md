@@ -156,7 +156,7 @@ main session needs:
     green this way on the first try, instead of a 30-minute dry run.
   - **The pin pull request that `release.yml` opens starts no checks** (a pull request opened with the workflow's token
     triggers no workflow): `gh pr close <n>` and `gh pr reopen <n>`, wait for `deploy-checks`, merge (#789, 0.7.0).
-  - **The boot-only run needs that version's Ume.Rag images on ghcr.io.** For a change that needs new images (the
+  - **The boot-only run needs that version's Källa images on ghcr.io.** For a change that needs new images (the
     wizard's stage 2 against 0.6.0's images), only a dry run from the branch shows the boot test (session 44).
   - `docker compose up --wait` fails on a one-shot that exits 0 unless a service waits for it
     (`service_completed_successfully`). The boot test waits only on the long-running services (#751).
@@ -166,7 +166,7 @@ main session needs:
   rebase on `origin/main`, open the PR, watch CI, remove the worktree, then merge with `--delete-branch`. Check that a
   short CI job really ran its steps (a 25 s `deploy-checks` did).
 - **Gateway docs vs code:** the gateway's `docs/integrations.md` and OpenAPI said 403 where the code answers 401. Check
-  behaviour Ume.Rag depends on in the code at the tag.
+  behaviour Källa depends on in the code at the tag.
 - **Agent worktrees start from local `main`, not from the branch that is checked out.** An agent told "your branch
   contains X" didn't have X (A-36 on B-47 part 1): merge the prerequisite first, or tell the agent to check
   `git log -1` and name the commit it needs. Both agents coped (one applied the missing files unchanged).
@@ -177,7 +177,7 @@ main session needs:
   text goes on a `main-session/` branch (A-33, #609), or `ownership` fails.
 - **Regenerating the Portainer stack:** `deploy/portainer/build-stack.sh` (the gateway's latest release asset, which
   pins the gateway's images; or a tag, or a local file). Any PR that changes `deploy/postgres/app-roles.sql` or the
-  template leaves the stack stale until someone runs it (#605, #608; #611 fixed it). Ume.Rag's image pins in the
+  template leaves the stack stale until someone runs it (#605, #608; #611 fixed it). Källa's image pins in the
   template follow each release (#657 set 0.5.0). **The Open WebUI profile (#657) was merged without a boot test**
   (user, 2026-11-13): the first VM deploy is its test; suspect the entrypoint wrapper, the CA bundle and the data
   volume's owner first. **Booted:** the user deployed 0.5.0 with Portainer, `openwebui` and `clamav` on (2026-11-13).

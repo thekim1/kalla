@@ -331,10 +331,10 @@ tables in one migration of its own (no backward compatibility before production)
 - **Read:** gateway-changes §5.6; admin §4.5, §8.6; repo-and-deployment §3 (`Gateway:IntegrationApiUrl`), §4.3;
   cost-attribution §6.
 
-### [ ] B-46 Gateway phase 3 in the admin UI: budget status and the gateway's cost beside Ume.Rag's (#580, cost-attribution B7, UI part)
+### [ ] B-46 Gateway phase 3 in the admin UI: budget status and the gateway's cost beside Källa's (#580, cost-attribution B7, UI part)
 - **Do:** the key header's budget status on the assistant's and knowledge base's pages (admin §5.5.4: per budget its
   scope, spent of limit with the percentage, the period's end, *Used up*); the gateway's figures on B-41's *Cost* cards
-  beside Ume.Rag's (admin §8.6), with the note when several objects share the key and the gateway link when there is no
+  beside Källa's (admin §8.6), with the note when several objects share the key and the gateway link when there is no
   read-back. Every label in `labels.ts`, every sentence in `messages.ts`.
 - **Paths:** `src/admin-ui/src/views/**`, `src/admin-ui/src/components/**`, `src/admin-ui/src/api/**`,
   `src/admin-ui/src/utils/labels.ts`, `messages.ts`.

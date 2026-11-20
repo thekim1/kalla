@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: pgBackRest backup of ragdb (repo-and-deployment §7.4)
+Description=Källa: pgBackRest backup of ragdb (repo-and-deployment §7.4)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service

@@ -21,7 +21,7 @@
 #                            give it again when the gateway gets a new CA. Not needed for a gateway with a public
 #                            certificate. (Only the certificate is copied: the gateway's directory also holds its keys.)
 #   --gateway-secrets-dir DIR  KALLA_GATEWAY_SECRETS_DIR: the credential keys a gateway on this host wrote from
-#                            Ume.Rag's manifest (deploy/portainer/integration-manifest.json): DIR/Ume.Rag/rag-api,
+#                            Källa's manifest (deploy/portainer/integration-manifest.json): DIR/Kalla/rag-api,
 #                            kalla-admin and kalla-worker
 #   --gateway-credential-key-file SERVICE=FILE
 #                            KALLA_<SERVICE>_GATEWAY_KEY: a key issued by hand for api, admin or worker; wins

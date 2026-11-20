@@ -1,6 +1,6 @@
 # Kubernetes
 
-`deploy/kubernetes` has Kustomize manifests for running Ume Rag on Kubernetes, with updates that do not interrupt
+`deploy/kubernetes` has Kustomize manifests for running Källa on Kubernetes, with updates that do not interrupt
 clients, in the shape of the gateway's (its [Kubernetes guide](https://github.com/thekim1/fors/blob/main/docs/kubernetes.md)).
 They are the same services, settings, certificates and secrets as the [Docker Compose setup](production-setup.md), and
 the certificates and secrets come from the same script as theirs (`deploy/portainer/bootstrap.sh`, which
@@ -52,7 +52,7 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    the blob master key, the Data Protection certificate, kalla-admin's setup secret, the pgBackRest repository settings
    and connection strings to the host `postgres` (the Service in `components/datastores`). Each service's gateway
    credential key (issued by a gateway admin: [production-setup.md](production-setup.md), *Gateway credential keys*)
-   goes to `deploy/secrets/<service>/Gateway__Key` and into `ume-rag-<service>-secrets`; the key's address list then
+   goes to `deploy/secrets/<service>/Gateway__Key` and into `kalla-<service>-secrets`; the key's address list then
    holds the cluster's egress addresses. **Escrow the keys** outside the cluster (runbook, *Key escrow*): without them
    a restored database is unusable. `deploy/escrow-keys.sh --secrets-dir deploy/secrets --certs-dir deploy/certs
    /media/<escrow>` writes the set, `--verify` reads it back, and `--restore` puts it into new directories before the

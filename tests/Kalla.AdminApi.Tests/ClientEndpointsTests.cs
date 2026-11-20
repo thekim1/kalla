@@ -135,7 +135,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
         key.GetProperty("clientName").GetString().ShouldBe("Open WebUI " + code);
         key.GetProperty("teamId").GetGuid().ShouldBe(team);
         key.GetProperty("status").GetString().ShouldBe("active");
-        key.GetProperty("prefix").GetString().ShouldBe(secret[..15]);
+        key.GetProperty("prefix").GetString().ShouldBe(secret[..13]);
 
         await using (var db = TestPostgres.Context(database.Connection(null)))
         {

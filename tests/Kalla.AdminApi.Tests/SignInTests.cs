@@ -122,7 +122,7 @@ public sealed class TenantCheckTests
 
     [Fact]
     public void Keycloak_tokens_without_tid_acct_or_idp_pass_when_no_tenant_is_set() =>
-        TenantCheck.Refusal(User(("sub", "x"), ("iss", "http://localhost:8080/realms/ume")), new OidcOptions()).ShouldBeNull();
+        TenantCheck.Refusal(User(("sub", "x"), ("iss", "http://localhost:8080/realms/fors")), new OidcOptions()).ShouldBeNull();
 }
 
 /// <summary>The BFF endpoints and the sign-in steps against the real database (identity design §1).</summary>

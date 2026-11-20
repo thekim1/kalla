@@ -1,6 +1,6 @@
 #!/bin/sh
 # Generates deploy/portainer/compose.portainer.yaml: the gateway's Portainer stack (its deploy/compose.portainer.yaml,
-# unchanged but for one line, below) plus Ume.Rag's services from deploy/compose.rag.yaml, as one stack to paste into
+# unchanged but for one line, below) plus Källa's services from deploy/compose.rag.yaml, as one stack to paste into
 # Portainer.
 #
 #   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
@@ -19,13 +19,13 @@
 # variables), so build from a release unless testing an unreleased gateway change. A named release is downloaded with
 # curl (the gateway's repository is public); only the latest one is looked up with gh.
 #
-# deploy/compose.rag.yaml is the one Ume.Rag service file, which Compose runs directly. Its marks are applied first: a
+# deploy/compose.rag.yaml is the one Källa service file, which Compose runs directly. Its marks are applied first: a
 # line "#@joined <line>" becomes <line>, and a line that ends in "#@alone" is left out (what a stack without the gateway
 # needs of its own: the network llm, the host directories, the x-hardened anchor, which the gateway's file has). Then
 # its x- anchors go after the gateway's, and its services, configs, networks and volumes at the end of the gateway's
 # same sections; each "file: path" config (relative to deploy/) becomes inline content, indented, with $ escaped as $$,
 # as the gateway's build-portainer-stack.sh does. stack-header.txt, the comment Portainer operators read, goes before
-# the gateway's name:. Run again after a gateway or Ume.Rag change.
+# the gateway's name:. Run again after a gateway or Källa change.
 #
 # Two lines of the gateway's part are rewritten. Its adminapi's
 #   Gateway__IntegrationApiUrl: ${FORS_INTEGRATION_API_URL:-}
@@ -33,7 +33,7 @@
 # stack, so the cost and budget read-back needs no variable. And its bootstrap's
 #   FORS_INTEGRATION_MANIFEST: ${FORS_INTEGRATION_MANIFEST:-}
 # gets integration-manifest.json (beside this script, written on one line) as its default, so the gateway creates the
-# integration Ume.Rag and its three credential keys with nothing typed (M-20 S8). The default applies only when the
+# integration Källa and its three credential keys with nothing typed (M-20 S8). The default applies only when the
 # variable is unset ("-", not ":-"): a stack that sets its own manifest keeps it, and an empty value creates nothing.
 # The manifest names no owner, which the gateway accepts from 0.11.0. The build stops when the
 # gateway's file does not have exactly that line.
@@ -104,7 +104,7 @@ if len(at) != 1:
     sys.exit(f"the gateway's file has {len(at)} lines '{passed}', expected 1: see this script's header")
 indent = gw[at[0]][: len(gw[at[0]]) - len(gw[at[0]].lstrip())]
 gw[at[0]:at[0] + 1] = [
-    indent + "# Rewritten by the RAG repository's build-stack.sh: the integration Ume.Rag and its three credential keys as the",
+    indent + "# Rewritten by the RAG repository's build-stack.sh: the integration Källa and its three credential keys as the",
     indent + "# default (deploy/portainer/integration-manifest.json), used only while the variable is unset. Set, the variable",
     indent + "# wins; set and empty, nothing is provisioned.",
     indent + "FORS_INTEGRATION_MANIFEST: '${FORS_INTEGRATION_MANIFEST-" + manifest + "}'",
@@ -123,7 +123,7 @@ gw[at[0]:at[0] + 1] = [
     indent + "Gateway__IntegrationApiUrl: ${FORS_INTEGRATION_API_URL-https://adminapi:8443/integration/v1}",
 ]
 
-# Ume.Rag's file as the joined stack has it: the marks applied, then its top-level blocks (the file's own comment, before
+# Källa's file as the joined stack has it: the marks applied, then its top-level blocks (the file's own comment, before
 # the first key, is dropped).
 joined = []
 for line in read(rag_path).split("\n"):

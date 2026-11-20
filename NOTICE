@@ -1,9 +1,10 @@
-Ume.Rag
-Copyright (c) Umeå kommun
+Källa
+Copyright © 2026 Kim Vallén and Nichlas Löfdahl
 
-Ume.Rag is licensed under the European Union Public Licence v. 1.2 (EUPL-1.2); the full text is in LICENSE.
+Licensed under the Apache License, Version 2.0 (Apache-2.0); see LICENSE.
+Releases up to and including 0.8.0 (as Ume.Rag) were published under the European Union Public Licence v. 1.2 (EUPL-1.2).
 
-Ume.Rag includes or uses third-party components under their own licences:
+Källa includes or uses third-party components under their own licences:
 
 - The parser image (kalla/parser): every Python package, Debian package and model it ships, with its licence, is
   listed in src/parser/LICENSES.md (in the image: /usr/share/doc/kalla-parser/LICENSES.md). The model licence texts

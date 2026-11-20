@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host names of the Portainer stack (M-17 setup wizard step S0): Ume.Rag's three names default under FORS_DOMAIN, and each
+# Host names of the Portainer stack (M-17 setup wizard step S0): Källa's three names default under FORS_DOMAIN, and each
 # KALLA_*_HOST overrides its own. Offline, with `docker compose config --format json` of compose.portainer.yaml, the
 # variables of stack.env.example without its host lines and each case's own, this checks every place a name is used
 # (kalla-bootstrap's three names, kalla-api's Knowledge__PublicBaseUrl, kalla-admin's Admin__ApiPublicUrl, kalla-openwebui's

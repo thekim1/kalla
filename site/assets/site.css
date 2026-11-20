@@ -1,4 +1,4 @@
-/* Ume Rag website (the gateway's site styles, unchanged but for this line). Colours, radii and shadows come from tokens.css (the admin UI's design tokens). */
+/* Källa website (the gateway's site styles, unchanged but for this line). Colours, radii and shadows come from tokens.css (the admin UI's design tokens). */
 
 html { scroll-padding-top: 80px; }
 [hidden] { display: none !important; }

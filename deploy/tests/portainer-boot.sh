@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Boot test of the Portainer stack (release.yml; the deploy-configuration plan's step C0): starts a
-# compose.portainer.yaml, the gateway and Ume.Rag as one stack, the way Portainer does (the stack file, variables, no
+# compose.portainer.yaml, the gateway and Källa as one stack, the way Portainer does (the stack file, variables, no
 # scripts and no host files but the proxy's certificate), with the profiles clamav, openwebui and proxy, then checks:
 #
 #   - every long-running service up (healthy where it has a health check), both bootstraps and both migrations
@@ -10,7 +10,7 @@
 #   - kalla-bootstrap's log ends with its checklist, and the checklist is empty: nothing to paste or type
 #   - the gateway credential keys (M-17 C7): neither variables file sets FORS_INTEGRATION_MANIFEST, so the gateway's
 #     bootstrap gets the stack file's default (deploy/portainer/integration-manifest.json, compared as JSON); the
-#     gateway's migrations created the integration Ume.Rag from it, each service has its key and the gateway accepts it;
+#     gateway's migrations created the integration Källa from it, each service has its key and the gateway accepts it;
 #     the context names the Integration API, no admin_url, no oidc_authority (nobody completed the gateway's wizard)
 #     and the feature oidc-authority
 #   - kalla-api: /health/ready = 200 (TLS verified against kalla-bootstrap's CA), /version (with --version), /v1/models =
@@ -235,7 +235,7 @@ if ! jq -e . >/dev/null 2>&1 <<< "$used" \
   fail "the gateway's bootstrap did not get the default manifest (deploy/portainer/integration-manifest.json)"
 fi
 ok "with no FORS_INTEGRATION_MANIFEST set, the gateway's bootstrap got the stack file's default manifest"
-# The gateway's migrations created the integration Ume.Rag from it and wrote each key to the integration-secrets volume;
+# The gateway's migrations created the integration Källa from it and wrote each key to the integration-secrets volume;
 # kalla-bootstrap copied them to each service. The gateway accepts each one on its context.
 gw_helper="$(grep -m1 '/alpine/openssl@' <<< "$(dc config --images)")"
 docker run --rm --network none -v "${project}_ume-certs:/c:ro" --entrypoint cat "$gw_helper" /c/ca.pem > "$work/gateway-ca.pem" \
@@ -518,4 +518,4 @@ read_by_api="$(docker cp "$(dc ps -q kalla-api):/run/openwebui-feedback/OpenWebU
 ok "kalla-openwebui-setup minted the feedback key: 200 on the feedback list, 403 elsewhere, and kalla-api reads it"
 
 echo
-echo "The Portainer stack booted: $(basename "$stack")${version:+, Ume.Rag $version}."
+echo "The Portainer stack booted: $(basename "$stack")${version:+, Källa $version}."

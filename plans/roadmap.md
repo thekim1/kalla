@@ -1,6 +1,6 @@
 # Roadmap
 
-Where Ume.Rag stands and what comes next: **the one place for the plan ahead.** The binding rules are in
+Where Källa stands and what comes next: **the one place for the plan ahead.** The binding rules are in
 [`decisions.md`](decisions.md) and the design documents ([`README.md`](README.md)); the work items are in
 [`work/`](work/), and `HANDOVER.md` links here instead of restating it. The main session updates this page when a step
 lands or an input arrives.
@@ -13,9 +13,9 @@ lands or an input arrives.
 | `v0.2.0` (2026-11-08) | **P1a + P1b code:** crawl, upload, parse, embed, hybrid retrieval with citations, chat API behind Open WebUI, admin UI for the pilot journey, evaluation, publish and rollback, JavaScript rendering, optional rerank. Demo 2026-11-01 on a 200-page umea.se slice ([`archive/p1/`](archive/p1/README.md), [`archive/p1b/`](archive/p1b/README.md)) |
 | `v0.3.0` (2026-11-10) | Deployment options matching the gateway's, upload knowledge bases, legacy Office formats, the #499–#513 review fixes |
 | `v0.4.0` (2026-11-11) | Answer length from the model, editable embedding profiles, prompt texts as settings, keyword statistics in the worker, lower idle cost |
-| `v0.5.0` (2026-11-13) | **Gateway integration phases 1–3** (#580): one credential key per service, a gateway key per assistant and knowledge base that every call runs as, organisation and models from the gateway's context (no Data API), **cost attribution** stages 1 and 2 (built; stage 2's live done-when waits on step 0 below) with the gateway's cost and budgets beside Ume.Rag's, refusals in chat and admin, content retention, malware scan optional |
-| `v0.5.1` (2026-11-13) | Easier deploys with Portainer: the gateway and Ume.Rag as one stack with every image pinned, Open WebUI in it, a variables file, a checklist of what is still missing, gateway keys that apply without restarts |
-| `v0.6.0` (2026-11-15) | A deploy that needs only what a process can't start without (M-17): the gateway creates Ume.Rag's credential keys, the rest comes from the gateway, the admin UI or the stack; apps and keys connected in one go (M-16); the admin UI review (M-19); the fixes of the 2026-11-14 review (#694) |
+| `v0.5.0` (2026-11-13) | **Gateway integration phases 1–3** (#580): one credential key per service, a gateway key per assistant and knowledge base that every call runs as, organisation and models from the gateway's context (no Data API), **cost attribution** stages 1 and 2 (built; stage 2's live done-when waits on step 0 below) with the gateway's cost and budgets beside Källa's, refusals in chat and admin, content retention, malware scan optional |
+| `v0.5.1` (2026-11-13) | Easier deploys with Portainer: the gateway and Källa as one stack with every image pinned, Open WebUI in it, a variables file, a checklist of what is still missing, gateway keys that apply without restarts |
+| `v0.6.0` (2026-11-15) | A deploy that needs only what a process can't start without (M-17): the gateway creates Källa's credential keys, the rest comes from the gateway, the admin UI or the stack; apps and keys connected in one go (M-16); the admin UI review (M-19); the fixes of the 2026-11-14 review (#694) |
 | `v0.7.0` (2026-11-16) | **The setup wizard** (M-20): sign-in set in the browser with a setup code and a test sign-in; a new Portainer stack needs one typed value, `FORS_DOMAIN`, and no secret, with the gateway's wizard first (gateway `v0.11.0`); retired deployment variables named (M-21); three hot paths of #764 |
 | `v0.8.0` (2026-11-19) | **The deploy simplification** (M-22): one service file and one bootstrap for Compose, Portainer and Kubernetes, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for; continue a crawl run and its live progress; the images' security updates and a daily image scan (A-27, #818) |
 
@@ -33,8 +33,8 @@ T2–T6; they fix what the team reports and answer questions.
 
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
-| T0 | Gateway on v0.10.1 with the integration *Ume.Rag* and three credential keys (`kalla-api`; `kalla-admin` with `organisation.read`, `usage.read`; `kalla-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
-| T1 | Ume.Rag `v0.5.0` deployed as one Portainer stack with the gateway (`docs/portainer.md`; Keycloak realm, Open WebUI, ClamAV on), checked with its read-backs. The upgrade to `v0.7.0` goes one release at a time, each with its own stack file: 0.5.x → 0.6.0 → 0.7.0 (the gateway to `v0.11.0`) | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
+| T0 | Gateway on v0.10.1 with the integration *Källa* and three credential keys (`kalla-api`; `kalla-admin` with `organisation.read`, `usage.read`; `kalla-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
+| T1 | Källa `v0.5.0` deployed as one Portainer stack with the gateway (`docs/portainer.md`; Keycloak realm, Open WebUI, ClamAV on), checked with its read-backs. The upgrade to `v0.7.0` goes one release at a time, each with its own stack file: 0.5.x → 0.6.0 → 0.7.0 (the gateway to `v0.11.0`) | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
 | T2 | The test group's accounts (Keycloak or the gateway's sign-in) and their Open WebUI access; DoIT's admin in the admin UI | T1 | user | open |
 | T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user | open |
 | T4 | Assistant `support`: the instructions of `04-assistant.md` §3, the knowledge base's key (V39), general knowledge `fallback`, a not-found text with the real escalation links; checked in the test panel with about twenty anonymised or invented tickets | T3 | user | open |
@@ -53,7 +53,7 @@ pilot department uses its assistant in Open WebUI. The steps, in order; a step s
 
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
-| 0 | The gateway and Ume.Rag as deployed for the test chatbot (T0, T1), or the test host's own | T0–T1 | user | after the test chatbot |
+| 0 | The gateway and Källa as deployed for the test chatbot (T0, T1), or the test host's own | T0–T1 | user | after the test chatbot |
 | 1 | Gateway and Keycloak for the pilot: pilot accounts, the key that allows the model `turkos` is published on | step 0 | user | open |
 | 2 | U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass (A-L1, A-L4) | U1 page URL, owner, contact | user + web editors | open |
 | 3 | Gold set written with DoIT, entered, run three ways (`scripts/grading/`); not-found thresholds set from it | the gold set and its reviewers | user + DoIT | open |
@@ -150,7 +150,7 @@ chatbot's assistant (T4) once it exists; until then FakeGateway and the demo see
 | Theme | Waits on |
 |---|---|
 | A second department or a group audience: gateway release 2 (member groups from claims), cost attribution stage 2's done-when, owner-team edit scoping | the gateway team; W3's grant step |
-| Entra ID with Ume.Rag's own registrations, OBO and the E1 spike | a tenant and its admin |
+| Entra ID with Källa's own registrations, OBO and the E1 spike | a tenant and its admin |
 | SharePoint | tenant access and an internal-content pilot (architecture plan item 9) |
 | Stored chat content (history modes, content encryption, conversation review), chat attachments | A1, G1 |
 | Ask-a-file workspaces | the user's calls on ownership (Decisions "Ask-a-file workspaces"); W3's grant step |

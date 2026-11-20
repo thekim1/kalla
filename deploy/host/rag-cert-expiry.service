@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: warn when an internal certificate expires within 60 days (#705)
+Description=Källa: warn when an internal certificate expires within 60 days (#705)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Service]

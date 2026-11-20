@@ -1,7 +1,7 @@
 # Frontend integration: the contract for the frontend team
 
 The frontend is built by another team in its own repository. This file is what they build against: how the app
-authenticates, which endpoints it calls, what comes back, and what Ume.Rag's operators set up. Everything below is
+authenticates, which endpoints it calls, what comes back, and what Källa's operators set up. Everything below is
 read from the code on `main` (2026-11-06; line references re-checked against `v0.2.0` on 2026-11-08); the binding descriptions are chat §3 and knowledge §3–§4.
 
 ## 1. Architecture and authentication
@@ -18,9 +18,9 @@ staff browser ──────── citation links ──────▶ kall
 | Rule | Why | Reference |
 |---|---|---|
 | The app calls kalla-api **from its own backend**, never from the browser | the key is a secret; kalla-api has no CORS (no `AddCors`/`UseCors` in `src/Kalla.Api/Program.cs`), so browser calls fail anyway | identity §6 |
-| One Ume.Rag client of kind **`integration`** and one `kalla-sk-` key for it | `integration` accepts a secret key (`src/Kalla.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Kalla.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
-| Staff sign in to **the app**, not to Ume.Rag | kalla-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
-| The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Kalla.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
+| One Källa client of kind **`integration`** and one `kalla-sk-` key for it | `integration` accepts a secret key (`src/Kalla.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Kalla.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
+| Staff sign in to **the app**, not to Källa | kalla-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
+| The app decides who may use it | Källa sees every request as the key (`SubjectId` = the key's id, `src/Kalla.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
 | The rate limit is the app key's own | for a key subject the chat limit is the key's `RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser` (`ChatRateLimiter.LimitFor`, `src/Kalla.Api/ChatStreaming.cs:250-257`); the platform admin sets it on the app key (§2, §7) | chat §4.1 step 4 |
 | Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, kalla-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Kalla.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
 
@@ -30,7 +30,7 @@ administrator creates it, and a realm role or group for support staff lets the a
 accounts exist and how support staff get them is the same open point as for Open WebUI (identity §5.3, "Who may sign
 in … in P1 is not settled").
 
-## 2. What Ume.Rag's admins set up
+## 2. What Källa's admins set up
 
 | Step | Who | How |
 |---|---|---|
@@ -81,7 +81,7 @@ The assistants this key may use (`src/Kalla.Api/ChatEndpoints.cs:26-48`):
 | Last user message (the question) | **1–16,000 characters** after normalisation, else 400 `question_too_long`; other messages ≤ 32,000 characters. Paste the whole ticket: over 2,000 characters it is condensed into the search query, and the answer model reads it in full with its line breaks (§6) | `ChatRequest.cs:57-60`, `:140-142`; chat §3.2, §5.1 |
 | `kalla` | optional: `related_documents` 0–10 (documents to list, §5), `follow_ups` 0–5 (suggestions, §5) and `general_knowledge` `off`/`supplement`/`fallback`/`open` (a stricter general-knowledge level for this turn, [`04-assistant.md`](04-assistant.md) §4: the turn runs at the stricter of it and the assistant's own, so it never loosens the assistant; absent or `null`: the assistant's level); `{}` gives only `outcome` and `degraded` (§3.5). Not an object, a count out of range or another level value → 400 `invalid_request`, `param` `kalla.<name>`; an unknown member → 400 `unsupported_parameter`, `param` `kalla.<name>`. Absent: no `kalla` in the answer | `ChatRequest.cs:207-259`; chat §3.8 |
 | Body | ≤ 2 MB | `src/Kalla.Api/ChatEndpoints.cs:19` |
-| History | the app sends the whole conversation every turn; it is the authoritative history. Ume.Rag uses the last `history.maxMessages` within `history.maxTokens` | chat §11.3 |
+| History | the app sends the whole conversation every turn; it is the authoritative history. Källa uses the last `history.maxMessages` within `history.maxTokens` | chat §11.3 |
 | `max_tokens` / `max_completion_tokens` | may lower, never raise, the assistant's limit | chat §3.2 |
 | `temperature`, `top_p`, `user`, `metadata`, … | ignored | chat §3.2 |
 | `tools`, JSON `response_format`, `n` > 1, `logprobs` | refused with 400 | `ChatRequest.cs:68-101` |
@@ -293,14 +293,14 @@ Its size is the key's `RequestsPerMinute` (§2; e.g. 200), or, when unset, the p
 value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads: 120 a minute per client address
 (`src/Kalla.Api/Program.cs:48-59`), the staff member's own address once the trusted proxies are set (§2).
 
-## 8. Developing against Ume.Rag
+## 8. Developing against Källa
 
-- **Locally:** run Ume.Rag's AppHost with the FakeGateway ([`../../../docs/local-development.md`](../../../docs/local-development.md));
+- **Locally:** run Källa's AppHost with the FakeGateway ([`../../../docs/local-development.md`](../../../docs/local-development.md));
   sign in to the admin UI as a test platform admin, create an `integration` client and key, a small collection and an
   assistant. The FakeGateway answers deterministically, so the app's parsing and rendering can be tested without
   model cost.
 - **API reference:** kalla-api publishes an OpenAPI document and a Scalar page when `Knowledge:PublishApiReference` is
-  on (default on; `src/Kalla.Api/Program.cs:60-71`, `:138-144`). It is titled "Ume.Rag Knowledge API"; whether the
+  on (default on; `src/Kalla.Api/Program.cs:60-71`, `:138-144`). It is titled "Källa Knowledge API"; whether the
   chat routes appear in it is unverified. This file and chat §3 are the contract until then.
 - **Test host:** the same routes as production, with the app's backend host routed by the operator.
 
@@ -309,7 +309,7 @@ value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads
 | # | Step | Who |
 |---|---|---|
 | 1 | App's OIDC client and a support-staff role in realm `fors` | realm administrator |
-| 2 | Ume.Rag `integration` client; key scoped to the assistant, with `requestsPerMinute` (e.g. 200) and `allowedIpRanges` = the app backend's addresses | Ume.Rag platform admin |
+| 2 | Källa `integration` client; key scoped to the assistant, with `requestsPerMinute` (e.g. 200) and `allowedIpRanges` = the app backend's addresses | Källa platform admin |
 | 3 | Assistant audience = the client | support department admin |
 | 4 | Proxy and firewall: app backend → kalla-api chat routes (2 MB body); staff network → `/v1/documents/*`; the proxy's addresses in `Settings.TrustedProxies` | operator, platform admin |
 | 5 | `Knowledge:PublicBaseUrl` set; `Settings.Chat.allowedLinkHosts` includes the intranet host | operator, platform admin |

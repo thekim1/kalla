@@ -32,7 +32,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
 {
     private const string Route = OpenWebUiSignInEndpoints.Path;
     private const string Secret = "owui-client-secret-3a9f71";
-    private const string ProviderUrl = "https://idp.test/realms/ume/.well-known/openid-configuration";
+    private const string ProviderUrl = "https://idp.test/realms/fors/.well-known/openid-configuration";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private (WebApplicationFactory<Program> Api, CapturingLoggerProvider Logs) Host(PolicySnapshot? snapshot = null, params (string Key, string Value)[] settings)
@@ -186,7 +186,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
     public async Task Deployment_values_win_and_defaults_fill_the_rest_from_rag_admins_authority()
     {
         await StoreAsync(new OpenWebUiOidcValues { ClientId = "owui-wizard" }, Secret);
-        var (api, logs) = Host(settings: [("Oidc:Authority", "https://idp.test/realms/ume"), ("OpenWebUi:Oidc:ClientSecret", "deployed-owui-secret")]);
+        var (api, logs) = Host(settings: [("Oidc:Authority", "https://idp.test/realms/fors"), ("OpenWebUi:Oidc:ClientSecret", "deployed-owui-secret")]);
         await using (api)
         {
             using var owui = Client(api, db.OwuiKey);

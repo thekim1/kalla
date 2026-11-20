@@ -56,13 +56,13 @@ public sealed partial class ChatApiTests
     /// without (the recorded <c>sse-cited-owui</c>, never rewritten from here).
     /// </summary>
     [Theory]
-    [InlineData("json-ume-cited", false, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
-    [InlineData("sse-ume-cited", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
-    [InlineData("json-ume-not-found", false, false, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{"related_documents":5}""")]
-    [InlineData("sse-ume-not-found", true, true, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{}""")]
-    [InlineData("json-ume-general", false, false, false, "Hur långt är det till månen i kilometer?", "open", Upstream.Fake, """{"related_documents":5}""")]
-    [InlineData("sse-ume-degraded", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", "degraded", Upstream.Fake, """{"related_documents":5}""")]
-    [InlineData("sse-ume-mid-stream-error", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.MidStreamError,
+    [InlineData("json-kalla-cited", false, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-kalla-cited", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("json-kalla-not-found", false, false, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-kalla-not-found", true, true, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{}""")]
+    [InlineData("json-kalla-general", false, false, false, "Hur långt är det till månen i kilometer?", "open", Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-kalla-degraded", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", "degraded", Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-kalla-mid-stream-error", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.MidStreamError,
         """{"related_documents":5}""")]
     [InlineData("sse-cited-owui", true, false, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"foo":1,"related_documents":99}""")]
     public Task The_ume_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, string kalla) =>
@@ -75,9 +75,9 @@ public sealed partial class ChatApiTests
     /// <c>[]</c> in its only <c>kalla</c> chunk, without a call.
     /// </summary>
     [Theory]
-    [InlineData("json-ume-follow-ups", false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
-    [InlineData("sse-ume-follow-ups", true, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
-    [InlineData("sse-ume-follow-ups-not-found", true, true, "Hur långt är det till månen i kilometer?", """{"follow_ups":3}""")]
+    [InlineData("json-kalla-follow-ups", false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
+    [InlineData("sse-kalla-follow-ups", true, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
+    [InlineData("sse-kalla-follow-ups-not-found", true, true, "Hur långt är det till månen i kilometer?", """{"follow_ups":3}""")]
     public Task The_follow_up_wire_matches_its_golden_file(string name, bool stream, bool usage, string question, string kalla) =>
         WireMatchesAsync(name, stream, usage, false, question, null, Upstream.Fake, JsonDocument.Parse(kalla).RootElement.Clone(), update: true, condenseModel: true);
 

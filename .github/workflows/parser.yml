@@ -50,7 +50,7 @@ jobs:
           # The parser, its contract, the parser contract tests (the files at the top of tests/Kalla.ContractTests/,
           # its project file included; Blobs/ holds the blob store tests, which the backend job runs), the fixtures and
           # goldens, the worker's parser client, or this workflow.
-          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/[^/]+$|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/parser\.yml$)' || true)"
+          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Kalla\.ContractTests/[^/]+$|tests/fixtures/parser/|src/Kalla\.Worker/Parsing/|\.github/workflows/parser\.yml$)' || true)"
           if [ -n "$parser" ]; then echo "parser=true"; else echo "parser=false"; fi >> "$GITHUB_OUTPUT"
 
   parser:

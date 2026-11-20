@@ -1,12 +1,12 @@
 {
-  "realm": "$(env:FORS_KEYCLOAK_REALM)",
+  "realm": "$(env:FORS_KEYCLOAK_REALM:-fors)",
   "groups": [
     {
       "name": "fors-admins",
       "realmRoles": ["gateway-admin", "rag-platform-admin"]
     },
     {
-      "name": "ume-department-admins",
+      "name": "fors-department-admins",
       "realmRoles": ["department-admin", "rag-department-admin"]
     },
     {

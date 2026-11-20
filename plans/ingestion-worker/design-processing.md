@@ -1,6 +1,6 @@
 # Ingestion worker, part C: processing stages, personal data, embedding and evaluation
 
-Detail step 6c of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
+Detail step 6c of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
 states every rule, the plan's answered items in §20) and
 specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a) marks "6c" in its stage table
 (`design-engine.md` §6). It consumes, without redesigning: the stage values (6a §2.2), the stage interface and results
@@ -808,7 +808,7 @@ exists.
 
 ## 15. Observability
 
-Meter `Ume.Rag` (6a §17), low-cardinality dimensions only:
+Meter `Källa` (6a §17), low-cardinality dimensions only:
 
 | Metric | Type | Dimensions |
 |---|---|---|

@@ -1,7 +1,7 @@
 # Applies the DOCKER-USER rules when Docker starts (and again when it restarts: PartOf), and from rag-firewall.timer,
 # which re-resolves the allowed host names.
 [Unit]
-Description=Ume Rag: host firewall for the Compose networks (repo-and-deployment §6.1)
+Description=Källa: host firewall for the Compose networks (repo-and-deployment §6.1)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service

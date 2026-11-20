@@ -1,4 +1,4 @@
-"""Measures on-prem model capacity through the LLM gateway (P0 checklist #22, weakness review §5, to-verify #98, #99,
+"""Measures on-prem model capacity through Fors (P0 checklist #22, weakness review §5, to-verify #98, #99,
 #104, #125, #149). Standard library only, one file, so it can be copied to any host that reaches the gateway.
 
 Usage: python3 -I scripts/capacity/capacity.py <command> --base-url URL --key-file FILE [options]

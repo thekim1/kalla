@@ -18,12 +18,12 @@ variables and three paste round trips to one pass. This proposal is about the va
 
 | Whose | Values |
 |---|---|
-| The gateway (4) | `FORS_OIDC_AUTHORITY` (shared with Ume.Rag and Open WebUI), `FORS_GATEWAY_HOST`, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_HOST` |
-| Ume.Rag (3) | `KALLA_API_HOST`, `KALLA_ADMIN_HOST`, `KALLA_OIDC_CLIENT_SECRET` |
+| The gateway (4) | `FORS_OIDC_AUTHORITY` (shared with Källa and Open WebUI), `FORS_GATEWAY_HOST`, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_HOST` |
+| Källa (3) | `KALLA_API_HOST`, `KALLA_ADMIN_HOST`, `KALLA_OIDC_CLIENT_SECRET` |
 | Open WebUI (2) | `KALLA_OPENWEBUI_HOST`, `KALLA_OPENWEBUI_OIDC_CLIENT_SECRET` |
 
 So: five host names, one URL that repeats a host name, one sign-in provider address and two client secrets (three
-with a confidential `ume-admin`). The two secrets are typed into Portainer's variable list, where they stay readable.
+with a confidential `fors-admin`). The two secrets are typed into Portainer's variable list, where they stay readable.
 Not marked, but edited by some: Open WebUI's client id, and the owner department's code inside the one-line JSON of
 `FORS_INTEGRATION_MANIFEST`.
 
@@ -84,7 +84,7 @@ Each was put as four alternatives with a recommendation; the user took the recom
 
 | # | Question | Answer |
 |---|---|---|
-| W1 | Which products | **The whole stack, Ume.Rag first:** one design for the gateway, Ume.Rag and Open WebUI; Ume.Rag's and Open WebUI's part is built first, the gateway's part is issues in its repository |
+| W1 | Which products | **The whole stack, Källa first:** one design for the gateway, Källa and Open WebUI; Källa's and Open WebUI's part is built first, the gateway's part is issues in its repository |
 | W2 | Which deploy forms | **All three:** Portainer, Compose and Kubernetes (the recommendation was Portainer only) |
 | W3 | Who may use the wizard before sign-in works | **A setup code from the log:** reading it proves host access; the wizard is open only while no working sign-in is stored and locks itself when done |
 | W4 | Lock-out | **A test sign-in before saving, and the setup code re-opens:** no passwords; after setup the sign-in provider changes only through the wizard with a new code, never from an ordinary admin session |
@@ -277,14 +277,14 @@ logic of its own beyond where a variable is written.
 **Today** (Portainer, v0.6.0): fill 9 values, two of them secrets, into the stack's variables; deploy; read
 `kalla-bootstrap`'s checklist; make sure the first admin has the role; sign in; create the embedding profile.
 
-**After stage 1** (Ume.Rag and Open WebUI): fill **5** values, none of them a secret of Ume.Rag or Open WebUI:
+**After stage 1** (Källa and Open WebUI): fill **5** values, none of them a secret of Källa or Open WebUI:
 `FORS_OIDC_AUTHORITY`, `FORS_GATEWAY_HOST`, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_HOST` (the gateway's four) and
 `FORS_DOMAIN`. Deploy, copy the setup code from kalla-admin's log, open `https://kalla-admin.<domain>/setup`. The wizard
 shows the redirect URIs, takes the two client secrets, tests each sign-in and tells the deployer whether they are a
 platform admin. Then the checklist, as now.
 
 **After stage 2** (the gateway's part, §6): fill **1** value, `FORS_DOMAIN`, and deploy. The gateway's wizard takes the
-provider address and its client; Ume.Rag's wizard gets the address from the gateway and asks for its two client
+provider address and its client; Källa's wizard gets the address from the gateway and asks for its two client
 secrets.
 
 The count falls by four in stage 1, three of them from `FORS_DOMAIN`. The wizard's own gain is in what follows.
@@ -307,11 +307,11 @@ Proposed as issues in thekim1/llmgateway once this proposal is agreed; none bloc
 | # | Change | For |
 |---|---|---|
 | WG1 | **`FORS_DOMAIN` in the gateway's stack file:** `FORS_GATEWAY_HOST` defaults to `llm.<domain>`, `FORS_ADMIN_HOST` to `llm-admin.<domain>`, `FORS_GATEWAY_PUBLIC_URL` to `https://<gateway host>` | 5 host values → 1 |
-| WG2 | **The sign-in provider's address in `/v1/fors/context`** (`gateway.oidc_authority`, an addition as `organisation_name` was): Ume.Rag's wizard uses it as the default, so the address is typed once for the stack | the shared authority |
+| WG2 | **The sign-in provider's address in `/v1/fors/context`** (`gateway.oidc_authority`, an addition as `organisation_name` was): Källa's wizard uses it as the default, so the address is typed once for the stack | the shared authority |
 | WG3 | **The same setup mode in the gateway's admin:** a setup code in adminapi's log, a test sign-in before saving, the deployment's value wins, re-open by a variable. This proposal's §4.2–§4.6 is the contract; the gateway's role groups are its own to decide | `FORS_OIDC_AUTHORITY`, `FORS_OIDC_CLIENT_ID`, `FORS_OIDC_CLIENT_SECRET` |
 | WG4 | Optional. **The manifest without an edit:** the owner department chosen in the gateway's admin after the first sign-in (the integration created without an owner, or in a default department), so `FORS_INTEGRATION_MANIFEST` can ship as a default in the stack file | the department code inside the JSON line |
 
-With WG3 the gateway's wizard runs first (the gateway is the base product, Ume.Rag its add-on) and Ume.Rag's wizard
+With WG3 the gateway's wizard runs first (the gateway is the base product, Källa its add-on) and Källa's wizard
 links to it when the context has no provider address yet.
 
 ## 7. Risks and how the design answers them
@@ -341,7 +341,7 @@ by main before S1.
 
 | # | What | Paths | Done when | Stream | Waits on |
 |---|---|---|---|---|---|
-| S0 | `FORS_DOMAIN`: the three names default under it in the template (seven places) and `kalla-bootstrap`, `init-deployment.sh --domain`; today's fallback kept when only the names are set | `deploy/**`, `docs/portainer.md` | The boot-only run passes with only `FORS_DOMAIN` for Ume.Rag's names, and with only the names; each `*_HOST` overrides | a | – |
+| S0 | `FORS_DOMAIN`: the three names default under it in the template (seven places) and `kalla-bootstrap`, `init-deployment.sh --domain`; today's fallback kept when only the names are set | `deploy/**`, `docs/portainer.md` | The boot-only run passes with only `FORS_DOMAIN` for Källa's names, and with only the names; each `*_HOST` overrides | a | – |
 | S1 | Encrypted settings: the store (Data Protection purpose, write-only API shape), `Settings.Identity.Oidc.*`, `SetupCompletedAt`, effective values with their source read from raw configuration (deployment, wizard, default) | `src/Kalla.Infrastructure/`, `src/Kalla.AdminApi/`, `contracts/admin/` | Tests: a deployment value wins; an empty one counts as unset; a secret never appears in a response or the audit row | b | the designs |
 | S2 | Spike, then build: kalla-admin starts without an authority; its sign-in options come from the effective values and are rebuilt when the settings version differs at a challenge or callback; the test sign-in with candidate values kept in the database (one callback path for both, or a second one if the spike says so) | `src/Kalla.AdminApi/` | A changed authority applies to the next sign-in on both of two instances without a restart; a test with a wrong secret fails with the reason and saves nothing | b | S1 |
 | S3 | Setup mode: the explicit open state, the derived code written to standard output, the attempt limit in the database, the setup session under `/bff/setup`, `Setup:Reopen` consumed at opening, the security events; the setup secret file in `kalla-bootstrap`, `init-deployment.sh`, `create-secrets.sh` and the AppHost | `src/Kalla.AdminApi/`, `src/Kalla.AppHost/`, `docs/security-events.md` (b); `deploy/**` (a) | `/bff/setup` answers 404 once completed; a deleted settings row or an unreadable secret doesn't open it; a re-open value opens it once for an hour; two instances print the same code; wrong codes never void it | b, then a | S2 |
@@ -349,7 +349,7 @@ by main before S1.
 | S5 | Open WebUI: Data Protection in kalla-api (read-only), the internal route for the managed client, the wrapper (fetch, start without sign-in when empty, exit on change) in the template and `compose.openwebui.yaml`, the wizard's step | `src/Kalla.Api/`, `deploy/postgres/app-roles.sql` if a grant is missing (b); `deploy/**` (a); `src/admin-ui/` (b) | With the values saved, a user signs in to Open WebUI with no `KALLA_OPENWEBUI_OIDC_*` set; a changed secret restarts Open WebUI by itself; the boot test passes unchanged without values | b, then a | S1, S4 |
 | S6 | The deploy files lose what moved: the default `Oidc__*` lines in the template and the Kubernetes base, `stack.env.example`, `init-deployment.sh` (options optional, no prompt); `docs/portainer.md`, `production-setup.md`, the upgrade guide (an existing deployment keeps its variables and never sees the wizard; who changed a token-shape variable keeps that line), the restore steps; `kalla-bootstrap`'s checklist points at the wizard | `deploy/**`, `docs/**` | `stack.env.example` has no secret and 5 CHANGE values; the boot test passes with no `Oidc` value set and reads the setup code from kalla-admin's output | a | S4, S5 |
 | S7 | The browser test of the wizard in `e2e.yml`, where a Keycloak runs (the release boot test has none): the code from the output, the test sign-in, the lock, a re-open | `tests/e2e/` | Green on a manual `e2e.yml` run | b | S6 |
-| S8 | The gateway issues WG1–WG4, and Ume.Rag's side of each when released (the context's `oidc_authority` as the default; `FORS_DOMAIN` for all five names) | issues; `src/Kalla.Infrastructure/Gateway/`, `deploy/**` | `stack.env.example` has 1 CHANGE value | main, then b and a | the gateway |
+| S8 | The gateway issues WG1–WG4, and Källa's side of each when released (the context's `oidc_authority` as the default; `FORS_DOMAIN` for all five names) | issues; `src/Kalla.Infrastructure/Gateway/`, `deploy/**` | `stack.env.example` has 1 CHANGE value | main, then b and a | the gateway |
 
 **As built:** the test sign-in moved from S2 to S3 (it has no caller before the setup API exists); S2 keeps the spike
 and reports its answer. S0 is #760, S1 #761.

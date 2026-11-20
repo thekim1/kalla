@@ -41,7 +41,7 @@ public sealed class ClamAvTests
     [Theory]
     [InlineData("Win.Test.EICAR_HDB-1", "clamav.win.test")]
     [InlineData("Doc.Malware.Agent-123456", "clamav.doc.malware")]
-    [InlineData("Kalla.Test.EICAR", "clamav.ume.rag")]
+    [InlineData("Kalla.Test.EICAR", "clamav.kalla.test")]
     [InlineData("Eicar-Test-Signature", "clamav.eicar_test_signature")]
     public void Malware_reasons_name_the_signature_family(string signature, string reason) =>
         new ScanResult.Malware(signature).Reason.ShouldBe(reason);

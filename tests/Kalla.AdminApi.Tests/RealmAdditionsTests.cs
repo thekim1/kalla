@@ -405,11 +405,11 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         {
             var text = File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", file)));
             using var json = JsonDocument.Parse(text);
-            json.RootElement.GetProperty("realm").GetString().ShouldBe("$(env:FORS_KEYCLOAK_REALM)", file);
+            json.RootElement.GetProperty("realm").GetString().ShouldBe("$(env:FORS_KEYCLOAK_REALM:-fors)", file);
             json.RootElement.EnumerateObject().Select(p => p.Name).ShouldBeSubsetOf(keys, file);
             text.ShouldNotContain("${", Case.Sensitive, file);
             PlaceholderName().Matches(text).Select(m => m.Groups[1].Value).Distinct().ShouldBeSubsetOf(
-                ["KALLA_ADMIN_PUBLIC_HOST", "KALLA_OPENWEBUI_HOST", "KALLA_OIDC_CLIENT_SECRET", "KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"], file);
+                ["FORS_KEYCLOAK_REALM", "KALLA_ADMIN_PUBLIC_HOST", "KALLA_OPENWEBUI_HOST", "KALLA_OIDC_CLIENT_SECRET", "KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"], file);
         }
 
         // #207 review: the local AppHost URIs are only in rag-additions.local.json, which never goes to production.

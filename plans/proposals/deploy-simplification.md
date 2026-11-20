@@ -18,7 +18,7 @@ their own copy of everything.
 | S2 | **Compose carries host machinery Portainer does without:** fixed subnets in `172.30.0.0/16`, the iptables firewall on a timer, the systemd slice, the cgroup driver, `daemon.json`, Compose 2.33.1 for `gw_priority` | Everything must be in place before the first `up`. The firewall is the source of the special cases: the sign-in provider it must be told about, the `--allow` drop-in for the cost read-back, the one for Open WebUI's provider. The two forms have different security postures | The firewall and the slice become an optional hardening step after a working install |
 | S3 | **Open WebUI is a second Compose project** | A script re-run, an `up` of its own and a firewall restart; in Portainer it is the profile `openwebui` | A profile in Compose too |
 | S4 | **Upgrades are fragile because every release changed the contract:** seven releases in two weeks, 20 retired variables, a 550-line upgrade guide, a stack file per release applied in order, a manual stop for *Rolling update: no* | An operator must read three sections to move one VM | (a) delete the upgrade paths nobody runs; (b) the migration step stops what it must itself; (c) test an upgrade that skips a release, so it is one paste |
-| S5 | **Two products, two of everything:** two setup wizards with two codes, two sign-in clients registered by hand, two internal CAs, two databases, two bundles | The second wizard repeats the first's work | After the gateway's wizard, the gateway hands Ume.Rag a ready link (no second code, no provider address); with the gateway's own Keycloak, Ume.Rag's clients are applied by themselves |
+| S5 | **Two products, two of everything:** two setup wizards with two codes, two sign-in clients registered by hand, two internal CAs, two databases, two bundles | The second wizard repeats the first's work | After the gateway's wizard, the gateway hands Källa a ready link (no second code, no provider address); with the gateway's own Keycloak, Källa's clients are applied by themselves |
 | S6 | **Too many things to back up separately, and differently per form:** the pepper, the Data Protection certificate, the blob key, the pgBackRest passphrase, the CA key; Compose has pgBackRest, escrow and timers, Portainer manual dumps | A restore without one of them is unusable, and the list is spread over three guides | One command that writes one escrow set with all of them, the same in both forms |
 | S7 | **Gateway keys still need hand work after the manifest:** the integration is moved to a team, and assigned keys are created per department before an assistant can be published | The first assistant waits on a step no page asks for | The manifest names the owner at install and creates a first assigned key |
 | S8 | **Operator documents carry project history:** about 5,000 lines on twelve pages, with phase names, item IDs and issue numbers | It is why so much had gone stale (#795 corrected about 80 statements) | Operator pages without project vocabulary; the script's `--help` is the only option list |
@@ -26,7 +26,7 @@ their own copy of everything.
 
 ## Smaller items from the first analysis (the same goal, not started)
 
-- **A readiness list on Ume.Rag's Home** for platform admins: the gateway reachable, each service's key accepted, the
+- **A readiness list on Källa's Home** for platform admins: the gateway reachable, each service's key accepted, the
   keys' residencies, an embedding model and a chat model, an assigned key in a department, trusted proxies, the last
   backup, Open WebUI's sign-in; each line links to the page or guide that fixes it. Today Home asks only for the
   embedding profile. A design change to the admin UI (admin §5.5).
@@ -34,7 +34,7 @@ their own copy of everything.
   version, a test embedding with each key), and a finishing step that offers the host units, `up`, `stanza-create` and
   the first backup. Fits with M-17's C13. Mostly absorbed by S1 if Compose takes the bootstrap container.
 - **A first-run list in the gateway's admin** after the first sign-in: add a provider, add a model, create a team,
-  connect Ume.Rag from the preset. In the gateway's repository; merges there are the user's.
+  connect Källa from the preset. In the gateway's repository; merges there are the user's.
 
 ## Recommended start: S1, S3 with S9, S4a
 
@@ -52,7 +52,7 @@ They remove the most code and documentation without changing what the system doe
      gateway's CA, PKI certificates and `create-secrets.sh` read from or mount into a volume.
   2. **The script writes only `deploy/.env`** (host names, the gateway's address and keys, the backup target, the
      optional parts). M-17's C13 is absorbed: the options whose values moved go with the rest.
-  3. **One Ume.Rag service file with the `rag-` names, plus overlays** for what only a Compose host has (pgBackRest,
+  3. **One Källa service file with the `rag-` names, plus overlays** for what only a Compose host has (pgBackRest,
      the host firewall's subnets, the slice, rolling slots, the 24 GB sizes); `build-stack.sh` merges it with the
      gateway's file for Portainer.
   4. **Kubernetes:** `create-secrets.sh` runs the same `bootstrap.sh` locally and uploads the result.
@@ -80,7 +80,7 @@ They remove the most code and documentation without changing what the system doe
 
   Steps 1 and 4 went together (#798: Kubernetes was the first consumer of the script's parameters).
 - **Step 2, how** (the main session's plan, 2026-11-16; adjust it when the code says otherwise):
-  - **The one file** is `deploy/compose.rag.yaml`, a valid Compose file that starts Ume.Rag alone: today's
+  - **The one file** is `deploy/compose.rag.yaml`, a valid Compose file that starts Källa alone: today's
     `portainer/compose.rag.template.yaml` with the `rag-` names, its static files as `configs` with `file:`, the
     networks and the two gateway inputs of its own (`llm` and `edge` defined here; the gateway's CA and its manifest
     keys as host paths, `KALLA_GATEWAY_CA_DIR` and `KALLA_GATEWAY_SECRETS_DIR`, both optional).
@@ -159,7 +159,7 @@ Low-hanging fruit that an upgrade path was the only reason to keep. Check each i
   the quick start installs without it and ends with *Harden the host*, and `production-setup.md` keeps it as what a
   production host adds. Decisions "One deployment bootstrap".
 - **S5 and S7, proposed to the gateway:** both are changes in the gateway's repository, whose merges and releases are
-  the user's, so each is an issue there with what Ume.Rag would do on its side. Nothing in this repository waits on
+  the user's, so each is an issue there with what Källa would do on its side. Nothing in this repository waits on
   them.
 
 ## Order after that

@@ -1,6 +1,6 @@
 # Knowledge API: detailed design
 
-Detail step 7 of the Ume.Rag design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
+Detail step 7 of the Källa design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
 states every rule, the plan's answered questions in §19) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Kalla.Retrieval` and
@@ -297,7 +297,7 @@ The chat role keeps the OpenAI shape (identity §4.4) for its own routes; the in
 ### 3.7 OpenAPI and Scalar
 
 As the Data API (`src/Fors.DataApi/Program.cs:22-29`, `:47-56`): `AddOpenApi("knowledge", …)` with a document
-transformer (title "Ume.Rag Knowledge API", description of authentication, grants and limits), `MapOpenApi`,
+transformer (title "Källa Knowledge API", description of authentication, grants and limits), `MapOpenApi`,
 `MapScalarApiReference(o => o.WithTitle(…).WithNonce().DisableDefaultFonts())`, `UseApiReferencePolicy("/scalar", …)`,
 published when `Knowledge:PublishApiReference` (default `true`, off in production until P2). The chat role publishes its
 own document `chat`; Scalar lists both. Endpoints carry `WithTags("Knowledge")`, `WithSummary`, typed results
@@ -1069,7 +1069,7 @@ Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `
 
 ## 15. Observability
 
-Meter and activity source **`Ume.Rag`** (repo-and-deployment §9; the gateway's equivalent is `Fors`,
+Meter and activity source **`Källa`** (repo-and-deployment §9; the gateway's equivalent is `Fors`,
 `src/Fors.ServiceDefaults/Extensions.cs:21`, `:83`, `:89`). Instruments created once from `IMeterFactory`
 as `GatewayMetrics` does (`src/Fors.Gateway/Pipeline/UsageWriter.cs:616-636`); durations in **ms** like
 `kalla.gateway.request.duration` (`:627`); low-cardinality dimensions only.

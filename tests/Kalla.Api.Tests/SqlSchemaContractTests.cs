@@ -44,7 +44,7 @@ public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClas
     public async Task Every_api_statement_prepares_and_returns_the_shape_its_reader_expects()
     {
         var statements = Assemblies
-            .SelectMany(a => SqlContract.Statements(a, "Källa.", Assemblies))
+            .SelectMany(a => SqlContract.Statements(a, "Kalla.", Assemblies))
             .Where(s => !Fragments.ContainsKey(s.Name))
             .Concat(Built())
             .ToList();
@@ -61,7 +61,7 @@ public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClas
     [Fact]
     public void Every_fragment_named_here_still_exists()
     {
-        var names = Assemblies.SelectMany(a => SqlContract.Statements(a, "Källa.", Assemblies)).Select(s => s.Name).ToHashSet();
+        var names = Assemblies.SelectMany(a => SqlContract.Statements(a, "Kalla.", Assemblies)).Select(s => s.Name).ToHashSet();
 
         Fragments.Keys.Where(k => !names.Contains(k)).ShouldBeEmpty();
     }

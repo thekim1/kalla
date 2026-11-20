@@ -94,7 +94,7 @@ public sealed class ClamAvContainerTests(ClamAvContainer clamd) : IClassFixture<
         var result = await clamd.Scanner().ScanAsync(new MemoryStream(Eicar), "upload", TestContext.Current.CancellationToken);
 
         result.ShouldBe(new ScanResult.Malware("Kalla.Test.EICAR.UNOFFICIAL"));
-        ((ScanResult.Malware)result).Reason.ShouldBe("clamav.ume.rag");
+        ((ScanResult.Malware)result).Reason.ShouldBe("clamav.kalla.test");
     }
 
     [Fact]

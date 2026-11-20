@@ -53,7 +53,7 @@ exporters:
   #   token: ${env:SPLUNK_HEC_TOKEN}
   #   endpoint: https://splunk.example.org:8088/services/collector
   #   source: kalla
-  #   sourcetype: ume:security
+  #   sourcetype: kalla:security
   #   index: security
 
   # Elasticsearch / Elastic Security.

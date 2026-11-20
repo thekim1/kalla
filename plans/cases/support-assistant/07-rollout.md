@@ -38,7 +38,7 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
+| 1.1 | Källa `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
 | 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `fors`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
@@ -92,8 +92,8 @@ grading is the gate.
 
 | # | Step | Who | Detail |
 |---|---|---|---|
-| 5.1 | The frontend team builds against a local Ume.Rag with the FakeGateway | frontend team | [`05-frontend-integration.md`](05-frontend-integration.md) §8 |
-| 5.2 | Client, key (with `requestsPerMinute` and `allowedIpRanges`), audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Ume.Rag admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
+| 5.1 | The frontend team builds against a local Källa with the FakeGateway | frontend team | [`05-frontend-integration.md`](05-frontend-integration.md) §8 |
+| 5.2 | Client, key (with `requestsPerMinute` and `allowedIpRanges`), audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Källa admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
 | 5.3 | Contract check: a cited answer with related documents and follow-ups (stream and JSON), a not-found, an uploaded-file download, a crawled-page link, a feedback rating, a long ticket, a call from outside the allow-list | both teams | [`05-frontend-integration.md`](05-frontend-integration.md) §9 step 7 |
 
 ## 6. Pilot
@@ -125,8 +125,8 @@ grading is the gate.
 
 | Step | What it needs | Reference |
 |---|---|---|
-| **Ticket-system integration, read**: the app or the assistant fetches a ticket by number instead of a paste | either the app does it (no Ume.Rag change: it reads the ticket and sends the text), or a read-only tool on the P2 tool hub that the assistant calls | tools design; roadmap "P2: Tools and skills" |
-| **Ticket-system integration, write back**: a drafted reply or a resolution note into the ticket | write tools with confirmation are P3; until then the app writes back what the user approved, outside Ume.Rag | roadmap "Later: P3" |
+| **Ticket-system integration, read**: the app or the assistant fetches a ticket by number instead of a paste | either the app does it (no Källa change: it reads the ticket and sends the text), or a read-only tool on the P2 tool hub that the assistant calls | tools design; roadmap "P2: Tools and skills" |
+| **Ticket-system integration, write back**: a drafted reply or a resolution note into the ticket | write tools with confirmation are P3; until then the app writes back what the user approved, outside Källa | roadmap "Later: P3" |
 | Similar solved tickets as a source | a collection of anonymised, resolved tickets (export to files, or a connector); personal data in tickets needs its own DPIA decision | processing §9 |
 | Per-user identity, department audiences | SA-5 | identity §7 |
 | Intranet in SharePoint | the P2 SharePoint connector | connectors §14 |

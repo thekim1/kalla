@@ -95,7 +95,7 @@ public sealed class OidcOptions
     /// <summary>The identity provider's issuer URL; when the deployment sets it, an absolute https URL (<see cref="OidcAuthorityValidator"/>).</summary>
     public string? Authority { get; set; }
 
-    /// <summary>Källa's own registration (identity design §1.6), never the gateway's <c>ume-admin</c>. An empty value is unset (§19).</summary>
+    /// <summary>Källa's own registration (identity design §1.6), never the gateway's <c>fors-admin</c>. An empty value is unset (§19).</summary>
     public string ClientId { get; set; } = "kalla-admin";
 
     public string? ClientSecret { get; set; }

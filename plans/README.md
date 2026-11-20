@@ -1,6 +1,6 @@
 # Plans
 
-Ume.Rag's plans in three layers. Read them in this order:
+Källa's plans in three layers. Read them in this order:
 
 1. **Decisions** — [`decisions.md`](decisions.md): one entry per topic, every entry binds, and they win over
    everything below.
@@ -23,8 +23,8 @@ nobody needs to read them end to end.
 | Chat | [`chat-api/design.md`](chat-api/design.md) | OpenAI-compatible chat, frames, condense, feedback, history |
 | Admin | [`admin/design.md`](admin/design.md) | The admin API, validation rules (V-numbers), every admin page |
 | Tools (P2) | [`tools/design.md`](tools/design.md) | Skills, the tool hub, MCP |
-| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Ume.Rag relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
-| Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: each assistant and knowledge base on its own assigned gateway key, the gateway's cost as the record, Ume.Rag's split per step |
+| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Källa relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
+| Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: each assistant and knowledge base on its own assigned gateway key, the gateway's cost as the record, Källa's split per step |
 
 **Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line:
 - [`architecture-plans.md`](proposals/architecture-plans.md): knowledge, assistants and models (2026-11-02); the roadmap
@@ -57,5 +57,5 @@ milestones, questions, deferred lists; a moved section keeps its heading with a 
 finished queue items (`work/`) and older proposals and reviews. Nothing there binds, except the
 performance pass's capacity model as named in the roadmap.
 
-Working name: **Ume.Rag** (placeholder, register N1). Plain-language overview for stakeholders:
+Working name: **Källa** (placeholder, register N1). Plain-language overview for stakeholders:
 [`../docs/stakeholder-report.html`](../docs/stakeholder-report.html).

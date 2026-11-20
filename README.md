@@ -1,4 +1,4 @@
-# Ume.Rag
+# Källa
 
 RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top of the team's LLM gateway
 ([thekim1/llmgateway](https://github.com/thekim1/fors)), a Python Docling parser and PostgreSQL with pgvector,
@@ -91,9 +91,9 @@ against `FORS_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 - [`docs/local-development.md`](docs/local-development.md): the dev stack in detail and the start scripts.
 - [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
-- [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Ume.Rag on one host with Docker Compose, the short path.
+- [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Källa on one host with Docker Compose, the short path.
 - [`docs/production-setup.md`](docs/production-setup.md): the Compose reference: host sizing, `init-deployment.sh`, sign-in, backups, Open WebUI.
-- [`docs/portainer.md`](docs/portainer.md): the gateway and Ume.Rag as one Portainer stack, a first deploy and each upgrade.
+- [`docs/portainer.md`](docs/portainer.md): the gateway and Källa as one Portainer stack, a first deploy and each upgrade.
 - [`docs/kubernetes.md`](docs/kubernetes.md): the same services as Kustomize manifests.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
 - [`docs/network-and-ports.md`](docs/network-and-ports.md): listeners, outbound destinations and firewall/proxy rules per setup.
@@ -136,7 +136,7 @@ deployment, when every younger pin is reviewed (Decisions table, "7-day rule in 
 
 ## Licence
 
-Copyright © 2026 Umeå kommun. Licensed under the European Union Public Licence v. 1.2 (EUPL-1.2), see
-[`LICENSE`](LICENSE). The EUPL is published in every official EU language, Swedish included, and each version is
-equally valid (<https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12>). Third-party components
-keep their own licences.
+Copyright © 2026 Kim Vallén and Nichlas Löfdahl. Licensed under the Apache License, Version 2.0 (Apache-2.0), see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Källa is built by two private developers for Swedish municipalities; the
+examples use Umeå kommun, where we work by day. Releases up to and including 0.8.0 (as Ume.Rag) were published under the
+European Union Public Licence v. 1.2 (EUPL-1.2). Third-party components keep their own licences.

@@ -12,8 +12,8 @@ import { ERROR_MESSAGES, SETUP_COMPLETE_MESSAGES, SETUP_TEST_MESSAGES } from '@/
 import SetupWizard from './SetupWizard.vue'
 
 const L = SETUP_WIZARD
-const AUTHORITY = 'https://idp.example.org/realms/ume'
-const AUTHORIZE = 'https://idp.example.org/realms/ume/protocol/openid-connect/auth?state=rag-setup-test.x'
+const AUTHORITY = 'https://idp.example.org/realms/fors'
+const AUTHORIZE = 'https://idp.example.org/realms/fors/protocol/openid-connect/auth?state=rag-setup-test.x'
 
 const noSession = () => new ApiError(401, 'GET', { code: 'setup_session_required' })
 const fakePopup = () => ({ closed: false, close: vi.fn(), location: { href: 'about:blank' } })

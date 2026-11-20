@@ -2,7 +2,7 @@
 # gateway, its admin, kalla-api, kalla-admin and Open WebUI, with the operator's certificate. kalla-bootstrap fills in the
 # @placeholders@ from the stack's host names and writes kalla-config/proxy/nginx.conf; it drops the blocks marked
 # #gwadmin, #ragadmin or #owui when that host has no name of its own (or the openwebui profile is off). Routes and body
-# sizes as the gateway's and Ume.Rag's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
+# sizes as the gateway's and Källa's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
 # is re-encrypted and verified against its internal CA.
 worker_processes auto;
 pid /tmp/nginx.pid;
@@ -70,7 +70,7 @@ http {
 #gateway            proxy_send_timeout 600s;
 #gateway            proxy_connect_timeout 5s;
 #gateway            proxy_ssl_verify on;
-#gateway            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+#gateway            proxy_ssl_trusted_certificate /etc/nginx/kalla/gateway-ca.pem;
 #gateway            proxy_ssl_name gateway;
 #gateway            proxy_ssl_server_name on;
 #gateway        }
@@ -88,7 +88,7 @@ http {
 #gwadmin            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #gwadmin            proxy_connect_timeout 5s;
 #gwadmin            proxy_ssl_verify on;
-#gwadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+#gwadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/gateway-ca.pem;
 #gwadmin            proxy_ssl_name adminapi;
 #gwadmin            proxy_ssl_server_name on;
 #gwadmin        }
@@ -107,14 +107,14 @@ http {
 #ragapi            proxy_http_version 1.1;
 #ragapi            proxy_set_header Connection '';
 #ragapi            proxy_set_header Host $host;
-#ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or kalla-api ignores the header.
+#ragapi            # List this proxy under Källa's Settings > Network (trusted proxies), or kalla-api ignores the header.
 #ragapi            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #ragapi            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
 #ragapi            proxy_read_timeout 600s;
 #ragapi            proxy_send_timeout 600s;
 #ragapi            proxy_connect_timeout 5s;
 #ragapi            proxy_ssl_verify on;
-#ragapi            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+#ragapi            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
 #ragapi            proxy_ssl_name kalla-api;
 #ragapi            proxy_ssl_server_name on;
 #ragapi        }
@@ -133,7 +133,7 @@ http {
 #ragadmin            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #ragadmin            proxy_connect_timeout 5s;
 #ragadmin            proxy_ssl_verify on;
-#ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+#ragadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
 #ragadmin            proxy_ssl_name kalla-admin;
 #ragadmin            proxy_ssl_server_name on;
 #ragadmin        }
@@ -149,7 +149,7 @@ http {
 #ragadmin            proxy_send_timeout 300s;
 #ragadmin            proxy_connect_timeout 5s;
 #ragadmin            proxy_ssl_verify on;
-#ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+#ragadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
 #ragadmin            proxy_ssl_name kalla-admin;
 #ragadmin            proxy_ssl_server_name on;
 #ragadmin        }

@@ -26,7 +26,7 @@ namespace Kalla.AdminApi.Tests;
 /// </summary>
 internal sealed class FakeProvider : HttpMessageHandler
 {
-    public const string Authority = "https://idp.test/realms/ume";
+    public const string Authority = "https://idp.test/realms/fors";
     public const string LeakMarker = "LEAK-MARKER-7f3a";
     private const string KeyId = "k1";
 
@@ -183,7 +183,7 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
 {
     /// <summary>Long enough to be an HS256 key, so the "signed with the client secret" token is well-formed.</summary>
     private const string TypedSecret = "typed-secret-9d1c4e-0123456789abcdef";
-    private const string OtherAuthority = "https://idp2.test/realms/ume";
+    private const string OtherAuthority = "https://idp2.test/realms/fors";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private string Admin => database.Connection(RagDatabase.Admin);
@@ -302,7 +302,7 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
     [Fact]
     public async Task A_provider_that_cannot_serve_is_refused_with_its_step_and_nothing_of_its_answer()
     {
-        const string discovery = "/realms/ume/.well-known/openid-configuration";
+        const string discovery = "/realms/fors/.well-known/openid-configuration";
         var cases = new (string Reason, string Path, Func<HttpResponseMessage> Answer)[]
         {
             (SetupTestReasons.Redirected, discovery, () => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("https://internal.test/" + FakeProvider.LeakMarker) } }),
@@ -314,8 +314,8 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
             }),
             (SetupTestReasons.IssuerMismatch, discovery, () => FakeProvider.Json(FakeProvider.Discovery(issuer: "https://other.test/" + FakeProvider.LeakMarker))),
             (SetupTestReasons.ParRequired, discovery, () => FakeProvider.Json(FakeProvider.Discovery(requirePar: true))),
-            (SetupTestReasons.KeysUnavailable, "/realms/ume/certs", () => new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(FakeProvider.LeakMarker) }),
-            (SetupTestReasons.KeysUnavailable, "/realms/ume/certs", () => FakeProvider.Json(new { keys = Array.Empty<object>(), note = FakeProvider.LeakMarker })),
+            (SetupTestReasons.KeysUnavailable, "/realms/fors/certs", () => new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(FakeProvider.LeakMarker) }),
+            (SetupTestReasons.KeysUnavailable, "/realms/fors/certs", () => FakeProvider.Json(new { keys = Array.Empty<object>(), note = FakeProvider.LeakMarker })),
             (SetupTestReasons.AuthorityUnreachable, discovery, () => throw new HttpRequestException(HttpRequestError.ConnectionError, FakeProvider.LeakMarker)),
             (SetupTestReasons.Tls, discovery, () => throw new HttpRequestException(HttpRequestError.SecureConnectionError, FakeProvider.LeakMarker)),
         };
@@ -349,11 +349,11 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         using var provider = new FakeProvider();
         await using var host = Host(provider, environment: "Staging");
         using var session = await SessionAsync(host, Admin);
-        using var response = await PostAsync(session, "/bff/setup/test", new { authority = "http://idp.test/realms/ume", clientSecret = TypedSecret });
+        using var response = await PostAsync(session, "/bff/setup/test", new { authority = "http://idp.test/realms/fors", clientSecret = TypedSecret });
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await ReasonOf(response)).ShouldBe(SetupTestReasons.AuthorityInvalid);
         provider.Requested.ShouldBeEmpty();
-        using var control = await PostAsync(session, "/bff/setup/test", new { authority = "https://idp.test/realms/ume\u0007" });
+        using var control = await PostAsync(session, "/bff/setup/test", new { authority = "https://idp.test/realms/fors\u0007" });
         control.StatusCode.ShouldBe(HttpStatusCode.BadRequest); // a control character fails validation
         provider.Requested.ShouldBeEmpty();
     }
@@ -662,7 +662,7 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         SetupTestSignIn.Fingerprint(values, Mapping("app_roles", groups: groups)).ShouldNotBe(same);
         SetupTestSignIn.Fingerprint(values, Mapping(tenant: "another-tenant", groups: groups)).ShouldNotBe(same);
         SetupTestSignIn.Fingerprint(values, Mapping(refuseGuests: false, groups: groups)).ShouldNotBe(same);
-        SetupTestSignIn.Fingerprint(new OidcWizardValues { Authority = "https://idp2.test/realms/ume" }, Mapping(groups: groups)).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(new OidcWizardValues { Authority = "https://idp2.test/realms/fors" }, Mapping(groups: groups)).ShouldNotBe(same);
     }
 
     [Fact]
@@ -726,10 +726,10 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         }
 
         (await LatestTestAsync(session)).GetProperty("reason").GetString().ShouldBe(SetupTestReasons.ProviderError);
-        (await RunTestAsync(session, provider, () => provider.Overrides["/realms/ume/token"] = () => FakeProvider.Json(new { error = "invalid_client" }, HttpStatusCode.Unauthorized)))
+        (await RunTestAsync(session, provider, () => provider.Overrides["/realms/fors/token"] = () => FakeProvider.Json(new { error = "invalid_client" }, HttpStatusCode.Unauthorized)))
             .ShouldBe(SetupTestReasons.TokenRefused);
         provider.Overrides.Clear();
-        (await RunTestAsync(session, provider, () => provider.Overrides["/realms/ume/token"] = () => FakeProvider.Json(new { access_token = "x" }))).ShouldBe(SetupTestReasons.IdTokenMissing);
+        (await RunTestAsync(session, provider, () => provider.Overrides["/realms/fors/token"] = () => FakeProvider.Json(new { access_token = "x" }))).ShouldBe(SetupTestReasons.IdTokenMissing);
         provider.Overrides.Clear();
         (await RunTestAsync(session, provider, () => provider.Nonce = "another-nonce")).ShouldBe(SetupTestReasons.NonceMismatch);
         // The candidate refuses guests (the default): a guest's sign-in is refused by the same checks as a real sign-in.
@@ -756,7 +756,7 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         provider.IdTokenFactory = null;
         (await RunTestAsync(session, provider, () => provider.Audience = "another-client")).ShouldBe(SetupTestReasons.IdTokenInvalid);
         provider.Audience = null;
-        (await RunTestAsync(session, provider, () => provider.Issuer = "https://other.test/realms/ume")).ShouldBe(SetupTestReasons.IdTokenInvalid);
+        (await RunTestAsync(session, provider, () => provider.Issuer = "https://other.test/realms/fors")).ShouldBe(SetupTestReasons.IdTokenInvalid);
         provider.Issuer = FakeProvider.Authority;
         (await RunTestAsync(session, provider, () => provider.ExpiresIn = TimeSpan.FromMinutes(-10))).ShouldBe(SetupTestReasons.IdTokenInvalid);
         provider.ExpiresIn = TimeSpan.FromMinutes(5);

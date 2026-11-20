@@ -76,7 +76,7 @@ describe('Gateway models: a model\'s limits (Decisions "Answer length from the m
     await flushPromises()
 
     const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')!
-    expect(put[0]).toBe('/api/gateway/models/ume%2Fchat-eu')
+    expect(put[0]).toBe('/api/gateway/models/fors%2Fchat-eu')
     expect(JSON.parse(String(put[1]!.body))).toEqual({ contextWindow: 128000, maxOutputTokens: 16384 })
     wrapper.unmount()
   })

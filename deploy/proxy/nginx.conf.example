@@ -1,4 +1,4 @@
-# nginx of your own in front of Ume.Rag on a Compose host (re-encrypting to the HTTPS listeners), in the shape of the
+# nginx of your own in front of Källa on a Compose host (re-encrypting to the HTTPS listeners), in the shape of the
 # gateway's deploy/proxy (#468); the stack's own TLS proxy is the profile proxy. Fill in the @placeholders@ (@UPSTREAM@:
 # the address this proxy reaches the Compose host at; the ports are deploy/.env's), and enable the lines marked #owui
 # with the profile openwebui and #rolling with compose.rolling.yaml. Add your own ssl_certificate / ssl_certificate_key

@@ -55,7 +55,7 @@ public sealed class OrgSyncFixture : RagDatabase, IAsyncLifetime
         {
             web.UseEnvironment("Development");
             web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
-            web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
+            web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/fors");
             web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
             web.UseSetting("Gateway:Key", key);
             web.UseSetting("OrgSync:IntervalMinutes", "1440");

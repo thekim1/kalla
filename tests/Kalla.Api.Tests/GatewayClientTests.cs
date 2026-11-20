@@ -157,7 +157,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public void The_organisation_name_the_integration_api_and_the_provider_address_count_only_under_their_features_and_empty_is_none()
     {
-        const string authority = "https://idp.example.se/realms/ume";
+        const string authority = "https://idp.example.se/realms/fors";
         var features = new GatewayFeatures();
         features.Update(["organisation"]);
         features.UpdateGateway("Exempelstad", "https://llm-admin.example.se/integration/v1", authority);
@@ -173,10 +173,10 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Theory]
-    [InlineData("http://idp.example.se/realms/ume")]
-    [InlineData("/realms/ume")]
+    [InlineData("http://idp.example.se/realms/fors")]
+    [InlineData("/realms/fors")]
     [InlineData("idp.example.se")]
-    [InlineData("https://user:secret@idp.example.se/realms/ume")]
+    [InlineData("https://user:secret@idp.example.se/realms/fors")]
     [InlineData("javascript:alert(1)")]
     [InlineData("https://idp.example.se/realms/\u0007ume")]
     [InlineData(" ")]

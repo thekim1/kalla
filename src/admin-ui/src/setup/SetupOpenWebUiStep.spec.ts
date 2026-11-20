@@ -13,7 +13,7 @@ import SetupWizard from './SetupWizard.vue'
 
 const L = SETUP_WIZARD
 const W = SETUP_WIZARD.openWebUi
-const DISCOVERY = 'https://idp.example.org/realms/ume/.well-known/openid-configuration'
+const DISCOVERY = 'https://idp.example.org/realms/fors/.well-known/openid-configuration'
 const CHAT_IDP = 'https://chat-idp.example.org/realms/chat/.well-known/openid-configuration'
 
 /** The wizard resumed (a live setup session) with `state`. */

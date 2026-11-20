@@ -11,8 +11,8 @@ import { appHostSecret, ready, scan, setupCode, typeSecret } from '../helpers'
 // aria snapshot, which could show a typed value, out of a failed test's error-context.md.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1'
 
-const authority = 'https://localhost:7411/realms/ume'
-const unreachableAuthority = 'https://localhost:1/realms/ume'
+const authority = 'https://localhost:7411/realms/fors'
+const unreachableAuthority = 'https://localhost:1/realms/fors'
 const wrongSecret = 'not-the-client-secret'
 const password = () => appHostSecret('dev-user-password', 'E2E_PASSWORD')
 const adminClientSecret = () => appHostSecret('oidc-client-secret', 'E2E_OIDC_CLIENT_SECRET')

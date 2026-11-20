@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: check the internal certificates' expiry daily
+Description=Källa: check the internal certificates' expiry daily
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

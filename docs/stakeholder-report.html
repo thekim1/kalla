@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- Stakeholder report. Published copy: https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (private). Open this file in a browser. -->
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>Ume.Rag Knowledge Platform</title>
+<title>Källa Knowledge Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -197,7 +197,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
 <body>
 <div class="wrap">
   <header class="topbar">
-    <span class="brand">Ume.Rag</span>
+    <span class="brand">Källa</span>
     <nav aria-label="Sections">
       <a href="#what">What it does</a>
       <a href="#how">How it works</a>
@@ -212,9 +212,9 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
   <div class="hero">
     <p class="eyebrow">Design report · Umeå kommun · October 2026</p>
     <h1>One place where the municipality's own knowledge answers questions, in Swedish, with sources</h1>
-    <p class="lead col">Ume.Rag is a knowledge platform for Umeå kommun. Departments point it at web pages, websites and
+    <p class="lead col">Källa is a knowledge platform for Umeå kommun. Departments point it at web pages, websites and
       documents. It reads and indexes them, and builds assistants that answer staff questions with links to the exact
-      sources. It runs on the municipality's own servers, and every AI call goes through the municipality's LLM gateway,
+      sources. It runs on the municipality's own servers, and every AI call goes through Fors,
       which goes into production together with the pilot.</p>
     <div class="facts" role="list">
       <div class="fact" role="listitem"><b>One server</b><span>The pilot runs on a single 8-core machine with 16–24 GB of memory.</span></div>
@@ -229,7 +229,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <h2 id="what-h">Staff ask in plain Swedish and get an answer they can check</h2>
     <div class="col stack">
       <p>Today the answer to a question like "who do I call about IT support?" is spread over thousands of pages
-        on umea.se, the intranet and in PDF files. Ume.Rag gathers those sources per department, keeps them up to date,
+        on umea.se, the intranet and in PDF files. Källa gathers those sources per department, keeps them up to date,
         and lets an assistant answer from them. The assistant shows up as a model in the chat tool staff already use
         (Open WebUI in the pilot). Other systems, such as the intranet or a case system, can call the same assistant
         through a standard API.</p>
@@ -259,9 +259,9 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <p class="eyebrow">How it works</p>
     <h2 id="how-h">Five small parts, each with one job</h2>
     <p class="col">Platforms such as Eneo put everything in one large application, so a big website import can slow down
-      everyone's chat. Ume.Rag keeps reading and indexing apart from answering, so the two never compete.</p>
+      everyone's chat. Källa keeps reading and indexing apart from answering, so the two never compete.</p>
 
-    <div class="map" role="img" aria-label="System map: sources flow into the ingestion side, which fills the knowledge store; assistants answer people from the store; all AI calls go through the LLM gateway.">
+    <div class="map" role="img" aria-label="System map: sources flow into the ingestion side, which fills the knowledge store; assistants answer people from the store; all AI calls go through Fors.">
       <div class="lane">
         <h3>Sources</h3>
         <div class="box"><b>Web pages</b><span>Lists of exact pages</span></div>
@@ -389,14 +389,14 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
 
   <section id="compare" aria-labelledby="compare-h">
     <p class="eyebrow">Compared with other platforms</p>
-    <h2 id="compare-h">Where Ume.Rag is stronger</h2>
+    <h2 id="compare-h">Where Källa is stronger</h2>
     <p class="col">Before designing anything we studied the source code and issue trackers of five comparable platforms:
       Eneo (used by several Swedish municipalities), Dify, RAGFlow, Onyx and Open WebUI. The strengths below answer
       problems we found there.</p>
 
     <div class="strengths">
       <div class="strength"><h3>It understands Swedish</h3>
-        <p>Swedish builds long compound words. Ume.Rag splits them when indexing and when searching, and combines keyword
+        <p>Swedish builds long compound words. Källa splits them when indexing and when searching, and combines keyword
           and meaning search. Diarienummer, form names and exact terms are found as well as paraphrases.</p>
         <p class="vs">None of the five platforms analyses Swedish text. Eneo searches by meaning only, and Open WebUI uses a
           language-neutral keyword search.</p></div>
@@ -429,7 +429,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <div class="table-scroll" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
       <table>
         <thead>
-          <tr><th scope="col">Topic</th><th scope="col" class="us">Ume.Rag</th><th scope="col">Eneo</th><th scope="col">Dify</th><th scope="col">RAGFlow</th><th scope="col">Onyx</th><th scope="col">Open WebUI</th></tr>
+          <tr><th scope="col">Topic</th><th scope="col" class="us">Källa</th><th scope="col">Eneo</th><th scope="col">Dify</th><th scope="col">RAGFlow</th><th scope="col">Onyx</th><th scope="col">Open WebUI</th></tr>
         </thead>
         <tbody>
           <tr><th scope="row">Swedish text search</th>
@@ -470,9 +470,9 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <div class="two">
       <div class="panel"><h3>Where others are ahead today</h3>
         <ul>
-          <li><b>They exist.</b> Ume.Rag's foundation is built, but it answers its first questions only in phase 1. The others can be installed today.</li>
+          <li><b>They exist.</b> Källa's foundation is built, but it answers its first questions only in phase 1. The others can be installed today.</li>
           <li><b>Breadth.</b> Onyx and Dify have many more connectors and a large plugin ecosystem.</li>
-          <li><b>Visual building.</b> Dify has a drag-and-drop workflow canvas. Ume.Rag deliberately uses fixed pipelines with settings forms.</li>
+          <li><b>Visual building.</b> Dify has a drag-and-drop workflow canvas. Källa deliberately uses fixed pipelines with settings forms.</li>
           <li><b>A polished chat interface.</b> Open WebUI's is much better than anything we would build, which is why the pilot uses it as the front end.</li>
         </ul></div>
       <div class="panel"><h3>Kept simple on purpose</h3>
@@ -510,7 +510,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
       <div class="question"><span class="id">M2</span><span><b>No AI hardware of our own yet.</b> Everything runs EU-hosted until there is. Accepted risk: if the assessment (G1) refuses EU processing, the pilot waits for hardware or another provider.</span><span class="when">Accepted risk</span></div>
       <div class="question"><span class="id">W1</span><span><b>The existing chat on umea.se.</b> Answered: chat.umea.se is built by Team Turkos. The product owner decides with the team how it relates to the pilot assistant.</span><span class="when">Product owner</span></div>
       <div class="question"><span class="id">W2</span><span><b>Copies in Open WebUI.</b> Open WebUI keeps its own copy of chats and cannot easily delete other users' chats. Decided within the assessment (G1), before go-live.</span><span class="when">Platform team + G1 and A1 owners</span></div>
-      <div class="question"><span class="id">N1</span><span><b>Product name.</b> "Ume.Rag" is a working name.</span><span class="when">Product owner</span></div>
+      <div class="question"><span class="id">N1</span><span><b>Product name.</b> "Källa" is a working name.</span><span class="when">Product owner</span></div>
       <div class="question"><span class="id">U1</span><span><b>Crawler contact page.</b> Prepared: umea.se's robots.txt allows the crawler and the page is drafted. Open: its address, owner and contact, before the first crawl of umea.se.</span><span class="when">Web editors</span></div>
       <div class="question"><span class="id">P2</span><span><b>Licences</b> of the AI models, OCR data and Swedish dictionaries the platform ships with. Reviewed: no blockers.</span><span class="when">Platform team</span></div>
     </div>
@@ -518,7 +518,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
   </section>
 
   <footer>
-    <span>Ume.Rag design, state after the weakness review and the pilot decisions of 2026-10-30. The foundation (P0) is built and in its integration step; the pilot (P1) starts after release v0.1.0.</span>
+    <span>Källa design, state after the weakness review and the pilot decisions of 2026-10-30. The foundation (P0) is built and in its integration step; the pilot (P1) starts after release v0.1.0.</span>
     <span>Detailed documents: the <code>plans/</code> folder of the repository, starting with <code>plans/README.md</code>, <code>plans/archive/passes/weakness-review.md</code> and <code>plans/archive/progress.md</code>.</span>
   </footer>
 </div>

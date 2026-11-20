@@ -23,7 +23,7 @@
 #
 # And fixtures/stack-stage1.env, the variables of stack.env.example before M-20 S8 (five CHANGE values, among them
 # FORS_DOMAIN, and the manifest with an owner): the stack's own authority, gateway names, public URL and manifest win over
-# FORS_DOMAIN's defaults, and Ume.Rag's names come from the domain.
+# FORS_DOMAIN's defaults, and Källa's names come from the domain.
 #
 #   deploy/tests/portainer-upgrade.sh [STACK.yaml]   [deploy/portainer/compose.portainer.yaml]
 #
@@ -62,7 +62,7 @@ fixture_value() { sed -n "s/^$2=//p" "$1"; }
 
 render "$fixture" "0.6.0's variables"
 ok "the stack renders with 0.6.0's variables and nothing added"
-authority=https://keycloak.example.se/realms/ume
+authority=https://keycloak.example.se/realms/fors
 is kalla-admin Oidc__Authority "$authority" "kalla-admin's authority is the stack's (declared)"
 is kalla-bootstrap KALLA_OIDC_CLIENT_SECRET a-client-secret "kalla-bootstrap gets kalla-admin's client secret to write as a file (declared)"
 is kalla-admin Setup__Reopen "" "nothing re-opens the wizard"
@@ -110,7 +110,7 @@ else fail "an empty FORS_INTEGRATION_MANIFEST gives the gateway's bootstrap '$(m
 stage1="$here/fixtures/stack-stage1.env"
 render "$stage1" "stage 1's variables"
 ok "the stack renders with stage 1's variables"
-authority=https://login.kommun.se/realms/ume
+authority=https://login.kommun.se/realms/fors
 is adminapi Oidc__Authority "$authority" "stage 1: the gateway's admin keeps the stack's authority"
 is kalla-admin Oidc__Authority "$authority" "stage 1: kalla-admin's authority is the stack's"
 is adminapi Gateway__BaseUrl https://ai.kommun.se "stage 1: the gateway's public URL is the stack's, not llm.<domain>"
@@ -132,7 +132,7 @@ old5="$here/fixtures/stack-0.5.1.env"
 sed -e 's/^KALLA_API_GATEWAY_KEY=$/KALLA_API_GATEWAY_KEY=hand-issued-api-key/' "$old5" > "$work/0.5.env"
 render "$work/0.5.env" "0.5.x's variables"
 ok "the stack renders with 0.5.x's variables and nothing added (retired ones are ignored)"
-authority=https://keycloak.example.se/realms/ume
+authority=https://keycloak.example.se/realms/fors
 is kalla-admin Oidc__Authority "$authority" "0.5.x: kalla-admin's authority is the stack's (declared, no setup wizard)"
 is kalla-bootstrap KALLA_OIDC_CLIENT_SECRET a-value "0.5.x: kalla-bootstrap gets kalla-admin's client secret (declared)"
 is adminapi Oidc__Authority "$authority" "0.5.x: the gateway's admin keeps its authority"

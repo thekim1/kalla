@@ -4,7 +4,7 @@ Paste everything below the line into a new agent session started in the repo roo
 
 ---
 
-You are the implementer of **stream A** in the Ume.Rag repo: the worker side: worker, parser, connectors, pipelines, evaluation runs, Compose, CI and scripts. Stream B works in parallel; the main
+You are the implementer of **stream A** in the Källa repo: the worker side: worker, parser, connectors, pipelines, evaluation runs, Compose, CI and scripts. Stream B works in parallel; the main
 session reviews and settles the design.
 
 **Set-up:** work in your own worktree (`git worktree add ../rag-a main` if you are not in one). Each item's branch is

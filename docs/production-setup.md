@@ -5,7 +5,7 @@ six long-running containers (`kalla-postgres`, with pgBackRest inside when backu
 `kalla-worker`, `kalla-parser` and, with the profile `clamav` (the default), `kalla-clamav`: *Malware scan*, below), with the
 profile `render` a seventh (`kalla-renderer`, below), and the one-shots `kalla-bootstrap` and `kalla-migrate`.
 `kalla-bootstrap` creates the certificates and secrets in the volumes `kalla-certs` and `kalla-secrets` and copies the
-static configuration into `kalla-config`. The same file is the Ume.Rag part of the Portainer stack. `init-deployment.sh`
+static configuration into `kalla-config`. The same file is the Källa part of the Portainer stack. `init-deployment.sh`
 writes `deploy/.env`, whose `COMPOSE_FILE` lists `compose.rag.yaml` and the overlays your options need, so every
 command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory that
 holds `deploy/`.
@@ -135,7 +135,7 @@ digest for one pushed to a registry, `--set KALLA_API_IMAGE=ghcr.io/<owner>/kall
   --gateway-credential-key-file worker=kalla-worker.key \
   --set KALLA_CRAWL_ALLOW=10.20.0.0/16 \
   --backup-target /mnt/backup/kalla --host-memory 24 --freshclam-proxy proxy.intern.umea.se:8080 \
-  --hardened --oidc-authority https://<keycloak host>/realms/ume --proxy-address <the proxy's addresses> --yes
+  --hardened --oidc-authority https://<keycloak host>/realms/fors --proxy-address <the proxy's addresses> --yes
 ```
 
 Without `--yes` it asks for what is missing: the domain (or `--api-host`), the gateway's address and, with
@@ -174,10 +174,10 @@ options name and keeps every other variable in `deploy/.env` (an empty one, and 
 |---|---|---|
 | `--domain DOMAIN` | – | `FORS_DOMAIN`: kalla-api, kalla-admin and Open WebUI are `rag.DOMAIN`, `kalla-admin.DOMAIN` and `chat.DOMAIN` |
 | `--api-host HOST`, `--admin-host HOST` | under `--domain`; without it the admin shares kalla-api's name | `KALLA_API_HOST`, `KALLA_ADMIN_HOST`: a name of its own instead; in the listener certificates and kalla-api's public URL `https://<api host>` |
-| `--gateway-url URL` | asked for (required) | the LLM gateway (HTTPS): `KALLA_GATEWAY_URL` |
+| `--gateway-url URL` | asked for (required) | Fors (HTTPS): `KALLA_GATEWAY_URL` |
 | `--gateway-ca-file FILE` | – | The gateway's CA certificate, which the services then trust (a gateway on this host: `<gateway>/deploy/certs/ca.pem`). The script copies it to `deploy/gateway-ca/ca.pem` and sets `KALLA_GATEWAY_CA_DIR` to that directory; only the certificate is copied, since the gateway's directory also holds its private keys. Give it again when the gateway gets a new CA. Not needed for a gateway with a public certificate |
-| `--gateway-secrets-dir DIR` | – | `KALLA_GATEWAY_SECRETS_DIR`: the three keys from a gateway on this host, the directory its migration writes a manifest's keys to (`<gateway>/deploy/integration-secrets`, holding `Ume.Rag/rag-api`, `kalla-admin` and `kalla-worker`; *Gateway credential keys*, below). `kalla-bootstrap` copies them at every start, and its checklist names a key that is missing |
-| `--gateway-credential-key-file SERVICE=FILE` | – | `KALLA_<SERVICE>_GATEWAY_KEY`: `SERVICE`'s credential key of the gateway integration *Ume.Rag* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service), issued by a gateway admin (*Gateway credential keys*, below). It wins over the key from `--gateway-secrets-dir`. A service without a key has its model calls refused |
+| `--gateway-secrets-dir DIR` | – | `KALLA_GATEWAY_SECRETS_DIR`: the three keys from a gateway on this host, the directory its migration writes a manifest's keys to (`<gateway>/deploy/integration-secrets`, holding `Kalla/rag-api`, `rag-admin` and `rag-worker`; *Gateway credential keys*, below). `kalla-bootstrap` copies them at every start, and its checklist names a key that is missing |
+| `--gateway-credential-key-file SERVICE=FILE` | – | `KALLA_<SERVICE>_GATEWAY_KEY`: `SERVICE`'s credential key of the gateway integration *Källa* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service), issued by a gateway admin (*Gateway credential keys*, below). It wins over the key from `--gateway-secrets-dir`. A service without a key has its model calls refused |
 | `--profiles LIST` | `clamav` | `COMPOSE_PROFILES`, comma-separated, replacing the current list: `clamav` (*Malware scan*), `render` (*Renderer*), `openwebui` (*Open WebUI*) and `proxy` (*Reverse proxy and PKI*); `--profiles ''` runs none |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | – | `KALLA_BACKUP_TARGET`, with `compose.backup.yaml`: pgBackRest `repo1` and the upload copy (*Backup target*, below) |
 | `--backup-s3-credentials-file FILE` | – | with an `s3://` target: access key and secret key on two lines |
@@ -215,7 +215,7 @@ When it is done the script prints the next steps, in the order below: with `--ha
 **The pilot signs in with the Keycloak shared with the gateway** (`plans/decisions.md` "P1 pilot sign-in";
 identity design §11.2): the gateway repo runs it and its realm `fors`; RAG's realm additions (`deploy/keycloak/`) add the
 clients `kalla-admin`, `open-webui` and `kalla-api`, the `rag-*` roles and the `departmentCodes` attribute. The
-provider address is `https://<keycloak host>/realms/ume`; Open WebUI's provider URL follows from it.
+provider address is `https://<keycloak host>/realms/fors`; Open WebUI's provider URL follows from it.
 
 Give the admin's client the two redirect URIs the setup wizard shows (code + PKCE):
 `https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`, and Open WebUI's client
@@ -344,8 +344,8 @@ it had.
 
 ## Gateway credential keys
 
-Each RAG service calls the LLM gateway with its own key: kalla-api, kalla-admin and kalla-worker each hold one **credential
-key** of the gateway integration *Ume.Rag* (identity design §4.7, gateway-changes §5.1; the gateway's
+Each RAG service calls Fors with its own key: kalla-api, kalla-admin and kalla-worker each hold one **credential
+key** of the gateway integration *Källa* (identity design §4.7, gateway-changes §5.1; the gateway's
 `docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-fors-max-residency`), and
 never holds another service's key. The three keys come about in one of three ways:
 
@@ -358,17 +358,17 @@ never holds another service's key. The three keys come about in one of three way
   afterwards. To rotate, rotate the key in the gateway's admin, delete its file under `integration-secrets/Kalla/`,
   run the gateway's `up` again, then `docker compose --env-file deploy/.env up -d` (`kalla-bootstrap` copies the new
   key) and restart the service.
-- **A gateway admin creates them from the preset:** *Access → Integrations → Add from manifest*, the preset *Ume.Rag*.
+- **A gateway admin creates them from the preset:** *Access → Integrations → Add from manifest*, the preset *Källa*.
   The three secrets are shown once; hand them over as step 3 below says.
 - **By hand**, field by field, in the gateway's admin UI. The manifest and the preset carry these settings, with an
   empty address list:
 
-1. **The integration.** Under *Access → Integrations*, create `Ume.Rag` with its owner team. Calls made as a credential
+1. **The integration.** Under *Access → Integrations*, create `Källa` with its owner team. Calls made as a credential
    key are charged to that team: the organisation and model syncs, the embedding canary, model checks, and every call
    of an assistant or knowledge base that has no key of its own.
-2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Ume.Rag`,
-   role *Credential*. Name them so the usage report tells them apart, for example `Ume.Rag api`, `Ume.Rag admin` and
-   `Ume.Rag worker`. Each key has:
+2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Källa`,
+   role *Credential*. Name them so the usage report tells them apart, for example `Källa api`, `Källa admin` and
+   `Källa worker`. Each key has:
    - **`RequireMaxResidency` on**: the gateway refuses a request without the ceiling header (`400 invalid_request`).
    - **An address list** (`AllowedIpRanges`): the addresses that service's requests reach the gateway from (this host's,
      or the NAT or proxy address the gateway sees; on Kubernetes the cluster's egress addresses).
@@ -376,7 +376,7 @@ never holds another service's key. The three keys come about in one of three way
      credential key's residencies as an upper bound on every key the service acts as (gateway-changes §5.3), so the cap
      also holds for the keys that assistants and knowledge bases run on. The worker's key: `OnPrem` and `Eu` (it never
      sends `External`). kalla-api's and kalla-admin's: up to the highest level assistants may use, which is `OnPrem` and
-     `Eu` under register M2, and all three once External routes exist. **These residencies are Ume.Rag's ceiling**: each
+     `Eu` under register M2, and all three once External routes exist. **These residencies are Källa's ceiling**: each
      service reads its key's residencies from the gateway's context and no call carries a higher ceiling (identity design
      §4.7, M-17 C9), so changing them in the gateway's admin is the one place to change it.
    - **PII policy `Off` or `Allow`**, never `Redact` or `Block`: every service embeds (the worker documents, kalla-api
@@ -415,13 +415,13 @@ restarted with the new key.
 ### Cost and budget read-back
 
 From gateway v0.10 (its integration phase 3) the admin UI shows the gateway's own figures for an assistant's or
-knowledge base's gateway key beside Ume.Rag's: its requests, tokens and cost per day or month and step on the *Cost*
+knowledge base's gateway key beside Källa's: its requests, tokens and cost per day or month and step on the *Cost*
 cards, and its budgets with how much is spent (an *Unavailable* badge once one is used up). kalla-admin reads them from
 the gateway's **Integration API**, `/integration/v1/usage` and `/integration/v1/budgets` on the gateway's **Admin API**
 (not the gateway address of `--gateway-url`), with its own credential key. It is optional; without it the admin UI
-shows Ume.Rag's figures only.
+shows Källa's figures only.
 
-1. **The scope.** A gateway admin adds the scope `usage.read` to kalla-admin's credential key (`Ume.Rag admin` in the
+1. **The scope.** A gateway admin adds the scope `usage.read` to kalla-admin's credential key (`Källa admin` in the
    naming above), next to `organisation.read`. Only kalla-admin's key gets it. The key's status, expiry and address list
    apply on the Admin API as on the gateway, so the list must hold the address the Admin API sees kalla-admin's requests
    from.
@@ -429,7 +429,7 @@ shows Ume.Rag's figures only.
    (`integration_api_url`, gateway v0.10.2), which is the gateway's `FORS_INTEGRATION_API_URL` (`Gateway:IntegrationApiUrl`)
    ending in `/integration/v1`, as kalla-admin reaches it: for example `https://llm-admin.intern.umea.se/integration/v1`
    (the gateway's Compose stack publishes the Admin API on 9443; behind its proxy, usually its own host name on 443).
-   The gateway admin sets it; Ume.Rag has no setting of its own, and while the gateway names none there is no read-back.
+   The gateway admin sets it; Källa has no setting of its own, and while the gateway names none there is no read-back.
 3. **The firewall.** Add the address's host and port to the `llm` network's allow-list:
    `docker-user-firewall.sh --allow llm=<gateway admin host>:<port>`, in a drop-in for `rag-firewall.service`
    (`sudo systemctl edit rag-firewall.service`: clear `ExecStart=` and repeat it with the option; *Host firewall* in the
@@ -573,7 +573,7 @@ first start within 30 days of its expiry (or when its host names change), which 
 The certificate-expiry timer (`deploy/host/cert-expiry.sh`, *4. Host units*) warns 60 days ahead. **A new internal
 CA:** delete `ca.pem` and `ca.key` in `kalla-certs`
 (`docker run --rm -v kalla_kalla-certs:/c alpine rm /c/ca.pem /c/ca.key`) and run `docker compose --env-file deploy/.env up -d --wait`: `kalla-bootstrap` creates a new CA and re-issues
-every service certificate. Then restart every Ume.Rag service (and `kalla-proxy`, `kalla-openwebui` where their profiles
+every service certificate. Then restart every Källa service (and `kalla-proxy`, `kalla-openwebui` where their profiles
 are on), which read the CA only at start: `docker compose --env-file deploy/.env restart`.
 
 ## Kubernetes
@@ -592,9 +592,9 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 **On a new VM** (Docker and Portainer installed, nothing else):
 
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
-   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.11.0` for Ume.Rag
-   `0.7.0` and `0.8.0`) and Ume.Rag's by digest, so no image variable is needed.
-2. **Registry:** Ume.Rag's images on `ghcr.io/thekim1/kalla/*` are private: add `ghcr.io` as a registry in Portainer
+   the release tag). It pins the gateway's images (the gateway release it was built from, `v0.11.0` for Källa
+   `0.7.0` and `0.8.0`) and Källa's by digest, so no image variable is needed.
+2. **Registry:** Källa's images on `ghcr.io/thekim1/kalla/*` are private: add `ghcr.io` as a registry in Portainer
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
 3. **Variables:** `FORS_DOMAIN`, which names the gateway API and its admin `llm.` and `llm-admin.<domain>`, and
@@ -605,7 +605,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
    provider and no client secret: after the first start, sign-in is set in the gateway's setup wizard and then in
    kalla-admin's, each with the setup code from its log ([portainer.md](portainer.md), *First deploy* steps 4–5), unless
    the stack declares it (`FORS_OIDC_AUTHORITY`).
-4. **TLS:** the gateway (8443/9443) and Ume.Rag (8543/9543) serve certificates from their own internal CAs; Open WebUI
+4. **TLS:** the gateway (8443/9443) and Källa (8543/9543) serve certificates from their own internal CAs; Open WebUI
    (3000) serves plain HTTP on loopback. Put a reverse proxy with real certificates in front of the public names
    (*Reverse proxy and PKI* below for the routes and body sizes), and set `KALLA_OPENWEBUI_BIND` and the other `*_BIND`
    variables to match. Or add `proxy` to `COMPOSE_PROFILES`: the stack's own nginx with your certificate in front of
@@ -619,7 +619,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
    *The feedback service account* below says for Compose); `kalla-bootstrap` points
    kalla-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
    (W2, below).
-6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Ume.Rag's admin
+6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Källa's admin
    (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 9). Until then no knowledge base
    can be created.
 

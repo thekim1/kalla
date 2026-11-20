@@ -184,7 +184,7 @@ export const SETUP_WIZARD = {
   },
   signIn: {
     authority: 'Provider address',
-    authorityHint: 'The issuer address of the provider, for example https://login.example.org/realms/ume or https://login.microsoftonline.com/<tenant ID>/v2.0.',
+    authorityHint: 'The issuer address of the provider, for example https://login.example.org/realms/fors or https://login.microsoftonline.com/<tenant ID>/v2.0.',
     authorityRequired: 'Enter the provider address.',
     /** The provider address was filled in from the AI gateway's sign-in (identity design §19). */
     authorityFromGateway: 'From the AI gateway, which signs in at the same provider. You can change it.',
@@ -251,7 +251,7 @@ export const SETUP_WIZARD = {
     noRedirectUri:
       'kalla-admin does not know the chat’s public address (OpenWebUi:PublicUrl), so it cannot name the redirect URI. It is the chat’s public address followed by /oauth/oidc/login/callback.',
     providerUrl: 'Provider address (discovery document)',
-    providerUrlHint: 'The address of the provider’s discovery document, for example https://login.example.org/realms/ume/.well-known/openid-configuration.',
+    providerUrlHint: 'The address of the provider’s discovery document, for example https://login.example.org/realms/fors/.well-known/openid-configuration.',
     followsSignIn: (value: string) => `Follows the sign-in provider: leave empty for ${value}.`,
     providerUrlRequired:
       'Enter the provider address, or pass the test sign-in in the Sign-in step first: left empty, the address then follows that provider.',
@@ -2405,7 +2405,7 @@ export const COSTS = {
   } as Record<string, string>,
   /** The test panel's client row (admin design §4.9). */
   testPanel: 'Test panel',
-  /** B-46: the gateway's figures beside Ume.Rag's (admin design §8.6). */
+  /** B-46: the gateway's figures beside Källa's (admin design §8.6). */
   gatewayCounted: 'Gateway',
   gatewayReport: 'See the key’s usage in the AI gateway',
   indexing: 'Indexing',

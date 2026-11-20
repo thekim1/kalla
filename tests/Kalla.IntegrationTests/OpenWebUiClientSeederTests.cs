@@ -63,7 +63,7 @@ public sealed class OpenWebUiClientSeederTests(RagDatabaseFixture database) : IC
         await Should.ThrowAsync<InvalidOperationException>(() => OpenWebUiClientSeeder.SeedAsync(db, Hasher, "sk-not-ours", null, TimeProvider.System, Ct));
         var other = new Client { Name = "Integration " + Guid.NewGuid().ToString("N")[..6], Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Public };
         db.Clients.Add(other);
-        db.Keys.Add(new ApiKey { ClientId = other.Id, Name = "k", Prefix = Key('C')[..15], KeyHash = Hasher.Hash(Key('C')), CreatedAt = DateTimeOffset.UtcNow });
+        db.Keys.Add(new ApiKey { ClientId = other.Id, Name = "k", Prefix = Key('C')[..13], KeyHash = Hasher.Hash(Key('C')), CreatedAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync(Ct);
         await Should.ThrowAsync<InvalidOperationException>(() => OpenWebUiClientSeeder.SeedAsync(db, Hasher, Key('C'), null, TimeProvider.System, Ct));
 

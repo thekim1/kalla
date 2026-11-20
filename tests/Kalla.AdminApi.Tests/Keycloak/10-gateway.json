@@ -1,5 +1,5 @@
 {
-  "realm": "$(env:FORS_KEYCLOAK_REALM)",
+  "realm": "$(env:FORS_KEYCLOAK_REALM:-fors)",
   "enabled": true,
   "displayName": "Stand-in for the gateway's realm/10-gateway.json (RealmAdditionsTests)",
   "sslRequired": "external",

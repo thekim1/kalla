@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
+State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.8.0`** (2026-11-19, the deploy simplification; tag on #856's merge commit `faa001dd`, on the
 gateway's `v0.11.0`). `main` after it has a release's worth of work (*State*). The user's VM runs 0.5.0. Two
 machines work on it: `~/research/rag` (the user's, where session 49 ran) and `~/git/kalla-platform` (`thekim1`'s,
@@ -9,7 +9,7 @@ through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
 
-**Ume.Rag** (working name, N1) is a RAG / crawling / chatbot platform for Umeå kommun: small .NET 10 services on top
+**Källa** (working name, N1) is a RAG / crawling / chatbot platform for Umeå kommun: small .NET 10 services on top
 of the team's **LLM gateway** (https://github.com/thekim1/fors, `~/git/llmgateway`), as an add-on to it (Decisions
 "Shared sign-in with the gateway"). The user owns the gateway and wants to do better than **Eneo**, a slow "kitchen
 sink" monolith. Design and code live in this repo.
@@ -123,13 +123,13 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   to the release.
 - **#858's open ends** (#862) with the user's decision that the unavailable text ends with the assistant's links,
   else the platform's (B-49, #866).
-- **The Compose quick start run end to end** (gateway 0.11.0 and Ume.Rag 0.8.0 as two Compose projects on one host,
+- **The Compose quick start run end to end** (gateway 0.11.0 and Källa 0.8.0 as two Compose projects on one host,
   no proxy, the gateway bundle's Keycloak as provider). Passed: the gateway's install and wizard, the manifest's
-  three keys, Ume.Rag's install and wizard (the provider suggested from the gateway), sign-in, *Models*, the backup
+  three keys, Källa's install and wizard (the provider suggested from the gateway), sign-in, *Models*, the backup
   stanza, `escrow-keys.sh` with `--verify`. Not run: a provider and models, so nothing from the embedding profile
-  on; `deploy/host/install.sh` and the hardening (no root). Not the guide as written: Ume.Rag's images were built
+  on; `deploy/host/install.sh` and the hardening (no root). Not the guide as written: Källa's images were built
   from the `v0.8.0` tag (no ghcr login; the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in
-  containers, both projects got a host entry and Ume.Rag's networks explicit subnets. Found: **#865** (kalla-admin did
+  containers, both projects got a host entry and Källa's networks explicit subnets. Found: **#865** (kalla-admin did
   not start without a domain or a gateway admin address; fixed in #867, tested in #872), **#874**, and the
   gateway's **#112** and **#113**.
 - **How easy the setup is** (asked by the user; read in both repositories): Portainer is close to one typed value;
@@ -202,10 +202,10 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   that needs no new image.
 - **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.11.0` (or the gateway's next release);
   `--check` is what `deploy-checks` runs.
-- **Try Ume.Rag's wizard locally** (a throwaway volume each time): `export FakeGateway__Enabled=true
+- **Try Källa's wizard locally** (a throwaway volume each time): `export FakeGateway__Enabled=true
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
   DevelopmentVolumes__Postgres=<a throwaway name> Setup__Try=true`, `aspire start …`, `aspire wait admin-ui`; the code
-  is in `aspire logs adminapi | grep 'Setup code:'`; the provider is `https://localhost:7411/realms/ume`, the clients
+  is in `aspire logs adminapi | grep 'Setup code:'`; the provider is `https://localhost:7411/realms/fors`, the clients
   `kalla-admin` and `open-webui-dev` (secrets: the AppHost parameters `oidc-client-secret`,
   `openwebui-client-secret`), the user `rag-platform-admin`. Afterwards `aspire stop --all`, wait, `docker volume rm`.
   Or run the spec: `tests/e2e/README.md`. On a FakeGateway stack the sign-in step shows the note that the gateway's
@@ -214,7 +214,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   DataApi__Enabled=false DevelopmentVolumes__Postgres=<a throwaway name>`, `aspire start --apphost
   src/Fors.AppHost/Fors.AppHost.csproj`, then `npx playwright test specs/setup.spec.ts` in
   `tests/e2e` (the gateway's `docs/local-development.md`, *Trying setup mode*). Port 5173 is taken here: set
-  `ADMIN_UI_URL` to the port `aspire logs admin-ui` names and add that address's `/signin-oidc` to the `ume-admin`
+  `ADMIN_UI_URL` to the port `aspire logs admin-ui` names and add that address's `/signin-oidc` to the `fors-admin`
   client in the bundled Keycloak.
 
 ## State
@@ -245,7 +245,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   local Docker. **Docker's default address pools are full there** (about 25 unused networks of other projects): a
   new Compose project needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper
   case and does not resolve inside containers. `gh` has two accounts, `ume-nichlas` and `Crotalus` (the user's
-  own; which is active: *Start here*); neither token has `read:packages`, so Ume.Rag's images
+  own; which is active: *Start here*); neither token has `read:packages`, so Källa's images
   cannot be pulled there. `actionlint` is installed (`/snap/bin/actionlint`; it hung once without `-shellcheck=
   -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). Playwright's
   Chromium and Firefox are in `~/.cache/ms-playwright`; Edge needs sudo to install. The Aspire CLI is at

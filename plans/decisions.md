@@ -1,6 +1,6 @@
 # Decisions
 
-The decisions in force for Ume.Rag: one entry per topic, in the present tense. Every entry binds and wins over the
+The decisions in force for Källa: one entry per topic, in the present tense. Every entry binds and wins over the
 design documents; where a design says otherwise, the design is a bug to report. Cite an entry by its name
 (`Decisions "Cost attribution"`); an older name is on the entry's *Also* line. *From* names the rows of the dated
 history, [`archive/decisions-log.md`](archive/decisions-log.md), that the entry was written from (on 2026-11-08, from
@@ -16,14 +16,18 @@ off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
 ### Product names
 
 The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the LLM gateway is **Fors**; the working
-names Ume.Rag and Fors go. The rename of code, images, documents and deployment names is stream b's work
-(the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
+names Ume.Rag and Ume.LlmGateway are gone. Code, images, documents and deployment names follow, with an upgrade path for
+existing deployments ("One deployment bootstrap"): `Kalla.*` projects, `KALLA_*` variables (the gateway's `FORS_*`),
+`kalla-*` services, volumes and networks (copied once from the `rag-*` volumes), `kalla_*` database roles,
+`ghcr.io/thekim1/kalla/*` images and the repository thekim1/kalla. Generic `rag` names that describe a function stay:
+`rag.*` metrics, the `rag-*` roles and role groups, and the credential keys `rag-api`, `rag-admin` and `rag-worker`.
 The names on the wire change too, in both products in one step (no backward compatibility before production): Källa's
-own Chat API members `kalla.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
-gateway's `x-fors-*` headers, `/v1/fors/context` and the `kalla.*` model facts become `x-fors-*`, `/v1/fors/context` and
-`fors.*`; the two renames land together. The rename comes before `v0.9.0`. This answers N1.
+own Chat API members `ume.*` became `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
+gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts became `x-fors-*`, `/v1/fors/context` and
+`fors.*`; Källa needs Fors 0.12 or later. Keys issued before the rename (`ume-rag-sk-`, `ume-rag-pk-`) stay valid; new
+ones are `kalla-sk-` and `kalla-pk-`. The rename comes before `v0.9.0`. This answers N1.
 
-*From:* decided by user, 2026-11-20.
+*From:* decided by user, 2026-11-20 (#894, #899: deployment names, the key prefixes and how far `kalla-*` goes).
 
 ### First version
 
@@ -36,7 +40,7 @@ department. Detail: `roadmap.md` "Done", "Now".
 
 Before the umea.se pilot, a **test chatbot** runs on the latest release and the gateway: DoIT's support documents
 uploaded into one knowledge base, one assistant, used by a small test group in Open WebUI. The user deploys the gateway
-and Ume.Rag by hand. The umea.se pilot (full crawl, gold set, go-live gate) follows it. The case plan is
+and Källa by hand. The umea.se pilot (full crawl, gold set, go-live gate) follows it. The case plan is
 `cases/support-assistant/` (non-binding); tickets in it are anonymised or invented until G1 allows real ones. Detail:
 `roadmap.md` "Now".
 
@@ -172,10 +176,11 @@ Detail: `admin/design.md` §1 (row 3).
 
 ### Licence
 
-Ume.Rag is EUPL-1.2; the repository stays private until then. It takes effect on publication or distribution, which waits for the municipality's approval (the
-third-party notices are in `NOTICE`); the gateway is to get the same licence. Detail: the root `README.md` "Licence"; `NOTICE`.
+Källa is Apache-2.0, copyright Kim Vallén and Nichlas Löfdahl, as Fors is; releases up to and including 0.8.0 (as
+Ume.Rag) were published under EUPL-1.2. The third-party notices are in `NOTICE`. Detail: the root `README.md` "Licence";
+`NOTICE`.
 
-*From:* log row 82; decided by user, 2026-10-31.
+*From:* log row 82; decided by user, 2026-10-31; changed to Apache-2.0 by user, 2026-11-20 (#899).
 
 ### Low CPU during development
 
@@ -188,7 +193,7 @@ re-sets before go-live. Detail: `platform/repo-and-deployment.md` §6.2.
 
 ### Postgres hosting
 
-Ume.Rag has its own Postgres, never the gateway's: the digest-pinned stock pgvector image plus pgBackRest (WAL archiving,
+Källa has its own Postgres, never the gateway's: the digest-pinned stock pgvector image plus pgBackRest (WAL archiving,
 point-in-time restore), or managed Postgres with pgvector ≥ 0.8, which is not planned for now. CI's `backend` job builds the image and runs
 integration tests on it. Blobs are write-once and long-lived keys escrowed. A standby (D1) is required before
 production beyond the pilot. Detail: `platform/repo-and-deployment.md` §5.2, §7.4, §8.2.
@@ -222,7 +227,7 @@ gets its own VM. Detail: `platform/repo-and-deployment.md` §6.4; performance pa
 
 Seven long-running containers (`kalla-api`, `kalla-admin`, `kalla-worker`, `kalla-parser`, `kalla-clamav`, `kalla-renderer`,
 `kalla-postgres`) and the one-shots `kalla-bootstrap` and `kalla-migrate`; no Redis until the first multi-host deployment, and then
-Ume.Rag's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
+Källa's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
 process behind `IRateLimitStore`/`ISharedCache`; pgBackRest runs inside the Postgres image, not as a sidecar. Merging
 containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. `kalla-clamav`
 runs only where the malware scan is on (Decisions "Malware scan optional"). Detail:
@@ -251,7 +256,7 @@ integration in the gateway's admin, G2, #88); Open WebUI's client created by the
 feedback import's address with the `openwebui` profile and a fixed 15-minute interval; the ClamAV mode from the
 `clamav` profile; the embedding profile created in the admin UI from the gateway's embedding models, its dimensions
 measured; the organisation's name and the Integration API from the gateway (G4 #89, G5 #90). The Portainer stack has
-an optional `proxy` profile: nginx with the operator's certificates, in Ume.Rag's template, for all five host names.
+an optional `proxy` profile: nginx with the operator's certificates, in Källa's template, for all five host names.
 Detail and order: `proposals/deploy-configuration.md`; work: `work/main.md` M-17.
 
 *From:* decided by user, 2026-11-13 (session 34, D1–D10); sign-in values to the setup wizard and `FORS_DOMAIN`, decided
@@ -320,7 +325,7 @@ Every deployment form gets its certificates, secrets and derived files from one 
 - **`deploy/init-deployment.sh` writes only `deploy/.env`:** the domain, the gateway's address and where its keys are,
   the backup target and the optional parts. It generates no certificate or secret, and its `--help` is the option
   list.
-- **One Ume.Rag service file with the `rag-` names.** Compose runs it directly; `build-stack.sh` merges it with the
+- **One Källa service file with the `rag-` names.** Compose runs it directly; `build-stack.sh` merges it with the
   gateway's file for Portainer. What only a Compose host has (pgBackRest, the fixed subnets of the host firewall, the
   ingestion slice, rolling slots, the 24 GB sizes) is in overlay files. The Portainer stack's service, volume and
   variable names stay.
@@ -350,7 +355,7 @@ session on the user's "do what you think is best", 2026-11-16).
 
 ### Host names
 
-Each service keeps a host name of its own: the gateway API, the gateway's admin, kalla-api, Ume.Rag's admin and Open
+Each service keeps a host name of its own: the gateway API, the gateway's admin, kalla-api, Källa's admin and Open
 WebUI. They are not served under paths of one shared name. Separate names keep the two admin consoles and the APIs
 apart as browser origins (their session cookies and scripts do not reach each other), and need no change in either
 product.
@@ -443,15 +448,15 @@ ticked on a green run. Detail: `platform/repo-and-deployment.md`
 ### Cost attribution
 
 Every assistant and every knowledge base runs on an **assigned gateway key** of its own department, chosen by id from
-the department's assigned keys; Ume.Rag stores the key's id, never a secret. Every call of a chat turn (condense, query
+the department's assigned keys; Källa stores the key's id, never a secret. Every call of a chat turn (condense, query
 embedding, rerank, answer, follow-ups) and the admin's test panel run as the assistant's key; indexing, re-embedding and
 evaluation of a knowledge base run as the knowledge base's key. The gateway charges, limits and budgets each call as
-that key, its team and department, and is the record of cost: Ume.Rag takes the cost from `x-fors-cost-usd`, from the
+that key, its team and department, and is the record of cost: Källa takes the cost from `x-fors-cost-usd`, from the
 stream comment it asks for with `x-fors-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
 finer split per step, joined on `x-fors-run-id` and `x-fors-step`. A per-assistant budget is the key's budget in the
-gateway, shown read-only in Ume.Rag; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
+gateway, shown read-only in Källa; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
 the service's credential key and is charged to the integration's owner team; once the gateway's `features` contain
-`act-as-key`, publishing an assistant needs a key. Ume.Rag's own record (stage 1) is one row per day, object, step
+`act-as-key`, publishing an assistant needs a key. Källa's own record (stage 1) is one row per day, object, step
 (and client, for an assistant) in `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"`; a call without a
 gateway cost is priced from the model mirror and kept apart as an estimate, never mixed into the gateway's figure; a
 row belongs to the object's department at the time of the call. Calls made for no assistant or knowledge base
@@ -464,29 +469,29 @@ needs no hard budget (Q3). Detail: `platform/cost-attribution.md` §4–§6; `ga
 
 ### Identity model
 
-Ume.Rag copies the gateway's identity model (OIDC code + PKCE BFF, claims, `KALLA_OIDC_*` keys, key and Data API patterns, security events) with its own clients and secrets (`kalla-admin`). Member groups are group claim values; if they cannot be read, scope narrows to claims only, never fails open. Policy denials above the ceiling or outside the audience answer 404. The audit actor is `oid` on Entra, else `sub`. Detail: `identity/design.md` §1.1, §1.3–§1.6, §2.6, §4.3.
+Källa copies the gateway's identity model (OIDC code + PKCE BFF, claims, `KALLA_OIDC_*` keys, key and Data API patterns, security events) with its own clients and secrets (`kalla-admin`). Member groups are group claim values; if they cannot be read, scope narrows to claims only, never fails open. Policy denials above the ceiling or outside the audience answer 404. The audit actor is `oid` on Entra, else `sub`. Detail: `identity/design.md` §1.1, §1.3–§1.6, §2.6, §4.3.
 
 *From:* log rows 29, 32, 55; decided by user, 2026-10-30.
 
 ### Role groups as a setting
 
-Which IdP groups grant which Ume.Rag role is `Settings.Identity.RoleGroups`, edited by platform admins and read at
+Which IdP groups grant which Källa role is `Settings.Identity.RoleGroups`, edited by platform admins and read at
 each sign-in. `Oidc:RoleGroups:rag-platform-admin` (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`) stays as a break-glass for
 the first platform admin and is merged with the setting, never replaced; the other four variables go. Roles in the
 token's role claim still count. Built in M-17 C10 (#693).
 
 *From:* decided by user, 2026-11-13 (deploy-configuration D2).
 
-### Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later
+### Identity providers: AD and Entra ID through Keycloak, Källa standalone later
 
 In production AD and Entra ID must both work, brokered through Keycloak (Entra ID as an OIDC provider, AD by LDAP federation or AD FS) and directly through `Oidc:*`; the brokered route is tested with a stand-in upstream provider. Entra ID comes in P2 as configuration, not code, with the Graph group lookup; On-Behalf-Of is designed now and
-built later. Ume.Rag's realm part needs only the `departmentCodes` and `teamCodes` claims from the base realm, so Ume.Rag can run standalone. Detail: `identity/design.md` §11.2, §11.3.
+built later. Källa's realm part needs only the `departmentCodes` and `teamCodes` claims from the base realm, so Källa can run standalone. Detail: `identity/design.md` §11.2, §11.3.
 
 *From:* log rows 21, 55, 71, 72; decided by user, 2026-11-05.
 
 ### P1 pilot sign-in
 
-The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `fors` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Ume.Rag delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
+The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `fors` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Källa delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
 Keycloak's database is `keycloak` in the gateway's Postgres, under its backups; each repo keeps its own dev Keycloak in
 its AppHost. `kalla-api` is an audience only. Detail: `identity/design.md` §11.2.
 
@@ -494,8 +499,8 @@ its AppHost. `kalla-api` is an audience only. Detail: `identity/design.md` §11.
 
 ### Shared sign-in with the gateway
 
-One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Ume.Rag's role groups keep the `rag-` names. The two
-products are separate Compose projects with the same layout, and Ume.Rag's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
+One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Källa's role groups keep the `rag-` names. The two
+products are separate Compose projects with the same layout, and Källa's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
 
 *From:* log rows 74, 118; decided by user, 2026-11-07.
 
@@ -510,7 +515,7 @@ Master keys are protected files (file key provider) while no `sensitive` data ex
 
 ### Gateway keys
 
-Each Ume.Rag service (api, admin, worker) holds **one credential key** of the gateway integration *Ume.Rag*, as a secret
+Each Källa service (api, admin, worker) holds **one credential key** of the gateway integration *Källa*, as a secret
 file, with `AllowedIpRanges` and `RequireMaxResidency`. A call for an assistant or a knowledge base sends
 `x-fors-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
 usage record); the answer's echo of the header is checked, and a missing or different echo fails closed
@@ -519,16 +524,16 @@ never sends `External`. The gateway bounds an acted request by the credential ke
 when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
 user, 2026-11-12, #580; built in thekim1/llmgateway#84, feature `credential-residencies`). So each service's
 credential key is capped at the highest level it serves (the worker's at `Eu`). An assigned key cannot
-authenticate by itself, so nothing per assistant is copied, stored or rotated in Ume.Rag. Each setting has one owner:
+authenticate by itself, so nothing per assistant is copied, stored or rotated in Källa. Each setting has one owner:
 departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,
 rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
-retrieval and answer settings, who may call an assistant and the content's level are Ume.Rag's. Configuration comes
+retrieval and answer settings, who may call an assistant and the content's level are Källa's. Configuration comes
 from the gateway's data plane with the credential key, not the Data API: the gateway's features, the assigned keys and
 the models with their limits and prices from `GET /v1/fors/context` and `GET /v1/models`, polled with `If-None-Match`;
 departments and teams from the same context, where `kalla-admin`'s credential key (and only it) holds the scope
 `organisation.read` (every department and team, inactive ones included; feature `organisation`), so the Data API key
 goes. Department member groups come from the same context (`member_groups` per department, feature `member-groups`,
-gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
+gateway v0.10.0) and are never edited in Källa (the user chose to wait for the gateway rather than build another
 source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
 release tag), which changes by addition only. Each service reads the gateway's `features` from its own
 `/v1/fors/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
@@ -542,7 +547,7 @@ groups by hand until the gateway has them, decided by user, 2026-11-12 (#580); V
 
 ### Gateway releases
 
-The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-fors-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-fors-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Ume.Rag tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
+The gateway never depends on Källa; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-fors-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-fors-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Källa tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Källa retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
 
 *From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06; the integration phases decided by user, 2026-11-11
 (#580).

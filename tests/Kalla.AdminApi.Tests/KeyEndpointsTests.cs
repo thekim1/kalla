@@ -93,7 +93,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         var secret = body.GetProperty("secret").GetString()!;
         var id = body.GetProperty("key").GetProperty("id").GetGuid();
         secret.ShouldStartWith("kalla-sk-");
-        body.GetProperty("key").GetProperty("prefix").GetString().ShouldBe(secret[..15]);
+        body.GetProperty("key").GetProperty("prefix").GetString().ShouldBe(secret[..13]);
         body.GetProperty("key").GetProperty("status").GetString().ShouldBe("active");
         body.GetProperty("key").GetProperty("clientName").GetString().ShouldBe("Integration " + code);
 
