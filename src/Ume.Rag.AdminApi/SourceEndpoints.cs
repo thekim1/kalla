@@ -146,9 +146,11 @@ public static class SourceEndpoints
                     source.DeletedAt = admin.Now;
                     source.UpdatedAt = admin.Now;
                     source.UpdatedBy = admin.Actor;
+                    // The worker takes its content out of the index with the delete (admin design §4.5; data-model §8).
                     return new AdminChange<bool>(true, "delete", AuditEntityTypes.Source, source.Id, before, null)
                     {
                         DepartmentId = department, Classification = source.Classification,
+                        Jobs = [CommandJobs.DeleteSourceJob(source.Id, department, source.Classification)],
                     };
                 }, ct);
                 return Results.NoContent();

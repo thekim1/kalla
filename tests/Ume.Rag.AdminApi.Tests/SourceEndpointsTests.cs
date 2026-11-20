@@ -135,6 +135,32 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHos
 
     /// <summary>#488: the selector check refuses what isn't CSS, not modern CSS the browser and the normaliser understand.</summary>
     [Fact]
+    public async Task Deleting_a_source_queues_the_workers_delete_source_with_it()
+    {
+        // Decisions "Deleting knowledge bases, sources and assistants"; admin design §4.5: the worker takes its content out
+        // of the index (A-36), so the delete and the command commit together.
+        var (collection, code) = await CollectionAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, code);
+        using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
+            new { type = "url-list", name = "Borttagen", classification = "internal", settings = UrlList("https://a.se/x") }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var source = await Json(created);
+        var id = source.GetProperty("id").GetGuid();
+
+        using var deleted = await admin.DeleteAsync($"/api/sources/{id}?version={source.GetProperty("version").GetString()}", Ct);
+        deleted.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"delete-source:{id}", Ct);
+        (job.Class, job.Classification).ShouldBe((JobClasses.Command, Classification.Internal));
+        using var payload = JsonDocument.Parse(job.Payload);
+        Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.DeleteSourceCommand)).Validate(payload.RootElement)
+            .ShouldBeEmpty(job.Payload);
+        payload.RootElement.GetProperty("sourceId").GetGuid().ShouldBe(id);
+        (await db.Sources.AsNoTracking().SingleAsync(s => s.Id == id, Ct)).DeletedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
     public async Task Valid_css_selectors_are_accepted()
     {
         var (collection, code) = await CollectionAsync();
