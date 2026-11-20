@@ -17,6 +17,7 @@ public static class CommandJobs
     public const string ReleaseHold = "release-hold";
     public const string ConfirmDeletion = "confirm-deletion";
     public const string RejectDeletion = "reject-deletion";
+    public const string DeleteSource = "delete-source";
 
     /// <summary>Cancels a run's queued and running jobs; dedup <c>cancel:{runId}</c>. The endpoint comes with <c>Runs</c> (P1).</summary>
     public static JobRequest CancelRunJob(Guid runId, Guid departmentId, string classification) =>
@@ -56,5 +57,15 @@ public static class CommandJobs
         {
             DedupKey = $"deletion:{runId}",
             RunId = runId,
+        };
+
+    /// <summary>
+    /// A deleted source's content leaves the index (<c>command.delete-source</c>; Decisions "Deleting knowledge bases, sources
+    /// and assistants"): its runs cancelled, its documents soft-deleted, its uploads tombstoned; dedup <c>delete-source:{sourceId}</c>.
+    /// </summary>
+    public static JobRequest DeleteSourceJob(Guid sourceId, Guid departmentId, string classification) =>
+        new(JobClasses.Command, departmentId, classification, JsonSerializer.Serialize(new { kind = DeleteSource, sourceId }))
+        {
+            DedupKey = $"delete-source:{sourceId}",
         };
 }
