@@ -325,6 +325,23 @@ Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. De
 path the same day; the bind default and what is gone confirmed, and hardening as an optional step chosen by the main
 session on the user's "do what you think is best", 2026-11-16).
 
+### Host names
+
+Each service keeps a host name of its own: the gateway API, the gateway's admin, rag-api, Ume.Rag's admin and Open
+WebUI. They are not served under paths of one shared name. Separate names keep the two admin consoles and the APIs
+apart as browser origins (their session cookies and scripts do not reach each other), and need no change in either
+product.
+
+The guides ask for as little DNS as that allows: every name is one label under `UME_DOMAIN`, so one wildcard record
+and one wildcard certificate for a sub-domain of the installation's own cover them all. A test host needs only its
+own name: without a proxy the services share it on their ports (the Compose quick start).
+
+Paths under one name are not built. If an organisation can get exactly one name, the APIs go first (prefixes the
+proxy strips, since both serve `/v1`), Open WebUI keeps a name of its own, and the admin consoles need a base path in
+each UI and admin API, in both products, with the shared origin decided explicitly.
+
+*From:* decided by user, 2026-11-20 (session 49, after the quick start was run end to end).
+
 ### Deployment values across releases
 
 A release may add, move or retire deployment variables without stopping a deployment that upgrades from the guides.
