@@ -224,6 +224,8 @@ if (fakeGateway is not null)
 {
     migrations.WithEnvironment("Seed__FakeGatewayUrl", ReferenceExpression.Create($"{fakeGateway.GetEndpoint("https")}/v1"))
         .WaitFor(fakeGateway);
+    // The demo content (repo-and-deployment §4.4): its department is the fake catalog's, so only with the FakeGateway.
+    migrations.WithEnvironment("Seed__DemoDirectory", Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "tests", "evaluation", "smoke")));
 }
 
 var api = builder.AddProject<Projects.Ume_Rag_Api>("api", o => o.LaunchProfileName = "https")
@@ -331,7 +333,8 @@ if (string.IsNullOrWhiteSpace(blobRoot) && builder.ExecutionContext.IsRunMode)
 
 if (!string.IsNullOrWhiteSpace(blobRoot))
 {
-    foreach (var service in new[] { api, worker, adminApi })
+    // The migration service writes the demo content's upload blobs (public: plaintext, no key).
+    foreach (var service in new[] { api, worker, adminApi, migrations })
     {
         service.WithEnvironment("BlobStore__Root", blobRoot);
     }
