@@ -155,7 +155,7 @@ public static class DemoSeeder
                 UpdatedBy = SettingsSeeder.Actor,
             };
             db.Assistants.Add(assistant);
-            await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(attempt);
             var version = new AssistantVersion
             {
                 AssistantId = AssistantId,
@@ -172,14 +172,14 @@ public static class DemoSeeder
                 PublishedAt = now,
             };
             db.AssistantVersions.Add(version);
-            await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(attempt);
             assistant.PublishedVersionId = version.Id;
             if (await db.Clients.AnyAsync(c => c.Id == DevSeeder.DevClientId, attempt))
             {
                 db.AssistantAudiences.Add(new AssistantAudience { AssistantId = AssistantId, SubjectId = DevSeeder.DevClientId });
             }
 
-            await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(attempt);
 
             var sync = new JobRequest(JobClasses.Sync, DepartmentId, Classification.Public,
                 JsonSerializer.Serialize(new SyncPayload { SourceId = SourceId, Kind = SyncKind.Sync, Trigger = RunTrigger.Upload, BatchId = batchId }, ContractJson.Options))

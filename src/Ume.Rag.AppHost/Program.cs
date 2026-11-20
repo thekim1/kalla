@@ -224,8 +224,6 @@ if (fakeGateway is not null)
 {
     migrations.WithEnvironment("Seed__FakeGatewayUrl", ReferenceExpression.Create($"{fakeGateway.GetEndpoint("https")}/v1"))
         .WaitFor(fakeGateway);
-    // The demo content (repo-and-deployment §4.4): its department is the fake catalog's, so only with the FakeGateway.
-    migrations.WithEnvironment("Seed__DemoDirectory", Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "tests", "evaluation", "smoke")));
 }
 
 var api = builder.AddProject<Projects.Ume_Rag_Api>("api", o => o.LaunchProfileName = "https")
@@ -420,6 +418,13 @@ else
 // Setup:Try=true (AppHost user secrets) starts rag-admin without a sign-in authority and client secret and with a setup
 // secret, so the setup wizard opens (identity design §19); Setup:Reopen is passed on for a database whose setup is done.
 var setupTry = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("Setup:Try");
+
+// The demo content (repo-and-deployment §4.4): its department is the fake catalog's, so only with the FakeGateway, and not
+// on the setup wizard's stack, which stands for a first install (#877 review).
+if (fakeGateway is not null && !setupTry)
+{
+    migrations.WithEnvironment("Seed__DemoDirectory", Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "tests", "evaluation", "smoke")));
+}
 if (keycloak is not null)
 {
     if (!setupTry)
