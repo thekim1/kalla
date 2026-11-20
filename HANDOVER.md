@@ -41,7 +41,6 @@ that for green pull requests the same day. That is not a broken rule, and it doe
    - **Release tags are protected** ("Protect release tags", `refs/tags/v*`: creation, update and deletion, since
      2026-11-16): `ume-nichlas` cannot push one (GH013). `thekim1` pushed `v0.8.0`; no workflow creates a tag. The
      next release's tag is `thekim1`'s or the user's to push, on the release preparation's merge commit.
-   - **Open: #862**, #858's open ends (below) with the user's decision on the unavailable text and B-49 queued.
 2. **0.5.1's admin image is gone from ghcr.io.** The first dry run
    ([44350629158](https://github.com/thekim1/ume-rag-platform/actions/runs/44350629158)) failed pulling
    `ghcr.io/thekim1/ume-rag/admin:0.5.1@sha256:38c9e6de…` (*not found*); the same digest pulled in #817's run on
@@ -54,7 +53,27 @@ that for green pull requests the same day. That is not a broken rule, and it doe
 3. **Stream b's B-47 and B-48** (#857's F3 and F4, the support chatbot) merged on 2026-11-19 by the other machine,
    after the release preparation; their notes are in `changes/`. The design before them is **#858**: Decisions
    "Escalation hand-off" and "Source dates on citations", chat §9.9, knowledge §10.1 and §10.4, to-verify V38. It
-   left three things for the main session (*What the main session can take without input*, 4).
+   left three things for the main session, all done: #862 (the knob list, `checked` in the example, the user's
+   decision that the unavailable text ends with the assistant's links, else the platform's) and B-49 (#866).
+4. **The Compose quick start was run end to end** (2026-11-19, on `~/research/rag`'s machine, gateway 0.11.0 and
+   Ume.Rag 0.8.0 as two Compose projects, no proxy, the gateway bundle's Keycloak as provider). Passed: the
+   gateway's install and wizard, the manifest's three keys, Ume.Rag's install, its wizard (the provider suggested
+   from the gateway), sign-in, *Models* (the gateway's version, both syncs), the backup stanza, `escrow-keys.sh`
+   with `--verify`. **Not run:** a provider and models in the gateway, so nothing from the embedding profile on
+   (step 5.2 to 5.4); `deploy/host/install.sh` and step 7 (no root here).
+   - **The run was not the guide as written:** Ume.Rag's images were built from the `v0.8.0` tag (no ghcr login;
+     the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in containers, both projects got a host
+     entry (the machine's name does not resolve in containers) and Ume.Rag's networks explicit subnets (Docker's
+     default pools were full).
+   - **Found:** #865, rag-admin did not start without a domain or a gateway admin address (fixed: #867, and the
+     smoke test runs the host-only form, #872). **Open: #874** (the bootstrap's wizard address has no port; the
+     setup script's bare error without root; the quick start does not say the cost read-back is off) and, in the
+     gateway's repository, **thekim1/llmgateway#112** (`realm-import` cannot read its trust store after
+     `init-keycloak.sh`, and `up --wait` reports success) and **#113** (the bundle has no `docs/`).
+5. **Host names (Decisions "Host names", user, 2026-11-20; #875, open):** each service keeps a host name of its
+   own; the guides recommend one wildcard record and certificate for a sub-domain of the installation's own, and
+   one name with ports for a test host. Paths under one name are not built (the roadmap's open calls). The gateway's
+   own guides do not say this yet.
 
 ### Waiting on the user
 
@@ -88,13 +107,10 @@ that for green pull requests the same day. That is not a broken rule, and it doe
    `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
    `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
    a reason, or drop the dependency.
-4. **#858's open ends** (design, the main session's; all three are in **#862**, and the third was decided by the
-   user on 2026-11-19: the unavailable text ends with the assistant's links, else the platform's, code in B-49):
-   - `Chat:EscalationTimeout` (2 s, hard; 0 = no summary, chat §9.9) is missing from `repo-and-deployment.md`'s
-     chat knob list, where `Chat:FollowUpTimeout` is.
-   - `checked` is missing from knowledge §3.2's JSON example.
-   - Settle #860's design deviation: for `unavailable`, `contacts` falls back to the platform's links (§9.9), but
-     the unavailable text (§10.2, `FixedTexts.Unavailable`) shows only the assistant's. Align §10.2, or keep it.
+4. **#874**'s three points (stream a's paths; say so on the issue first), and the wildcard advice in the gateway's
+   guides (a pull request there; merges are the user's).
+5. **#873:** the dev seed has no demo knowledge base or assistant though repo-and-deployment §4.4 says so; build it
+   (stream b) or change the design (main).
 
 ### Watch
 
@@ -142,10 +158,11 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
 - **A hardened Compose host's firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it
   the wizard's test can't reach a provider there. `init-deployment.sh --hardened` asks for it in an interactive run,
   and its closing lines say when it is missing. A host without the hardening has no such limit.
-- **The Compose quick start (`docs/compose-quick-start.md`) is read, not run** end to end: the gateway's manifest path
-  is exercised only in the Portainer boot test, and the same-host flow (the gateway on `--bind 0.0.0.0`, Ume.Rag
-  reading its keys and CA from the gateway's directory) nowhere. The release smoke test boots `compose.rag.yaml` with
-  the backup overlay against the fake gateway.
+- **The Compose quick start (`docs/compose-quick-start.md`) was run once, by hand, not as written** (*Start here*
+  4): with locally built images, without root, and without a provider, so its steps 5.2 to 5.4, the host timers
+  and the hardening are still only read. No test runs the two products' Compose projects together; the release
+  smoke test boots `compose.rag.yaml` with the backup overlay against the fake gateway (since #872 also in the
+  host-only form).
 - **The gateway's Data API does not follow its wizard:** a gateway whose sign-in is set there sets
   `UME_DATA_AUTHORITY` for access tokens. On Kubernetes a gateway that declares `Oidc__Authority` must set
   `Gateway__OidcAuthority` too (documented).
@@ -202,17 +219,22 @@ On `~/git/ume-rag-platform`, as the main session and stream a. All merged after 
   its live progress, move to another department, the images' security updates and the daily image scan. Migrations
   `DropMessageParentId` (stops the old rag-api and rag-admin) and `ContinueRuns` (additive); *Rolling update: no*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`UME_DOMAIN`, no secret).
-- **On `main` after `faa001dd`, unreleased:** B-47 (source dates on citations) and B-48 (the escalation hand-off,
-  `ume.escalation`), notes in `changes/`.
+- **On `main` after `faa001dd`, unreleased:** B-47 (source dates on citations), B-48 (the escalation hand-off,
+  `ume.escalation`), B-49 (#866), #867 and #872 (#865), and the other machine's website (GitHub Pages, #868, #870)
+  and font fix (#871); notes in `changes/`.
 - **Open issues that matter:** #781 (watch), #667 (M-16, the other machine's), #333 (the exact-scan and recall
-  checks on the test host), #511 (splitting the worker), #580 and #550 (decisions to record). Open pull request: #862.
+  checks on the test host), #511 (splitting the worker), #580 and #550 (decisions to record), #873 and #874. Open
+  pull request: #875.
 - **Dependabot works:** its first grouped pull requests merged (#841 to #844); `.github/dependabot.yml`'s header lists
   where a pin is repeated.
 - **Ume.Rag on this machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in this WSL distro, so
   stack and image tests run only in CI; `shellcheck` and `actionlint` are not installed. On the other machine
   (`~/research/rag`) session 47's agent worktrees and the merged local branches were removed on 2026-11-19; what
   remains is the main clone on `main` and `~/research/rag-small` (the second checkout). Volumes
-  `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept there.
+  `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are kept there. The quick start's test
+  installation is torn down (containers, its volumes, the built images); the gateway's 0.11.0 images stay in the
+  local Docker, and Docker's default address pools are full there (about 25 unused networks of other projects): a
+  new Compose project needs explicit subnets or a `docker network prune` by the user.
 - **The gateway on this machine:** `gh` is signed in as `ume-nichlas` (it can push to both repositories; merges and
   releases in the gateway are the user's). Worktrees `~/git/llmgateway`, `~/git/llmgateway-100`,
   `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull requests are all merged: they can
