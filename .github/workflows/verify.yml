@@ -298,7 +298,8 @@ jobs:
           sh deploy/kubernetes/sync-config.sh
           git diff --exit-code -- deploy/kubernetes || { echo "Run deploy/kubernetes/sync-config.sh and commit the copies"; exit 1; }
           # A NetworkPolicy by name from a rendered file.
-          np() { awk -v n="$2" '/^---$/ { if (f) exit; d = ""; next } { d = d $0 "\n" } $0 == "  name: " n { f = 1 } END { if (f) printf "%s", d }' "$1"; }
+          # np FILE NAME: the NetworkPolicy NAME (a workload may have the same name).
+          np() { awk -v n="$2" '/^---$/ { if (f) exit; d = ""; k = ""; next } { d = d $0 "\n" } /^kind: / { k = $2 } k == "NetworkPolicy" && $0 == "  name: " n { f = 1 } END { if (f) printf "%s", d }' "$1"; }
           kustomize deploy/kubernetes/base > "$RUNNER_TEMP/k8s-base.yaml"
           # The base denies all traffic to and from the stack's pods (#706); the policies after it allow the flows.
           diff -u - <(np "$RUNNER_TEMP/k8s-base.yaml" kalla-default-deny) <<'EOF'
