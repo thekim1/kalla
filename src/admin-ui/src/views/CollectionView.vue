@@ -15,6 +15,7 @@ import SourceDrawer from '@/components/sources/SourceDrawer.vue'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
@@ -23,6 +24,7 @@ import SelectField from '@/components/ui/SelectField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import UiDialog from '@/components/ui/UiDialog.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import CostCard from '@/components/costs/CostCard.vue'
@@ -31,7 +33,7 @@ import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 
@@ -95,6 +97,18 @@ const editing = ref(false)
 // Change department (#811): platform admins only, on the owner's view.
 const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
 const moving = ref(false)
+// Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, the name typed; while an
+// assistant links it or it has a source, the dialog names them and has no delete button (the API refuses with
+// collection_in_use).
+const canDelete = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const deleting = ref(false)
+const inUse = computed(() => users.value.length > 0 || sources.data.value.length > 0)
+async function deleteCollection(): Promise<void> {
+  const deleted = collection.data.value!
+  await api.collections.remove(deleted.id, deleted.version)
+  ui.notify(DELETE.knowledgeBaseDeleted(deleted.name))
+  void router.push({ name: 'collections' })
+}
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 let documentsRequest = 0
 
@@ -285,6 +299,7 @@ onMounted(load)
         />
         <UiButton v-if="canEdit" icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
         <UiButton v-if="canMove && !shared" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
+        <UiButton v-if="canDelete && !shared" variant="danger" icon="delete" data-test="delete" @click="deleting = true">{{ DELETE.action }}</UiButton>
         <UiButton v-if="canPublish && !collection.data.value.publishedAt" variant="primary" :loading="publishing" data-test="publish" @click="publish">
           {{ COLLECTION.publish }}
         </UiButton>
@@ -435,6 +450,20 @@ onMounted(load)
         v-if="canMove && !shared" :id="collection.data.value.id" v-model:open="moving" kind="collection"
         :department-id="collection.data.value.departmentId" :version="collection.data.value.version" @moved-collection="moved"
       />
+      <template v-if="canDelete && !shared">
+        <UiDialog v-if="inUse" v-model:open="deleting" :title="DELETE.inUseTitle" icon="block" tone="warn">
+          <template #description>
+            <p v-if="users.length > 0" data-test="in-use-assistants">{{ DELETE.inUseAssistants(usedBy) }}</p>
+            <p v-if="sources.data.value.length > 0" data-test="in-use-sources">{{ DELETE.inUseSources(formatNumber(sources.data.value.length)) }}</p>
+          </template>
+          <template #actions><UiButton @click="deleting = false">{{ DELETE.close }}</UiButton></template>
+        </UiDialog>
+        <ConfirmDialog
+          v-else v-model:open="deleting" :title="DELETE.knowledgeBaseTitle" :confirm-label="DELETE.action" danger
+          :consequence="DELETE.knowledgeBaseConsequence(formatNumber(collection.data.value.documentCount))"
+          :confirm-name="collection.data.value.name" :confirm-name-label="DELETE.typeName(collection.data.value.name)" :action="deleteCollection"
+        />
+      </template>
     </template>
   </AsyncState>
 </template>

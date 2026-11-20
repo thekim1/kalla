@@ -12,7 +12,8 @@ import CollectionView from './CollectionView.vue'
 
 // `?tab=` (the Files tab's `?tab=files`, §5.5.7) through a route the tests set.
 const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
-vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push: vi.fn() }) }))
+const push = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push }) }))
 beforeEach(() => {
   route.query = {}
 })
@@ -185,6 +186,57 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(rows[1]).toContain('GK check')
     expect(rows[1]).toContain('Archived')
     expect(rows[1]).not.toContain('Draft')
+  })
+
+  it('deletes an unused knowledge base after its name is typed (Decisions "Deleting knowledge bases, sources and assistants")', async () => {
+    signIn(['rag-department-admin'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection({ usedBy: [], documentCount: 0, version: '7' }))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    const remove = vi.spyOn(api.collections, 'remove').mockResolvedValue(undefined)
+    push.mockClear()
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=delete]').trigger('click')
+    await flushPromises()
+    expect(window.document.body.textContent).toContain('This cannot be undone. Its name is free for a new knowledge base.')
+    const confirm = window.document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
+    expect(confirm.getAttribute('aria-disabled')).toBe('true')
+    const name = window.document.body.querySelector<HTMLInputElement>('[data-test=confirm-name] input, input[data-test=confirm-name]')!
+    name.value = base.name
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    confirm.click()
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith('c1', '7')
+    expect(push).toHaveBeenCalledWith({ name: 'collections' })
+    wrapper.unmount()
+  })
+
+  it('names the assistants and sources that keep a knowledge base in use, with no Delete button; an editor has no Delete', async () => {
+    signIn(['rag-department-admin'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection({
+      usedBy: [collectionUser({ id: 'a2', name: 'GK check', state: 'archived', published: false, draft: true })],
+    }))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([
+      { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active', documents: 3, lastRun: null },
+    ])
+    const remove = vi.spyOn(api.collections, 'remove').mockResolvedValue(undefined)
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=delete]').trigger('click')
+    await flushPromises()
+    expect(window.document.body.querySelector('[data-test=in-use-assistants]')!.textContent).toBe('Used by: GK check (archived). Delete or unlink them first.')
+    expect(window.document.body.querySelector('[data-test=in-use-sources]')!.textContent).toBe('It has 1 source. Delete its sources first.')
+    expect(window.document.body.querySelector('[data-test=confirm]')).toBeNull()
+    expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
+
+    signIn(['rag-editor'])
+    const editor = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(editor.find('[data-test=delete]').exists()).toBe(false)
   })
 
   it('offers Add contact on an empty contact, which opens the Edit drawer; a reader sees no button (§5.5.2)', async () => {

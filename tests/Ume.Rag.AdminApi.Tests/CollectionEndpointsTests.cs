@@ -74,7 +74,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database, Admi
         // q is text, not a pattern: "_" matches only an underscore.
         (await admin.GetFromJsonAsync<JsonElement>("/api/collections?q=_", Ct)).GetProperty("total").GetInt32().ShouldBe(0);
 
-        // The slug is taken (also after a delete); the problem points at the field with a free suggestion.
+        // The slug is taken while the knowledge base is not deleted; the problem points at the field with a free suggestion.
         using (var taken = await admin.PostAsJsonAsync("/api/collections", new { name = "Bygglov och Ärenden " + code, departmentId = department, classification = "public" }, Ct))
         {
             taken.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -103,6 +103,11 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database, Admi
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "collection" && a.EntityId == id.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
             .ShouldBe(["create", "update", "publish", "delete"]);
         (await db.Collections.AsNoTracking().SingleAsync(c => c.Id == id, Ct)).DeletedAt.ShouldNotBeNull();
+
+        // Its name is free at once (Decisions "Deleting knowledge bases, sources and assistants"): a new one gets the same slug.
+        var again = await CreateAsync(admin, department, "Bygglov och Ärenden " + code);
+        again.GetProperty("slug").GetString().ShouldBe($"bygglov-och-arenden-{code.ToLowerInvariant()}");
+        again.GetProperty("id").GetGuid().ShouldNotBe(id);
     }
 
     [Fact]

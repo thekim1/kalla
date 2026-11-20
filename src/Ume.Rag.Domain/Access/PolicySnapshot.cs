@@ -104,12 +104,15 @@ public sealed record PolicySnapshot(
     private static readonly ConditionalWeakTable<IReadOnlyDictionary<Guid, CollectionEntry>, IReadOnlyDictionary<string, CollectionEntry>> BySlug = new();
 
     /// <summary>
-    /// Collections by slug (slugs are unique, data-model §2.1), built once per <see cref="Collections"/> instance: keyed
-    /// on the dictionary rather than stored in the record, so a <c>with</c> copy that replaces the collections never
-    /// carries a stale index.
+    /// Collections by slug, built once per <see cref="Collections"/> instance: keyed on the dictionary rather than stored
+    /// in the record, so a <c>with</c> copy that replaces the collections never carries a stale index. A slug is unique
+    /// among the collections that are not deleted (data-model §2.1), so a deleted one may share it with a new one: the one
+    /// not deleted wins. A slug only deleted collections have still resolves, so the policy refuses it with its own
+    /// reason (identity §4.3 step 5).
     /// </summary>
     public IReadOnlyDictionary<string, CollectionEntry> CollectionsBySlug =>
-        BySlug.GetValue(Collections, static c => c.Values.ToDictionary(e => e.Slug, StringComparer.Ordinal));
+        BySlug.GetValue(Collections, static c => c.Values.OrderBy(e => e.Deleted).GroupBy(e => e.Slug, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal));
 
     /// <summary>
     /// <c>Sources.DemoteRules</c> (jsonb, the crawl's <c>demote</c> list) by source id, for sources that have some

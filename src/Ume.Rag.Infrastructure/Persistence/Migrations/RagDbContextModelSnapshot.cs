@@ -1011,7 +1011,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmbeddingProfileId");
 
                     b.HasIndex("Slug")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"DeletedAt\" IS NULL");
 
                     b.ToTable("Collections", "config", t =>
                         {

@@ -2443,3 +2443,21 @@ export const CONTINUE_RUN = {
   dropped: (n: string) => `${n} pages were left out because they are no longer within the scope or the depth limit.`,
   limit: (admitted: string) => `Only ${admitted} of them were fetched before the page limit.`,
 } as const
+
+/** Delete a knowledge base or a source (admin design §5.5 *Delete in the UI*; Decisions "Deleting knowledge bases, sources and assistants"). */
+export const DELETE = {
+  action: 'Delete',
+  typeName: (name: string) => `Type “${name}” to confirm`,
+  knowledgeBaseTitle: 'Delete the knowledge base?',
+  knowledgeBaseConsequence: (documents: string) =>
+    `Its ${documents} documents leave the search at once and are then removed for good. This cannot be undone. Its name is free for a new knowledge base.`,
+  inUseTitle: 'The knowledge base is still in use',
+  inUseAssistants: (names: string) => `Used by: ${names}. Delete or unlink them first.`,
+  inUseSources: (count: string) => `It has ${count} ${count === '1' ? 'source' : 'sources'}. Delete its sources first.`,
+  knowledgeBaseDeleted: (name: string) => `The knowledge base ${name} has been deleted.`,
+  sourceTitle: 'Delete the source?',
+  sourceConsequence: (documents: string) =>
+    `Its ${documents} documents leave the search at once and are then removed for good. This cannot be undone.`,
+  sourceDeleted: (name: string) => `The source ${name} has been deleted.`,
+  close: 'Close',
+} as const

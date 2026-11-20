@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
@@ -10,6 +11,7 @@ import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
 import SourceQuarantine from '@/components/sources/SourceQuarantine.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
@@ -21,7 +23,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { DELETE, LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { pollDelay } from '@/composables/useJobPoll'
 import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
@@ -38,6 +40,25 @@ const next = ref<string | null>(null)
 const syncing = ref(false)
 const syncError = ref<unknown>(null)
 const editing = ref(false)
+const router = useRouter()
+// Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, at any time, the name typed;
+// the dialog says how many documents leave the search (the collection's source list carries the count).
+const canDelete = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const deleting = ref(false)
+const documentCount = ref<number | null>(null)
+async function openDelete(): Promise<void> {
+  const current = source.data.value!
+  documentCount.value = await api.collections.sources(current.collectionId)
+    .then((list) => list.find((s) => s.id === current.id)?.documents ?? null)
+    .catch(() => null)
+  deleting.value = true
+}
+async function deleteSource(): Promise<void> {
+  const deleted = source.data.value!
+  await api.sources.remove(deleted.id, deleted.version)
+  ui.notify(DELETE.sourceDeleted(deleted.name))
+  void router.push({ name: 'collection', params: { id: deleted.collectionId } })
+}
 const collection = ref<Collection | null>(null)
 // The report's numbers and type names (#217): the types whose rule fired and the non-zero counts; never values.
 const piiType = (type: string) => SOURCE_PAGE.piiTypes[type] ?? type
@@ -167,6 +188,7 @@ onMounted(load)
         <UiButton v-if="canEdit" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
         <ContinueRunButton v-if="continuable && !activeRun" :run-id="continuable" can-continue @started="loadRuns()" />
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
+        <UiButton v-if="canDelete" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
       </PageHeader>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
       <p v-if="activeProgress && activeRun" class="mb-4 tabular" aria-live="polite" data-test="run-progress">
@@ -239,6 +261,11 @@ onMounted(load)
 
       <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
       <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />
+      <ConfirmDialog
+        v-if="canDelete" v-model:open="deleting" :title="DELETE.sourceTitle" :confirm-label="DELETE.action" danger
+        :consequence="DELETE.sourceConsequence(documentCount === null ? '–' : formatNumber(documentCount))"
+        :confirm-name="source.data.value.name" :confirm-name-label="DELETE.typeName(source.data.value.name)" :action="deleteSource"
+      />
     </template>
   </AsyncState>
 </template>

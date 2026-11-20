@@ -137,4 +137,24 @@ public sealed class AccessPolicyTests
         Policy.Filter(who, all, RagAction.ListModels, Config, true).Select(r => r.Id)
             .ShouldBe([PublicAssistant, InternalAssistant], ignoreOrder: true);
     }
+
+    [Fact]
+    public void A_deleted_collection_leaves_its_slug_to_a_new_one()
+    {
+        // Decisions "Deleting knowledge bases, sources and assistants": the slug is unique among collections that are not deleted.
+        Guid deleted = Guid.NewGuid(), live = Guid.NewGuid(), gone = Guid.NewGuid();
+        var snapshot = PolicySnapshot.Empty with
+        {
+            Collections = new Dictionary<Guid, CollectionEntry>
+            {
+                [deleted] = new(deleted, "bygglov", "Bygglov", Department, Classification.Public, Guid.NewGuid(), "{}", DateTimeOffset.UnixEpoch, true),
+                [live] = new(live, "bygglov", "Bygglov", Department, Classification.Public, Guid.NewGuid(), "{}", DateTimeOffset.UnixEpoch, false),
+                [gone] = new(gone, "arkiv", "Arkiv", Department, Classification.Public, Guid.NewGuid(), "{}", DateTimeOffset.UnixEpoch, true),
+            },
+        };
+
+        snapshot.CollectionsBySlug["bygglov"].Id.ShouldBe(live);
+        // A slug of deleted collections only still resolves, so the policy refuses it with its own reason.
+        snapshot.CollectionsBySlug["arkiv"].Id.ShouldBe(gone);
+    }
 }
