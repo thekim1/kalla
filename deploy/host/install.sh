@@ -9,7 +9,7 @@
 #   sudo deploy/host/install.sh [--host-memory 16|24] [--no-enable]
 #
 # Options:
-#   --host-memory 16|24   [KALLA_HOST_MEMORY in deploy/.env, else 16] MemoryMax of kalla-ingestion.slice: 7G or 11G
+#   --host-memory 16|24   [KALLA_HOST_MEMORY in deploy/.env, else 16] MemoryMax of rag-ingestion.slice: 7G or 11G
 #   --deploy-dir DIR      [the directory above this script] the deployment's deploy/ directory
 #   --unit-dir DIR        [/etc/systemd/system] where the units go; another directory only writes them (CI, review)
 #   --no-enable           write the units and reload systemd, but enable and start nothing
@@ -45,7 +45,7 @@ if [ "$system" = 1 ]; then
 fi
 mkdir -p "$unit_dir"
 
-units=(kalla-ingestion.slice rag-firewall.service rag-firewall.timer rag-backup.service rag-backup.timer
+units=(rag-ingestion.slice rag-firewall.service rag-firewall.timer rag-backup.service rag-backup.timer
   rag-backup-status.service rag-backup-status.timer rag-upload-backup.service rag-upload-backup.timer
   rag-restart-unhealthy.service rag-restart-unhealthy.timer rag-cert-expiry.service rag-cert-expiry.timer)
 for u in "${units[@]}"; do
@@ -53,7 +53,7 @@ for u in "${units[@]}"; do
   chmod 0644 "$unit_dir/$u.tmp"
   mv -f "$unit_dir/$u.tmp" "$unit_dir/$u"
 done
-dropin="$unit_dir/kalla-ingestion.slice.d/50-host-memory.conf"
+dropin="$unit_dir/rag-ingestion.slice.d/50-host-memory.conf"
 if [ "$memory_max" = 7G ]; then
   rm -f "$dropin"; rmdir "$(dirname "$dropin")" 2>/dev/null || true
 else
@@ -62,13 +62,13 @@ else
     "$host_memory" "$memory_max" > "$dropin"
   chmod 0644 "$dropin"
 fi
-echo "installed ${#units[@]} units in $unit_dir (kalla-ingestion.slice MemoryMax=$memory_max)"
+echo "installed ${#units[@]} units in $unit_dir (rag-ingestion.slice MemoryMax=$memory_max)"
 [ "$system" = 1 ] || exit 0
 
 systemctl daemon-reload
 if [ "$(docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null)" != "systemd 2" ]; then
   echo "warning: Docker does not use the systemd cgroup driver on cgroup v2 ($(docker info --format \
-'{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null || echo unknown)): kalla-ingestion.slice will not cap the ingestion \
+'{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null || echo unknown)): rag-ingestion.slice will not cap the ingestion \
 zone (to-verify #90). Set \"exec-opts\": [\"native.cgroupdriver=systemd\"] in /etc/docker/daemon.json." >&2
 fi
 [ "$enable" = 1 ] || exit 0

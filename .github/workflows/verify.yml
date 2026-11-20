@@ -366,7 +366,7 @@ jobs:
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do
-            export "RAG_${v}_IMAGE=ghcr.io/example/kalla/${v,,}:0.0.0@$digest"
+            export "KALLA_${v}_IMAGE=ghcr.io/example/kalla/${v,,}:0.0.0@$digest"
           done
           if out="$(KALLA_PARSER_IMAGE=kalla/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
             echo "an unpinned image was accepted"; exit 1
@@ -377,7 +377,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/bundle/kalla-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
           b="$RUNNER_TEMP/bundle/kalla-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
-          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "RAG_${v}_IMAGE"; done
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "KALLA_${v}_IMAGE"; done
           images="$(docker compose -f "$b/compose.rag.yaml" -f "$b/compose.backup.yaml" -f "$b/compose.hardened.yaml" \
             -f "$b/compose.host-24g.yaml" -f "$b/compose.clamav-conf.yaml" -f "$b/compose.rolling.yaml" \
             --profile backup --profile clamav --profile render --profile openwebui --profile proxy config --images)"

@@ -84,7 +84,7 @@ deploy/
   redis/                             P2, not built: redis.conf, users.acl.example (first multi-host deployment)
   proxy/                             nginx.conf.example (an operator's own reverse proxy: one slot, or both with the lines marked `#rolling`), nginx.portainer.conf.template (the nginx.conf of `kalla-proxy`, profile `proxy`, which kalla-bootstrap writes from it)
   otel/                              collector-siem.example.yaml (security category)
-  host/                              install.sh, kalla-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5), cert-expiry.sh + rag-cert-expiry.service/.timer (internal certificates within 60 days, #705)
+  host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5), cert-expiry.sh + rag-cert-expiry.service/.timer (internal certificates within 60 days, #705)
   kubernetes/                        base/, components/, example/, create-secrets.sh, deploy.sh, sync-config.sh (§10)
   keycloak/                          RAG's realm additions for the shared Keycloak, the standalone realm, examples (§4.2)
   openwebui/                         start-with-sign-in.py (Open WebUI's entrypoint), feedback-key-setup.py
@@ -610,8 +610,8 @@ The proxy keeps the gateway's 1 MB body limit except on the admin upload route
 
 Compose keys per service: `cpus`, `mem_reservation`, `mem_limit`, `pids_limit` (`compose.rag.yaml`; the 24 GB column is
 `compose.host-24g.yaml`) and, with `compose.hardened.yaml`, `cpu_shares` (cgroup v2 maps it to `cpu.weight`). With that
-overlay the ingestion services also get `cgroup_parent: kalla-ingestion.slice` (`KALLA_INGESTION_SLICE`; empty where the
-slice is not installed), a systemd slice installed by `deploy/host/install.sh` from `deploy/host/kalla-ingestion.slice`
+overlay the ingestion services also get `cgroup_parent: rag-ingestion.slice` (`KALLA_INGESTION_SLICE`; empty where the
+slice is not installed), a systemd slice installed by `deploy/host/install.sh` from `deploy/host/rag-ingestion.slice`
 that caps the **whole zone** (requires cgroup v2 with the systemd cgroup driver: *to
 verify* on the host image).
 
@@ -625,7 +625,7 @@ verify* on the host image).
 | kalla-parser | ingestion | **4.0** (half the host; development: 2.0, 1 worker × 2 threads) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_*`; the NER process (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
 | kalla-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | only with the Compose profile `clamav` (a first `init-deployment.sh` run's default; `--profiles` without it leaves it out, §5.5); `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
 | kalla-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | only with the Compose profile `render` (`init-deployment.sh --profiles`, #505; without it `browser` sources fail with `render.not_configured`); one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
-| `kalla-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
+| `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
 | kalla-openwebui (profile `openwebui`) | edge | 1.0 | 512 (in `compose.rag.yaml`) | 512m | not co-hosted | 1.5g | 256 | §12.8 |
 | `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
 
@@ -634,7 +634,7 @@ on any host with 2 cores or more (the CI runner included): postgres 2.0, parser 
 `compose.host-24g.yaml` restores the pilot caps (postgres 3.0, parser 4.0). The pilot's CPU sizing is set again before
 go-live with the R1 release test (§8.3). Memory limits are unchanged.
 
-The renderer is inside `kalla-ingestion.slice`, so the sum of the ingestion containers' limits (8.5 GB on a 16 GB host) is
+The renderer is inside `rag-ingestion.slice`, so the sum of the ingestion containers' limits (8.5 GB on a 16 GB host) is
 above the slice's `MemoryMax=7G`: the slice is the cap, and the parser, ClamAV and the renderer do not peak together
 (to measure in A-13 and R1). Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
 slot (seven long-running containers, no Redis): 16 GB host ≈ 12 GB (OS and Docker keep ~2 GB; limits are not all
@@ -864,7 +864,7 @@ one stack, configured only through variables, with no script run on the host.
   inline `content:` (`bootstrap.sh` as `kalla-bootstrap`'s script among them) and puts `stack-header.txt`, the comment
   operators read, before the gateway's `name:`.
   `build-stack.sh --check` (deploy-checks) fails when the committed `compose.portainer.yaml` differs. `release.yml`
-  pins the stack's `RAG_*_IMAGE` defaults to the release's images and publishes the file as a release asset, and its
+  pins the stack's `KALLA_*_IMAGE` defaults to the release's images and publishes the file as a release asset, and its
   pull request afterwards pins `compose.rag.yaml` and the committed stack the same way (`build-stack.sh --images`); its boot test
   (`deploy/tests/portainer-boot.sh`) starts it as Portainer does: a plain `up -d`, then `--wait` on the long-running
   services only (a one-shot that exits counts as a failure under `--wait` unless a service waits for it, #751). A manual
@@ -1166,7 +1166,7 @@ pilot's models are EU-hosted through the gateway.
 | 11 | Admin UI skeleton with the copied design system in Swedish (`labels.ts`/`messages.ts` skeleton), Vite on 5174, `design-system.lock`; admin API write path (`AdminContext`: change + outbox + audit in one transaction), `PermissionMatrix` role tests, org sync against the FakeGateway catalogue, `contracts/admin/v1/error-codes.json` export | lint/typecheck/test/build green; shell looks like the gateway's; a saved change bumps the config version with one audit entry; synced departments visible | admin P0 (admin design §12) |
 | 12 | AppHost (§4.1) with postgres (pinned pgvector image), keycloak, fake-gateway, parser (P0 image with Docling, Tesseract `swe` and models baked, size measured; supervisor with one slot; health + `/v1/info` with `build_hash`; parser design §16), clamav, migrations, api, worker, adminapi, admin-ui; `Start-Dev.ps1`, `Start-E2E.ps1`; seeder | `.\scripts\Start-Dev.ps1` brings every resource to healthy on a clean machine | plan §11.4, parser P0 |
 | 13 | Parser contract skeleton: `contracts/parser/v1/*.json`, `ContractTests`, parser CI jobs (`parser.yml`) | contract job green; `test_offline.py` passes with networking disabled | parser P0 |
-| 14 | Single-host `compose.prod.yaml` + `compose.ingestion.yaml` with networks, zones and limits (§6; one slot), `init-deployment.sh`, `kalla-ingestion.slice`, firewall script; **pgBackRest** inside the postgres image with WAL archiving, `rag-backup.timer` + `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (§7.4) | `docker compose config` passes in CI; **point-in-time restore drill** on the test host documented with achieved RPO/RTO; escrowed keys read back | plan §11.5 |
+| 14 | Single-host `compose.prod.yaml` + `compose.ingestion.yaml` with networks, zones and limits (§6; one slot), `init-deployment.sh`, `rag-ingestion.slice`, firewall script; **pgBackRest** inside the postgres image with WAL archiving, `rag-backup.timer` + `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (§7.4) | `docker compose config` passes in CI; **point-in-time restore drill** on the test host documented with achieved RPO/RTO; escrowed keys read back | plan §11.5 |
 | 15 | `release.yml` + `build-release-bundle.sh`; tag `v0.1.0` | release with digest-pinned bundle and SBOM; smoke test green | plan §10 Releases |
 | 16 | Deploy `v0.1.0` to the test host (8 vCPU / 16 GB) behind the municipal proxy | health green through the proxy | plan §11.5 |
 | 17 | `infra/entra/` + `entra.yml` (plan only on PR); approval package 1 (RAG's own registrations: `kalla-admin` with redirect URIs and `rag-*` roles incl. `rag-reviewer`, its own credential, the `open-webui` registration, pilot groups) **submitted**. *Changed 2026-10-31* (Decisions table "P1 pilot sign-in", identity §11.2): package 1 is **kept, not submitted**; it is submitted for P2 (H7 deferred); the pilot signs in with the shared Keycloak | workflow run awaiting the environment approval; ticket id recorded | plan §11.7, identity §2/§8 |

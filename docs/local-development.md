@@ -282,7 +282,7 @@ docker build -t kalla/renderer:latest images/renderer
 for p in Api AdminApi Worker MigrationService; do dotnet publish src/Kalla.$p -c Release -t:PublishContainer; done
 mkdir -p ~/rag-deploy-test && cp -r deploy ~/rag-deploy-test/
 images=()
-for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=kalla/$s:latest"); done
+for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "KALLA_${s^^}_IMAGE=kalla/$s:latest"); done
 ~/rag-deploy-test/deploy/init-deployment.sh --api-host localhost --gateway-url https://<a gateway> \
   --backup-target local "${images[@]}" --yes
 docker compose --env-file ~/rag-deploy-test/deploy/.env up -d --wait

@@ -3,7 +3,7 @@
 # postgresql.conf (KALLA_HOST_MEMORY). With the malware scan on, use it together with compose.clamav-conf.yaml
 # (ConcurrentDatabaseReload and TestDatabases yes, which need the 3g limit below); `init-deployment.sh --host-memory 24`
 # lists both in COMPOSE_FILE. A changed postgresql.conf takes effect when kalla-postgres restarts.
-# The kalla-ingestion.slice cap goes from MemoryMax=7G to 11G (deploy/host/). It also restores the pilot's CPU caps
+# The rag-ingestion.slice cap goes from MemoryMax=7G to 11G (deploy/host/). It also restores the pilot's CPU caps
 # (postgres 3, parser 4), which compose.rag.yaml keeps at 2 during development (§6.2).
 
 services:

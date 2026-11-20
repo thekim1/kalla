@@ -17,7 +17,7 @@ writes the rendered units (CI runs `systemd-analyze verify` on them).
 
 | Unit | What it does | When |
 |---|---|---|
-| `kalla-ingestion.slice` | Caps the ingestion zone (kalla-worker, kalla-parser, kalla-clamav, kalla-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
+| `rag-ingestion.slice` | Caps the ingestion zone (kalla-worker, kalla-parser, kalla-clamav, kalla-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
 | `rag-firewall.service` + `.timer` | `docker-user-firewall.sh`: egress per Compose network in `DOCKER-USER`, no new connections from the networks to the host | After Docker starts or restarts, then every 15 minutes (host names resolved again) |
 | `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the kalla-postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.service` + `.timer` | `backup-postgres.sh --status-only`: backup age and WAL archive age from `pgbackrest info` and `pg_stat_archiver` | Every 2 minutes |

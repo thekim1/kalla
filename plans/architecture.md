@@ -36,7 +36,7 @@ flowchart LR
         admin["kalla-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
     end
 
-    subgraph ingestion_zone["Ingestion zone (kalla-ingestion.slice)"]
+    subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
         worker["kalla-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
         parser["kalla-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
         renderer["kalla-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]

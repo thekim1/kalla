@@ -96,7 +96,7 @@ They remove the most code and documentation without changing what the system doe
     subnets for `deploy/host/docker-user-firewall.sh`, the ingestion slice, the restart-unhealthy labels, the
     renderer's seccomp file), and `compose.rolling.yaml`, `compose.host-24g.yaml` and `compose.clamav-conf.yaml` as
     today under the new names. `deploy/.env`'s `COMPOSE_FILE` lists the ones in use.
-  - **One set of variable names:** the stack's (`RAG_*_IMAGE`, `FORS_OTEL_*`, `FORS_DOMAIN`, the profiles `clamav`,
+  - **One set of variable names:** the stack's (`KALLA_*_IMAGE`, `FORS_OTEL_*`, `FORS_DOMAIN`, the profiles `clamav`,
     `render`, `openwebui`, `proxy`); Compose's own `KALLA_CLAMAV_MODE`, `KALLA_OPENWEBUI_BASE_URL`,
     `KALLA_CERTS_DIR`, `KALLA_SECRETS_DIR` and `*_IMAGE` go. The release bundle's image file follows.
   - **What reads the volumes afterwards:** `escrow-keys.sh`, `cert-expiry.sh`, `rolling-update.sh` and the tests,

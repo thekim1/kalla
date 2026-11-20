@@ -2,7 +2,7 @@
 # the first `up` (deploy/host/install.sh): init-deployment.sh --hardened adds it to COMPOSE_FILE.
 #   - fixed subnets in 172.30.0.0/16, so deploy/host/docker-user-firewall.sh gives each network its egress rule (keep
 #     the range out of Docker's default-address-pools; the firewall's --print-subnets lists the same ones);
-#   - the ingestion zone (kalla-worker, kalla-parser, kalla-clamav, kalla-renderer) in kalla-ingestion.slice, which caps it as a
+#   - the ingestion zone (kalla-worker, kalla-parser, kalla-clamav, kalla-renderer) in rag-ingestion.slice, which caps it as a
 #     whole (cgroup v2 with Docker's systemd cgroup driver; empty KALLA_INGESTION_SLICE where it is not installed);
 #   - the CPU weights of the resource zones (§6.2);
 #   - the restart-unhealthy label: Docker restarts a container only when its main process exits, and ClamAV's and the

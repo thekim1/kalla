@@ -22,7 +22,7 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
 - **Linux with systemd**, Docker 28+ and Compose v2.33.1+ (the Compose files use `gw_priority`, the overlays
   `!override`), and root for the host units.
 - **With `--hardened`** (`compose.hardened.yaml` and the host units of `deploy/host/`), three more:
-  - **cgroup v2 and Docker's systemd cgroup driver.** The ingestion containers run below `kalla-ingestion.slice`
+  - **cgroup v2 and Docker's systemd cgroup driver.** The ingestion containers run below `rag-ingestion.slice`
     (`cgroup_parent`), which caps the whole zone; with the `cgroupfs` driver the slice caps nothing. `docker info` must
     show `Cgroup Driver: systemd` and `Cgroup Version: 2`.
   - **`172.30.0.0/16` stays out of Docker's `default-address-pools`.** The Compose networks then use fixed subnets
@@ -68,7 +68,7 @@ picks the profile; 16 is the default.
 | `kalla-parser` | ingestion | 4.0 | 2g | 3.5g (1 slot × 4 threads) | 6g (2 slots × 2 threads) |
 | `kalla-clamav` | ingestion | 1.0 | 1.2g | 1.5g | 3g |
 | `kalla-renderer` | ingestion | 2.0 | 256m | 2g | 2g |
-| `kalla-ingestion.slice` (zone cap) | ingestion | `CPUQuota=500%` | – | `MemoryMax=7G` | `MemoryMax=11G` |
+| `rag-ingestion.slice` (zone cap) | ingestion | `CPUQuota=500%` | – | `MemoryMax=7G` | `MemoryMax=11G` |
 | `kalla-openwebui` (optional, profile `openwebui`) | – | 1.0 | 512m | not on a 16 GB host | 1.5g |
 
 During development the base Compose file caps every container at 2 CPUs or less (decisions table, "Low CPU during
@@ -205,7 +205,7 @@ options name and keeps every other variable in `deploy/.env` (an empty one, and 
 | `KALLA_PKI_DIR` | – | a host directory with certificates from your PKI for the public listeners, `api.crt` and `api.key`, `admin.crt` and `admin.key`, used instead of the internal CA's (*Reverse proxy and PKI*, below) |
 | `KALLA_CRAWL_ALLOW` | – | private ranges the crawler may fetch (municipal hosts), comma-separated CIDRs: used by the worker and the firewall |
 | `FORS_OTEL_ENDPOINT` | – | the OpenTelemetry collector (*Telemetry*, below) |
-| `RAG_*_IMAGE`, `OPENWEBUI_IMAGE` | the release's pins | the images (*1. Files and images*) |
+| `KALLA_*_IMAGE`, `OPENWEBUI_IMAGE` | the release's pins | the images (*1. Files and images*) |
 
 When it is done the script prints the next steps, in the order below: with `--hardened` the host units come
 **before** the first `up`, because the ingestion containers run below the slice they install.
@@ -276,7 +276,7 @@ systemctl list-timers 'rag-*'
 ```
 
 It installs the units of `deploy/host/` ([`deploy/host/README.md`](../deploy/host/README.md)) with this deployment's
-`deploy/` path filled in, and enables what `COMPOSE_FILE` uses: `kalla-ingestion.slice`, `rag-firewall.service` with its
+`deploy/` path filled in, and enables what `COMPOSE_FILE` uses: `rag-ingestion.slice`, `rag-firewall.service` with its
 timer and the restart-unhealthy timer with `compose.hardened.yaml` (`--hardened`: run it before the first `up` then),
 the backup, backup-status and upload-copy timers with `compose.backup.yaml` (`--backup-target`), and the
 certificate-expiry timer always. It warns when Docker does not use the systemd cgroup driver. The upload-copy timer is

@@ -37,7 +37,7 @@ there yet, and the local images:
 ```bash
 cp -r deploy ~/rag-p1a && cd ~/rag-p1a
 images=()
-for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=kalla/$s:latest"); done
+for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "KALLA_${s^^}_IMAGE=kalla/$s:latest"); done
 ./init-deployment.sh --gateway-url https://gateway.invalid --api-host localhost --backup-target local "${images[@]}" --yes
 docker compose --env-file .env up -d --wait
 docker compose --env-file .env ps

@@ -11,7 +11,7 @@
 # Options, before the gateway:
 #   --check          write nothing: build from `current` and fail with the difference when the committed
 #                    compose.portainer.yaml is not what deploy/compose.rag.yaml gives (verify.yml's deploy-checks)
-#   --images FILE    first pin the RAG_*_IMAGE defaults of deploy/compose.rag.yaml to FILE's lines (a release's
+#   --images FILE    first pin the KALLA_*_IMAGE defaults of deploy/compose.rag.yaml to FILE's lines (a release's
 #                    images.env: KALLA_API_IMAGE=registry/repo:tag@sha256:..., one per image), then build; release.yml's
 #                    pull request after a release
 #

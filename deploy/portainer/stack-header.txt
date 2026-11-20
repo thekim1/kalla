@@ -80,7 +80,7 @@
 #                             <stack>_kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
 #   KALLA_SETUP_REOPEN      empty; any new value (for example today's date) opens the setup wizard once, for an hour,
 #                             with a new setup code in kalla-admin's log (remove it before restoring a database)
-#   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
+#   KALLA_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
 #   COMPOSE_PROFILES=proxy    kalla-proxy, nginx with your certificate in front of all five host names (M-17 C8): the

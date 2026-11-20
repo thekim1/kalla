@@ -213,7 +213,7 @@ sudo docker compose --env-file deploy/.env up -d --wait
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | `up` fails with "Pool overlaps with other one on this address space" | on a hardened host, a Docker network already uses `172.30.x.x` | step 7; recreate that network after setting `default-address-pools` |
-| `up --wait` times out on `kalla-worker`, `kalla-parser` or `kalla-clamav` | on a hardened host, the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status kalla-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
+| `up --wait` times out on `kalla-worker`, `kalla-parser` or `kalla-clamav` | on a hardened host, the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
 | `kalla-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file deploy/.env logs kalla-clamav`; `--freshclam-proxy` behind an egress proxy |
 | The end of `kalla-bootstrap`'s log: *KALLA_API_GATEWAY_KEY: no key for kalla-api* (or `kalla-admin`, `kalla-worker`) | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again (its `migrations` log names a manifest it refused), then Källa's `up -d` |
 | The wizard: *kalla-admin could not reach the provider address* | on a hardened host, the firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file deploy/.env up -d` and `sudo systemctl start rag-firewall.service` |

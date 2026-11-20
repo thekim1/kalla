@@ -6,7 +6,7 @@
 #   KALLA_API_IMAGE=... KALLA_ADMIN_IMAGE=... KALLA_WORKER_IMAGE=... KALLA_MIGRATIONS_IMAGE=... KALLA_PARSER_IMAGE=... \
 #   KALLA_CLAMAV_IMAGE=... KALLA_RENDERER_IMAGE=... KALLA_POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
 #
-# Each RAG_*_IMAGE (the variables of the Portainer stack and of a release's images.env) is a full reference pinned by
+# Each KALLA_*_IMAGE (the variables of the Portainer stack and of a release's images.env) is a full reference pinned by
 # digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one fails. Writes OUTPUT_DIR/kalla-VERSION.tar.gz:
 # one top-level directory kalla-VERSION/ holding deploy/ (the Compose files, the deployment scripts, the bootstrap and
 # the static files compose.rag.yaml names, host/, kubernetes/ and the rest), docs/ (the operator documents) and the
@@ -103,7 +103,7 @@ done < <(grep -HE '^\s*image:' "${compose_files[@]}" | grep -vF "\${" | grep -vE
 if [ -d kubernetes ]; then
   images_block="$(echo "images:"
     for var in "${images[@]}"; do
-      ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var#RAG_}"; svc="${svc%_IMAGE}"
+      ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var#KALLA_}"; svc="${svc%_IMAGE}"
       echo "  - {name: kalla/${svc,,}, newName: $repo, digest: $digest}"
     done)"
   for k in kubernetes/base/kustomization.yaml kubernetes/components/*/kustomization.yaml; do
@@ -112,7 +112,7 @@ if [ -d kubernetes ]; then
 fi
 
 # The Portainer stack (the gateway's stack plus RAG, deploy/portainer/compose.portainer.yaml) as a release asset of its
-# own, with RAG's RAG_*_IMAGE defaults pinned to this release.
+# own, with Källa's KALLA_*_IMAGE defaults pinned to this release.
 portainer="$here/portainer/compose.portainer.yaml"
 if [ -f "$portainer" ]; then
   sed 's/\r$//' "$portainer" > "$out/compose.portainer.yaml"

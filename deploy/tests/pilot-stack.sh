@@ -95,9 +95,9 @@ env_is "$pilot" kalla-bootstrap KALLA_HOST_MEMORY 24
 if jq -e '.services["kalla-clamav"].volumes | map(select(.target == "/etc/clamav" and .volume.subpath == "clamav")) | length == 1' \
   <<< "$pilot" >/dev/null; then ok "kalla-clamav: its confs from kalla-config/clamav"; else fail "kalla-clamav: no confs from kalla-config/clamav"; fi
 bash "$d/host/install.sh" --unit-dir "$work/units" --host-memory 24 --no-enable >/dev/null
-if grep -qx 'MemoryMax=11G' "$work/units/kalla-ingestion.slice.d/50-host-memory.conf"; then
-  ok "kalla-ingestion.slice: MemoryMax=11G on a 24 GB host"
-else fail "kalla-ingestion.slice: no MemoryMax=11G drop-in for a 24 GB host"; fi
+if grep -qx 'MemoryMax=11G' "$work/units/rag-ingestion.slice.d/50-host-memory.conf"; then
+  ok "rag-ingestion.slice: MemoryMax=11G on a 24 GB host"
+else fail "rag-ingestion.slice: no MemoryMax=11G drop-in for a 24 GB host"; fi
 
 # --- Open WebUI (the openwebui profile) -----------------------------------------------------------------------------
 owui="$(render rag)"

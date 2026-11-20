@@ -574,7 +574,7 @@ gateway's `FORS_OIDC_AUTHORITY` is the provider of both (kalla-admin's client `k
 instead*).
 
 The optional ones (ports, a separate admin host, `KALLA_OIDC_TENANT_ID` for Entra ID, image overrides
-`RAG_*_IMAGE`) are listed at the top of the file. The embedding profile is no variable: a platform admin creates it in
+`KALLA_*_IMAGE`) are listed at the top of the file. The embedding profile is no variable: a platform admin creates it in
 the admin UI from the gateway's embedding model (*Models → Embedding profiles → Create profile*; every RAG credential
 key must allow that model). kalla-api, kalla-admin and kalla-worker join the gateway's `llm`
 network and reach it at `https://gateway:8443`, trusting the gateway's internal CA; kalla-admin's organisation and model

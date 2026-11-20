@@ -148,7 +148,7 @@
 #                             <stack>_kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
 #   KALLA_SETUP_REOPEN      empty; any new value (for example today's date) opens the setup wizard once, for an hour,
 #                             with a new setup code in kalla-admin's log (remove it before restoring a database)
-#   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
+#   KALLA_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
 #   COMPOSE_PROFILES=proxy    kalla-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
@@ -525,7 +525,7 @@ services:
 
   kalla-postgres:
     <<: *hardened
-    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -557,7 +557,7 @@ services:
 
   kalla-migrate:
     <<: *hardened
-    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/kalla/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
+    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -581,7 +581,7 @@ services:
 
   kalla-api:
     <<: *hardened
-    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/kalla/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
+    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -647,7 +647,7 @@ services:
 
   kalla-admin:
     <<: *hardened
-    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/kalla/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
+    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -728,7 +728,7 @@ services:
 
   kalla-worker:
     <<: *hardened
-    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/kalla/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
+    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -790,7 +790,7 @@ services:
 
   kalla-parser:
     <<: *hardened
-    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/kalla/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
+    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -815,7 +815,7 @@ services:
   kalla-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/kalla/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
+    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -834,7 +834,7 @@ services:
   kalla-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/kalla/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
+    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]

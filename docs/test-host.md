@@ -65,13 +65,13 @@ overlay restores the pilot caps and sets the 24 GB limits:
 | `kalla-worker` | 1.5 | 2g | |
 | `kalla-parser` | 4.0 | 6g | 2 slots × 2 threads, slot watchdog 2 600 MB |
 | `kalla-clamav` | 1.0 | 3g | `ConcurrentDatabaseReload`, `TestDatabases` |
-| `kalla-ingestion.slice` | `CPUQuota=500%` | `MemoryMax=11G` | `deploy/host/install.sh` reads `KALLA_HOST_MEMORY=24` |
+| `rag-ingestion.slice` | `CPUQuota=500%` | `MemoryMax=11G` | `deploy/host/install.sh` reads `KALLA_HOST_MEMORY=24` |
 
 Check what the deployment renders, and that the slice got its 24 GB cap after the host units are installed:
 
 ```bash
 dc config --format json | jq -r '.services | to_entries[] | "\(.key) cpus=\(.value.cpus) mem_limit=\(.value.mem_limit)"'
-systemctl show kalla-ingestion.slice -p MemoryMax          # MemoryMax=11811160064
+systemctl show rag-ingestion.slice -p MemoryMax          # MemoryMax=11811160064
 ```
 
 In the repository, `deploy/tests/pilot-stack.sh` checks the same values offline, with `docker compose config`.

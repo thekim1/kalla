@@ -178,7 +178,7 @@ tmp="$(mktemp "$env_file.XXXXXX")"
   printf "COMPOSE_FILE='%s'\n" "$compose_file"
   for n in "${order[@]}"; do
     # An empty value is left out, but an empty COMPOSE_PROFILES stays (none, not a first run's default), and an empty
-    # KALLA_INGESTION_SLICE (no slice on this host, where unset means kalla-ingestion.slice).
+    # KALLA_INGESTION_SLICE (no slice on this host, where unset means rag-ingestion.slice).
     if [ "$n" != COMPOSE_FILE ] && { [ -n "${val[$n]}" ] || [ "$n" = COMPOSE_PROFILES ] || [ "$n" = KALLA_INGESTION_SLICE ]; }; then printf "%s='%s'\n" "$n" "${val[$n]}"; fi
   done
 } > "$tmp"

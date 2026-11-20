@@ -80,7 +80,7 @@ What a process needs before it can reach the database or sign anyone in, or what
 | `KALLA_API_HOST`, `KALLA_ADMIN_HOST` | Certificate SANs, written before anything starts |
 | `KALLA_{API,ADMIN,OPENWEBUI}_{PORT,BIND}` (6) | Published ports |
 | `COMPOSE_PROFILES` | Which containers run (and, after step C3, the ClamAV mode) |
-| `RAG_*_IMAGE`, `OPENWEBUI_IMAGE` (9) | Pinned by the stack file; nobody sets them |
+| `KALLA_*_IMAGE`, `OPENWEBUI_IMAGE` (9) | Pinned by the stack file; nobody sets them |
 | `KALLA_GATEWAY_URL` | Internal default `https://gateway:8443`; only for a gateway elsewhere (Compose) |
 | `FORS_OIDC_AUTHORITY` / `KALLA_OIDC_AUTHORITY`, `KALLA_OIDC_CLIENT_ID`, `KALLA_OIDC_CLIENT_SECRET` (secret file) | Sign-in to the admin UI: a wrong value in the UI would lock every admin out, and the OIDC handler caches its options. The secret must equal the one in the Keycloak import |
 | `KALLA_OIDC_{ROLE,DEPARTMENT,TEAM,GROUP}_CLAIM`, `_EXTRA_SCOPE`, `_TENANT_ID`, `_REFUSE_GUESTS` | Token shape and tenant checks; defaults fit Keycloak, set only for Entra ID. Security boundary |
