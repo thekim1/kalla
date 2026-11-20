@@ -19,8 +19,8 @@ lands or an input arrives.
 | `v0.7.0` (2026-11-16) | **The setup wizard** (M-20): sign-in set in the browser with a setup code and a test sign-in; a new Portainer stack needs one typed value, `UME_DOMAIN`, and no secret, with the gateway's wizard first (gateway `v0.11.0`); retired deployment variables named (M-21); three hot paths of #764 |
 | `v0.8.0` (2026-11-19) | **The deploy simplification** (M-22): one service file and one bootstrap for Compose, Portainer and Kubernetes, upgrades in one step from 0.5.x, one escrow set, Open WebUI off unless asked for; continue a crawl run and its live progress; the images' security updates and a daily image scan (A-27, #818) |
 
-Every code item of both stream queues is done. What is left before go-live is live work, and every step of it waits on
-an input from people.
+What is left before go-live is live work, and every step of it waits on an input from people. **P2 code starts beside
+it once `v0.9.0` is released** (user, 2026-11-20; Decisions "P2 starts before go-live"): *P2 Broaden* below.
 
 ## Now: the test chatbot (before the umea.se pilot)
 
@@ -103,17 +103,60 @@ The inputs of the critical path are in its table. The other open calls:
 |---|---|---|
 | N1 product name; W1 relation to `chat.umea.se` | user, product owner | go-live |
 | Upload gaps U1–U7: suggested picture descriptions (U1, needs a decision entry) and rerank on (U4) first | user | nothing in P1b |
-| Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (`work/main.md` M-11) | user | P2 |
+| Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (Decisions "Ask-a-file workspaces") | user | P2 |
 | Product calls: #333 finding 1 (`exactScanMaxChunks`, after the recall check on the test host); [`proposals/architecture-plans.md`](proposals/architecture-plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
 | #511 splitting the worker into libraries | stream b | only if it keeps growing in P2 |
 | Paths under one host name (`example.se/rag`), Decisions "Host names": not built | user | nothing; only if an organisation gets exactly one name |
 
 Every postponed decision with its stopgap and deadline: [`postponed-decisions.md`](postponed-decisions.md).
 
-## Next: P2 Broaden
+## P2 Broaden
 
-Several departments, internal sources, tools, and the first multi-host deployment. Themes, not a plan yet; the P2
-work split is written when P1b is live.
+Several departments, internal sources, tools, and the first multi-host deployment. **P2 code starts once `v0.9.0` is
+released, beside the live block** (Decisions "P2 starts before go-live"); go-live keeps its gate. P2 runs in waves,
+each a set of queue items in `work/stream-a.md` and `work/stream-b.md`; the next wave is picked by the user when one
+is nearly done.
+
+**Before P2 code: `v0.9.0`.** Its content is on `main` (the support chatbot's F3 and F4, the deletes of #878, the demo
+seed, the host-only Compose fix) with the open items that need no input: B-52 (`ume.topics`), B-53, A-37, A-38 and
+#874. Then the preparation, a dry run with `e2e=true` and the tag.
+
+**Wave 1: assistants and answer quality** (user, 2026-11-20). Designed; no input needed, built on FakeGateway:
+
+| Item | What | Design |
+|---|---|---|
+| B-54 | Assistant templates: three seeded starting points, picked when an assistant is created | admin §4.5 (`/api/assistant-templates`), §5 step 9; data-model `AssistantTemplates`; architecture plan item 3 |
+| B-55 | Copy an assistant | admin §4.5 (`POST /api/assistants/{id}/copy`) |
+| B-56 | Version diff: **Compare** in Versions, the diff in `draft_base_changed` | admin §4.5 (`…/diff?against=`) |
+| B-57 | Test questions per assistant: the set, the runner, the report, the run after publish | admin §7.4, V33; data-model `AssistantTestQuestions` |
+| B-58 | The nightly answer run (`answers`): faithfulness and citation precision per assistant | processing §14.8; admin §7.2 |
+| B-59 | Home's *Needs attention*: the attention items of every design that names one | admin §5.5.1 |
+
+Each later item needs the earlier ones only where its row says so in the queue. The live check of wave 1 is the test
+chatbot's assistant (T4) once it exists; until then FakeGateway and the demo seed.
+
+**Later waves: themes that need no input** (the user picks the order):
+
+- **Tools and MCP:** the in-process tool hub, the agent loop, `/mcp` with `search_knowledge`, the mock municipal
+  server `ume-mcp-kommun` (tools design; the gateway passes function tools already). The SDK and validator re-checks
+  of M1 and V1 come first (`postponed-decisions.md`).
+- **Ingestion breadth:** e-mail (`.eml`/`.msg`, Z1), site-profile learning and re-learning, a crawl frontier shared
+  between sources, publish plans from effect tags, adaptive embedding concurrency.
+- **Assistants, the rest:** the drawn Map, unused-assistant attention items, the `TimeSeriesChart` trend.
+
+**Themes that wait on people** (each with its input):
+
+| Theme | Waits on |
+|---|---|
+| A second department or a group audience: gateway release 2 (member groups from claims), cost attribution stage 2's done-when, owner-team edit scoping | the gateway team; W3's grant step |
+| Entra ID with Ume.Rag's own registrations, OBO and the E1 spike | a tenant and its admin |
+| SharePoint | tenant access and an internal-content pilot (architecture plan item 9) |
+| Stored chat content (history modes, content encryption, conversation review), chat attachments | A1, G1 |
+| Ask-a-file workspaces | the user's calls on ownership (Decisions "Ask-a-file workspaces"); W3's grant step |
+| Multi-host topology (leader leases, Redis, batched dequeue, a/b slots), Postgres standby (D1), object store (S2) | IT, a second host |
+| `halfvec` embeddings, on-prem reranker and models | the full crawl's evaluation set; M2 hardware |
+
+The theme list as written before the split:
 
 - **More departments:** gateway release 2 (delegation, member groups from claims) before a second department or a
   group audience; **cost attribution** stage 2's done-when (built in `v0.5.0`, steps B1–B7: two departments' objects as their own keys in

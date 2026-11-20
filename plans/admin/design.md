@@ -483,7 +483,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
 | `GET /api/assistants/{id}/stats?from=&to=` | Read | `AssistantDailyTotals` |
 | `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | writes the draft's `QuerySteps.agent`; V14 |
-| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*` |
+| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Ume.Rag.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
 
 **Skills and tool servers (P2)** — rules as tools design §3.5–§3.7, §4.4–§4.5 and §9.2: `/api/skills` (draft, validate,
 publish → skill gate (run in the admin, tools §3.7), gate report, serve, rollback, retire, share list, re-run the gate), `/api/tool-servers`
@@ -1093,7 +1093,9 @@ upgrade adds a code here (or a card as the embedding profile's). They are not th
 items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
 seen on its own page (run page, source page, feedback import state, gateway status). Attention item sources: runs
 `awaiting-deletion-confirmation`; evaluation reports ≥ 5 points worse than the previous run
-(after a publish or nightly); PII-flagged documents in `public` collections; degraded runs; sources with ≥ 3 failed
+(after a publish or nightly); a nightly recall@10 5 points below its 28-day median (processing §14.8); an assistant
+test run with fewer questions as expected than the previous version's (§7.4); PII-flagged documents in `public`
+collections; degraded runs; sources with ≥ 3 failed
 runs; sources with N (default 3) runs without a complete traversal (simplification pass §2); feedback import failing ≥ 4
 runs; org or model sync failing; an assistant or knowledge base whose gateway key is unusable (disabled, revoked,
 expired, its team or department inactive), has lost a model or residency the object uses, or whose budget is spent,
@@ -1869,7 +1871,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
   questions that changed and the judge's reasons; after a publish it carries **Keep** and **Restore the previous
   version** (a restore, §4.5); a worse result than the previous version also becomes a Home attention item.
   "About the test questions" says the judge can be wrong and that nothing is blocked.
-- **Cost**: questions × (one answer + one judge call), shown before **Publish** and **Run test questions**; at most 50
+- **Cost**: questions × (one answer + one judge call), shown before **Publish** and **Run test questions**; at most 30
   questions (V33), metric `rag.admin.assistant_tests{outcome}`. Old runs: the last 20 per assistant are kept (data-model
   §8).
 

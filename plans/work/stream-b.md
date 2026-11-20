@@ -116,6 +116,92 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** data-model §8; Decisions "Deleting knowledge bases, sources and assistants"; #884.
 
+## P2 wave 1: assistants and answer quality (Decisions "P2 starts before go-live")
+
+Start these once `v0.9.0` is tagged (the roadmap's *P2 Broaden*); B-52 and B-53 above go first. Each adds its
+tables in one migration of its own (no backward compatibility before production). The UI texts go in `labels.ts` and
+`messages.ts`; show each page in a real browser before the PR (FakeGateway stack with the demo seed).
+
+### [ ] B-54 Assistant templates: three seeded starting points
+- **Do:** admin §4.5 `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (Read / Admin, audited
+  `assistanttemplate.*`), the table `config."AssistantTemplates"` (data-model), the seeder `AssistantTemplateSeeder`
+  with the three presets of admin §4.5 (into an empty table only), the platform page through the generic form (§5.8),
+  and the template field in the create-assistant drawer (§5 step 9: *Allmän rådgivning* preselected; its
+  instructions, not-found texts with links and query steps copied into the first draft, never linked; the field
+  emptied keeps P1's start from `Settings.Chat.defaultSystemPrompt`). Write the two new presets' instructions in
+  Swedish in the style of the default prompt and show them in the PR.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Infrastructure/**` (b's), `src/Ume.Rag.Domain/**` (b's),
+  `src/Ume.Rag.MigrationService/` (not `Templates/**`), `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** API tests for the endpoints and roles; a seeded database has the three templates and a second start
+  doesn't add or restore one; an assistant created from *Intern policy* has its instructions in the first draft and
+  keeps them when the template changes later; the drawer shown in a browser.
+- **Waits on:** `v0.9.0`.
+- **Read:** admin §3 (`Admin` row), §4.5, §5 step 9, §5.8; data-model `AssistantTemplates`; architecture plan §2
+  item 3 and §3 *Presets make setup easier*.
+
+### [ ] B-55 Copy an assistant
+- **Do:** admin §4.5 `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }`: a new assistant
+  whose only version is a draft equal to the source's published version (its draft when never published); audiences,
+  keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy`;
+  **Copy** on the assistant page. Copy its test questions too once B-57 is in (whichever item lands second does it).
+- **Paths:** as B-54.
+- **Done when:** API tests: a copy into another department warns on a collection not shared with it, the copy has no
+  key and no audience, the source is unchanged; the button shown in a browser.
+- **Waits on:** `v0.9.0`.
+- **Read:** admin §3 (`Edit` row), §4.5, the wireframe under §5.5 (*Copy*), §9 (audit actions).
+
+### [ ] B-56 Version diff
+- **Do:** admin §4.5 `GET /api/assistants/{id}/versions/{n}/diff?against={m|draft}`: changed settings by name,
+  collections and skills added or removed, and a line diff of instructions and not-found texts (an in-house Myers
+  diff over at most 20,000 characters, no package); **Compare** in Versions; the diff in the 409 `draft_base_changed`
+  answer of publish and in its dialog.
+- **Paths:** as B-54.
+- **Done when:** admin §11.1's version-diff tests (settings, links, a line diff with Swedish characters, the size
+  limit); the Compare view shown in a browser.
+- **Waits on:** `v0.9.0`.
+- **Read:** admin §4.5 (versions, publish), §11.1.
+
+### [ ] B-57 Test questions per assistant
+- **Do:** admin §7.4: `config."AssistantTestQuestions"` (data-model), `GET/POST/PUT/DELETE
+  /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in rag-admin (each question through
+  `Ume.Rag.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
+  judge `Settings.EvaluationJudgeModel` at the assistant's level, `x-ume-step: assistant-test`), the
+  `EvaluationRuns`/`EvaluationResults` rows of kind `assistant-tests` and `AssistantVersions.TestRunId`, the run after
+  every publish and restore and **Run test questions** on demand (one run per assistant at a time), the cost shown
+  before, the report card (§7.2) with **Keep** and **Restore the previous version**, **Save as test question** in the
+  test panel, the last 20 runs kept (data-model §8), `rag.admin.assistant_tests{outcome}`. The FakeGateway answers the
+  judge (its script per step).
+- **Paths:** as B-54, and `src/Ume.Rag.Answering/**`, `src/Ume.Rag.FakeGateway/**` where the judge step needs it.
+- **Done when:** admin §11.2's assistant-test cases: a publish starts a run, a question with each check passes and
+  fails as specified, a run compares with the previous version's, results are readable only within the assistant's
+  scope; the tab and the report shown in a browser.
+- **Waits on:** `v0.9.0`.
+- **Read:** admin §4.5 (publish, restore), §4.9, §7.2, §7.4, V33; data-model §2.2 (`EvaluationRuns`), §8;
+  processing §14.8 (the judge prompt family).
+
+### [ ] B-58 The nightly answer run
+- **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in rag-admin, nightly per published assistant: the
+  evaluation sets of its collections answered through `Ume.Rag.Answering` with the published version's settings, the
+  judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-ume-step: eval-answer`) rating faithfulness
+  and citation precision; run kind `answers` with results per question; the assistant's Statistics tab shows the
+  latest run's counts beside the live `uncited_answer` rate; `rag.evaluation.llm_tokens{step=answer}`; at most 100
+  questions per assistant and night, and the night's cost in the run (§14.8).
+- **Paths:** as B-57.
+- **Done when:** a test runs the nightly job on FakeGateway for two assistants and stores per-question verdicts;
+  an assistant with no published version or no questions gets no run; the Statistics tab shown in a browser.
+- **Waits on:** B-57 (the judge call and the run rows).
+- **Read:** processing §14.8, §15; admin §2.2 (`AnswerEvaluationService`), §7.2; chat design (`uncited_answer`).
+
+### [ ] B-59 Home: *Needs attention*
+- **Do:** admin §5.5.1: `GET /api/overview`'s attention list for the caller's scope with every source listed under
+  *Attention items are P2* (a kind, the object, the reason, a link), the *Needs attention* card at the top of Home and
+  the badge count, V32's Overview warning; one query per kind, each from data the admin already has.
+- **Paths:** as B-54.
+- **Done when:** an API test per kind (raised, and gone when its cause is); a department admin sees only the items
+  of their departments; the card shown in a browser with the demo seed plus one forced item of each kind.
+- **Waits on:** B-57 and B-58 for their two kinds (the others first, those two added when they land).
+- **Read:** admin §5.3 (Home row), §5.5.1, V32; processing §14.8; cost-attribution §4.2.
+
 ## Live (the live block, see the roadmap)
 
 

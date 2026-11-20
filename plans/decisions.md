@@ -38,6 +38,17 @@ one go. Detail: `roadmap.md` "Now", track 2.
 
 *From:* log row 85; decided by user, 2026-10-31.
 
+### P2 starts before go-live
+
+P2 code starts once `v0.9.0` is released, without waiting for P1b's go-live. The live block and go-live (the
+roadmap's critical path) go on in parallel as their inputs arrive, and their live checks may be postponed. The
+phase-start rule binds go-live, not the start of P2 code. P2 runs in waves: wave 1 is **assistants and answer
+quality** (assistant templates, copy, version diff, per-assistant test questions, the nightly answer run, Home's
+attention items); the themes that wait on people (gateway release 2, Entra ID, SharePoint access, stored chat content
+under A1, ask-a-file workspaces, multi-host) are listed with their inputs. Detail: `roadmap.md` "P2 Broaden".
+
+*From:* decided by user, 2026-11-20 (the first wave picked from four themes).
+
 ### Two streams
 
 The code lives in this repository. Stream A owns the platform and worker side, stream B the serving side and all admin
@@ -48,8 +59,8 @@ Detail: `AGENTS.md` "Working in a stream"; `.github/stream-ownership.txt`.
 
 ### Phase-start rule
 
-Every item that blocks the next phase has a named person and a date before that phase starts. Detail:
-`postponed-decisions.md` (header).
+Every item that blocks the next phase has a named person and a date before that phase starts; for P2 it binds
+go-live, not the start of P2 code ("P2 starts before go-live"). Detail: `postponed-decisions.md` (header).
 
 *From:* log row 66; decided by user, 2026-10-30.
 

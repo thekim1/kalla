@@ -794,9 +794,11 @@ exists.
   `Ume.Rag.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
   assistant's ceiling, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
-  rate from live chat is shown next to them (chat design). Run kind `answers`; it runs in **`rag-admin`**, which
-  already runs `Ume.Rag.Answering` for the test panel and holds the gateway keys of every level. The worker runs only
-  retrieval evaluation (through `Ume.Rag.Retrieval`) and references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools`.
+  rate from live chat is shown next to them (chat design). At most 100 questions per assistant and night (the
+  `human` layer first, then the newest generated questions), and the run records its cost. Run kind `answers`; it
+  runs in **`rag-admin`**, which already runs `Ume.Rag.Answering` for the test panel and holds the gateway keys of
+  every level. The worker runs only retrieval evaluation (through `Ume.Rag.Retrieval`) and references neither
+  `Ume.Rag.Answering` nor `Ume.Rag.Tools`.
 
 ## 15. Observability
 

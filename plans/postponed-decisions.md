@@ -12,6 +12,13 @@ by*: the date).
 **Not met (2026-11-01):** P0 finished (v0.1.0, 2026-10-31) with A1, N1, U1 and W2 still naming roles and no dates. The
 user names the persons and dates; until then these rows stay open and block the phase gates they name.
 
+**Reviewed at P2's start (2026-11-20, Decisions "P2 starts before go-live"):** nothing here blocks P2's wave 1
+(assistants and answer quality). Due with later waves: M1's open questions and SDK re-check and V1's validator
+question before the tools wave; K1, S2 and D1 before the first multi-host deployment; T1 and K2 before the first
+`sensitive` source; A1 before stored chat content or chat attachments; W3's grant step before a group audience or
+workspaces; E1 with Entra; Z1 with the e-mail formats; O2 when real tools are inventoried. Go-live still needs A1's
+and G1's owners, N1, U1, W1 and W2 (the rule above).
+
 | ID | Decision | Stopgap until then | Decide by | Owner | Details |
 |---|---|---|---|---|---|
 | K1 | **Key service for master keys** (target: Azure Key Vault) | File key provider: master keys as protected files in the secrets directory (chat keys only in `rag-api`/`rag-admin`, and only once A1 allows stored chat content: none in P0/P1, [weakness review §4](archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected); blob keys in `rag-worker`/`rag-admin` and read-only in `rag-api`), no `sensitive` data. Key backups follow two key classes: long-lived keys (blob master keys per level, the pgBackRest passphrase, later chat bucket wrapping keys not being shredded) are escrowed offline with retention ≥ the data they protect; shred-bucket keys follow the shred rule | Before the first `sensitive` deployment, before rollout beyond the pilot, and before the first multi-host deployment (master key files then reach more hosts) | Platform team | `archive/area-plans/platform.md` §8a; `archive/passes/simplification-pass.md` §4; switch with the `rewrap` command; `archive/passes/performance-pass.md` §5.4 |
