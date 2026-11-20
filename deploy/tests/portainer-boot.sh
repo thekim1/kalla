@@ -16,7 +16,7 @@
 #   - kalla-api: /health/ready = 200 (TLS verified against kalla-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key and 200 with Open WebUI's key, which the stack generated and registered by itself
 #   - all five host names come from FORS_DOMAIN alone (llm., llm-admin., rag., rag-admin. and chat.boot.test; no
-#     UME_*_HOST): adminapi's Gateway__BaseUrl is https://llm.boot.test; kalla-api's public URL is https://rag.boot.test
+#     `*_HOST` variable): adminapi's Gateway__BaseUrl is https://llm.boot.test; kalla-api's public URL is https://rag.boot.test
 #     for citation links and for kalla-admin; Open WebUI's WEBUI_URL is https://chat.boot.test
 #   - kalla-admin: / = 200 with the admin UI's index.html
 #   - the gateway's setup wizard (its docs/identity-and-roles.md, "Setup mode"): the stack sets no sign-in value
@@ -91,7 +91,7 @@ if [ -z "$stack" ] || [ ! -r "$stack" ]; then usage 1; fi
 for tool in docker curl jq; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 
 # The stack's pins and the variables file are under test: an inherited variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^UME_|^COMPOSE_PROFILES$' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '_IMAGE$|^(UME|FORS|KALLA)_|^COMPOSE_PROFILES$' || true)
 
 work="$(mktemp -d)"
 gateway_port=$((8443 + offset)); gateway_admin_port=$((9443 + offset)); gateway_data_port=$((10443 + offset))
@@ -202,9 +202,9 @@ for svc in gateway adminapi kalla-api kalla-admin kalla-worker kalla-parser kall
 done
 while read -r name state exit_code restarts; do
   case "$name" in
-    *-bootstrap-1|*-migrations-1|*-rag-migrate-1)
+    *-bootstrap-1|*-migrations-1|*-kalla-migrate-1)
       [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code), expected to have completed";;
-    *-rag-openwebui-setup-1)
+    *-kalla-openwebui-setup-1)
       # One-shot that waits for Open WebUI itself; checked below.
       [ "$state" = running ] || [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code)";;
     *)
@@ -361,7 +361,7 @@ echo "== the gateway's setup wizard (the gateway's docs/identity-and-roles.md, \
 # No FORS_OIDC_AUTHORITY, so adminapi opened setup mode at its first start and wrote its setup code to its standard output;
 # read from the log and never printed. Routes, cookies and headers as the gateway's own deploy/tests/setup-mode-boot.sh
 # and its admin API: /bff/user (Security/AdminAuthentication.cs) sets the XSRF-TOKEN cookie, sent back as X-XSRF-TOKEN
-# with X-Requested-With; /bff/setup/session, /bff/setup/state and the cookie __Secure-ume-setup (Setup/SetupEndpoints.cs,
+# with X-Requested-With; /bff/setup/session, /bff/setup/state and the cookie __Secure-fors-setup (Setup/SetupEndpoints.cs,
 # Setup/SetupSessions.cs); the problem code setup_code_invalid (Setup/SetupContracts.cs).
 grep -qF "bootstrap: sign-in to the admin console is set in the setup wizard: https://llm-admin.boot.test:$gateway_admin_port/setup (behind a reverse proxy https://llm-admin.boot.test/setup)" \
   <<< "$(dc logs --no-color --no-log-prefix bootstrap)" \
@@ -395,7 +395,7 @@ ok "the gateway's POST /bff/setup/session refuses a wrong code (400 setup_code_i
 answer="$(printf '{"code":"%s"}' "$gateway_code" | gateway_post /bff/setup/session)"
 status="$(tail -n 1 <<< "$answer")"
 [ "$status" = 200 ] || fail "the setup code from adminapi's output answered $status on the gateway's POST /bff/setup/session, expected 200"
-grep -q $'\t__Secure-ume-setup\t' "$gw_jar" || fail "the gateway's POST /bff/setup/session gave no setup session cookie"
+grep -q $'\t__Secure-fors-setup\t' "$gw_jar" || fail "the gateway's POST /bff/setup/session gave no setup session cookie"
 ok "the gateway's POST /bff/setup/session takes the code from adminapi's output: 200 and a setup session"
 state="$(gateway_ui -H 'Accept: application/json' -w '\n%{http_code}' "$gw_setup_url/bff/setup/state")"
 status="$(tail -n 1 <<< "$state")"; state="$(sed '$d' <<< "$state")"

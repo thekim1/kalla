@@ -11,7 +11,7 @@ the certificates and secrets come from the same script as theirs (`deploy/portai
 
 | Part | Contents |
 |---|---|
-| `base/` | kalla-api and kalla-admin (2 replicas each, rolling updates, PodDisruptionBudgets, probes on `/health/*`), their Services, the `kalla-migrate` Job, the blob volume `kalla-blobs` and the NetworkPolicies: default deny, then only the stack's own flows (below) |
+| `base/` | kalla-api and kalla-admin (2 replicas each, rolling updates, PodDisruptionBudgets, probes on `/health/*`), their Services, the `kalla-migrate` Job, the blob volume `rag-blobs` and the NetworkPolicies: default deny, then only the stack's own flows (below) |
 | `components/datastores/` | Optional single-instance Postgres (StatefulSet with the `kalla/postgres` image: pgvector, pgBackRest and WAL archiving, as in Compose), TLS and separate database roles |
 | `components/ingestion/` | kalla-worker (1 replica, stop-then-start) and kalla-parser: crawling, uploads and parsing |
 | `components/clamav/` | kalla-clamav, the malware scan, with its signature volume and NetworkPolicies; in the example by default (below) |

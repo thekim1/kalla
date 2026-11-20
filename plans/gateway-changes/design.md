@@ -352,12 +352,13 @@ key, and the order of Källa's work, are in [`../platform/cost-attribution.md`](
 
 ### 5.1 Model
 
-- The gateway holds an **integration** *Källa*, made by gateway admins, with an owner team. Its keys have one of two
-  roles:
-  - **Credential keys**: one per Källa service (`kalla-api`, `kalla-admin`, `kalla-worker`), in the owner team, with a
-    secret, `AllowedIpRanges`, an expiry and rotation. Their settings, scopes included, are changed by gateway admins
-    only. A call without `x-fors-on-behalf-of` runs as the credential key itself and is charged to the owner team
-    (the syncs, the canary, model checks without a key, and every call of an object without a key).
+- The gateway holds an **integration** named `Kalla`, made by gateway admins, with an owner team. Its keys have one of
+  two roles:
+  - **Credential keys**: one per Källa service (the manifest names them `rag-api`, `rag-admin` and `rag-worker`, as
+    before the rename), in the owner team, with a secret, `AllowedIpRanges`, an expiry and rotation. Their settings,
+    scopes included, are changed by gateway admins only. A call without `x-fors-on-behalf-of` runs as the credential
+    key itself and is charged to the owner team (the syncs, the canary, model checks without a key, and every call of
+    an object without a key).
   - **Assigned keys**: ordinary keys that a department's or team's admins make in their own team and mark *used
     through: Källa*. One assistant or knowledge base runs on one; its models, residencies, PII policy, content guard,
     rate limits, output cap and budget are set there. An assigned key cannot authenticate by itself (`403
@@ -760,8 +761,8 @@ dimensions, requested with `dimensions`. Källa already behaves as for release 1
 
 **With the gateway's integration phases** (§5; cost-attribution §6 orders Källa's work):
 
-- **Phase 1:** a gateway admin makes the integration *Källa* and one credential key per service (`kalla-api`,
-  `kalla-admin`, `kalla-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
+- **Phase 1:** a gateway admin makes the integration `Kalla` and one credential key per service (`rag-api`,
+  `rag-admin`, `rag-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
   worker's has `AllowedResidencies = [OnPrem, Eu]` (an upper bound on every key it acts as, #84, §5.3);
   `kalla-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-fors-max-residency`; calls
   run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned

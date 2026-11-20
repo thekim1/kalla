@@ -184,7 +184,7 @@ public sealed class RenderTests : IAsyncLifetime
     [Fact]
     public async Task The_real_renderer_reports_a_refused_ready_selector_as_render_bad_selector_without_waiting()
     {
-        // The driver's own message for <h1> (packages/isomorphic/cssParser.ts, Playwright 1.64.1).
+        // The driver's own message for <h1> (packages/isomorphic/cssParser.ts, Playwright 1.65.1).
         var browser = new FakeBrowser { SelectorError = "Unexpected token \"<\" while parsing css selector \"<h1>\". Did you mean to CSS.escape it?\nCall log:\n  - waiting for <h1>" };
         await using var renderer = Renderer(browser);
         await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions());

@@ -186,7 +186,7 @@ export interface SetupState {
 }
 
 /** Which client a setup test or a client secret belongs to (`SetupTargets`). */
-export type SetupTarget = 'kalla-admin' | 'open-webui'
+export type SetupTarget = 'rag-admin' | 'open-webui'
 
 /** Open WebUI's sign-in values, each with its source (`OpenWebUiSignInDto`); `providerUrl`'s default is null while no authority is known. */
 export interface OpenWebUiSignIn {

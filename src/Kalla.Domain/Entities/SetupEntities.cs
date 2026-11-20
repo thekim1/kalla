@@ -3,7 +3,11 @@ namespace Kalla.Domain.Entities;
 /// <summary>What a setup test checks (identity design §19): kalla-admin's own client, or Open WebUI's.</summary>
 public static class SetupTargets
 {
-    public const string RagAdmin = "kalla-admin";
+    /// <summary>
+    /// kalla-admin's own client. The value is stored (<c>config."SetupTests"."Target"</c>, under <c>CK_SetupTests_Target</c>) and is
+    /// the admin API's name for the client, so it keeps the name it had before the rename (as <c>StoredFormatNames</c> does).
+    /// </summary>
+    public const string RagAdmin = "rag-admin";
 
     /// <summary>Open WebUI's client: a back-channel test (its discovery document and its credentials at the token endpoint); nobody signs in.</summary>
     public const string OpenWebUi = "open-webui";

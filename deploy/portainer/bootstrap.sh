@@ -73,20 +73,31 @@ PG="${KALLA_POSTGRES_HOST:-kalla-postgres}"
 # Its rag-* volumes are mounted read-only under /legacy: copied once into the kalla-* volumes while those are new (no key
 # pepper yet), so the certificates, secrets, uploads, Open WebUI's data and the database carry over (docs/upgrade-guide.md,
 # "0.9.0"). A database that is still open (the old rag-postgres running beside the new stack) is never copied.
+# The pepper is copied last, and the database's PG_VERSION last of its files: each says that its copy finished, so a
+# copy that stopped part-way (a full disk, a restart) is done again by the next run instead of being taken as done.
 L="${KALLA_BOOTSTRAP_LEGACY:-/legacy}"
+# copy_last FROM TO NAME: FROM's content into TO, the file NAME last.
+copy_last() {
+  for f in "$1"/* "$1"/.[!.]*; do
+    [ -e "$f" ] || continue
+    [ "${f##*/}" = "$3" ] || cp -a "$f" "$2/"
+  done
+  cp -a "$1/$3" "$2/$3"
+}
 if [ ! -f "$S/.pepper" ] && [ -f "$L/secrets/.pepper" ]; then
   if [ -f "$L/postgres-data/postmaster.pid" ]; then
     echo "kalla-bootstrap: the stack's old database (volume rag-postgres-data) is still in use: stop the stack, remove the old rag-* containers (or update with 'Prune services' on) and update the stack again" >&2
     exit 1
   fi
   echo "kalla-bootstrap: copying the volumes rag-certs, rag-secrets, rag-blobs, rag-openwebui-data and rag-postgres-data into the kalla-* volumes (upgrade to Källa 0.9)"
-  cp -a "$L/certs/." "$C/"; cp -a "$L/secrets/." "$S/"
+  cp -a "$L/certs/." "$C/"
   [ ! -d /blobs ] || cp -a "$L/blobs/." /blobs/
   [ ! -d /openwebui-data ] || cp -a "$L/openwebui-data/." /openwebui-data/
   if [ -d /postgres-data ] && [ -f "$L/postgres-data/PG_VERSION" ] && [ ! -f /postgres-data/PG_VERSION ]; then
-    cp -a "$L/postgres-data/." /postgres-data/
+    copy_last "$L/postgres-data" /postgres-data PG_VERSION
     echo "kalla-bootstrap: copied the database; rename its roles before kalla-migrate can sign in (docs/upgrade-guide.md, \"0.9.0\")"
   fi
+  copy_last "$L/secrets" "$S" .pepper
 fi
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 # The host names come resolved from the stack file: FORS_DOMAIN's defaults unless a KALLA_*_HOST is set.

@@ -33,7 +33,7 @@
 # stack, so the cost and budget read-back needs no variable. And its bootstrap's
 #   FORS_INTEGRATION_MANIFEST: ${FORS_INTEGRATION_MANIFEST:-}
 # gets integration-manifest.json (beside this script, written on one line) as its default, so the gateway creates the
-# integration Källa and its three credential keys with nothing typed (M-20 S8). The default applies only when the
+# integration Kalla and its three credential keys with nothing typed (M-20 S8). The default applies only when the
 # variable is unset ("-", not ":-"): a stack that sets its own manifest keeps it, and an empty value creates nothing.
 # The manifest names no owner, which the gateway accepts from 0.11.0. The build stops when the
 # gateway's file does not have exactly that line.
@@ -104,7 +104,7 @@ if len(at) != 1:
     sys.exit(f"the gateway's file has {len(at)} lines '{passed}', expected 1: see this script's header")
 indent = gw[at[0]][: len(gw[at[0]]) - len(gw[at[0]].lstrip())]
 gw[at[0]:at[0] + 1] = [
-    indent + "# Rewritten by the RAG repository's build-stack.sh: the integration Källa and its three credential keys as the",
+    indent + "# Rewritten by the RAG repository's build-stack.sh: the integration Kalla and its three credential keys as the",
     indent + "# default (deploy/portainer/integration-manifest.json), used only while the variable is unset. Set, the variable",
     indent + "# wins; set and empty, nothing is provisioned.",
     indent + "FORS_INTEGRATION_MANIFEST: '${FORS_INTEGRATION_MANIFEST-" + manifest + "}'",

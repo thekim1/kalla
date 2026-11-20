@@ -177,7 +177,7 @@ options name and keeps every other variable in `deploy/.env` (an empty one, and 
 | `--gateway-url URL` | asked for (required) | Fors (HTTPS): `KALLA_GATEWAY_URL` |
 | `--gateway-ca-file FILE` | – | The gateway's CA certificate, which the services then trust (a gateway on this host: `<gateway>/deploy/certs/ca.pem`). The script copies it to `deploy/gateway-ca/ca.pem` and sets `KALLA_GATEWAY_CA_DIR` to that directory; only the certificate is copied, since the gateway's directory also holds its private keys. Give it again when the gateway gets a new CA. Not needed for a gateway with a public certificate |
 | `--gateway-secrets-dir DIR` | – | `KALLA_GATEWAY_SECRETS_DIR`: the three keys from a gateway on this host, the directory its migration writes a manifest's keys to (`<gateway>/deploy/integration-secrets`, holding `Kalla/rag-api`, `rag-admin` and `rag-worker`; *Gateway credential keys*, below). `kalla-bootstrap` copies them at every start, and its checklist names a key that is missing |
-| `--gateway-credential-key-file SERVICE=FILE` | – | `KALLA_<SERVICE>_GATEWAY_KEY`: `SERVICE`'s credential key of the gateway integration *Källa* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service), issued by a gateway admin (*Gateway credential keys*, below). It wins over the key from `--gateway-secrets-dir`. A service without a key has its model calls refused |
+| `--gateway-credential-key-file SERVICE=FILE` | – | `KALLA_<SERVICE>_GATEWAY_KEY`: `SERVICE`'s credential key of the gateway integration *Kalla* (`SERVICE` is `api`, `admin` or `worker`; repeat, one per service), issued by a gateway admin (*Gateway credential keys*, below). It wins over the key from `--gateway-secrets-dir`. A service without a key has its model calls refused |
 | `--profiles LIST` | `clamav` | `COMPOSE_PROFILES`, comma-separated, replacing the current list: `clamav` (*Malware scan*), `render` (*Renderer*), `openwebui` (*Open WebUI*) and `proxy` (*Reverse proxy and PKI*); `--profiles ''` runs none |
 | `--backup-target DIR\|s3://ENDPOINT/BUCKET[/PATH]\|local` | – | `KALLA_BACKUP_TARGET`, with `compose.backup.yaml`: pgBackRest `repo1` and the upload copy (*Backup target*, below) |
 | `--backup-s3-credentials-file FILE` | – | with an `s3://` target: access key and secret key on two lines |
@@ -345,7 +345,7 @@ it had.
 ## Gateway credential keys
 
 Each RAG service calls Fors with its own key: kalla-api, kalla-admin and kalla-worker each hold one **credential
-key** of the gateway integration *Källa* (identity design §4.7, gateway-changes §5.1; the gateway's
+key** of the gateway integration *Kalla* (identity design §4.7, gateway-changes §5.1; the gateway's
 `docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-fors-max-residency`), and
 never holds another service's key. The three keys come about in one of three ways:
 
@@ -363,10 +363,10 @@ never holds another service's key. The three keys come about in one of three way
 - **By hand**, field by field, in the gateway's admin UI. The manifest and the preset carry these settings, with an
   empty address list:
 
-1. **The integration.** Under *Access → Integrations*, create `Källa` with its owner team. Calls made as a credential
+1. **The integration.** Under *Access → Integrations*, create `Kalla` with its owner team. Calls made as a credential
    key are charged to that team: the organisation and model syncs, the embedding canary, model checks, and every call
    of an assistant or knowledge base that has no key of its own.
-2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Källa`,
+2. **One credential key per service**, in the owner team, with the key form's *Integration* section set to `Kalla`,
    role *Credential*. Name them so the usage report tells them apart, for example `Källa api`, `Källa admin` and
    `Källa worker`. Each key has:
    - **`RequireMaxResidency` on**: the gateway refuses a request without the ceiling header (`400 invalid_request`).

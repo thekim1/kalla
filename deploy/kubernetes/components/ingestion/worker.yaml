@@ -94,7 +94,7 @@ spec:
         - name: blob-key
           secret: {secretName: kalla-blob-key, defaultMode: 0440}
         - name: blobs
-          persistentVolumeClaim: {claimName: kalla-blobs}
+          persistentVolumeClaim: {claimName: rag-blobs}
         # 32 fetches (Worker:Concurrency:fetch) of up to 50 MB each.
         - name: spool
           emptyDir: {sizeLimit: 4Gi}

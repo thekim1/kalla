@@ -4,9 +4,9 @@
 #   docker build -t kalla/renderer:dev images/renderer
 # Test: images/renderer/test.sh.
 
-# Playwright 1.64.1 on Ubuntu 24.04 (built 2026-11-01), the same exact version as the worker's Microsoft.Playwright
+# Playwright 1.65.1 on Ubuntu 24.04 (built 2026-11-13), the same exact version as the worker's Microsoft.Playwright
 # NuGet. It ships the browsers and their system libraries but no Playwright package.
-FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f AS build
+FROM mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579 AS build
 
 WORKDIR /srv/renderer
 # playwright-core from the lockfile (integrity-checked by npm ci), installed here so nothing is downloaded at start:
