@@ -25,6 +25,29 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; data-model §8; connectors §12 (soft
   delete and purge); admin §4.5.
 
+### [ ] A-37 Purge documents removed from a source that still exists (#878, found in #884)
+- **Do:** data-model §8 and connectors §12: a document that was soft-deleted because its source no longer has it
+  (`DeletedAt`, `PurgeAfter` +14 days) is deleted after `PurgeAfter` with its chunk sets and chunks, and its raw
+  blobs tombstoned, as `DeletedSourcePurge` does for a deleted source's. Designed, never built (#884's design
+  deviation). It meets revival (a document seen again inside the 14 days comes back, `EngineStore`), the deletion
+  proposals and the evaluation questions that expect the document (A-38).
+- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Done when:** a test removes a document from a live source and shows it purged after the 14 days and not
+  before, a revival inside them, and its raw blob tombstoned unless another document has the content.
+- **Waits on:** nothing.
+- **Read:** data-model §8; connectors §12; `DeletedSourcePurge`, `DeleteSourceHandler` (#884).
+
+### [ ] A-38 Evaluation questions whose expected documents are gone (#878, found in #884)
+- **Do:** a question of a knowledge base's evaluation set whose `ExpectedDocumentIds` name a document that is purged
+  (its source deleted, A-36, or the document removed, A-37) scores as a miss for ever. Say first what the design
+  holds for it (processing §13 and admin §5.5's Test questions; if it says nothing, open an issue for the main
+  session with a proposal: mark the question stale and leave it out of the score, shown as such in the admin).
+- **Paths:** `src/Ume.Rag.Worker/Evaluation/**`, `tests/**`; the admin's part is stream b's, by an issue.
+- **Done when:** a deleted source's questions no longer lower the knowledge base's score, by a test; the admin
+  shows which questions lost their documents.
+- **Waits on:** the design's answer (above).
+- **Read:** processing §13; admin §5.5; Decisions "Deleting knowledge bases, sources and assistants".
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
