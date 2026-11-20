@@ -119,7 +119,8 @@ is nearly done.
 
 **Before P2 code: `v0.9.0`.** Its content is on `main` (the support chatbot's F3 and F4, the deletes of #878, the demo
 seed, the host-only Compose fix) with the open items that need no input: B-52 (`ume.topics`), B-53, A-37, A-38 and
-#874. Then the preparation, a dry run with `e2e=true` and the tag.
+#874. Then the rename to Källa and Fors (Decisions "Product names"; stream b, user 2026-11-20: before 0.9.0), and
+then the preparation, a dry run with `e2e=true` and the tag, as the first release under the new names.
 
 **Wave 1: assistants and answer quality** (user, 2026-11-20). Designed; no input needed, built on FakeGateway:
 
