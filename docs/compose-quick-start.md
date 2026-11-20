@@ -172,6 +172,10 @@ The script ends with the next steps, the setup wizard's address among them.
   gateway's release).
 - **A real backup target, a reverse proxy with certificates from your PKI, and the proxy's addresses** under
   *Settings → Network* in Ume.Rag's admin: production-setup.md.
+- **The cost and budget read-back is off** after this guide: *Models* shows *Cost and budgets from the AI gateway:
+  Off*, since the gateway names no Integration API address (its `UME_INTEGRATION_API_URL`). The gateway's
+  `deploy/.env` needs it and rag-admin a route to the gateway's Admin API:
+  [production-setup.md](production-setup.md#cost-and-budget-read-back).
 - **Open WebUI** for staff chat: [production-setup.md](production-setup.md#open-webui-optional).
 - **Upgrades:** the [upgrade guide](upgrade-guide.md); day-to-day operation: the [runbook](runbook.md).
 

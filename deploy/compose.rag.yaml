@@ -73,6 +73,9 @@ services:
       UME_RAG_BOOTSTRAP_GATEWAY_CA: optional  #@alone
       UME_RAG_BOOTSTRAP_PROXY_GATEWAY: "no"  #@alone
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      # The ports rag-admin and the TLS proxy are published on, for the setup wizard's address in the checklist.
+      UME_RAG_ADMIN_PORT: ${UME_RAG_ADMIN_PORT:-9543}
+      UME_RAG_PROXY_PORT: ${UME_RAG_PROXY_PORT:-443}
       UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
       UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
       UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}

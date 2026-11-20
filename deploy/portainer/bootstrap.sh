@@ -315,6 +315,8 @@ fi
 
 # --- Static configuration (the services run read-only, so they get it from a volume) -----------------------------
 proxy_todo=""
+# Whether the TLS proxy below serves rag-admin's host name, for the setup wizard's address at the end.
+admin_proxied=""
 if [ -n "$F" ]; then
 mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/openwebui-setup" "$F/openwebui"
 # rag-openwebui-setup's script and rag-openwebui's start wrapper (profile openwebui): those services are read-only, so they
@@ -377,7 +379,7 @@ case ",${COMPOSE_PROFILES:-}," in
     elif hostname_ok "$gw_admin" && [ "$gw_admin" != "$gw" ]; then enable="$enable -e s/^#gwadmin//"
     else gw_admin=""; enable="$enable -e /^#gwadmin/d"
       proxy_todo="$proxy_todo|UME_ADMIN_HOST: the proxy serves the gateway's admin only on a host name of its own"; fi
-    if hostname_ok "$rag_admin" && [ "$rag_admin" != "$api" ]; then enable="$enable -e s/^#ragadmin//"
+    if hostname_ok "$rag_admin" && [ "$rag_admin" != "$api" ]; then enable="$enable -e s/^#ragadmin//"; admin_proxied=yes
     else rag_admin=""; enable="$enable -e /^#ragadmin/d"
       proxy_todo="$proxy_todo|UME_RAG_ADMIN_HOST: the proxy serves Ume.Rag's admin only on a host name of its own"; fi
     case ",${COMPOSE_PROFILES:-}," in
@@ -487,6 +489,14 @@ fi
 if [ -n "${UME_RAG_OIDC_AUTHORITY:-}" ] && [ -s "$S/admin/Oidc__ClientSecret" ]; then
   echo "rag-bootstrap: sign-in to Ume.Rag's admin is declared by the stack's variables (the authority and UME_RAG_OIDC_CLIENT_SECRET), so the setup wizard stays closed"
 else
-  echo "rag-bootstrap: sign-in is set in the setup wizard: https://$ADMIN_HOST/setup, with the setup code in rag-admin's log (first start, or after UME_RAG_SETUP_REOPEN); skip this if you can already sign in"
+  # The address that answers (#874): through the TLS proxy when it serves rag-admin's host name, else rag-admin's own
+  # port. A reverse proxy of the operator's own is out of rag-bootstrap's sight, so that form is named beside the port.
+  if [ -n "$admin_proxied" ]; then
+    proxy_port="${UME_RAG_PROXY_PORT:-443}"
+    case "$proxy_port" in 443) setup_url="https://$ADMIN_HOST/setup" ;; *) setup_url="https://$ADMIN_HOST:$proxy_port/setup" ;; esac
+  else
+    setup_url="https://$ADMIN_HOST:${UME_RAG_ADMIN_PORT:-9543}/setup (or https://$ADMIN_HOST/setup through a reverse proxy of your own)"
+  fi
+  echo "rag-bootstrap: sign-in is set in the setup wizard: $setup_url, with the setup code in rag-admin's log (first start, or after UME_RAG_SETUP_REOPEN); skip this if you can already sign in"
 fi
 echo "rag-bootstrap: the first platform admin needs the role rag-platform-admin in the token's roles claim, or a group named in UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN; the setup wizard's test sign-in says whether you have it"
