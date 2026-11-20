@@ -69,6 +69,16 @@ public sealed class AdminOptions
     /// </summary>
     [Url]
     public string? ApiPublicUrl { get; set; }
+
+    /// <summary>
+    /// An empty or blank <see cref="GatewayAdminUrl"/> or <see cref="ApiPublicUrl"/> counts as unset (#865), so the deployment
+    /// may pass an empty value and the admin still starts.
+    /// </summary>
+    public static void BlankAddressesUnset(AdminOptions options)
+    {
+        options.GatewayAdminUrl = string.IsNullOrWhiteSpace(options.GatewayAdminUrl) ? null : options.GatewayAdminUrl;
+        options.ApiPublicUrl = string.IsNullOrWhiteSpace(options.ApiPublicUrl) ? null : options.ApiPublicUrl;
+    }
 }
 
 /// <summary>
