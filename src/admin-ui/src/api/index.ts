@@ -203,6 +203,8 @@ export const api = {
   assistants: {
     list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),
     get: (id: string) => http.get<Assistant>(`/api/assistants/${id}`),
+    /** From any state (Decisions "Deleting knowledge bases, sources and assistants"): its name is free at once. */
+    remove: (id: string, version: string) => http.del(`/api/assistants/${id}?version=${encodeURIComponent(version)}`),
     create: (body: AssistantCreate) => http.post<Assistant>('/api/assistants', body),
     draft: (id: string) => http.get<AssistantDraft>(`/api/assistants/${id}/draft`),
     saveDraft: (id: string, body: {

@@ -38,8 +38,13 @@ internal static class ServingConfigModel
             e.Property(x => x.HistoryMode).HasMaxLength(20);
             e.Property(x => x.AllowedOrigins).HasColumnType("text[]");
             e.Property(x => x.State).HasMaxLength(20);
-            e.HasIndex(x => x.Slug).IsUnique();
+            // Unique among assistants that are not deleted: a deleted one's name is free at once (Decisions "Deleting knowledge
+            // bases, sources and assistants").
+            e.HasIndex(x => x.Slug).IsUnique().HasFilter("\"DeletedAt\" IS NULL");
             e.HasIndex(x => x.DepartmentId);
+            // A deleted assistant is gone for every EF reader (the admin): lists, routes (404), the rules and the counts. The
+            // retention step and the API's snapshot read SQL and filter it themselves.
+            e.HasQueryFilter(x => x.DeletedAt == null);
             // The pointers name a version of this assistant: (version id, assistant id) references the version's
             // (Id, AssistantId), so a pointer can never reach another assistant's version. NO ACTION, checked at the end
             // of the statement, so deleting an assistant cascades to its versions.

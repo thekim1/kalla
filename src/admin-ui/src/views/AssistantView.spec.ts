@@ -14,7 +14,8 @@ import AssistantView from './AssistantView.vue'
 // `?tab=` through a route the tests set; tab changes go to router.replace.
 const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 const replace = vi.hoisted(() => vi.fn())
-vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push: vi.fn(), replace }) }))
+const push = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push, replace }) }))
 beforeEach(() => {
   route.query = {}
   replace.mockReset()
@@ -518,6 +519,40 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(versions).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 5')
     wrapper.unmount()
+  })
+
+  it('deletes the assistant for Manage after its name is typed, naming its apps and recent questions; an editor has no Delete', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 2, audienceClientIds: ['k1'], version: 'a3' })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [{ id: 'a1', questions7d: 42 } as never], total: 1, page: 1, pageSize: 50 } as never)
+    const remove = vi.spyOn(api.assistants, 'remove').mockResolvedValue(undefined)
+    push.mockClear()
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-test=delete]').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=delete-apps]')!.textContent).toContain('Open WebUI (pilot)')
+    expect(document.body.querySelector('[data-test=delete-questions]')!.textContent).toBe('Questions in the last 7 days: 42.')
+    expect(document.body.textContent).toContain('Its name is free for a new assistant at once')
+    const confirm = document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
+    expect(confirm.getAttribute('aria-disabled')).toBe('true')
+    const name = document.body.querySelector<HTMLInputElement>('[data-test=confirm-name] input, input[data-test=confirm-name]')!
+    name.value = 'Bygglovsassistenten'
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    confirm.click()
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith('a1', 'a3')
+    expect(push).toHaveBeenCalledWith({ name: 'assistants' })
+    wrapper.unmount()
+
+    signIn(['rag-editor'])
+    mocks()
+    const editor = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    expect(editor.find('[data-test=delete]').exists()).toBe(false)
   })
 
   it('archives and brings back the assistant, and sets retention within the level\'s maximum', async () => {

@@ -97,6 +97,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             SELECT "Id", "Slug", "Name", "Classification", "HistoryMode", "State", "DepartmentId", "OwnerTeamId", "Description", "ContactName", "ContactEmail",
                    "RetentionDays", "GatewayKeyId"
             FROM config."Assistants"
+            WHERE "DeletedAt" IS NULL
             """, r =>
         {
             var id = r.GetGuid(0);

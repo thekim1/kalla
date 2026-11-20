@@ -713,6 +713,74 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
     }
 
     [Fact]
+    public async Task A_deleted_assistant_answers_404_leaves_the_list_and_its_knowledge_base_frees_its_name_and_keeps_its_statistics()
+    {
+        // B-51 (#878; Decisions "Deleting knowledge bases, sources and assistants").
+        var seed = await SeedAsync();
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
+        var name = "Raderas " + seed.Code;
+        async Task<JsonElement> CreateAsync()
+        {
+            using var created = await admin.PostAsJsonAsync("/api/assistants", new
+            {
+                name, departmentId = seed.Department, classification = "internal", description = "D", contactName = "K", contactEmail = "k@umea.se",
+            }, Ct);
+            created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+            return await Json(created);
+        }
+
+        var assistant = await CreateAsync();
+        var id = assistant.GetProperty("id").GetGuid();
+        var path = $"/api/assistants/{id}";
+        using (var draft = await admin.PutAsJsonAsync($"{path}/draft", new
+        {
+            gatewayModel = Model, collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } },
+            version = assistant.GetProperty("draft").GetProperty("version").GetString(),
+        }, Ct))
+        {
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+        }
+
+        var usedBy = async () => (await admin.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}", Ct)).GetProperty("usedBy")
+            .EnumerateArray().Select(u => u.GetProperty("id").GetGuid()).ToList();
+        (await usedBy()).ShouldContain(id);
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            db.AssistantDailyTotals.Add(new AssistantDailyTotal
+            {
+                Day = DateOnly.FromDateTime(DateTime.UtcNow), AssistantId = id, ClientId = Guid.NewGuid(), DepartmentId = seed.Department, Classification = "internal",
+                Conversations = 2, Messages = 5,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var version = (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("version").GetString();
+        (await editor.DeleteAsync($"{path}?version={version}", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden); // Manage
+        (await admin.DeleteAsync($"{path}?version=1", Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict); // a stale version
+        (await admin.DeleteAsync($"{path}?version={version}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Gone from every admin route and list, and it no longer keeps its knowledge base in use.
+        (await admin.GetAsync(path, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await admin.DeleteAsync($"{path}?version={version}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants?q={Uri.EscapeDataString(name)}", Ct)).GetProperty("total").GetInt32().ShouldBe(0);
+        (await usedBy()).ShouldNotContain(id);
+
+        // Its name is free at once; its statistics stay their own time; the draft went with it.
+        var again = await CreateAsync();
+        again.GetProperty("slug").GetString().ShouldBe(assistant.GetProperty("slug").GetString());
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            (await db.AssistantDailyTotals.AsNoTracking().CountAsync(t => t.AssistantId == id, Ct)).ShouldBe(1);
+            var row = await db.Assistants.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.Id == id, Ct);
+            (row.DeletedAt.HasValue, row.DraftVersionId).ShouldBe((true, (Guid?)null));
+            (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "assistant" && a.EntityId == id.ToString()).OrderBy(a => a.Id).Select(a => a.Action)
+                .ToListAsync(Ct)).Last().ShouldBe("delete");
+        }
+    }
+
+    [Fact]
     public async Task The_list_shows_the_shown_versions_knowledge_bases_and_model_the_publication_and_the_questions_of_7_stockholm_days()
     {
         var seed = await SeedAsync();
