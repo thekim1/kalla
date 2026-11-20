@@ -45,8 +45,8 @@ function mocks() {
   vi.spyOn(api.assistants, 'draft').mockResolvedValue(draft)
   vi.spyOn(api.gateway, 'models').mockResolvedValue([
     { name: 'bge-m3', kind: 'model', modelKind: 'embedding', residencies: ['OnPrem'] },
-    { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'] },
-    { name: 'ume/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
+    { name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'] },
+    { name: 'fors/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
   ])
   vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 2, items: [
     collectionSummary(),
@@ -60,7 +60,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     signIn(['rag-editor'])
     mocks()
     const list = vi.spyOn(api.collections, 'list')
-    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', warnings: [], version: 'd8' })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu', warnings: [], version: 'd8' })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
@@ -68,8 +68,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
     expect(wrapper.text()).toContain('Model name: bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
-    expect(options).toContain('ume/chat-eu')
-    expect(options).toContain('ume/chat') // a route alias is a chat model
+    expect(options).toContain('fors/chat-eu')
+    expect(options).toContain('fors/chat') // a route alias is a chat model
     expect(options).not.toContain('bge-m3') // embedding models are not answer models (#363 point 1): the mirror's modelKind, not kind
     // The picker reads every knowledge base the user may see (view=all): Ours is the assistant's department, Shared with us
     // the others, each with level, document count and topics.
@@ -100,13 +100,13 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await link.get('form').trigger('submit')
     expect(link.find('.font-mono').text()).toBe('bygglov')
 
-    await wrapper.get('#assistant-model').setValue('ume/chat-eu')
+    await wrapper.get('#assistant-model').setValue('fors/chat-eu')
     await wrapper.get('#assistant-prompt').setValue('Svara kort.')
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
 
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov'] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
+      gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov'] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
     })
     expect(wrapper.find('[data-test=warnings]').exists()).toBe(false)
     wrapper.unmount()
@@ -169,7 +169,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
   it('sends each link back with the topics it was loaded with', async () => {
     signIn(['rag-editor'])
     mocks()
-    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov', 'altan'] }] })
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov', 'altan'] }] })
     const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
@@ -202,7 +202,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect((wrapper.get('#assistant-language').element as HTMLSelectElement).value).toBe('sv')
 
     await advanced.get('summary').trigger('click')
-    await wrapper.get('#assistant-model').setValue('ume/chat-eu')
+    await wrapper.get('#assistant-model').setValue('fors/chat-eu')
     await wrapper.get('#assistant-top-k').setValue('99')
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
@@ -226,7 +226,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     // Other keys of a step are kept (filters); an emptied field drops its key.
     expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Du svarar invånare.',
+      gatewayModel: 'fors/chat-eu', systemPrompt: 'Du svarar invånare.',
       querySteps: {
         retrieval: { topK: 12, filters: { tags: ['x'] }, rerank: 'gateway' }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
       },
@@ -315,10 +315,10 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3, draft: null })
     const draftCall = vi.spyOn(api.assistants, 'draft')
     const version = vi.spyOn(api.assistants, 'version').mockResolvedValue({
-      number: 3, state: 'published', gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', querySteps: {}, notFound: {}, collectionLinks: [{ collectionId: 'c1', tags: [] }],
+      number: 3, state: 'published', gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort.', querySteps: {}, notFound: {}, collectionLinks: [{ collectionId: 'c1', tags: [] }],
       restoredFrom: null, createdAt: '2026-11-01T10:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T10:00:00Z', publishedBy: 'anna',
     })
-    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, number: 4, gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], warnings: [], version: 'd1' })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, number: 4, gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], warnings: [], version: 'd1' })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
@@ -326,14 +326,14 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(version).toHaveBeenCalledWith('a1', 3)
     expect(draftCall).not.toHaveBeenCalled()
     expect(wrapper.get('[data-test=draft-lead]').text()).toBe('Saving starts a draft from version 3; version 3 stays live until you publish.')
-    expect((wrapper.get('#assistant-model').element as HTMLSelectElement).value).toBe('ume/chat-eu')
+    expect((wrapper.get('#assistant-model').element as HTMLSelectElement).value).toBe('fors/chat-eu')
     expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
     expect(wrapper.find('[data-test=link-c1]').exists()).toBe(true)
 
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
+      gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
     })
   })
 
@@ -389,7 +389,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     signIn(['rag-department-admin'])
     mocks()
     const models = vi.spyOn(api.gateway, 'models').mockResolvedValue([
-      { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: true },
+      { name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: true },
       { name: 'claude-opus-5-5', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: false },
       { name: 'bge-m3', kind: 'model', modelKind: 'embedding', residencies: ['OnPrem'], available: true },
     ])
@@ -398,7 +398,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     expect(models).toHaveBeenCalledWith('internal', undefined) // no gateway key: the platform key's availability (B-43)
     const options = [...wrapper.get<HTMLSelectElement>('#assistant-model').element.options].map((o) => ({ value: o.value, label: o.text, disabled: o.disabled }))
-    expect(options).toContainEqual({ value: 'ume/chat-eu', label: 'ume/chat-eu', disabled: false })
+    expect(options).toContainEqual({ value: 'fors/chat-eu', label: 'fors/chat-eu', disabled: false })
     expect(options).toContainEqual({ value: 'claude-opus-5-5', label: `claude-opus-5-5 — ${MODEL_AVAILABILITY.notAvailable}`, disabled: true })
     expect(options.some((o) => o.value === 'bge-m3')).toBe(false)
     expect(wrapper.text()).not.toContain(MODEL_AVAILABILITY.unknown)
@@ -408,7 +408,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     signIn(['rag-department-admin'])
     mocks()
     vi.spyOn(api.gateway, 'models').mockResolvedValue([
-      { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: null },
+      { name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: null },
       { name: 'claude-opus-5-5', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: null },
     ])
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
@@ -425,7 +425,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 812.4, generalKnowledge: 'off', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [{ rank: 1, documentId: 'x', title: 'Altan', urlOrFileName: null, headingPath: 'Bygglov › Altan', text: 'Du behöver bygglov…', cited: true }] },
       answer: { raw: 'Ja [1].', delivered: 'Ja [1].', outcome: 'answered', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
+      gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
     })
     const publish = vi.spyOn(api.assistants, 'publish').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, version: 'a4' })
     const audiences = vi.spyOn(api.assistants, 'audiences').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, audienceClientIds: ['k1'], version: 'a5' })
@@ -439,7 +439,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
     expect(test).toHaveBeenCalledWith('a1', { question: 'Behöver jag bygglov för en altan?' })
     expect(wrapper.get('[data-test=answer]').text()).toContain('Ja [1].')
-    expect(wrapper.text()).toContain('ume/chat-eu · EU · 812 ms')
+    expect(wrapper.text()).toContain('fors/chat-eu · EU · 812 ms')
     expect(wrapper.text()).toContain('Cited')
 
     await wrapper.get('[data-test=publish]').trigger('click')
@@ -631,7 +631,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'fallback', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
       answer: { raw: 'Ungefär 384 400 km.', delivered: `${caveat}\n\nUngefär 384 400 km.`, outcome: 'answered-general', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
+      gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
     })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
@@ -654,7 +654,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'fallback', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
       answer: { raw: 'Ungefär 384 400 km.', delivered: 'Ungefär 384 400 km.', outcome: 'answered-general', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
+      gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8, costUsd: 0.0001, costEstimated: false },
     })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
@@ -676,7 +676,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       target: 'Draft', versionNumber: 1, durationMs: 300, generalKnowledge: 'supplement', condense: { used: false, outcome: null },
       retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
       answer: { raw: null, delivered: 'Inget svar i källorna.', outcome: 'not-found', language: 'sv', citations: [] },
-      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: null, inputTokens: null, outputTokens: null, costUsd: 0, costEstimated: false },
+      gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: null, inputTokens: null, outputTokens: null, costUsd: 0, costEstimated: false },
     })
     await wrapper.get('#assistant-test-general-knowledge').setValue('supplement')
     await wrapper.get('form').trigger('submit')
@@ -700,8 +700,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
   describe('answer length (Decisions "Answer length from the model", admin design §5.5.4)', () => {
     function withLimits() {
       vi.spyOn(api.gateway, 'models').mockResolvedValue([
-        { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], contextWindow: 128_000, maxOutputTokens: 16_384 },
-        { name: 'ume/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
+        { name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], contextWindow: 128_000, maxOutputTokens: 16_384 },
+        { name: 'fors/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
       ])
     }
 
@@ -709,7 +709,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       signIn(['rag-editor'])
       mocks()
       withLimits()
-      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu' })
       const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -731,7 +731,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       signIn(['rag-editor'])
       mocks()
       withLimits()
-      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu' })
       const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -756,7 +756,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       mocks()
       withLimits()
       vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, maxAnswerTokens: 4000 })
-      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu' })
       const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -775,7 +775,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       mocks()
       withLimits()
       vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, maxAnswerTokens: 100_000 })
-      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu' })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu' })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
       expect(wrapper.find('[data-test=answer-ceiling]').exists()).toBe(false)
@@ -784,7 +784,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     it('opens a stored override unchecked, drops it when checked again, and says when the model\'s limit is unknown', async () => {
       signIn(['rag-editor'])
       mocks()
-      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', querySteps: { answer: { maxOutputTokens: 800 } } })
+      vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'fors/chat-eu', querySteps: { answer: { maxOutputTokens: 800 } } })
       const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -806,7 +806,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'off', condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Ett långt svar', delivered: 'Ett långt svar', outcome: 'answered', language: 'sv', citations: [] },
-        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length', costUsd: 0.0012, costEstimated: true },
+        gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2000, maxTokens: 2000, maxTokensSource: 'model', finishReason: 'length', costUsd: 0.0012, costEstimated: true },
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
@@ -847,7 +847,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         target: 'Draft', versionNumber: 1, durationMs: 500, generalKnowledge: 'off', condense: { used: false, outcome: null },
         retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
         answer: { raw: 'Kort.', delivered: 'Kort.', outcome: 'answered', language: 'sv', citations: [] },
-        gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00002, costEstimated: false },
+        gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 2, maxTokens: null, maxTokensSource: 'provider', finishReason: 'stop', costUsd: 0.00002, costEstimated: false },
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()

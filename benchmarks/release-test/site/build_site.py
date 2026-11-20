@@ -81,7 +81,7 @@ def paragraph(rng: random.Random, words: int) -> str:
 
 def unique_pdf(source: Path, target: Path, tag: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(source.read_bytes() + f"\n% ume-rag release-test copy {tag}\n".encode())
+    target.write_bytes(source.read_bytes() + f"\n% kalla release-test copy {tag}\n".encode())
 
 
 def page_html(title: str, crumbs: list[tuple[str, str]], body: list[str], links: list[tuple[str, str]]) -> str:

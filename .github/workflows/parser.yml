@@ -6,7 +6,7 @@ name: Parser
 # when nothing of that changed: a skipped job counts as passed for a required check, while a workflow left out by an
 # `on.*.paths` filter never reports and would block a pull request that requires it.
 # Jobs: parser (lock, lint, unit tests, schemas, pip-audit on the runner), parser-image (the image's test target, whose
-# tests run during the build with no network) and contract (Ume.Rag.ContractTests against the runtime image).
+# tests run during the build with no network) and contract (Kalla.ContractTests against the runtime image).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -47,10 +47,10 @@ jobs:
             || [ "$REF_TYPE" = tag ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             echo "parser=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          # The parser, its contract, the parser contract tests (the files at the top of tests/Ume.Rag.ContractTests/,
+          # The parser, its contract, the parser contract tests (the files at the top of tests/Kalla.ContractTests/,
           # its project file included; Blobs/ holds the blob store tests, which the backend job runs), the fixtures and
           # goldens, the worker's parser client, or this workflow.
-          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/[^/]+$|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/parser\.yml$)' || true)"
+          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Kalla\.ContractTests/[^/]+$|tests/fixtures/parser/|src/Kalla\.Worker/Parsing/|\.github/workflows/parser\.yml$)' || true)"
           if [ -n "$parser" ]; then echo "parser=true"; else echo "parser=false"; fi >> "$GITHUB_OUTPUT"
 
   parser:
@@ -113,13 +113,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/docker-config"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Build the image's test target (runs the tests without network)
-        run: docker build --target test -t ume-rag.local/parser-test:ci src/parser
+        run: docker build --target test -t kalla.local/parser-test:ci src/parser
       - name: Disk left
         if: always()
         run: df -h / | tail -1
 
   contract:
-    # Ume.Rag.ContractTests (parser design §15.2): the worker's parser client against the parser image built from this
+    # Kalla.ContractTests (parser design §15.2): the worker's parser client against the parser image built from this
     # commit; responses and error cases validated against contracts/parser/v1/ and compared with the goldens. Same
     # trigger and cache as parser-image. The backend job (verify.yml) runs the same project without the image, so there
     # the image tests skip and the blob store tests run.
@@ -139,11 +139,11 @@ jobs:
       - name: Build the parser image
         # Straight into the Docker daemon that Testcontainers uses, from the runner's local layer cache (see parser-image).
         # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
-        run: docker build -t ume-rag.local/parser:ci --build-arg REVISION=${{ github.sha }} src/parser
+        run: docker build -t kalla.local/parser:ci --build-arg REVISION=${{ github.sha }} src/parser
       - name: Contract tests
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_PARSER_IMAGE: ume-rag.local/parser:ci
+          KALLA_TEST_PARSER_IMAGE: kalla.local/parser:ci
         run: |
           df -h / | tail -1
-          dotnet test --project tests/Ume.Rag.ContractTests/Ume.Rag.ContractTests.csproj -c Release
+          dotnet test --project tests/Kalla.ContractTests/Kalla.ContractTests.csproj -c Release

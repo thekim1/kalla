@@ -1,11 +1,11 @@
 <Project>
   <!--
     Container settings shared by the service images (AdminApi, DataApi, Gateway, MigrationService). Opt in with
-    <UmeServiceContainer>true</UmeServiceContainer>. This lives in a .targets file because Directory.Build.props is read
+    <KallaServiceContainer>true</KallaServiceContainer>. This lives in a .targets file because Directory.Build.props is read
     before the project file, so it cannot see the opt-in; the SDK reads these properties in targets that run later.
     Base image: digest-pinned chiseled-extra (non-root, no shell, ICU and time-zone data). Update tag and digest together.
   -->
-  <PropertyGroup Condition="'$(UmeServiceContainer)' == 'true'">
+  <PropertyGroup Condition="'$(KallaServiceContainer)' == 'true'">
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5b962bfb786606def03d250c6a645cc98839095c89e806e4bd8978a68115b</ContainerBaseImage>
     <ContainerUser>1654</ContainerUser>
   </PropertyGroup>

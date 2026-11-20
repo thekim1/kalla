@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/sources/v1/crawl.schema.json",
+  "$id": "https://kalla.local/contracts/sources/v1/crawl.schema.json",
   "title": "Crawl source settings",
   "type": "object",
   "properties": {

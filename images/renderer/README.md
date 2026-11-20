@@ -1,4 +1,4 @@
-# ume-rag/renderer
+# kalla/renderer
 
 Chromium behind Playwright's `launch-server`, nothing else: no crawling logic, no volumes, no other process. The worker
 drives it over WebSocket with Playwright .NET and fetches every request the page makes itself, through its guarded
@@ -16,14 +16,14 @@ for all of them.
 | Playwright | `playwright-core` **1.64.1** from `package-lock.json` (`npm ci` at build time; nothing is downloaded at start). The worker's `Microsoft.Playwright` NuGet is the same exact version (the server itself checks only major.minor) |
 | Process | `node …/playwright-core/cli.js launch-server --browser chromium --config <file>` (`start.sh`), one shared headless Chromium (the headless shell) |
 | Config | `launch-server.json` plus the path: `{ headless: true, chromiumSandbox: true, port: 3000, host: "0.0.0.0", wsPath: <path>, args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] }` |
-| Secret path | environment variable **`UME_RAG_RENDER_WS_PATH`**, required: `/` followed by at least 16 characters of `[A-Za-z0-9_-]` (production: `/` + 64 hex characters, `init-deployment.sh`; the AppHost: 32 alphanumerics). Missing or invalid: the container exits with code 64 and says why. The path is never logged (launch-server prints its endpoint on stdout, which is discarded) |
+| Secret path | environment variable **`KALLA_RENDER_WS_PATH`**, required: `/` followed by at least 16 characters of `[A-Za-z0-9_-]` (production: `/` + 64 hex characters, `init-deployment.sh`; the AppHost: 32 alphanumerics). Missing or invalid: the container exits with code 64 and says why. The path is never logged (launch-server prints its endpoint on stdout, which is discarded) |
 | Endpoint | `ws://<host>:3000<path>`; a wrong path gets HTTP 400 |
 | WebRTC | off: `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` (no proxy exists, so no ICE candidate is gathered and no mDNS or IGMP packet leaves; `--webrtc-ip-handling-policy` alone has no effect, measured) |
 | User | `10002:10002` (no passwd entry needed), `HOME=/tmp` |
 | Runs with | `read_only: true`, a `tmpfs` on `/tmp` (512m in Compose: Chromium's profile and shared memory, Playwright passes `--disable-dev-shm-usage`), `cap_drop: [ALL]`, `no-new-privileges`, **`seccomp=images/renderer/seccomp.json`**, `init: true` (reaps Chromium's children) |
 | Seccomp | `seccomp.json`: Moby's default profile plus one rule allowing `clone`, `unshare` and `chroot` without `CAP_SYS_ADMIN`, which Chromium's namespace sandbox needs. Under Docker's default profile Chromium exits with "No usable sandbox" and so does the container: it fails closed, never without the sandbox |
 | Health | the image's `HEALTHCHECK`: TCP connect to 127.0.0.1:3000, no secret needed. launch-server closes the port and exits when Chromium exits, so a dead browser is an exited container (Docker restarts it) |
-| Network | in production only `render` (internal, 172.30.18.0/24), shared with `rag-worker`; the host firewall rejects that subnet at the host (`INPUT`) |
+| Network | in production only `render` (internal, 172.30.18.0/24), shared with `kalla-worker`; the host firewall rejects that subnet at the host (`INPUT`) |
 
 ## Image
 
@@ -35,11 +35,11 @@ keep the browsers in the base's layers. About 1.46 GB against the base's 2.54 GB
 again in the final stage.
 
 ```bash
-docker build -t ume-rag/renderer:dev images/renderer
-bash images/renderer/test.sh ume-rag/renderer:dev
+docker build -t kalla/renderer:dev images/renderer
+bash images/renderer/test.sh kalla/renderer:dev
 docker run --rm --network <internal network> --user 10002:10002 --read-only --tmpfs /tmp:size=512m --cap-drop ALL \
   --security-opt no-new-privileges --security-opt seccomp=images/renderer/seccomp.json --init \
-  -e UME_RAG_RENDER_WS_PATH=/<at least 16 of A-Za-z0-9_-> ume-rag/renderer:dev
+  -e KALLA_RENDER_WS_PATH=/<at least 16 of A-Za-z0-9_-> kalla/renderer:dev
 ```
 
 `test.sh` runs it as Compose does on internal networks of its own (`RENDER_TEST_SUBNET`, default 10.214.0.0/24, and

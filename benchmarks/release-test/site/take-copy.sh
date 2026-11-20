@@ -25,7 +25,7 @@ mkdir -p "$out"
 # --convert-links makes links between copied pages relative, so the crawl stays on the local server.
 wget --input-file="$urls" --directory-prefix="$out" --force-directories --no-host-directories --adjust-extension \
   --convert-links --wait=1 --random-wait --tries=2 --timeout=30 \
-  --user-agent="Ume.Rag R1 page copy (Umea kommun platform team)" --no-verbose
+  --user-agent="Källa R1 page copy (Umea kommun platform team)" --no-verbose
 if [ -n "$ocr_from" ]; then
   mkdir -p "$out/ocr-batch" && cp "$ocr_from"/*.pdf "$out/ocr-batch/"
 fi

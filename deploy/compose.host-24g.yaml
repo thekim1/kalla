@@ -1,30 +1,30 @@
 # Overlay for a 24 GB pilot host (plans/platform/repo-and-deployment.md §6.2): the 24 GB memory limits, the parser
-# with two slots of two threads, and the 24 GB Postgres memory settings, which rag-bootstrap writes into rag-config's
-# postgresql.conf (UME_RAG_HOST_MEMORY). With the malware scan on, use it together with compose.clamav-conf.yaml
+# with two slots of two threads, and the 24 GB Postgres memory settings, which kalla-bootstrap writes into kalla-config's
+# postgresql.conf (KALLA_HOST_MEMORY). With the malware scan on, use it together with compose.clamav-conf.yaml
 # (ConcurrentDatabaseReload and TestDatabases yes, which need the 3g limit below); `init-deployment.sh --host-memory 24`
-# lists both in COMPOSE_FILE. A changed postgresql.conf takes effect when rag-postgres restarts.
+# lists both in COMPOSE_FILE. A changed postgresql.conf takes effect when kalla-postgres restarts.
 # The rag-ingestion.slice cap goes from MemoryMax=7G to 11G (deploy/host/). It also restores the pilot's CPU caps
 # (postgres 3, parser 4), which compose.rag.yaml keeps at 2 during development (§6.2).
 
 services:
-  rag-bootstrap:
+  kalla-bootstrap:
     environment:
-      UME_RAG_HOST_MEMORY: "24"
+      KALLA_HOST_MEMORY: "24"
 
-  rag-postgres:
+  kalla-postgres:
     cpus: 3.0
     mem_limit: 5g
 
-  rag-api:
+  kalla-api:
     mem_limit: 1.5g
 
-  rag-admin:
+  kalla-admin:
     mem_limit: 768m
 
-  rag-worker:
+  kalla-worker:
     mem_limit: 2g
 
-  rag-parser:
+  kalla-parser:
     cpus: 4.0
     mem_limit: 6g
     environment:
@@ -33,5 +33,5 @@ services:
       # RSS watchdog per slot at 2 x 2 (parser design §10.3; 2 800 MB at 1 x 4).
       PARSER_SLOT_MAX_RSS_MB: "2600"
 
-  rag-clamav:
+  kalla-clamav:
     mem_limit: 3g

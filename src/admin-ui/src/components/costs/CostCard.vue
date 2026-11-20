@@ -22,7 +22,7 @@ const props = defineProps<{
   source: (query: CostQuery) => Promise<ObjectCosts>
   /** A route to the Costs page for those who see it (the knowledge base's card, admin §8.6). */
   costsLink?: { name: string; query: Record<string, string> } | null
-  /** B-46: the object's gateway key, whose figures (the gateway's Integration API, B-45) are shown beside Ume.Rag's. */
+  /** B-46: the object's gateway key, whose figures (the gateway's Integration API, B-45) are shown beside Källa's. */
   gatewayKeyId?: string | null
   /** The object's department, for the gateway link when there is no read-back. */
   departmentId?: string

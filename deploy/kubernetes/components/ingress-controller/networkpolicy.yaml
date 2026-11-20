@@ -1,14 +1,14 @@
-# rag-api and rag-admin: clients through the Ingress controller (Compose: edge). The overlay patches the namespace if
+# kalla-api and kalla-admin: clients through the Ingress controller (Compose: edge). The overlay patches the namespace if
 # yours is not ingress-nginx.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: ume-rag-ingress-controller
+  name: kalla-ingress-controller
 spec:
   podSelector:
-    matchLabels: {app.kubernetes.io/name: ume-rag}
+    matchLabels: {app.kubernetes.io/name: kalla}
     matchExpressions:
-      - {key: app.kubernetes.io/component, operator: In, values: [rag-api, rag-admin]}
+      - {key: app.kubernetes.io/component, operator: In, values: [kalla-api, kalla-admin]}
   policyTypes: [Ingress]
   ingress:
     - from:

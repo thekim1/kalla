@@ -1,9 +1,9 @@
 # Knowledge API: detailed design
 
-Detail step 7 of the Ume.Rag design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
+Detail step 7 of the Källa design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
 states every rule, the plan's answered questions in §19) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
-[`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Ume.Rag.Retrieval` and
+[`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Kalla.Retrieval` and
 the evaluator of [`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) (§5–§6, §11,
 §13.5); uploads of
 [`../ingestion-worker/design-connectors.md`](../ingestion-worker/design-connectors.md) (§3.4, §9.4); the
@@ -36,14 +36,14 @@ Moved to [`../archive/design-history/knowledge-api.md`](../archive/design-histor
 
 | Project | Owns | Used by |
 |---|---|---|
-| `Ume.Rag.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
-| `Ume.Rag.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `IReranker` (§6.7), `RetrievalSettingsResolver`, `QueryNormalizer`, `SwedishDecompounder` (query side, or in `Ume.Rag.Text`, platform §3), `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Ume.Rag.Api` (knowledge role), `Ume.Rag.Worker` (evaluator, processing §13.5), `Ume.Rag.AdminApi` (test panel) |
-| `Ume.Rag.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `ISharedCache` and `IRateLimitStore` (in-memory implementations; Redis implementations and `RedisKeys` used when `ConnectionStrings:redis` is set, P2) | all |
-| `Ume.Rag.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Ume.Rag.Api` (knowledge role), `Ume.Rag.AdminApi` (test panel) |
-| `Ume.Rag.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
+| `Kalla.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
+| `Kalla.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `IReranker` (§6.7), `RetrievalSettingsResolver`, `QueryNormalizer`, `SwedishDecompounder` (query side, or in `Kalla.Text`, platform §3), `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Kalla.Api` (knowledge role), `Kalla.Worker` (evaluator, processing §13.5), `Kalla.AdminApi` (test panel) |
+| `Kalla.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `ISharedCache` and `IRateLimitStore` (in-memory implementations; Redis implementations and `RedisKeys` used when `ConnectionStrings:redis` is set, P2) | all |
+| `Kalla.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Kalla.Api` (knowledge role), `Kalla.AdminApi` (test panel) |
+| `Kalla.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
 
 The evaluator calls `RetrievalEngine` directly with a `Collections` scope over the full collection (processing
-§13.5) and no policy; the API wraps the same engine with policy and hydration. Nothing in `Ume.Rag.Retrieval` reads
+§13.5) and no policy; the API wraps the same engine with policy and hydration. Nothing in `Kalla.Retrieval` reads
 `config` or knows about principals: it receives a resolved `SearchScope`, so the evaluator and the API cannot drift
 apart except in what they pass in (contract test, §16.3). No API route includes an unpublished collection; only the
 admin host passes them to the shared core (test panel, §4.5).
@@ -52,11 +52,11 @@ admin host passes them to the shared core (test panel, §4.5).
 
 While the chat role runs only with the knowledge role in its process, the chat code calls `KnowledgeService`'s methods
 below directly: the `IRetriever` interface was removed while it had a single implementation (#411), and the records
-moved to `Ume.Rag.Domain/Retrieval/RetrievalContract.cs`. The interface returns with `HttpRetriever` when the roles are
+moved to `Kalla.Domain/Retrieval/RetrievalContract.cs`. The interface returns with `HttpRetriever` when the roles are
 split; `IRetriever` in this document names that port and, until then, `KnowledgeService`'s methods.
 
 ```csharp
-// Ume.Rag.Domain
+// Kalla.Domain
 public interface IRetriever
 {
     Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct);
@@ -76,11 +76,11 @@ public sealed record RetrievalRequest(
     int TopK = 10,                             // 1..50
     RetrievalMode Mode = RetrievalMode.Hybrid,
     RetrievalFilters? Filters = null,
-    IReadOnlyList<string>? Topics = null,      // chat only: ume.topics, narrows the links' topics (§4.2)
+    IReadOnlyList<string>? Topics = null,      // chat only: kalla.topics, narrows the links' topics (§4.2)
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
-    Guid? RunId = null);                       // sent as x-ume-run-id (chat: the message id)
+    Guid? RunId = null);                       // sent as x-fors-run-id (chat: the message id)
 
 public sealed record RetrievalFilters(
     IReadOnlyList<string>? Tags, IReadOnlyList<string>? DocumentTypes, DateTimeOffset? ModifiedAfter);
@@ -223,8 +223,8 @@ metadata (no index, would break the rule that every filter runs on an index).
 | `degraded` | null \| `embedding_unavailable` \| `embedding_residency` \| `rerank_unavailable` (P2) | §5.5, §6.7 |
 | `config_version` | int | snapshot the decision was made at (R7) |
 
-Headers: `Cache-Control: no-store` (gateway `UseUmeSecurityHeaders` with `NoStorePrefixes` `/v1`,
-`src/Ume.LlmGateway.DataApi/Program.cs:47`, `WebDefaults.cs:26`), `x-request-id`. No timing headers outside
+Headers: `Cache-Control: no-store` (gateway `UseKallaSecurityHeaders` with `NoStorePrefixes` `/v1`,
+`src/Fors.DataApi/Program.cs:47`, `WebDefaults.cs:26`), `x-request-id`. No timing headers outside
 Development (they would let a caller time-probe sizes of other scopes).
 
 ### 3.3 `GET /v1/collections`
@@ -266,14 +266,14 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
 | Ranges | **not supported in P1** (`Accept-Ranges: none`; uploads ≤ 50 MB, connectors §9.1). The segment format allows ranges later (seek to segment ⌊offset / 64 KiB⌋) |
-| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 per address: in P1 ASP.NET Core's in-process fixed-window rate limiter, per instance; **Later (P2):** through `IRateLimitStore` with Redis `ume-rag:rl:dl:{ipHash}:{minute}` (data-model §11; not the P2 widget key `rl:ip`) |
+| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 per address: in P1 ASP.NET Core's in-process fixed-window rate limiter, per instance; **Later (P2):** through `IRateLimitStore` with Redis `kalla:rl:dl:{ipHash}:{minute}` (data-model §11; not the P2 widget key `rl:ip`) |
 | Errors | as §3.6; after the first byte only a reset is possible |
 
 ### 3.6 Errors (problem details)
 
-Knowledge routes answer RFC 9457 problem details exactly like the gateway's Data API: `AddUmeWebDefaults` +
+Knowledge routes answer RFC 9457 problem details exactly like the gateway's Data API: `AddKallaWebDefaults` +
 `ApiExceptionHandler` turn an `ApiFaultException(status, detail, extensions)` into `Results.Problem`
-(`src/Ume.LlmGateway.ServiceDefaults/ApiExceptionHandler.cs:30-55`, `ApiFaultException.cs:1-34`), validation faults
+(`src/Fors.ServiceDefaults/ApiExceptionHandler.cs:30-55`, `ApiFaultException.cs:1-34`), validation faults
 into `ValidationProblem` with field errors, and anything else into a 500 that logs only the exception type
 (`ApiExceptionHandler.cs:49`). The machine-readable reason goes into the `code` extension.
 
@@ -296,8 +296,8 @@ The chat role keeps the OpenAI shape (identity §4.4) for its own routes; the in
 
 ### 3.7 OpenAPI and Scalar
 
-As the Data API (`src/Ume.LlmGateway.DataApi/Program.cs:22-29`, `:47-56`): `AddOpenApi("knowledge", …)` with a document
-transformer (title "Ume.Rag Knowledge API", description of authentication, grants and limits), `MapOpenApi`,
+As the Data API (`src/Fors.DataApi/Program.cs:22-29`, `:47-56`): `AddOpenApi("knowledge", …)` with a document
+transformer (title "Källa Knowledge API", description of authentication, grants and limits), `MapOpenApi`,
 `MapScalarApiReference(o => o.WithTitle(…).WithNonce().DisableDefaultFonts())`, `UseApiReferencePolicy("/scalar", …)`,
 published when `Knowledge:PublishApiReference` (default `true`, off in production until P2). The chat role publishes its
 own document `chat`; Scalar lists both. Endpoints carry `WithTags("Knowledge")`, `WithSummary`, typed results
@@ -323,10 +323,10 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2), and a chat request's `ume.topics` narrows the links further for that turn (`RetrievalRequest.Topics`; chat §3.8: a link with topics keeps those also asked for and leaves the scope when none is, a link without topics gets the asked ones), so the topic links of §6.2, the coverage counts and the floor all see the narrowed links; a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2), and a chat request's `kalla.topics` narrows the links further for that turn (`RetrievalRequest.Topics`; chat §3.8: a link with topics keeps those also asked for and leaves the scope when none is, a link without topics gets the asked ones), so the topic links of §6.2, the coverage counts and the floor all see the narrowed links; a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
-| Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
+| Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Kalla.Answering`) on `Kalla.Retrieval` |
 | Download grant | exactly the grant's collection (§4.6) |
 
 At most 20 collections per query (an assistant with more is refused on save by the admin API).
@@ -367,7 +367,7 @@ collections in its scope, the API never does, and an integration test asserts th
 
 ### 4.6 Download grants (citations without a public URL)
 
-Open WebUI users click citation links in their browser, which holds no credential for `rag-api`. The link therefore
+Open WebUI users click citation links in their browser, which holds no credential for `kalla-api`. The link therefore
 carries a **signed, short-lived grant** made by the knowledge role when it builds a citation (§10), and every download
 re-runs the access check at the current config version (answered 5).
 
@@ -380,16 +380,16 @@ mac     = base64url(HMAC-SHA256(Security:DownloadGrantKeys[kid], "g1." + kid + "
 
 | Rule | Detail |
 |---|---|
-| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest (the greatest kid in ordinal order; kids are dated, e.g. `2026-10`) signs, all verify, so a key can be rotated with a one-lifetime overlap. `Knowledge:PublicBaseUrl` (rag-api's staff-network address) makes the link absolute; unset, it is relative |
+| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest (the greatest kid in ordinal order; kids are dated, e.g. `2026-10`) signs, all verify, so a key can be rotated with a one-lifetime overlap. `Knowledge:PublicBaseUrl` (kalla-api's staff-network address) makes the link absolute; unset, it is relative |
 | Lifetime | `Knowledge:DownloadGrantLifetime` **7 days** for `public`/`internal` (answered 5), **1 hour** for `sensitive` (no `sensitive` client stores history). Links in Open WebUI chats older than 7 days stop working (Open WebUI keeps chats 90 days); asking again issues a new link |
-| Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:93-97`) |
+| Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Fors.ServiceDefaults/Extensions.cs:93-97`) |
 | Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason; reasons without an identity §4.3 code are `grant_scope` (another document) and `key_unusable`) |
 | Failure on the token | 401 `grant_invalid` / `grant_expired`, counted as 5001 with `Credential = grant`; a browser request (`Accept: text/html`) gets a minimal static Swedish page instead ("Länken har gått ut. Ställ frågan igen för att få en ny länk."), same status, CSP `default-src 'none'` |
 | Scope | only `GET /v1/documents/{d}` and `/content` for that one document; never `/v1/retrieve` |
-| Reachability | the reverse proxy exposes `GET /v1/documents/*/content` (and `/v1/documents/*`) to the staff network; all other `rag-api` paths stay restricted to the Open WebUI host (identity §5.3) |
+| Reachability | the reverse proxy exposes `GET /v1/documents/*/content` (and `/v1/documents/*`) to the staff network; all other `kalla-api` paths stay restricted to the Open WebUI host (identity §5.3) |
 
 A forwarded link works for its lifetime for anyone on the internal network who has it; revoking the collection link,
-the assistant, the key or the client stops it at once. A download streams through `rag-api` from the blob store (a GET
+the assistant, the key or the client stops it at once. A download streams through `kalla-api` from the blob store (a GET
 on the LAN, ≈ 5–20 ms); no decrypted copy is cached on disk. Possible P2 addition: a BFF-style Entra sign-in on the
 download path, binding the download to the user.
 
@@ -399,7 +399,7 @@ download path, binding the download to the user.
 |---|---|
 | 5001 `rag.auth.failed` | credential failures incl. grants (`Credential` `grant`, reasons `grant_invalid`, `grant_expired`) |
 | 5002 `rag.access.denied` / 5005 `rag.ceiling.refused` | explicit denials: a requested collection, a document id, a grant re-check (throttled once a minute per subject, reason, resource, identity §10) |
-| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-ume-residency` above the profile's ceiling (§5.2) |
+| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-fors-residency` above the profile's ceiling (§5.2) |
 | 5004 `rag.config.stale_refused` | `config_unconfirmed` |
 
 - **No audit rows** for retrievals or downloads: they are normal use, not privileged reads, and would be the
@@ -426,7 +426,7 @@ download path, binding the download to the user.
 
 ### 5.1 Normalisation
 
-`QueryNormalizer` (in `Ume.Rag.Retrieval`, used by API and evaluator): Unicode **NFC** (as chunks, processing §11),
+`QueryNormalizer` (in `Kalla.Retrieval`, used by API and evaluator): Unicode **NFC** (as chunks, processing §11),
 C0/C1 control characters → space, whitespace runs → one space, trim. No lower-casing (the embedding models'
 tokenizers are cased), no instruction prefix (processing §11; *to verify* §20), no rewriting (answered 3). The normalised string is
 both what is embedded and what the cache key is computed from, so equal keys always mean equal inputs. The keyword
@@ -437,15 +437,15 @@ statement gets the **query search text** = the normalised string plus the parts 
 
 `IGatewayClient.EmbedQueryAsync(profile, text, attribution, ct)` on a named `HttpClient` `gateway-query`, whose
 residency-ceiling `DelegatingHandler` (shared with every gateway client, chat §8.1) refuses a request without an
-explicit `x-ume-max-residency` and checks that the key matches it:
+explicit `x-fors-max-residency` and checks that the key matches it:
 
 ```http
 POST {Gateway:BaseUrl}/v1/embeddings
-Authorization: Bearer <rag-api's credential key>
-x-ume-on-behalf-of: <gateway key id>        (from gateway phase 2; none when the object has no key)
-x-ume-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
-x-ume-run-id: <RunId or retrieval id>
-x-ume-step: query-embed
+Authorization: Bearer <kalla-api's credential key>
+x-fors-on-behalf-of: <gateway key id>        (from gateway phase 2; none when the object has no key)
+x-fors-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
+x-fors-run-id: <RunId or retrieval id>
+x-fors-step: query-embed
 traceparent: …
 
 { "model": "<EmbeddingProfiles.GatewayModel>", "input": "<normalised query>", "encoding_format": "float",
@@ -455,11 +455,11 @@ traceparent: …
 | Topic | Rule |
 |---|---|
 | Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (data-model §2.1). The pilot profile is `text-embedding-3-large` from an `Eu` provider at **1024** dimensions, requested with `dimensions` (Decisions "Pilot embedding model, U-b"); an on-prem BGE-M3 profile (register M2, once on-prem hardware exists; moving to it re-embeds every chunk) never sends `dimensions` (gateway design §6) |
-| Attribution | the call runs as a gateway key (cost-attribution §4.1; identity §4.7): chat and the assistant test panel: the assistant's `GatewayKeyId`; integration keys, token callers and MCP: the first searched collection's `GatewayKeyId`; the retrieval test: the collection's. An object without a key, and every call until rag-api's own context shows `act-as-key` (identity §4.7), runs as the credential key. Until the gateway's integration phase 1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). The key must allow the profile's model (admin V39) |
+| Attribution | the call runs as a gateway key (cost-attribution §4.1; identity §4.7): chat and the assistant test panel: the assistant's `GatewayKeyId`; integration keys, token callers and MCP: the first searched collection's `GatewayKeyId`; the retrieval test: the collection's. An object without a key, and every call until kalla-api's own context shows `act-as-key` (identity §4.7), runs as the credential key. Until the gateway's integration phase 1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). The key must allow the profile's model (admin V39) |
 | Residency | the profile's `EmbeddingProfiles.MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile until M2, `OnPrem` for an on-prem profile (Decisions "M2 and test hosting"); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
-| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); when `x-ume-on-behalf-of` was sent, the `2xx` answer's echo must be the GUID sent while `Gateway:RequireDelegationEcho` is set, else discard + 5011 (gateway-changes §5.2); a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded`, gateway-changes §5.7) is an embedding failure of §5.5 for Knowledge API callers, and in a chat turn the assistant's unavailability (chat §3.6); exactly one vector of `Dimensions` finite floats, not all zero |
-| Key | rag-api's credential key (`Gateway__Key`), checked by the `ResidencyCeilingHandler`. The `PiiPolicy` that applies is the acting key's: an assigned key used for chat or search must have `PiiPolicy` `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); the credential key's own is checked at startup by one canary embedding (§5.6), an assigned key's by the `x-ume-pii` check above on every call and shown on the assistant page (admin §5.5.4) |
-| Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-ume-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
+| Response checks | `x-fors-residency` (`src/Fors.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-fors-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); when `x-fors-on-behalf-of` was sent, the `2xx` answer's echo must be the GUID sent while `Gateway:RequireDelegationEcho` is set, else discard + 5011 (gateway-changes §5.2); a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded`, gateway-changes §5.7) is an embedding failure of §5.5 for Knowledge API callers, and in a chat turn the assistant's unavailability (chat §3.6); exactly one vector of `Dimensions` finite floats, not all zero |
+| Key | kalla-api's credential key (`Gateway__Key`), checked by the `ResidencyCeilingHandler`. The `PiiPolicy` that applies is the acting key's: an assigned key used for chat or search must have `PiiPolicy` `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); the credential key's own is checked at startup by one canary embedding (§5.6), an assigned key's by the `x-fors-pii` check above on every call and shown on the assistant page (admin §5.5.4) |
+| Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-fors-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
 
 ### 5.3 Timeouts, retries, circuit
 
@@ -485,19 +485,19 @@ traceparent: …
 | Layer | Levels | Key | Value | TTL, size |
 |---|---|---|---|---|
 | L1 in process (`MemoryCache` with `SizeLimit`, as `KeyAuthenticator.cs:23`) | all | `(profileId, gatewayKeyId, queryMac)`: the key the call runs as (none: the credential key), so each assistant's key pays for, and is checked on, its own query embeddings | `float[1024]` | 5 min; 2,000 entries (≈ 8 MB) |
-| L2 `ISharedCache` | `public`, `internal` effective level only (data-model §12.14) | `ume-rag:qemb:{profileId:N}:{gatewayKeyId:N or -}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (Redis: `SET … EX 300`); P2 multi-host only |
+| L2 `ISharedCache` | `public`, `internal` effective level only (data-model §12.14) | `kalla:qemb:{profileId:N}:{gatewayKeyId:N or -}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (Redis: `SET … EX 300`); P2 multi-host only |
 
 `queryMac` = hex of the first 16 bytes of `HMAC-SHA256(Security:CacheKeyPepper, normalised query)`: a plain SHA-256
 of a short question is reversible by dictionary, the HMAC is not without the pepper (a secret file like the key pepper,
 identity §6.1). `RedisKeys.QueryEmbedding(Guid profileId, string queryMac)` is added to the copied `RedisKeys` class
-(gateway `src/Ume.LlmGateway.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
+(gateway `src/Fors.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
 comment). L2 goes through `ISharedCache`: P1 has no Redis (single slot), so P1 registers the
 no-op implementation (every L2 read is a miss, every write is dropped) and L1 alone is the cache; a second in-memory
 copy would only duplicate L1. From the first multi-host deployment (P2) `ConnectionStrings:redis` selects
 the Redis implementation, which shares hits across instances; a Redis failure is then a miss (logged once a minute),
 never an error. The evaluator keeps its own durable cache (`EmbeddingCache` by question hash, processing §13.5). The
 admin test panel uses L1 only, with a per-process random HMAC key instead of the pepper (admin design §4.9), so only
-`rag-api` holds `Security__CacheKeyPepper`.
+`kalla-api` holds `Security__CacheKeyPepper`.
 
 ### 5.5 Failure behaviour (decision)
 
@@ -520,7 +520,7 @@ answer (chat step 8: it must not claim "no information" from a degraded search).
   `EmbeddingProfiles.CanaryEmbedding` (cosine ≥ 0.999, as the worker, processing §11); a mismatch marks
   `/health/ready` degraded and alerts: queries would be embedded in another vector space than the chunks. The same
   call checks the residency and PII headers of §5.2.
-- Development and CI: `Ume.Rag.FakeGateway` serves 1024-dim feature-hashing vectors (repo-and-deployment §4.3); against
+- Development and CI: `Kalla.FakeGateway` serves 1024-dim feature-hashing vectors (repo-and-deployment §4.3); against
   a real local gateway, FakeLlm `fake-embed-1024` behind the profile's model alias (gateway design §6). Fault models
   `fake-fail-500`, `fake-slow`, `fake-wrong-residency` drive the §5.5 tests.
 
@@ -614,8 +614,8 @@ words only gives `NULL` and K returns nothing.
 before the pilot crawl"). .NET chooses the stop list and passes it as `$4`; Postgres removes those lexemes from the
 query vector with `ts_delete`, since only its `swedish` stemmer knows the query text's lexemes. The statistics are
 kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks) in
-`content."KeywordStatistics"` (data-model §2.2), which **the worker maintains** and rag-api only reads: rag-api runs no
-`ts_stat` (#499: measured as `ume_rag_api`, `ts_stat` costs about 18 ms per 1,000 chunks, 18 s at 1M, past the 60 s
+`content."KeywordStatistics"` (data-model §2.2), which **the worker maintains** and kalla-api only reads: kalla-api runs no
+`ts_stat` (#499: measured as `kalla_api`, `ts_stat` costs about 18 ms per 1,000 chunks, 18 s at 1M, past the 60 s
 limit near 3.3M). The worker recomputes a collection's rows with `ts_stat` over its live child chunks when it has at
 least 100 of them and no rows yet, when its live child count differs by more than 10 % from the `ChunkCount` stored
 with its rows, or when the rows are older than 7 days. It checks this at the end of each sync run of the collection's
@@ -688,10 +688,10 @@ HNSW applies the `CollectionId` filter **after** the graph walk; with `relaxed_o
 walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Iterative Index Scans",
 `src/hnsw.c:102-104`). For a small collection inside a large shared index that means poor recall or a long walk. So:
 
-- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
+- `ScopeSizeCache` (in `Kalla.Retrieval`) holds chunk counts per (embedding profile, collection, tag set), from
   `SELECT "EmbeddingProfileId", "CollectionId", "Tags", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND
   "Kind" = 'child' GROUP BY 1, 2, 3` every 10 minutes, so a scope's share *s* of its profile's index is known. The
-  count stays in rag-api (#499 step 2): it is cheap (116 ms at 1M chunks as `ume_rag_api`, B-25) and runs with its own
+  count stays in kalla-api (#499 step 2): it is cheap (116 ms at 1M chunks as `kalla_api`, B-25) and runs with its own
   `SET LOCAL statement_timeout`; it moves to the worker only if the scale test (R1) shows it near its limit. A
   collection linked with topics counts only its chunks carrying one of the link's tags (a chunk with two of them counts
   once), so a narrow topic in a large collection falls under the exact-search limit (Decisions "M-2 open design calls").
@@ -724,7 +724,7 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
   `IX_Chunks_Embedding_*_ccnew*` indexes on every run. Both bounds are
   `Settings.Retrieval.hnswRecallFloor` and `hnswCheckSample`.
 
-The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
+The HNSW settings are **role defaults** (`ALTER ROLE kalla_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
 `hnsw.iterative_scan = relaxed_order` and `hnsw.max_scan_tuples = 100000`, and for the worker and admin roles),
 applied by `app-roles.sql` like the timeouts (data-model §1.1), so no `SET` runs per query and V needs no transaction.
 The development stack connects as one superuser, so the migration service sets the same three values on the database
@@ -771,7 +771,7 @@ order: score desc, distance asc (nulls last), chunk Id asc
 
 | Setting | Value | Why |
 |---|---|---|
-| Data source | one `NpgsqlDataSource` with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` **12** per `rag-api` instance (starting value measured in P0), `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2, no `Multiplexing`; multi-statement round trips as one `NpgsqlBatch` (§6.3) | retrieval statements are prepared per connection after first use |
+| Data source | one `NpgsqlDataSource` with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` **12** per `kalla-api` instance (starting value measured in P0), `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2, no `Multiplexing`; multi-statement round trips as one `NpgsqlBatch` (§6.3) | retrieval statements are prepared per connection after first use |
 | Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default **4** = ⌊(pool − 3) ÷ 2⌋: it bounds the engine's connections, not the searches in flight. The engine has **2 × that many statement slots** (8; a search runs at most two statements at once, K and V), and a slot is one statement's connection, held only while that statement runs: K, V and the reranker's text read (§6.7) each take one; the hydrate statement runs outside the slots. A search that waits for its query embedding or its rerank call holds none, so the gateway's latency does not limit how many searches an instance serves (#764: with rerank on, 4.4 searches a second and 503s became every client answered, with at most 8 statements at once). 3 connections stay for chat writes and the stats flush; a statement waits ≤ 200 ms for a slot or a connection, then 503 `search_unavailable`; the value is validated at start-up and measured in P0; more chat throughput comes from more instances, never from a bigger pool (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
 | Read replica | **Later (P3), by trigger:** optional `ConnectionStrings__ragdb-read` on the streaming standby (`hot_standby_feedback = on`, `max_standby_streaming_delay = 30s`, repo-and-deployment §7.4), set only when primary CPU in office hours exceeds 70 % with retrieval over half of it, or retrieval p95 exceeds 250 ms during ingestion: K, V, H+D and the evaluator read from it (a lag of seconds only delays a publish swap); writes (stats flush, writer) stay on the primary. The chat path keeps no session state, so instances need no sticky sessions | spreads retrieval load off the primary |
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
@@ -784,7 +784,7 @@ knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the values above
 
 Rerank is **optional everywhere**: with no model configured for an assistant's reranker there is no call, no
 `rerank_unavailable` and nothing degraded, and the assistant's switch is disabled with a hint. `IReranker.ScoreAsync`
-in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
+in `Kalla.Retrieval`, routed by `RerankerKind`:
 
 | Reranker | Call | Model setting | Time limit | Cost |
 |---|---|---|---|---|
@@ -792,7 +792,7 @@ in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
 | `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 1.5 s (covers the POC model's p95 of 1.4 s, #421) | input tokens |
 
 Both go through the `gateway-rerank` client with the call's residency ceiling (the assistant's turn ceiling) and
-`x-ume-step: rerank`; the 502/504 retry applies. Only a caller with a ceiling asks for it: chat and the test panel (the
+`x-fors-step: rerank`; the 502/504 retry applies. Only a caller with a ceiling asks for it: chat and the test panel (the
 turn's ceiling) and the evaluator's `hybrid-rerank` variants (the collection level's, capped at `Eu`).
 `POST /v1/retrieve` with an `assistant_id` keeps the fused order, since that route has no turn ceiling to pass.
 Placement: after fusion and dedup, before the per-document cap, over the top `rerankCandidates` (20) whose texts are read in one extra statement. Unscored passages keep their fused
@@ -906,7 +906,7 @@ the cost is only that paragraph breaks between two chunks are unknown (joined wi
 | `title` | §10.2 | always present (fallback "Dokument utan titel") |
 | `display_name` | `Documents.DisplayName` | uploads only |
 | `url` | `Documents.Url` | `url` documents |
-| `download_url` | §4.6 grant link (`Knowledge:PublicBaseUrl` = `UME_RAG_API_PUBLIC_URL`) | `upload`, `sharepoint` (P2); null for `url` |
+| `download_url` | §4.6 grant link (`Knowledge:PublicBaseUrl` = `KALLA_API_PUBLIC_URL`) | `upload`, `sharepoint` (P2); null for `url` |
 | `source_type` | `IdentityKind` `url` → `web`, `upload` → `file`, `sharepoint` (P2) → `sharepoint` | – |
 | `document_type`, `media_type`, `language` | chunk `DocumentType`, `Documents.MediaType`, `Documents.Language` | – |
 | `modified` | chunk `SourceModifiedAt`, else `Documents.SourceModifiedAt`; for `file`, else `FetchedAt` (the upload time) | when the source last changed by its own date; null for a crawled page that states none (Decisions "Source dates on citations"): its fetch time is `checked`, not a change date |
@@ -953,7 +953,7 @@ crawled page (answered 4), and a file has `modified`.
 Chat TTFT = chat overhead (< 10 ms, chat plan §4) + condense (optional LLM call) + retrieval + the answer model's TTFT
 through the gateway; retrieval should stay below ~15 % of it.
 
-**Measured by**: micro-benchmarks (`tests/Ume.Rag.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
+**Measured by**: micro-benchmarks (`tests/Kalla.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
 gateway's `PipelineBenchmarks`: fusion + diversity over 200 candidates, section assembly, citations and grants;
 allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); a warm retrieval's **3 Postgres round
 trips** (K, V, H+D) and 0 config queries are the design, checked in the R1 test (the gateway-style interaction audit
@@ -1009,7 +1009,7 @@ filters hash, queryMac)`).
 
 ## 13. OpenSearch seam (O1)
 
-`ISearchIndex` (`Ume.Rag.Retrieval`) has `KeywordAsync(scope, query, filters, limit)` and `VectorAsync(scope, vector,
+`ISearchIndex` (`Kalla.Retrieval`) has `KeywordAsync(scope, query, filters, limit)` and `VectorAsync(scope, vector,
 filters, limit, options)`, both returning `Candidate(ChunkId, DocumentId, ChunkSetId, Ordinal, TextHash, CollectionId,
 Level, Distance?, KeywordScore?, IdentityKey)`; `PostgresSearchIndex` (§6.2) is the only implementation. Only candidate generation could move: fusion, dedup, diversity and coverage stay in
 `RetrievalEngine`, and hydration, sections, citations and downloads stay on Postgres, the master copy (plan §3), which
@@ -1030,7 +1030,7 @@ With the halfvec index (§6.4) a 64 GB host keeps 10M chunks below the first tri
 
 ## 14. MCP exposure (P2 outline)
 
-**Later (P2):** `/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only. In `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
+**Later (P2):** `/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only. In `Kalla.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
 2026-07-28; tools design §7.1),
 `MapMcp("/mcp")`, tools as `[McpServerTool(Name = "search_knowledge", ReadOnly = true, Idempotent = true,
 OpenWorld = false, UseStructuredContent = true)]` methods calling `IRetriever` in process with `Purpose = Mcp`.
@@ -1069,10 +1069,10 @@ Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `
 
 ## 15. Observability
 
-Meter and activity source **`Ume.Rag`** (repo-and-deployment §9; the gateway's equivalent is `Ume.LlmGateway`,
-`src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:21`, `:83`, `:89`). Instruments created once from `IMeterFactory`
-as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:616-636`); durations in **ms** like
-`ume.gateway.request.duration` (`:627`); low-cardinality dimensions only.
+Meter and activity source **`Källa`** (repo-and-deployment §9; the gateway's equivalent is `Fors`,
+`src/Fors.ServiceDefaults/Extensions.cs:21`, `:83`, `:89`). Instruments created once from `IMeterFactory`
+as `GatewayMetrics` does (`src/Fors.Gateway/Pipeline/UsageWriter.cs:616-636`); durations in **ms** like
+`kalla.gateway.request.duration` (`:627`); low-cardinality dimensions only.
 
 | Metric | Type | Dimensions |
 |---|---|---|
@@ -1106,7 +1106,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 ## 16. Tests
 
-### 16.1 Unit (`tests/Ume.Rag.Retrieval.Tests`, new; `Ume.Rag.Api.Tests` for the role)
+### 16.1 Unit (`tests/Kalla.Retrieval.Tests`, new; `Kalla.Api.Tests` for the role)
 
 - `RrfFusion`: hand-computed RRF values, weights, missing ranks, tie-breaks, modes; multi-profile fusion; age decay
   (half-life arithmetic, kinds, missing `SourceModifiedAt`, per-collection settings in a multi-collection query) and
@@ -1126,11 +1126,11 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - `DownloadGrants`: round trip, tamper of every field, expiry, unknown `kid`, rotation overlap, constant-time compare.
 - Cache keys: HMAC derivation, `sensitive` never yields an L2 key.
 
-### 16.2 Integration (`Ume.Rag.IntegrationTests`, Testcontainers: the stock pgvector image, Keycloak; Redis from P2)
+### 16.2 Integration (`Kalla.IntegrationTests`, Testcontainers: the stock pgvector image, Keycloak; Redis from P2)
 
 - Statements: every variant prepared; `EXPLAIN` under `SET plan_cache_mode = force_generic_plan` shows the HNSW partial
   index for approximate V, the B-tree `IX_Chunks_CollectionId` and no HNSW for exact V, the partial GIN index for K;
-  role defaults `hnsw.ef_search`/`iterative_scan`/`max_scan_tuples` visible via `SHOW` on an `ume_rag_api` connection.
+  role defaults `hnsw.ef_search`/`iterative_scan`/`max_scan_tuples` visible via `SHOW` on an `kalla_api` connection.
 - Swedish: the query `bygglov altan` finds a chunk containing only `bygglovsansökan` and `altanen` (compound through the
   decompounder + inflection through `swedish`); `content.rag_or_query` returns an OR query, never an AND, and `NULL` for
   stop words only.
@@ -1142,10 +1142,10 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - Keycloak (P2): app token with `Knowledge.Read.All` retrieves only client-audience collections; a user token with the
   app role by mistake is refused (identity §13.4).
 
-### 16.3 API and contract (`Ume.Rag.Api.Tests`, WebApplicationFactory + FakeGateway)
+### 16.3 API and contract (`Kalla.Api.Tests`, WebApplicationFactory + FakeGateway)
 
 - In-process chat path and `HttpRetriever` (roles split) return identical results.
-- **Contract test evaluator == API** (processing §13.5; in `Ume.Rag.Worker.Tests`, which hosts rag-api too, §16.4): the
+- **Contract test evaluator == API** (processing §13.5; in `Kalla.Worker.Tests`, which hosts kalla-api too, §16.4): the
   smoke fixture collection; for each of the 30 questions the evaluator's `RetrievalEngine` call (`Collections` scope,
   hybrid, k = 10, no filters) and `POST /v1/retrieve` (`rag-internal`, `expand: none`) return the same chunk ids in the
   same order. FakeGateway embeddings are
@@ -1155,7 +1155,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
   `content_not_served`; grant re-check after unlinking the collection, revoking the key or disabling the client → 404.
 - Failure paths: `fake-fail-500`, `fake-slow` (timeout), `fake-wrong-residency` → degraded hybrid / 503 vector, events
   5003; circuit opens after 5 failures; config unconfirmed → 503 + 5004.
-- P2 (with `ConnectionStrings:redis`): Redis down → still answers; after `sensitive` retrievals no `ume-rag:qemb:*`
+- P2 (with `ConnectionStrings:redis`): Redis down → still answers; after `sensitive` retrievals no `kalla:qemb:*`
   key exists, after `internal` ones it does.
 - Telemetry scan: marker query never appears in captured logs, traces, metrics, problem bodies or cache keys.
 
@@ -1164,8 +1164,8 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - `verify.yml` **evaluation-smoke** (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
   embedding quality. The smoke collection's own `coverageMaxDistance` is 0.85 (FakeGateway distances, §7); the
-  evaluator == API contract test (§16.3) runs over the smoke set; both live in `Ume.Rag.Worker.Tests`, which hosts
-  rag-api too. Only the smoke itself carries the `EvaluationSmoke` trait and runs in that job; the contract test runs
+  evaluator == API contract test (§16.3) runs over the smoke set; both live in `Kalla.Worker.Tests`, which hosts
+  kalla-api too. Only the smoke itself carries the `EvaluationSmoke` trait and runs in that job; the contract test runs
   in the `backend` job.
 - `evaluation.yml` nightly (P1, before the pilot) on the test host with the pilot's real embedding model through the
   gateway (self-hosted runner, open item R1 in the register): the evaluation sets of every published collection plus

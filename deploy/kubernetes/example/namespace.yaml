@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ume-rag
+  name: kalla
   labels:
     # Every pod in the manifests meets the "restricted" Pod Security Standard.
     pod-security.kubernetes.io/enforce: restricted

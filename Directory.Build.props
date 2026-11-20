@@ -10,8 +10,9 @@
     <!-- Required for IDE0005 (unnecessary usings) to run on build; missing XML docs (CS1591) stay allowed. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <Authors>Umeå kommun</Authors>
-    <Product>Ume Rag</Product>
+    <Authors>Kim Vallén;Nichlas Löfdahl</Authors>
+    <Copyright>Copyright © 2026 Kim Vallén and Nichlas Löfdahl</Copyright>
+    <Product>Källa</Product>
     <!-- Local placeholder only; release.yml overrides -p:Version=X.Y.Z from the pushed git tag. -->
     <Version>0.0.0-local</Version>
     <ContainerImageTag>latest</ContainerImageTag>

@@ -139,7 +139,7 @@ def next_steps(outputs_path: str) -> None:
     print(
         f"""### Still needs a person (plans/identity/design.md §12.3)
 
-Applied: `ume-rag-admin` (appId `{outputs["adminAppId"]}`), `ume-rag-open-webui` (appId `{outputs["openWebUiAppId"]}`),
+Applied: `kalla-admin` (appId `{outputs["adminAppId"]}`), `kalla-open-webui` (appId `{outputs["openWebUiAppId"]}`),
 groups {", ".join(f"`{g['uniqueName']}` (`{g['id']}`)" for g in outputs["groups"])}.
 
 1. **Admin consent** for `openid profile email` on both registrations (an Entra administrator):
@@ -157,9 +157,9 @@ groups {", ".join(f"`{g['uniqueName']}` (`{g['id']}`)" for g in outputs["groups"
             f"`{v}` {k}" for k, v in roles.items())}).
 3. **Client secrets**, one per registration, by an operator; never in this workflow (§12.2):
    `az ad app credential reset --id <appId> --append --display-name <deployment> --years 1`, then
-   `init-deployment.sh --oidc-client-secret-file` for `ume-rag-admin`, `OAUTH_CLIENT_SECRET` for Open WebUI.
+   `init-deployment.sh --oidc-client-secret-file` for `kalla-admin`, `OAUTH_CLIENT_SECRET` for Open WebUI.
 4. **Group membership** of the pilot groups: maintained by IT.
-5. **`departmentCodes` claim** on `ume-rag-admin` (the gateway's Entra step 4): claims-mapping policy by IT.
+5. **`departmentCodes` claim** on `kalla-admin` (the gateway's Entra step 4): claims-mapping policy by IT.
 """
     )
 

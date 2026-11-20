@@ -33,7 +33,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Status (2026-11-16, session 46):** S1's four points decided. Merged: #798 (S1 steps 1 and 4: `bootstrap.sh` takes
   its paths and inputs as variables, `create-secrets.sh` runs it; an existing Kubernetes installation keeps its
   secrets), #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide) and #800 (S1 steps
-  2 and 3 with S3: `deploy/compose.rag.yaml` and its overlays, Compose on `rag-bootstrap` and volumes, Open WebUI as a
+  2 and 3 with S3: `deploy/compose.rag.yaml` and its overlays, Compose on `kalla-bootstrap` and volumes, Open WebUI as a
   profile, the 193-line `init-deployment.sh`; the Portainer stack renders as before; booted in dry run 43941252174).
   Also merged: #806 (S9, the deploy part: Open WebUI out of the example's default profiles, nothing of it generated
   without the profile); the design follows the new files (`repo-and-deployment.md` §1, §3, §5 to §10, Decisions
@@ -41,10 +41,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
   form). **S1 is done.** #809 (S9's guides: the Portainer first deploy finishes without Open WebUI, *Adding Open
   WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Session 47: S4b and S4c in one pull
-  request (`rag-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
+  request (`kalla-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
   step, boot-tested from 0.5.1 in `release.yml`; `docs/portainer.md` has one *Upgrade* section; Decisions "Upgrades in
   one step"), and S9's admin UI part (#816, closes #807). S6 (one escrow set: `escrow-keys.sh` with the pepper, the blob keys, the passphrase, the database passwords, the conversation id keys, the Data Protection certificate and the CA, by `--env-file`, `--project` or directories, with `--restore`; repo-and-deployment §7.4). Open: S8 as each page is touched. S5 and S7 are proposals in the gateway's
-  repository (thekim1/llmgateway#108, #109).
+  repository (thekim1/fors#108, #109).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.
@@ -55,9 +55,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
 - **Do, in order** (each one PR or less):
   1. **API** (admin §5.9.1): `assistantIds` on `POST /api/clients`, `PUT /api/clients/{id}/assistants`, `slug` and
      `classification` on `ClientDto.assistants`, `GET /api/clients/connection` (`Admin:ApiPublicUrl`), `lastUsedAt` on
-     `KeyDto` and `ClientSummary`. Paths: `src/Ume.Rag.AdminApi/**`, `tests/Ume.Rag.AdminApi.Tests/**`,
+     `KeyDto` and `ClientSummary`. Paths: `src/Kalla.AdminApi/**`, `tests/Kalla.AdminApi.Tests/**`,
      `src/admin-ui/src/api/**`.
-  2. **Deploy:** rag-admin gets `Admin__ApiPublicUrl` from `UME_RAG_API_PUBLIC_URL` in the Compose, Kubernetes and
+  2. **Deploy:** kalla-admin gets `Admin__ApiPublicUrl` from `KALLA_API_PUBLIC_URL` in the Compose, Kubernetes and
      Portainer templates. Paths: `deploy/**`.
   3. **Add app and the drawer:** the step *What it may use*, the result *How to connect*, the drawer's checklist and
      *How to connect*, last use, **Connect a new app** on the assistant's *Who can use it*. Paths:
@@ -78,10 +78,10 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   use; Apps and keys, Models and Settings open from the side menu in one click; no settings member of steps 6–7 needs
   JSON; checked in the browser and by the Vitest and API tests of each step.
 - **Mind:** the open deploy-configuration proposal (#662, on its branch): its C4 makes Open WebUI's client deployment-managed (the wizard's Open WebUI block goes then), its C1
-  gives `UME_RAG_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
+  gives `KALLA_API_PUBLIC_URL` a default (step 2 follows it), its C5 and C10 add to the Models and Settings pages.
 - **Read:** admin §5.9, §5.9.1, §5.10, §5.8, §4.6 (V7–V9); identity §6.4; data-model §2.1.
 - **Status (2026-11-14):** steps 1–8 built: #668, #669, #671, #672, #673 (step 6, before 5), #675, #676 (step 7 for Chat,
-  Search and Processing's schedules) and step 8 in the PR that says so, with #670 (rag-api records a key's last use, which
+  Search and Processing's schedules) and step 8 in the PR that says so, with #670 (kalla-api records a key's last use, which
   nothing wrote before), and Personal data's flag rules as a table (the PR that says so). Left: Open WebUI's block and *Managed by the
   deployment* once M-17's C4 lands. The Role groups section came with C10 (#693); #677 was M-18 (#686).
 
@@ -106,14 +106,14 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   repository setting *Allow GitHub Actions to create and approve pull requests*), C1 (#683), C2 and C3 (#682, by the
   M-16 session), C4 (#684; the upgrade note for hand-made Open WebUI clients is in `docs/upgrade-guide.md`'s
   *Unreleased*), C5 (the PR that says so: `POST /api/embedding-profiles`, *Create profile* on *Models*, the Home card;
-  the seed and its five variables gone; review nits #688), C6 (the PR that says so: the one-shot `rag-openwebui-setup`
+  the seed and its five variables gone; review nits #688), C6 (the PR that says so: the one-shot `kalla-openwebui-setup`
   mints the feedback key with a session token signed with Open WebUI's secret, as the spike on #667 found;
-  `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `_PASSWORD_AUTH` and `openwebui-feedback-key.sh` gone; #689), C8 (#690: profile
-  `proxy`, `rag-proxy` nginx with the operator's certificate from `UME_RAG_PROXY_CERTS_DIR`, a host directory by the
+  `KALLA_OPENWEBUI_ADMIN_API_KEY`, `_PASSWORD_AUTH` and `openwebui-feedback-key.sh` gone; #689), C8 (#690: profile
+  `proxy`, `kalla-proxy` nginx with the operator's certificate from `KALLA_PROXY_CERTS_DIR`, a host directory by the
   user's choice; upstream re-resolution #692), C9 (#691: each service's ceiling is its credential key's residencies from
   the context, `OnPrem` before the first one; `Gateway:MaxResidency` gone), C10 (#693: `Settings.Identity.RoleGroups`,
   *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass), C7 (#727, gateway
-  v0.10.2: the gateway's migrations create the three credential keys from `UME_INTEGRATION_MANIFEST`, rag-bootstrap
-  copies them; preset hand-off thekim1/llmgateway#95), C12 (#731: `organisation_name` from the context). In review: C11
+  v0.10.2: the gateway's migrations create the three credential keys from `FORS_INTEGRATION_MANIFEST`, kalla-bootstrap
+  copies them; preset hand-off thekim1/fors#95), C12 (#731: `organisation_name` from the context). In review: C11
   (#740, replaces #732: `integration_api_url` from the context, key sent only over `https`). Left: C13. The M-16 session
   continues and announces each step on #667.

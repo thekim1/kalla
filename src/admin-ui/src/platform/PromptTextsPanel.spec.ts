@@ -39,7 +39,7 @@ async function open(put: () => Response = () => json({ value: {}, version: '4' }
     if (url === '/api/settings/chat/prompts') return Promise.resolve(json(sections))
     if (url === '/api/settings/chat' && init?.method === 'PUT') return Promise.resolve(put())
     if (url === '/api/settings/chat') {
-      return Promise.resolve(json({ value: { condenseModel: 'ume/chat-eu', prompts: { caveats: { general: { sv: '*Sparad text.*' } } } }, version: server.version }))
+      return Promise.resolve(json({ value: { condenseModel: 'fors/chat-eu', prompts: { caveats: { general: { sv: '*Sparad text.*' } } } }, version: server.version }))
     }
     return Promise.resolve(json([]))
   })
@@ -81,7 +81,7 @@ describe('Settings: Prompt texts (admin design §4.5, chat design §7.3)', () =>
     const body = putBody(fetch)
     expect(body.version).toBe('3')
     expect(body.value).toEqual({
-      condenseModel: 'ume/chat-eu',
+      condenseModel: 'fors/chat-eu',
       prompts: { rules: { off: 'Svara bara utifrån källorna.' }, caveats: { general: { sv: '*Sparad text.*' } } },
     })
     wrapper.unmount()
@@ -107,7 +107,7 @@ describe('Settings: Prompt texts (admin design §4.5, chat design §7.3)', () =>
     expect((area(wrapper, 'caveats.general.sv').element as HTMLTextAreaElement).value).toBe('*Allmän kunskap.*')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(putBody(fetch).value).toEqual({ condenseModel: 'ume/chat-eu' })
+    expect(putBody(fetch).value).toEqual({ condenseModel: 'fors/chat-eu' })
     wrapper.unmount()
   })
 

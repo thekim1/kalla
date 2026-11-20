@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: re-apply the host firewall every 15 minutes (allowed host names are resolved again)
+Description=Källa: re-apply the host firewall every 15 minutes (allowed host names are resolved again)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

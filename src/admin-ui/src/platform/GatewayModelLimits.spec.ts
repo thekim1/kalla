@@ -8,8 +8,8 @@ import PlatformResourceView from './PlatformResourceView.vue'
 import { resetOpenApiCache } from './schema'
 
 const models = [
-  { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], source: 'catalog', contextWindow: null, maxOutputTokens: null, available: true, limitsSource: 'manual' },
-  { name: 'ume/chat-se', kind: 'model', modelKind: 'chat', residencies: ['Se'], source: 'catalog', contextWindow: 200000, maxOutputTokens: 32000, available: true, limitsSource: 'catalog' },
+  { name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], source: 'catalog', contextWindow: null, maxOutputTokens: null, available: true, limitsSource: 'manual' },
+  { name: 'fors/chat-se', kind: 'model', modelKind: 'chat', residencies: ['Se'], source: 'catalog', contextWindow: 200000, maxOutputTokens: 32000, available: true, limitsSource: 'catalog' },
 ]
 const nullableInt = { type: ['null', 'integer', 'string'], minimum: 1, maximum: 10_000_000 }
 const doc = {
@@ -62,7 +62,7 @@ describe('Gateway models: a model\'s limits (Decisions "Answer length from the m
     expect(header).toContain(PLATFORM.fields.contextWindow)
     expect(header).toContain(PLATFORM.fields.maxOutputTokens)
 
-    await wrapper.findAll('tbody tr').find((r) => r.text().includes('ume/chat-eu'))!.trigger('click')
+    await wrapper.findAll('tbody tr').find((r) => r.text().includes('fors/chat-eu'))!.trigger('click')
     await flushPromises()
     const window = document.body.querySelector<HTMLInputElement>('input#platform-gateway-models-contextWindow')!
     const output = document.body.querySelector<HTMLInputElement>('input#platform-gateway-models-maxOutputTokens')!
@@ -76,7 +76,7 @@ describe('Gateway models: a model\'s limits (Decisions "Answer length from the m
     await flushPromises()
 
     const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')!
-    expect(put[0]).toBe('/api/gateway/models/ume%2Fchat-eu')
+    expect(put[0]).toBe('/api/gateway/models/fors%2Fchat-eu')
     expect(JSON.parse(String(put[1]!.body))).toEqual({ contextWindow: 128000, maxOutputTokens: 16384 })
     wrapper.unmount()
   })
@@ -87,7 +87,7 @@ describe('Gateway models: limits the gateway sends (admin design §4.10, #606)',
     const { fetch, wrapper } = mountModels(() => undefined)
     await flushPromises()
 
-    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('ume/chat-se'))!
+    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('fors/chat-se'))!
     expect(row.text()).toContain(PLATFORM.gatewayModels.limitsSources.catalog)
     await row.trigger('click')
     await flushPromises()
@@ -112,7 +112,7 @@ describe('Gateway models: limits the gateway sends (admin design §4.10, #606)',
 
     // The table has its heading, and a manual row's source reads as plain "Manual", not an instruction.
     expect(wrapper.get('[data-test=list-title]').text()).toBe('The AI gateway’s models')
-    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('ume/chat-eu'))!
+    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('fors/chat-eu'))!
     expect(row.text()).toContain('Manual')
     expect(row.text()).not.toContain('Set here')
     await row.trigger('click')
@@ -129,7 +129,7 @@ describe('Gateway models: limits the gateway sends (admin design §4.10, #606)',
       init?.method === 'PUT' ? json({ status: 400, code: 'platform_rule', params: { constraint: 'limits_from_gateway' } }, 400) : undefined)
     await flushPromises()
 
-    await wrapper.findAll('tbody tr').find((r) => r.text().includes('ume/chat-eu'))!.trigger('click')
+    await wrapper.findAll('tbody tr').find((r) => r.text().includes('fors/chat-eu'))!.trigger('click')
     await flushPromises()
     document.body.querySelector<HTMLFormElement>('form#platform-gateway-models')!.dispatchEvent(new Event('submit'))
     await flushPromises()

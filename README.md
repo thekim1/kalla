@@ -1,12 +1,12 @@
-# Ume.Rag
+# Källa
 
-RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top of the team's LLM gateway
-([thekim1/llmgateway](https://github.com/thekim1/llmgateway)), a Python Docling parser and PostgreSQL with pgvector,
+RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top of Fors, the team's LLM gateway
+([thekim1/fors](https://github.com/thekim1/fors)), a Python Docling parser and PostgreSQL with pgvector,
 orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGENTS.md`](AGENTS.md) and
 [`HANDOVER.md`](HANDOVER.md).
 
 **Status: P1 (pilot), built and released; the live block is ahead.** The last release is
-[`v0.8.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.8.0) (2026-11-19), on the gateway's `v0.11.0`;
+[`v0.8.0`](https://github.com/thekim1/kalla/releases/tag/v0.8.0) (2026-11-19), on the gateway's `v0.11.0`;
 [`CHANGELOG.md`](CHANGELOG.md) has every release. P1 was built on FakeGateway, fixtures and the dev Keycloak first; the
 live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold set, the pilot member, the test host)
 come as one block at the end. Built:
@@ -33,25 +33,25 @@ The plan ahead: [`plans/roadmap.md`](plans/roadmap.md). Overview for stakeholder
 ## Build and test
 
 ```bash
-dotnet build UmeRag.slnx -c Release --nologo
-dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+dotnet build Kalla.slnx -c Release --nologo
+dotnet test --solution Kalla.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
 ```
 
 `--filter-not-trait` skips tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does. The integration
-tests start the pinned pgvector image with Testcontainers, so Docker must be running. `UME_RAG_TEST_POSTGRES_IMAGE`
-runs them against another image (CI: the built `ume-rag/postgres`).
+tests start the pinned pgvector image with Testcontainers, so Docker must be running. `KALLA_TEST_POSTGRES_IMAGE`
+runs them against another image (CI: the built `kalla/postgres`).
 
 The container tests skip unless their image is named. Build the images locally (Testcontainers wants a dot in a local
 registry name): the worker's tests use ClamAV and the renderer, the contract tests the parser.
 
 ```bash
-docker build -t ume-rag.local/clamav:dev images/clamav
-docker build -t ume-rag.local/renderer:dev images/renderer
-UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:dev \
-  dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build
-docker build -t ume-rag.local/parser:ci src/parser
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
-  dotnet test --project tests/Ume.Rag.ContractTests -c Release --no-build
+docker build -t kalla.local/clamav:dev images/clamav
+docker build -t kalla.local/renderer:dev images/renderer
+KALLA_TEST_CLAMAV_IMAGE=kalla.local/clamav:dev KALLA_TEST_RENDERER_IMAGE=kalla.local/renderer:dev \
+  dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build
+docker build -t kalla.local/parser:ci src/parser
+KALLA_TEST_PARSER_IMAGE=kalla.local/parser:ci \
+  dotnet test --project tests/Kalla.ContractTests -c Release --no-build
 ```
 
 The pre-commit hook runs the admin UI lint and the parser's ruff check on staged changes. Enable it once per clone:
@@ -63,7 +63,7 @@ git config core.hooksPath .githooks
 ## Run locally
 
 ```bash
-aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
+aspire run      # or: dotnet run --project src/Kalla.AppHost
 ```
 
 The Aspire dashboard opens at `https://localhost:17470`. The AppHost starts postgres (stock pgvector image), keycloak,
@@ -74,26 +74,26 @@ worker, adminapi, the admin UI (`https://localhost:5174`) and Open WebUI (`http:
 them as AppHost user secrets:
 
 ```bash
-dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
+dotnet user-secrets --project src/Kalla.AppHost set Parser:Mode off
 ```
 
 To run against the interim gateway instead of FakeGateway, see [`docs/p1a-local-run.md`](docs/p1a-local-run.md).
 Addresses and keys go only in user secrets or secret files, never in the repository.
 
-On Linux or WSL, `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj` runs the same stack in the
+On Linux or WSL, `aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj` runs the same stack in the
 background (`aspire describe`, `aspire logs <resource>`, `aspire stop`); `Seed__Enabled=false` in the environment starts
 it without demo data.
 
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
-against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
+against `FORS_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 ## Docs
 
 - [`docs/local-development.md`](docs/local-development.md): the dev stack in detail and the start scripts.
 - [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
-- [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Ume.Rag on one host with Docker Compose, the short path.
+- [`docs/compose-quick-start.md`](docs/compose-quick-start.md): the gateway and Källa on one host with Docker Compose, the short path.
 - [`docs/production-setup.md`](docs/production-setup.md): the Compose reference: host sizing, `init-deployment.sh`, sign-in, backups, Open WebUI.
-- [`docs/portainer.md`](docs/portainer.md): the gateway and Ume.Rag as one Portainer stack, a first deploy and each upgrade.
+- [`docs/portainer.md`](docs/portainer.md): the gateway and Källa as one Portainer stack, a first deploy and each upgrade.
 - [`docs/kubernetes.md`](docs/kubernetes.md): the same services as Kustomize manifests.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
 - [`docs/network-and-ports.md`](docs/network-and-ports.md): listeners, outbound destinations and firewall/proxy rules per setup.
@@ -136,7 +136,7 @@ deployment, when every younger pin is reviewed (Decisions table, "7-day rule in 
 
 ## Licence
 
-Copyright © 2026 Umeå kommun. Licensed under the European Union Public Licence v. 1.2 (EUPL-1.2), see
-[`LICENSE`](LICENSE). The EUPL is published in every official EU language, Swedish included, and each version is
-equally valid (<https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12>). Third-party components
-keep their own licences.
+Copyright © 2026 Kim Vallén and Nichlas Löfdahl. Licensed under the Apache License, Version 2.0 (Apache-2.0), see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Källa is built by two private developers for Swedish municipalities; the
+examples use Umeå kommun, where we work by day. Releases up to and including 0.8.0 (as Ume.Rag) were published under the
+European Union Public Licence v. 1.2 (EUPL-1.2). Third-party components keep their own licences.

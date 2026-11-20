@@ -5,7 +5,7 @@ them as root after `deploy/init-deployment.sh` and, with `compose.hardened.yaml`
 `docker compose up`:
 
 ```sh
-sudo deploy/host/install.sh            # reads UME_RAG_HOST_MEMORY from deploy/.env
+sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from deploy/.env
 systemctl list-timers 'rag-*'
 ```
 
@@ -17,13 +17,13 @@ writes the rendered units (CI runs `systemd-analyze verify` on them).
 
 | Unit | What it does | When |
 |---|---|---|
-| `rag-ingestion.slice` | Caps the ingestion zone (rag-worker, rag-parser, rag-clamav, rag-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
+| `rag-ingestion.slice` | Caps the ingestion zone (kalla-worker, kalla-parser, kalla-clamav, kalla-renderer): `CPUQuota=500%`, `CPUWeight=25`, `MemoryMax=7G`; a drop-in sets `MemoryMax=11G` on a 24 GB host | Loaded when the containers start (`cgroup_parent` in `compose.hardened.yaml`) |
 | `rag-firewall.service` + `.timer` | `docker-user-firewall.sh`: egress per Compose network in `DOCKER-USER`, no new connections from the networks to the host | After Docker starts or restarts, then every 15 minutes (host names resolved again) |
-| `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the rag-postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
+| `rag-backup.service` + `.timer` | `backup-postgres.sh --type auto`: pgBackRest backup inside the kalla-postgres container, full on Sundays (or when the newest full is 7 days old), differential otherwise; expiry follows | Daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.service` + `.timer` | `backup-postgres.sh --status-only`: backup age and WAL archive age from `pgbackrest info` and `pg_stat_archiver` | Every 2 minutes |
 | `rag-upload-backup.service` + `.timer` | `backup-uploads.sh`: new files below `uploads/` to the upload copy, never overwriting | Every 10 minutes (not enabled with an S3 backup target) |
-| `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `ume-rag.restart-unhealthy=true` that are unhealthy (rag-clamav and rag-renderer, with `compose.hardened.yaml`) | Every minute |
-| `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates in the `rag-certs` volume; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
+| `rag-restart-unhealthy.service` + `.timer` | `restart-unhealthy.sh`: `docker restart` of containers labelled `kalla.restart-unhealthy=true` that are unhealthy (kalla-clamav and kalla-renderer, with `compose.hardened.yaml`) | Every minute |
+| `rag-cert-expiry.service` + `.timer` | `cert-expiry.sh`: the internal CA and the service certificates in the `kalla-certs` volume; the service fails, naming the certificate and how to renew it, while one expires within 60 days | Daily at 07:00 (up to 15 minutes later), caught up after downtime |
 
 ## Requirements
 
@@ -31,7 +31,7 @@ With `compose.hardened.yaml`:
 
 - **cgroup v2 with Docker's systemd cgroup driver** (`docker info` shows `Cgroup Driver: systemd`, `Cgroup Version: 2`;
   to-verify #90). Without it the slice caps nothing. Where the slice is not installed (a developer machine), set
-  `UME_RAG_INGESTION_SLICE=` (empty) in `deploy/.env`: `init-deployment.sh --set UME_RAG_INGESTION_SLICE=`, which a
+  `KALLA_INGESTION_SLICE=` (empty) in `deploy/.env`: `init-deployment.sh --set KALLA_INGESTION_SLICE=`, which a
   re-run keeps.
 - **Docker's iptables integration** (the default), so `DOCKER-USER` exists. The firewall uses the `iptables` that
   Docker uses (`iptables-nft` on current distributions). IPv4 only: the Compose networks have no IPv6.
@@ -48,18 +48,18 @@ sudo iptables -S UME-RAG-EGRESS
 ```
 
 A container sends all its egress through the network that holds its default route. Compose pins it with
-`gw_priority` (rag-api and rag-admin: `llm`; rag-worker: `rag-crawl`), so `llm` allows the gateway, the OIDC authority and the OTLP endpoint, `rag-edge` Open WebUI's OIDC provider, and `rag-crawl` the
-gateway, the OTLP endpoint, `UME_RAG_CRAWL_ALLOW` and the public Internet. The allow-lists name hosts, resolved when
+`gw_priority` (kalla-api and kalla-admin: `llm`; kalla-worker: `kalla-crawl`), so `llm` allows the gateway, the OIDC authority and the OTLP endpoint, `kalla-edge` Open WebUI's OIDC provider, and `kalla-crawl` the
+gateway, the OTLP endpoint, `KALLA_CRAWL_ALLOW` and the public Internet. The allow-lists name hosts, resolved when
 the script runs: a CDN-hosted name (`login.microsoftonline.com`, `database.clamav.net`) can move to addresses the rules
 do not have yet, until the next run. Where IT provides an egress proxy, send freshclam through it
 (`init-deployment.sh --freshclam-proxy`). `--allow NETWORK=HOST[:PORT]` adds a destination, such as
-`llm=<gateway admin host>:9443` for rag-admin's cost and budget read-back (the gateway's Integration API, at the address
+`llm=<gateway admin host>:9443` for kalla-admin's cost and budget read-back (the gateway's Integration API, at the address
 its context names). `--remove` takes the rules
 out.
 
 ## Metrics and alerts (§7.4 rule 5)
 
-The backup scripts and `cert-expiry.sh` write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`,
+The backup scripts and `cert-expiry.sh` write Prometheus text files to `/var/lib/kalla/` (`backup.prom`,
 `upload-backup.prom`, `certs.prom`); point node_exporter's textfile collector (or the collector that reads them,
 to-verify §14) at that directory. Proposed alerts:
 

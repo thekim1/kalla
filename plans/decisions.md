@@ -1,6 +1,6 @@
 # Decisions
 
-The decisions in force for Ume.Rag: one entry per topic, in the present tense. Every entry binds and wins over the
+The decisions in force for Källa: one entry per topic, in the present tense. Every entry binds and wins over the
 design documents; where a design says otherwise, the design is a bug to report. Cite an entry by its name
 (`Decisions "Cost attribution"`); an older name is on the entry's *Also* line. *From* names the rows of the dated
 history, [`archive/decisions-log.md`](archive/decisions-log.md), that the entry was written from (on 2026-11-08, from
@@ -16,14 +16,22 @@ off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
 ### Product names
 
 The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the LLM gateway is **Fors**; the working
-names Ume.Rag and Ume.LlmGateway go. The rename of code, images, documents and deployment names is stream b's work
-(the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
+names Ume.Rag and Ume.LlmGateway are gone. Code, images, documents and deployment names follow, with an upgrade path for
+existing deployments ("One deployment bootstrap"): `Kalla.*` projects, `KALLA_*` variables (the gateway's `FORS_*`),
+`kalla-*` services, volumes and networks (copied once from the `rag-*` volumes), `kalla_*` database roles,
+`ghcr.io/thekim1/kalla/*` images and the repository thekim1/kalla. Generic `rag` names that describe a function stay:
+`rag.*` metrics, the `rag-*` roles and role groups, and the credential keys `rag-api`, `rag-admin` and `rag-worker`.
 The names on the wire change too, in both products in one step (no backward compatibility before production): Källa's
-own Chat API members `ume.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
-gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts become `x-fors-*`, `/v1/fors/context` and
-`fors.*`; the two renames land together. The rename comes before `v0.9.0`. This answers N1.
+own Chat API members `ume.*` became `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
+gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts became `x-fors-*`, `/v1/fors/context` and
+`fors.*`; Källa needs Fors 0.12 or later. Keys issued before the rename (`ume-rag-sk-`, `ume-rag-pk-`) stay valid; new
+ones are `kalla-sk-` and `kalla-pk-`. The names that are part of stored ciphertext keep the old name, as format
+constants nobody sees (`StoredFormatNames`: the Data Protection application name `Ume.Rag`, its purposes `Ume.Rag.*`
+and the blob key wrap's `ume-rag-wrap:`), so what an installation has encrypted stays readable (thekim1/fors#116).
+The public host-name defaults (`rag.`, `rag-admin.`, `chat.<domain>`) and the host units (`rag-*.service`,
+`rag-ingestion.slice`) stay too. The rename comes before `v0.9.0`. This answers N1.
 
-*From:* decided by user, 2026-11-20.
+*From:* decided by user, 2026-11-20 (#894, #899: deployment names, the key prefixes and how far `kalla-*` goes).
 
 ### First version
 
@@ -36,7 +44,7 @@ department. Detail: `roadmap.md` "Done", "Now".
 
 Before the umea.se pilot, a **test chatbot** runs on the latest release and the gateway: DoIT's support documents
 uploaded into one knowledge base, one assistant, used by a small test group in Open WebUI. The user deploys the gateway
-and Ume.Rag by hand. The umea.se pilot (full crawl, gold set, go-live gate) follows it. The case plan is
+and Källa by hand. The umea.se pilot (full crawl, gold set, go-live gate) follows it. The case plan is
 `cases/support-assistant/` (non-binding); tickets in it are anonymised or invented until G1 allows real ones. Detail:
 `roadmap.md` "Now".
 
@@ -172,10 +180,11 @@ Detail: `admin/design.md` §1 (row 3).
 
 ### Licence
 
-Ume.Rag is EUPL-1.2; the repository stays private until then. It takes effect on publication or distribution, which waits for the municipality's approval (the
-third-party notices are in `NOTICE`); the gateway is to get the same licence. Detail: the root `README.md` "Licence"; `NOTICE`.
+Källa is Apache-2.0, copyright Kim Vallén and Nichlas Löfdahl, as Fors is; releases up to and including 0.8.0 (as
+Ume.Rag) were published under EUPL-1.2. The third-party notices are in `NOTICE`. Detail: the root `README.md` "Licence";
+`NOTICE`.
 
-*From:* log row 82; decided by user, 2026-10-31.
+*From:* log row 82; decided by user, 2026-10-31; changed to Apache-2.0 by user, 2026-11-20 (#899).
 
 ### Low CPU during development
 
@@ -188,7 +197,7 @@ re-sets before go-live. Detail: `platform/repo-and-deployment.md` §6.2.
 
 ### Postgres hosting
 
-Ume.Rag has its own Postgres, never the gateway's: the digest-pinned stock pgvector image plus pgBackRest (WAL archiving,
+Källa has its own Postgres, never the gateway's: the digest-pinned stock pgvector image plus pgBackRest (WAL archiving,
 point-in-time restore), or managed Postgres with pgvector ≥ 0.8, which is not planned for now. CI's `backend` job builds the image and runs
 integration tests on it. Blobs are write-once and long-lived keys escrowed. A standby (D1) is required before
 production beyond the pilot. Detail: `platform/repo-and-deployment.md` §5.2, §7.4, §8.2.
@@ -220,11 +229,11 @@ gets its own VM. Detail: `platform/repo-and-deployment.md` §6.4; performance pa
 
 ### Pilot containers
 
-Seven long-running containers (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer`,
-`rag-postgres`) and the one-shots `rag-bootstrap` and `rag-migrate`; no Redis until the first multi-host deployment, and then
-Ume.Rag's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
+Seven long-running containers (`kalla-api`, `kalla-admin`, `kalla-worker`, `kalla-parser`, `kalla-clamav`, `kalla-renderer`,
+`kalla-postgres`) and the one-shots `kalla-bootstrap` and `kalla-migrate`; no Redis until the first multi-host deployment, and then
+Källa's own, never the gateway's. Admin sessions are in Postgres; rate limits and the query-embedding cache stay in
 process behind `IRateLimitStore`/`ISharedCache`; pgBackRest runs inside the Postgres image, not as a sidecar. Merging
-containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. `rag-clamav`
+containers (api with admin, ClamAV with the parser, the worker with the api) was considered and rejected. `kalla-clamav`
 runs only where the malware scan is on (Decisions "Malware scan optional"). Detail:
 `docs/production-setup.md`; `platform/repo-and-deployment.md` §6.2.
 
@@ -232,7 +241,7 @@ runs only where the malware scan is on (Decisions "Malware scan optional"). Deta
 
 ### Repo and deployment
 
-`Ume.Rag.Api` is one binary with roles; tests use `Ume.Rag.FakeGateway`. Production Compose has resource zones and
+`Kalla.Api` is one binary with roles; tests use `Kalla.FakeGateway`. Production Compose has resource zones and
 fixed networks with firewall egress rules; releases ship a digest-pinned bundle. Detail: `platform/repo-and-deployment.md` §3,
 §4.3, §6, §7.
 
@@ -241,46 +250,46 @@ fixed networks with firewall egress rules; releases ship a digest-pinned bundle.
 ### Deploy configuration
 
 A deployment sets only what a process can't start without: host names (on Portainer and Compose they default under
-one `UME_DOMAIN`), ports and binds, the crawler's private ranges (`Crawl:AllowedPrivateRanges` stays a deployment knob:
+one `FORS_DOMAIN`), ports and binds, the crawler's private ranges (`Crawl:AllowedPrivateRanges` stays a deployment knob:
 a security boundary), profiles, image pins and telemetry. The sign-in provider's address, the client ids and the
-client secrets, rag-admin's and Open WebUI's, are set in the setup wizard unless the deployment sets them (Decisions
+client secrets, kalla-admin's and Open WebUI's, are set in the setup wizard unless the deployment sets them (Decisions
 "Setup wizard"). The rest is set up automatically or comes from the gateway: the gateway
 credential keys from a gateway integration manifest in a shared stack (gateway G1, llmgateway#87; elsewhere a one-step
 integration in the gateway's admin, G2, #88); Open WebUI's client created by the deployment (key generated by
-`rag-bootstrap`, client registered by `rag-migrate`, found by its kind; shown as managed by the deployment); the admin test panel's `admin-console` client seeded by `rag-migrate` the same way (#712); the
+`kalla-bootstrap`, client registered by `kalla-migrate`, found by its kind; shown as managed by the deployment); the admin test panel's `admin-console` client seeded by `kalla-migrate` the same way (#712); the
 feedback import's address with the `openwebui` profile and a fixed 15-minute interval; the ClamAV mode from the
 `clamav` profile; the embedding profile created in the admin UI from the gateway's embedding models, its dimensions
 measured; the organisation's name and the Integration API from the gateway (G4 #89, G5 #90). The Portainer stack has
-an optional `proxy` profile: nginx with the operator's certificates, in Ume.Rag's template, for all five host names.
+an optional `proxy` profile: nginx with the operator's certificates, in Källa's template, for all five host names.
 Detail and order: `proposals/deploy-configuration.md`; work: `work/main.md` M-17.
 
-*From:* decided by user, 2026-11-13 (session 34, D1–D10); sign-in values to the setup wizard and `UME_DOMAIN`, decided
+*From:* decided by user, 2026-11-13 (session 34, D1–D10); sign-in values to the setup wizard and `FORS_DOMAIN`, decided
 by user, 2026-11-15.
 
 ### Setup wizard
 
-Sign-in is set up in the browser. While setup is open, rag-admin prints a one-time setup code on its standard output
+Sign-in is set up in the browser. While setup is open, kalla-admin prints a one-time setup code on its standard output
 (derived from a generated setup secret file and a nonce in the database, the same on every replica, valid one hour,
 never sent through the logger); the admin UI's `/setup` asks for it. Setup is open only before its first completion
 and after a re-open; a fault never opens it, and a deployment that declares an authority and a client secret counts as
 completed. Saving sign-in values needs a passed test sign-in with those values by a person who comes out as a platform
-admin. Afterwards rag-admin's and Open WebUI's sign-in provider, client and secret change only in setup mode, never
+admin. Afterwards kalla-admin's and Open WebUI's sign-in provider, client and secret change only in setup mode, never
 from an admin session; the deployer re-opens it by giving `Setup:Reopen` a new value, which is consumed when setup
 opens. A value the deployment sets wins and is shown locked (an empty value is unset). Wizard values are settings; the
-typed client secrets are stored encrypted with Data Protection and are write-only. rag-admin rebuilds its sign-in
+typed client secrets are stored encrypted with Data Protection and are write-only. kalla-admin rebuilds its sign-in
 options when the settings version differs at a sign-in; Open WebUI's start wrapper fetches its sign-in settings from
-rag-api and exits when they change. It covers Portainer, Compose and Kubernetes; the gateway's part follows in its own
+kalla-api and exits when they change. It covers Portainer, Compose and Kubernetes; the gateway's part follows in its own
 repository. The main session builds it, stream b's paths included (user, 2026-11-15). Detail:
 `identity/design.md` §19; `admin/design.md` §5.11; `proposals/setup-wizard.md`; work: `work/main.md` M-20.
 
-In the Portainer stack (stage 2, one typed value, `UME_DOMAIN`):
+In the Portainer stack (stage 2, one typed value, `FORS_DOMAIN`):
 
 - **The integration manifest is the stack file's default.** `deploy/portainer/build-stack.sh` rewrites one line of the
-  gateway's part, its bootstrap's `UME_INTEGRATION_MANIFEST`, to carry `deploy/portainer/integration-manifest.json` (no
+  gateway's part, its bootstrap's `FORS_INTEGRATION_MANIFEST`, to carry `deploy/portainer/integration-manifest.json` (no
   owner) as the default for an unset variable; a set value wins and an empty one provisions nothing. The rest of the
   gateway's part is copied unchanged, and the build stops when that line is not found.
-- **rag-admin's address of the gateway's admin** defaults to `https://<the gateway admin's host name>` (port 443, as
-  behind the TLS proxy) and is empty when the admin has no host name of its own; `UME_ADMIN_PUBLIC_URL` overrides it.
+- **kalla-admin's address of the gateway's admin** defaults to `https://<the gateway admin's host name>` (port 443, as
+  behind the TLS proxy) and is empty when the admin has no host name of its own; `FORS_ADMIN_PUBLIC_URL` overrides it.
 - **The release's boot test sets no sign-in value,** so Open WebUI starts without sign-in there. Open WebUI with OIDC
   sign-in is shown by the browser tests (`e2e.yml`) before a release.
 
@@ -293,7 +302,7 @@ An existing deployment moves to a new release in one step, from any release stil
 hand on one slot.
 
 - **The migration step stops what it must itself.** A migration that the previous version of a service can't run
-  beside declares the service roles it stops; `rag-migrate` holds those roles out of the schemas until a version that
+  beside declares the service roles it stops; `kalla-migrate` holds those roles out of the schemas until a version that
   contains the migration starts (data-model §10, *Service fences*). The upgrade guide still marks the release
   *Rolling update: no*: it means a short outage of those services, not a step for the operator.
 - **Two slots and Kubernetes** stop or scale down the old instances of such a release first (the grant is per role, so
@@ -303,7 +312,7 @@ hand on one slot.
   one upgrade section, not one per release; what a deployment from an older release must do by hand is a numbered
   step there, and steps for releases before `UPGRADE_FROM` are dropped.
 - **The joined Portainer stack sets what it knows:** the Integration API's address is the stack's own `adminapi` by
-  default (`build-stack.sh` rewrites the gateway's line as it does the manifest's), so `UME_INTEGRATION_API_URL` is
+  default (`build-stack.sh` rewrites the gateway's line as it does the manifest's), so `FORS_INTEGRATION_API_URL` is
   typed by nobody.
 
 *From:* main session, 2026-11-17 (session 47; the user asked for M-22's remaining points with the recommended choices),
@@ -312,15 +321,15 @@ hand on one slot.
 ### One deployment bootstrap
 
 Every deployment form gets its certificates, secrets and derived files from one script, `deploy/portainer/bootstrap.sh`
-(the `rag-bootstrap` service), and its services from one definition.
+(the `kalla-bootstrap` service), and its services from one definition.
 
-- **Files live in Docker volumes in Compose too:** `rag-certs`, `rag-secrets` and `rag-config`, as in the Portainer
+- **Files live in Docker volumes in Compose too:** `kalla-certs`, `kalla-secrets` and `kalla-config`, as in the Portainer
   stack. Host scripts (key escrow, backups, certificate checks) read them from the volumes; what an operator supplies
   as a file (the gateway's CA, PKI certificates, the TLS proxy's certificate) is a host path mounted read-only.
 - **`deploy/init-deployment.sh` writes only `deploy/.env`:** the domain, the gateway's address and where its keys are,
   the backup target and the optional parts. It generates no certificate or secret, and its `--help` is the option
   list.
-- **One Ume.Rag service file with the `rag-` names.** Compose runs it directly; `build-stack.sh` merges it with the
+- **One Källa service file with the `rag-` names.** Compose runs it directly; `build-stack.sh` merges it with the
   gateway's file for Portainer. What only a Compose host has (pgBackRest, the fixed subnets of the host firewall, the
   ingestion slice, rolling slots, the 24 GB sizes) is in overlay files. The Portainer stack's service, volume and
   variable names stay.
@@ -328,8 +337,8 @@ Every deployment form gets its certificates, secrets and derived files from one 
 - **The setup wizard is the same in every form** (Decisions "Setup wizard"): the bootstrap generates the setup
   secret, ends its log with the wizard's address, and takes the declared sign-in values from the same variables;
   `init-deployment.sh` asks for no sign-in value, except the provider's address where the host firewall overlay is on
-  (rag-admin reaches only the provider named there).
-- **Published ports bind `0.0.0.0` in every form** (rag-api, rag-admin and `rag-proxy`; Open WebUI `127.0.0.1`, for a
+  (kalla-admin reaches only the provider named there).
+- **Published ports bind `0.0.0.0` in every form** (kalla-api, kalla-admin and `kalla-proxy`; Open WebUI `127.0.0.1`, for a
   proxy on the host); the `*_BIND` variables change one.
 - **Host hardening is an optional step on a Compose host** (`compose.hardened.yaml` with `deploy/host/install.sh`: the
   egress firewall, the ingestion slice, the renderer's seccomp profile). A first install runs without it, with the
@@ -350,12 +359,12 @@ session on the user's "do what you think is best", 2026-11-16).
 
 ### Host names
 
-Each service keeps a host name of its own: the gateway API, the gateway's admin, rag-api, Ume.Rag's admin and Open
+Each service keeps a host name of its own: the gateway API, the gateway's admin, kalla-api, Källa's admin and Open
 WebUI. They are not served under paths of one shared name. Separate names keep the two admin consoles and the APIs
 apart as browser origins (their session cookies and scripts do not reach each other), and need no change in either
 product.
 
-The guides ask for as little DNS as that allows: every name is one label under `UME_DOMAIN`, so one wildcard record
+The guides ask for as little DNS as that allows: every name is one label under `FORS_DOMAIN`, so one wildcard record
 and one wildcard certificate for a sub-domain of the installation's own cover them all. A test host needs only its
 own name: without a proxy the services share it on their ports (the Compose quick start).
 
@@ -370,15 +379,15 @@ each UI and admin API, in both products, with the shared origin decided explicit
 A release may add, move or retire deployment variables without stopping a deployment that upgrades from the guides.
 
 - **A new deployment variable** has a default in the deploy files or is generated by the bootstrap
-  (`rag-bootstrap`, in every deployment form). A value the platform can start without is a setting instead (Decisions
+  (`kalla-bootstrap`, in every deployment form). A value the platform can start without is a setting instead (Decisions
   "Settings rule"): with a default, or, when a person must choose, the feature that needs it stays off and Home tells
   platform admins until it is set (as the embedding profile). A variable that is required and has no default needs the
   user's approval; the bootstrap then stops with one line that names it, and the upgrade guide has a numbered step.
 - **A variable that becomes a setting:** from production on, the variable stays readable as the deployment's value,
   which wins and is shown locked (as Decisions "Setup wizard"). Before production it may go in one step (Decisions "No
   backward compatibility before production").
-- **A retired variable** (no longer read) goes on `rag-bootstrap`'s retired list in the change that stops reading it,
-  with a few words on what replaced it. While a stack still sets one, `rag-bootstrap` names it on its checklist and
+- **A retired variable** (no longer read) goes on `kalla-bootstrap`'s retired list in the change that stops reading it,
+  with a few words on what replaced it. While a stack still sets one, `kalla-bootstrap` names it on its checklist and
   Home shows platform admins a deployment notice (`GET /api/overview`, `deploymentNotices`, code `retired_variables`);
   nothing stops. The upgrade guide lists it. Compose runs the Portainer stack's service file, so it has the same
   list and notice, and `init-deployment.sh` refuses to write a retired variable into `deploy/.env`; Kubernetes'
@@ -392,7 +401,7 @@ P2. Detail: `admin/design.md` §5.5.1; `deploy/portainer/bootstrap.sh`.
 ### .NET runtime settings
 
 Every .NET container sets `DOTNET_GCHeapHardLimitPercent=0x4B` (hexadecimal). `AuditLog.Service` is the OTel service
-name; the query-embedding step is `x-ume-step: query-embed`. Detail: `platform/repo-and-deployment.md` §6.2;
+name; the query-embedding step is `x-fors-step: query-embed`. Detail: `platform/repo-and-deployment.md` §6.2;
 `platform/data-model.md` §2.4.
 
 *From:* log row 70; decided by main session, 2026-10-30.
@@ -443,15 +452,15 @@ ticked on a green run. Detail: `platform/repo-and-deployment.md`
 ### Cost attribution
 
 Every assistant and every knowledge base runs on an **assigned gateway key** of its own department, chosen by id from
-the department's assigned keys; Ume.Rag stores the key's id, never a secret. Every call of a chat turn (condense, query
+the department's assigned keys; Källa stores the key's id, never a secret. Every call of a chat turn (condense, query
 embedding, rerank, answer, follow-ups) and the admin's test panel run as the assistant's key; indexing, re-embedding and
 evaluation of a knowledge base run as the knowledge base's key. The gateway charges, limits and budgets each call as
-that key, its team and department, and is the record of cost: Ume.Rag takes the cost from `x-ume-cost-usd`, from the
-stream comment it asks for with `x-ume-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
-finer split per step, joined on `x-ume-run-id` and `x-ume-step`. A per-assistant budget is the key's budget in the
-gateway, shown read-only in Ume.Rag; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
+that key, its team and department, and is the record of cost: Källa takes the cost from `x-fors-cost-usd`, from the
+stream comment it asks for with `x-fors-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
+finer split per step, joined on `x-fors-run-id` and `x-fors-step`. A per-assistant budget is the key's budget in the
+gateway, shown read-only in Källa; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
 the service's credential key and is charged to the integration's owner team; once the gateway's `features` contain
-`act-as-key`, publishing an assistant needs a key. Ume.Rag's own record (stage 1) is one row per day, object, step
+`act-as-key`, publishing an assistant needs a key. Källa's own record (stage 1) is one row per day, object, step
 (and client, for an assistant) in `chat."AssistantDailyUsage"` and `content."CollectionDailyUsage"`; a call without a
 gateway cost is priced from the model mirror and kept apart as an estimate, never mixed into the gateway's figure; a
 row belongs to the object's department at the time of the call. Calls made for no assistant or knowledge base
@@ -464,38 +473,38 @@ needs no hard budget (Q3). Detail: `platform/cost-attribution.md` §4–§6; `ga
 
 ### Identity model
 
-Ume.Rag copies the gateway's identity model (OIDC code + PKCE BFF, claims, `UME_RAG_OIDC_*` keys, key and Data API patterns, security events) with its own clients and secrets (`ume-rag-admin`). Member groups are group claim values; if they cannot be read, scope narrows to claims only, never fails open. Policy denials above the ceiling or outside the audience answer 404. The audit actor is `oid` on Entra, else `sub`. Detail: `identity/design.md` §1.1, §1.3–§1.6, §2.6, §4.3.
+Källa copies the gateway's identity model (OIDC code + PKCE BFF, claims, `KALLA_OIDC_*` keys, key and Data API patterns, security events) with its own clients and secrets (`kalla-admin`). Member groups are group claim values; if they cannot be read, scope narrows to claims only, never fails open. Policy denials above the ceiling or outside the audience answer 404. The audit actor is `oid` on Entra, else `sub`. Detail: `identity/design.md` §1.1, §1.3–§1.6, §2.6, §4.3.
 
 *From:* log rows 29, 32, 55; decided by user, 2026-10-30.
 
 ### Role groups as a setting
 
-Which IdP groups grant which Ume.Rag role is `Settings.Identity.RoleGroups`, edited by platform admins and read at
-each sign-in. `Oidc:RoleGroups:rag-platform-admin` (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`) stays as a break-glass for
+Which IdP groups grant which Källa role is `Settings.Identity.RoleGroups`, edited by platform admins and read at
+each sign-in. `Oidc:RoleGroups:rag-platform-admin` (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`) stays as a break-glass for
 the first platform admin and is merged with the setting, never replaced; the other four variables go. Roles in the
 token's role claim still count. Built in M-17 C10 (#693).
 
 *From:* decided by user, 2026-11-13 (deploy-configuration D2).
 
-### Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later
+### Identity providers: AD and Entra ID through Keycloak, Källa standalone later
 
 In production AD and Entra ID must both work, brokered through Keycloak (Entra ID as an OIDC provider, AD by LDAP federation or AD FS) and directly through `Oidc:*`; the brokered route is tested with a stand-in upstream provider. Entra ID comes in P2 as configuration, not code, with the Graph group lookup; On-Behalf-Of is designed now and
-built later. Ume.Rag's realm part needs only the `departmentCodes` and `teamCodes` claims from the base realm, so Ume.Rag can run standalone. Detail: `identity/design.md` §11.2, §11.3.
+built later. Källa's realm part needs only the `departmentCodes` and `teamCodes` claims from the base realm, so Källa can run standalone. Detail: `identity/design.md` §11.2, §11.3.
 
 *From:* log rows 21, 55, 71, 72; decided by user, 2026-11-05.
 
 ### P1 pilot sign-in
 
-The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `ume` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Ume.Rag delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
+The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `fors` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Källa delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
 Keycloak's database is `keycloak` in the gateway's Postgres, under its backups; each repo keeps its own dev Keycloak in
-its AppHost. `ume-rag-api` is an audience only. Detail: `identity/design.md` §11.2.
+its AppHost. `kalla-api` is an audience only. Detail: `identity/design.md` §11.2.
 
 *From:* log rows 71, 73, 74, 83; decided by user, 2026-11-06.
 
 ### Shared sign-in with the gateway
 
-One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Ume.Rag's role groups keep the `rag-` names. The two
-products are separate Compose projects with the same layout, and Ume.Rag's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
+One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Källa's role groups keep the `rag-` names. The two
+products are separate Compose projects with the same layout, and Källa's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
 
 *From:* log rows 74, 118; decided by user, 2026-11-07.
 
@@ -503,38 +512,38 @@ products are separate Compose projects with the same layout, and Ume.Rag's ports
 
 ### Key service
 
-Master keys are protected files (file key provider) while no `sensitive` data exists; Azure Key Vault is the target, adopted later with a re-wrap. Long-lived keys are escrowed offline. `public` blobs are not encrypted. Client keys are `ume-rag-sk-…`
-(secret) and `ume-rag-pk-…` (public). Detail: `postponed-decisions.md` K1.
+Master keys are protected files (file key provider) while no `sensitive` data exists; Azure Key Vault is the target, adopted later with a re-wrap. Long-lived keys are escrowed offline. `public` blobs are not encrypted. Client keys are `kalla-sk-…`
+(secret) and `kalla-pk-…` (public). Detail: `postponed-decisions.md` K1.
 
 *From:* log rows 9, 30, 55; decided by user, 2026-10-30.
 
 ### Gateway keys
 
-Each Ume.Rag service (api, admin, worker) holds **one credential key** of the gateway integration *Ume.Rag*, as a secret
+Each Källa service (api, admin, worker) holds **one credential key** of the gateway integration *Källa*, as a secret
 file, with `AllowedIpRanges` and `RequireMaxResidency`. A call for an assistant or a knowledge base sends
-`x-ume-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
+`x-fors-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
 usage record); the answer's echo of the header is checked, and a missing or different echo fails closed
-(`Gateway:RequireDelegationEcho`). Every call still sends `x-ume-max-residency` from the data's level, and the worker
+(`Gateway:RequireDelegationEcho`). Every call still sends `x-fors-max-residency` from the data's level, and the worker
 never sends `External`. The gateway bounds an acted request by the credential key too: `RequireMaxResidency` applies
 when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
-user, 2026-11-12, #580; built in thekim1/llmgateway#84, feature `credential-residencies`). So each service's
+user, 2026-11-12, #580; built in thekim1/fors#84, feature `credential-residencies`). So each service's
 credential key is capped at the highest level it serves (the worker's at `Eu`). An assigned key cannot
-authenticate by itself, so nothing per assistant is copied, stored or rotated in Ume.Rag. Each setting has one owner:
+authenticate by itself, so nothing per assistant is copied, stored or rotated in Källa. Each setting has one owner:
 departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,
 rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
-retrieval and answer settings, who may call an assistant and the content's level are Ume.Rag's. Configuration comes
+retrieval and answer settings, who may call an assistant and the content's level are Källa's. Configuration comes
 from the gateway's data plane with the credential key, not the Data API: the gateway's features, the assigned keys and
-the models with their limits and prices from `GET /v1/ume/context` and `GET /v1/models`, polled with `If-None-Match`;
-departments and teams from the same context, where `rag-admin`'s credential key (and only it) holds the scope
+the models with their limits and prices from `GET /v1/fors/context` and `GET /v1/models`, polled with `If-None-Match`;
+departments and teams from the same context, where `kalla-admin`'s credential key (and only it) holds the scope
 `organisation.read` (every department and team, inactive ones included; feature `organisation`), so the Data API key
 goes. Department member groups come from the same context (`member_groups` per department, feature `member-groups`,
-gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
+gateway v0.10.0) and are never edited in Källa (the user chose to wait for the gateway rather than build another
 source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
 release tag), which changes by addition only. Each service reads the gateway's `features` from its own
-`/v1/ume/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
+`/v1/fors/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
 key of its own department: publishing or restoring one without a key is refused, and so is a save that clears the key of a
 published assistant (V39, `gateway_key_required`); to drop its key, an admin unpublishes it or picks another key, so it never
-runs on rag-api's credential key outside its department's budget (confirmed by user, 2026-11-13). Detail:
+runs on kalla-api's credential key outside its department's budget (confirmed by user, 2026-11-13). Detail:
 `gateway-changes/design.md` §5, §13.4; `identity/design.md` §4.7; `admin/design.md` §4.10.
 
 *From:* log rows 33, 55, 66, 120; decided by user, 2026-11-11 (#580); the organisation from the context and member
@@ -542,7 +551,7 @@ groups by hand until the gateway has them, decided by user, 2026-11-12 (#580); V
 
 ### Gateway releases
 
-The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-ume-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/ume/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-ume-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Ume.Rag tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
+The gateway never depends on Källa; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-fors-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-fors-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Källa tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Källa retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
 
 *From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06; the integration phases decided by user, 2026-11-11
 (#580).
@@ -550,7 +559,7 @@ The gateway never depends on Ume.Rag; any key may send a residency ceiling. Rele
 
 ### Interim gateway for P1a
 
-A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `ume` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
+A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `fors` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
 
 *From:* log rows 78, 83; decided by user, 2026-10-31.
 
@@ -566,7 +575,7 @@ Levels are `public`, `internal` and `sensitive`; `sensitive`, the municipality's
 
 Every model call sends an explicit ceiling from its data's level: `public` `External`, `internal` `Eu`, `sensitive`
 `OnPrem`. The worker never sends `External`, so its calls run `public` at `Eu`; embedding calls use the profile's
-`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/ume/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; built in M-17 C9, #691). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
+`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/fors/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; built in M-17 C9, #691). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-fors-residency` is checked before use. Detail: `identity/design.md` §4.7.
 
 *From:* log rows 14, 17, 25, 55, 77, 100; decided by user, 2026-10-30.
 
@@ -678,7 +687,7 @@ Fetches go through a DNS-pinned egress guard, with the host firewall and a start
 
 The malware scan is a deployment's choice: `ClamAv:Mode` is `on` (default) or `off`, a deployment knob like
 `Parser:Mode`. With `on` the scan is as before, fail-closed, and outside Development a worker without `ClamAv:Host`
-refuses to start. With `off` no `rag-clamav` container runs, and the worker stores files without a scan and says so:
+refuses to start. With `off` no `kalla-clamav` container runs, and the worker stores files without a scan and says so:
 a warning and security event 5106 `rag.malware.scan_off` at every start; the health check stays Healthy with the text
 "malware scan off"; an upload slot is `unscanned`, never `clean`, and has no `ScannedAt`; the run's report carries
 `malwareScan: "off"`; and the admin UI shows *Not scanned for malware* on those files and runs. Files stored while the
@@ -690,7 +699,7 @@ scan was off are not scanned when it is turned on; an automatic re-scan may come
 
 ### JavaScript rendering
 
-A `browser` source (`fetchMode`, optional `readySelector`) is rendered by `rag-renderer`, a browser-only container with no route out, driven by the worker, which fetches every browser request through its guard. Fresh context per page; images, fonts, media, trackers blocked; a page is ready when no routed request has been open for `Render:QuietPeriod`, and with a `readySelector` once the
+A `browser` source (`fetchMode`, optional `readySelector`) is rendered by `kalla-renderer`, a browser-only container with no route out, driven by the worker, which fetches every browser request through its guard. Fresh context per page; images, fonts, media, trackers blocked; a page is ready when no routed request has been open for `Render:QuietPeriod`, and with a `readySelector` once the
 selector holds text and then that quiet rule holds; up to 4 renders per worker (`Render:MaxConcurrent`) and per host
 its `renderPerHost` (default 1) up to its `maxConnections`, a slot taken only when free. Scripts and stylesheets are cached in the worker per run. There is no fallback to the raw shell: a failed render
 keeps the last good content and links; `browser` pages render every traversal. The preflight compares raw and
@@ -738,7 +747,7 @@ Published municipal content is public information. .NET patterns run on every ch
 
 ### Knowledge API (step 7)
 
-Retrieval is hybrid in the shared `Ume.Rag.Retrieval` engine, used unchanged by the knowledge API, the evaluator and
+Retrieval is hybrid in the shared `Kalla.Retrieval` engine, used unchanged by the knowledge API, the evaluator and
 the test panel: keyword and vector candidates, RRF in .NET, then per-collection age decay (off by default) and source
 `demote` patterns, at most 3 chunks per document by default (1–10). Top-k is 10 (max 50), the query is used as given, results are not
 cached, query text is never stored, and a failed embedding degrades to keyword-only. Detail: `knowledge-api/design.md`
@@ -752,7 +761,7 @@ A scope of up to 10,000 chunks, counted after topic filters, is searched exactly
 recall the worker samples per enumerable scope and restores by rebuild on `ConnectionStrings:ragdb-maintenance`, never through a
 pooler. The keyword search drops lexemes found in more
 than 30 % of the scope's chunks; the worker keeps the per-collection statistics for it (`KeywordStatistics`), so
-rag-api runs no corpus-wide `ts_stat`, while the cheap scope-size count stays in rag-api. Latency over budget at
+kalla-api runs no corpus-wide `ts_stat`, while the cheap scope-size count stays in kalla-api. Latency over budget at
 100,000 chunks in one scope is accepted for the pilot and re-measured in R1. Detail: `knowledge-api/design.md` §6.2, §6.4.
 
 *From:* log rows 73, 87, 119; decided by user, 2026-11-07; statistics in the worker: main session at the user's go-ahead, 2026-11-11 (M-10).
@@ -814,16 +823,16 @@ the not-found text; with `fallback` and `open`, coverage `low` gets an answer wi
 caveat, stored as `answered-general` and counted apart from not-found. "Search unavailable" is the fixed text at every
 level. On a `public` assistant a level other than `off` is a warning and needs
 explicit confirmation on publish, restore and a level change to `public` (V36). A client other than Open WebUI may
-ask for a level per chat request (`ume.general_knowledge`); the turn runs at the stricter of the request's level and
+ask for a level per chat request (`kalla.general_knowledge`); the turn runs at the stricter of the request's level and
 the assistant's, so a request only tightens and V36 keeps holding (#726). The admin's test panel takes the same
 optional level. Detail: `chat-api/design.md` §3.8, §7.3, §10.4; `admin/design.md` §4.6, §4.9.
 
 *From:* log rows 103, 111; decided by user, 2026-11-07; the per-request level by user, 2026-11-15 (#726).
 *Also:* "General knowledge on a public assistant"
 
-### Related documents and the `ume` chat extension
+### Related documents and the `kalla` chat extension
 
-A client other than Open WebUI may add `ume` to a chat request to get the turn's `outcome` and `degraded`, plus on
+A client other than Open WebUI may add `kalla` to a chat request to get the turn's `outcome` and `degraded`, plus on
 request `related_documents` (1–10, from the same retrieval, empty on coverage `low`) and `follow_ups` (1–5, one
 condense-model call within 2 s, never stored, lines with markers, links or personal data dropped), and
 `general_knowledge`, a stricter general-knowledge level for the turn (Decisions "General knowledge per assistant"),
@@ -835,7 +844,7 @@ dates (Decisions "Source dates on citations"). Detail: `chat-api/design.md` §3.
 
 ### Escalation hand-off
 
-A client other than Open WebUI may ask for `ume.escalation`. When the turn ends `not-found`, `answered-general` or
+A client other than Open WebUI may ask for `kalla.escalation`. When the turn ends `not-found`, `answered-general` or
 `unavailable`, the answer then carries the escalation route: the reason, the assistant's contact links (its not-found
 links, else the platform's), and a short hand-off summary of the user's problem for a second-line ticket. The summary
 comes from one condense-model call at the condense ceiling, as the step `escalation` on the assistant's gateway key, within
@@ -859,10 +868,10 @@ sitemap `lastmod`. An upload has no `checked`. The citation label shows both, in
 
 ### Topics per request
 
-A client other than Open WebUI may send `ume.topics` with a chat request: the turn then searches only chunks that
+A client other than Open WebUI may send `kalla.topics` with a chat request: the turn then searches only chunks that
 carry one of those topics, inside what the assistant's links allow. A link with topics keeps the ones also asked
 for, and is left out when none is; a link without topics is searched for the asked topics. A request narrows and
-never widens. A topic that matches no link is not an error: the answer's `ume.topics` lists the ones that were
+never widens. A topic that matches no link is not an error: the answer's `kalla.topics` lists the ones that were
 searched, and a turn with nothing left to search ends `not-found`. Detail: `chat-api/design.md` §3.8;
 `knowledge-api/design.md` §4.2.
 
@@ -906,9 +915,9 @@ else left out when the limit is unknown (the prompt budget then keeps its 1,024-
 4,096 ceiling. An optional platform-wide ceiling, `Settings.Chat.MaxAnswerTokens` (unset by default), guards against
 long, costly answers on models with large output limits: when set, it caps every answer's `max_tokens`, override
 included, and `max_tokens` is then always sent, also when the model's limit is unknown. A platform admin enters both
-limits on the mirror row until the gateway sends them (`ume.context_window`, `ume.max_output_tokens` on
+limits on the mirror row until the gateway sends them (`fors.context_window`, `fors.max_output_tokens` on
 `GET /v1/models`); then the sync fills them and the manual fields go. The assistant's gateway key's output cap
-(`max_output_tokens` in `/v1/ume/context`), when set, caps every answer too. The test panel shows the `max_tokens`
+(`max_output_tokens` in `/v1/fors/context`), when set, caps every answer too. The test panel shows the `max_tokens`
 sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
@@ -1035,7 +1044,7 @@ after Save, naming the affected objects. Detail: `admin/design.md` §5.5.2, §5.
 
 Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the service's
 credential key at the relevant ceiling and, for an assistant or knowledge base with a gateway key, as that key
-(`x-ume-on-behalf-of`, once the gateway's `features` contain `act-as-key`), cached 5 minutes per ceiling and key. A model
+(`x-fors-on-behalf-of`, once the gateway's `features` contain `act-as-key`), cached 5 minutes per ceiling and key. A model
 the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint.
 V8 (publish), V32 (save) and V39 (the object's key) stay authoritative. Detail: `admin/design.md` §4.5, §4.6, §4.10.
 

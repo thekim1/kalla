@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kalla.TestKit\Kalla.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Kalla.AdminApi\Kalla.AdminApi.csproj" />
+    <!-- The member-group tests run against its catalogue; its top-level Program would clash with the admin API's. -->
+    <ProjectReference Include="..\..\src\Kalla.FakeGateway\Kalla.FakeGateway.csproj" Aliases="fakegateway" />
+  </ItemGroup>
+</Project>

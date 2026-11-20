@@ -1,29 +1,29 @@
 -- Dev seed: a public URL-list source in the local AppHost database (P1a item 18, milestone 1), until the admin's set-up
 -- endpoints (J7) exist. Run it through seed_url_list.py, which refuses a non-local database and sets the parameters;
--- tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs runs this same file against TestPostgres.
+-- tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs runs this same file against TestPostgres.
 --
 -- Parameters, as session settings (set_config) before this file runs:
---   ume_seed.urls             JSON array of absolute http(s) URLs (required)
---   ume_seed.profile          embedding profile name (required): pilot-embedding (EmbeddingProfile:*) or dev-embedding
---   ume_seed.department_id    an existing department to use (optional; else ume_seed.department_name)
---   ume_seed.department_name  department found by name, created when missing
---   ume_seed.collection_slug  collection found by slug, created when missing (public, published, on the profile)
---   ume_seed.collection_name  the new collection's name
---   ume_seed.source_name      URL-list source found by name in the collection: created, or its settings replaced
---   ume_seed.pii_mode         the source's piiMode (contracts/sources/v1/url-list.schema.json): report (default; the
+--   kalla_seed.urls             JSON array of absolute http(s) URLs (required)
+--   kalla_seed.profile          embedding profile name (required): pilot-embedding (EmbeddingProfile:*) or dev-embedding
+--   kalla_seed.department_id    an existing department to use (optional; else kalla_seed.department_name)
+--   kalla_seed.department_name  department found by name, created when missing
+--   kalla_seed.collection_slug  collection found by slug, created when missing (public, published, on the profile)
+--   kalla_seed.collection_name  the new collection's name
+--   kalla_seed.source_name      URL-list source found by name in the collection: created, or its settings replaced
+--   kalla_seed.pii_mode         the source's piiMode (contracts/sources/v1/url-list.schema.json): report (default; the
 --                             municipality's own published site, Decisions table 2026-11-01) or hold
---   ume_seed.enqueue          true: enqueue a manual sync as the admin's "sync now" does; false: leave it to the scheduler
---   ume_seed.key_hash         with a key (--api-key): hex HMAC-SHA256 of the new key under Security:KeyPepper (KeyHasher.Hash);
+--   kalla_seed.enqueue          true: enqueue a manual sync as the admin's "sync now" does; false: leave it to the scheduler
+--   kalla_seed.key_hash         with a key (--api-key): hex HMAC-SHA256 of the new key under Security:KeyPepper (KeyHasher.Hash);
 --                             empty: no client and no key
---   ume_seed.key_prefix       the new key's display prefix (its first 15 characters, KeyHasher.Generate)
---   ume_seed.client_name      the internal client found by name, created when missing (ceiling public)
+--   kalla_seed.key_prefix       the new key's display prefix (its first 15 characters, KeyHasher.Generate)
+--   kalla_seed.client_name      the internal client found by name, created when missing (ceiling public)
 --
 -- Rows as the engine reads them (EngineTestKit.SeedUrlListAsync, SourceContexts): the source and its collection at level
 -- public, the collection on the profile, the source on the platform url-list pipeline that the migrator seeds and
 -- publishes (PipelineTemplateSeeder). The config triggers bump config."ConfigVersion" and write the outbox for every
 -- row; the version row is locked first, as an admin config write does (ConfigWrites), so the change is one version.
 --
--- With a key, what rag-api's knowledge routes check (KnowledgeCallers, AccessPolicy steps 1-9, KeyChecks): an internal client
+-- With a key, what kalla-api's knowledge routes check (KnowledgeCallers, AccessPolicy steps 1-9, KeyChecks): an internal client
 -- (Knowledge:OpenToClientKinds; the internal kind reaches any live collection directly, there is no link row in P1), ceiling
 -- public, no history store; a secret key of it scoped to the collection (Keys.Scopes), enabled, expiring after 30 days; and
 -- the public level's DataProtectionPolicies row, without which every public collection is refused (fail closed). The row
@@ -44,18 +44,18 @@ CREATE TEMP TABLE seed_result (
 DO $seed$
 DECLARE
     actor constant text := 'dev:seed-url-list';
-    urls jsonb := nullif(current_setting('ume_seed.urls', true), '')::jsonb;
-    profile_name text := nullif(current_setting('ume_seed.profile', true), '');
-    department_param text := nullif(current_setting('ume_seed.department_id', true), '');
-    department_name text := coalesce(nullif(current_setting('ume_seed.department_name', true), ''), 'Pilot (dev seed)');
-    collection_slug text := coalesce(nullif(current_setting('ume_seed.collection_slug', true), ''), 'pilot-public');
-    collection_name text := coalesce(nullif(current_setting('ume_seed.collection_name', true), ''), 'Pilot: umea.se (public)');
-    source_name text := coalesce(nullif(current_setting('ume_seed.source_name', true), ''), 'Pilot URL list');
-    pii_mode text := coalesce(nullif(current_setting('ume_seed.pii_mode', true), ''), 'report');
-    enqueue boolean := coalesce(nullif(current_setting('ume_seed.enqueue', true), '')::boolean, true);
-    key_hash text := nullif(current_setting('ume_seed.key_hash', true), '');
-    key_prefix text := nullif(current_setting('ume_seed.key_prefix', true), '');
-    client_name text := coalesce(nullif(current_setting('ume_seed.client_name', true), ''), 'Pilot retrieval (dev seed)');
+    urls jsonb := nullif(current_setting('kalla_seed.urls', true), '')::jsonb;
+    profile_name text := nullif(current_setting('kalla_seed.profile', true), '');
+    department_param text := nullif(current_setting('kalla_seed.department_id', true), '');
+    department_name text := coalesce(nullif(current_setting('kalla_seed.department_name', true), ''), 'Pilot (dev seed)');
+    collection_slug text := coalesce(nullif(current_setting('kalla_seed.collection_slug', true), ''), 'pilot-public');
+    collection_name text := coalesce(nullif(current_setting('kalla_seed.collection_name', true), ''), 'Pilot: umea.se (public)');
+    source_name text := coalesce(nullif(current_setting('kalla_seed.source_name', true), ''), 'Pilot URL list');
+    pii_mode text := coalesce(nullif(current_setting('kalla_seed.pii_mode', true), ''), 'report');
+    enqueue boolean := coalesce(nullif(current_setting('kalla_seed.enqueue', true), '')::boolean, true);
+    key_hash text := nullif(current_setting('kalla_seed.key_hash', true), '');
+    key_prefix text := nullif(current_setting('kalla_seed.key_prefix', true), '');
+    client_name text := coalesce(nullif(current_setting('kalla_seed.client_name', true), ''), 'Pilot retrieval (dev seed)');
     settings jsonb;
     profile_id uuid;
     department_id uuid;
@@ -80,19 +80,19 @@ DECLARE
     config_version bigint;
 BEGIN
     IF urls IS NULL OR jsonb_typeof(urls) <> 'array' OR jsonb_array_length(urls) = 0 THEN
-        RAISE EXCEPTION 'seed-url-list: ume_seed.urls must be a non-empty JSON array of URLs';
+        RAISE EXCEPTION 'seed-url-list: kalla_seed.urls must be a non-empty JSON array of URLs';
     END IF;
     IF pii_mode NOT IN ('hold', 'report') THEN
-        RAISE EXCEPTION 'seed-url-list: ume_seed.pii_mode must be hold or report, not %', pii_mode;
+        RAISE EXCEPTION 'seed-url-list: kalla_seed.pii_mode must be hold or report, not %', pii_mode;
     END IF;
     settings := jsonb_build_object('urls', urls, 'piiMode', pii_mode);
 
     IF profile_name IS NULL THEN
-        RAISE EXCEPTION 'seed-url-list: ume_seed.profile (the embedding profile name) is required';
+        RAISE EXCEPTION 'seed-url-list: kalla_seed.profile (the embedding profile name) is required';
     END IF;
 
-    IF key_hash IS NOT NULL AND (key_hash !~ '^[0-9a-f]{64}$' OR key_prefix IS NULL OR key_prefix !~ '^ume-rag-sk-[0-9A-Za-z]{4}$') THEN
-        RAISE EXCEPTION 'seed-url-list: ume_seed.key_hash must be 64 lower-case hex digits and ume_seed.key_prefix a secret key''s 15-character prefix';
+    IF key_hash IS NOT NULL AND (key_hash !~ '^[0-9a-f]{64}$' OR key_prefix IS NULL OR key_prefix !~ '^kalla-sk-[0-9A-Za-z]{4}$') THEN
+        RAISE EXCEPTION 'seed-url-list: kalla_seed.key_hash must be 64 lower-case hex digits and kalla_seed.key_prefix a secret key''s 15-character prefix';
     END IF;
 
     -- The admin's config write: the version lock first.

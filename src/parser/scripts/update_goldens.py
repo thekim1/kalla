@@ -1,11 +1,11 @@
 """Write the golden results of tests/fixtures/parser/golden/ from a running parser (parser design §15.2).
 
 Converts every case of tests/fixtures/parser/cases.json ("conversions") and writes the normalised `result.json`:
-without `timings`, `build` and the per-page `ms`, which change from run to run. Ume.Rag.ContractTests compares new
+without `timings`, `build` and the per-page `ms`, which change from run to run. Kalla.ContractTests compares new
 results with these: kinds, levels, pages and table shapes exactly, text by similarity. Run it only in a PR that
 changes the conversion (a Docling bump, a fast-path change), and review the diff.
 
-    docker run --rm -p 8000:8000 ume-rag/parser:dev
+    docker run --rm -p 8000:8000 kalla/parser:dev
     uv run python -m scripts.update_goldens --url http://localhost:8000
 
 Standard library only (with `scripts/parser_http.py`).

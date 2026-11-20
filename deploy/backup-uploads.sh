@@ -9,20 +9,20 @@
 #   deploy/backup-uploads.sh [--env-file FILE] [--state-dir DIR]
 #
 # It runs the rag-upload-backup service of compose.backup.yaml (profile backup: a shell as uid 1654, read-only blob
-# volume, no network) with UME_RAG_UPLOAD_BACKUP_DIR from deploy/.env mounted as the target: a directory on the backup
-# share, or the volume rag-upload-copy with --backup-target local. An S3 target is not built yet: replicate the bucket's
+# volume, no network) with KALLA_UPLOAD_BACKUP_DIR from deploy/.env mounted as the target: a directory on the backup
+# share, or the volume kalla-upload-copy with --backup-target local. An S3 target is not built yet: replicate the bucket's
 # uploads/ prefix (bucket replication or rclone) once the blob store moves to S3 (§6.4).
 #
 # Options:
 #   --env-file FILE    [deploy/.env] the deployment
-#   --state-dir DIR    [$STATE_DIRECTORY, else /var/lib/ume-rag] where upload-backup.prom goes:
+#   --state-dir DIR    [$STATE_DIRECTORY, else /var/lib/kalla] where upload-backup.prom goes:
 #                      rag_upload_backup_last_success_timestamp_seconds, rag_upload_backup_copied (this run),
 #                      rag_upload_backup_files (in the copy); alert when the last success is older than 30 minutes
 set -euo pipefail
 umask 027
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; state_dir="${STATE_DIRECTORY:-/var/lib/ume-rag}"
+env_file="$here/.env"; state_dir="${STATE_DIRECTORY:-/var/lib/kalla}"
 
 usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -38,13 +38,13 @@ done
 [ -r "$env_file" ] || die "cannot read $env_file: run deploy/init-deployment.sh first, or pass --env-file"
 # KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
 env_value() { sed -n "s/^$1=//p" "$env_file" | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
-case "$(env_value UME_RAG_BACKUP_TARGET)" in
-  "") die "UME_RAG_BACKUP_TARGET is empty in $env_file: no backup target, so no upload copy";;
+case "$(env_value KALLA_BACKUP_TARGET)" in
+  "") die "KALLA_BACKUP_TARGET is empty in $env_file: no backup target, so no upload copy";;
   s3://*) die "an S3 backup target has no upload copy yet";;
 esac
-target="$(env_value UME_RAG_UPLOAD_BACKUP_DIR)"
+target="$(env_value KALLA_UPLOAD_BACKUP_DIR)"
 [ -z "$target" ] || [ -d "$target" ] || die "the upload copy's directory $target does not exist (is the backup share mounted?)"
-target="${target:-the volume rag-upload-copy}"
+target="${target:-the volume kalla-upload-copy}"
 mkdir -p "$state_dir"
 
 # Inside the container: /data/blobs/rag is the blob store's root (BlobStore:Root), .staging/ holds writes in progress

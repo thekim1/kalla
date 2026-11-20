@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Host firewall for the Compose networks (plans/platform/repo-and-deployment.md §6.1): egress per network in Docker's
 # DOCKER-USER chain, no new connections from any of them to the host itself (except the allow-listed endpoints, when
-# the gateway or Keycloak runs on the same machine), and, with UME_RAG_PROXY_SOURCES set, the published ports (rag-api,
-# rag-admin, Open WebUI) only from the reverse proxy. The subnets are compose.hardened.yaml's: Docker's DNAT bypasses INPUT rules (ufw, firewalld), so they are
+# the gateway or Keycloak runs on the same machine), and, with KALLA_PROXY_SOURCES set, the published ports (kalla-api,
+# kalla-admin, Open WebUI) only from the reverse proxy. The subnets are compose.hardened.yaml's: Docker's DNAT bypasses INPUT rules (ufw, firewalld), so they are
 # matched here by their original port (#453). Idempotent: it rebuilds its own two
 # chains in one iptables-restore transaction and jumps to them from DOCKER-USER and INPUT once. rag-firewall.service
 # runs it after Docker starts and every 15 minutes (the allow-lists are host names, resolved when it runs).
@@ -11,20 +11,20 @@
 #   deploy/host/docker-user-firewall.sh --remove | --print-subnets
 #
 # A container sends all its egress through the network that holds its default route: Compose pins it with gw_priority
-# (rag-api and rag-admin: llm; rag-worker: rag-crawl; rag-postgres, rag-clamav and Open WebUI have one non-internal
+# (kalla-api and kalla-admin: llm; kalla-worker: kalla-crawl; kalla-postgres, kalla-clamav and Open WebUI have one non-internal
 # network), so each allow-list below is everything the members of that network call.
-#   rag-edge   the published ports, rag-proxy's upstreams and Open WebUI (profile openwebui in COMPOSE_PROFILES): its
-#              OIDC provider (UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL, else UME_RAG_OIDC_AUTHORITY) and DNS; else none
-#              (replies pass as established connections; rag-api is on the same network)
-#   rag-data, rag-ingestion, rag-parser, rag-render
-#              none (internal networks; dropped here as well). rag-render holds the renderer's Chromium, which runs
+#   kalla-edge   the published ports, kalla-proxy's upstreams and Open WebUI (profile openwebui in COMPOSE_PROFILES): its
+#              OIDC provider (KALLA_OPENWEBUI_OIDC_PROVIDER_URL, else KALLA_OIDC_AUTHORITY) and DNS; else none
+#              (replies pass as established connections; kalla-api is on the same network)
+#   kalla-data, kalla-ingestion, kalla-parser, kalla-render
+#              none (internal networks; dropped here as well). kalla-render holds the renderer's Chromium, which runs
 #              untrusted page scripts, and its bridge gateway answers at the IP level: the INPUT rule rejects it there
-#   llm        the gateway (UME_RAG_GATEWAY_URL; the admin's organisation and model syncs call it too), the
-#              OIDC authority (UME_RAG_OIDC_AUTHORITY), the OTLP endpoint (UME_OTEL_ENDPOINT), DNS
-#   rag-crawl  the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
+#   llm        the gateway (KALLA_GATEWAY_URL; the admin's organisation and model syncs call it too), the
+#              OIDC authority (KALLA_OIDC_AUTHORITY), the OTLP endpoint (FORS_OTEL_ENDPOINT), DNS
+#   kalla-crawl  the gateway, the OTLP endpoint, DNS and KALLA_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
 #              loopback, link-local, documentation, multicast and reserved ranges), the rest of the Internet allowed
-#   rag-mirror database.clamav.net:443, or only freshclam's proxy (UME_RAG_FRESHCLAM_PROXY); DNS
-#   backup     the S3 endpoint (UME_RAG_BACKUP_ENDPOINT) and DNS; none with a mounted share
+#   kalla-mirror database.clamav.net:443, or only freshclam's proxy (KALLA_FRESHCLAM_PROXY); DNS
+#   backup     the S3 endpoint (KALLA_BACKUP_ENDPOINT) and DNS; none with a mounted share
 # DNS: the upstream resolvers Docker's embedded DNS forwards to from the container (the non-loopback nameservers of
 # /etc/resolv.conf, or of /run/systemd/resolve/resolv.conf behind systemd-resolved); --dns IP replaces them.
 #
@@ -48,10 +48,10 @@ chain=UME-RAG-EGRESS; input_chain=UME-RAG-INPUT
 reject=(-j REJECT --reject-with icmp-admin-prohibited)
 
 # Networks in the order the rules are written, with the subnets of compose.hardened.yaml.
-names=(rag-edge rag-data llm rag-ingestion rag-parser rag-render rag-crawl rag-mirror backup)
+names=(kalla-edge kalla-data llm kalla-ingestion kalla-parser kalla-render kalla-crawl kalla-mirror backup)
 declare -A subnet=(
-  [rag-edge]=172.30.1.0/24 [rag-data]=172.30.2.0/24 [llm]=172.30.3.0/24 [rag-ingestion]=172.30.4.0/24
-  [rag-parser]=172.30.5.0/24 [rag-render]=172.30.18.0/24 [rag-crawl]=172.30.6.0/24 [rag-mirror]=172.30.7.0/24
+  [kalla-edge]=172.30.1.0/24 [kalla-data]=172.30.2.0/24 [llm]=172.30.3.0/24 [kalla-ingestion]=172.30.4.0/24
+  [kalla-parser]=172.30.5.0/24 [kalla-render]=172.30.18.0/24 [kalla-crawl]=172.30.6.0/24 [kalla-mirror]=172.30.7.0/24
   [backup]=172.30.16.0/24
 )
 private=(0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24
@@ -138,20 +138,20 @@ add() { # add NETWORK URL-OR-HOST[:PORT] — nothing when the value is empty
   [ -n "$2" ] || return 0
   allows[$1]+="$(endpoint "$2" 443)"$'\n'
 }
-gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_OTEL_ENDPOINT)"
-add llm "$gateway"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"
+gateway="$(env_value KALLA_GATEWAY_URL)"; otel="$(env_value FORS_OTEL_ENDPOINT)"
+add llm "$gateway"; add llm "$(env_value KALLA_OIDC_AUTHORITY)"
 add llm "$otel"
-add rag-crawl "$gateway"; add rag-crawl "$otel"
-proxy="$(env_value UME_RAG_FRESHCLAM_PROXY)"
-if [ -n "$proxy" ]; then add rag-mirror "$proxy"; else add rag-mirror database.clamav.net; fi
-add backup "$(env_value UME_RAG_BACKUP_ENDPOINT)"
+add kalla-crawl "$gateway"; add kalla-crawl "$otel"
+proxy="$(env_value KALLA_FRESHCLAM_PROXY)"
+if [ -n "$proxy" ]; then add kalla-mirror "$proxy"; else add kalla-mirror database.clamav.net; fi
+add backup "$(env_value KALLA_BACKUP_ENDPOINT)"
 openwebui=0
 case ",$(env_value COMPOSE_PROFILES)," in *,openwebui,*) openwebui=1;; esac
 if [ "$openwebui" = 1 ]; then
-  # Its provider: the deployment's, else the default, rag-admin's authority (identity design §19). A provider set only in
-  # the setup wizard on another host needs --allow rag-edge=HOST. It reaches rag-api inside the stack.
-  owui_provider="$(env_value UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL)"
-  add rag-edge "${owui_provider:-$(env_value UME_RAG_OIDC_AUTHORITY)}"
+  # Its provider: the deployment's, else the default, kalla-admin's authority (identity design §19). A provider set only in
+  # the setup wizard on another host needs --allow kalla-edge=HOST. It reaches kalla-api inside the stack.
+  owui_provider="$(env_value KALLA_OPENWEBUI_OIDC_PROVIDER_URL)"
+  add kalla-edge "${owui_provider:-$(env_value KALLA_OIDC_AUTHORITY)}"
 fi
 for spec in ${extra[@]+"${extra[@]}"}; do add "${spec%%=*}" "${spec#*=}"; done
 
@@ -161,17 +161,17 @@ input_allows=()  # allowed endpoints that may be this host's own addresses (a ga
 out=("*filter" ":$chain - [0:0]" ":$input_chain - [0:0]" "-A $chain -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN")
 # The published ports, from the reverse proxy only: a new connection Docker has DNATed to one of them (its original
 # destination port) from any other source is rejected. Container egress is never DNATed, so it doesn't match.
-proxy_sources="$(env_value UME_RAG_PROXY_SOURCES)"
+proxy_sources="$(env_value KALLA_PROXY_SOURCES)"
 if [ -n "$proxy_sources" ]; then
   # Each port as deploy/.env sets it, else compose.rag.yaml's default.
   port_of() { local v; v="$(env_value "$1")"; echo "${v:-$2}"; }
-  published=("$(port_of UME_RAG_API_PORT 8543)" "$(port_of UME_RAG_ADMIN_PORT 9543)")
-  [ "$openwebui" = 0 ] || published+=("$(port_of UME_RAG_OPENWEBUI_PORT 3000)")
+  published=("$(port_of KALLA_API_PORT 8543)" "$(port_of KALLA_ADMIN_PORT 9543)")
+  [ "$openwebui" = 0 ] || published+=("$(port_of KALLA_OPENWEBUI_PORT 3000)")
   # The second slots (compose.rolling.yaml), when COMPOSE_FILE lists it.
   if [[ "$(env_value COMPOSE_FILE)" == *compose.rolling.yaml* ]]; then
-    published+=("$(port_of UME_RAG_API_B_PORT 8544)" "$(port_of UME_RAG_ADMIN_B_PORT 9544)")
+    published+=("$(port_of KALLA_API_B_PORT 8544)" "$(port_of KALLA_ADMIN_B_PORT 9544)")
   fi
-  out+=("# published ports: the reverse proxy only (UME_RAG_PROXY_SOURCES)")
+  out+=("# published ports: the reverse proxy only (KALLA_PROXY_SOURCES)")
   for port in "${published[@]}"; do
     [[ "$port" =~ ^[0-9]+$ ]] || die "a published port in $env_file is not a number: '$port'"
     for src in ${proxy_sources//,/ }; do
@@ -183,7 +183,7 @@ fi
 for n in "${names[@]}"; do
   s="${subnet[$n]}"
   out+=("# $n" "-A $chain -s $s -d $s -j RETURN")
-  if [ -n "${allows[$n]:-}" ] || [ "$n" = rag-crawl ]; then
+  if [ -n "${allows[$n]:-}" ] || [ "$n" = kalla-crawl ]; then
     for ip in ${dns_servers[@]+"${dns_servers[@]}"}; do
       out+=("-A $chain -s $s -d $ip -p udp --dport 53 -j RETURN" "-A $chain -s $s -d $ip -p tcp --dport 53 -j RETURN")
     done
@@ -199,8 +199,8 @@ for n in "${names[@]}"; do
       input_allows+=("-A $input_chain -s $s -d $ip -p tcp --dport $port -j RETURN")
     done
   done <<<"${allows[$n]:-}"
-  if [ "$n" = rag-crawl ]; then
-    for cidr in $(env_value UME_RAG_CRAWL_ALLOW | tr ',' ' '); do out+=("-A $chain -s $s -d $cidr -j RETURN"); done
+  if [ "$n" = kalla-crawl ]; then
+    for cidr in $(env_value KALLA_CRAWL_ALLOW | tr ',' ' '); do out+=("-A $chain -s $s -d $cidr -j RETURN"); done
     for cidr in "${private[@]}"; do out+=("-A $chain -s $s -d $cidr ${reject[*]}"); done
     out+=("-A $chain -s $s -j RETURN")
   else

@@ -17,7 +17,7 @@ param pilotDepartmentName string
 @maxLength(30)
 param pilotDepartmentKey string
 
-@description('Accept a claims-mapping policy without a custom signing key on ume-rag-admin, for the departmentCodes claim (the gateway\'s Entra step 4).')
+@description('Accept a claims-mapping policy without a custom signing key on kalla-admin, for the departmentCodes claim (the gateway\'s Entra step 4).')
 param acceptMappedClaims bool = true
 
 // The identity running the deployment. It is made an owner of every object it creates, so that with only
@@ -25,7 +25,7 @@ param acceptMappedClaims bool = true
 var deployerObjectId = deployer().objectId
 
 module admin 'admin.bicep' = {
-  name: 'ume-rag-admin'
+  name: 'kalla-admin'
   params: {
     ragAdminHost: ragAdminHost
     acceptMappedClaims: acceptMappedClaims
@@ -34,7 +34,7 @@ module admin 'admin.bicep' = {
 }
 
 module openWebUi 'open-webui.bicep' = {
-  name: 'ume-rag-open-webui'
+  name: 'kalla-open-webui'
   params: {
     openWebUiHost: openWebUiHost
     ownerIds: [deployerObjectId]
@@ -45,21 +45,21 @@ module openWebUi 'open-webui.bicep' = {
 var groups = [
   {
     key: 'pilotUsers'
-    uniqueName: 'ume-rag-pilot-users'
-    displayName: 'Ume.Rag pilot users'
-    description: 'Ume.Rag: may sign in to the pilot Open WebUI.'
+    uniqueName: 'kalla-pilot-users'
+    displayName: 'Källa pilot users'
+    description: 'Källa: may sign in to the pilot Open WebUI.'
   }
   {
     key: 'platformAdmins'
-    uniqueName: 'ume-rag-platform-admins'
-    displayName: 'Ume.Rag platform admins'
-    description: 'Ume.Rag: app role rag-platform-admin on ume-rag-admin.'
+    uniqueName: 'kalla-platform-admins'
+    displayName: 'Källa platform admins'
+    description: 'Källa: app role rag-platform-admin on kalla-admin.'
   }
   {
     key: 'departmentAdmins'
-    uniqueName: 'ume-rag-department-admins-${pilotDepartmentKey}'
-    displayName: 'Ume.Rag department admins – ${pilotDepartmentName}'
-    description: 'Ume.Rag: app role rag-department-admin on ume-rag-admin, for ${pilotDepartmentName}.'
+    uniqueName: 'kalla-department-admins-${pilotDepartmentKey}'
+    displayName: 'Källa department admins – ${pilotDepartmentName}'
+    description: 'Källa: app role rag-department-admin on kalla-admin, for ${pilotDepartmentName}.'
   }
 ]
 

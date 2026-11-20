@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: backup and WAL archive metrics every two minutes
+Description=Källa: backup and WAL archive metrics every two minutes
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

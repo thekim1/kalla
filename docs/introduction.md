@@ -1,8 +1,8 @@
 # Introduction
 
-Ume.Rag is the RAG, crawling and chat platform of Umeå kommun: it collects the municipality's knowledge from websites
+Källa is the RAG, crawling and chat platform of Umeå kommun: it collects the municipality's knowledge from websites
 and documents, keeps it current, and answers questions about it in chat with a cited source for every claim. It is
-built as small .NET 10 services on top of the [Ume AI Gateway](https://github.com/thekim1/llmgateway), which every
+built as small .NET 10 services on top of the [Ume AI Gateway](https://github.com/thekim1/fors), which every
 model call goes through, with a Python parser and PostgreSQL with pgvector.
 
 **Status:** the pilot (P1) is built and released; the live block (the real gateway, the shared sign-in, the umea.se
@@ -20,15 +20,15 @@ crawl, the gold set and the test host) is ahead. The [changelog](../CHANGELOG.md
   reranker. The knowledge API (`POST /v1/retrieve`) offers it without an answer.
 - **Chat.** An OpenAI-compatible chat API (`POST /v1/chat/completions`) for Open WebUI and other clients. An assistant
   is a model; its answers cite numbered sources with each document's date and when it was last checked. When the
-  sources have no answer, it says so and gives the assistant's contact links. The optional `ume` member adds the
+  sources have no answer, it says so and gives the assistant's contact links. The optional `kalla` member adds the
   outcome, related documents, follow-up questions and an escalation hand-off.
 - **Administration.** An admin UI for knowledge bases, sources, assistants, apps and keys, costs and settings, with a
   setup wizard for sign-in. Departments own their knowledge bases and assistants.
 
 ## How it runs
 
-The pilot runs on one Linux host with Docker Compose: `rag-postgres`, `rag-api` (chat and knowledge), `rag-admin` (the
-admin UI and its API), `rag-worker` (ingestion), `rag-parser` and `rag-clamav`, plus the one-shot `rag-migrate`. The
+The pilot runs on one Linux host with Docker Compose: `kalla-postgres`, `kalla-api` (chat and knowledge), `kalla-admin` (the
+admin UI and its API), `kalla-worker` (ingestion), `kalla-parser` and `kalla-clamav`, plus the one-shot `kalla-migrate`. The
 same services run as one Portainer stack together with the gateway, or on Kubernetes.
 
 - Every model call goes through the gateway with an explicit residency ceiling (on-prem or EU), so the gateway refuses

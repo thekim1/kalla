@@ -1,10 +1,10 @@
 # Architecture diagrams
 
-Mermaid views of the Ume.Rag design as it stands after the simplification pass
+Mermaid views of the Källa design as it stands after the simplification pass
 ([`archive/passes/simplification-pass.md`](archive/passes/simplification-pass.md)) and the P1 split of the
 [weakness review §1](archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
 [§5](archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show the gateway's integration phase 2; in P1 the keys are the pilot team's and no
-`x-ume-on-behalf-of` or echo is sent). Sources: networks and containers
+`x-fors-on-behalf-of` or echo is sent). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
 [`knowledge-api/design.md`](knowledge-api/design.md) §6, ingestion
@@ -13,8 +13,8 @@ Where a diagram and a document differ, the document wins.
 
 ## 1. System overview
 
-Dashed edges and boxes marked P2 are not in the pilot. The pilot runs six long-running containers (rag-api, rag-admin,
-rag-worker, rag-parser, rag-clamav, postgres) plus the one-shot rag-migrate; Redis arrives with the first multi-host
+Dashed edges and boxes marked P2 are not in the pilot. The pilot runs six long-running containers (kalla-api, kalla-admin,
+kalla-worker, kalla-parser, kalla-clamav, postgres) plus the one-shot kalla-migrate; Redis arrives with the first multi-host
 deployment (P2).
 
 ```mermaid
@@ -29,18 +29,18 @@ flowchart LR
     proxy["Municipal reverse proxy<br/>(TLS)"]
 
     subgraph data_plane["Data plane zone"]
-        api["rag-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Ume.Rag.Answering + Ume.Rag.Retrieval<br/>in-process tool hub (P2)"]
+        api["kalla-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Kalla.Answering + Kalla.Retrieval<br/>in-process tool hub (P2)"]
     end
 
     subgraph control_plane["Control plane zone"]
-        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
+        admin["kalla-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
     end
 
     subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
-        worker["rag-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
-        parser["rag-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
-        renderer["rag-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]
-        clamav["rag-clamav"]
+        worker["kalla-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
+        parser["kalla-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
+        renderer["kalla-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]
+        clamav["kalla-clamav"]
     end
 
     subgraph data_zone["Data zone"]
@@ -67,7 +67,7 @@ flowchart LR
     proxy --> api
     proxy --> admin
 
-    api -- "chat, condense, query embeddings<br/>credential key; x-ume-on-behalf-of = the assistant's key<br/>(gateway phase 2), explicit x-ume-max-residency" --> gateway
+    api -- "chat, condense, query embeddings<br/>credential key; x-fors-on-behalf-of = the assistant's key<br/>(gateway phase 2), explicit x-fors-max-residency" --> gateway
     admin -- "test panel, Data API sync,<br/>/v1/models at the level's ceiling,<br/>answer judge, skill gate (P2)" --> gateway
     worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
@@ -103,7 +103,7 @@ flowchart LR
 The zones are one host in the pilot, with one slot per service and an announced maintenance window for updates. From
 the first multi-host deployment (P2, [`archive/passes/performance-pass.md`](archive/passes/performance-pass.md) §5) the same images run per host by
 role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane and control;
-**I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
+**I** ingestion), five in P3 (D; **A1/A2** kalla-api and kalla-admin; **F** fetch: worker
 `preview,command,sync,fetch,eval`, clamd, small parser, renderer if needed; **P** processing: worker `parse,embed` with
 its own parser). A Postgres streaming standby is required before production beyond the pilot (register D1). Parser,
 renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and object store over a
@@ -120,8 +120,8 @@ retrieval searches only the collections that version links directly (simplificat
 sequenceDiagram
     autonumber
     participant U as Open WebUI
-    participant C as rag-api chat role
-    participant K as Knowledge core (Ume.Rag.Answering)
+    participant C as kalla-api chat role
+    participant K as Knowledge core (Kalla.Answering)
     participant P as Postgres
     participant G as LLM gateway
     participant W as Background writer
@@ -131,7 +131,7 @@ sequenceDiagram
     C->>C: effective level = max(assistant level, client ceiling), fixed from the first message
     C->>C: per-user rate limit (in process in the pilot, Redis from P2)
     opt follow-up question that is not self-contained (length, anaphora)
-        C->>G: condense on Settings.Chat.CondenseModel (x-ume-step: condense, explicit ceiling)
+        C->>G: condense on Settings.Chat.CondenseModel (x-fors-step: condense, explicit ceiling)
         G-->>C: standalone query (timeout 600 ms or failure: raw question)
     end
     C->>K: RetrieveAsync(assistant, query, top_k 10, expand section) over the version's direct collections
@@ -148,8 +148,8 @@ sequenceDiagram
     alt coverage low (best distance above threshold and keyword list below its floor)
         C-->>U: generalKnowledge off or supplement: fixed not-found text + contact links (no model call); fallback or open: model answer without sources behind a fixed caveat line
     else coverage ok or degraded, or no content words (gate skipped, no-sources frame)
-        C->>G: stream answer (per-level key, x-ume-on-behalf-of from P2, explicit x-ume-max-residency)
-        G-->>C: headers: x-ume-residency, key echo from gateway phase 2 (503 + Retry-After when targets are drained)
+        C->>G: stream answer (per-level key, x-fors-on-behalf-of from P2, explicit x-fors-max-residency)
+        G-->>C: headers: x-fors-residency, key echo from gateway phase 2 (503 + Retry-After when targets are drained)
         C->>C: check residency and echo before the first byte
         G-->>C: SSE deltas
         C-->>U: filtered text, [n] renumbered, Open WebUI source events
@@ -162,15 +162,15 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    subgraph admin_side["Admin (rag-admin)"]
+    subgraph admin_side["Admin (kalla-admin)"]
         form["Source form + template parameters<br/>preflight, preview with site-profile before/after"]
         publish["Publish: re-process every document (P1),<br/>plan from changed parameters (P2)"]
         decide{"Owner: keep or roll back<br/>(previous chunk sets kept 14 days)"}
         cfg[("config tables<br/>+ outbox, version bump")]
-        judge["Nightly answer judge (P2)<br/>Ume.Rag.Answering + on-prem judge"]
+        judge["Nightly answer judge (P2)<br/>Kalla.Answering + on-prem judge"]
     end
 
-    subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
+    subgraph worker_side["Worker (kalla-worker): one fixed pipeline per source type"]
         sched["Scheduler / EnsureCurrent"]
         sync["sync job: sitemap lastmod (incremental once a 500-URL sample<br/>shows it reliable; full traversals until then),<br/>change detection, deletion guard (complete at ≥ 99 % seeds),<br/>removal check, alert after 3 runs without a full traversal"]
         profile["Site profile per host<br/>P1: hand-checked Sitevision preset (manual JSON),<br/>P2: learned from 30–50 sample pages;<br/>versioned, rollback"]
@@ -186,7 +186,7 @@ flowchart TD
     jobs[("content.Jobs<br/>LISTEN/NOTIFY")]
     store[("Documents and chunk sets per source<br/>Chunks with scalar CollectionId")]
     report["Evaluation report<br/>on the publish screen"]
-    parserp["rag-parser<br/>/v1/inspect routes: pypdfium2 text layer,<br/>Docling layout, Tesseract OCR"]
+    parserp["kalla-parser<br/>/v1/inspect routes: pypdfium2 text layer,<br/>Docling layout, Tesseract OCR"]
     gw["LLM gateway"]
 
     form --> cfg
@@ -211,19 +211,19 @@ flowchart TD
 ## 4. Tool call from an agent assistant (P2)
 
 An assistant runs this loop when its published version links a skill with tools; the mode is derived from its skills,
-not chosen (simplification pass §15). The tool hub runs in-process in the chat role (`IToolHub`), and in `rag-admin`
+not chosen (simplification pass §15). The tool hub runs in-process in the chat role (`IToolHub`), and in `kalla-admin`
 for discovery, the test panel and the skill gate; never in the worker. Skills totalling ≤ about 4k tokens are included statically
 with their tools visible from step 1, and `search_knowledge` is prefetched with the user question.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as Agent loop (Ume.Rag.Answering, chat role)
+    participant M as Agent loop (Kalla.Answering, chat role)
     participant G as LLM gateway
     participant H as Tool hub (in-process, chat role)
     participant S as Hosted MCP server
 
-    M->>G: step n with tools = ToolPolicy.Visible (explicit x-ume-max-residency)
+    M->>G: step n with tools = ToolPolicy.Visible (explicit x-fors-max-residency)
     G-->>M: tool_calls (streamed deltas)
     M->>M: ToolPolicy.Authorize (same function), lethal-trifecta check (hard refusal), limits 8 calls / 60 s / $0.05
     M->>H: IToolHub call (pinned definition id)

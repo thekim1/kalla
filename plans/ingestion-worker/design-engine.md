@@ -1,6 +1,6 @@
 # Ingestion worker, part A: pipeline engine, stages, jobs, runs, preview and publish
 
-Detail step 6a of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
+Detail step 6a of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
 this design states every rule, the plan's answered items in §22) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. The engine runs fixed
@@ -18,12 +18,12 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 
 | Convention | Gateway source | Here |
 |---|---|---|
-| Long-running loops are `BackgroundService`s driven by `PeriodicTimer(interval, TimeProvider)`; a final flush in `StopAsync` | `src/Ume.LlmGateway.Gateway/Pipeline/AuthFailureRecorder.cs:115-145`, `UsageWriter.cs:130-143` | dispatcher, heartbeat, reaper, scheduler, finalizer (§9) |
-| `TimeProvider` injected everywhere, registered with `TryAddSingleton(TimeProvider.System)` | `src/Ume.LlmGateway.Infrastructure/InfrastructureExtensions.cs:89` | all time decisions (leases, back-off, cron), `FakeTimeProvider` in tests |
-| Options classes with `SectionName`, data annotations, `ValidateDataAnnotations().ValidateOnStart()` | `src/Ume.LlmGateway.AdminApi/RetentionService.cs:11-26`, `InfrastructureExtensions.cs:57-58` | `WorkerOptions` (`Worker:*`) |
-| Local schedule in Europe/Stockholm via `BudgetPeriods.Stockholm` | `src/Ume.LlmGateway.Domain/Services/BudgetPeriods.cs:11`, `RetentionService.cs:44-62` | cron evaluation (§9.6) |
-| One instance does a periodic job: `pg_try_advisory_xact_lock` inside an execution-strategy transaction | `src/Ume.LlmGateway.AdminApi/ModelListSync.cs:148-153` | reaper, scheduler, finalizer and maintenance leadership |
-| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Ume.Rag`, `rag.*` names (repo-and-deployment §9) |
+| Long-running loops are `BackgroundService`s driven by `PeriodicTimer(interval, TimeProvider)`; a final flush in `StopAsync` | `src/Fors.Gateway/Pipeline/AuthFailureRecorder.cs:115-145`, `UsageWriter.cs:130-143` | dispatcher, heartbeat, reaper, scheduler, finalizer (§9) |
+| `TimeProvider` injected everywhere, registered with `TryAddSingleton(TimeProvider.System)` | `src/Fors.Infrastructure/InfrastructureExtensions.cs:89` | all time decisions (leases, back-off, cron), `FakeTimeProvider` in tests |
+| Options classes with `SectionName`, data annotations, `ValidateDataAnnotations().ValidateOnStart()` | `src/Fors.AdminApi/RetentionService.cs:11-26`, `InfrastructureExtensions.cs:57-58` | `WorkerOptions` (`Worker:*`) |
+| Local schedule in Europe/Stockholm via `BudgetPeriods.Stockholm` | `src/Fors.Domain/Services/BudgetPeriods.cs:11`, `RetentionService.cs:44-62` | cron evaluation (§9.6) |
+| One instance does a periodic job: `pg_try_advisory_xact_lock` inside an execution-strategy transaction | `src/Fors.AdminApi/ModelListSync.cs:148-153` | reaper, scheduler, finalizer and maintenance leadership |
+| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Fors.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Källa`, `rag.*` names (repo-and-deployment §9) |
 
 ## 1. Summary of decisions
 
@@ -117,7 +117,7 @@ hashing and validation. A pipeline version is immutable once published.
 
 ### 3.2 Templates and the stage manifest
 
-A **template** (`src/Ume.Rag.MigrationService/Templates/{name}.v{n}.json`, schema
+A **template** (`src/Kalla.MigrationService/Templates/{name}.v{n}.json`, schema
 `contracts/pipeline/v2/template.schema.json`, seeded insert-if-absent; a changed template is a new version) names its
 source type and its stages with their code versions and declares its parameters:
 
@@ -145,7 +145,7 @@ source type and its stages with their code versions and declares its parameters:
 - `labels` (optional) names a parameter whose name says too little (`pathRules`: `en` Topics, `sv` Ämnen); the
   catalog serves it as `x-labels` in `paramsSchema`, and a label for an unknown parameter fails the template check.
   The form takes a parameter's label from `labels.ts` by name first (AGENTS.md), then from `x-labels` (admin §6.3).
-- `TemplateCatalog.BuiltIn` (`Ume.Rag.Pipelines`) embeds the template files as resources, so the admin and the
+- `TemplateCatalog.BuiltIn` (`Kalla.Pipelines`) embeds the template files as resources, so the admin and the
   worker validate against the same versions without reading the database. The migration service seeds them into
   `config` (§13.1).
 - `stage` is the parameter's **effect tag**: the first stage its change affects. `appliesTo` narrows it to a route
@@ -190,7 +190,7 @@ does not force a re-parse when only chunking changes.
 
 ## 4. Validation
 
-Run by `PipelineValidator` (`Ume.Rag.Pipelines`) in the admin on save and publish, and **again by the worker** when it
+Run by `PipelineValidator` (`Kalla.Pipelines`) in the admin on save and publish, and **again by the worker** when it
 loads a published version (fail closed: an invalid published version is not run; event 5105, §17).
 
 | # | Rule | On |
@@ -210,7 +210,7 @@ stages.
 
 ## 5. Stage interface and manifest
 
-### 5.1 C# sketch (`Ume.Rag.Worker/Pipelines`)
+### 5.1 C# sketch (`Kalla.Worker/Pipelines`)
 
 ```csharp
 public interface IPipelineNode                                // one stage; the name stays for continuity
@@ -329,9 +329,9 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429, or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
 | Gateway `402 budget_exceeded` (budget used up: the knowledge base's key, its team or department; the gateway's message names which) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
-| The knowledge base's gateway key unusable, on a call sent with `x-ume-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `403 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
+| The knowledge base's gateway key unusable, on a call sent with `x-fors-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `403 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
 | Gateway 403 `max_residency_not_met`; 400 | fatal, reason `gateway.<code>` | – | – |
-| Gateway answer above the residency ceiling (`x-ume-residency`) | fatal, result discarded, event 5003 | – | – |
+| Gateway answer above the residency ceiling (`x-fors-residency`) | fatal, result discarded, event 5003 | – | – |
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |
 | Stage version not supported here (§5.2) | transient | no | 30 s |
 | Unhandled exception in a stage | transient (`node.exception`; type name only, never the message) | yes | back-off |
@@ -413,20 +413,20 @@ call of a job runs as the **knowledge base's gateway key** (`Collections.Gateway
 evaluation are charged, limited and budgeted as that key (cost-attribution §4.1). A collection without a key, and
 every call before the gateway's `features` contain `act-as-key`, runs as the credential key. **Until the gateway's
 integration phase 1** (P1, weakness review §5) the worker holds the pilot department's team's own `OnPrem` and `Eu`
-keys, every call is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is checked).
+keys, every call is charged to that team, and no `x-fors-on-behalf-of` is sent (so no echo is checked).
 
 | Header | Value |
 |---|---|
-| `x-ume-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
-| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
-| `x-ume-run-id`, `x-ume-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
+| `x-fors-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
+| `x-fors-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
+| `x-fors-run-id`, `x-fors-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 
-The worker learns `act-as-key` from its own `GET /v1/ume/context` (identity §4.7). The response is checked before
-anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when `x-ume-on-behalf-of` was sent, a
+The worker learns `act-as-key` from its own `GET /v1/fors/context` (identity §4.7). The response is checked before
+anything is stored: `x-fors-residency` within the ceiling (else fatal + 5003); when `x-fors-on-behalf-of` was sent, a
 `2xx` answer's echo must be the GUID sent (`Gateway:RequireDelegationEcho`; gateway-changes §5.2), else fatal
 `gateway.delegation_not_applied` (event 5011); an error answer goes by §7.3. The call's usage (input, cached input
-and output tokens) and its cost are added to the stage's `NodeUsage`: `x-ume-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
+and output tokens) and its cost are added to the stage's `NodeUsage`: `x-fors-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
 an estimate from the model mirror's prices, kept apart as estimated (§10.6).
 
 HTTP clients come from `IHttpClientFactory`, one per downstream: the named gateway clients (`AddGatewayClient`) with
@@ -484,7 +484,7 @@ Fleet-wide shares and caps come in P2 with code that reads them; `config."Settin
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, `urlHash` (the source's `CrawlFrontier` row) or `uploadId` (the upload slot); `executionId` once known | 6b, then §7 |
 | `parse` | `min(Worker:Concurrency:parse, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `stage`, `inputKey`, `slice` | §7, §9.5 |
 | `embed` | 4 (fixed in P1; adaptive from P2, §18) | `documentId`, `level`, `executionId`, `pipelineVersionId`, `runId`, `inputKey` | §7, §14 |
-| `eval` | 1, on at most two instances (`Worker:Classes`) | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `rag-admin`, 6c §14.8) | 6c §13–§14 |
+| `eval` | 1, on at most two instances (`Worker:Classes`) | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `kalla-admin`, 6c §14.8) | 6c §13–§14 |
 | `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; dispatched right after `preview`; never writes `chat` and holds no chat keys |
 
 `Worker:Classes` lists the classes an instance runs as a comma list (`parse,embed`; empty = every class; an unknown
@@ -493,7 +493,7 @@ deployment values too: `Worker:HeartbeatSeconds` (10), `Worker:InstanceTimeoutSe
 (10), `Worker:IdleWaitSeconds` (30) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4).
 
 **Payload contracts**: one schema per class and kind in `contracts/jobs/v1/` (`{class}.{kind}.payload.schema.json`, with results beside them), generated from the
-records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
+records in `Kalla.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
 `reject-site-profile` command: P2).
 - The `sync` payload carries `trigger` because `Jobs` has no column for it. It refers to the checkpoint by
   `resumeFromCheckpoint`, because `ConnectorCheckpoints` rows have no id (PK `SourceId`, `Kind`).
@@ -577,8 +577,8 @@ Fairness is per instance and approximate. **Later (P2):** at 20+ departments the
 recursive-CTE loose index scan builds the department list every 5 s, shared per instance, with a per-department cap of
 `max(1, ⌈slots ÷ departments⌉)` per instance (to-verify #9).
 
-Queue access goes through the **`IJobQueue`** seam (`Ume.Rag.Domain/Ports`, Postgres implementation in
-`Ume.Rag.Infrastructure/Jobs` = the data-model §4.2 SQL). Its members: `EnqueueAsync` and `CompleteAsync` take the
+Queue access goes through the **`IJobQueue`** seam (`Kalla.Domain/Ports`, Postgres implementation in
+`Kalla.Infrastructure/Jobs` = the data-model §4.2 SQL). Its members: `EnqueueAsync` and `CompleteAsync` take the
 caller's `DbTransaction`; `ReadyDepartmentsAsync`; `DequeueAsync` returns one job; `HeartbeatAsync` renews every
 running job of the instance; `FailAsync`, `ReleaseAsync` and `CancelRunAsync`. Wake-ups (`JobWakeUps`) live in
 Infrastructure. The queue stays in Postgres; a broker comes only behind the performance pass's §6 trigger, then
@@ -694,7 +694,7 @@ phases, reconcile included.
 `Reason` is a code plus short fixed text, `<area>.<code>` (`parser.timeout`, `http.404`, `gateway.budget_exhausted`,
 `pii.flagged`), never library messages or document text (parser §7.5 rule). A document served by another source's
 frontier request gets its real outcome and the fact `fetch.shared` (6b §6.2). `Strategy` holds the route (§7.2);
-`CostUsd` the cost of this document's model calls in this run (the gateway's `x-ume-cost-usd`, plus the estimates of
+`CostUsd` the cost of this document's model calls in this run (the gateway's `x-fors-cost-usd`, plus the estimates of
 §10.6 for calls without it); `DurationMs` wall time across its jobs; `ParserBuildHash` as
 parser §13.1.
 
@@ -736,10 +736,10 @@ reporting only; the gateway is the record for charging (it also counts fallbacks
 |---|---|
 | Calls | every gateway call of §7.7: indexing, re-embedding and preview (`embed`), set generation (`eval-generate`, `eval-judge`, `eval-dedup`), retrieval evaluation's query embeddings (`query-embed`, only cache misses) and rerank (`rerank`); `GET /v1/models` costs nothing and is not recorded |
 | Usage | from the answer's `usage`: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (0 when absent), `completion_tokens` (none for embeddings); an answer without `usage` counts 0 tokens |
-| Cost | `x-ume-cost-usd` on the answer (every worker call is non-streamed, so the gateway sends it on every successful call); without it an **estimate** from `GatewayModels` (per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd`, the input price when that is null, + output × `OutputPerMillionUsd`; 0 for a model without prices), counted as estimated; the same rule as chat §8.3. A call answered with an error status records nothing |
+| Cost | `x-fors-cost-usd` on the answer (every worker call is non-streamed, so the gateway sends it on every successful call); without it an **estimate** from `GatewayModels` (per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd`, the input price when that is null, + output × `OutputPerMillionUsd`; 0 for a model without prices), counted as estimated; the same rule as chat §8.3. A call answered with an error status records nothing |
 | Per document | `RunItems.CostUsd` is the cost of the document's calls in the attempt that writes the item (gateway cost plus estimates, §10.2); the finalizer's `Runs.CostUsd` sums it (§10.4). Calls of an earlier attempt that failed are in the daily table only; the retry finds their embeddings in the cache and does not pay again |
 | Per day | `content."CollectionDailyUsage"` (data-model §2.2) per (Europe/Stockholm day, collection, level, step): calls, input, cached input and output tokens, `CostUsd` (the gateway's), `EstimatedCalls`, `EstimatedCostUsd`. Each job attempt that made a model call adds its deltas, keys sorted, as the **last statement of the transaction that records the attempt's outcome** (the run item's commit, the job's retry or completion; §14's swap transaction for a document that is indexed), so a retried or failed attempt's calls are counted once and the hot row's lock is held only until that commit (performance pass §3.2). A retry, a failure and a release are written by the job queue without a transaction of the caller's, so their usage follows in a transaction of its own right after the queue call: a crash between the two loses that attempt's usage (an undercount, never a double count). An attempt whose lease was lost writes none. The row's level is the collection's. Calls outside a run (preview, evaluation) are counted the same way under the source's or the evaluation set's collection |
-| Run ids | every call carries `x-ume-run-id` (§7.7), so the split per step joins the gateway's usage on `x-ume-run-id` and `x-ume-step` (gateway-changes §7.1) |
+| Run ids | every call carries `x-fors-run-id` (§7.7), so the split per step joins the gateway's usage on `x-fors-run-id` and `x-fors-step` (gateway-changes §7.1) |
 | Why a daily table | `RunItems` are kept 90 days and `Runs` 13 months (data-model §8), set generation is no run, and the per-run figures do not keep gateway and estimated cost apart; the cost report (admin §8.6) reads the daily table, the run pages keep showing the per-run cost |
 
 ## 11. Preview
@@ -838,8 +838,8 @@ back directly (§2.3).
 ### 13.1 P1 templates
 
 Platform templates (`Pipelines.DepartmentId = null`; data-model §2.1 has no `IsTemplate` column), seeded by the
-migration service from `src/Ume.Rag.MigrationService/Templates/*.json` (§3.2). The three files below are embedded in
-`Ume.Rag.Pipelines` (`TemplateCatalog.BuiltIn`). All three share the `pathRules` subschema (≤ 100 rules); on `files`
+migration service from `src/Kalla.MigrationService/Templates/*.json` (§3.2). The three files below are embedded in
+`Kalla.Pipelines` (`TemplateCatalog.BuiltIn`). All three share the `pathRules` subschema (≤ 100 rules); on `files`
 a rule matches the upload's folder path (admin §5.5.7). Only `website` has `collectionDefaults`.
 
 Seeding: the migration service's `PipelineTemplateSeeder` runs in every environment after the migrations. Per template name it inserts one platform `Pipelines` row if absent (`Name` = `TemplateId` =
@@ -1003,7 +1003,7 @@ round trips use `NpgsqlBatch` (to-verify #19, #20); `Multiplexing` is not used.
 
 ## 17. Observability
 
-Meter `Ume.Rag` and activity source `Ume.Rag` (repo-and-deployment §9). New metrics (low-cardinality dimensions only;
+Meter `Källa` and activity source `Källa` (repo-and-deployment §9). New metrics (low-cardinality dimensions only;
 never source names, URLs or titles):
 
 | Metric | Type | Dimensions |
@@ -1080,12 +1080,12 @@ scale test are in [`../archive/passes/performance-pass.md`](../archive/passes/pe
 
 | Level | Project | What |
 |---|---|---|
-| Unit | `Ume.Rag.Pipelines.Tests` | schema validation; every §4 rule with a failing and a passing definition; stage keys: a changed parameter changes exactly its stage's key and the later ones; effect tags and routes give the documented plans; templates validate |
-| Unit | `Ume.Rag.Worker.Tests` | stage order; routing inside `parse`; result mapping table §7.3 (each parser and gateway code); cache keys; `OutputHash` chain; segment cutting and continuation payloads; cost estimates; scheduler with `FakeTimeProvider` (DST change days, jitter stability, catch-up collapse); AIMD limiter; preview context refuses DB and non-preview blob paths |
-| Golden | `Ume.Rag.Worker.Tests` | per stage and version: fixture input → expected output (`tests/fixtures/`); a changed output without a version bump fails |
-| Integration (Testcontainers, stock pgvector image) | `Ume.Rag.IntegrationTests` | dequeue under `SKIP LOCKED` with 8 parallel consumers (no double lease); dedup under concurrency with the partial unique index; heartbeat and lease expiry; reaper incl. early reclaim of a dead instance without an attempt, dead-letter after 3 reclaims; requeue without attempt; fence: superseded and lease-lost swaps roll back; index writer: invisible batches not returned by K or V, swap, swap-back within 14 days, re-key, `held` for a flagged set in a `public` collection, orphan sweep; snapshot test (a concurrent reader sees old or new set only); finalizer counters; manifest immutability and support check; preview leaves `content` unchanged (row counts and `xmin` of every table except `Jobs`, `CrawlHosts`) |
-| Crash recovery | `Ume.Rag.IntegrationTests` (worker in-process, killed by cancellation without `StopAsync`, and as a container with `docker kill`) | kill during fetch, during a parse range, between chunk batches, between embed and swap; restart; assert every document ends current, no duplicate live sets, no attempts consumed by the kills, run counters exact: **"worker restart loses no work"** |
-| Contract | `Ume.Rag.ContractTests` | parser client vs parser image error fixtures (parser §15.2) mapped per §7.3; FakeGateway residency and 402/429 answers; the gateway client refuses a call without a ceiling |
+| Unit | `Kalla.Pipelines.Tests` | schema validation; every §4 rule with a failing and a passing definition; stage keys: a changed parameter changes exactly its stage's key and the later ones; effect tags and routes give the documented plans; templates validate |
+| Unit | `Kalla.Worker.Tests` | stage order; routing inside `parse`; result mapping table §7.3 (each parser and gateway code); cache keys; `OutputHash` chain; segment cutting and continuation payloads; cost estimates; scheduler with `FakeTimeProvider` (DST change days, jitter stability, catch-up collapse); AIMD limiter; preview context refuses DB and non-preview blob paths |
+| Golden | `Kalla.Worker.Tests` | per stage and version: fixture input → expected output (`tests/fixtures/`); a changed output without a version bump fails |
+| Integration (Testcontainers, stock pgvector image) | `Kalla.IntegrationTests` | dequeue under `SKIP LOCKED` with 8 parallel consumers (no double lease); dedup under concurrency with the partial unique index; heartbeat and lease expiry; reaper incl. early reclaim of a dead instance without an attempt, dead-letter after 3 reclaims; requeue without attempt; fence: superseded and lease-lost swaps roll back; index writer: invisible batches not returned by K or V, swap, swap-back within 14 days, re-key, `held` for a flagged set in a `public` collection, orphan sweep; snapshot test (a concurrent reader sees old or new set only); finalizer counters; manifest immutability and support check; preview leaves `content` unchanged (row counts and `xmin` of every table except `Jobs`, `CrawlHosts`) |
+| Crash recovery | `Kalla.IntegrationTests` (worker in-process, killed by cancellation without `StopAsync`, and as a container with `docker kill`) | kill during fetch, during a parse range, between chunk batches, between embed and swap; restart; assert every document ends current, no duplicate live sets, no attempts consumed by the kills, run counters exact: **"worker restart loses no work"** |
+| Contract | `Kalla.ContractTests` | parser client vs parser image error fixtures (parser §15.2) mapped per §7.3; FakeGateway residency and 402/429 answers; the gateway client refuses a call without a ceiling |
 | Performance | `perf.yml`, BenchmarkDotNet | R1 test (§18); benchmarks for key computation, validation and the dequeue query plan |
 
 ## 20. Milestones

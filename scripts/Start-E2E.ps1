@@ -2,14 +2,14 @@
 .SYNOPSIS
   Starts the local Aspire stack on a separate, disposable test database for the browser tests (tests/e2e).
 .DESCRIPTION
-  Uses its own Docker volume (ume-rag-e2e-postgres), so your development database is never touched.
+  Uses its own Docker volume (kalla-e2e-postgres), so your development database is never touched.
   Every start deletes that test volume first and seeds the demo data again, so the tests always begin
   from the same state. The FakeGateway is always on, whatever the user secrets say, and the fixture website of tests/e2e runs on port 7416. The stack uses the same ports as the dev stack: stop the dev stack first.
   Waits for the admin UI, or for the admin API while src/admin-ui does not exist yet.
   -Stop stops the stack and removes both test volumes.
   -Keep starts without resetting the test volume (the demo data is only seeded into an empty database).
   -Setup starts the setup wizard's stack instead (tests/e2e, --project=setup): Setup:Try on a volume of its own
-  (ume-rag-e2e-setup-postgres), always reset, so rag-admin starts without a sign-in and writes a setup code to its output.
+  (kalla-e2e-setup-postgres), always reset, so kalla-admin starts without a sign-in and writes a setup code to its output.
   It runs no parser, renderer, ClamAV or Open WebUI, which the wizard does not use.
 #>
 [CmdletBinding()]
@@ -17,11 +17,11 @@ param([switch]$Stop, [switch]$Keep, [switch]$Setup)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$apphost = [IO.Path]::Combine($root, 'src', 'Ume.Rag.AppHost', 'Ume.Rag.AppHost.csproj')
+$apphost = [IO.Path]::Combine($root, 'src', 'Kalla.AppHost', 'Kalla.AppHost.csproj')
 # The AppHost registers admin-ui only when src/admin-ui/package.json exists (P0 checklist #11).
 $last = if (Test-Path ([IO.Path]::Combine($root, 'src', 'admin-ui', 'package.json'))) { 'admin-ui' } else { 'adminapi' }
-$normalVolume = 'ume-rag-e2e-postgres'
-$setupVolume = 'ume-rag-e2e-setup-postgres'
+$normalVolume = 'kalla-e2e-postgres'
+$setupVolume = 'kalla-e2e-setup-postgres'
 $volume = if ($Setup) { $setupVolume } else { $normalVolume }
 
 function Remove-TestVolume([string]$name) {

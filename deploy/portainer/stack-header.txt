@@ -1,96 +1,96 @@
 #
-# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
-# The same stack also runs Ume Rag: rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker,
-# rag-parser and, with their profiles in COMPOSE_PROFILES, rag-clamav (clamav) and rag-renderer (render). Its one-shot
-# rag-bootstrap creates RAG's certificates and secrets in the volumes <stack>_rag-certs and <stack>_rag-secrets on first
+# ---- Källa (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
+# The same stack also runs Källa: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
+# kalla-parser and, with their profiles in COMPOSE_PROFILES, kalla-clamav (clamav) and kalla-renderer (render). Its one-shot
+# kalla-bootstrap creates RAG's certificates and secrets in the volumes <stack>_kalla-certs and <stack>_kalla-secrets on first
 # start. Keep the stack name: the gateway's volumes are found by it.
 #
 # Start from deploy/portainer/stack.env.example (Portainer: "Load variables from .env file"); after each deploy the end
-# of rag-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
+# of kalla-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
 # them (built from a gateway release). Steps: docs/portainer.md.
 #
 # Required variable: one, the gateway's too
-#   UME_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
-#                             llm-admin.<domain> (the gateway's), rag.<domain> (rag-api), rag-admin.<domain>
-#                             (rag-admin) and, with the openwebui profile, chat.<domain>. Each UME_RAG_*_HOST (Optional, below)
-#                             overrides its name; without UME_DOMAIN, UME_GATEWAY_HOST and UME_RAG_API_HOST are
+#   FORS_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
+#                             llm-admin.<domain> (the gateway's), rag.<domain> (kalla-api), rag-admin.<domain>
+#                             (kalla-admin) and, with the openwebui profile, chat.<domain>. Each KALLA_*_HOST (Optional, below)
+#                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
 # Set by the stack file or stack.env.example, nothing to type
-#   UME_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
+#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Källa with its three
 #                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
-#                             its own (ume-rag) that a gateway admin can move. The gateway's migrations create what is
+#                             its own (kalla) that a gateway admin can move. The gateway's migrations create what is
 #                             missing (never change what exists) and write each new key to the volume
-#                             <stack>_integration-secrets, from which rag-bootstrap gives each service its key (M-17
+#                             <stack>_integration-secrets, from which kalla-bootstrap gives each service its key (M-17
 #                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
 #                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
-#   UME_RAG_API_GATEWAY_KEY, UME_RAG_ADMIN_GATEWAY_KEY, UME_RAG_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
+#   KALLA_API_GATEWAY_KEY, KALLA_ADMIN_GATEWAY_KEY, KALLA_WORKER_GATEWAY_KEY
+#                             each service's credential key of the gateway integration Källa; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
 #                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
 #                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
-#   UME_INTEGRATION_API_URL   (the gateway's) https://adminapi:8443/integration/v1: the Integration API's address the
-#                             gateway hands rag-admin in its context, for the cost and budget read-back (rag-admin
+#   FORS_INTEGRATION_API_URL   (the gateway's) https://adminapi:8443/integration/v1: the Integration API's address the
+#                             gateway hands kalla-admin in its context, for the cost and budget read-back (kalla-admin
 #                             joins the gateway's edge network to reach adminapi)
 # Recommended
-#   COMPOSE_PROFILES=clamav   rag-clamav, the malware scan: the worker scans with it while the profile is on, and
-#                             without it stores files unscanned and marked so (rag-bootstrap sets ClamAv__Mode)
-# Sign-in is set in two setup wizards, the gateway's first: https://<UME_ADMIN_HOST>/setup with the setup code from
-# adminapi's log (the gateway's part above), then https://<UME_RAG_ADMIN_HOST>/setup with the setup code from
-# rag-admin's log. Each shows the redirect URIs to register, takes its client secret and tests a sign-in. rag-admin's
-# wizard suggests the provider saved in the gateway's. A stack that sets UME_OIDC_AUTHORITY declares the provider for
-# both instead (locked in both wizards; UME_RAG_OIDC_AUTHORITY gives rag-admin another).
+#   COMPOSE_PROFILES=clamav   kalla-clamav, the malware scan: the worker scans with it while the profile is on, and
+#                             without it stores files unscanned and marked so (kalla-bootstrap sets ClamAv__Mode)
+# Sign-in is set in two setup wizards, the gateway's first: https://<FORS_ADMIN_HOST>/setup with the setup code from
+# adminapi's log (the gateway's part above), then https://<KALLA_ADMIN_HOST>/setup with the setup code from
+# kalla-admin's log. Each shows the redirect URIs to register, takes its client secret and tests a sign-in. kalla-admin's
+# wizard suggests the provider saved in the gateway's. A stack that sets FORS_OIDC_AUTHORITY declares the provider for
+# both instead (locked in both wizards; KALLA_OIDC_AUTHORITY gives kalla-admin another).
 # Optional
-#   UME_RAG_OIDC_CLIENT_SECRET  declares RAG admin's own OIDC client's secret instead of the wizard (client
-#                             UME_RAG_OIDC_CLIENT_ID, default ume-rag-admin): with the authority, the wizard never opens.
-#                             The token's shape, each optional and the wizard's otherwise: UME_RAG_OIDC_ROLE_CLAIM,
+#   KALLA_OIDC_CLIENT_SECRET  declares RAG admin's own OIDC client's secret instead of the wizard (client
+#                             KALLA_OIDC_CLIENT_ID, default kalla-admin): with the authority, the wizard never opens.
+#                             The token's shape, each optional and the wizard's otherwise: KALLA_OIDC_ROLE_CLAIM,
 #                             _DEPARTMENT_CLAIM, _TEAM_CLAIM, _GROUP_CLAIM, _EXTRA_SCOPE, _TENANT_ID (Entra ID) and
 #                             _REFUSE_GUESTS (true or false); a variable set locks its field in the wizard
-#   UME_RAG_API_PUBLIC_URL    rag-api's public URL when it is not https://<UME_RAG_API_HOST> (a port:
+#   KALLA_API_PUBLIC_URL    kalla-api's public URL when it is not https://<KALLA_API_HOST> (a port:
 #                             https://rag.example.se:8543); citation links are absolute
-#   UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN  the break-glass group(s) for the first platform admin (';'-separated), for an
+#   KALLA_OIDC_GROUPS_PLATFORM_ADMIN  the break-glass group(s) for the first platform admin (';'-separated), for an
 #                             identity provider whose tokens carry groups instead of the role rag-platform-admin in the
 #                             roles claim; the other roles' groups are set in RAG's admin (Settings, Role groups)
-#   UME_RAG_API_HOST (rag.<domain>), UME_RAG_ADMIN_HOST (rag-admin.<domain>; without UME_DOMAIN, rag-api's name)
-#   UME_RAG_API_PORT (8543), UME_RAG_ADMIN_PORT (9543), UME_RAG_*_BIND (0.0.0.0)
-#   UME_RAG_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
+#   KALLA_API_HOST (rag.<domain>), KALLA_ADMIN_HOST (rag-admin.<domain>; without FORS_DOMAIN, kalla-api's name)
+#   KALLA_API_PORT (8543), KALLA_ADMIN_PORT (9543), KALLA_*_BIND (0.0.0.0)
+#   KALLA_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
 #                             residencies in the gateway (register M2: OnPrem and Eu)
-#   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see rag-renderer)
+#   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see kalla-renderer)
 #   Open WebUI is optional: without the openwebui profile nothing of it is created (no secrets, no client in RAG's
-#                             admin, no chat host name in the proxy), and Ume.Rag serves its API to your applications.
-#   COMPOSE_PROFILES=clamav,openwebui  also rag-openwebui, Open WebUI as the chat for users, on plain HTTP at
-#                             UME_RAG_OPENWEBUI_BIND (127.0.0.1):UME_RAG_OPENWEBUI_PORT (3000) for a TLS proxy in front
-#                             (it sets Secure cookies, so users reach it over HTTPS only). It calls rag-api inside the
+#                             admin, no chat host name in the proxy), and Källa serves its API to your applications.
+#   COMPOSE_PROFILES=clamav,openwebui  also kalla-openwebui, Open WebUI as the chat for users, on plain HTTP at
+#                             KALLA_OPENWEBUI_BIND (127.0.0.1):KALLA_OPENWEBUI_PORT (3000) for a TLS proxy in front
+#                             (it sets Secure cookies, so users reach it over HTTPS only). It calls kalla-api inside the
 #                             stack. Set with it:
-#     UME_RAG_OPENWEBUI_HOST      its public hostname (default chat.<domain>)
+#     KALLA_OPENWEBUI_HOST      its public hostname (default chat.<domain>)
 #     Its sign-in is the setup wizard's Open WebUI step (redirect URI
-#                             https://<UME_RAG_OPENWEBUI_HOST>/oauth/oidc/login/callback; until the admin UI has that
+#                             https://<KALLA_OPENWEBUI_HOST>/oauth/oidc/login/callback; until the admin UI has that
 #                             step, declare a confidential client's secret). To declare it instead:
-#                             UME_RAG_OPENWEBUI_OIDC_CLIENT_ID (open-webui), UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET,
-#                             UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL (default rag-admin's authority's
+#                             KALLA_OPENWEBUI_OIDC_CLIENT_ID (open-webui), KALLA_OPENWEBUI_OIDC_CLIENT_SECRET,
+#                             KALLA_OPENWEBUI_OIDC_PROVIDER_URL (default kalla-admin's authority's
 #                             /.well-known/openid-configuration) and the button's label
-#                             UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME (Umeå kommun); each one set wins and locks its field.
-#                             rag-api serves them to Open WebUI's start (deploy/openwebui/start-with-sign-in.py), which
+#                             KALLA_OPENWEBUI_OIDC_PROVIDER_NAME (Umeå kommun); each one set wins and locks its field.
+#                             kalla-api serves them to Open WebUI's start (deploy/openwebui/start-with-sign-in.py), which
 #                             restarts Open WebUI within a minute of a change; without a provider, Open WebUI starts
 #                             without sign-in
-#                             Open WebUI's key for rag-api is generated by rag-bootstrap, and rag-migrate registers it as
+#                             Open WebUI's key for kalla-api is generated by kalla-bootstrap, and kalla-migrate registers it as
 #                             the deployment's own Open WebUI client in RAG's admin (Apps and keys); nothing to paste
 #                             The feedback import needs nothing either: Open WebUI's first user is the service account
-#                             feedback-import@localhost, and the one-shot rag-openwebui-setup mints its API key after
+#                             feedback-import@localhost, and the one-shot kalla-openwebui-setup mints its API key after
 #                             Open WebUI starts (password sign-in stays off) and keeps it while it works. A new key: delete
-#                             <stack>_rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
-#   UME_RAG_SETUP_REOPEN      empty; any new value (for example today's date) opens the setup wizard once, for an hour,
-#                             with a new setup code in rag-admin's log (remove it before restoring a database)
-#   RAG_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
+#                             <stack>_kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey and update the stack
+#   KALLA_SETUP_REOPEN      empty; any new value (for example today's date) opens the setup wizard once, for an hour,
+#                             with a new setup code in kalla-admin's log (remove it before restoring a database)
+#   KALLA_*_IMAGE               other RAG images (default: the latest release's, from ghcr.io/thekim1, pinned by digest;
 #                             a release's compose.portainer.yaml asset pins its own; add ghcr.io as a registry in
 #                             Portainer if the packages are private)
-#   COMPOSE_PROFILES=proxy    rag-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
-#                             gateway (UME_GATEWAY_HOST), its admin (UME_ADMIN_HOST), rag-api (UME_RAG_API_HOST),
-#                             rag-admin (UME_RAG_ADMIN_HOST) and Open WebUI (UME_RAG_OPENWEBUI_HOST), each a name of its
-#                             own, on UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT (0.0.0.0:443). UME_RAG_PROXY_CERTS_DIR
-#                             (/etc/ume-rag/proxy-certs) is a host directory with tls.crt (full chain) and tls.key for
+#   COMPOSE_PROFILES=proxy    kalla-proxy, nginx with your certificate in front of all five host names (M-17 C8): the
+#                             gateway (FORS_GATEWAY_HOST), its admin (FORS_ADMIN_HOST), kalla-api (KALLA_API_HOST),
+#                             kalla-admin (KALLA_ADMIN_HOST) and Open WebUI (KALLA_OPENWEBUI_HOST), each a name of its
+#                             own, on KALLA_PROXY_BIND:KALLA_PROXY_PORT (0.0.0.0:443). KALLA_PROXY_CERTS_DIR
+#                             (/etc/kalla/proxy-certs) is a host directory with tls.crt (full chain) and tls.key for
 #                             every name (SAN or wildcard), readable by uid 101; renewing it: replace both files and
-#                             restart rag-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
+#                             restart kalla-proxy. Then bind the other published ports to 127.0.0.1 (the *_BIND
 #                             variables) and list the proxy as a trusted proxy in both admins (docs/portainer.md)
 # Escrow the keys a restored RAG database needs with deploy/escrow-keys.sh --project <stack> from the release bundle
-# (docs/portainer.md): without them it is unusable. This stack has no WAL archiving (pgBackRest): back up rag-postgres
+# (docs/portainer.md): without them it is unusable. This stack has no WAL archiving (pgBackRest): back up kalla-postgres
 # with pg_dump or volume snapshots.

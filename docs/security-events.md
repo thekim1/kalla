@@ -1,17 +1,17 @@
 # Security events
 
-The services log security events for the municipality's SIEM under one logger category, **`Ume.Rag.Security`**,
+The services log security events for the municipality's SIEM under one logger category, **`Kalla.Security`**,
 with stable numeric ids and event names (identity design §10). This page lists them, says what each one means, what is
 never in them, and which alerts are worth setting up. The source of truth for the code is
-`src/Ume.Rag.Infrastructure/Security/SecurityEvents.cs`. `SecurityEventsDocTests` fails when an event there is
+`src/Kalla.Infrastructure/Security/SecurityEvents.cs`. `SecurityEventsDocTests` fails when an event there is
 missing from the table below.
 
 ## Getting them to the SIEM
 
-Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `rag-api`, `rag-worker` and `rag-admin`. In an OpenTelemetry Collector, route
-log records whose category is `Ume.Rag.Security` to the SIEM:
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `kalla-api`, `kalla-worker` and `kalla-admin`. In an OpenTelemetry Collector, route
+log records whose category is `Kalla.Security` to the SIEM:
 [`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) does (syslog RFC 5424, with
-Splunk, Elastic and Sentinel alternatives; copied from the gateway's). With Compose, set `UME_RAG_OTEL_ENDPOINT` in
+Splunk, Elastic and Sentinel alternatives; copied from the gateway's). With Compose, set `KALLA_OTEL_ENDPOINT` in
 `deploy/.env`; on Kubernetes `OTEL_EXPORTER_OTLP_ENDPOINT` in the overlay. The event id is the record's `EventId`, the name its `EventName`, and each attribute below is
 a structured field.
 
@@ -27,7 +27,7 @@ a structured field.
 - **Client-supplied text** (paths, query strings, user agents) is logged with control characters replaced by `?`, so it
   cannot start a forged log line. Logs are JSON outside development.
 - **Source address:** the client's address. When the connection comes from a proxy listed in the admin's trusted
-  proxies (Settings, *Network*), both rag-api and the admin take the right-most untrusted `X-Forwarded-For` entry;
+  proxies (Settings, *Network*), both kalla-api and the admin take the right-most untrusted `X-Forwarded-For` entry;
   otherwise it is the connection's address, so behind a reverse proxy that is not listed it is the proxy's.
 
 ## Events
@@ -46,7 +46,7 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
 | 5008 | `rag.key.unexpected_use` | Warning | api | A key in its grace period used after its replacement was used: a leak signal | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` | P1 |
 | 5009 | `rag.mcp.client_refused` | Warning | api | A delegated token from an `azp` that is not an enabled MCP client | `ClientId`, `SubjectId`, `SourceAddress` | P2 |
 | 5010 | `rag.obo.refused` | Warning | tools | An on-behalf-of exchange failed | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` | P3 |
-| 5011 | `rag.gateway.delegation_missing` | Warning | api, admin, worker | A `2xx` or `304` answer to a call made as an assigned gateway key lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another, while `Gateway:RequireDelegationEcho` is on; the call was aborted before use | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` | P1 |
+| 5011 | `rag.gateway.delegation_missing` | Warning | api, admin, worker | A `2xx` or `304` answer to a call made as an assigned gateway key lacks the `x-fors-on-behalf-of` echo of the key id sent, or echoes another, while `Gateway:RequireDelegationEcho` is on; the call was aborted before use | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` | P1 |
 | 5012 | `rag.tool.definition_changed` | Warning | api, admin | A tool's definition changed, was removed or added since it was pinned | `ToolServerId`, `ToolId`, `ToolName`, `Kind`, `PinnedHash`, `ObservedHash` | P2 |
 | 5013 | `rag.tool.upstream_refused` | Warning | api, admin | A tool server refused our credential; once a minute per server and reason | `ToolServerId`, `Reason`, `Status`, `Count` | P2 |
 | 5014 | `rag.content.tag_neutralised` | Information | api, admin | Reserved tags neutralised in untrusted text | `SourceKind`, `ResourceId`, `Count` | P2 |
@@ -64,12 +64,12 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
 | 6005 | `rag.admin.session.extended` | Information | admin | *Stanna inloggad* | `Actor`, `SessionId`, `ExpiresAt`, `SourceAddress` | P0 |
 | 6006 | `rag.admin.access.denied` | Warning | admin | A 403 for a signed-in user; at most once a minute per user, with the count since the last | `Actor`, `Method`, `Path`, `Count`, `SourceAddress`, `Roles` | P0 |
 | 6007 | `rag.admin.data.read` | Information | admin | A read of a sensitive list: the audit log (P0); keys, feedback, the access log and conversation views as they arrive | `Actor`, `Path`, `Query`, `SourceAddress` | P0 |
-| 6008 | `rag.admin.setup.opened` | Warning | admin | Setup mode opened at rag-admin's start (identity design §19): `Kind` `first_run` (never completed) or `reopen` (a new `Setup:Reopen` value). Never the setup code | `Kind`, `EndsAt` | P1 |
+| 6008 | `rag.admin.setup.opened` | Warning | admin | Setup mode opened at kalla-admin's start (identity design §19): `Kind` `first_run` (never completed) or `reopen` (a new `Setup:Reopen` value). Never the setup code | `Kind`, `EndsAt` | P1 |
 | 6009 | `rag.admin.setup.code_refused` | Warning | admin | Wrong setup codes, sampled: at most one event per 10 seconds per instance, with the number since the last event (the code checks are limited to 20 a minute per instance; a wrong code never voids the code) | `SourceAddress` (of the latest), `Count` | P1 |
 | 6010 | `rag.admin.setup.session` | Warning | admin | A setup session started for a correct setup code | `SessionId` (`setup-` and a random id, never the cookie), `SourceAddress`, `ExpiresAt` | P1 |
-| 6011 | `rag.admin.setup.test` | Warning | admin | A setup test finished: rag-admin's test sign-in, or Open WebUI's back-channel test (no person signs in); or callbacks with an unknown, replayed or expired test (`Reason` `unknown_test`, sampled like 6009) | `Target` (`rag-admin`, `open-webui`), `Result` (`passed`, `failed`), `Reason`, `Subject` (the tested person's `oid`, else `sub`; none for `open-webui`), `PlatformAdmin`, `SessionId`, `SourceAddress`, `Count` (1, or the sampled `unknown_test` callbacks since the last event) | P1 |
+| 6011 | `rag.admin.setup.test` | Warning | admin | A setup test finished: kalla-admin's test sign-in, or Open WebUI's back-channel test (no person signs in); or callbacks with an unknown, replayed or expired test (`Reason` `unknown_test`, sampled like 6009) | `Target` (`kalla-admin`, `open-webui`), `Result` (`passed`, `failed`), `Reason`, `Subject` (the tested person's `oid`, else `sub`; none for `open-webui`), `PlatformAdmin`, `SessionId`, `SourceAddress`, `Count` (1, or the sampled `unknown_test` callbacks since the last event) | P1 |
 | 6012 | `rag.admin.setup.completed` | Warning | admin | Setup completed: the tested values are saved and setup is closed; the audit entry names the same person | `Actor` (the tested person), `SessionId`, `SourceAddress` | P1 |
-| 6013 | `rag.admin.setup.openwebui_saved` | Warning | admin | Open WebUI's sign-in values saved in setup mode after their test (setup stays open); the audit entry names the same person | `Actor` (the person of the session's passed rag-admin test), `SessionId`, `SourceAddress`, `ClientVerified` (whether the test confirmed the client's credentials) | P1 |
+| 6013 | `rag.admin.setup.openwebui_saved` | Warning | admin | Open WebUI's sign-in values saved in setup mode after their test (setup stays open); the audit entry names the same person | `Actor` (the person of the session's passed kalla-admin test), `SessionId`, `SourceAddress`, `ClientVerified` (whether the test confirmed the client's credentials) | P1 |
 
 ### `Reason` values
 
@@ -78,7 +78,7 @@ Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted 
   `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`, `token_expired`, `wrong_tenant`,
   `guest_refused`, `client_unknown`, `permission_missing`, `grant_invalid`, `grant_expired`. In P0 the admin emits
   `wrong_tenant` and `guest_refused` (identity design §1.7). `client_not_allowed`: a valid key of another client than the
-  deployment's own Open WebUI client asked rag-api for Open WebUI's sign-in settings (`/internal/openwebui/sign-in`).
+  deployment's own Open WebUI client asked kalla-api for Open WebUI's sign-in settings (`/internal/openwebui/sign-in`).
 - **6011:** `passed`, or the step that failed: `browser_mismatch`, `secret_required`,
   `deployment_secret_without_authority`, `provider_error`, `token_refused`, `token_endpoint_unreachable`, `tls`,
   `insecure_endpoint`, `redirected`, `id_token_missing`, `id_token_invalid`, `nonce_mismatch`, `keys_unavailable`,

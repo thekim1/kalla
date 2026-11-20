@@ -16,13 +16,13 @@ import time
 from pathlib import Path
 
 SERVICE = re.compile(r"Ume\.Rag\.(Api|AdminApi|Worker|FakeGateway)(\.dll)?( |$)")
-CONTAINER = re.compile(r"^(postgres|clamav|keycloak|fixture-site|renderer|parser|ume-rag-restest-parser)(-|$)")
+CONTAINER = re.compile(r"^(postgres|clamav|keycloak|fixture-site|renderer|parser|kalla-restest-parser)(-|$)")
 TICKS = os.sysconf("SC_CLK_TCK")
 UNITS = {"B": 1 / 2**20, "KiB": 1 / 1024, "MiB": 1, "GiB": 1024, "kB": 1 / 1000, "MB": 1, "GB": 1000}
 
 
 def services() -> dict[str, tuple[float, float]]:
-    """Name -> (RSS MB, CPU seconds) of the Ume.Rag processes on the host."""
+    """Name -> (RSS MB, CPU seconds) of the Källa processes on the host."""
     found: dict[str, tuple[float, float]] = {}
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():

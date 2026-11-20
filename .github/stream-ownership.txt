@@ -36,7 +36,7 @@ aspire.config.json                            main
 .agents/**                                    main
 
 # Shared, append-only
-UmeRag.slnx                                   shared
+Kalla.slnx                                   shared
 Directory.Packages.props                      shared
 .gitignore                                    shared
 
@@ -58,21 +58,21 @@ contracts/pipeline/**                         a
 contracts/sources/**                          a
 contracts/jobs/**                             a
 contracts/site-profiles/**                    a
-src/Ume.Rag.MigrationService/Templates/**     a
-src/Ume.Rag.Worker/Processing/Pii/**         b
-src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs  b
-src/Ume.Rag.Worker/**                         a
-src/Ume.Rag.Pipelines/**                      a
-src/Ume.Rag.Domain/Ports/IJobQueue.cs         a
-src/Ume.Rag.Domain/Ports/IBlobStore.cs        a
-src/Ume.Rag.Infrastructure/Jobs/**            a
-src/Ume.Rag.Infrastructure/Blobs/**           a
-tests/Ume.Rag.Worker.Tests/Engine/HnswIndexHealthTests.cs b
-tests/Ume.Rag.Worker.Tests/Processing/PersonalDataTests.cs b
-tests/Ume.Rag.Worker.Tests/Processing/PiiFlaggedAtTests.cs b
-tests/Ume.Rag.Worker.Tests/**                 a
-tests/Ume.Rag.Pipelines.Tests/**              a
-tests/Ume.Rag.ContractTests/**                a
+src/Kalla.MigrationService/Templates/**     a
+src/Kalla.Worker/Processing/Pii/**         b
+src/Kalla.Worker/Engine/HnswIndexHealth.cs  b
+src/Kalla.Worker/**                         a
+src/Kalla.Pipelines/**                      a
+src/Kalla.Domain/Ports/IJobQueue.cs         a
+src/Kalla.Domain/Ports/IBlobStore.cs        a
+src/Kalla.Infrastructure/Jobs/**            a
+src/Kalla.Infrastructure/Blobs/**           a
+tests/Kalla.Worker.Tests/Engine/HnswIndexHealthTests.cs b
+tests/Kalla.Worker.Tests/Processing/PersonalDataTests.cs b
+tests/Kalla.Worker.Tests/Processing/PiiFlaggedAtTests.cs b
+tests/Kalla.Worker.Tests/**                 a
+tests/Kalla.Pipelines.Tests/**              a
+tests/Kalla.ContractTests/**                a
 tests/fixtures/**                             a
 benchmarks/**                                 a
 docs/security-events.md                       b
@@ -81,7 +81,7 @@ docs/**                                       a
 site/**                                       a
 
 # Stream B: application and the serving side
-src/Ume.Rag.AppHost/**                        b
+src/Kalla.AppHost/**                        b
 src/admin-ui/src/platform/**                  a
 src/**                                        b
 tests/**                                      b

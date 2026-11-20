@@ -9,15 +9,15 @@ registration, and it requests no Graph application permission for RAG.
 
 | Object | File | Content |
 |---|---|---|
-| `ume-rag-admin` registration | `admin.bicep` | single tenant; Web redirect URIs `https://<rag admin host>/signin-oidc` and `/signout-callback-oidc`; app roles `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-viewer`, `rag-editor` (P2), `rag-skill-editor` (P2) for users and groups; `groupMembershipClaims = SecurityGroup`; optional ID-token claims `email`, `acct`; `acceptMappedClaims` for the `departmentCodes` claim (parameter, default on, as the gateway's Entra step 4); delegated Microsoft Graph `openid profile email` |
+| `kalla-admin` registration | `admin.bicep` | single tenant; Web redirect URIs `https://<rag admin host>/signin-oidc` and `/signout-callback-oidc`; app roles `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-viewer`, `rag-editor` (P2), `rag-skill-editor` (P2) for users and groups; `groupMembershipClaims = SecurityGroup`; optional ID-token claims `email`, `acct`; `acceptMappedClaims` for the `departmentCodes` claim (parameter, default on, as the gateway's Entra step 4); delegated Microsoft Graph `openid profile email` |
 | its service principal | `admin.bicep` | `appRoleAssignmentRequired = true` |
-| `ume-rag-open-webui` registration | `open-webui.bicep` | single tenant; Web redirect URI `https://<open webui host>/oauth/oidc/login/callback`; optional ID-token claims `email`, `acct`; delegated Microsoft Graph `openid profile email` |
+| `kalla-open-webui` registration | `open-webui.bicep` | single tenant; Web redirect URI `https://<open webui host>/oauth/oidc/login/callback`; optional ID-token claims `email`, `acct`; delegated Microsoft Graph `openid profile email` |
 | its service principal | `open-webui.bicep` | `appRoleAssignmentRequired = true` |
-| security groups | `main.bicep` | `Ume.Rag pilot users`, `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names to agree with IT) |
+| security groups | `main.bicep` | `Källa pilot users`, `Källa platform admins`, `Källa department admins – <pilot department>` (names to agree with IT) |
 
-App role ids are derived from the role values (`guid('ume-rag-admin', value)`), so they never change between runs. The
+App role ids are derived from the role values (`guid('kalla-admin', value)`), so they never change between runs. The
 identity that applies the templates is made an owner of every object, so it can update them on the next run. Package 2
-(`rag-api`, `rag-ingestion`, `ume-rag-tools`, the MCP server registrations) is not here.
+(`kalla-api`, `kalla-ingestion`, `kalla-tools`, the MCP server registrations) is not here.
 
 A deployment replaces whole arrays (`appRoles`, `redirectUris`, `optionalClaims`): a change made by hand in the portal
 to one of these registrations is overwritten on the next apply, and the plan shows it first. To retire an app role,
@@ -32,22 +32,22 @@ with the object ids filled in (`entra.py next-steps`):
 1. **Admin consent** for `openid profile email` on both registrations (an Entra administrator):
    `az ad app permission admin-consent --id <appId>`.
 2. **Group → app role assignments**: platform admins group → `rag-platform-admin` and department admins group →
-   `rag-department-admin` on `ume-rag-admin`; pilot users group → default access on `ume-rag-open-webui`; reviewer
+   `rag-department-admin` on `kalla-admin`; pilot users group → default access on `kalla-open-webui`; reviewer
    groups → `rag-reviewer` when the department has them. Needs `AppRoleAssignment.ReadWrite.All` or ownership of the
    registration.
 3. **Client secrets**, one per registration, by an operator: `az ad app credential reset --id <appId> --append`. The
    admin secret goes to `init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), the Open WebUI secret to
    `OAUTH_CLIENT_SECRET`. Never in a workflow, never in the repository.
 4. **Group membership** of the pilot groups: maintained by IT, not by IaC.
-5. **`departmentCodes` claim** on `ume-rag-admin`: a claims-mapping policy from the user attribute that holds the
+5. **`departmentCodes` claim** on `kalla-admin`: a claims-mapping policy from the user attribute that holds the
    cost-centre code (the gateway's `docs/identity-and-roles.md`, Entra ID step 4), by IT.
 
 ## Identities and settings (one-time, part of the approval)
 
 | What | Where | Content |
 |---|---|---|
-| Deployer `ume-rag-entra-deploy` | Entra app registration | federated credentials for this repository with subjects `repo:<owner>/<repo>:environment:entra-test` and `…:environment:entra-prod`; Graph application permissions `Application.ReadWrite.OwnedBy` and `Group.Create` (admin consent); no `AppRoleAssignment.ReadWrite.All`, no directory role |
-| Plan identity `ume-rag-entra-plan` | Entra app registration | federated credential `repo:<owner>/<repo>:environment:entra-plan`; Graph application permission `Application.Read.All` (read only) |
+| Deployer `kalla-entra-deploy` | Entra app registration | federated credentials for this repository with subjects `repo:<owner>/<repo>:environment:entra-test` and `…:environment:entra-prod`; Graph application permissions `Application.ReadWrite.OwnedBy` and `Group.Create` (admin consent); no `AppRoleAssignment.ReadWrite.All`, no directory role |
+| Plan identity `kalla-entra-plan` | Entra app registration | federated credential `repo:<owner>/<repo>:environment:entra-plan`; Graph application permission `Application.Read.All` (read only) |
 | Deployment record | Azure | a subscription and an (empty) resource group; the deployer may create deployments there (for example *Contributor* on that resource group only) |
 | `ENTRA_TENANT_ID`, `ENTRA_PLAN_CLIENT_ID` | GitHub repository variables | the tenant id and the plan identity's application id; the plan is skipped until both are set |
 | `entra-plan` | GitHub environment | no reviewers |

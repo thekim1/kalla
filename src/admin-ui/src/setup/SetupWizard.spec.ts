@@ -12,8 +12,8 @@ import { ERROR_MESSAGES, SETUP_COMPLETE_MESSAGES, SETUP_TEST_MESSAGES } from '@/
 import SetupWizard from './SetupWizard.vue'
 
 const L = SETUP_WIZARD
-const AUTHORITY = 'https://idp.example.org/realms/ume'
-const AUTHORIZE = 'https://idp.example.org/realms/ume/protocol/openid-connect/auth?state=rag-setup-test.x'
+const AUTHORITY = 'https://idp.example.org/realms/fors'
+const AUTHORIZE = 'https://idp.example.org/realms/fors/protocol/openid-connect/auth?state=rag-setup-test.x'
 
 const noSession = () => new ApiError(401, 'GET', { code: 'setup_session_required' })
 const fakePopup = () => ({ closed: false, close: vi.fn(), location: { href: 'about:blank' } })
@@ -59,8 +59,8 @@ describe('setup wizard: the setup code (admin design §5.11 step 1)', () => {
     const wrapper = await mountWizard()
     expect(heading(wrapper)).toBe(L.steps.code)
     expect(wrapper.find('[data-test=setup-notice]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('docker compose logs rag-admin')
-    expect(wrapper.text()).toContain('kubectl logs deploy/rag-admin')
+    expect(wrapper.text()).toContain('docker compose logs kalla-admin')
+    expect(wrapper.text()).toContain('kubectl logs deploy/kalla-admin')
     wrapper.unmount()
   })
 
@@ -165,7 +165,7 @@ describe('setup wizard: sign-in and the test (admin design §5.11 step 3)', () =
     await wrapper.get('#setup-authority').setValue(AUTHORITY)
     await wrapper.get('#setup-clientSecret').setValue('s3cret')
     await startTest(wrapper)
-    expect(open).toHaveBeenCalledWith('about:blank', 'ume-rag-setup-test', expect.any(String))
+    expect(open).toHaveBeenCalledWith('about:blank', 'kalla-setup-test', expect.any(String))
     expect(test).toHaveBeenLastCalledWith(expect.objectContaining({ authority: AUTHORITY, clientSecret: 's3cret' }))
     expect(popup.location.href).toBe(AUTHORIZE)
 
@@ -374,7 +374,7 @@ describe('setup wizard: summary and finish (admin design §5.11 step 5)', () => 
     const wrapper = await resume(setupState({ latestTest: tested }))
     await goTo(wrapper, 'summary')
     expect(wrapper.get('[data-test=summary-authority]').text()).toContain(L.summary.sources.wizard)
-    expect(wrapper.get('[data-test=summary-clientId]').text()).toContain('ume-rag-admin')
+    expect(wrapper.get('[data-test=summary-clientId]').text()).toContain('kalla-admin')
     expect(wrapper.get('[data-test=summary-clientId]').text()).toContain(L.summary.sources.default)
     expect(wrapper.get('[data-test=summary-secret]').text()).toBe(L.summary.secret.typed)
     expect(wrapper.get('[data-test=summary-person]').text()).toContain('Anna Andersson')

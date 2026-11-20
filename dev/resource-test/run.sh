@@ -16,9 +16,9 @@ fi
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-apphost="$root/src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj"
+apphost="$root/src/Kalla.AppHost/Kalla.AppHost.csproj"
 out="" pages=150 idle=60 load=20 ingest_timeout=900 parser_image="" keep=false
-site_port=7418 parser_port=7419 parser_container=ume-rag-restest-parser
+site_port=7418 parser_port=7419 parser_container=kalla-restest-parser
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,7 +37,7 @@ done
 for tool in aspire docker dotnet python3 curl; do
   command -v "$tool" >/dev/null || { echo "run.sh: $tool is not on PATH" >&2; exit 2; }
 done
-if aspire ps --non-interactive 2>/dev/null | grep -q "Ume.Rag.AppHost"; then
+if aspire ps --non-interactive 2>/dev/null | grep -q "Kalla.AppHost"; then
   echo "run.sh: an AppHost is already running; stop it first (aspire stop --apphost $apphost)." >&2
   exit 2
 fi
@@ -46,11 +46,11 @@ if curl -s -o /dev/null "http://127.0.0.1:$site_port/"; then
   exit 2
 fi
 
-out="${out:-$(mktemp -d "${TMPDIR:-/tmp}/ume-rag-resource-test.XXXXXX")}"
+out="${out:-$(mktemp -d "${TMPDIR:-/tmp}/kalla-resource-test.XXXXXX")}"
 mkdir -p "$out"
 samples="$out/samples.tsv" facts="$out/facts.txt"
 : > "$samples"; : > "$facts"
-key_file="$(umask 077; mktemp "${TMPDIR:-/tmp}/ume-rag-restest-key.XXXXXX")"
+key_file="$(umask 077; mktemp "${TMPDIR:-/tmp}/kalla-restest-key.XXXXXX")"
 fact() { printf '%s\t%s\n' "$1" "$2" >> "$facts"; echo "  $1: $2"; }
 log() { echo "[$(date +%T)] $*"; }
 
@@ -75,7 +75,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-secrets="$(dotnet user-secrets --project "$root/src/Ume.Rag.AppHost" list)"
+secrets="$(dotnet user-secrets --project "$root/src/Kalla.AppHost" list)"
 secret() { sed -n "s/^Parameters:$1 = //p" <<< "$secrets"; }
 pg_password="$(secret postgres-password)"
 [[ -n "$pg_password" ]] || { echo "run.sh: no Parameters:postgres-password in the AppHost's user secrets (run the AppHost once)" >&2; exit 2; }
@@ -113,11 +113,11 @@ grep -o '<loc>[^<]*</loc>' "$out/site/sitemap.xml" | sed 's/<[^>]*>//g' > "$out/
 python3 -I -m http.server "$site_port" --bind 127.0.0.1 --directory "$out/site" >/dev/null 2>&1 &
 site_pid=$!
 slug="restest-$(date +%Y%m%d-%H%M%S)"
-seeded="$(UME_RAG_DEV_DB="Host=localhost;Port=7412;Username=postgres;Password=$pg_password;Database=ragdb" \
-  UME_RAG_DEV_KEY_PEPPER="$(secret key-pepper)" \
+seeded="$(KALLA_DEV_DB="Host=localhost;Port=7412;Username=postgres;Password=$pg_password;Database=ragdb" \
+  KALLA_DEV_KEY_PEPPER="$(secret key-pepper)" \
   python3 -I "$root/scripts/dev/seed_url_list.py" --profile dev-embedding --urls-file "$out/urls.txt" --api-key \
     --collection-slug "$slug" --docker "$pg")"
-grep -o 'ume-rag-sk-[A-Za-z0-9]*' <<< "$seeded" > "$key_file"
+grep -o 'kalla-sk-[A-Za-z0-9]*' <<< "$seeded" > "$key_file"
 collection="$(sed -n 's/^ *collection: \([0-9a-f-]*\).*/\1/p' <<< "$seeded")"
 source_id="$(sed -n 's/^ *source: \([0-9a-f-]*\).*/\1/p' <<< "$seeded")"
 [[ -s "$key_file" && -n "$collection" && -n "$source_id" ]] || { echo "run.sh: the seed printed no key, collection or source" >&2; exit 1; }

@@ -1,5 +1,5 @@
 {
-  "name": "ume-rag-renderer",
+  "name": "kalla-renderer",
   "private": true,
   "description": "playwright-core for launch-server, the same exact version as the worker's Microsoft.Playwright NuGet",
   "dependencies": {

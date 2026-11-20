@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Open WebUI's start with its sign-in settings from rag-api (identity design §19, "Open WebUI").
+"""Open WebUI's start with its sign-in settings from kalla-api (identity design §19, "Open WebUI").
 
 Open WebUI reads its OIDC settings only from its environment, and ENABLE_PERSISTENT_CONFIG=false makes that environment the
-truth on every start. The settings live in rag-api (the deployment's OpenWebUi:Oidc:*, else the setup wizard's), so this
+truth on every start. The settings live in kalla-api (the deployment's OpenWebUi:Oidc:*, else the setup wizard's), so this
 wrapper is the container's entrypoint:
 
-  1. with --secrets-dir, the user-JWT secret, the feedback service account's password and the key for rag-api are read from
+  1. with --secrets-dir, the user-JWT secret, the feedback service account's password and the key for kalla-api are read from
      their files into the environment (FORWARD_USER_INFO_HEADER_JWT_SECRET, WEBUI_ADMIN_PASSWORD, OPENAI_API_KEYS); without
      it they are already in the environment (Compose's env file);
-  2. GET rag-api's internal route with that key (TLS verified against SSL_CERT_FILE when set), for up to
-     UME_RAG_SIGN_IN_WAIT seconds while rag-api starts;
+  2. GET kalla-api's internal route with that key (TLS verified against SSL_CERT_FILE when set), for up to
+     KALLA_SIGN_IN_WAIT seconds while kalla-api starts;
   3. configured: ENABLE_OAUTH_SIGNUP=true, OAUTH_CLIENT_ID, OPENID_PROVIDER_URL, OAUTH_PROVIDER_NAME, and OAUTH_CLIENT_SECRET
      (a public client without one gets OAUTH_CODE_CHALLENGE_METHOD=S256, which Open WebUI v0.12.5 requires instead of a
      secret, config.py load_oauth_providers). Not configured, or no answer: ENABLE_OAUTH_SIGNUP=false and no provider, so
@@ -17,17 +17,17 @@ wrapper is the container's entrypoint:
      outside is dropped first;
   4. Open WebUI starts as a child (the command after --, default: bash start.sh); SIGTERM and SIGINT are passed to it, and
      the wrapper exits with its exit code;
-  5. every UME_RAG_SIGN_IN_POLL seconds it asks again. A changed answer stops the child and exits 3, so the container's
+  5. every KALLA_SIGN_IN_POLL seconds it asks again. A changed answer stops the child and exits 3, so the container's
      restart policy starts it again with the new values. A failed call changes nothing; a start without an answer
      restarts only when an answer turns out configured.
 
 Nothing of the answer is ever written to the output: no value, no secret, no response body.
 
 Environment:
-  UME_RAG_SIGN_IN_URL    rag-api's route         [https://rag-api:8443/internal/openwebui/sign-in]
-  UME_RAG_SIGN_IN_WAIT   seconds to wait at start [60]
-  UME_RAG_SIGN_IN_POLL   seconds between calls    [60]
-  SSL_CERT_FILE          the CA bundle that verifies rag-api (in the Portainer stack, RAG's CA among the public ones)
+  KALLA_SIGN_IN_URL    kalla-api's route         [https://kalla-api:8443/internal/openwebui/sign-in]
+  KALLA_SIGN_IN_WAIT   seconds to wait at start [60]
+  KALLA_SIGN_IN_POLL   seconds between calls    [60]
+  SSL_CERT_FILE          the CA bundle that verifies kalla-api (in the Portainer stack, RAG's CA among the public ones)
 """
 
 import json
@@ -40,9 +40,9 @@ import time
 import urllib.error
 import urllib.request
 
-URL = os.environ.get("UME_RAG_SIGN_IN_URL", "https://rag-api:8443/internal/openwebui/sign-in")
-WAIT = int(os.environ.get("UME_RAG_SIGN_IN_WAIT", "60"))
-POLL = int(os.environ.get("UME_RAG_SIGN_IN_POLL", "60"))
+URL = os.environ.get("KALLA_SIGN_IN_URL", "https://kalla-api:8443/internal/openwebui/sign-in")
+WAIT = int(os.environ.get("KALLA_SIGN_IN_WAIT", "60"))
+POLL = int(os.environ.get("KALLA_SIGN_IN_POLL", "60"))
 SECRET_FILES = {
     "FORWARD_USER_INFO_HEADER_JWT_SECRET": "jwt-secret",
     "WEBUI_ADMIN_PASSWORD": "admin-password",
@@ -55,7 +55,7 @@ MAX_ANSWER = 64 * 1024
 
 
 def log(message):
-    print(f"rag-openwebui: {message}", flush=True)
+    print(f"kalla-openwebui: {message}", flush=True)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -73,7 +73,7 @@ def read_secrets(environment, directory):
 
 
 def parse(body):
-    """rag-api's answer, checked; ValueError when it is not one."""
+    """kalla-api's answer, checked; ValueError when it is not one."""
     answer = json.loads(body)
     if not isinstance(answer, dict) or not isinstance(answer.get("configured"), bool):
         raise ValueError("no configured member")
@@ -93,7 +93,7 @@ def parse(body):
 
 
 def fetch(key, context):
-    """The parsed answer, or None when rag-api could not be asked or did not answer well."""
+    """The parsed answer, or None when kalla-api could not be asked or did not answer well."""
     request = urllib.request.Request(URL, headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
     opener = urllib.request.build_opener(_NoRedirect(), urllib.request.HTTPSHandler(context=context))
     try:
@@ -133,7 +133,7 @@ def exit_code(returncode):
 
 
 def self_test():
-    """The pure parts, without rag-api or Open WebUI: --self-test."""
+    """The pure parts, without kalla-api or Open WebUI: --self-test."""
     on = parse(b'{"configured":true,"provider_url":"https://idp/x","client_id":"c","client_secret":"s","provider_name":"N","version":"v1"}')
     public = dict(on, client_secret=None)
     off = parse(b'{"configured":false,"provider_url":null,"client_id":null,"client_secret":null,"provider_name":null,"version":"v0"}')
@@ -174,11 +174,11 @@ def main(argv):
         time.sleep(2)
         started = fetch(key, context)
     if started is None:
-        log(f"rag-api did not answer within {WAIT} s: starting without OIDC sign-in; nobody can sign in until it answers")
+        log(f"kalla-api did not answer within {WAIT} s: starting without OIDC sign-in; nobody can sign in until it answers")
     elif started["configured"]:
-        log("starting with OIDC sign-in from rag-api's sign-in settings")
+        log("starting with OIDC sign-in from kalla-api's sign-in settings")
     else:
-        log("no sign-in settings yet (rag-admin's setup wizard, or the deployment's UME_RAG_OPENWEBUI_OIDC_*): starting without OIDC sign-in; nobody can sign in")
+        log("no sign-in settings yet (kalla-admin's setup wizard, or the deployment's KALLA_OPENWEBUI_OIDC_*): starting without OIDC sign-in; nobody can sign in")
 
     child = subprocess.Popen(command, env=sign_in_environment(environment, started))
 

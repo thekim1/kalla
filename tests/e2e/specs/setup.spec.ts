@@ -2,7 +2,7 @@ import { expect, test, type BrowserContext, type Locator, type Page } from '@pla
 import { appHostSecret, ready, scan, setupCode, typeSecret } from '../helpers'
 
 // The setup wizard (admin design §5.11, identity design §19) end to end on the stack of `scripts/Start-E2E.ps1 -Setup`: a fresh
-// database with Setup:Try, so rag-admin starts without a sign-in and the wizard opens. Finishing closes setup, so the tests
+// database with Setup:Try, so kalla-admin starts without a sign-in and the wizard opens. Finishing closes setup, so the tests
 // run in order in one browser context, and a second run needs a fresh stack. The values to enter are the bundled Keycloak's
 // (docs/local-development.md, "Trying the setup wizard").
 //
@@ -11,8 +11,8 @@ import { appHostSecret, ready, scan, setupCode, typeSecret } from '../helpers'
 // aria snapshot, which could show a typed value, out of a failed test's error-context.md.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1'
 
-const authority = 'https://localhost:7411/realms/ume'
-const unreachableAuthority = 'https://localhost:1/realms/ume'
+const authority = 'https://localhost:7411/realms/fors'
+const unreachableAuthority = 'https://localhost:1/realms/fors'
 const wrongSecret = 'not-the-client-secret'
 const password = () => appHostSecret('dev-user-password', 'E2E_PASSWORD')
 const adminClientSecret = () => appHostSecret('oidc-client-secret', 'E2E_OIDC_CLIENT_SECRET')
@@ -83,7 +83,7 @@ test.describe.serial('setup wizard', () => {
     // Open WebUI's step joins the count once the setup state says the deployment runs it.
     await expect(hook('step-of')).toHaveText(/^Step 1 of [45]$/)
     await expect(hook('code-step')).toContainText(/writes the code to its output/)
-    await expect(hook('code-step')).toContainText('docker compose logs rag-admin')
+    await expect(hook('code-step')).toContainText('docker compose logs kalla-admin')
     await scan(page, 'step 1: setup code')
 
     // Well formed (26 Crockford base32 characters), but not the code. The throttle's 429 is covered by the unit tests.
@@ -96,7 +96,7 @@ test.describe.serial('setup wizard', () => {
 
   test('the code in lower case without dashes opens step 2: the redirect URIs copy, and a reload resumes past the code', async () => {
     let code: string | null = null
-    await expect.poll(() => (code = setupCode()) !== null, { message: 'a setup code in rag-admin’s output', timeout: 60_000 }).toBe(true)
+    await expect.poll(() => (code = setupCode()) !== null, { message: 'a setup code in kalla-admin’s output', timeout: 60_000 }).toBe(true)
     await typeSecret(page.getByRole('textbox', { name: 'Setup code' }), code!.toLowerCase().replaceAll('-', ''))
     await page.getByRole('button', { name: 'Continue' }).click()
     await expect(heading()).toHaveText('Addresses')
@@ -213,7 +213,7 @@ test.describe.serial('setup wizard', () => {
     await expect(hook('step-of')).toHaveText('Step 5 of 5')
     await expect(hook('summary-authority')).toContainText(authority)
     await expect(hook('summary-authority')).toContainText('Set here')
-    await expect(hook('summary-clientId')).toContainText('ume-rag-admin')
+    await expect(hook('summary-clientId')).toContainText('kalla-admin')
     await expect(hook('summary-secret')).toHaveText('The secret you typed for the test')
     await expect(hook('summary-values')).toContainText(expiresOn)
     await expect(hook('summary-openwebui-outcome')).toHaveText('Saved in this session')
@@ -251,7 +251,7 @@ test.describe.serial('setup wizard', () => {
     const response = await page.request.get('/api/settings/sign-in')
     expect(response.status()).toBe(200)
     const raw = await response.text()
-    expect(raw.includes(adminClientSecret()), 'GET /api/settings/sign-in holds rag-admin’s client secret').toBe(false)
+    expect(raw.includes(adminClientSecret()), 'GET /api/settings/sign-in holds kalla-admin’s client secret').toBe(false)
     expect(raw.includes(openWebUiClientSecret()), 'GET /api/settings/sign-in holds Open WebUI’s client secret').toBe(false)
     const settings = JSON.parse(raw)
     expect(settings.authority).toEqual({ value: authority, source: 'wizard' })

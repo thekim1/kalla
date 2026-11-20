@@ -4,7 +4,7 @@ import type {
 } from '@/api/types'
 
 /**
- * The setup wizard's values (admin design §5.11 steps 3 and 4, identity design §19): the forms of rag-admin's sign-in and of Open
+ * The setup wizard's values (admin design §5.11 steps 3 and 4, identity design §19): the forms of kalla-admin's sign-in and of Open
  * WebUI's, what they send, and when a test still counts. Only what is typed in the wizard is sent: a field left empty (the default)
  * or set by the deployment is sent as null.
  */
@@ -44,7 +44,7 @@ export const SETUP_TEST_REASONS = [
 ] as const
 
 /**
- * The reasons of `setup_test_required` from `POST /bff/setup/complete` (SetupModeEndpoints.cs): rag-admin's, and Open WebUI's, which
+ * The reasons of `setup_test_required` from `POST /bff/setup/complete` (SetupModeEndpoints.cs): kalla-admin's, and Open WebUI's, which
  * adds `admin_test_required` (no passed test sign-in by a platform admin in this session).
  */
 export const SETUP_COMPLETE_REASONS = ['unknown_test', 'not_latest', 'not_passed', 'not_platform_admin', 'values_changed', 'admin_test_required'] as const
@@ -58,7 +58,7 @@ export type TextFieldName = (typeof TEXT_FIELDS)[number]
 export type SignInField = TextFieldName | 'extraScopes' | 'refuseGuests' | 'clientSecret'
 
 /**
- * A client secret's part of a form, rag-admin's and Open WebUI's alike: the secret is typed only; it is never prefilled and lives
+ * A client secret's part of a form, kalla-admin's and Open WebUI's alike: the secret is typed only; it is never prefilled and lives
  * nowhere but here.
  */
 export interface SecretFields {
@@ -69,7 +69,7 @@ export interface SecretFields {
   removeSecret: boolean
 }
 
-/** The wizard's form of rag-admin's sign-in. */
+/** The wizard's form of kalla-admin's sign-in. */
 export interface SetupForm extends SecretFields {
   authority: string
   clientId: string
@@ -85,14 +85,14 @@ export interface SetupForm extends SecretFields {
 
 export type ProviderPreset = 'keycloak' | 'entra'
 
-/** Whether the deployment sets `field` of `values` (rag-admin's or Open WebUI's sign-in values), so the wizard shows it locked. */
+/** Whether the deployment sets `field` of `values` (kalla-admin's or Open WebUI's sign-in values), so the wizard shows it locked. */
 export function isLocked<K extends string>(values: Record<K, { source: SignInValueSource }>, field: K): boolean {
   return values[field].source === 'deployment'
 }
 
 /**
  * Whether the provider address field takes the gateway's address (`GET /bff/setup/state`'s `gateway.suggestedAuthority`, identity
- * design §19): the gateway has one, and neither the deployment nor the wizard sets rag-admin's authority.
+ * design §19): the gateway has one, and neither the deployment nor the wizard sets kalla-admin's authority.
  */
 export function suggestsAuthority(signIn: SignInSettings, suggested: string | null | undefined): suggested is string {
   return !!suggested && signIn.authority.source === 'default'
@@ -194,7 +194,7 @@ function expiryOf(fields: SecretFields, secret: SignInSecretStatus): string | nu
   return secret.source === 'deployment' || fields.removeSecret ? null : clean(fields.clientSecretExpiresOn)
 }
 
-/** rag-admin's secret as `POST test` takes it (`typedSecretOf`). */
+/** kalla-admin's secret as `POST test` takes it (`typedSecretOf`). */
 export function secretOf(form: SetupForm, signIn: SignInSettings): string | null {
   return typedSecretOf(form, signIn.clientSecret)
 }

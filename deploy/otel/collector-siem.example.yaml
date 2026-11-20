@@ -1,12 +1,12 @@
-# Example OpenTelemetry Collector (contrib distribution) configuration that sends the security events of rag-api,
-# rag-admin and rag-worker to a SIEM. Copied from the gateway's deploy/otel/collector-siem.example.yaml, with RAG's
+# Example OpenTelemetry Collector (contrib distribution) configuration that sends the security events of kalla-api,
+# kalla-admin and kalla-worker to a SIEM. Copied from the gateway's deploy/otel/collector-siem.example.yaml, with RAG's
 # category and app name. See docs/security-events.md, "Getting them to the SIEM".
 #
-# Point the services at the collector: UME_OTEL_ENDPOINT=https://otel-collector.internal:4317 in deploy/.env
+# Point the services at the collector: FORS_OTEL_ENDPOINT=https://otel-collector.internal:4317 in deploy/.env
 # (Compose; the host firewall then allows it), OTEL_EXPORTER_OTLP_ENDPOINT in a Kubernetes overlay. The gateway and
 # RAG can share one collector: add the gateway's category to the filter below.
 # Security events are the log records whose logger category (exported as the instrumentation scope) is
-# "Ume.Rag.Security". Everything else is operational telemetry and is not sent to the SIEM here.
+# "Kalla.Security". Everything else is operational telemetry and is not sent to the SIEM here.
 #
 # Pick ONE exporter for the security pipeline and remove or comment out the others. Check the exporter options
 # against the collector version you run; this file was validated with otel/opentelemetry-collector-contrib 0.120.0.
@@ -24,7 +24,7 @@ processors:
     error_mode: ignore
     logs:
       log_record:
-        - instrumentation_scope.name != "Ume.Rag.Security"
+        - instrumentation_scope.name != "Kalla.Security"
 
   # Syslog needs an app name and a message; the record body is the formatted event text and the event's fields
   # stay available as attributes (Reason, KeyId, SourceAddress, Count, ...; docs/security-events.md lists them).
@@ -33,7 +33,7 @@ processors:
     log_statements:
       - context: log
         statements:
-          - set(attributes["appname"], "ume-rag")
+          - set(attributes["appname"], "kalla")
           - set(attributes["message"], body)
 
   batch: {}
@@ -52,14 +52,14 @@ exporters:
   # splunk_hec:
   #   token: ${env:SPLUNK_HEC_TOKEN}
   #   endpoint: https://splunk.example.org:8088/services/collector
-  #   source: ume-rag
-  #   sourcetype: ume:security
+  #   source: kalla
+  #   sourcetype: kalla:security
   #   index: security
 
   # Elasticsearch / Elastic Security.
   # elasticsearch:
   #   endpoints: [https://elastic.example.org:9200]
-  #   logs_index: ume-rag-security
+  #   logs_index: kalla-security
   #   auth: { authenticator: basicauth/elastic }
 
   # Microsoft Sentinel via Azure Monitor (Application Insights connection string; or use the Azure Monitor

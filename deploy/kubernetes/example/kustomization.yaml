@@ -3,7 +3,7 @@
 # See docs/kubernetes.md.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: ume-rag
+namespace: kalla
 resources:
   - namespace.yaml
   - ../base
@@ -14,60 +14,60 @@ components:
   - ../components/datastores
   # Worker and parser: crawling, uploads and parsing.
   - ../components/ingestion
-  # ClamAV, the malware scan. To run without it, remove this line and set ClamAv__Mode=off in ume-rag-worker-config
+  # ClamAV, the malware scan. To run without it, remove this line and set ClamAv__Mode=off in kalla-worker-config
   # below: files are then stored unscanned (docs/kubernetes.md, Malware scan).
   - ../components/clamav
   # The renderer for JavaScript-rendered pages (copy its seccomp profile to the nodes first; docs/kubernetes.md).
   # - ../components/renderer
-  # The Ingress controller's way in to rag-api and rag-admin (the base's NetworkPolicies deny any other). It admits
+  # The Ingress controller's way in to kalla-api and kalla-admin (the base's NetworkPolicies deny any other). It admits
   # the namespace ingress-nginx; change: for another controller, see the NetworkPolicy patches below.
   - ../components/ingress-controller
 images:
   # The released images. A release bundle already pins the base to them by digest, so these lines only matter when you
   # deploy from the repository, or set newName to your own registry (pin by digest: digest: sha256:...).
-  - {name: ume-rag/api, newName: ghcr.io/thekim1/ume-rag/api, newTag: "latest"}
-  - {name: ume-rag/admin, newName: ghcr.io/thekim1/ume-rag/admin, newTag: "latest"}
-  - {name: ume-rag/migrations, newName: ghcr.io/thekim1/ume-rag/migrations, newTag: "latest"}
-  - {name: ume-rag/worker, newName: ghcr.io/thekim1/ume-rag/worker, newTag: "latest"}
-  - {name: ume-rag/parser, newName: ghcr.io/thekim1/ume-rag/parser, newTag: "latest"}
-  - {name: ume-rag/clamav, newName: ghcr.io/thekim1/ume-rag/clamav, newTag: "latest"}
-  - {name: ume-rag/renderer, newName: ghcr.io/thekim1/ume-rag/renderer, newTag: "latest"}
-  - {name: ume-rag/postgres, newName: ghcr.io/thekim1/ume-rag/postgres, newTag: "latest"}
+  - {name: kalla/api, newName: ghcr.io/thekim1/kalla/api, newTag: "latest"}
+  - {name: kalla/admin, newName: ghcr.io/thekim1/kalla/admin, newTag: "latest"}
+  - {name: kalla/migrations, newName: ghcr.io/thekim1/kalla/migrations, newTag: "latest"}
+  - {name: kalla/worker, newName: ghcr.io/thekim1/kalla/worker, newTag: "latest"}
+  - {name: kalla/parser, newName: ghcr.io/thekim1/kalla/parser, newTag: "latest"}
+  - {name: kalla/clamav, newName: ghcr.io/thekim1/kalla/clamav, newTag: "latest"}
+  - {name: kalla/renderer, newName: ghcr.io/thekim1/kalla/renderer, newTag: "latest"}
+  - {name: kalla/postgres, newName: ghcr.io/thekim1/kalla/postgres, newTag: "latest"}
 configMapGenerator:
-  - name: ume-rag-config
+  - name: kalla-config
     behavior: merge
     literals:
       # change: the gateway (HTTPS). Each service's credential key is its secret file Gateway__Key
       # (init-deployment.sh --gateway-credential-key-file).
       - Gateway__BaseUrl=https://llm.example.se
       # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
-  - name: ume-rag-api-config
+  - name: kalla-api-config
     behavior: merge
     literals:
-      # change: the public address of rag-api (citation links are absolute).
+      # change: the public address of kalla-api (citation links are absolute).
       - Knowledge__PublicBaseUrl=https://rag.example.se
-  - name: ume-rag-admin-config
+  - name: kalla-admin-config
     behavior: merge
     literals:
       # Sign-in (docs/kubernetes.md, Sign-in), one of two ways:
       # - the setup wizard: leave the Oidc__ lines below commented out. After the first deploy, read the setup code with
-      #   kubectl -n ume-rag logs deploy/rag-admin | grep 'Setup code' (either pod) and open https://<admin host>/setup;
+      #   kubectl -n kalla logs deploy/kalla-admin | grep 'Setup code' (either pod) and open https://<admin host>/setup;
       #   it shows the redirect URIs, takes the client secret and tests the sign-in before saving;
       # - declared: each Oidc__ literal set is the deployment's value, locked in the wizard. With Oidc__Authority and the
-      #   client secret (init-deployment.sh --oidc-client-secret-file, in ume-rag-admin-secrets) the wizard never opens.
-      # - Oidc__Authority=https://idp.example.se/realms/ume
-      # - Oidc__ClientId=ume-rag-admin
+      #   client secret (init-deployment.sh --oidc-client-secret-file, in kalla-admin-secrets) the wizard never opens.
+      # - Oidc__Authority=https://idp.example.se/realms/fors
+      # - Oidc__ClientId=kalla-admin
       # - Oidc__TenantId=<Entra tenant id>
       # - Oidc__RefuseGuests=false
       # The break-glass group(s) for the first platform admin, only for an identity provider without roles in its tokens.
       # - Oidc__RoleGroups__rag-platform-admin=rag-platform-admins
       # Any new value (for example today's date) opens the setup wizard again, once, for an hour; the new setup code is
-      # in kubectl logs deploy/rag-admin. Remove it before restoring a database.
+      # in kubectl logs deploy/kalla-admin. Remove it before restoring a database.
       # - Setup__Reopen=2026-11-15
-      # change: rag-api's public address again (Knowledge__PublicBaseUrl above), shown to a platform admin who connects
+      # change: kalla-api's public address again (Knowledge__PublicBaseUrl above), shown to a platform admin who connects
       # an app.
       - Admin__ApiPublicUrl=https://rag.example.se
-  - name: ume-rag-worker-config
+  - name: kalla-worker-config
     behavior: merge
     literals:
       # Private ranges the crawler may fetch (municipal hosts), comma-separated.
@@ -75,39 +75,39 @@ configMapGenerator:
       # Only without ../components/clamav: no malware scan.
       # - ClamAv__Mode=off
 patches:
-  # change: a ReadWriteMany storage class for the blob volume (rag-api, rag-admin and rag-worker mount it).
-  - target: {kind: PersistentVolumeClaim, name: rag-blobs}
+  # change: a ReadWriteMany storage class for the blob volume (kalla-api, kalla-admin and kalla-worker mount it).
+  - target: {kind: PersistentVolumeClaim, name: kalla-blobs}
     patch: |-
       - op: add
         path: /spec/storageClassName
         value: nfs-client
   # NetworkPolicies (docs/kubernetes.md, Network policies). The base lets each pod reach only the stack's own flows, the
-  # crawl and freshclam at public addresses on 80 and 443, and rag-api and rag-admin any address on 443. NetworkPolicy
+  # crawl and freshclam at public addresses on 80 and 443, and kalla-api and kalla-admin any address on 443. NetworkPolicy
   # cannot filter by host name, so change: give each destination these do not cover its own rule, for example
   # - your Ingress controller's namespace, if it is not ingress-nginx:
-  # - target: {kind: NetworkPolicy, name: ume-rag-ingress-controller}
+  # - target: {kind: NetworkPolicy, name: kalla-ingress-controller}
   #   patch: |-
   #     - op: replace
   #       path: /spec/ingress/0/from/0/namespaceSelector/matchLabels/kubernetes.io~1metadata.name
   #       value: traefik
   # - the ranges of Crawl__AllowedPrivateRanges above, the same list, and the gateway if it has a private address or
-  #   another port than 443 (the gateway's Compose stack publishes 8443); rag-api and rag-admin need that port too
-  #   (ume-rag-api, ume-rag-admin), as they do the OTLP collector's (4317):
-  # - target: {kind: NetworkPolicy, name: ume-rag-worker}
+  #   another port than 443 (the gateway's Compose stack publishes 8443); kalla-api and kalla-admin need that port too
+  #   (kalla-api, kalla-admin), as they do the OTLP collector's (4317):
+  # - target: {kind: NetworkPolicy, name: kalla-worker}
   #   patch: |-
   #     - op: add
   #       path: /spec/egress/-
   #       value:
   #         to: [{ipBlock: {cidr: 10.20.0.0/16}}, {ipBlock: {cidr: 10.30.0.10/32}}]
   #         ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 80}, {protocol: TCP, port: 8443}]
-  # - pgBackRest's S3 store, with ../components/datastores (ume-rag-postgres), or freshclam's proxy (ume-rag-clamav):
-  # - target: {kind: NetworkPolicy, name: ume-rag-postgres}
+  # - pgBackRest's S3 store, with ../components/datastores (kalla-postgres), or freshclam's proxy (kalla-clamav):
+  # - target: {kind: NetworkPolicy, name: kalla-postgres}
   #   patch: |-
   #     - op: add
   #       path: /spec/egress/-
   #       value: {to: [{ipBlock: {cidr: 10.40.0.20/32}}], ports: [{protocol: TCP, port: 443}]}
   # - your own Postgres instead of ../components/datastores:
-  # - target: {kind: NetworkPolicy, name: ume-rag-database}
+  # - target: {kind: NetworkPolicy, name: kalla-database}
   #   patch: |-
   #     - op: replace
   #       path: /spec/egress/0/to

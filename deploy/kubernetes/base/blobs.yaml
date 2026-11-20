@@ -1,12 +1,12 @@
-# The blob store (uploads, raw crawled content, previews): a file tree that rag-admin and rag-worker write and rag-api
+# The blob store (uploads, raw crawled content, previews): a file tree that kalla-admin and kalla-worker write and kalla-api
 # reads, so all three mount it. With more than one node it needs a ReadWriteMany storage class (NFS, CephFS, Azure
 # Files, Longhorn RWX); the overlay sets storageClassName. With ReadWriteOnce every pod that mounts it must run on one
-# node. Files are encrypted by the blob master key (secret ume-rag-blob-key) before they reach the volume.
+# node. Files are encrypted by the blob master key (secret kalla-blob-key) before they reach the volume.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: rag-blobs
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: blobs}
+  name: kalla-blobs
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: blobs}
 spec:
   accessModes: [ReadWriteMany]
   volumeMode: Filesystem

@@ -50,7 +50,7 @@ def refusals_text(pg: dict | None) -> str:
 
 
 def phase_table(folder: Path, phases: list[str], meta: dict) -> list[str]:
-    app = meta.get("app_container") or "rag-api"
+    app = meta.get("app_container") or "kalla-api"
     lines = [
         "| Phase | Streams (probe + k6) | Streams/s | Errors | TTFT p50 | TTFT p95 | TTFT p99 | First event p95 "
         "| Gap p99 | Whole stream p50 (k6) | Whole p95 (k6) | Dropped (k6) | Late starts (probe) "

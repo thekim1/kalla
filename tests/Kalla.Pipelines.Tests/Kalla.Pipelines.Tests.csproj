@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Kalla.Pipelines (engine design §19, unit level): the §4 validation rules with a failing and a passing definition
+    each, stage keys, the P1 templates in src/Kalla.MigrationService/Templates/, source-setting effect hashes, the job
+    contracts' cross-member rules, RFC 8785 and the JSON Schema validator (to-verify #17). No database.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Kalla.Pipelines\Kalla.Pipelines.csproj" />
+  </ItemGroup>
+</Project>

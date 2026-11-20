@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Image test for ume-rag/postgres (repo-and-deployment §5.2; CI job `images` in .github/workflows/verify.yml).
+# Image test for kalla/postgres (repo-and-deployment §5.2; CI job `images` in .github/workflows/verify.yml).
 # Runs the image hardened as in Compose (uid 999, read-only root file system, tmpfs /tmp and /var/run/postgresql, no
 # capabilities) with deploy/postgres/postgresql.conf, then checks pgvector, an HNSW build on 1024-dim vectors,
 # pg_stat_statements, wal_compression=lz4, TLS, WAL archiving with pgBackRest from inside the container (stanza-create,
@@ -7,13 +7,13 @@
 # init.sql and pg_hba.conf are stream B's (P0 #6), so the test uses the bootstrap superuser and writes its own minimal
 # pg_hba.conf.
 #
-# Usage: deploy/postgres/test.sh [image]   (default: ume-rag/postgres:latest)
+# Usage: deploy/postgres/test.sh [image]   (default: kalla/postgres:latest)
 set -euo pipefail
 
-image="${1:-ume-rag/postgres:latest}"
+image="${1:-kalla/postgres:latest}"
 expected_vector=0.8.7
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-id="ume-rag-pgtest-$$"
+id="kalla-pgtest-$$"
 work="$(mktemp -d)"
 password="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 main="$id-main"

@@ -1,6 +1,6 @@
 # Identity, authentication and authorisation: detailed design
 
-Detail step 3 of the Ume.Rag design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
+Detail step 3 of the Källa design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
 Decisions table in [`../decisions.md`](../decisions.md). Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
@@ -16,10 +16,10 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 
 | Phase | Provider | RAG's part |
 |---|---|---|
-| Dev and CI | each repo's own Keycloak in its AppHost, realm `ume` from `dev/keycloak/ume-realm.json`, with test users | §11.1 |
-| **P1 (pilot)** | **one Keycloak shared with the LLM gateway**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `ume` with both systems' clients and roles; local accounts without OTP (MFA returns with brokered Entra ID or AD), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**` (stream B, P1 item 16 → J8), no test users (§11.2) |
+| Dev and CI | each repo's own Keycloak in its AppHost, realm `fors` from `dev/keycloak/fors-realm.json`, with test users | §11.1 |
+| **P1 (pilot)** | **one Keycloak shared with Fors**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `fors` with both systems' clients and roles; local accounts without OTP (MFA returns with brokered Entra ID or AD), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**` (stream B, P1 item 16 → J8), no test users (§11.2) |
 | **P2** | Entra ID, approval package 1 (`infra/entra/`; kept, not yet submitted) | §12 |
-| **Production** | AD and Entra ID, both: brokered through Keycloak or directly through `Oidc:*` (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone later") | §11.2 |
+| **Production** | AD and Entra ID, both: brokered through Keycloak or directly through `Oidc:*` (Decisions "Identity providers: AD and Entra ID through Keycloak, Källa standalone later") | §11.2 |
 
 The code path is the same in every phase: OIDC code + PKCE for the admin and Open WebUI, JWT bearer for RAG API
 tokens, configured by `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings. Moving from Keycloak to Entra is
@@ -31,13 +31,13 @@ to it.
 
 | Area | Gateway source | Here |
 |---|---|---|
-| OIDC code + PKCE BFF, server-side cookie session, CSRF, 8 h / 12 h sessions | `src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
+| OIDC code + PKCE BFF, server-side cookie session, CSRF, 8 h / 12 h sessions | `src/Fors.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
 | Claim mapping (`roles`, `departmentCodes`, `teamCodes`, group → role) | `AdminAuthentication.cs:18-65`, `AdminOptions.cs:107-131` | §1.3 (copy) |
 | Department scope from `departmentCodes` matched on cost-centre code | `AdminContext.cs:81-90`, `docs/identity-and-roles.md:26-31` | §1.3, §2 (copy + feature C) |
 | Virtual keys: HMAC + pepper, cache incl. negative cache, failure buckets, per-address throttle, 24 h grace, audited reveal | `Domain/Services/VirtualKeyHasher.cs`, `Gateway/Pipeline/KeyAuthenticator.cs`, `AuthFailureRecorder.cs`, `AuthFailureThrottle.cs`, `Domain/Services/KeyRotation.cs`, `AdminApi/KeyEndpoints.cs:79-133` | §6 (adapt) |
 | Machine tokens: `Authority`/`Audience`/`PermissionClaims`, keys vs tokens never mixed | `DataApi/DataApiAuthentication.cs`, `DataApiOptions.cs` | §7 (adapt) |
 | Security events: one category, stable names and ids, `Printable()`, no secrets | `Infrastructure/Security/SecurityEvents.cs`, `docs/data-access.md:54-133` | §10 (copy pattern) |
-| Keycloak dev realm; claim mappers for the shared P1 realm | `dev/keycloak/ume-realm.json`, `docs/identity-and-roles.md:132-158` | §11 (adapt) |
+| Keycloak dev realm; claim mappers for the shared P1 realm | `dev/keycloak/fors-realm.json`, `docs/identity-and-roles.md:132-158` | §11 (adapt) |
 
 ## 1. Admin sign-in (BFF)
 
@@ -52,7 +52,7 @@ to it.
   (`:112`). Sign-out returns the IdP's end-session URL as JSON (`:139-149`).
 - Server-side sessions: the cookie holds only a random id; the ticket is Data-Protection-encrypted
   (`AdminSessions.cs:16-54`) and stored in Postgres, `config."AdminSessions"` (session id, ciphertext, expiry; owned by
-  `rag-admin`), through a Postgres implementation of `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`;
+  `kalla-admin`), through a Postgres implementation of `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`;
   the gateway has Redis and in-memory ones, `InfrastructureExtensions.cs:110`, `:120`). A read ignores expired rows;
   the admin's retention step deletes them. The Data Protection key ring is already in Postgres
   (`config."DataProtectionKeys"`, as the gateway's `PersistKeysToDbContext`, `InfrastructureExtensions.cs:60-63`), so
@@ -70,15 +70,15 @@ to it.
 - Audit actor = **`oid`**, else `sub`, else name (adapted from `AdminContext.cs:76-79`, which uses `sub`; `oid` is the
   same user id in every registration of the tenant, §1.6); actor context (name, roles, departments, address,
   session, request id, user agent) from `AdminActor` (`AdminActivity.cs:18-57`). Built as
-  `AdminActor.SubjectOf` (`src/Ume.Rag.AdminApi/AdminActor.cs:38-40`), used by `AdminContext.Actor`
-  (`src/Ume.Rag.AdminApi/AdminContext.cs:54-55`). **P1 (Keycloak):** Keycloak issues no `oid`, so the actor is `sub`, the Keycloak user id;
-  it is the same in every client of realm `ume`, so it equals the gateway's actor (`sub`) for the same person. It changes
+  `AdminActor.SubjectOf` (`src/Kalla.AdminApi/AdminActor.cs:38-40`), used by `AdminContext.Actor`
+  (`src/Kalla.AdminApi/AdminContext.cs:54-55`). **P1 (Keycloak):** Keycloak issues no `oid`, so the actor is `sub`, the Keycloak user id;
+  it is the same in every client of realm `fors`, so it equals the gateway's actor (`sub`) for the same person. It changes
   when the provider changes (P2 Entra `oid`; possibly with LDAP federation, §16), so one person can appear under two
   actor ids in the audit log.
 
 ### 1.2 Class map
 
-| Gateway (`Ume.LlmGateway.AdminApi`) | Ume.Rag (`Ume.Rag.AdminApi`) | How |
+| Gateway (`Fors.AdminApi`) | Källa (`Kalla.AdminApi`) | How |
 |---|---|---|
 | `AdminAuthentication.ApplyClaimMapping`, `CopyClaims` (`AdminAuthentication.cs:18-65`) | same | copy |
 | `AdminAuthentication.AddAdminAuthentication` (`:71-174`) | same | adapt: cookie names (below), policies for `rag-*` roles, `OnTokenValidated` adds §1.7 and §2.3 |
@@ -87,17 +87,17 @@ to it.
 | `AdminClaims` (`:248-257`) | same | adapt: adds `oid` (`sub`, `roles`, `departmentCodes`, `teamCodes`, `ume_session`) |
 | `AdminPolicies` (`:260-279`) | same | adapt: §1.3 |
 | `AdminAntiforgeryMiddleware` (`:281-305`) | same | copy |
-| `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
+| `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `kalla-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
 | `AdminOptions` (`AdminOptions.cs:7-51`) | same | adapt: keep `RequestsPerMinute`, `MaxSessionHours`, `AuditSourceAddress`; drop price/release settings |
-| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1`; sign-in-time item `.ume-rag.signedIn` (the gateway's is `.ume.signedIn`), so a ticket from one system never reads as the other's |
+| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Kalla.AdminApi.Session.v1`; sign-in-time item `.kalla.signedIn` (the gateway's is `.fors.signedIn`), so a ticket from one system never reads as the other's |
 | `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`), `RedisAdminSessionStore`, `InMemoryAdminSessionStore` | `IAdminSessionStore`, `PostgresAdminSessionStore` | adapt: Postgres implementation over `config."AdminSessions"` (§1.1); the Redis one is not copied |
 | `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy; `AdminClientAddresses` reads `Settings.TrustedProxies` (the `network` settings section, admin design §4.5) at most every 30 s, so `SourceAddress` is the client's address behind a trusted proxy and the connection address otherwise (`docs/security-events.md`) |
 | `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles; actor `oid` (§1.1) |
 | – | `DepartmentMembershipResolver` | new (§2) |
 
 Cookie names must differ from the gateway's: browsers ignore the port, so on `localhost` the gateway admin (5173)
-and ours (5174) would overwrite each other's `__Host-ume-admin` and `XSRF-TOKEN`. Ours: `__Host-ume-rag-admin`
-(session), `__Host-ume-rag-csrf` (antiforgery), `RAG-XSRF-TOKEN` (readable token; the copied admin UI's fetch helper
+and ours (5174) would overwrite each other's `__Host-ume-admin` and `XSRF-TOKEN`. Ours: `__Host-kalla-admin`
+(session), `__Host-kalla-csrf` (antiforgery), `RAG-XSRF-TOKEN` (readable token; the copied admin UI's fetch helper
 reads this name).
 
 ### 1.3 Claim mapping and role resolution
@@ -140,22 +140,22 @@ with event 6006; there is no new security event. Whether the municipality can fi
 ### 1.4 Settings
 
 Same names and semantics as the gateway (`docs/identity-and-roles.md:106-121`, `deploy/compose.prod.yaml:136-146`)
-with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in AppHost user secrets.
+with the `KALLA_` prefix; for local runs the same keys as `Oidc:<Setting>` in AppHost user secrets.
 
 | Env (`deploy/.env`) | Setting | Default | Notes |
 |---|---|---|---|
-| `UME_RAG_OIDC_AUTHORITY` | `Oidc:Authority` | – (required) | P1: the shared Keycloak, `https://<keycloak host>/realms/ume` (the gateway's form, `docs/identity-and-roles.md:156`); P2 Entra: `https://login.microsoftonline.com/<tid>/v2.0` |
-| `UME_RAG_OIDC_CLIENT_ID` | `Oidc:ClientId` | `ume-rag-admin` | P1: the Keycloak client id `ume-rag-admin` (the default); P2 Entra: the `ume-rag-admin` application id (`init-deployment.sh --oidc-client-id`, repo-and-deployment §7.1) |
-| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | P1: the `ume-rag-admin` client's secret in the shared realm (§11.2); P2: the registration's own secret (§12.2); `init-deployment.sh --oidc-client-secret-file` as in the gateway |
-| `UME_RAG_OIDC_ROLE_CLAIM` | `Oidc:RoleClaim` | `roles` | |
-| `UME_RAG_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
-| `UME_RAG_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
-| `UME_RAG_OIDC_GROUP_CLAIM` | `Oidc:GroupClaim` | `groups` | |
-| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | the break-glass for the first platform admin: `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
+| `KALLA_OIDC_AUTHORITY` | `Oidc:Authority` | – (required) | P1: the shared Keycloak, `https://<keycloak host>/realms/fors` (the gateway's form, `docs/identity-and-roles.md:156`); P2 Entra: `https://login.microsoftonline.com/<tid>/v2.0` |
+| `KALLA_OIDC_CLIENT_ID` | `Oidc:ClientId` | `kalla-admin` | P1: the Keycloak client id `kalla-admin` (the default); P2 Entra: the `kalla-admin` application id (`init-deployment.sh --oidc-client-id`, repo-and-deployment §7.1) |
+| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | P1: the `kalla-admin` client's secret in the shared realm (§11.2); P2: the registration's own secret (§12.2); `init-deployment.sh --oidc-client-secret-file` as in the gateway |
+| `KALLA_OIDC_ROLE_CLAIM` | `Oidc:RoleClaim` | `roles` | |
+| `KALLA_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
+| `KALLA_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
+| `KALLA_OIDC_GROUP_CLAIM` | `Oidc:GroupClaim` | `groups` | |
+| `KALLA_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | the break-glass for the first platform admin: `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
 | *(no variable)* | `Settings.Identity.RoleGroups` (database, *Settings → Role groups*) | – | the groups of `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-editor` and `rag-viewer` (`rag-skill-editor` from P2); the same `rag-`-or-object-id rule, refused by the admin API on save; merged with the row above (M-17 C10) |
-| `UME_RAG_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
-| `UME_RAG_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7). **Unset in P1**: Keycloak tokens carry no `tid`, so a set value refuses every sign-in (`src/Ume.Rag.AdminApi/TenantCheck.cs:19-23`); set with Entra in P2 |
-| `UME_RAG_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | **new** (§1.7); harmless on Keycloak (no-op) |
+| `KALLA_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
+| `KALLA_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7). **Unset in P1**: Keycloak tokens carry no `tid`, so a set value refuses every sign-in (`src/Kalla.AdminApi/TenantCheck.cs:19-23`); set with Entra in P2 |
+| `KALLA_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | **new** (§1.7); harmless on Keycloak (no-op) |
 | – | `Admin:MaxSessionHours` | 12 | copy (`AdminOptions.cs:19-20`) |
 | – | `Admin:RequestsPerMinute` | 120 | copy (`AdminOptions.cs:12-13`) |
 | – | `Admin:AuditSourceAddress` | `Full` | copy (`AdminOptions.cs:26`) |
@@ -172,24 +172,24 @@ context answer.
 
 ### 1.6 Own registration (decided)
 
-Our BFF uses its **own** client `ume-rag-admin` (plan §2, answered question 7, revised 2026-10-30), next to the
-gateway's `ume-admin`, with its own client secret. The code is the gateway's; only `UME_RAG_OIDC_CLIENT_ID` and the
+Our BFF uses its **own** client `kalla-admin` (plan §2, answered question 7, revised 2026-10-30), next to the
+gateway's `fors-admin`, with its own client secret. The code is the gateway's; only `KALLA_OIDC_CLIENT_ID` and the
 client definition differ. Rotating or revoking either system's credential never affects the other, and a user with
 only `rag-*` roles gets nothing in the gateway admin (the gateway's roles are `gateway-admin`, `department-admin`,
-`viewer`, `team-admin` and Data API permissions such as `catalog.read`, gateway `dev/keycloak/ume-realm.json:9-18`;
+`viewer`, `team-admin` and Data API permissions such as `catalog.read`, gateway `dev/keycloak/fors-realm.json:9-18`;
 ours are `rag-*` plus `Knowledge.Read.All` and `Chat.Invoke.All`, so the names never collide).
 
-- **P1, shared Keycloak:** `ume-rag-admin` is a confidential client in realm `ume`, configured like the gateway's
+- **P1, shared Keycloak:** `kalla-admin` is a confidential client in realm `fors`, configured like the gateway's
   Keycloak client (`docs/identity-and-roles.md:137-153`) and defined in RAG's realm additions (§11.2). Roles are realm
-  roles `rag-*` given to users or groups; with *full scope allowed* off on every client, a token of `ume-rag-admin`
-  carries only `rag-*` roles and a token of `ume-admin` only the gateway's. Keycloak's `sub` is the user id, the same in
+  roles `rag-*` given to users or groups; with *full scope allowed* off on every client, a token of `kalla-admin`
+  carries only `rag-*` roles and a token of `fors-admin` only the gateway's. Keycloak's `sub` is the user id, the same in
   every client, so the audit actor is `sub` (§1.1).
-- **P2, Entra:** the registration `ume-rag-admin`, configured like the gateway's (`docs/identity-and-roles.md:160-182`)
+- **P2, Entra:** the registration `kalla-admin`, configured like the gateway's (`docs/identity-and-roles.md:160-182`)
   plus §12's additions, with its own client secret (§12.2). Users get `rag-*` app roles on it; the gateway's
   registration and its assignments are untouched. Because `sub` is pairwise per application in Entra, the audit actor
   is `oid` (§1.1).
 
-Development and CI use the same model (dev Keycloak client `ume-rag-admin`, §11.1), so both stacks run side by side.
+Development and CI use the same model (dev Keycloak client `kalla-admin`, §11.1), so both stacks run side by side.
 
 ### 1.7 Tenant and guests (new, both systems)
 
@@ -209,21 +209,21 @@ The same two checks guard RAG API tokens (§7.1) and, in the gateway, admin sign
 release 2, P2, gateway design §4.6; weakness review §5).
 
 **P1 (shared Keycloak): both checks are no-ops.** Keycloak emits none of `tid`, `acct`, `idp`, so `Oidc:TenantId` and
-`RagApi:TenantId` stay unset (a set value would refuse every Keycloak user, `src/Ume.Rag.AdminApi/TenantCheck.cs:19-23`) and
-`Oidc:RefuseGuests` finds nothing to refuse (`src/Ume.Rag.AdminApi/TenantCheck.cs:30-41`). The code (`TenantCheck.cs`,
-called before claim mapping at `src/Ume.Rag.AdminApi/AdminAuthentication.cs:83`) stays and takes effect with Entra in P2. What the tenant boundary does
-on Entra is done in P1 by the realm: only accounts in realm `ume` can sign in, and there are no guest or brokered
+`RagApi:TenantId` stay unset (a set value would refuse every Keycloak user, `src/Kalla.AdminApi/TenantCheck.cs:19-23`) and
+`Oidc:RefuseGuests` finds nothing to refuse (`src/Kalla.AdminApi/TenantCheck.cs:30-41`). The code (`TenantCheck.cs`,
+called before claim mapping at `src/Kalla.AdminApi/AdminAuthentication.cs:83`) stays and takes effect with Entra in P2. What the tenant boundary does
+on Entra is done in P1 by the realm: only accounts in realm `fors` can sign in, and there are no guest or brokered
 accounts (local accounts only; LDAP federation later adds no brokered identity provider). The realm is shared, so a
 gateway-only account can complete sign-in to our admin: it has no `rag-*` role, so every `/api` call is 403 (§1.3). Who
 may sign in to Open WebUI is open (§5.3, §16).
 
 ## 2. Feature C: department scope from member groups (both systems, claims only)
 
-**Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/llmgateway#85, 2026-11-12): each
-department of `GET /v1/ume/context` carries `member_groups` under the scope `organisation.read` (feature
+**Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/fors#85, 2026-11-12): each
+department of `GET /v1/fors/context` carries `member_groups` under the scope `organisation.read` (feature
 `member-groups`). Department scope comes from the `departmentCodes` claim **plus the mirrored member groups**, matched
 against the `groups` claim by the resolver (§2.3). The user chose to wait for the gateway rather than build another
-source (2026-11-12), so the interim hand entry on Ume.Rag's department record goes with the sync that reads them
+source (2026-11-12), so the interim hand entry on Källa's department record goes with the sync that reads them
 (B-35). On the shared Keycloak both are set on the account: `departmentCodes` is a user attribute shared with the
 gateway (one value scopes the user in both systems), and a member group is a Keycloak group name (§2.2, §2.5).
 
@@ -232,11 +232,11 @@ gateway (one value scopes the user in both systems), and a member group is a Key
 - **Gateway (source of truth)**: `Department` (`Domain/Entities/Entities.cs:8-19`) gains `MemberGroups`
   (`varchar(256)[]`, default empty), edited by gateway admins on the *Organisation* page; every change is an audit
   entry (`admin.change`).
-- **Gateway context**: each department in `GET /v1/ume/context` carries `member_groups` under the scope
+- **Gateway context**: each department in `GET /v1/fors/context` carries `member_groups` under the scope
   `organisation.read` (feature `member-groups`, gateway v0.10.0; gateway-changes §5.5).
-- **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
-  The admin API's `OrgSync` job reads departments and teams from `GET /v1/ume/context` every **5 minutes** and on
-  demand (*Sync now* on our organisation page), with `rag-admin`'s credential key, which holds the scope
+- **Källa (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
+  The admin API's `OrgSync` job reads departments and teams from `GET /v1/fors/context` every **5 minutes** and on
+  demand (*Sync now* on our organisation page), with `kalla-admin`'s credential key, which holds the scope
   `organisation.read` (gateway design §5.5, admin design §4.10); there is no Data API key. The credential key needs no
   IdP registration, which keeps the "no registration before the pilot" rule (plan §2). Only changed rows are written,
   so an unchanged sync does not bump the config version (data-model §2.1). The sync replaces `MemberGroups` from
@@ -280,17 +280,17 @@ token does not show adds nothing.
 
 ### 2.5 Group claim per IdP
 
-- **Entra (P2)**: `ume-rag-admin` sets `groupMembershipClaims = SecurityGroup` (§12.3), so the ID token's `groups` claim
+- **Entra (P2)**: `kalla-admin` sets `groupMembershipClaims = SecurityGroup` (§12.3), so the ID token's `groups` claim
   carries the object ids of the user's security groups, cloud and synced, without assigning department groups to the
   application (assigning them would let whole departments sign in). Roles still come from app roles. Above the token's
   group limit Entra omits `groups` and sets `_claim_names.groups` (overage); that user then gets claim codes only
   (§2.6). We never follow `_claim_sources`.
-- **Keycloak (dev, P1)**: a *Group Membership* mapper on `ume-rag-admin` (claim `groups`, *Full group path* off, *Add
-  to ID token* on, `docs/identity-and-roles.md:145-147`; dev realm `dev/keycloak/ume-realm.json:765-842`) and member groups entered
+- **Keycloak (dev, P1)**: a *Group Membership* mapper on `kalla-admin` (claim `groups`, *Full group path* off, *Add
+  to ID token* on, `docs/identity-and-roles.md:145-147`; dev realm `dev/keycloak/fors-realm.json:765-842`) and member groups entered
   as names. In the shared realm the claim lists every group of the account, the gateway's included; only names
   entered as member groups count (§2.3 step 3). No overage limit applies. Because a role group named like a gateway
-  group would grant an Ume.Rag role by accident, every role group (`Oidc:RoleGroups` and `Settings.Identity.RoleGroups`) is a `rag-` name (case-insensitive,
-  longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Ume.Rag.AdminApi/AdminOptions.cs`)
+  group would grant an Källa role by accident, every role group (`Oidc:RoleGroups` and `Settings.Identity.RoleGroups`) is a `rag-` name (case-insensitive,
+  longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Kalla.AdminApi/AdminOptions.cs`)
   refuses to start otherwise, and `PUT /api/settings/identity` refuses to save one, and the gateway gives none of its groups a `rag-` name (`deploy/keycloak/README.md`,
   *Group names*). Member groups are not checked: they give department scope only, never a role, and are the
   gateway's groups on purpose (§2.1). AD FS role groups need `rag-` names too.
@@ -314,9 +314,9 @@ admins (who need no departments) are never locked out.
    `OnTokenValidated` after `ApplyClaimMapping` (`AdminAuthentication.cs:123-127`).
 4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
    (tenant/guest refusals).
-5. Integration context: `member_groups` on each department of `GET /v1/ume/context` under `organisation.read` (teams
-   already carry `code`). Built in v0.10.0 (thekim1/llmgateway#85).
-6. `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
+5. Integration context: `member_groups` on each department of `GET /v1/fors/context` under `organisation.read` (teams
+   already carry `code`). Built in v0.10.0 (thekim1/fors#85).
+6. `FORS_OIDC_TENANT_ID`, `FORS_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
    provider*.
 8. Tests (§2.8), shared in spirit with ours.
@@ -336,7 +336,7 @@ the principal and the options), so the class can be copied either way.
 
 ## 3. Principal model
 
-Every data-plane request becomes one `RagPrincipal` (in `Ume.Rag.Domain`, built by `Ume.Rag.Api` authentication
+Every data-plane request becomes one `RagPrincipal` (in `Kalla.Domain`, built by `Kalla.Api` authentication
 handlers; the admin API keeps the gateway's `ClaimsPrincipal` + `AdminContext` model).
 
 ```csharp
@@ -359,16 +359,16 @@ public sealed record RagPrincipal(
 
 | Caller (plan §4) | Credential checked | `Kind` | `SubjectId` | `Client` resolved by | Phase |
 |---|---|---|---|---|---|
-| Open WebUI | `ume-rag-sk-` connection key **and** `X-OpenWebUI-User-Jwt` (§5) | `OwuiUser` | JWT `sub` (Open WebUI user id) | the key's `ClientId` (kind `open-webui`) | P1 |
+| Open WebUI | `kalla-sk-` connection key **and** `X-OpenWebUI-User-Jwt` (§5) | `OwuiUser` | JWT `sub` (Open WebUI user id) | the key's `ClientId` (kind `open-webui`) | P1 |
 | Open WebUI with `system_oauth` (E1) | key in `x-api-key` + Entra token (§9.4) | `EntraUser` | `oid` | the key's `ClientId` | P2 test |
-| Integration with a key | `ume-rag-sk-` key | `Application` | `key:{keyId}` | the key's `ClientId` (kind `integration`) | P1 |
+| Integration with a key | `kalla-sk-` key | `Application` | `key:{keyId}` | the key's `ClientId` (kind `integration`) | P1 |
 | Integration with a token | client-credentials token (§7) | `Application` | `app:{azp}` | `Clients.OAuthClientId = azp` | P2 |
-| Public widget | `ume-rag-pk-` key + `Origin` + issued session (§6.5) | `Anonymous` | `anon:{HMAC(session)}` | the key's `ClientId` (kind `widget`) | P2 |
+| Public widget | `kalla-pk-` key + `Origin` + issued session (§6.5) | `Anonymous` | `anon:{HMAC(session)}` | the key's `ClientId` (kind `widget`) | P2 |
 | Own chat client, Teams | delegated token, `scp` `Chat.Use` (§7) | `EntraUser` | `oid` (Keycloak: `sub`) | `azp` | P2/P3 |
 | MCP client (`/mcp` and `/mcp/skills/<slug>`, same principal) | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
-| Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `ume-rag-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
-| Chat and `mcp` roles → `rag-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `ume-rag-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
+| Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `kalla-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
+| Chat and `mcp` roles → `rag-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `kalla-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
 | Admin → `rag-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `oid` (fallback `sub`; P1 Keycloak: `sub`) | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
@@ -376,7 +376,7 @@ public sealed record RagPrincipal(
 Rules:
 
 - `SubjectId` is what conversations (`chat."Conversations"."SubjectId"`, data-model §2.3), per-user rate limits
-  (`ume-rag:rl:user:{subjectHash}:{minute}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
+  (`kalla:rl:user:{subjectHash}:{minute}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
   events carry it only where the gateway carries an actor (§10).
 - When the key itself is the subject (`Application`, e.g. one shared `integration` key behind an app's backend), the
   chat message limit is that key's `Keys.RequestsPerMinute`, else the platform's per-user value; a user subject (Open
@@ -434,7 +434,7 @@ hardware or another provider (accepted risk, Decisions table "P1a plan answers")
 
 ### 4.2 Interface
 
-`IAccessPolicy` lives in `Ume.Rag.Domain` and is **pure**: no I/O, no clock reads beyond an injected `now`, so the
+`IAccessPolicy` lives in `Kalla.Domain` and is **pure**: no I/O, no clock reads beyond an injected `now`, so the
 policy matrix is a table-driven unit test.
 
 ```csharp
@@ -536,16 +536,16 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 `MaxResidency` comes from the **level of the data in the call** (platform plan §6), not from the client, and is
 **always explicit**:
 
-| Effective level | `x-ume-max-residency` |
+| Effective level | `x-fors-max-residency` |
 |---|---|
 | `public` | `External` (the worker: `Eu`) |
 | `internal` | `Eu` |
 | `sensitive` | `OnPrem` |
 
 **The gateway sets each service's maximum** (Decisions "Residency per level"; M-17 C9): the highest of its credential
-key's `allowed_residencies` in its own `GET /v1/ume/context` (an empty list allows every residency, `External`; a list
-with no value Ume.Rag knows gives `OnPrem`), lowered to the service's fixed maximum (the worker's `Eu`). There is no
-residency knob in Ume.Rag's configuration. Every call's ceiling is `min(ForLevel(level), maximum)`: chat (and its
+key's `allowed_residencies` in its own `GET /v1/fors/context` (an empty list allows every residency, `External`; a list
+with no value Källa knows gives `OnPrem`), lowered to the service's fixed maximum (the worker's `Eu`). There is no
+residency knob in Källa's configuration. Every call's ceiling is `min(ForLevel(level), maximum)`: chat (and its
 condense call), the admin's V8 `/v1/models` check, model pickers and test panel, and the worker's evaluation. Register
 M2 (every model call EU-hosted until on-prem hardware exists) is set on the keys in the gateway: the api's and admin's
 allow `OnPrem` and `Eu`, so a `public` assistant is checked and answered at `Eu`; once External routes exist the keys
@@ -556,47 +556,47 @@ call whose ceiling is above the service's maximum is refused before sending (adm
 §4.6 V8).
 
 **Keys.** From the gateway's integration phase 1 (gateway design §5.1, §13.4) each service holds **one credential key**
-of the integration *Ume.Rag* (`rag-api`, `rag-admin`, `rag-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
+of the integration *Källa* (`kalla-api`, `kalla-admin`, `kalla-worker`; secret file `Gateway__Key`), with `AllowedIpRanges`
 and `RequireMaxResidency` (the gateway refuses a request without the header). The api's and admin's allow the
-residencies their assistants may use, which is their ceiling (above); the worker's `[OnPrem, Eu]`. Only `rag-admin`'s holds scopes: `organisation.read` (the
+residencies their assistants may use, which is their ceiling (above); the worker's `[OnPrem, Eu]`. Only `kalla-admin`'s holds scopes: `organisation.read` (the
 whole organisation in the context, §2.1) and, from phase 3, `usage.read`.
 
 **Where the keys come from** (M-17 C7, gateway v0.10.2, its ADR 022). In the Portainer stack the gateway's migration
-service provisions the integration and the three keys from the manifest in `UME_INTEGRATION_MANIFEST`
+service provisions the integration and the three keys from the manifest in `FORS_INTEGRATION_MANIFEST`
 (`stack.env.example`: all three limited to `OnPrem`+`Eu`), **create-only**: an existing integration or key, found by
 name, is never changed, a difference is only logged. It writes each new key's secret to the stack's own
-`integration-secrets` volume (owner 1654, mode 700, files 600; never `ume-certs`, which holds the CA key), and
-`rag-bootstrap`, which mounts that volume read-only with no network, copies each to its service's `Gateway__Key`. A set
-`UME_RAG_*_GATEWAY_KEY` wins over the file (keys made by hand, or a gateway elsewhere). Rotation is in the gateway's
+`integration-secrets` volume (owner 1654, mode 700, files 600; never `fors-certs`, which holds the CA key), and
+`kalla-bootstrap`, which mounts that volume read-only with no network, copies each to its service's `Gateway__Key`. A set
+`KALLA_*_GATEWAY_KEY` wins over the file (keys made by hand, or a gateway elsewhere). Rotation is in the gateway's
 admin (with a grace period), then deleting the key's file and updating the stack: a missing file is written again from
 the key's stored secret (audited as a reveal). Compose and Kubernetes take the keys from files as before
-(`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/ume-rag.json`
-is Ume.Rag's to change (thekim1/llmgateway#95: rag-api and rag-admin limited to `OnPrem`+`Eu` too).
+(`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/kalla.json`
+is Källa's to change (thekim1/fors#95: kalla-api and kalla-admin limited to `OnPrem`+`Eu` too).
 
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
-assistant or a knowledge base that has a `GatewayKeyId` also sends `x-ume-on-behalf-of: <that key id>` (cost-attribution
+assistant or a knowledge base that has a `GatewayKeyId` also sends `x-fors-on-behalf-of: <that key id>` (cost-attribution
 §4.1 says which object a call belongs to); a call without an object, or for an object without a key, sends none and
-runs as the credential key. Each service (api, admin, worker) reads the features from its own `GET /v1/ume/context`
+runs as the credential key. Each service (api, admin, worker) reads the features from its own `GET /v1/fors/context`
 with its credential key, at start and every 5 minutes with `If-None-Match` (gateway-changes §5.2), held in memory;
 until the first answer it sends no header. A `2xx` or `304` answer must echo the id sent (the gateway writes it in the
-GUID's `D` form; compared as a GUID): a missing or different `x-ume-on-behalf-of` aborts the call before a byte is
+GUID's `D` form; compared as a GUID): a missing or different `x-fors-on-behalf-of` aborts the call before a byte is
 used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an older gateway instance
 during a rolling update ignores the header and would charge the credential key). An error answer goes by its code:
 `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `key_expired` and `402 budget_exceeded` mean
 the object's key cannot be used now (gateway-changes §5.7; chat §3.6, engine §7.3).
 
-**Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every
+**Two guards on every call.** The ceiling header and the `x-fors-residency` check are Källa's residency rule on every
 call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
-assigned key needs `x-ume-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
+assigned key needs `x-fors-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
 residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3,
-built in thekim1/llmgateway#84, feature `credential-residencies`). An older gateway instance during a rolling update
+built in thekim1/fors#84, feature `credential-residencies`). An older gateway instance during a rolling update
 does not apply the bound, which is one more reason the ceiling header goes on every call. Each service's credential key is therefore capped at the highest level that service serves: the worker's at
-`Eu` (it never sends `External`), rag-api's and rag-admin's at the highest level their assistants may use (`Eu`
+`Eu` (it never sends `External`), kalla-api's and kalla-admin's at the highest level their assistants may use (`Eu`
 while register M2 holds). The
 handler below stays required on every gateway client and tested at every call site.
 
 A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
-ceiling, or with a ceiling above the service's maximum (the worker: `Eu`), sets `x-ume-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
+ceiling, or with a ceiling above the service's maximum (the worker: `Eu`), sets `x-fors-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
 for every call site (chat, condense, follow-ups, query embedding, rerank, judge, evaluation generation, NER/LLM stages).
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
@@ -606,10 +606,10 @@ from another assistant, so model and residency do not change between turn 1 and 
 plan §6). For P2 agent runs it is fixed at the run's start and never rises: tool servers are bounded by clearance
 (assistant level ≤ clearance) and result level (result level ≤ assistant level) (tools design §5.3).
 
-The Chat API sends the header from `AccessDecision.MaxResidency` and, from phase 2, `x-ume-on-behalf-of` = the
+The Chat API sends the header from `AccessDecision.MaxResidency` and, from phase 2, `x-fors-on-behalf-of` = the
 assistant's `GatewayKeyId` on every call of the turn (gateway design §5.2; the FakeGateway echoes too). Header values
 are the gateway's
-`DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-ume-residency` is
+`DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-fors-residency` is
 checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). Retries are
 chat-api §8.3's (`GatewayRetryHandler`): a gateway `502`/`504` is sent once more with the same ceiling; a `503` with
 `Retry-After` (in-ceiling targets drained or circuit-open) is not retried but passed on, so the caller can wait and
@@ -618,7 +618,7 @@ try again; `403 max_residency_not_met` (no target configured within the ceiling)
 **Model validation on publish**: when an assistant version is published (and when its level or audience is saved), the
 admin calls the gateway's `GET /v1/models` with its credential key and the ceiling of the assistant's effective level
 (for an audience client that keeps history, max(level, client ceiling)), from phase 2 as the assistant's key
-(`x-ume-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
+(`x-fors-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
 admin design V8, V39).
 
 ### 4.8 Internal callers
@@ -626,7 +626,7 @@ admin design V8, V39).
 - **Admin test panel**: runs in the admin process, builds a `RagPrincipal` for client `admin-console` with the
   admin's `oid` (fallback `sub`), and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
   not with assistant audiences. Answers are not stored as conversations. It runs the real chat path in process through
-  the `Ume.Rag.Answering` library on the assistant's **draft** (or a chosen version), so drafts are tried only here and
+  the `Kalla.Answering` library on the assistant's **draft** (or a chosen version), so drafts are tried only here and
   in the admin's assistant test runs, under the same principal (admin design §2.1, §4.9, §7.4). P2 agent test calls go to the hub as `admin-console`
   (needs `ToolPolicy = read` on that client, tools design §2.2).
 - **`rag-internal`**: the chat role sends `assistantId` and the already-made decision's level; the knowledge role
@@ -667,23 +667,23 @@ headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-
 connection key goes in `Authorization: Bearer` (`headers.py:210-228`) unless `auth_type` says otherwise.
 
 Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title, tag and follow-up generation is switched
-off (`../archive/passes/simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `rag-api`. The
+off (`../archive/passes/simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `kalla-api`. The
 connection also sends the custom headers `X-Rag-Owui-Message-Id` and `X-Rag-Owui-User-Message-Id` (templated by Open
 WebUI, `headers.py:138-155`). They are **unsigned**: they only map messages and feedback **inside the caller's own
 conversation** (keyed by the JWT `sub`), never grant access.
 
 ### 5.2 Validation (`OpenWebUiUserJwt`, new)
 
-1. The request authenticated with an `ume-rag-sk-` key whose client has `Kind = open-webui` (§6). The JWT is never a
+1. The request authenticated with an `kalla-sk-` key whose client has `Kind = open-webui` (§6). The JWT is never a
    credential on its own: replaying a captured JWT without the connection key gets nothing.
 2. Header present and ≤ 4 KB; exactly one.
 3. Header `alg` must be `HS256` (pinned `ValidAlgorithms = ["HS256"]`; `none`, `RS*`, `ES*` and a `kid` are refused).
    Key: `OpenWebUi:JwtSecret` (secret file `OpenWebUi__JwtSecret`, ≥ 32 bytes, generated by `init-deployment.sh`,
    repo-and-deployment §7.1). The JWT is trusted only for **the deployment's Open WebUI client**: the client of kind
    `open-webui` marked `IsManagedByDeployment` (Decisions "Deploy configuration"; M-17 C4). The deployment generates
-   its `ume-rag-sk-` key (`rag-bootstrap` in the Portainer stack, `init-deployment.sh` with Compose) and gives it to
-   Open WebUI and to `rag-migrate`, which creates or updates that client and keeps exactly that key active on it
-   (`OpenWebUi:ApiKey`, a secret file of rag-migrate). No such client = not configured: rag-api starts, and no Open
+   its `kalla-sk-` key (`kalla-bootstrap` in the Portainer stack, `init-deployment.sh` with Compose) and gives it to
+   Open WebUI and to `kalla-migrate`, which creates or updates that client and keeps exactly that key active on it
+   (`OpenWebUi:ApiKey`, a secret file of kalla-migrate). No such client = not configured: kalla-api starts, and no Open
    WebUI user JWT is trusted. An `open-webui` client made by hand in the admin is never trusted with user JWTs. A
    second instance later gets its own managed client and `JwtSecret`: the decided fallback for a second department is
    one Open WebUI instance per department, each its own client with its own ceiling and audience, until W3 and E1 are
@@ -700,13 +700,13 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 ### 5.3 Network and secret hygiene
 
 - The connection key has `AllowedIpRanges` = the Open WebUI host (gateway pattern, `address_not_allowed`,
-  `GatewayRequestHandler.Stages.cs:63-67`); the firewall admits only that host to `rag-api` for this path.
+  `GatewayRequestHandler.Stages.cs:63-67`); the firewall admits only that host to `kalla-api` for this path.
 - Exception: the reverse proxy exposes `GET /v1/documents/*` and `GET /v1/documents/*/content` to the **staff network**,
-  so users' browsers can follow citation download links (signed grants, knowledge design §4.6); every other `rag-api`
+  so users' browsers can follow citation download links (signed grants, knowledge design §4.6); every other `kalla-api`
   path stays restricted to the Open WebUI host.
 - `FORWARD_USER_INFO_HEADER_JWT_SECRET` is used for nothing else. Open WebUI sends the same JWT to every connection
   (forwarding is global); it has **one connection only** (ours; task generation is off, chat design §4.2), so the JWT
-  reaches only `rag-api`. Without
+  reaches only `kalla-api`. Without
   `aud` a receiver could replay it within its lifetime, but it is useless without our connection key (§5.2 step 1);
   any connection added later must be a municipal service, never a third-party endpoint.
 - The feedback import (chat design §14.2) calls Open WebUI's admin API with a service account's API key
@@ -728,15 +728,15 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   realm (`open-webui-dev`), the Entra Bicep and the P1 realm additions (`open-webui`, §11.2) all use
   `/oauth/oidc/login/callback`; they moved together at the go-live pin bump to v0.12.5 (A-4, #457), before the legacy
   route is removed (Decisions table "P0 integration, stream A"; to-verify #46).
-- **Provider per phase.** P1: the shared Keycloak, client `open-webui` in realm `ume` (§11.2), with
-  `OPENID_PROVIDER_URL=https://<keycloak host>/realms/ume/.well-known/openid-configuration`
-  (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL`, `init-deployment.sh --openwebui-oidc-provider-url`), `OAUTH_CLIENT_ID=open-webui`
+- **Provider per phase.** P1: the shared Keycloak, client `open-webui` in realm `fors` (§11.2), with
+  `OPENID_PROVIDER_URL=https://<keycloak host>/realms/fors/.well-known/openid-configuration`
+  (`KALLA_OPENWEBUI_OIDC_PROVIDER_URL`, `init-deployment.sh --openwebui-oidc-provider-url`), `OAUTH_CLIENT_ID=open-webui`
   and that client's secret in `OAUTH_CLIENT_SECRET`; `deploy/compose.openwebui.yaml` takes the provider URL and the
-  provider name (`UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME`, default "Umeå kommun") from `deploy/.env`. P2:
-  the Entra registration `ume-rag-open-webui` (§12.1), where *assignment required* on its enterprise app decides who
+  provider name (`KALLA_OPENWEBUI_OIDC_PROVIDER_NAME`, default "Umeå kommun") from `deploy/.env`. P2:
+  the Entra registration `kalla-open-webui` (§12.1), where *assignment required* on its enterprise app decides who
   can sign in (plan §5).
 - **Who may sign in to Open WebUI in P1** is not settled. Keycloak has no per-client assignment: every enabled
-  account of realm `ume` (the gateway's admins too) can complete Open WebUI's sign-in and gets an Open WebUI account
+  account of realm `fors` (the gateway's admins too) can complete Open WebUI's sign-in and gets an Open WebUI account
   (`ENABLE_OAUTH_SIGNUP=true`) with the role `user` (`DEFAULT_USER_ROLE=user`). Candidates, not decided: Open WebUI's own role gate (`ENABLE_OAUTH_ROLE_MANAGEMENT`,
   `OAUTH_ROLES_CLAIM`, `OAUTH_ALLOWED_ROLES`; present in the local checkout at v0.12.5, `config.py:2683`, `:2698`,
   `:2702`, to verify at the pin) with a pilot-user role in the token, or a Keycloak browser-flow condition on the
@@ -759,11 +759,11 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 
 ### 6.1 Format and storage (adapt `VirtualKeyHasher`)
 
-| | Gateway | Ume.Rag |
+| | Gateway | Källa |
 |---|---|---|
-| Secret key | `ume-sk-` + 43 base62 (`VirtualKeyHasher.cs:9-17`) | `ume-rag-sk-` + 43 base62 |
-| Public (widget) key | – | `ume-rag-pk-` + 43 base62 |
-| Display prefix | 11 chars (`:19`) | 15 chars (`ume-rag-sk-AbC1`) |
+| Secret key | `fors-sk-` + 43 base62 (`VirtualKeyHasher.cs:9-17`) | `kalla-sk-` + 43 base62 |
+| Public (widget) key | – | `kalla-pk-` + 43 base62 |
+| Display prefix | 11 chars (`:19`) | 15 chars (`kalla-sk-AbC1`) |
 | Hash | hex HMAC-SHA256(pepper, key) (`:46-51`), pepper ≥ 32 bytes (`:23-31`, `Security.cs:13-18`) | same, **own** pepper `Security:KeyPepper` (never the gateway's) |
 | Shape check | `LooksLikeKey` (`:65-69`) | `LooksLikeKey` accepts either prefix; the stored `Keys.Kind` must match the prefix (else `invalid_key`) |
 | Reveal | `EncryptedSecret` via Data Protection, gateway-admin only, audited (`KeyEndpoints.cs:116-125`) | same, `rag-platform-admin` only; `Copy`/`Reveal` audit actions |
@@ -817,7 +817,7 @@ Same order as `GatewayRequestHandler.Stages.cs:21-77`:
 3. Status: `key_revoked`, `key_disabled`, `key_expired`, `owner_inactive` (team inactive in the mirror, or client
    disabled) ⇒ failure bucket with key id, 401/403.
 4. `address_not_allowed` after the status checks, so a revoked key is reported as revoked wherever it is used
-   (`:63-67`). The address is the client's: rag-api's `ClientAddressMiddleware` (copied from the gateway) takes it from
+   (`:63-67`). The address is the client's: kalla-api's `ClientAddressMiddleware` (copied from the gateway) takes it from
    `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (read from the access
    snapshot), else the connection address. Until the snapshot's first load, seconds after start, the list is empty
    and the proxy's address is used.
@@ -857,7 +857,7 @@ rotates or revokes).
   widget keeps it in `sessionStorage` and sends it back. `SubjectId = anon:` + hex HMAC-SHA256 of it with a key derived
   from the pepper (`HKDF(pepper, "widget-session")`), so the stored id cannot be turned back into the token.
 - Rate limits per key and per client address through `IRateLimitStore`: in process on one host; with
-  `ConnectionStrings:redis` (several hosts) `ume-rag:rl:req:{keyId}:{minute}` and `ume-rag:rl:ip:{ipHash}:{minute}`
+  `ConnectionStrings:redis` (several hosts) `kalla:rl:req:{keyId}:{minute}` and `kalla:rl:ip:{ipHash}:{minute}`
   (data-model §11).
   `Origin` can be forged by non-browser clients, so the per-address limit and the `public`-only rule are the real
   protection.
@@ -868,10 +868,10 @@ rotates or revokes).
 
 | Setting | Env | Default | Gateway counterpart |
 |---|---|---|---|
-| `RagApi:Authority` | `UME_RAG_API_AUTHORITY` | `UME_RAG_OIDC_AUTHORITY` | `DataApi:Authority` (`DataApiOptions.cs:15`, `compose.prod.yaml:181`) |
-| `RagApi:Audience` | `UME_RAG_API_AUDIENCE` | `ume-rag-api` (Keycloak, dev and P1: the `ume-rag-api` audience mapper, §11; P2 Entra v2: the `rag-api` application id) | `DataApi:Audience` = `ume-data-api` (`DataApiOptions.cs:31-32`) |
+| `RagApi:Authority` | `KALLA_API_AUTHORITY` | `KALLA_OIDC_AUTHORITY` | `DataApi:Authority` (`DataApiOptions.cs:15`, `compose.prod.yaml:181`) |
+| `RagApi:Audience` | `KALLA_API_AUDIENCE` | `kalla-api` (Keycloak, dev and P1: the `kalla-api` audience mapper, §11; P2 Entra v2: the `kalla-api` application id) | `DataApi:Audience` = `ume-data-api` (`DataApiOptions.cs:31-32`) |
 | `RagApi:PermissionClaims` | – | `scope`, `scp`, `roles` | `DataApiOptions.cs:38` |
-| `RagApi:TenantId` | `UME_RAG_API_TENANT_ID` | `UME_RAG_OIDC_TENANT_ID` | new; unset in P1 (Keycloak has no `tid`, §1.7) |
+| `RagApi:TenantId` | `KALLA_API_TENANT_ID` | `KALLA_OIDC_TENANT_ID` | new; unset in P1 (Keycloak has no `tid`, §1.7) |
 | `RagApi:RefuseGuests` | – | `true` | new |
 | `RagApi:AllowKeys` | – | `true` | `DataApi:AllowKeys` (`:18`) |
 
@@ -887,13 +887,13 @@ Added checks after signature/issuer/audience/lifetime (JWKS cached by the handle
 2. Guests refused by the §1.7 rule (`RagApi:RefuseGuests`) ⇒ `guest_refused` (delegated tokens only).
 3. Client = `ClientId(user)` (`client_id` ?? `azp` ?? `appid`, `DataApiAuthentication.cs:80-85`, without the `sub`
    fallback) looked up in `Clients.OAuthClientId`; unknown ⇒ `client_unknown`.
-4. Token type: **app-only** when `idtyp = app` (Entra optional claim, requested on `rag-api`) or, on Keycloak, when the
+4. Token type: **app-only** when `idtyp = app` (Entra optional claim, requested on `kalla-api`) or, on Keycloak, when the
    token has `client_id` and no `sid` (client-credentials tokens have no session; confirmed on Keycloak 26.6.4 in P0,
    to-verify #83, provided `service_account` is in the client's default scopes). Otherwise delegated.
 
 **P1 (shared Keycloak).** Not built yet (there is no `RagApi` code). `RagApi:Authority` defaults to the admin's authority,
-so in P1 it is realm `ume` of the shared Keycloak, and `RagApi:Audience` stays `ume-rag-api`: RAG's realm additions
-define a client `ume-rag-api` (§11.2) as the audience, so a token for the gateway's Data API (`aud` `ume-data-api`)
+so in P1 it is realm `fors` of the shared Keycloak, and `RagApi:Audience` stays `kalla-api`: RAG's realm additions
+define a client `kalla-api` (§11.2) as the audience, so a token for the gateway's Data API (`aud` `ume-data-api`)
 never passes our audience check and ours never passes the gateway's. P1 has no token caller (every token row in §3 is
 P2 or later; integrations use keys), so a token that does validate still ends at step 3 with `client_unknown` until a
 platform admin registers its `azp` in `config."Clients"`. Which token-caller parts go into the P1 additions is open
@@ -912,7 +912,7 @@ platform admin registers its `azp` in `config."Clients"`. Which token-caller par
 Delegated permissions are read only from `scp`/`scope` and app permissions only from `roles`, so a user who happens to
 have an app role assignment cannot act as an application, and an app token cannot carry a user scope. App roles are
 restricted to `allowedMemberTypes: ["Application"]` in Entra. Keycloak has no such restriction: there they are realm
-roles given only to service accounts (dev: `service-account-ume-rag-api-dev`), and a user given one by mistake still
+roles given only to service accounts (dev: `service-account-kalla-api-dev`), and a user given one by mistake still
 cannot act as an application (§13.4); with *full scope allowed* off, a client's tokens carry them only if the client's
 role scope mappings include them. Distinct names avoid any clash between an app role and a
 scope value on one registration. This is stricter than the Data API's "any configured claim" rule
@@ -929,20 +929,20 @@ scope value on one registration. This is stricter than the Data API's "any confi
   ```json
   { "resource": "https://<api host>/mcp",
     "authorization_servers": ["https://login.microsoftonline.com/<tid>/v2.0"],
-    "scopes_supported": ["api://<rag-api app id>/Mcp.Use"],
+    "scopes_supported": ["api://<kalla-api app id>/Mcp.Use"],
     "bearer_methods_supported": ["header"],
     "resource_name": "Umeå kommun – kunskap" }
   ```
 
 - 401 on `/mcp` without a valid token: `WWW-Authenticate: Bearer resource_metadata="https://<api host>/.well-known/
-  oauth-protected-resource/mcp", scope="api://<rag-api app id>/Mcp.Use"`; 403 `error="insufficient_scope"` when
+  oauth-protected-resource/mcp", scope="api://<kalla-api app id>/Mcp.Use"`; 403 `error="insufficient_scope"` when
   `Mcp.Use` is missing.
-- Token validation as §7 (aud = `rag-api` application id, `tid`, guests refused, `scp` contains `Mcp.Use`). Entra v2
-  puts the application id in `aud`, not the resource URL, so audience binding is to `rag-api` as a whole.
+- Token validation as §7 (aud = `kalla-api` application id, `tid`, guests refused, `scp` contains `Mcp.Use`). Entra v2
+  puts the application id in `aud`, not the resource URL, so audience binding is to `kalla-api` as a whole.
 - **Pre-registered clients only**: Entra has no dynamic client registration. Each MCP client application (by its
   Entra application id) must be in `config."Clients"` with `Kind = mcp-client`, ceiling `public` by default, raised to
   `internal` only by a platform admin (never `sensitive`, `CK_Clients_Mcp`); unknown `azp` ⇒ 403 `client_unknown`.
-  Consent for `Mcp.Use` is granted by an admin per client (or `preAuthorizedApplications` on `rag-api`), not by users.
+  Consent for `Mcp.Use` is granted by an admin per client (or `preAuthorizedApplications` on `kalla-api`), not by users.
 - Per-skill endpoints narrow further: only that skill's tools and collections, same principal and policy; their audience
   is `config."SkillAudiences"` (tools design §7.4).
 - Both kinds of metadata document and the challenge are served by the MCP SDK's `McpAuthenticationHandler` at its
@@ -959,7 +959,7 @@ scope value on one registration. This is stricter than the Data API's "any confi
 
 ### 9.1 Hand-off
 
-1. A caller with a delegated `rag-api` token (own client, Teams, MCP; Open WebUI only after E1) reaches the Chat API;
+1. A caller with a delegated `kalla-api` token (own client, Teams, MCP; Open WebUI only after E1) reaches the Chat API;
    the token was validated (§7).
 2. For a tool call whose tool server has `AuthMode = obo`, the Chat API sends the raw access token to the tool hub in
    the internal header `x-rag-user-assertion` on the internal, mTLS-only hop that already carries the service key.
@@ -970,14 +970,14 @@ scope value on one registration. This is stricter than the Data API's "any confi
 
 ### 9.2 Exchange and cache
 
-- The exchange uses the **`rag-api` registration's credential** (decided, plan §7: Entra requires the assertion's
+- The exchange uses the **`kalla-api` registration's credential** (decided, plan §7: Entra requires the assertion's
   audience to be the exchanging app), a certificate on-prem, via MSAL `AcquireTokenOnBehalfOf(scopes, new
   UserAssertion(token))` with the downstream scopes registered on the tool server row.
 - Cache: MSAL's in-memory token cache in the tool hub, partitioned by assertion hash, entries ≤ the downstream token's
   lifetime, process-local only (no Redis, so nothing to encrypt at rest); a restart costs one exchange per user.
   Should several tool-hub instances ever need a shared cache, it is Redis with Data Protection encryption and a key
   per user (plan §7).
-- P2 service-identity calls (client credentials) run in the in-process hub of `rag-api` and `rag-admin` (tools design
+- P2 service-identity calls (client credentials) run in the in-process hub of `kalla-api` and `kalla-admin` (tools design
   §4.6); OBO arrives with the separate `rag-tools` service (P3, tools design §2).
 
 ### 9.3 Claims challenges and consent
@@ -994,7 +994,7 @@ scope value on one registration. This is stricter than the Data API's "any confi
 
 With `auth_type: system_oauth` Open WebUI forwards the user's own OAuth access token in `Authorization`
 (`headers.py:211-214`), so the connection key moves to `x-api-key` (custom connection header, accepted by the key
-extraction in §6.2). For this to be a `rag-api` token, Open WebUI's login must request `api://<rag-api app id>/Chat.Use`
+extraction in §6.2). For this to be a `kalla-api` token, Open WebUI's login must request `api://<kalla-api app id>/Chat.Use`
 and refresh it. Then: subject = `EntraUser` (`oid`), the JWT is still validated and its email must match the token's
 `preferred_username`/`email` (else `user_jwt_mismatch`), the client stays the Open WebUI client (ceiling `internal`).
 The E1 spike is P2, with Entra (Decisions table "P1b briefs", O3; §16 question 9). Until it passes, OBO tools are offered only to clients that send a real Entra
@@ -1002,7 +1002,7 @@ token.
 
 ## 10. Security events
 
-Copied pattern: one static partial `SecurityEvents` class in `Ume.Rag.Infrastructure`, category `Ume.Rag.Security`,
+Copied pattern: one static partial `SecurityEvents` class in `Kalla.Infrastructure`, category `Kalla.Security`,
 `[LoggerMessage(id, level, …, EventName = …)]` with level as constructor argument for CA1873
 (`SecurityEvents.cs:63-114`), `Printable()` on every client-supplied value (`:30-49`), names and attributes only ever
 added (`:7-11`, `docs/data-access.md:58-62`). Never logged: key material, tokens, JWTs, passwords, prompts, emails,
@@ -1026,7 +1026,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
-| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | a `2xx` or `304` response lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another GUID, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2; error answers go by their code, gateway-changes §5.7) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
+| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | a `2xx` or `304` response lacks the `x-fors-on-behalf-of` echo of the key id sent, or echoes another GUID, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2; error answers go by their code, gateway-changes §5.7) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
 | 5012 | `rag.tool.definition_changed` | api, admin (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
 | 5013 | `rag.tool.upstream_refused` | api, admin (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
 | 5014 | `rag.content.tag_neutralised` | api, admin (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
@@ -1073,28 +1073,28 @@ changed without a pre-registration), 5013 bursts, any 5015 `level_refused`, 5014
 
 ### 11.1 Dev and CI realm
 
-`dev/keycloak/ume-realm.json` (the gateway's file name: Keycloak 26's directory import refuses a file whose name is not
-`<realm>-realm.json`), realm `ume` (same issuer path shape as the gateway's, `ume-realm.json:2`), adapted
-from the gateway's file; passwords and secrets are import placeholders like `${UME_DEV_USER_PASSWORD}`
+`dev/keycloak/fors-realm.json` (the gateway's file name: Keycloak 26's directory import refuses a file whose name is not
+`<realm>-realm.json`), realm `fors` (same issuer path shape as the gateway's, `fors-realm.json:2`), adapted
+from the gateway's file; passwords and secrets are import placeholders like `${FORS_DEV_USER_PASSWORD}`
 (`ume-realm.json:27`, `:119`). Extends repo-and-deployment §4.2:
 
 | Element | Content |
 |---|---|
 | User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes, `docs/identity-and-roles.md:148-149`) |
 | Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
-| Client scopes | Keycloak's built-in scopes as 26.6.4 creates them for a new realm (`basic`, `profile`, `email`, `roles`, `service_account`, …: an import that lists any `clientScopes` gets none of the built-in ones), then `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `ume-rag-api`, `include.in.token.scope` on, so they appear in `scope`) |
-| Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
-| Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All`; `service_account` in its default client scopes (without it a token has no `client_id` claim, to-verify #83) |
-| Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
-| Client `open-webui-dev` | confidential, code flow, secret from the placeholder `UME_RAG_OWUI_CLIENT_SECRET` (generated by the AppHost), redirect `http://localhost:8080/oauth/oidc/login/callback` (Open WebUI's default port; §5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
+| Client scopes | Keycloak's built-in scopes as 26.6.4 creates them for a new realm (`basic`, `profile`, `email`, `roles`, `service_account`, …: an import that lists any `clientScopes` gets none of the built-in ones), then `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `kalla-api`, `include.in.token.scope` on, so they appear in `scope`) |
+| Client `kalla-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
+| Client `kalla-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `kalla-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All`; `service_account` in its default client scopes (without it a token has no `client_id` claim, to-verify #83) |
+| Client `kalla-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
+| Client `open-webui-dev` | confidential, code flow, secret from the placeholder `KALLA_OWUI_CLIENT_SECRET` (generated by the AppHost), redirect `http://localhost:8080/oauth/oidc/login/callback` (Open WebUI's default port; §5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
 | Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute, role `rag-viewer`, since membership never grants a role; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
-### 11.2 P1: RAG's additions to the shared realm `ume`
+### 11.2 P1: RAG's additions to the shared realm `fors`
 
 The pilot's Keycloak is the gateway's (Decisions table "P1 pilot sign-in"; plan §1): the gateway repo defines the
-Compose project, the base realm `ume` (the gateway's clients and roles, without test users) and its operation
+Compose project, the base realm `fors` (the gateway's clients and roles, without test users) and its operation
 (`../gateway-changes/prompt-gateway-session.md` §2). RAG contributes a **realm-additions file** in `deploy/keycloak/`
 (owned by stream B, `../archive/p1/README.md` §2; P1 item 16 → hand-off J8, through the user to the gateway session; J11 is the
 shared Keycloak with the additions imported and pilot accounts created). It is derived from §11.1 and differs as
@@ -1104,72 +1104,72 @@ follows:
 |---|---|---|
 | Realm roles | the `rag-*` roles of §1.3 | names unchanged; none collides with the gateway's (§1.6) |
 | `departmentCodes` (and `teamCodes`) | **shared with the gateway**: one user attribute, declared in the realm's user profile (`docs/identity-and-roles.md:148-149`), read by both systems' attribute mappers; one value scopes the user in both | the user profile is a realm-level setting, so it is declared once for both systems (who declares it: §16) |
-| Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect `https://<rag admin host>/signin-oidc`, post-logout `https://<rag admin host>/signout-callback-oidc`, web origin `https://<rag admin host>` (as the gateway's Keycloak client, `docs/identity-and-roles.md:137-141`); mappers as §11.1 (`roles`, `departmentCodes`, `teamCodes`, `groups`, all to the ID token); secret as an import placeholder | pilot hosts instead of localhost; **full scope allowed off**, with role scope mappings to the `rag-*` roles so `roles` still carries them |
+| Client `kalla-admin` | confidential, standard flow only, PKCE S256, redirect `https://<rag admin host>/signin-oidc`, post-logout `https://<rag admin host>/signout-callback-oidc`, web origin `https://<rag admin host>` (as the gateway's Keycloak client, `docs/identity-and-roles.md:137-141`); mappers as §11.1 (`roles`, `departmentCodes`, `teamCodes`, `groups`, all to the ID token); secret as an import placeholder | pilot hosts instead of localhost; **full scope allowed off**, with role scope mappings to the `rag-*` roles so `roles` still carries them |
 | Client `open-webui` | confidential, code flow, redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3), `email` in the ID token, secret as an import placeholder | named `open-webui` (dev: `open-webui-dev`); pilot host; full scope allowed off |
-| Client `ume-rag-api` | the audience of RAG API tokens (`RagApi:Audience`, §7.1); no sign-in flow of its own | dev uses an audience mapper value `ume-rag-api` on `ume-rag-api-dev` and on the scopes `Chat.Use`, `Knowledge.Read`, `Mcp.Use`; whether P1 also carries those scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a client-credentials client is open (§7.1, §16) |
+| Client `kalla-api` | the audience of RAG API tokens (`RagApi:Audience`, §7.1); no sign-in flow of its own | dev uses an audience mapper value `kalla-api` on `kalla-api-dev` and on the scopes `Chat.Use`, `Knowledge.Read`, `Mcp.Use`; whether P1 also carries those scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a client-credentials client is open (§7.1, §16) |
 | *Full scope allowed* | **off on every RAG client**, as on the gateway's, so a token carries only its own system's roles | dev keeps Keycloak's default (on) |
 | Password policy, brute-force protection, user profile | **in the gateway's base realm file**, not in RAG's additions (Q3); the additions file must not declare `userProfile` (keycloak-config-cli would replace the whole profile) | dev has neither |
 | OTP | **not enforced for the pilot** (Decisions "Gateway release 1 and shared Keycloak as built"): password policy and brute-force protection only; MFA comes with brokered Entra ID/AD; G1 records it | dev has none |
 | Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand (J11, user item U-c); member groups for the pilot department are Keycloak groups whose names a platform admin enters on our department record (§2) | §11.1's users and groups stay dev-only |
 | Seed | none: the mirror is filled from the gateway (org sync) and by hand (§2) | – |
 
-**Settled by the gateway session (#390, thekim1/llmgateway#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
+**Settled by the gateway session (#390, thekim1/fors#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
 `quay.io/keycloak/keycloak:26.8.1-1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b`).
 **keycloak-config-cli** applies the realm on every `docker compose up` of the gateway's `deploy/keycloak` project: the
 gateway's `realm/10-gateway.json` first, then every `*.json` in the operator's additions directory in name order, each
 resource type with `no-delete` (a file adds and updates, never removes). RAG's `rag-additions.json` starts with
 `"realm": "ume"` and uses `$(env:NAME)` placeholders (`$(env:NAME:-default)` for defaults); the values
-(`UME_RAG_ADMIN_PUBLIC_HOST`, `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OIDC_CLIENT_SECRET`,
-`UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A RAG change reaches production when the
+(`KALLA_ADMIN_PUBLIC_HOST`, `KALLA_OPENWEBUI_HOST`, `KALLA_OIDC_CLIENT_SECRET`,
+`KALLA_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A RAG change reaches production when the
 operator pulls a new tagged RAG version of the file. `rag-realm-settings.json`, the OTP flow and `apply-additions.py`
-are not used for the shared realm; a standalone Ume.Rag realm declares password policy, brute-force protection and
+are not used for the shared realm; a standalone Källa realm declares password policy, brute-force protection and
 the user profile in its own file, `deploy/keycloak/standalone/10-rag-realm.json` (laid out like the gateway's
 `realm/`, so it imports before the additions). Local redirect URIs stay out of the production additions directory:
 they are in `rag-additions.local.json` (test realms only), which declares the pilot URIs next to the local ones,
 since keycloak-config-cli replaces a client's URI lists rather than merging them. Q8:
-`ume-rag-api` is the audience client only. Password and brute-force values are the gateway's (the same as RAG's).
+`kalla-api` is the audience client only. Password and brute-force values are the gateway's (the same as RAG's).
 
 **What P1 relies on in the code** (no change needed): the BFF and claim mapping are OIDC-generic
-(`src/Ume.Rag.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks
+(`src/Kalla.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks
 are no-ops (§1.7), and `Oidc:Authority`, `Oidc:ClientId`, `Oidc:ClientSecret` point the admin at the shared realm
 (§1.4). Locally, the AppHost already points the admin at any external authority when `Oidc:Authority` is set in its
-user secrets and then does not start the bundled Keycloak (`src/Ume.Rag.AppHost/Program.cs:45-50`, `:231-238`).
+user secrets and then does not start the bundled Keycloak (`src/Kalla.AppHost/Program.cs:45-50`, `:231-238`).
 
 **Later: LDAP federation** to the municipal AD when IT provides a read-only bind account (Decisions table): a user
 federation provider in the realm, with an LDAP *user-attribute-mapper* for `departmentCodes` and a *role-ldap-mapper*
 or groups for roles (`docs/identity-and-roles.md:143`, `:149-150`). No app change; what happens to the pilot's local
 accounts is open (§16).
 
-**Production: AD and Entra ID** (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag standalone
+**Production: AD and Entra ID** (Decisions "Identity providers: AD and Entra ID through Keycloak, Källa standalone
 later"). Both must work, by either route: **brokered** through Keycloak (Entra ID as an OIDC identity provider; AD by
 the LDAP federation above or by AD FS) or **directly** through `Oidc:*` (Entra, §12). Brokered accounts bring MFA back
-(the OTP row above). The brokered route is tested with a stand-in upstream identity provider (§13.3). Ume.Rag's realm
-part needs nothing from the gateway's base realm except the `departmentCodes` and `teamCodes` claims, so Ume.Rag can
+(the OTP row above). The brokered route is tested with a stand-in upstream identity provider (§13.3). Källa's realm
+part needs nothing from the gateway's base realm except the `departmentCodes` and `teamCodes` claims, so Källa can
 run standalone (`deploy/keycloak/standalone/`, §11.3).
 
-**P2: Entra.** The same clients become the Entra registrations of §12 (`ume-rag-admin`, `ume-rag-open-webui`; package 2
-for `rag-api`); switching is `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings.
+**P2: Entra.** The same clients become the Entra registrations of §12 (`kalla-admin`, `kalla-open-webui`; package 2
+for `kalla-api`); switching is `Oidc:*`, `RagApi:*` and the Open WebUI OIDC settings.
 
 ### 11.3 Shared sign-in with the gateway (2026-11-07, #468)
 
 Decided by the user (Decisions "Shared sign-in with the gateway"): one group membership gives a person their roles in
 both products, with **no code in either product referring to the other's roles**.
 
-- **Keycloak (the shared realm `ume`):** operator-made groups carry realm-role mappings for both systems, e.g.
-  `ume-admins` → `gateway-admin` + `rag-platform-admin`, `ume-department-admins` → `department-admin` +
+- **Keycloak (the shared realm `fors`):** operator-made groups carry realm-role mappings for both systems, e.g.
+  `ume-admins` → `gateway-admin` + `rag-platform-admin`, `fors-department-admins` → `department-admin` +
   `rag-department-admin`. The RAG-only roles (`rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor`) are mapped
   to groups the same way. These groups are **operator data** (the admin console or a site file such as
   `additions/90-groups.json`), never in `rag-additions.json`: a RAG file that maps to `gateway-admin` would fail on a
   standalone Keycloak where that role does not exist.
-- **One client per system:** `ume-admin` (gateway) and `ume-rag-admin` keep their own role scope mappings, so each
-  token carries only its own system's roles in `roles`. Ume.Rag keeps reading `rag-*` roles; the `rag-` rule for role
+- **One client per system:** `fors-admin` (gateway) and `kalla-admin` keep their own role scope mappings, so each
+  token carries only its own system's roles in `roles`. Källa keeps reading `rag-*` roles; the `rag-` rule for role
   groups (§1.4, #413) stays.
 - **Direct Entra route:** one app registration per product with app roles named as that product's roles; the same
-  Entra security group is assigned to `gateway-admin` on the gateway's app and to `rag-platform-admin` on Ume.Rag's
+  Entra security group is assigned to `gateway-admin` on the gateway's app and to `rag-platform-admin` on Källa's
   (`infra/entra/`). App roles, not the groups claim (object ids, overage above 200 groups).
 - **Deployment:** two Compose projects with the same layout and conventions, run side by side or apart; the gateway's
-  `deploy/keycloak` project runs Keycloak and Ume.Rag delivers only its additions file; Ume.Rag's default ports avoid
-  the gateway's (8443, 9443, 10443, 11443, 8444/9444). Standalone Ume.Rag runs the same Keycloak project with its own
+  `deploy/keycloak` project runs Keycloak and Källa delivers only its additions file; Källa's default ports avoid
+  the gateway's (8443, 9443, 10443, 11443, 8444/9444). Standalone Källa runs the same Keycloak project with its own
   realm-wide settings and user profile.
 
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)
@@ -1189,25 +1189,25 @@ Enterprise applications.
 
 | Object | Change | Needs admin consent / privileged role |
 |---|---|---|
-| `ume-rag-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); `acceptMappedClaims` (parameter, default true) for the `departmentCodes` claims-mapping policy, as the gateway's Entra step 4 (plan §2); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
+| `kalla-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); `acceptMappedClaims` (parameter, default true) for the `departmentCodes` claims-mapping policy, as the gateway's Entra step 4 (plan §2); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
-| `ume-rag-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
+| `kalla-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
-| Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
-| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `ume-rag-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `ume-rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
-| App role assignments | pilot users group → `ume-rag-open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `ume-rag-admin` | a manual approval step (§12.3) |
+| Pilot groups (new) | `Källa pilot users` (Open WebUI access), `Källa platform admins`, `Källa department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
+| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `kalla-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `kalla-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| App role assignments | pilot users group → `kalla-open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `kalla-admin` | a manual approval step (§12.3) |
 
 ### 12.2 Credentials
 
 The Graph Bicep extension cannot create client secrets: `passwordCredentials` appear on `applications` and
 `servicePrincipals`, but `secretText` is read-only and Microsoft's limitations page supports only `keyCredentials`
 (confirmed in P0, to-verify #84). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF's secret on
-`ume-rag-admin` is created by an operator with `az ad app credential reset --append` and passed to
+`kalla-admin` is created by an operator with `az ad app credential reset --append` and passed to
 `init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), exactly as in the gateway. Open WebUI's OIDC
 client supports only a client secret (`OAUTH_CLIENT_SECRET`), created the same way. Certificates (`private_key_jwt`)
 can later be added to **both** systems together (a `gateway-changes` candidate), not to ours alone.
 
-`infra/entra/` owns only RAG's registrations (`ume-rag-admin`, `ume-rag-open-webui`, P2 `rag-*`) and never declares
+`infra/entra/` owns only RAG's registrations (`kalla-admin`, `kalla-open-webui`, P2 `rag-*`) and never declares
 or touches the gateway's. `appRoles` and `keyCredentials` are arrays a Bicep deployment replaces as a whole, so a
 manual portal change to one of our registrations is overwritten on the next run, which the PR plan shows first.
 
@@ -1224,18 +1224,18 @@ param openWebUiHost string
 
 // App role ids derive from the role value, so they stay the same once assigned.
 var ragRoles = [
-  { id: guid('ume-rag-admin', 'rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: everything' }
-  { id: guid('ume-rag-admin', 'rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: own departments' }
-  { id: guid('ume-rag-admin', 'rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: pipelines' }
-  { id: guid('ume-rag-admin', 'rag-reviewer'),         value: 'rag-reviewer',         displayName: 'RAG reviewer',         allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: feedback comments and conversations with a reason' }
-  { id: guid('ume-rag-admin', 'rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: read' }
-  { id: guid('ume-rag-admin', 'rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: forms in own departments (P2)' }
-  { id: guid('ume-rag-admin', 'rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: skills in own departments (P2)' }
+  { id: guid('kalla-admin', 'rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: everything' }
+  { id: guid('kalla-admin', 'rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: own departments' }
+  { id: guid('kalla-admin', 'rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: pipelines' }
+  { id: guid('kalla-admin', 'rag-reviewer'),         value: 'rag-reviewer',         displayName: 'RAG reviewer',         allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: feedback comments and conversations with a reason' }
+  { id: guid('kalla-admin', 'rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: read' }
+  { id: guid('kalla-admin', 'rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: forms in own departments (P2)' }
+  { id: guid('kalla-admin', 'rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Källa: skills in own departments (P2)' }
 ]
 
 resource adminApp 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: 'ume-rag-admin'
-  displayName: 'Umeå kommun – Ume.Rag admin'
+  uniqueName: 'kalla-admin'
+  displayName: 'Umeå kommun – Källa admin'
   signInAudience: 'AzureADMyOrg'
   web: { redirectUris: [ 'https://${ragAdminHost}/signin-oidc', 'https://${ragAdminHost}/signout-callback-oidc' ] }
   appRoles: ragRoles
@@ -1246,19 +1246,19 @@ resource adminApp 'Microsoft.Graph/applications@v1.0' = {
 resource adminSp 'Microsoft.Graph/servicePrincipals@v1.0' = { appId: adminApp.appId, appRoleAssignmentRequired: true }
 
 resource pilotAdmins 'Microsoft.Graph/groups@v1.0' = {
-  uniqueName: 'ume-rag-platform-admins', displayName: 'Ume.Rag platform admins'
-  mailEnabled: false, mailNickname: 'ume-rag-platform-admins', securityEnabled: true
+  uniqueName: 'kalla-platform-admins', displayName: 'Källa platform admins'
+  mailEnabled: false, mailNickname: 'kalla-platform-admins', securityEnabled: true
 }
 
 // No appRoleAssignedTo resources: the deployer has no AppRoleAssignment.ReadWrite.All (§12.4), so group → role
 // assignments are made by a person after the run (below), like the admin consent.
 
-// open-webui.bicep: application 'ume-rag-open-webui' (web redirect, optional claims), service principal with
-// appRoleAssignmentRequired, group 'Ume.Rag pilot users' (its default-access assignment is a manual step too).
+// open-webui.bicep: application 'kalla-open-webui' (web redirect, optional claims), service principal with
+// appRoleAssignmentRequired, group 'Källa pilot users' (its default-access assignment is a manual step too).
 ```
 
 Not in Bicep: the admin consent for the delegated scopes and the group → app role assignments of §12.1 (admin groups
-→ `rag-*` roles, pilot users → `ume-rag-open-webui` default access). They are the approval itself: an Entra administrator
+→ `rag-*` roles, pilot users → `kalla-open-webui` default access). They are the approval itself: an Entra administrator
 makes them in the portal (or runs the `az rest` commands the workflow prints) after reviewing the run. Group
 membership of the pilot groups is maintained by IT, not by IaC.
 
@@ -1292,13 +1292,13 @@ membership of the pilot groups is maintained by IT, not by IaC.
 
 | Gateway test | Ours | Notes |
 |---|---|---|
-| `OidcClaimMappingTests` (`tests/Ume.LlmGateway.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Ume.Rag.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
+| `OidcClaimMappingTests` (`tests/Fors.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Kalla.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
 | `AdminSessionTests` (`AdminSessionTests.cs:38`, `:57`, `:73`, `:97`) | same | ticket store, 12 h limit; plus a `PostgresAdminSessionStore` test (expired row not returned, sign-out deletes the row) |
-| `AuthFailureThrottleTests` (`tests/Ume.LlmGateway.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Ume.Rag.Api.Tests` | unchanged |
-| Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Ume.Rag.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
-| `DataApiKeyTests` (`tests/Ume.LlmGateway.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Ume.Rag.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
+| `AuthFailureThrottleTests` (`tests/Fors.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Kalla.Api.Tests` | unchanged |
+| Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Kalla.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
+| `DataApiKeyTests` (`tests/Fors.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Kalla.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
 
-### 13.2 Unit (`Ume.Rag.Domain.Tests`, `Ume.Rag.AdminApi.Tests`)
+### 13.2 Unit (`Kalla.Domain.Tests`, `Kalla.AdminApi.Tests`)
 
 - **Policy matrix** (table-driven, one row per combination): subject kind × client kind × credential × resource level ×
   ceiling × audience kind × membership known/unknown × key scope → expected reason and status. Must include: Open WebUI
@@ -1326,19 +1326,19 @@ membership of the pilot groups is maintained by IT, not by IaC.
   `Teams.Code`; off ⇒ unchanged.
 - Key hasher: both prefixes, wrong prefix for the stored kind, gateway key shape refused, display prefix length.
 
-### 13.3 Integration (`Ume.Rag.Api.Tests`, `Ume.Rag.AdminApi.Tests`, `Ume.Rag.IntegrationTests` with Keycloak and Postgres containers)
+### 13.3 Integration (`Kalla.Api.Tests`, `Kalla.AdminApi.Tests`, `Kalla.IntegrationTests` with Keycloak and Postgres containers)
 
 - Sign in as each Keycloak user; `/bff/user` shows the expected roles, departments and sources (P0 checklist #9).
 - **P1 realm additions** (P1 item 16): the `deploy/keycloak/` file imports into a Keycloak 26.8.1 test container (the gateway's pin, B-15) next
-  to a minimal `ume` realm (standing in for the gateway's base realm) without collisions; a sign-in through `ume-rag-admin`
+  to a minimal `fors` realm (standing in for the gateway's base realm) without collisions; a sign-in through `kalla-admin`
   shows the `rag-*` roles and `departmentCodes` in `/bff/user`, and its ID token carries no gateway role (full scope
   off); the file contains no users.
 - **Brokered sign-in** (Decisions "Identity providers"; not built yet): a stand-in upstream identity provider brokered
-  by the test realm; a sign-in through it reaches `ume-rag-admin` with `rag-*` roles and `departmentCodes` mapped from
+  by the test realm; a sign-in through it reaches `kalla-admin` with `rag-*` roles and `departmentCodes` mapped from
   the upstream claims.
-- Token from `ume-rag-api-dev` (client credentials) calls search with `Knowledge.Read.All`; the same token on chat
+- Token from `kalla-api-dev` (client credentials) calls search with `Knowledge.Read.All`; the same token on chat
   without `Chat.Invoke.All` gets 403 `permission_missing`.
-- Delegated token from `ume-rag-chat-dev` with `Chat.Use` lists only assistants allowed for client `ume-rag-chat-dev`.
+- Delegated token from `kalla-chat-dev` with `Chat.Use` lists only assistants allowed for client `kalla-chat-dev`.
 - Key revoked in the admin API stops working on the api within the poll interval (≤ 3 s in the test), with event 5001
   `key_revoked`; key created clears the negative cache.
 - Config monitor stopped (Postgres `NOTIFY` and poll blocked) with `Config:MaxUnconfirmedSeconds = 5` ⇒ keyed
@@ -1356,7 +1356,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 | Valid JWT with an `integration` key, or with no key | 401 / 403 `credential_not_allowed` |
 | Plain `X-OpenWebUI-User-Id` header without JWT | 401 `user_jwt_missing` |
 | Guessed `X-OpenWebUI-Chat-Id` of another user | new conversation for the caller; the other user's never readable |
-| Gateway key `ume-sk-…` sent to our API; our key sent with `Bearer` and `x-api-key` both set | `invalid_key` (nothing derived logged); the `Authorization` value wins as in the gateway |
+| Gateway key `fors-sk-…` sent to our API; our key sent with `Bearer` and `x-api-key` both set | `invalid_key` (nothing derived logged); the `Authorization` value wins as in the gateway |
 | 61 unknown keys from one address in a minute | 429 for that address, cached valid keys from it still work, event 5006 |
 | `pk` key with a foreign `Origin`, no `Origin`, or for an `internal` assistant | 403 `origin_not_allowed` / 404 |
 | Token from another tenant (Keycloak second realm in the test), guest token, unknown `azp` | 401 `wrong_tenant` / `guest_refused` / 403 `client_unknown` |
@@ -1385,15 +1385,15 @@ Moved to [`../archive/design-history/identity.md`](../archive/design-history/ide
 - Entra: `acct` optional claim values and `idp` behaviour for B2B guests in ID and access tokens.
 - Open WebUI tag chosen at P0 (V1): **done** (to-verify #46): v0.12.3, JWT fields and fallback as
   designed (`headers.py:41-86`), callback path per §5.3. Still open: an end-to-end request from Open WebUI to
-  `rag-api` (needs the chat API, P1).
-- **New**: Entra ID tokens of `ume-rag-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
+  `kalla-api` (needs the chat API, P1).
+- **New**: Entra ID tokens of `kalla-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
   Not run in P0: needs the package 1 registration, now P2 (to-verify #151).
 - **New**: `groupMembershipClaims = SecurityGroup` puts cloud and synced member groups as object ids into the ID
   token's `groups` claim; how many pilot admins exceed the token's group limit (overage, §2.5).
 - **New (P2)**: whether IT can put team codes matching the gateway's `Teams.Code` into a `teamCodes` claim on
-  `ume-rag-admin` (the municipality has no department attribute either); otherwise owner-team scoping needs member
+  `kalla-admin` (the municipality has no department attribute either); otherwise owner-team scoping needs member
   groups on teams (§1.3, §14 item 10).
-- **New (P1)**: with *full scope allowed* off, the `roles` mapper of `ume-rag-admin` still emits the `rag-*` roles once
+- **New (P1)**: with *full scope allowed* off, the `roles` mapper of `kalla-admin` still emits the `rag-*` roles once
   they are in the client's role scope mappings, and no gateway role (§11.2; P1 item 16's sign-in test).
 - **New (P1)**: Keycloak's partial import covers users, clients, groups and roles, but not, as far as the admin console
   shows, client scopes, the user profile, password and brute-force policy or authentication flows. Settled: the shared realm uses keycloak-config-cli instead
@@ -1410,7 +1410,7 @@ J11; the gateway session (`../gateway-changes/prompt-gateway-session.md` §2) or
 
 1. **Who administers the shared realm** in production: accounts, role grants, `departmentCodes`, OTP resets, the
    realm's admin users and their own OTP. The gateway session writes the runbook; who holds the Keycloak admin role
-   for realm `ume` (the gateway's operators, RAG's platform admins, or both, with which Keycloak admin roles) is open.
+   for realm `fors` (the gateway's operators, RAG's platform admins, or both, with which Keycloak admin roles) is open.
 2. **How RAG's additions are imported and kept in step** with the gateway's base realm: an import job, `kcadm`, or a
    documented procedure (the gateway session chooses and says which); how a later change to `deploy/keycloak/**` (a new
    redirect URI, a new `rag-*` role) reaches production, who applies it, and how a mistake in one system's part is
@@ -1430,7 +1430,7 @@ J11; the gateway session (`../gateway-changes/prompt-gateway-session.md` §2) or
    WebUI accounts appear to be keyed by the provider's `sub` with `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false`, so a switch may
    create new Open WebUI users and new `SubjectId`s for our conversations (to verify). Whether the pilot's accounts and
    chats are migrated or start over.
-8. **Token-caller parts in the P1 additions**: whether `ume-rag-api` in P1 is only the audience, or also brings the
+8. **Token-caller parts in the P1 additions**: whether `kalla-api` in P1 is only the audience, or also brings the
    `Chat.Use`/`Knowledge.Read`/`Mcp.Use` scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a
    client-credentials client (no P1 caller needs them, §7.1). Provisionally (§11.2): the audience client only.
 9. **E1 spike** (§9.4, weakness review §5): answered by the Decisions table "P1b briefs" (O3): E1 moves to P2 with
@@ -1448,31 +1448,31 @@ Moved to [`../archive/design-history/identity.md`](../archive/design-history/ide
 
 The reasons and the alternatives are in [`../proposals/setup-wizard.md`](../proposals/setup-wizard.md); the rules:
 
-**Effective sign-in values.** rag-admin's sign-in values (`Authority`, `ClientId`, `ClientSecret`, the role,
+**Effective sign-in values.** kalla-admin's sign-in values (`Authority`, `ClientId`, `ClientSecret`, the role,
 department, team and group claims, the extra scopes, `TenantId`, `RefuseGuests`) each come from the deployment
 (`Oidc:*` in the raw configuration, an empty value is unset), else from `Settings.Identity.Oidc.*`, else from the
 code's default. The API reports each value's source (`deployment`, `wizard`, `default`) and never a secret (it answers
-*set* and when). `Oidc:RoleGroups:rag-platform-admin` stays a deployment value (§2.5). rag-admin starts without an
+*set* and when). `Oidc:RoleGroups:rag-platform-admin` stays a deployment value (§2.5). kalla-admin starts without an
 authority.
 
-**The gateway's provider address as a suggestion (M-20 S8).** rag-admin reads the gateway's provider address from its
+**The gateway's provider address as a suggestion (M-20 S8).** kalla-admin reads the gateway's provider address from its
 context (`gateway.oidc_authority`, feature `oidc-authority`; only an absolute https address without user information, at
 most 500 characters) and `GET /bff/setup/state` carries it as `gateway.suggestedAuthority`, with `gateway.adminUrl` (the
 context's `admin_url`, else `Admin:GatewayAdminUrl`); `gateway` is null for a gateway without the feature. It is a
 suggestion only: it is not a source in `SignInSettings.Resolve`, the effective values and their precedence (deployment,
 wizard, default) are unchanged, and it is stored only as a wizard value after a passed test and Finish, like a typed one.
-When the state would suggest no address and neither the deployment nor the wizard sets rag-admin's authority, rag-admin
+When the state would suggest no address and neither the deployment nor the wizard sets kalla-admin's authority, kalla-admin
 reads its gateway context again before answering: at most once per 5 seconds per instance
 (`GatewayContextReader.RefreshInterval`), shared by concurrent requests, and waited for at most 2 seconds, after which the
 state answers with what it has; a failed or slow read never fails the request. So a deployer who finishes the gateway's
-wizard and then opens Ume.Rag's sees the address without waiting for the context interval. The wizard page reads the
+wizard and then opens Källa's sees the address without waiting for the context interval. The wizard page reads the
 state again when its tab is shown again (back from the gateway's wizard, which the sign-in step's link opens in a tab of
 its own) and puts the address into the field while that is empty and no test has been made.
 
 **Stored secrets.** The client secrets are encrypted with Data Protection under a purpose per secret
-(`config."DataProtectionKeys"`, the ring protected by `data-protection.pfx`). rag-api registers Data Protection with
+(`config."DataProtectionKeys"`, the ring protected by `data-protection.pfx`). kalla-api registers Data Protection with
 the same application name and certificate and with key generation off; its code unprotects only Open WebUI's secret.
-The purposes keep one secret's ciphertext from being read as another's; they are not access control (rag-api's role
+The purposes keep one secret's ciphertext from being read as another's; they are not access control (kalla-api's role
 can read the settings row and the service holds the certificate). The worker has no certificate.
 
 **Setup state.** `SetupCompletedAt` in the settings row. Setup is open when it is null, or when `Setup:Reopen` holds
@@ -1480,17 +1480,17 @@ a value other than the last consumed one; that value is consumed when setup open
 with an authority and a client secret from the deployment sets `SetupCompletedAt` (the client id has a default, so it
 can't tell a declared deployment; a deployment that gives only the authority, as the shared Portainer stack does, gets
 the wizard for the secret and the test; one with a public client and no secret gets the wizard once). Nothing else opens setup: a missing
-row (`rag-migrate` seeds it, so the first run has a row with `SetupCompletedAt` null), an unreadable secret or a
-missing value leaves it closed, and rag-admin logs the reason. Setup sessions and tests are deleted when their opening
+row (`kalla-migrate` seeds it, so the first run has a row with `SetupCompletedAt` null), an unreadable secret or a
+missing value leaves it closed, and kalla-admin logs the reason. Setup sessions and tests are deleted when their opening
 ends.
 
 **Setup code.** HMAC-SHA-256 of the setup secret file (`Setup__Secret`, generated by the deployment like every
 generated secret, never overwritten) over the opening's nonce (in the settings row), shown as 128 bits in groups.
-rag-admin writes it to standard output at start while setup is open, with the wizard's address, never through the
+kalla-admin writes it to standard output at start while setup is open, with the wizard's address, never through the
 logger or a security event. A wrong code never voids the code and never stops the right one: the code is
 compared first, so the right one always gives a session, and after 20 wrong codes in a minute an instance answers
 further wrong ones 429 with `Retry-After`, on top of the per-address limit (until 2026-11-16 the throttle came first and
-a flood of wrong codes kept the right one out; found by the gateway's security review, thekim1/llmgateway#100); nothing
+a flood of wrong codes kept the right one out; found by the gateway's security review, thekim1/fors#100); nothing
 about wrong codes is stored, and their security event is sampled (one per 10 seconds, with a count). 128 bits need no
 hard stop, and a hard stop would let anyone who reaches the page shut the deployer out.
 
@@ -1500,7 +1500,7 @@ with the BFF's antiforgery), `GET state` (the values with their sources, the hos
 
 **Test sign-in.** `POST test` takes candidate values, fetches the discovery document (`https` only outside
 development, no redirects, no response content returned) and starts an authorization-code sign-in with them and
-rag-admin's redirect URI. The candidate values are stored encrypted with the setup session. The callback runs the
+kalla-admin's redirect URI. The candidate values are stored encrypted with the setup session. The callback runs the
 sign-in checks of §1.3 and §2 and stores the result: subject, name, roles, groups, departments, and whether the person
 is a platform admin. `POST complete` saves the tested values only when the latest test passed, was made with exactly
 those values, and its person is a platform admin; it sets `SetupCompletedAt`, clears the nonce and ends the setup
@@ -1520,7 +1520,7 @@ someone else.
 `Settings.OpenWebUi.Oidc.*` (the provider's display name excepted). They change in setup mode after a re-open, during
 which the existing sign-in keeps working.
 
-**Reload.** rag-admin builds its `OpenIdConnectOptions` from the effective values through one configure step. Before
+**Reload.** kalla-admin builds its `OpenIdConnectOptions` from the effective values through one configure step. Before
 authentication runs on `/bff/login`, `/bff/user`, `/bff/logout` and the callback it reads the effective values (one
 row), at most once every 2 seconds per instance (`AdminSignIn.RefreshInterval`; anyone may call those paths, and
 requests arriving together share one read), and compares a SHA-256 fingerprint of them, the secret included, with the one the live options were built from;
@@ -1534,7 +1534,7 @@ in use. Without a usable authority (none, not an absolute https URL, or a stored
 that can't be completed gives no session, security event 5001 `callback_failed` and a redirect to `/?signin=failed`.
 Built in M-20 S2 (#762); the bound in #784.
 
-**Anonymous callbacks of a setup test** (#784, from the review of thekim1/llmgateway#103). A request to the callback
+**Anonymous callbacks of a setup test** (#784, from the review of thekim1/fors#103). A request to the callback
 path with a setup test's `state` is answered before a test is looked up: 404 while setup is closed by the values last
 read (nothing more is read), and while it is open at most 20 a minute per client address reach the database, then 429
 (`SetupCallbackThrottle`, per instance; per address so a flood does not keep the deployer's own callback out). A passed
@@ -1552,7 +1552,7 @@ test row (single use, expiring) holds the PKCE verifier and nonce; the id token 
 same `ValidateSignInAsync` as a real sign-in runs on the candidate values. A provider whose metadata requires pushed
 authorization requests is refused with a message.
 
-**Open WebUI.** `Settings.OpenWebUi.Oidc.*`: the provider URL (the discovery document's address; default rag-admin's
+**Open WebUI.** `Settings.OpenWebUi.Oidc.*`: the provider URL (the discovery document's address; default kalla-admin's
 effective authority + `/.well-known/openid-configuration`), the client id (default `open-webui`), the provider's
 display name, the client secret (encrypted, its own purpose) and its optional expiry date. A deployment value
 (`OpenWebUi:Oidc:*`) wins. They are set in the wizard's Open WebUI step (`target: "open-webui"` on `POST test` and
@@ -1560,22 +1560,22 @@ display name, the client secret (encrypted, its own purpose) and its optional ex
 to register.
 
 - **Its default provider inside a setup session:** on a first run the admin's authority is tested but not saved when
-  this step comes (it is saved at Finish). So while rag-admin has no effective authority, the default provider URL of
-  this target follows the authority of the session's latest passed rag-admin test: the field can stay empty, the check
+  this step comes (it is saved at Finish). So while kalla-admin has no effective authority, the default provider URL of
+  this target follows the authority of the session's latest passed kalla-admin test: the field can stay empty, the check
   uses that provider, and null is saved, so the setting follows the admin's provider afterwards. Outside a setup
   session nothing changes. A deployment secret is still sent only to a provider the deployment names.
-- **Its test is a back-channel check, not a sign-in:** the provider sends the browser back to Open WebUI, so rag-admin
+- **Its test is a back-channel check, not a sign-in:** the provider sends the browser back to Open WebUI, so kalla-admin
   never sees a callback. The test fetches the discovery document (the provider URL must be the issuer's own) and the
   keys, then makes one token request with a random code and the candidate client: `invalid_grant` means the client was
   accepted, `invalid_client` or any 401 that it was refused, anything else that it could not be verified (saving is
   allowed, with a warning). It can't tell whether Open WebUI's redirect URI is registered. The secret rules above apply;
   a deployment secret also goes to the default derived from the deployment's own authority.
-- **Saving** needs a session whose latest rag-admin test passed as a platform admin (that person is the audit's actor),
+- **Saving** needs a session whose latest kalla-admin test passed as a platform admin (that person is the audit's actor),
   a test with discovery ok and the client not refused, and the same values; it doesn't close setup (event 6013).
-- **rag-api** serves the effective values on `GET /internal/openwebui/sign-in` to the managed Open WebUI client only
+- **kalla-api** serves the effective values on `GET /internal/openwebui/sign-in` to the managed Open WebUI client only
   (§5): 401 without a key, 403 for any other client, `no-store`, not in the API reference. Its `version` is an HMAC of
   the values under a deployment key, so it changes with any value and can't be used to test guesses. The Portainer
-  proxy answers 404 for `/internal/`; in Compose Open WebUI calls rag-api by its public address, so only the key opens
+  proxy answers 404 for `/internal/`; in Compose Open WebUI calls kalla-api by its public address, so only the key opens
   it there.
 - **Open WebUI's start wrapper** (`deploy/openwebui/start-with-sign-in.py`) fetches them before it starts, starts
   without OIDC sign-in when there are none (a public client gets PKCE instead of a secret), asks again every minute

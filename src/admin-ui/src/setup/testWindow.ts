@@ -3,9 +3,9 @@
  * it back to `/setup?test=done`, and that page tells the wizard and closes. The message carries nothing but its type: the
  * wizard reads the result from `GET /bff/setup/state`.
  */
-export const TEST_WINDOW_NAME = 'ume-rag-setup-test'
-export const TEST_DONE_MESSAGE = 'ume-rag-setup-test-done'
-const CHANNEL = 'ume-rag-setup'
+export const TEST_WINDOW_NAME = 'kalla-setup-test'
+export const TEST_DONE_MESSAGE = 'kalla-setup-test-done'
+const CHANNEL = 'kalla-setup'
 
 /**
  * Opens the window from the click itself (a window opened after an await is blocked), empty until the test's address is known.

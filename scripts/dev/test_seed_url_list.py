@@ -1,7 +1,7 @@
 """Tests for seed_url_list.py that need no database: the connection-string parsing, the localhost-only guard (a
 non-local database is refused before psql runs), the URL checks, the psql input (with the source's piiMode) and the
 --api-key handling (key format, hash, pepper from the environment only, the key printed once). The SQL itself, and
-rag-api accepting the key, are tested against TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs.
+kalla-api accepting the key, are tested against TestPostgres by tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs.
 Standard library only:
 
     python3 -I -m unittest discover -s scripts/dev -v
@@ -77,7 +77,7 @@ class MainTests(unittest.TestCase):
 
     def test_the_environment_variable_is_checked_too(self) -> None:
         with (
-            mock.patch.dict("os.environ", {"UME_RAG_DEV_DB": "Host=10.1.2.3;Database=ragdb"}),
+            mock.patch.dict("os.environ", {"KALLA_DEV_DB": "Host=10.1.2.3;Database=ragdb"}),
             mock.patch("subprocess.run") as run,
         ):
             code, err = run_main(["--profile", "p", "https://example.org/a"])
@@ -105,9 +105,9 @@ class MainTests(unittest.TestCase):
         self.assertEqual(PASSWORD, kwargs["env"]["PGPASSWORD"])
         self.assertEqual("54321", kwargs["env"]["PGPORT"])
         stdin = kwargs["input"]
-        self.assertIn("SELECT set_config('ume_seed.urls', '[\"https://example.org/a\"]', false);", stdin)
-        self.assertIn("SELECT set_config('ume_seed.enqueue', 'true', false);", stdin)
-        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'report', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.urls', '[\"https://example.org/a\"]', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.enqueue', 'true', false);", stdin)
+        self.assertIn("SELECT set_config('kalla_seed.pii_mode', 'report', false);", stdin)
         self.assertTrue(stdin.endswith(seed_url_list.SQL_FILE.read_text(encoding="utf-8")))
         self.assertIn("  source: abc (created)", out.getvalue())
         self.assertNotIn("source_id", out.getvalue())
@@ -119,7 +119,7 @@ class MainTests(unittest.TestCase):
                 ["--connection", LOCAL, "--profile", "p", "--pii-mode", "hold", "https://example.org/a"]
             )
         self.assertEqual(0, code)
-        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'hold', false);", run.call_args.kwargs["input"])
+        self.assertIn("SELECT set_config('kalla_seed.pii_mode', 'hold', false);", run.call_args.kwargs["input"])
 
         with (
             mock.patch("subprocess.run") as run,
@@ -134,16 +134,16 @@ class MainTests(unittest.TestCase):
     def test_socket_mode_runs_psql_in_the_container_as_postgres_without_a_password(self) -> None:
         completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")
         with (
-            mock.patch.dict(os.environ, {"PGPASSWORD": "leftover", "UME_RAG_DEV_DB": ""}),
+            mock.patch.dict(os.environ, {"PGPASSWORD": "leftover", "KALLA_DEV_DB": ""}),
             mock.patch("subprocess.run", return_value=completed) as run,
             redirect_stdout(io.StringIO()),
         ):
             code = seed_url_list.main(
-                ["--docker", "ume-rag-postgres-1", "--socket", "--profile", "pilot-embedding", "https://example.org/a"]
+                ["--docker", "kalla-postgres-1", "--socket", "--profile", "pilot-embedding", "https://example.org/a"]
             )
         self.assertEqual(0, code)
         command, env = run.call_args.args[0], run.call_args.kwargs["env"]
-        self.assertEqual(["docker", "exec", "-i", "-u", "postgres", "ume-rag-postgres-1", "psql"], command[:7])
+        self.assertEqual(["docker", "exec", "-i", "-u", "postgres", "kalla-postgres-1", "psql"], command[:7])
         self.assertEqual(["-U", "postgres", "-d", "ragdb"], command[-4:])
         self.assertNotIn("-h", command)
         self.assertNotIn("PGPASSWORD", env)
@@ -176,44 +176,44 @@ class ApiKeyTests(unittest.TestCase):
 
     def test_the_key_has_the_key_hashers_format(self) -> None:
         key = seed_url_list.generate_key()
-        self.assertRegex(key, r"^ume-rag-sk-[0-9A-Za-z]{43}$")
+        self.assertRegex(key, r"^kalla-sk-[0-9A-Za-z]{43}$")
         self.assertNotEqual(key, seed_url_list.generate_key())
 
     def test_the_hash_matches_the_key_hashers_test_vector(self) -> None:
         # The same vector is asserted against KeyHasher.Hash in DevSeedScriptTests.
-        key = "ume-rag-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        key = "kalla-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
         self.assertEqual(
-            "f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf",
+            "f6e1028b728aa3791542efce5c0beba5b6e0da3b03f7da70be7b5f1cf72bb194",
             seed_url_list.key_hash("dev-seed-vector-pepper-0123456789abcdef", key),
         )
 
     def test_a_new_key_is_printed_once_and_only_its_hash_reaches_psql(self) -> None:
         output = "Key,Value\nclient,c1 (created)\napi_key,k1 dev seed: pilot-public (created)\napi_key_state,created\n"
-        code, out, _, run = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        code, out, _, run = self.run_seed(output, {"KALLA_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
-        keys = re.findall(r"ume-rag-sk-[0-9A-Za-z]{43}", out)
+        keys = re.findall(r"kalla-sk-[0-9A-Za-z]{43}", out)
         self.assertEqual(1, len(keys))
         key = keys[0]
         stdin, env, command = run.call_args.kwargs["input"], run.call_args.kwargs["env"], run.call_args.args[0]
         self.assertNotIn(key, stdin)
         self.assertNotIn(PEPPER, stdin)
-        self.assertIn(f"SELECT set_config('ume_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
-        self.assertIn(f"SELECT set_config('ume_seed.key_prefix', '{key[:15]}', false);", stdin)
-        self.assertNotIn("UME_RAG_DEV_KEY_PEPPER", env)
+        self.assertIn(f"SELECT set_config('kalla_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
+        self.assertIn(f"SELECT set_config('kalla_seed.key_prefix', '{key[:13]}', false);", stdin)
+        self.assertNotIn("KALLA_DEV_KEY_PEPPER", env)
         self.assertNotIn(PEPPER, " ".join(command))
         self.assertNotIn("api_key_state", out)
 
     def test_an_existing_key_prints_nothing_secret(self) -> None:
         output = "Key,Value\napi_key,k1 dev seed: pilot-public (existing; not printed again)\napi_key_state,existing\n"
-        code, out, _, _ = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        code, out, _, _ = self.run_seed(output, {"KALLA_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
-        self.assertNotRegex(out, r"ume-rag-sk-[0-9A-Za-z]{43}")
+        self.assertNotRegex(out, r"kalla-sk-[0-9A-Za-z]{43}")
         self.assertIn("(existing; not printed again)", out)
 
     def test_the_pepper_must_be_set_and_long_enough(self) -> None:
         for pepper, message in (("", "needs the AppHost's key pepper"), ("short", "shorter than 32 bytes")):
             with self.subTest(pepper=pepper):
-                code, out, err, run = self.run_seed("", {"UME_RAG_DEV_KEY_PEPPER": pepper})
+                code, out, err, run = self.run_seed("", {"KALLA_DEV_KEY_PEPPER": pepper})
                 self.assertEqual(2, code)
                 self.assertIn(message, err)
                 self.assertEqual("", out)
@@ -225,8 +225,8 @@ class ApiKeyTests(unittest.TestCase):
         with mock.patch("subprocess.run", return_value=completed) as run, redirect_stdout(out):
             code = seed_url_list.main(["--connection", LOCAL, "--profile", "p", "https://example.org/a"])
         self.assertEqual(0, code)
-        self.assertIn("SELECT set_config('ume_seed.key_hash', '', false);", run.call_args.kwargs["input"])
-        self.assertNotIn("ume-rag-sk-", out.getvalue())
+        self.assertIn("SELECT set_config('kalla_seed.key_hash', '', false);", run.call_args.kwargs["input"])
+        self.assertNotIn("kalla-sk-", out.getvalue())
 
 
 if __name__ == "__main__":

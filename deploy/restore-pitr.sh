@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Point-in-time restore of ragdb from the pgBackRest repository (plans/platform/repo-and-deployment.md §7.4):
-#   1. archives the current WAL segment, if rag-postgres is running, so the newest changes are in the repository;
-#   2. stops rag-api, rag-admin (their second slots too, with --rolling) and rag-worker, then rag-postgres;
-#   3. `pgbackrest restore --type=time --delta` in a one-off container of the rag-postgres service (`docker compose run
-#      --rm`, so the same image, user, volumes and repository settings) on the rag-postgres-data volume;
+#   1. archives the current WAL segment, if kalla-postgres is running, so the newest changes are in the repository;
+#   2. stops kalla-api, kalla-admin (their second slots too, with --rolling) and kalla-worker, then kalla-postgres;
+#   3. `pgbackrest restore --type=time --delta` in a one-off container of the kalla-postgres service (`docker compose run
+#      --rm`, so the same image, user, volumes and repository settings) on the kalla-postgres-data volume;
 #   4. starts Postgres, which recovers to the target and pauses there; prints the last transaction it replayed;
 #   5. promotes it (a new timeline; the old one stays in the repository), checks WAL archiving with `pgbackrest check`;
 #   6. starts the services it stopped and waits until they are healthy; prints the timings (the achieved RTO).
@@ -50,7 +50,7 @@ target_pg="$(date -d "@$target_epoch" '+%Y-%m-%d %H:%M:%S%:z')"
 [ "$target_epoch" -le "$(date +%s)" ] || die "the target time $target_pg is in the future"
 
 dc() { docker compose --env-file "$env_file" "$@"; }
-sql() { dc exec -T rag-postgres psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d ragdb -c "$1"; }
+sql() { dc exec -T kalla-postgres psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d ragdb -c "$1"; }
 stamp() { date +%s.%N; }
 since() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%7.1f s", b - a }'; }
 
@@ -59,7 +59,7 @@ project="$(dc config | sed -n 's/^name: //p')"
 mapfile -t defined < <(dc config --services)
 running="$(dc ps --services --status running)"
 services=()
-for s in rag-api rag-api-b rag-admin rag-admin-b rag-worker; do
+for s in kalla-api kalla-api-b kalla-admin kalla-admin-b kalla-worker; do
   if printf '%s\n' "${defined[@]}" | grep -qx "$s" && grep -qx "$s" <<<"$running"; then services+=("$s"); fi
 done
 
@@ -67,8 +67,8 @@ cat <<EOF
 Point-in-time restore of ragdb in Compose project '$project'
   target time:   $target_pg (inclusive)
   backup set:    ${set_label:-the newest that ended before the target}
-  stops:         ${services[*]:-(no services running)} rag-postgres
-  restores:      the rag-postgres-data volume, in place (--delta); everything after the target is discarded
+  stops:         ${services[*]:-(no services running)} kalla-postgres
+  restores:      the kalla-postgres-data volume, in place (--delta); everything after the target is discarded
 EOF
 if [ "$confirm" != 1 ]; then
   echo
@@ -77,7 +77,7 @@ if [ "$confirm" != 1 ]; then
 fi
 
 t0="$(stamp)"
-if grep -qx rag-postgres <<<"$running"; then
+if grep -qx kalla-postgres <<<"$running"; then
   # Close the segment in progress and wait until it is archived, so the restore can reach the newest commits.
   seg="$(sql "SELECT pg_walfile_name(pg_switch_wal())" 2>/dev/null || true)"
   if [ -n "$seg" ]; then
@@ -90,21 +90,21 @@ if grep -qx rag-postgres <<<"$running"; then
   fi
 fi
 if [ ${#services[@]} -gt 0 ]; then dc stop "${services[@]}"; fi
-dc stop rag-postgres
+dc stop kalla-postgres
 t_stopped="$(stamp)"
 
 restore=(--stanza=ragdb --delta --type=time "--target=$target_pg" --target-action=pause --log-level-console=info)
 [ -z "$set_label" ] || restore+=("--set=$set_label")
-dc run --rm --no-deps -T --entrypoint pgbackrest rag-postgres "${restore[@]}" restore
+dc run --rm --no-deps -T --entrypoint pgbackrest kalla-postgres "${restore[@]}" restore
 t_restored="$(stamp)"
 
-dc up -d --no-deps rag-postgres
+dc up -d --no-deps kalla-postgres
 deadline=$(( $(date +%s) + timeout ))
 state=""
 until [ "$state" = paused ] || [ "$state" = promoted ]; do
-  [ "$(date +%s)" -lt "$deadline" ] || die "recovery did not reach the target within $timeout s (docker compose logs rag-postgres)"
+  [ "$(date +%s)" -lt "$deadline" ] || die "recovery did not reach the target within $timeout s (docker compose logs kalla-postgres)"
   # Recovery that ends before the target (no WAL that far) is fatal in Postgres: the container restarts in a loop.
-  if dc logs --since "$(date -d "@${t_restored%.*}" --iso-8601=seconds)" rag-postgres 2>/dev/null \
+  if dc logs --since "$(date -d "@${t_restored%.*}" --iso-8601=seconds)" kalla-postgres 2>/dev/null \
       | grep -q 'recovery ended before configured recovery target was reached'; then
     die "the repository has no WAL up to $target_pg: pick an earlier time (pgbackrest info shows the archive range)"
   fi
@@ -121,12 +121,12 @@ for _ in $(seq 1 150); do
   [ "$(sql "SELECT pg_is_in_recovery()")" = f ] && break
   sleep 2
 done
-[ "$(sql "SELECT pg_is_in_recovery()")" = f ] || die "rag-postgres did not leave recovery after pg_promote()"
+[ "$(sql "SELECT pg_is_in_recovery()")" = f ] || die "kalla-postgres did not leave recovery after pg_promote()"
 # The control file shows the new timeline only after the next checkpoint; the current WAL file name has it now.
 timeline="$(sql "SELECT ('x' || left(pg_walfile_name(pg_current_wal_lsn()), 8))::bit(32)::int")"
 t_promoted="$(stamp)"
 echo "promoted: timeline $timeline"
-dc exec -T rag-postgres pgbackrest --stanza=ragdb check
+dc exec -T kalla-postgres pgbackrest --stanza=ragdb check
 t_checked="$(stamp)"
 
 if [ ${#services[@]} -gt 0 ]; then dc up -d --wait "${services[@]}"; fi

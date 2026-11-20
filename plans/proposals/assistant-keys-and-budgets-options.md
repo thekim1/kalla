@@ -1,13 +1,13 @@
 # Keys and budgets per assistant: options
 
 > **Decided (user, 2026-11-11, #580), outbound:** an assistant, and a knowledge base, runs on an **assigned gateway key**
-> of its department, used by reference: Ume.Rag stores the key's id and sends `x-ume-on-behalf-of: <key id>` with its
+> of its department, used by reference: Källa stores the key's id and sends `x-fors-on-behalf-of: <key id>` with its
 > credential key; the per-assistant budget is that key's budget in the gateway. None of options A–E below is taken as
 > written. The rules are in Decisions "Cost attribution" and "Gateway keys", [`cost-attribution.md`](../platform/cost-attribution.md)
 > §4 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §5. The inbound questions (§3, Q5) stay open.
 > The text below is kept as the record of the options and does not bind.
 
-Whether an assistant should have keys of its own, and how a cost limit per assistant should work with the LLM gateway.
+Whether an assistant should have keys of its own, and how a cost limit per assistant should work with Fors.
 Status: **options for a decision, not binding** (main session, 2026-11-10). Nothing here changes a design. The
 decision that binds today is Decisions "Cost attribution (user, 2026-11-08)" and
 [`cost-attribution.md`](../platform/cost-attribution.md); this document reopens its option A and its "team per assistant"
@@ -21,8 +21,8 @@ Gateway facts are from `~/git/llmgateway` at `origin/main` v0.9.2 (`df6bf5e`), r
 
 | | Inbound | Outbound |
 |---|---|---|
-| Whose key | Ume.Rag's own (`ume-rag-sk-…`) | the gateway's (`ume-sk-…`) |
-| Who presents it | an app that calls an assistant through rag-api | Ume.Rag, when it calls a model |
+| Whose key | Källa's own (`kalla-sk-…`) | the gateway's (`fors-sk-…`) |
+| Who presents it | an app that calls an assistant through kalla-api | Källa, when it calls a model |
 | What it decides | who may use the assistant, from where, how often | who pays, which budget counts, which models are allowed |
 | Section | §3 | §4–§6 |
 
@@ -42,14 +42,14 @@ assistant.
 
 R3 is new and rules out option E (§5).
 
-## 3. Inbound: Ume.Rag keys that reach one assistant
+## 3. Inbound: Källa keys that reach one assistant
 
 ### 3.1 What exists
 
 - A key belongs to a **client**, has an optional **team**, and `Scopes.AssistantIds` / `Scopes.CollectionIds` narrow
-  it (`src/Ume.Rag.Domain/Entities/KeyEntities.cs`; identity §4.3 step 6, a miss is 404 `key_scope`).
+  it (`src/Kalla.Domain/Entities/KeyEntities.cs`; identity §4.3 step 6, a miss is 404 `key_scope`).
 - Per key: `AllowedIpRanges`, `RequestsPerMinute`, expiry, rotation (immediate or 24 h grace), audited reveal, revoke
-  (`src/Ume.Rag.AdminApi/KeyEndpoints.cs`; identity §6.4).
+  (`src/Kalla.AdminApi/KeyEndpoints.cs`; identity §6.4).
 - V23 limits scopes to assistants and collections of the key team's department (admin §4.6).
 - The support-assistant case plans one `integration` client and one key scoped to its assistant
   (`plans/cases/support-assistant/05-frontend-integration.md`).
@@ -60,7 +60,7 @@ R3 is new and rules out option E (§5).
 |---|---|---|
 | I1 | No key UI on the assistant page. Keys are only in the generic platform form (`/plattform/keys`), where the admin picks a client and enters assistant ids | `src/admin-ui/src/platform/resources.ts`; no key code in `src/admin-ui/src/views/AssistantView.vue` |
 | I2 | A department admin may manage keys of own teams, but a key needs a client, and clients are platform-admin objects | identity §6.4; admin §5.8 |
-| I3 | Usage is recorded per day, assistant and **client**, not per key | `AssistantDailyTotals`; no key id found in `src/Ume.Rag.Domain/Entities/ChatEntities.cs` or `src/Ume.Rag.Api/ConversationWriter.cs` (grep only, not a full read) |
+| I3 | Usage is recorded per day, assistant and **client**, not per key | `AssistantDailyTotals`; no key id found in `src/Kalla.Domain/Entities/ChatEntities.cs` or `src/Kalla.Api/ConversationWriter.cs` (grep only, not a full read) |
 
 ### 3.3 Options
 
@@ -82,13 +82,13 @@ part of cost-attribution step C1.
 
 | Fact | Where |
 |---|---|
-| Budgets have three scopes: department, team, key. USD or tokens. Periods hourly to yearly. A spent budget answers 402 and names the scope | `src/Ume.LlmGateway.Domain/BudgetEnums.cs`, `Entities/Budget.cs`, `Gateway/Budgets/BudgetService.cs` |
-| A usage record holds the key, its team and its department. Nothing per request (no tag, no end user) | `src/Ume.LlmGateway.Domain/Entities/UsageRecord.cs` |
-| A key carries its own model, provider and residency allow-lists, IP ranges, rate limits and `RequireMaxResidency` | `src/Ume.LlmGateway.Domain/Entities/VirtualKey.cs` |
+| Budgets have three scopes: department, team, key. USD or tokens. Periods hourly to yearly. A spent budget answers 402 and names the scope | `src/Fors.Domain/BudgetEnums.cs`, `Entities/Budget.cs`, `Gateway/Budgets/BudgetService.cs` |
+| A usage record holds the key, its team and its department. Nothing per request (no tag, no end user) | `src/Fors.Domain/Entities/UsageRecord.cs` |
+| A key carries its own model, provider and residency allow-lists, IP ranges, rate limits and `RequireMaxResidency` | `src/Fors.Domain/Entities/VirtualKey.cs` |
 | The admin API (create a key, set a budget) is cookie sign-in only. No machine credential can create keys | gateway `docs/admin-api.md` |
-| Delegation (`x-ume-on-behalf-of`) is designed for release 2 and **not built** | [`../gateway-changes/design.md`](../gateway-changes/design.md) §5 |
+| Delegation (`x-fors-on-behalf-of`) is designed for release 2 and **not built** | [`../gateway-changes/design.md`](../gateway-changes/design.md) §5 |
 | Under the delegation design, team and department budgets follow the named team; key budgets stay with the delegating key, so a key budget would cap the whole platform, not one assistant | gateway-changes §5.4 |
-| Ume.Rag today: keys per level and deployable, secret files, owned by the pilot team. All chat traffic is one line in the gateway | Decisions "Gateway keys"; gateway-changes §13.4 |
+| Källa today: keys per level and deployable, secret files, owned by the pilot team. All chat traffic is one line in the gateway | Decisions "Gateway keys"; gateway-changes §13.4 |
 
 So a per-assistant budget needs something in the gateway, one per assistant, that a budget can attach to. Today that
 can be a team or a key. Anything else is new gateway work.
@@ -97,15 +97,15 @@ can be a team or a key. Anything else is new gateway work.
 
 ### A. A gateway team per assistant (the current plan)
 
-Delegating platform keys per level; every call sends `x-ume-on-behalf-of: <owner team id>`. A department that wants a
+Delegating platform keys per level; every call sends `x-fors-on-behalf-of: <owner team id>`. A department that wants a
 limit on one assistant creates a gateway team for it (e.g. *DoIT › Supportassistenten*), sets the budget on that team
 and makes it the assistant's owner team (cost-attribution §4.2).
 
-- **Needs:** gateway release 2 (feature A); Ume.Rag steps B2–B6 of cost-attribution §6.
+- **Needs:** gateway release 2 (feature A); Källa steps B2–B6 of cost-attribution §6.
 - **For:** already decided and designed; no secret per assistant; the gateway is the only enforcer (R3); works for
   ingestion too.
 - **Against:**
-  - Teams that are not teams appear in the gateway's organisation, in its reports and in Ume.Rag's team pickers.
+  - Teams that are not teams appear in the gateway's organisation, in its reports and in Källa's team pickers.
   - The owner team has a second meaning. With `DepartmentSettings.EditOwnerTeamOnly` (P2, admin §3.2) an edit needs
     membership of the object's owner team. A per-assistant team has no real members, so the budget use and the
     edit-scope use collide.
@@ -113,21 +113,21 @@ and makes it the assistant's owner team (cost-attribution §4.2).
     change to those lists (cost-attribution §7 Q2).
   - Not available until release 2.
 - **Variant A2:** split the two meanings: keep `OwnerTeamId` for edit scope and add a `BillingTeamId` that is sent as
-  `x-ume-on-behalf-of`. Removes the collision; the fake teams remain.
+  `x-fors-on-behalf-of`. Removes the collision; the fake teams remain.
 
 ### B. A real gateway key per assistant
 
-Each assistant that needs it has its own gateway key, owned by its team in the gateway. Ume.Rag uses that key for the
+Each assistant that needs it has its own gateway key, owned by its team in the gateway. Källa uses that key for the
 assistant's calls. The budget is an ordinary key budget.
 
-- **Needs:** no gateway change. Ume.Rag: a place to hold the key and a rule for picking it per call.
+- **Needs:** no gateway change. Källa: a place to hold the key and a rule for picking it per call.
 - **For:**
   - Works today: key budgets and per-key usage exist.
   - The cost centre follows without delegation, because the key belongs to a team and department.
   - Least privilege: the key can allow only that assistant's models and residency level.
   - The gateway is the only enforcer (R3).
 - **Against:**
-  - Ume.Rag holds one secret per assistant. The secret adds no security (Ume.Rag holds them all); it is only a label.
+  - Källa holds one secret per assistant. The secret adds no security (Källa holds them all); it is only a label.
   - A manual gateway step for every such assistant: create, hand over, rotate.
   - A department admin can disable or revoke the key in the gateway and the assistant stops. Manageable with a clear
     error and an attention item, but it is a new failure mode.
@@ -147,10 +147,10 @@ assistant's calls. The budget is an ordinary key budget.
   - **B1, secret file per assistant:** an optional deployment knob (a key per assistant slug, as a secret file). Keeps
     the "secret files" rule. Operator work per assistant; fits a handful, not hundreds.
   - **B2, stored encrypted:** the key in the database under Data Protection, entered on the assistant page by a
-    platform admin, as Ume.Rag's own keys are stored for reveal. Self-service; a database and key-ring leak then
+    platform admin, as Källa's own keys are stored for reveal. Self-service; a database and key-ring leak then
     exposes gateway keys. Changes Decisions "Gateway keys".
-  - **B3, provisioned:** the gateway gains a machine API to create and rotate keys, and Ume.Rag calls it. No manual
-    step; new gateway work, and Ume.Rag then holds a credential that can mint keys.
+  - **B3, provisioned:** the gateway gains a machine API to create and rotate keys, and Källa calls it. No manual
+    step; new gateway work, and Källa then holds a credential that can mint keys.
 
 ### C. A budget line under a team, named by the delegated call
 
@@ -159,12 +159,12 @@ gateway counts and stops on the line as well as on the team and the department. 
 against its team only.
 
 - **Needs:** a change to gateway-changes §5 before release 2 is built: a fourth budget scope, a column on the usage
-  record, a second header or a second part of `x-ume-on-behalf-of`, the echo, the UI. Ume.Rag: the assistant stores
+  record, a second header or a second part of `x-fors-on-behalf-of`, the echo, the UI. Källa: the assistant stores
   the line's id (mirrored by the organisation sync) and sends it.
 - **For:**
   - The gateway is the only enforcer (R3), with no secret per assistant and no fake teams.
   - The owner team keeps one meaning.
-  - Per-assistant figures appear in the gateway's own reports (R4 without relying on Ume.Rag's estimate).
+  - Per-assistant figures appear in the gateway's own reports (R4 without relying on Källa's estimate).
   - Cheap to change now, since release 2 is not built.
 - **Against:**
   - New gateway concept and work, on top of release 2.
@@ -183,24 +183,24 @@ The assistant id in a header, stored on the usage record.
 - **For:** small gateway change; per-assistant reports in the gateway.
 - **Against:** reporting only. A tag has no budget, so R2 is not met. Rejected on 2026-11-08 and nothing has changed.
 
-### E. Ume.Rag enforces the budget itself
+### E. Källa enforces the budget itself
 
-A budget field on the assistant; chat checks Ume.Rag's own metered total before each call.
+A budget field on the assistant; chat checks Källa's own metered total before each call.
 
 - **For:** no gateway dependency; set on the assistant page; available as soon as stage 1 metering is.
 - **Against:** a second system controls the budget, with figures that differ from the gateway's (mirror prices, no
   view of fallbacks and retries).
-- **Ruled out by R3** (user, 2026-11-10). Ume.Rag's metering stays as reporting only, as already decided.
+- **Ruled out by R3** (user, 2026-11-10). Källa's metering stays as reporting only, as already decided.
 
 ## 6. Comparison
 
-| | A team per assistant | B key per assistant | C budget line | D tag | E Ume.Rag budget |
+| | A team per assistant | B key per assistant | C budget line | D tag | E Källa budget |
 |---|---|---|---|---|---|
 | Hard limit per assistant (R2) | yes | yes | yes | no | yes |
 | Gateway is the only enforcer (R3) | yes | yes | yes | – | **no** |
 | Works before gateway release 2 | no | **yes** | no | no | yes |
 | New gateway work beyond release 2 | none | none (B3: provisioning API) | a budget scope | a column | none |
-| Secrets Ume.Rag holds | few (per level) | one per assistant | few (per level) | few | few |
+| Secrets Källa holds | few (per level) | one per assistant | few (per level) | few | few |
 | Manual gateway step per assistant with a limit | create a team, extend the delegation lists | create a key, hand it over | create a line | none | none |
 | Organisation stays truthful | no (fake teams) | yes | yes | yes | yes |
 | Owner team keeps one meaning | no (A2: yes) | yes | yes | yes | yes |
@@ -223,9 +223,9 @@ A budget field on the assistant; chat checks Ume.Rag's own metered total before 
 | Q1 | Outbound long term: A (as decided), A2, or C? | the gateway owner's view of a fourth budget scope |
 | Q2 | If C: a new entity (C1) or a key that cannot sign in (C2)? | a read of the gateway's key pipeline |
 | Q3 | Is a hard limit per assistant needed before gateway release 2? If yes: B1 or B2? | pilot department |
-| Q4 | Who creates the gateway object for a limited assistant: a department admin by hand, or Ume.Rag through a gateway provisioning API? | gateway roadmap |
+| Q4 | Who creates the gateway object for a limited assistant: a department admin by hand, or Källa through a gateway provisioning API? | gateway roadmap |
 | Q5 | Inbound: may a department admin create an `integration` client, or only pick one a platform admin made? | §3.3 |
-| Q6 | Should Ume.Rag's assistant page show the gateway's budget status read-only (Data API)? | Q1 |
+| Q6 | Should Källa's assistant page show the gateway's budget status read-only (Data API)? | Q1 |
 
 ## 9. What a decision changes
 

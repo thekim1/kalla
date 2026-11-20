@@ -25,7 +25,7 @@ const props = defineProps<{
   state: SetupState
   test: OpenWebUiTest | null
   stale: boolean
-  /** The session's latest rag-admin test passed as a platform admin (Save needs it). */
+  /** The session's latest kalla-admin test passed as a platform admin (Save needs it). */
   adminTestPassed: boolean
   /** After a save in this session: whether the check confirmed the client; null while nothing was saved. */
   savedVerified: boolean | null

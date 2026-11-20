@@ -27,7 +27,7 @@ tickets only**: real ticket text waits for G1 (0.2).
 | P2 | The documents: the Word, PDF and Markdown files copied to the machine; intranet pages crawled if the intranet is reachable from it, else saved as PDF or HTML and uploaded | the source inventory (0.5) |
 | P3 | DoIT knowledge base `support` (`internal`): upload source, crawl source if reachable; preview, first sync, run reports, personal-data report ([`02-knowledge-base.md`](02-knowledge-base.md) §5) | main session |
 | P4 | Assistant `support`: the instructions of [`04-assistant.md`](04-assistant.md) §3, `generalKnowledge` `fallback`, a not-found text with the real escalation links; condense model per [`01-gateway-setup.md`](01-gateway-setup.md) §1 (local stack) | main session |
-| P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"ume": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
+| P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"kalla": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
 | P6 | Generated evaluation set and a first retrieval report (processing §13, §14) | – |
 | P7 | Show it: the admin test panel and Open WebUI work today; a throwaway demo page (answer, citation links, related documents, follow-up chips, outcome) is optional and is not the frontend team's app | the user's choice |
 | P8 | Findings back into this plan: instruction text, noise selectors or a site profile, articles the misses point to, the condense model | main session |
@@ -38,10 +38,10 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
+| 1.1 | Källa `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
 | 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
-| 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
+| 1.4 | Department and admins in Keycloak realm `fors`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
 | 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
 | 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |
@@ -79,7 +79,7 @@ platform; Decisions "Gold set drafted by the main session, reviewed by DoIT" sho
 
 | # | Step | Detail |
 |---|---|---|
-| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Ume.Rag.AdminApi/EvaluationEndpoints.cs:71`); admin §7.1; processing §13.4 |
+| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Kalla.AdminApi/EvaluationEndpoints.cs:71`); admin §7.1; processing §13.4 |
 | 4.2 | Run retrieval evaluation; compare hybrid with rerank (`hybrid-rerank-gateway` with the Foundry `Cohere-rerank-v5-fast` alias, `hybrid-rerank` with the chat-model reranker) if a rerank model is set | processing §14; `scripts/evaluation/rerank.sh` ([`../../../scripts/evaluation/README.md`](../../../scripts/evaluation/README.md)) |
 | 4.3 | Set the not-found thresholds from answerable and unanswerable questions | Decisions "Weakness review 2"; knowledge §7 |
 | 4.4 | Generate answers for the gold set and have the support reviewers grade them | the go-live gate below |
@@ -92,8 +92,8 @@ grading is the gate.
 
 | # | Step | Who | Detail |
 |---|---|---|---|
-| 5.1 | The frontend team builds against a local Ume.Rag with the FakeGateway | frontend team | [`05-frontend-integration.md`](05-frontend-integration.md) §8 |
-| 5.2 | Client, key (with `requestsPerMinute` and `allowedIpRanges`), audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Ume.Rag admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
+| 5.1 | The frontend team builds against a local Källa with the FakeGateway | frontend team | [`05-frontend-integration.md`](05-frontend-integration.md) §8 |
+| 5.2 | Client, key (with `requestsPerMinute` and `allowedIpRanges`), audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Källa admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
 | 5.3 | Contract check: a cited answer with related documents and follow-ups (stream and JSON), a not-found, an uploaded-file download, a crawled-page link, a feedback rating, a long ticket, a call from outside the allow-list | both teams | [`05-frontend-integration.md`](05-frontend-integration.md) §9 step 7 |
 
 ## 6. Pilot
@@ -118,15 +118,15 @@ grading is the gate.
 - [ ] Key expiry and rotation owner named; key stored only in the app's secret store.
 - [ ] Daily crawl runs complete; no deletion proposal left waiting.
 - [ ] Escalation links in the not-found text work from the app.
-- [ ] Runbook entry for the app: who to call when rag-api answers 5xx, and how to revoke the key.
+- [ ] Runbook entry for the app: who to call when kalla-api answers 5xx, and how to revoke the key.
 - [ ] The platform's own go-live items (backups, restore drill, R1) done for the deployment ([`../../roadmap.md`](../../roadmap.md)).
 
 ## 8. Later
 
 | Step | What it needs | Reference |
 |---|---|---|
-| **Ticket-system integration, read**: the app or the assistant fetches a ticket by number instead of a paste | either the app does it (no Ume.Rag change: it reads the ticket and sends the text), or a read-only tool on the P2 tool hub that the assistant calls | tools design; roadmap "P2: Tools and skills" |
-| **Ticket-system integration, write back**: a drafted reply or a resolution note into the ticket | write tools with confirmation are P3; until then the app writes back what the user approved, outside Ume.Rag | roadmap "Later: P3" |
+| **Ticket-system integration, read**: the app or the assistant fetches a ticket by number instead of a paste | either the app does it (no Källa change: it reads the ticket and sends the text), or a read-only tool on the P2 tool hub that the assistant calls | tools design; roadmap "P2: Tools and skills" |
+| **Ticket-system integration, write back**: a drafted reply or a resolution note into the ticket | write tools with confirmation are P3; until then the app writes back what the user approved, outside Källa | roadmap "Later: P3" |
 | Similar solved tickets as a source | a collection of anonymised, resolved tickets (export to files, or a connector); personal data in tickets needs its own DPIA decision | processing §9 |
 | Per-user identity, department audiences | SA-5 | identity §7 |
 | Intranet in SharePoint | the P2 SharePoint connector | connectors §14 |

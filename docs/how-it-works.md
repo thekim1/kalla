@@ -1,13 +1,13 @@
 # How it fits together
 
-Ume.Rag has four kinds of things to set up: **knowledge bases** hold the content, **assistants** answer from them,
+Källa has four kinds of things to set up: **knowledge bases** hold the content, **assistants** answer from them,
 **apps** (with their **keys**) are the programs that may use the assistants, and **sign-in** decides who may change any
 of it in the admin UI. This page explains each one and how a request is checked. The admin UI uses the same names:
 *Knowledge bases*, *Assistants* and *Apps and keys*.
 
 ## Departments own the content
 
-Departments and their teams come from the AI gateway's organisation. rag-admin reads them every 5 minutes, and
+Departments and their teams come from the AI gateway's organisation. kalla-admin reads them every 5 minutes, and
 *Organisation → Fetch now* reads them at once. Every knowledge base and every assistant belongs to one department,
 with an optional owner team. A department's admins see and change only their own department's objects, and an object
 of another department answers *not found*, as if it did not exist. Platform admins see every department.
@@ -69,11 +69,11 @@ An assistant is what an app's users talk to. To an app it is a **model**: its mo
 
 ## Apps and keys
 
-An **app** (a client) is a program that calls Ume.Rag's API. Platform admins add apps under *Apps and keys*:
+An **app** (a client) is a program that calls Källa's API. Platform admins add apps under *Apps and keys*:
 
 | Kind | Use |
 |---|---|
-| **Open WebUI** | The chat for staff. Open WebUI calls Ume.Rag with one key and forwards who the user is. |
+| **Open WebUI** | The chat for staff. Open WebUI calls Källa with one key and forwards who the user is. |
 | **Integration** | Another system that calls the API with its own key, for example a website's search. |
 | **Internal** | The platform's own tools, which may see every information class. |
 
@@ -85,14 +85,14 @@ Each app has an information class ceiling and says whether it keeps chat history
 
 **Keys** belong to an app:
 
-- A key looks like `ume-rag-sk-` followed by 43 characters. It is shown once when it is created. Ume.Rag stores only a
+- A key looks like `kalla-sk-` followed by 43 characters. It is shown once when it is created. Källa stores only a
   keyed hash of it, so a lost key cannot be read back from the database; platform admins can reveal it in the admin UI,
-  and every reveal is in the audit log. The admin UI shows its first characters (`ume-rag-sk-AbC1`) to tell keys apart.
+  and every reveal is in the audit log. The admin UI shows its first characters (`kalla-sk-AbC1`) to tell keys apart.
 - A key can be limited to some assistants or knowledge bases, to IP ranges and to a number of requests per minute,
   and it can expire. A department admin manages the keys of their department's teams.
 - **Rotate** makes a new key with the same limits, and the old one stops at once or after 24 hours. **Revoke** stops
   it within seconds.
-- Gateway keys (`ume-sk-…`) and Ume.Rag keys are separate: neither system accepts the other's.
+- Gateway keys (`fors-sk-…`) and Källa keys are separate: neither system accepts the other's.
 
 The app sends its key as `Authorization: Bearer <key>`, or in `x-api-key`. What a key reaches:
 
@@ -109,8 +109,8 @@ log ([security events](security-events.md)).
 
 ## Gateway keys and costs
 
-Ume.Rag never calls a model directly. Each service calls the gateway with its own **credential key**. A knowledge base
-or an assistant may also have a **gateway key** of its own, picked from the keys the gateway has assigned to Ume.Rag.
+Källa never calls a model directly. Each service calls the gateway with its own **credential key**. A knowledge base
+or an assistant may also have a **gateway key** of its own, picked from the keys the gateway has assigned to Källa.
 Its calls (embedding for a knowledge base, answering for an assistant) are then charged to that key, its team and its
 department, and the gateway enforces their budgets. Without one, the calls are charged to the platform's own team.
 
@@ -122,7 +122,7 @@ and *Costs* in the admin UI shows what each assistant and knowledge base cost.
 
 The admin UI signs in with OIDC: Keycloak (on its own, or the gateway's shared realm), Entra ID or AD FS. A new
 installation sets the provider in the **setup wizard** ([Keycloak](keycloak.md); the runbook's *Sign-in and the setup
-wizard*). Chat users never sign in to Ume.Rag: they sign in to their app, such as Open WebUI, and the app vouches for
+wizard*). Chat users never sign in to Källa: they sign in to their app, such as Open WebUI, and the app vouches for
 them.
 
 What a person may do comes from their roles, taken from the provider's role claim or from groups mapped under
@@ -142,15 +142,15 @@ lists as its member groups. Someone without any `rag-*` role sees a *no access* 
 
 ## Where the data is stored
 
-Everything stays on the installation's own host: one PostgreSQL database and one file store. Ume.Rag sends nothing
+Everything stays on the installation's own host: one PostgreSQL database and one file store. Källa sends nothing
 anywhere else except model calls through the gateway (the text of the chunks to embed, a question with its sources to
 answer) and, when configured, telemetry to your collector.
 
 | Where | Docker volume | What |
 |---|---|---|
-| **PostgreSQL** (`rag-postgres`, with pgvector) | `rag-postgres-data` | Four schemas. `config`: knowledge bases, sources, assistants, apps and keys (as hashes), settings. `content`: each document's metadata, its chunks with their text, search vectors and embeddings, runs, the job queue and the test questions. `chat`: conversation records and statistics. `audit`: the audit log. |
-| **File store** (a directory, `/data/blobs/rag` in the containers) | `rag-blobs` | `raw/`: pages and files as fetched. `parse/` and `stages/`: the parser's and the pipeline's outputs. `uploads/`: uploaded files. `quarantine/`: files the virus scan stopped. Short-lived previews and temporary files. |
-| **Open WebUI** (optional) | `rag-openwebui-data` | Open WebUI's own database, with its copies of the chats (below). |
+| **PostgreSQL** (`kalla-postgres`, with pgvector) | `kalla-postgres-data` | Four schemas. `config`: knowledge bases, sources, assistants, apps and keys (as hashes), settings. `content`: each document's metadata, its chunks with their text, search vectors and embeddings, runs, the job queue and the test questions. `chat`: conversation records and statistics. `audit`: the audit log. |
+| **File store** (a directory, `/data/blobs/rag` in the containers) | `kalla-blobs` | `raw/`: pages and files as fetched. `parse/` and `stages/`: the parser's and the pipeline's outputs. `uploads/`: uploaded files. `quarantine/`: files the virus scan stopped. Short-lived previews and temporary files. |
+| **Open WebUI** (optional) | `kalla-openwebui-data` | Open WebUI's own database, with its copies of the chats (below). |
 
 **How it is protected.**
 - The volumes must be on an encrypted disk ([production setup](production-setup.md)).
@@ -162,7 +162,7 @@ answer) and, when configured, telemetry to your collector.
 
 ### What a crawl or upload keeps
 
-For every page or file a source brings in, Ume.Rag keeps:
+For every page or file a source brings in, Källa keeps:
 - the original as fetched or uploaded;
 - the document's address or file name, title, dates (modified, fetched, last seen) and a hash of its content;
 - the parsed text, split into chunks, with their embeddings;
@@ -188,7 +188,7 @@ A personal-data check records only which types it found and how many, never the 
 
 ### What is kept of chats
 
-Today Ume.Rag stores **no question and no answer text**. For each conversation and message it keeps:
+Today Källa stores **no question and no answer text**. For each conversation and message it keeps:
 - which assistant and app it was, and the user's id in that app (for Open WebUI, its user id);
 - the times, the outcome (answered, not found, unavailable) and the ids of the documents it cited;
 - the tokens and the cost.
@@ -197,17 +197,17 @@ A rating keeps the thumbs and the score, and the reason only as one of the fixed
 after the assistant's retention time (90 days by default). The daily statistics per assistant (counts, tokens, cost)
 are kept 3 years.
 
-**Open WebUI keeps its own copies.** It stores every chat in its own database. Ume.Rag does not delete those copies
+**Open WebUI keeps its own copies.** It stores every chat in its own database. Källa does not delete those copies
 and no backup script includes them, so Open WebUI's own settings decide how long they stay.
 
 ### Logs and the audit log
 
 | What | Where | Kept |
 |---|---|---|
-| **Service logs** (rag-api, rag-admin, rag-worker and the others) | JSON on each container's standard output: `docker compose logs <service>`. With `UME_OTEL_ENDPOINT` set, also sent with metrics and traces to your OpenTelemetry collector ([production setup](production-setup.md), *Telemetry*); traces are sampled, a tenth of the requests by default. | As Docker's log driver keeps them on the host (set rotation in `/etc/docker/daemon.json`), or as the collector's backend keeps them |
-| **Security events** (refused keys and sign-ins, access denials, malware and personal-data findings, admin changes) | Log records under the category `Ume.Rag.Security`, which the collector sends on to the SIEM ([security events](security-events.md)) | As the SIEM keeps them |
+| **Service logs** (kalla-api, kalla-admin, kalla-worker and the others) | JSON on each container's standard output: `docker compose logs <service>`. With `FORS_OTEL_ENDPOINT` set, also sent with metrics and traces to your OpenTelemetry collector ([production setup](production-setup.md), *Telemetry*); traces are sampled, a tenth of the requests by default. | As Docker's log driver keeps them on the host (set rotation in `/etc/docker/daemon.json`), or as the collector's backend keeps them |
+| **Security events** (refused keys and sign-ins, access denials, malware and personal-data findings, admin changes) | Log records under the category `Kalla.Security`, which the collector sends on to the SIEM ([security events](security-events.md)) | As the SIEM keeps them |
 | **Audit log** (every change made in the admin UI or the admin API, with who made it and the values before and after) | The database, schema `audit`; *Audit log* in the admin UI | 2 years by default (`Settings.AuditRetentionDays`, at least 90 days) |
-| **Backup metrics** | Prometheus text files in `/var/lib/ume-rag/` on the host | Overwritten at each run |
+| **Backup metrics** | Prometheus text files in `/var/lib/kalla/` on the host | Overwritten at each run |
 
 No log, event or audit entry ever holds key material, tokens, passwords, questions, answers, document text, e-mail
 addresses or display names. They name things by id instead: the key's id and prefix, the app's id, the user's id in
@@ -215,7 +215,7 @@ their app, and the admin's id at the sign-in provider.
 
 ## MCP
 
-Ume.Rag does **not** serve MCP yet: there is no `/mcp` endpoint and no MCP tools. The *MCP client* app kind is
+Källa does **not** serve MCP yet: there is no `/mcp` endpoint and no MCP tools. The *MCP client* app kind is
 reserved for it. It is planned together with skills and tools: an `/mcp` endpoint with a `search_knowledge` tool, for
 MCP clients signing in with their own tokens. Until then, other programs use the knowledge API (`POST /v1/retrieve`)
 or the chat API with a key.

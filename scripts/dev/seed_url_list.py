@@ -8,7 +8,7 @@ Usage:
 
 The connection string is the AppHost's ragdb connection string from the Aspire dashboard (Npgsql form
 "Host=localhost;Port=...;Username=postgres;Password=...;Database=ragdb", or a postgresql:// URI), taken from
---connection or the UME_RAG_DEV_DB environment variable. The script refuses any host other than localhost, 127.0.0.1
+--connection or the KALLA_DEV_DB environment variable. The script refuses any host other than localhost, 127.0.0.1
 or ::1: it is for a developer's own database only. The password reaches psql through PGPASSWORD, never the command line.
 
 It finds or creates the department (by name, or --department-id for a synced one), the collection (by slug: public,
@@ -18,17 +18,17 @@ does (--no-sync leaves it to the scheduler's url-list schedule). It prints what 
 source gets piiMode report, as a source on the municipality's own published site does (Decisions table, 2026-11-01);
 --pii-mode hold keeps personal-data flags holding the chunk set.
 
---api-key also creates, until the admin's key endpoints (J7) exist, what a /v1/retrieve call on rag-api needs: the
+--api-key also creates, until the admin's key endpoints (J7) exist, what a /v1/retrieve call on kalla-api needs: the
 public level's data-protection row (when missing), an internal client with ceiling public (by --client-name) and a
 secret key of that client scoped to the collection. The key is generated here (secrets, the KeyHasher format
-ume-rag-sk- + 43 base62) and only its HMAC-SHA256 with the AppHost's key pepper reaches the database; the pepper comes
-from the UME_RAG_DEV_KEY_PEPPER environment variable (the key-pepper parameter in the Aspire dashboard), never from the
+kalla-sk- + 43 base62) and only its HMAC-SHA256 with the AppHost's key pepper reaches the database; the pepper comes
+from the KALLA_DEV_KEY_PEPPER environment variable (the key-pepper parameter in the Aspire dashboard), never from the
 command line. The plaintext key is printed once, to stdout, when the key is created; a re-run that finds a usable key
 of the client for the collection says so and prints nothing secret. Nothing writes the key to a file.
 
 psql comes from PATH, or from the AppHost's Postgres container with --docker CONTAINER (docker exec; the container's own
 port 5432). On the production Compose stack (a pilot or test host, docs/production-setup.md) the superuser may only
-connect over the Unix socket: --docker ume-rag-postgres-1 --socket runs psql there as the container's postgres user
+connect over the Unix socket: --docker kalla-postgres-1 --socket runs psql there as the container's postgres user
 (peer authentication, no password, no connection string). Exit 0 when seeded, 1 when psql or the SQL failed, 2 on bad
 arguments or a non-local database.
 """
@@ -47,15 +47,15 @@ import urllib.parse
 from pathlib import Path
 
 SQL_FILE = Path(__file__).resolve().parent / "seed-url-list.sql"
-ENV_CONNECTION = "UME_RAG_DEV_DB"
+ENV_CONNECTION = "KALLA_DEV_DB"
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 MAX_URLS = 5000  # UrlListSettings.Urls
 MAX_URL_LENGTH = 2048
-ENV_PEPPER = "UME_RAG_DEV_KEY_PEPPER"
-KEY_PREFIX = "ume-rag-sk-"  # KeyHasher.SecretPrefix
+ENV_PEPPER = "KALLA_DEV_KEY_PEPPER"
+KEY_PREFIX = "kalla-sk-"  # KeyHasher.SecretPrefix
 KEY_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"  # KeyHasher's base62
 KEY_RANDOM_CHARS = 43
-KEY_DISPLAY_PREFIX = 15  # "ume-rag-sk-" + 4 characters
+KEY_DISPLAY_PREFIX = 13  # "kalla-sk-" + 4 characters
 MIN_PEPPER_BYTES = 32  # KeyHasher and Security:KeyPepper
 NPGSQL_KEYS = {
     "host": "host",
@@ -131,7 +131,7 @@ def read_urls(args: argparse.Namespace) -> list[str]:
 
 
 def generate_key() -> str:
-    """A secret key as rag-api's KeyHasher.Generate makes one: the prefix and 43 random base62 characters."""
+    """A secret key as kalla-api's KeyHasher.Generate makes one: the prefix and 43 random base62 characters."""
     return KEY_PREFIX + "".join(secrets.choice(KEY_ALPHABET) for _ in range(KEY_RANDOM_CHARS))
 
 
@@ -157,18 +157,18 @@ def script(args: argparse.Namespace, urls: list[str], key: str | None = None, pe
     """The parameters as session settings, then seed-url-list.sql: what psql reads on stdin. Of a key, only its hash
     and display prefix."""
     settings = {
-        "ume_seed.urls": json.dumps(urls),
-        "ume_seed.profile": args.profile,
-        "ume_seed.department_id": args.department_id or "",
-        "ume_seed.department_name": args.department_name,
-        "ume_seed.collection_slug": args.collection_slug,
-        "ume_seed.collection_name": args.collection_name,
-        "ume_seed.source_name": args.source_name,
-        "ume_seed.pii_mode": args.pii_mode,
-        "ume_seed.enqueue": "false" if args.no_sync else "true",
-        "ume_seed.client_name": args.client_name,
-        "ume_seed.key_hash": key_hash(pepper, key) if key and pepper else "",
-        "ume_seed.key_prefix": key[:KEY_DISPLAY_PREFIX] if key else "",
+        "kalla_seed.urls": json.dumps(urls),
+        "kalla_seed.profile": args.profile,
+        "kalla_seed.department_id": args.department_id or "",
+        "kalla_seed.department_name": args.department_name,
+        "kalla_seed.collection_slug": args.collection_slug,
+        "kalla_seed.collection_name": args.collection_name,
+        "kalla_seed.source_name": args.source_name,
+        "kalla_seed.pii_mode": args.pii_mode,
+        "kalla_seed.enqueue": "false" if args.no_sync else "true",
+        "kalla_seed.client_name": args.client_name,
+        "kalla_seed.key_hash": key_hash(pepper, key) if key and pepper else "",
+        "kalla_seed.key_prefix": key[:KEY_DISPLAY_PREFIX] if key else "",
     }
     lines = [f"SELECT set_config({sql_literal(k)}, {sql_literal(v)}, false);" for k, v in settings.items()]
     return "\n".join(lines) + "\n" + SQL_FILE.read_text(encoding="utf-8")

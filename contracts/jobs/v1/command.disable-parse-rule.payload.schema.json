@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/jobs/v1/command.disable-parse-rule.payload.schema.json",
+  "$id": "https://kalla.local/contracts/jobs/v1/command.disable-parse-rule.payload.schema.json",
   "title": "disable-parse-rule command payload",
   "type": "object",
   "properties": {

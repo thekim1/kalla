@@ -1,6 +1,6 @@
-# ume-rag/parser: FastAPI + Docling with Tesseract `swe` and the models baked in (parser design §12,
+# kalla/parser: FastAPI + Docling with Tesseract `swe` and the models baked in (parser design §12,
 # plans/platform/repo-and-deployment.md §5.3). Build with this directory as the context:
-#   docker build -t ume-rag/parser:dev src/parser
+#   docker build -t kalla/parser:dev src/parser
 #   docker build --target test src/parser    (runs the tests during the build, with no network)
 # Nothing is downloaded at run time: the venv, the models and the Debian packages are all in the image.
 
@@ -69,7 +69,7 @@ COPY --from=build /opt/venv /opt/venv
 COPY --from=build /opt/models /opt/models
 # The models' licence texts beside their weights, and the image's third-party notices (scripts/licences.py).
 COPY licences/models/ /opt/models/
-COPY LICENSES.md /usr/share/doc/ume-rag-parser/LICENSES.md
+COPY LICENSES.md /usr/share/doc/kalla-parser/LICENSES.md
 WORKDIR /app
 COPY pyproject.toml ./
 COPY ume_parser ./ume_parser
@@ -77,10 +77,10 @@ RUN python -m compileall -q ume_parser
 
 ARG VERSION=dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+LABEL org.opencontainers.image.source="https://github.com/thekim1/kalla" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/parser"
+      org.opencontainers.image.title="kalla/parser"
 
 # No runtime downloads (parser design §11): Hugging Face offline, caches on the tmpfs, models from /opt/models.
 ENV PATH=/opt/venv/bin:$PATH \

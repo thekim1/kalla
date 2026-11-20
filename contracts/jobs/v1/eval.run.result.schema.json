@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.run.result.schema.json",
+  "$id": "https://kalla.local/contracts/jobs/v1/eval.run.result.schema.json",
   "title": "eval publish-report and nightly job result",
   "type": "object",
   "properties": {

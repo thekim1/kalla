@@ -1,2 +1,2 @@
-An empty directory: the default of the optional host directories in compose.rag.yaml (UME_RAG_GATEWAY_CA_DIR,
-UME_RAG_GATEWAY_SECRETS_DIR, UME_RAG_TRUST_DIR, UME_RAG_PKI_DIR). Keep it empty.
+An empty directory: the default of the optional host directories in compose.rag.yaml (KALLA_GATEWAY_CA_DIR,
+KALLA_GATEWAY_SECRETS_DIR, KALLA_TRUST_DIR, KALLA_PKI_DIR). Keep it empty.

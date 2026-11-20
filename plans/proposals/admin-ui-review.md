@@ -103,7 +103,7 @@ occur.
 
 - Design: admin §5.3 (Home row), §5.5.1 (the Live card; attention items only if UI1 C), §5.5.2 and §5.5.4 (list
   columns, labels), §9.1 (audit names and labels).
-- Code: `src/admin-ui/src/**` and the list and overview endpoints in `src/Ume.Rag.AdminApi/**`, both stream b's paths.
+- Code: `src/admin-ui/src/**` and the list and overview endpoints in `src/Kalla.AdminApi/**`, both stream b's paths.
   Stream b is on review #694, so main can build it on a `main-session/` branch after announcing it on #667, as with
   #723, or queue it for stream b.
 - Order: UI4 B and the small points (wording, a day), UI2 B, UI1 B, UI3 A.

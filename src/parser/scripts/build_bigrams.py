@@ -3,7 +3,7 @@
 Counts letter bigrams, with word boundaries, over the word types of two public sources in this repository, so the
 table needs no download and changes only when this script is rerun:
 
-- Swedish: the stems of `src/Ume.Rag.Retrieval/Text/sv_SE/sv_SE.dic` (Den stora svenska ordlistan, LGPL-3.0; the
+- Swedish: the stems of `src/Kalla.Retrieval/Text/sv_SE/sv_SE.dic` (Den stora svenska ordlistan, LGPL-3.0; the
   table holds counts derived from it, not the list);
 - English: the words of the repository's own English design documents (`plans/**/*.md`, `01-general-idea.md`).
 
@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent
-DICTIONARY = REPO / "src" / "Ume.Rag.Retrieval" / "Text" / "sv_SE" / "sv_SE.dic"
+DICTIONARY = REPO / "src" / "Kalla.Retrieval" / "Text" / "sv_SE" / "sv_SE.dic"
 ENGLISH = (REPO / "01-general-idea.md", REPO / "plans")
 OUT = Path(__file__).resolve().parent.parent / "ume_parser" / "garble_bigrams.json"
 ALPHABET = "abcdefghijklmnopqrstuvwxyzåäöéüàèáíóúñçæøß"

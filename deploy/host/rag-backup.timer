@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: daily pgBackRest backup (full on Sundays or when the last full is a week old, else differential)
+Description=Källa: daily pgBackRest backup (full on Sundays or when the last full is a week old, else differential)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 
 [Timer]

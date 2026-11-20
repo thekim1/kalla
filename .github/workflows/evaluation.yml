@@ -4,9 +4,9 @@ name: Evaluation
 # published collection, waits for the worker to run them and reports recall per collection with its spread over the
 # kept runs. Against the deployment's own embedding profile (the EU model under M2, P1b Open O4), not BGE-M3; at most
 # 100 queries per collection. Advisory: the job fails only when a run did not happen or did not succeed.
-# Runs on the self-hosted test-host runner (repository variable UME_RAG_TEST_HOST_RUNNER, a JSON list of labels;
+# Runs on the self-hosted test-host runner (repository variable KALLA_TEST_HOST_RUNNER, a JSON list of labels;
 # environment test-host; P1b hand-off L11). Without it the job is skipped with a notice and the script runs by hand on
-# the host. The runner's user needs Docker access to the deployment (deploy/.env at UME_RAG_TEST_HOST_DEPLOY_ENV).
+# the host. The runner's user needs Docker access to the deployment (deploy/.env at KALLA_TEST_HOST_DEPLOY_ENV).
 on:
   # CI runs on request to save Actions minutes (see verify.yml): the schedule ('17 3 * * *') is off; run it from the Actions
   # tab (workflow_dispatch).
@@ -23,15 +23,15 @@ concurrency:
   cancel-in-progress: false
 jobs:
   evaluation:
-    if: vars.UME_RAG_TEST_HOST_RUNNER != ''
-    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["self-hosted","linux","x64"]') }}
+    if: vars.KALLA_TEST_HOST_RUNNER != ''
+    runs-on: ${{ fromJSON(vars.KALLA_TEST_HOST_RUNNER || '["self-hosted","linux","x64"]') }}
     environment: test-host
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly evaluation
         env:
-          DEPLOY_ENV: ${{ vars.UME_RAG_TEST_HOST_DEPLOY_ENV }}
+          DEPLOY_ENV: ${{ vars.KALLA_TEST_HOST_DEPLOY_ENV }}
           ENQUEUE: ${{ github.event_name == 'schedule' || inputs.enqueue }}
         run: |
           args=(--deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/evaluation")
@@ -48,10 +48,10 @@ jobs:
           if-no-files-found: warn
 
   not-configured:
-    if: vars.UME_RAG_TEST_HOST_RUNNER == ''
+    if: vars.KALLA_TEST_HOST_RUNNER == ''
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: No test-host runner yet
         run: |
-          echo "::notice::No self-hosted test-host runner is configured (repository variable UME_RAG_TEST_HOST_RUNNER," \
+          echo "::notice::No self-hosted test-host runner is configured (repository variable KALLA_TEST_HOST_RUNNER," \
             "P1b hand-off L11). Run scripts/evaluation/nightly.sh on the test host by hand."

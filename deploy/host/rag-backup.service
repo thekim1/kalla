@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: pgBackRest backup of ragdb (repo-and-deployment §7.4)
+Description=Källa: pgBackRest backup of ragdb (repo-and-deployment §7.4)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service
@@ -10,7 +10,7 @@ ExecStart=@DEPLOY_DIR@/backup-postgres.sh --type auto --env-file @DEPLOY_DIR@/.e
 TimeoutStartSec=6h
 Nice=10
 IOSchedulingClass=idle
-StateDirectory=ume-rag
+StateDirectory=kalla
 StateDirectoryMode=0755
 UMask=0027
 NoNewPrivileges=yes

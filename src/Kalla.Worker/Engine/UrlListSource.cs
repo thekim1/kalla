@@ -1,0 +1,262 @@
+using Microsoft.Extensions.Options;
+using Npgsql;
+using Kalla.Domain.Entities;
+using Kalla.Domain.Ports;
+using Kalla.Infrastructure.Jobs;
+using Kalla.Pipelines.Jobs;
+using Kalla.Pipelines.Sources;
+using Kalla.Worker.Connectors;
+using Kalla.Worker.Connectors.Crawl;
+using Kalla.Worker.Connectors.Egress;
+using Kalla.Worker.Connectors.Hosts;
+using Kalla.Worker.Connectors.Http;
+using Kalla.Worker.Connectors.Persistence;
+using Kalla.Worker.Connectors.Render;
+using Kalla.Worker.Connectors.UrlList;
+using Kalla.Worker.Jobs;
+using Outcome = Kalla.Pipelines.Jobs.RunItemOutcome;
+
+namespace Kalla.Worker.Engine;
+
+/// <summary>
+/// The engine's part of a <c>url-list</c> source (connectors design §4, §6.0; engine design §9.2). Listing: the listed URLs
+/// are admitted to the source's own frontier at depth 0 (a <c>CrawlRuns</c> row holds the run's admission count, capped at
+/// the list's 5,000), committed per checkpoint with the connector checkpoint and the refused URLs' run items; a listing that
+/// runs past 2 minutes yields to a continuation. A <c>config-change</c> run (the list changed, connectors design §12.3)
+/// claims only the added URLs: a listed URL with a live document is marked listed for the run without a fetch, and the
+/// reconcile removes the URLs no longer listed (<c>removed-from-list</c>, exempt); when <c>fetchMode</c>,
+/// <c>readySelector</c> or <c>scrollToLoad</c> changed since the settings last applied, the run claims and fetches every
+/// URL again without validators (§12.3). Release: each host keeps at most
+/// <c>Crawl:FetchBatchPerHost</c> fetches queued or running, topped up after the listing and whenever one of its fetches ends; a released row whose job is gone is
+/// enqueued again (dedup <c>fetch:{sourceId}:{urlHash}</c>). Fetch: a <c>browser</c> source's render slot first (none free:
+/// <c>render.busy</c>, released without an attempt, §8.3), the row's host slot (§6.3), the connector's conditional GET (or
+/// render), then <see cref="DocumentIngest"/>, which completes the frontier row in the document's commit.
+/// </summary>
+public sealed class UrlListSource(
+    UrlListConnector connector,
+    ICrawlFrontierStore frontier,
+    ICrawlRunStore crawlRuns,
+    IConnectorCheckpointStore checkpoints,
+    HostBudget budget,
+    RenderSlots renders,
+    RunStore runs,
+    DocumentIngest ingest,
+    IJobQueue queue,
+    JobDatabase database,
+    WorkerIdentity identity,
+    IOptions<CrawlOptions> options,
+    TimeProvider time)
+{
+    /// <summary>A listing yields after this long (engine design §9.2).</summary>
+    public static readonly TimeSpan ListingSlice = TimeSpan.FromMinutes(2);
+
+    /// <summary>The URL list's cap (connectors design §4): the run's admission limit.</summary>
+    public const int MaxUrls = 5000;
+
+    private const string LiveUrlsSql = """
+        SELECT "IdentityHash" FROM content."Documents" WHERE "SourceId" = $1 AND "IdentityKind" = 'url' AND "DeletedAt" IS NULL
+        """;
+
+    private const string ReleasedSql = """
+        SELECT "UrlHash" FROM content."CrawlFrontier"
+        WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "State" = 'released'
+        """;
+
+    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
+    {
+        var key = new CrawlRunKey(source.SourceId, source.Classification, run.Id);
+        await crawlRuns.StartAsync(new CrawlRunRecord
+        {
+            RunId = run.Id,
+            Classification = source.Classification,
+            SourceId = source.SourceId,
+            MaxPages = MaxUrls,
+            MaxDepth = 0,
+        }, cancellationToken);
+        var from = payload.ResumeFromCheckpoint
+            ? await checkpoints.GetAsync<UrlListCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new UrlListCheckpoint()
+            : new UrlListCheckpoint();
+        var refetch = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Fetch;
+        var live = run.Trigger == RunTriggers.ConfigChange && !refetch ? await LiveUrlsAsync(source.SourceId, cancellationToken) : null;
+        var started = time.GetTimestamp();
+        var admissions = new List<FrontierAdmission>();
+        var refused = new List<RunItemRow>();
+        var context = new ListingContext(source.SourceId, source.Classification, run.Id, source.Settings);
+        await foreach (var listed in connector.ListAsync(context, from, cancellationToken))
+        {
+            switch (listed)
+            {
+                case ListingEvent<UrlListCheckpoint>.Item { Work: var work }:
+                    admissions.Add(new FrontierAdmission(work.CanonicalIdentity, work.Url!.Authority, 0, false));
+                    break;
+                case ListingEvent<UrlListCheckpoint>.Failure failure:
+                    refused.Add(new RunItemRow(run.Id, source.Classification, null, failure.Identity, Outcome.Failed) { Reason = failure.Reason });
+                    break;
+                case ListingEvent<UrlListCheckpoint>.Checkpoint checkpoint:
+                    if (live is not null)
+                    {
+                        var known = await frontier.MarkListedAsync(key, [.. admissions.Where(a => live.Contains(a.UrlHash))], cancellationToken);
+                        admissions.RemoveAll(a => known.Contains(a.UrlHash));
+                    }
+
+                    await frontier.AdmitAsync(key, admissions, cancellationToken);
+                    await AddItemsAsync(refused, cancellationToken);
+                    await checkpoints.SaveAsync(source.SourceId, source.Classification, CheckpointKind.Run, run.Id, checkpoint.State, cancellationToken);
+                    admissions.Clear();
+                    refused.Clear();
+                    if (time.GetElapsedTime(started) > ListingSlice)
+                    {
+                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2); completed with
+                        // this job, so a continuation that yields again does not lose its successor to its own dedup key.
+                        return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
+                            source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true), run.Id, null, cancellationToken);
+                    }
+
+                    break;
+                case ListingEvent<UrlListCheckpoint>.Done:
+                    await runs.SetPhaseAsync(run.Id, RunPhases.Fetch, null, cancellationToken);
+                    await TopUpAsync(source, run.Id, null, cancellationToken);
+                    return new JobResult.Success();
+            }
+        }
+
+        return new JobResult.Success();
+    }
+
+    /// <summary>Tops up one host (after its fetch ended) or every host of the run; re-enqueues released rows without a job.</summary>
+    public async Task TopUpAsync(SourceContext source, Guid runId, string? host, CancellationToken cancellationToken)
+    {
+        var key = new CrawlRunKey(source.SourceId, source.Classification, runId);
+        foreach (var load in await frontier.HostLoadAsync(key, cancellationToken))
+        {
+            var want = options.Value.FetchBatchPerHost - load.Released;
+            if ((host is null || string.Equals(load.Host, host, StringComparison.Ordinal)) && load.Pending > 0 && want > 0)
+            {
+                await frontier.ReleaseAsync(key, load.Host, want, cancellationToken);
+            }
+        }
+
+        var released = new List<string>();
+        await using (var connection = await database.OpenAsync(cancellationToken))
+        await using (var command = new NpgsqlCommand(ReleasedSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } })
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                released.Add(Db.Hex(reader.GetFieldValue<byte[]>(0)));
+            }
+        }
+
+        if (released.Count > 0)
+        {
+            await queue.EnqueueAsync([.. released.Select(h => SyncJobs.FetchUrl(source, runId, h))], null, cancellationToken);
+        }
+    }
+
+    public async Task<JobResult> FetchAsync(SourceContext source, RunRow run, PipelineRun pipeline, FetchPayload payload, LeasedJob job, CancellationToken cancellationToken)
+    {
+        var row = await frontier.GetAsync(source.SourceId, source.Classification, payload.UrlHash!, cancellationToken);
+        if (row is null || row.RunId != run.Id || row.State != FrontierState.Released)
+        {
+            return new JobResult.Success();
+        }
+
+        var fetch = new FetchCase(source, run, pipeline, job, IdentityKinds.Url, row.Url, Db.Bytes(row.UrlHash));
+        RenderLease? render = null;
+        if (UrlListConnector.Settings(source.Settings).FetchMode == FetchMode.Browser)
+        {
+            switch (renders.TryAcquire(row.Host))
+            {
+                case RenderSlot.Granted granted:
+                    render = granted.Lease;
+                    break;
+                case RenderSlot.Refused refused:
+                    return new JobResult.TransientError(refused.Reason, refused.Delay, CountsAttempt: false);
+            }
+        }
+
+        using (render)
+        {
+            return await FetchInSlotAsync(source, run, fetch, row, cancellationToken);
+        }
+    }
+
+    /// <summary>The row's host slot, the fetch and its commit; the host is topped up after a commit.</summary>
+    private async Task<JobResult> FetchInSlotAsync(SourceContext source, RunRow run, FetchCase fetch, FrontierRow row, CancellationToken cancellationToken)
+    {
+        JobResult result;
+        switch (await budget.AcquireAsync(row.Host, cancellationToken))
+        {
+            case HostSlot.Later later:
+                return new JobResult.TransientError(later.Reason, later.Delay, CountsAttempt: false);
+            case HostSlot.Refused { Until: { } until } paused when until > time.GetUtcNow():
+                return new JobResult.TransientError(paused.Reason, until - time.GetUtcNow(), CountsAttempt: false);
+            case HostSlot.Refused refused:
+                result = await ingest.HandleAsync(fetch, new FetchOutcome.Failed(refused.Reason), cancellationToken);
+                break;
+            case HostSlot.Granted granted:
+                using (granted.Lease)
+                {
+                    var item = new WorkItem(IdentityKind.Url, row.Url, new Uri(row.Url), 0,
+                        new WorkHints(row.ETag is null && row.LastModified is null ? null : new Validators(row.ETag, row.LastModified), row.ContentHash));
+                    var started = time.GetTimestamp();
+                    // A changed fetchMode, readySelector or scrollToLoad fetches every page again in full (§12.3).
+                    var revalidate = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Fetch;
+                    var outcome = await connector.FetchAsync(new FetchContext(source.SourceId, source.Classification, run.Id, source.Settings, revalidate),
+                        item, cancellationToken);
+                    await granted.Lease.CompleteAsync(Response(outcome, PageLatency.Of(outcome, time.GetElapsedTime(started))), cancellationToken);
+                    result = await ingest.HandleAsync(fetch, outcome, cancellationToken);
+                }
+
+                break;
+            default:
+                throw new InvalidOperationException("Unexpected host slot.");
+        }
+
+        if (result is JobResult.Committed)
+        {
+            await TopUpAsync(source, run.Id, row.Host, cancellationToken);
+        }
+
+        return result;
+    }
+
+    /// <summary>The identity hashes (lower-case hex, as <see cref="FrontierAdmission.UrlHash"/>) of the source's live documents.</summary>
+    private async Task<HashSet<string>> LiveUrlsAsync(Guid sourceId, CancellationToken cancellationToken)
+    {
+        var hashes = new HashSet<string>(StringComparer.Ordinal);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(LiveUrlsSql, connection) { Parameters = { Db.P(sourceId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hashes.Add(Db.Hex(reader.GetFieldValue<byte[]>(0)));
+        }
+
+        return hashes;
+    }
+
+    private async Task AddItemsAsync(List<RunItemRow> items, CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
+        foreach (var item in items)
+        {
+            await commit.AddRunItemAsync(item, cancellationToken);
+        }
+
+        await commit.CommitAsync(cancellationToken);
+    }
+
+    private static HostResponse Response(FetchOutcome outcome, TimeSpan? latency) => outcome switch
+    {
+        FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
+        FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
+        FetchOutcome.Transient { Reason: "http.5xx" or "net.timeout" } or FetchOutcome.Gone { Reason: "http.404" } => new HostResponse(HostResponseKind.Failure, latency),
+        _ => new HostResponse(HostResponseKind.Neutral, latency),
+    };
+}

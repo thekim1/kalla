@@ -6,7 +6,7 @@ the next request, `PARSER_IDLE_STOP_S`), else 503. Neither waits on a slot, so a
 busy parser still answers its probes.
 
 The health check exits 0 when `/health/ready` answers 200 and 1 otherwise (the .NET images' `--health-check`
-convention, repo-and-deployment §5.1), against `UME_HEALTHCHECK_URL` or this container's own listener.
+convention, repo-and-deployment §5.1), against `FORS_HEALTHCHECK_URL` or this container's own listener.
 """
 
 import os
@@ -66,7 +66,7 @@ def check(url: str, timeout_s: float = 3.0) -> bool:
 def main() -> int:
     settings = Settings()
     scheme = "https" if settings.tls else "http"
-    url = os.environ.get("UME_HEALTHCHECK_URL", f"{scheme}://127.0.0.1:{settings.port}{READY_PATH}")
+    url = os.environ.get("FORS_HEALTHCHECK_URL", f"{scheme}://127.0.0.1:{settings.port}{READY_PATH}")
     return 0 if check(url) else 1
 
 

@@ -1,47 +1,47 @@
-# Ume.Rag's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
-# runs this file directly, as the project ume-rag:
+# Källa's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
+# runs this file directly, as the project kalla:
 #
 #   deploy/init-deployment.sh ...                       # deploy/.env: the domain, the gateway, the optional parts
 #   docker compose --env-file deploy/.env up -d --wait  # its COMPOSE_FILE names this file and the overlays
 #
-# The one-shot rag-bootstrap (deploy/portainer/bootstrap.sh) creates the certificates and secrets in the volumes
-# rag-certs and rag-secrets on the first start and the static configuration in rag-config on every start; the end of
+# The one-shot kalla-bootstrap (deploy/portainer/bootstrap.sh) creates the certificates and secrets in the volumes
+# kalla-certs and kalla-secrets on the first start and the static configuration in kalla-config on every start; the end of
 # its log lists what is still missing and points at the setup wizard (https://<admin host>/setup, with the setup code in
-# rag-admin's log). Escrow the keys a restored database needs with deploy/escrow-keys.sh. The overlays, for a Compose
+# kalla-admin's log). Escrow the keys a restored database needs with deploy/escrow-keys.sh. The overlays, for a Compose
 # host only:
-#   compose.backup.yaml       WAL archiving and pgBackRest (UME_RAG_BACKUP_TARGET), the upload copy rag-upload-backup
+#   compose.backup.yaml       WAL archiving and pgBackRest (KALLA_BACKUP_TARGET), the upload copy rag-upload-backup
 #   compose.hardened.yaml     fixed subnets for the host firewall, the ingestion slice, the restart-unhealthy labels,
 #                             the renderer's seccomp profile and the CPU weights (deploy/host/)
 #   compose.host-24g.yaml     the 24 GB host's limits
 #   compose.clamav-conf.yaml  ClamAV's confs for the 24 GB host and freshclam's proxy
-#   compose.rolling.yaml      a second rag-api and rag-admin for updates without downtime (deploy/rolling-update.sh)
+#   compose.rolling.yaml      a second kalla-api and kalla-admin for updates without downtime (deploy/rolling-update.sh)
 #
 # deploy/portainer/build-stack.sh merges this file with the gateway's Portainer stack into
 # deploy/portainer/compose.portainer.yaml (its header: deploy/portainer/stack-header.txt), and these marks say what
 # differs there, as the blocks of deploy/proxy/nginx.portainer.conf.template are marked: a line that exists only in
 # the joined stack is a comment "#@joined <line>" (the gateway's bootstrap, migrations, CA and manifest keys), and a
-# line that exists only here ends in "#@alone" (the network llm, the host directories, rag-bootstrap's settings for a
+# line that exists only here ends in "#@alone" (the network llm, the host directories, kalla-bootstrap's settings for a
 # stack without the gateway). Each file: config becomes inline content there. Everything else is the same in both.
 #
-# Required: UME_DOMAIN (or UME_RAG_API_HOST) and UME_RAG_GATEWAY_URL, the gateway's https URL. The variables are the
+# Required: FORS_DOMAIN (or KALLA_API_HOST) and KALLA_GATEWAY_URL, the gateway's https URL. The variables are the
 # Portainer stack's (deploy/portainer/stack.env.example; init-deployment.sh --help).
-name: ume-rag  #@alone
+name: kalla  #@alone
 
-x-rag-certs: &rag-certs-mount
+x-rag-certs: &kalla-certs-mount
   type: volume
-  source: rag-certs
+  source: kalla-certs
   target: /run/certs
   read_only: true
 
-x-rag-conf: &rag-conf-mount
+x-rag-conf: &kalla-conf-mount
   type: volume
-  source: rag-config
+  source: kalla-config
   target: /run/config
   read_only: true
 
-x-rag-secrets: &rag-secrets-mount
+x-rag-secrets: &kalla-secrets-mount
   type: volume
-  source: rag-secrets
+  source: kalla-secrets
   target: /run/app-secrets
   read_only: true
 
@@ -53,90 +53,98 @@ x-hardened: &hardened  #@alone
   tmpfs: [/tmp]  #@alone
 
 services:
-  rag-bootstrap:
+  kalla-bootstrap:
     image: docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      # The host names: each UME_RAG_*_HOST, else its default under UME_DOMAIN (rag., rag-admin., chat.). Without the
-      # domain the admin's name is empty (bootstrap.sh gives it rag-api's) and so is Open WebUI's. rag-api, rag-admin and
-      # rag-openwebui repeat the same expressions below. With neither the domain nor rag-api's name, that name is empty
-      # and bootstrap.sh stops with "Set UME_DOMAIN or UME_RAG_API_HOST" (never ":?" inside a default: some Compose
+      # The host names: each KALLA_*_HOST, else its default under FORS_DOMAIN (rag., rag-admin., chat.). Without the
+      # domain the admin's name is empty (bootstrap.sh gives it kalla-api's) and so is Open WebUI's. kalla-api, kalla-admin and
+      # kalla-openwebui repeat the same expressions below. With neither the domain nor kalla-api's name, that name is empty
+      # and bootstrap.sh stops with "Set FORS_DOMAIN or KALLA_API_HOST" (never ":?" inside a default: some Compose
       # versions evaluate it even when the outer variable is set).
-      UME_RAG_API_HOST: ${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}
-      UME_RAG_ADMIN_HOST: ${UME_RAG_ADMIN_HOST:-${UME_DOMAIN:+rag-admin.}${UME_DOMAIN:-}}
+      KALLA_API_HOST: ${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}
+      KALLA_ADMIN_HOST: ${KALLA_ADMIN_HOST:-${FORS_DOMAIN:+rag-admin.}${FORS_DOMAIN:-}}
       #@joined # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
-      #@joined UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
-      #@joined UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
+      #@joined FORS_GATEWAY_HOST: ${FORS_GATEWAY_HOST:-${FORS_DOMAIN:+llm.}${FORS_DOMAIN:-}}
+      #@joined FORS_ADMIN_HOST: ${FORS_ADMIN_HOST:-${FORS_DOMAIN:+llm-admin.}${FORS_DOMAIN:-}}
       # Without the gateway in the stack: its CA is optional (one with a public certificate needs none), and the TLS  #@alone
       # proxy has no blocks for the gateway and its admin.  #@alone
-      UME_RAG_BOOTSTRAP_GATEWAY_CA: optional  #@alone
-      UME_RAG_BOOTSTRAP_PROXY_GATEWAY: "no"  #@alone
+      KALLA_BOOTSTRAP_GATEWAY_CA: optional  #@alone
+      KALLA_BOOTSTRAP_PROXY_GATEWAY: "no"  #@alone
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
-      # The ports rag-admin and the TLS proxy are published on, for the setup wizard's address in the checklist.
-      UME_RAG_ADMIN_PORT: ${UME_RAG_ADMIN_PORT:-9543}
-      UME_RAG_PROXY_PORT: ${UME_RAG_PROXY_PORT:-443}
-      UME_RAG_API_GATEWAY_KEY: ${UME_RAG_API_GATEWAY_KEY:-}
-      UME_RAG_ADMIN_GATEWAY_KEY: ${UME_RAG_ADMIN_GATEWAY_KEY:-}
-      UME_RAG_WORKER_GATEWAY_KEY: ${UME_RAG_WORKER_GATEWAY_KEY:-}
-      UME_RAG_OIDC_CLIENT_SECRET: ${UME_RAG_OIDC_CLIENT_SECRET:-}
-      UME_RAG_OIDC_REFUSE_GUESTS: ${UME_RAG_OIDC_REFUSE_GUESTS:-}
-      # For the checklist of what is still missing, which rag-bootstrap prints at the end of its log; the authority as
-      # rag-admin gets it, to say whether the stack declares the sign-in.
-      UME_RAG_OIDC_AUTHORITY: ${UME_RAG_OIDC_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
-      UME_RAG_API_PUBLIC_URL: ${UME_RAG_API_PUBLIC_URL:-}
-      UME_DOMAIN: ${UME_DOMAIN:-}
-      UME_RAG_OPENWEBUI_HOST: ${UME_RAG_OPENWEBUI_HOST:-${UME_DOMAIN:+chat.}${UME_DOMAIN:-}}
-      UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET:-}
+      # The ports kalla-admin and the TLS proxy are published on, for the setup wizard's address in the checklist.
+      KALLA_ADMIN_PORT: ${KALLA_ADMIN_PORT:-9543}
+      KALLA_PROXY_PORT: ${KALLA_PROXY_PORT:-443}
+      KALLA_API_GATEWAY_KEY: ${KALLA_API_GATEWAY_KEY:-}
+      KALLA_ADMIN_GATEWAY_KEY: ${KALLA_ADMIN_GATEWAY_KEY:-}
+      KALLA_WORKER_GATEWAY_KEY: ${KALLA_WORKER_GATEWAY_KEY:-}
+      KALLA_OIDC_CLIENT_SECRET: ${KALLA_OIDC_CLIENT_SECRET:-}
+      KALLA_OIDC_REFUSE_GUESTS: ${KALLA_OIDC_REFUSE_GUESTS:-}
+      # For the checklist of what is still missing, which kalla-bootstrap prints at the end of its log; the authority as
+      # kalla-admin gets it, to say whether the stack declares the sign-in.
+      KALLA_OIDC_AUTHORITY: ${KALLA_OIDC_AUTHORITY:-${FORS_OIDC_AUTHORITY:-}}
+      KALLA_API_PUBLIC_URL: ${KALLA_API_PUBLIC_URL:-}
+      FORS_DOMAIN: ${FORS_DOMAIN:-}
+      KALLA_OPENWEBUI_HOST: ${KALLA_OPENWEBUI_HOST:-${FORS_DOMAIN:+chat.}${FORS_DOMAIN:-}}
+      KALLA_OPENWEBUI_OIDC_CLIENT_SECRET: ${KALLA_OPENWEBUI_OIDC_CLIENT_SECRET:-}
       # The retired variables this stack still sets (Decisions "Deployment values across releases"): each name whose
-      # variable has a value, for rag-bootstrap's checklist and Home's notice in the admin UI. No service reads their
+      # variable has a value, for kalla-bootstrap's checklist and Home's notice in the admin UI. No service reads their
       # values. A variable that is no longer read is added here and to bootstrap.sh's retired list in the same change.
-      UME_RAG_RETIRED_SET: >-
-        ${UME_RAG_ORG_SYNC_KEY:+UME_RAG_ORG_SYNC_KEY} ${UME_RAG_ORG_SYNC_URL:+UME_RAG_ORG_SYNC_URL}
-        ${UME_RAG_OPENWEBUI_API_KEY:+UME_RAG_OPENWEBUI_API_KEY} ${UME_RAG_OPENWEBUI_CLIENT_ID:+UME_RAG_OPENWEBUI_CLIENT_ID}
-        ${UME_RAG_OPENWEBUI_ADMIN_API_KEY:+UME_RAG_OPENWEBUI_ADMIN_API_KEY} ${UME_RAG_OPENWEBUI_PASSWORD_AUTH:+UME_RAG_OPENWEBUI_PASSWORD_AUTH}
-        ${UME_RAG_OPENWEBUI_BASE_URL:+UME_RAG_OPENWEBUI_BASE_URL} ${UME_RAG_CLAMAV_MODE:+UME_RAG_CLAMAV_MODE}
-        ${UME_RAG_EMBEDDING_MODEL:+UME_RAG_EMBEDDING_MODEL} ${UME_RAG_EMBEDDING_DIMENSIONS:+UME_RAG_EMBEDDING_DIMENSIONS}
-        ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:+UME_RAG_EMBEDDING_REQUEST_DIMENSIONS} ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:+UME_RAG_EMBEDDING_MAX_INPUT_TOKENS}
-        ${UME_RAG_EMBEDDING_MAX_RESIDENCY:+UME_RAG_EMBEDDING_MAX_RESIDENCY} ${UME_RAG_GATEWAY_MAX_RESIDENCY:+UME_RAG_GATEWAY_MAX_RESIDENCY}
-        ${UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN:+UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN} ${UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR:+UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR}
-        ${UME_RAG_OIDC_GROUPS_REVIEWER:+UME_RAG_OIDC_GROUPS_REVIEWER} ${UME_RAG_OIDC_GROUPS_VIEWER:+UME_RAG_OIDC_GROUPS_VIEWER}
-        ${UME_ORGANISATION_NAME:+UME_ORGANISATION_NAME} ${UME_RAG_GATEWAY_INTEGRATION_API_URL:+UME_RAG_GATEWAY_INTEGRATION_API_URL}
+      KALLA_RETIRED_SET: >-
+        ${KALLA_ORG_SYNC_KEY:+KALLA_ORG_SYNC_KEY} ${KALLA_ORG_SYNC_URL:+KALLA_ORG_SYNC_URL}
+        ${KALLA_OPENWEBUI_API_KEY:+KALLA_OPENWEBUI_API_KEY} ${KALLA_OPENWEBUI_CLIENT_ID:+KALLA_OPENWEBUI_CLIENT_ID}
+        ${KALLA_OPENWEBUI_ADMIN_API_KEY:+KALLA_OPENWEBUI_ADMIN_API_KEY} ${KALLA_OPENWEBUI_PASSWORD_AUTH:+KALLA_OPENWEBUI_PASSWORD_AUTH}
+        ${KALLA_OPENWEBUI_BASE_URL:+KALLA_OPENWEBUI_BASE_URL} ${KALLA_CLAMAV_MODE:+KALLA_CLAMAV_MODE}
+        ${KALLA_EMBEDDING_MODEL:+KALLA_EMBEDDING_MODEL} ${KALLA_EMBEDDING_DIMENSIONS:+KALLA_EMBEDDING_DIMENSIONS}
+        ${KALLA_EMBEDDING_REQUEST_DIMENSIONS:+KALLA_EMBEDDING_REQUEST_DIMENSIONS} ${KALLA_EMBEDDING_MAX_INPUT_TOKENS:+KALLA_EMBEDDING_MAX_INPUT_TOKENS}
+        ${KALLA_EMBEDDING_MAX_RESIDENCY:+KALLA_EMBEDDING_MAX_RESIDENCY} ${KALLA_GATEWAY_MAX_RESIDENCY:+KALLA_GATEWAY_MAX_RESIDENCY}
+        ${KALLA_OIDC_GROUPS_DEPARTMENT_ADMIN:+KALLA_OIDC_GROUPS_DEPARTMENT_ADMIN} ${KALLA_OIDC_GROUPS_PIPELINE_EDITOR:+KALLA_OIDC_GROUPS_PIPELINE_EDITOR}
+        ${KALLA_OIDC_GROUPS_REVIEWER:+KALLA_OIDC_GROUPS_REVIEWER} ${KALLA_OIDC_GROUPS_VIEWER:+KALLA_OIDC_GROUPS_VIEWER}
+        ${FORS_ORGANISATION_NAME:+FORS_ORGANISATION_NAME} ${KALLA_GATEWAY_INTEGRATION_API_URL:+KALLA_GATEWAY_INTEGRATION_API_URL}
     configs:
-      - {source: rag-bootstrap-script, target: /config/bootstrap.sh}
-      - {source: rag-postgres-init, target: /config/postgres-init.sql}
-      - {source: rag-postgres-hba, target: /config/pg_hba.conf}
-      - {source: rag-postgres-conf, target: /config/postgresql.conf}
-      - {source: rag-app-roles, target: /config/app-roles.sql}
-      - {source: rag-proxy-conf-template, target: /config/nginx-proxy.conf.template}
-      - {source: rag-openwebui-setup-script, target: /config/feedback-key-setup.py}
-      - {source: rag-openwebui-start-script, target: /config/start-with-sign-in.py}
+      - {source: kalla-bootstrap-script, target: /config/bootstrap.sh}
+      - {source: kalla-postgres-init, target: /config/postgres-init.sql}
+      - {source: kalla-postgres-hba, target: /config/pg_hba.conf}
+      - {source: kalla-postgres-conf, target: /config/postgresql.conf}
+      - {source: kalla-app-roles, target: /config/app-roles.sql}
+      - {source: kalla-proxy-conf-template, target: /config/nginx-proxy.conf.template}
+      - {source: kalla-openwebui-setup-script, target: /config/feedback-key-setup.py}
+      - {source: kalla-openwebui-start-script, target: /config/start-with-sign-in.py}
     volumes:
-      - rag-certs:/certs
-      - rag-secrets:/secrets
-      - rag-config:/conf
-      - rag-blobs:/blobs
-      - rag-openwebui-data:/openwebui-data
-      #@joined - {type: volume, source: ume-certs, target: /gateway-certs, read_only: true}
-      #@joined # The credential keys the gateway's migrations created from UME_INTEGRATION_MANIFEST (M-17 C7).
+      - kalla-certs:/certs
+      - kalla-secrets:/secrets
+      - kalla-config:/conf
+      - kalla-blobs:/blobs
+      - kalla-openwebui-data:/openwebui-data
+      #@joined - {type: volume, source: fors-certs, target: /gateway-certs, read_only: true}
+      #@joined # A stack from before the rename to Källa (0.8 and earlier): its rag-* volumes, read-only, which kalla-bootstrap
+      #@joined # copies once into the kalla-* volumes (docs/upgrade-guide.md, "0.9.0"), and the new database volume to copy into.
+      #@joined - kalla-postgres-data:/postgres-data
+      #@joined - {type: volume, source: rag-certs, target: /legacy/certs, read_only: true}
+      #@joined - {type: volume, source: rag-secrets, target: /legacy/secrets, read_only: true}
+      #@joined - {type: volume, source: rag-blobs, target: /legacy/blobs, read_only: true}
+      #@joined - {type: volume, source: rag-openwebui-data, target: /legacy/openwebui-data, read_only: true}
+      #@joined - {type: volume, source: rag-postgres-data, target: /legacy/postgres-data, read_only: true}
+      #@joined # The credential keys the gateway's migrations created from FORS_INTEGRATION_MANIFEST (M-17 C7).
       #@joined - {type: volume, source: integration-secrets, target: /integration-secrets, read_only: true}
       # Host directories, each deploy/empty while unset: the gateway's CA (its ca.pem), the credential keys a gateway  #@alone
-      # on this host wrote from Ume.Rag's manifest (Ume.Rag/rag-<service>), more CAs to trust (*.pem: a sign-in  #@alone
-      # provider's or a database's) and your own certificates for rag-api and rag-admin (api.crt and api.key,  #@alone
+      # on this host wrote from Källa's manifest (Kalla/rag-<service>), more CAs to trust (*.pem: a sign-in  #@alone
+      # provider's or a database's) and your own certificates for kalla-api and kalla-admin (api.crt and api.key,  #@alone
       # admin.crt and admin.key), used instead of the internal CA's.  #@alone
-      - {type: bind, source: "${UME_RAG_GATEWAY_CA_DIR:-./empty}", target: /gateway-certs, read_only: true, bind: {create_host_path: false}}  #@alone
-      - {type: bind, source: "${UME_RAG_GATEWAY_SECRETS_DIR:-./empty}", target: /integration-secrets, read_only: true, bind: {create_host_path: false}}  #@alone
-      - {type: bind, source: "${UME_RAG_TRUST_DIR:-./empty}", target: /trust, read_only: true, bind: {create_host_path: false}}  #@alone
-      - {type: bind, source: "${UME_RAG_PKI_DIR:-./empty}", target: /pki, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${KALLA_GATEWAY_CA_DIR:-./empty}", target: /gateway-certs, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${KALLA_GATEWAY_SECRETS_DIR:-./empty}", target: /integration-secrets, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${KALLA_TRUST_DIR:-./empty}", target: /trust, read_only: true, bind: {create_host_path: false}}  #@alone
+      - {type: bind, source: "${KALLA_PKI_DIR:-./empty}", target: /pki, read_only: true, bind: {create_host_path: false}}  #@alone
     #@joined depends_on:
     #@joined   bootstrap: {condition: service_completed_successfully}
-    #@joined   # The gateway's migrations write the manifest's keys before rag-bootstrap copies them.
+    #@joined   # The gateway's migrations write the manifest's keys before kalla-bootstrap copies them.
     #@joined   migrations: {condition: service_completed_successfully}
     network_mode: none
 
-  rag-postgres:
+  kalla-postgres:
     <<: *hardened
-    image: ${RAG_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -152,23 +160,23 @@ services:
     # deploy/postgres/postgresql.conf (16 GB profile), without WAL archiving: this stack has no pgBackRest repository.
     command: [postgres, -c, config_file=/run/config/postgresql.conf, -c, archive_mode=off]
     volumes:
-      - rag-postgres-data:/var/lib/postgresql/data
-      - {<<: *rag-conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
-      - {<<: *rag-conf-mount, volume: {subpath: postgres}}
-      - {<<: *rag-certs-mount, volume: {subpath: postgres}}
-      - {<<: *rag-secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+      - kalla-postgres-data:/var/lib/postgresql/data
+      - {<<: *kalla-conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
+      - {<<: *kalla-conf-mount, volume: {subpath: postgres}}
+      - {<<: *kalla-certs-mount, volume: {subpath: postgres}}
+      - {<<: *kalla-secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
-    networks: [rag-data]
+      kalla-bootstrap: {condition: service_completed_successfully}
+    networks: [kalla-data]
     healthcheck:
       test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, ragdb]
       interval: 10s
       timeout: 5s
       retries: 12
 
-  rag-migrate:
+  kalla-migrate:
     <<: *hardened
-    image: ${RAG_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
+    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -183,16 +191,16 @@ services:
       Seed__Enabled: "false"
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
-      - {<<: *rag-conf-mount, volume: {subpath: migrations}}
-      - {<<: *rag-certs-mount, volume: {subpath: migrations}}
-      - {<<: *rag-secrets-mount, volume: {subpath: migrations}}
+      - {<<: *kalla-conf-mount, volume: {subpath: migrations}}
+      - {<<: *kalla-certs-mount, volume: {subpath: migrations}}
+      - {<<: *kalla-secrets-mount, volume: {subpath: migrations}}
     depends_on:
-      rag-postgres: {condition: service_healthy}
-    networks: [rag-data]
+      kalla-postgres: {condition: service_healthy}
+    networks: [kalla-data]
 
-  rag-api:
+  kalla-api:
     <<: *hardened
-    image: ${RAG_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
+    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -200,12 +208,12 @@ services:
     mem_reservation: 384m
     mem_limit: 1g
     pids_limit: 512
-    ports: ["${UME_RAG_API_BIND:-0.0.0.0}:${UME_RAG_API_PORT:-8543}:8443"]
+    ports: ["${KALLA_API_BIND:-0.0.0.0}:${KALLA_API_PORT:-8543}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       DOTNET_GCHeapHardLimitPercent: "0x4B"
       Security__SecretsDirectory: /run/app-secrets
-      # The Open WebUI feedback key, minted by rag-openwebui-setup into a directory of its own (M-17 C6).
+      # The Open WebUI feedback key, minted by kalla-openwebui-setup into a directory of its own (M-17 C6).
       Security__ExtraSecretsDirectory: /run/openwebui-feedback
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Kestrel__Endpoints__Https__Url: https://+:8443
@@ -213,53 +221,53 @@ services:
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
       Rag__Roles: knowledge,chat,mcp
       BlobStore__Root: /data/blobs/rag
-      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
+      #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
       # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
-      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      Knowledge__PublicBaseUrl: ${KALLA_API_PUBLIC_URL:-https://${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
-      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
-      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
-      OTEL_SERVICE_NAME: rag-api
+      OTEL_TRACES_SAMPLER: ${FORS_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${FORS_OTEL_TRACES_SAMPLER_ARG:-0.1}
+      OTEL_SERVICE_NAME: kalla-api
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
-      # Open WebUI (profile openwebui): its users are trusted for the deployment's own Open WebUI client, which rag-migrate
-      # registers (identity §5.2); the feedback import from it (chat §13.3) runs every 15 minutes. rag-bootstrap writes the
-      # secret file OpenWebUi__BaseUrl (the stack's rag-openwebui, while the profile is on) and rag-openwebui-setup
+      # Open WebUI (profile openwebui): its users are trusted for the deployment's own Open WebUI client, which kalla-migrate
+      # registers (identity §5.2); the feedback import from it (chat §13.3) runs every 15 minutes. kalla-bootstrap writes the
+      # secret file OpenWebUi__BaseUrl (the stack's kalla-openwebui, while the profile is on) and kalla-openwebui-setup
       # OpenWebUi__AdminApiKey; without both there is no import.
-      # Open WebUI's sign-in settings, which rag-api serves to its start (identity design §19): the deployment's values when
-      # set (empty is unset; the client secret is the secret file OpenWebUi__Oidc__ClientSecret from rag-bootstrap), else
-      # the setup wizard's. The provider defaults to rag-admin's authority, so rag-api gets that authority too.
-      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
-      OpenWebUi__Oidc__ProviderUrl: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:-}
-      OpenWebUi__Oidc__ClientId: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:-}
-      OpenWebUi__Oidc__ProviderName: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-}
+      # Open WebUI's sign-in settings, which kalla-api serves to its start (identity design §19): the deployment's values when
+      # set (empty is unset; the client secret is the secret file OpenWebUi__Oidc__ClientSecret from kalla-bootstrap), else
+      # the setup wizard's. The provider defaults to kalla-admin's authority, so kalla-api gets that authority too.
+      Oidc__Authority: ${KALLA_OIDC_AUTHORITY:-${FORS_OIDC_AUTHORITY:-}}
+      OpenWebUi__Oidc__ProviderUrl: ${KALLA_OPENWEBUI_OIDC_PROVIDER_URL:-}
+      OpenWebUi__Oidc__ClientId: ${KALLA_OPENWEBUI_OIDC_CLIENT_ID:-}
+      OpenWebUi__Oidc__ProviderName: ${KALLA_OPENWEBUI_OIDC_PROVIDER_NAME:-}
     volumes:
-      - {<<: *rag-certs-mount, volume: {subpath: api}}
-      - {<<: *rag-secrets-mount, volume: {subpath: api}}
-      - {<<: *rag-secrets-mount, target: /run/openwebui-feedback, volume: {subpath: openwebui-feedback}}
-      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
-      - {type: volume, source: rag-blobs, target: /data/blobs, read_only: true}
+      - {<<: *kalla-certs-mount, volume: {subpath: api}}
+      - {<<: *kalla-secrets-mount, volume: {subpath: api}}
+      - {<<: *kalla-secrets-mount, target: /run/openwebui-feedback, volume: {subpath: openwebui-feedback}}
+      - {<<: *kalla-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - {type: volume, source: kalla-blobs, target: /data/blobs, read_only: true}
     depends_on:
-      rag-postgres: {condition: service_healthy}
-      rag-migrate: {condition: service_completed_successfully}
+      kalla-postgres: {condition: service_healthy}
+      kalla-migrate: {condition: service_completed_successfully}
       #@joined gateway: {condition: service_started}
     networks:
-      rag-edge: {}
-      rag-data: {}
+      kalla-edge: {}
+      kalla-data: {}
       llm: {gw_priority: 1}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
+      test: [CMD, dotnet, Kalla.Api.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
       start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
       retries: 3
 
-  rag-admin:
+  kalla-admin:
     <<: *hardened
-    image: ${RAG_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
+    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -267,7 +275,7 @@ services:
     mem_reservation: 256m
     mem_limit: 512m
     pids_limit: 256
-    ports: ["${UME_RAG_ADMIN_BIND:-0.0.0.0}:${UME_RAG_ADMIN_PORT:-9543}:8443"]
+    ports: ["${KALLA_ADMIN_BIND:-0.0.0.0}:${KALLA_ADMIN_PORT:-9543}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       DOTNET_GCHeapHardLimitPercent: "0x4B"
@@ -277,71 +285,71 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/admin.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
       # Sign-in (identity design §19): each value set here is the deployment's and locks its field in the setup wizard;
-      # an empty one is unset, so the wizard's value applies, else the code's default (client ume-rag-admin, the claims
+      # an empty one is unset, so the wizard's value applies, else the code's default (client kalla-admin, the claims
       # roles, departmentCodes, teamCodes and groups, guests refused). The provider is the gateway's by default, with RAG's
       # own client (never the gateway's). With an authority and a client secret (the secret file Oidc__ClientSecret from
-      # UME_RAG_OIDC_CLIENT_SECRET) the deployment declares its sign-in and the wizard never opens. UME_RAG_OIDC_REFUSE_GUESTS
-      # is the secret file Oidc__RefuseGuests (rag-bootstrap), since an empty boolean here would stop rag-admin.
-      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
-      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-}
-      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-}
-      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-}
-      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-}
-      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-}
-      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-}
-      Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
-      Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
-      # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in rag-secrets.
-      Setup__Reopen: ${UME_RAG_SETUP_REOPEN:-}
-      # Open WebUI's sign-in settings as rag-api has them (a deployment value locks the wizard's field; the client secret is
+      # KALLA_OIDC_CLIENT_SECRET) the deployment declares its sign-in and the wizard never opens. KALLA_OIDC_REFUSE_GUESTS
+      # is the secret file Oidc__RefuseGuests (kalla-bootstrap), since an empty boolean here would stop kalla-admin.
+      Oidc__Authority: ${KALLA_OIDC_AUTHORITY:-${FORS_OIDC_AUTHORITY:-}}
+      Oidc__ClientId: ${KALLA_OIDC_CLIENT_ID:-}
+      Oidc__RoleClaim: ${KALLA_OIDC_ROLE_CLAIM:-}
+      Oidc__DepartmentClaim: ${KALLA_OIDC_DEPARTMENT_CLAIM:-}
+      Oidc__TeamClaim: ${KALLA_OIDC_TEAM_CLAIM:-}
+      Oidc__GroupClaim: ${KALLA_OIDC_GROUP_CLAIM:-}
+      Oidc__ExtraScopes__0: ${KALLA_OIDC_EXTRA_SCOPE:-}
+      Oidc__RoleGroups__rag-platform-admin: ${KALLA_OIDC_GROUPS_PLATFORM_ADMIN:-}
+      Oidc__TenantId: ${KALLA_OIDC_TENANT_ID:-}
+      # A new value re-opens the setup wizard once (identity design §19); the setup secret is a file in kalla-secrets.
+      Setup__Reopen: ${KALLA_SETUP_REOPEN:-}
+      # Open WebUI's sign-in settings as kalla-api has them (a deployment value locks the wizard's field; the client secret is
       # the secret file OpenWebUi__Oidc__ClientSecret), and its address for the redirect URI the wizard names. Whether it
-      # runs is the secret file OpenWebUi__Enabled, which rag-bootstrap writes from the openwebui profile.
-      OpenWebUi__Oidc__ProviderUrl: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:-}
-      OpenWebUi__Oidc__ClientId: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:-}
-      OpenWebUi__Oidc__ProviderName: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-}
-      OpenWebUi__PublicUrl: https://${UME_RAG_OPENWEBUI_HOST:-${UME_DOMAIN:+chat.}${UME_DOMAIN:-localhost}}
+      # runs is the secret file OpenWebUi__Enabled, which kalla-bootstrap writes from the openwebui profile.
+      OpenWebUi__Oidc__ProviderUrl: ${KALLA_OPENWEBUI_OIDC_PROVIDER_URL:-}
+      OpenWebUi__Oidc__ClientId: ${KALLA_OPENWEBUI_OIDC_CLIENT_ID:-}
+      OpenWebUi__Oidc__ProviderName: ${KALLA_OPENWEBUI_OIDC_PROVIDER_NAME:-}
+      OpenWebUi__PublicUrl: https://${KALLA_OPENWEBUI_HOST:-${FORS_DOMAIN:+chat.}${FORS_DOMAIN:-localhost}}
       BlobStore__Root: /data/blobs/rag
-      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
-      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
-      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
-      OTEL_SERVICE_NAME: rag-admin
-      # rag-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
-      Admin__ApiPublicUrl: ${UME_RAG_API_PUBLIC_URL:-https://${UME_RAG_API_HOST:-${UME_DOMAIN:+rag.}${UME_DOMAIN:-}}}
-      # The gateway admin console's address for rag-admin's links to it (the setup wizard's link to the gateway's wizard
-      # among them), used while the gateway's context names none (UME_ADMIN_PUBLIC_URL sets it there): its host name on
-      # port 443, as behind the TLS proxy. On another port, set UME_ADMIN_PUBLIC_URL. Empty (no links) when the admin has
-      # no name of its own: without UME_DOMAIN and UME_ADMIN_HOST it shares the gateway's name on another port.
-      Admin__GatewayAdminUrl: ${UME_ADMIN_PUBLIC_URL:-${UME_ADMIN_HOST:+https://}${UME_ADMIN_HOST:-${UME_DOMAIN:+https://llm-admin.}${UME_DOMAIN:-}}}
+      OTEL_TRACES_SAMPLER: ${FORS_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${FORS_OTEL_TRACES_SAMPLER_ARG:-0.1}
+      OTEL_SERVICE_NAME: kalla-admin
+      # kalla-api's public address, shown to a platform admin who connects an app ("How to connect", admin design §5.9.1).
+      Admin__ApiPublicUrl: ${KALLA_API_PUBLIC_URL:-https://${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}}
+      # The gateway admin console's address for kalla-admin's links to it (the setup wizard's link to the gateway's wizard
+      # among them), used while the gateway's context names none (FORS_ADMIN_PUBLIC_URL sets it there): its host name on
+      # port 443, as behind the TLS proxy. On another port, set FORS_ADMIN_PUBLIC_URL. Empty (no links) when the admin has
+      # no name of its own: without FORS_DOMAIN and FORS_ADMIN_HOST it shares the gateway's name on another port.
+      Admin__GatewayAdminUrl: ${FORS_ADMIN_PUBLIC_URL:-${FORS_ADMIN_HOST:+https://}${FORS_ADMIN_HOST:-${FORS_DOMAIN:+https://llm-admin.}${FORS_DOMAIN:-}}}
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
-      - {<<: *rag-certs-mount, volume: {subpath: admin}}
-      - {<<: *rag-secrets-mount, volume: {subpath: admin}}
-      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
-      - rag-blobs:/data/blobs
+      - {<<: *kalla-certs-mount, volume: {subpath: admin}}
+      - {<<: *kalla-secrets-mount, volume: {subpath: admin}}
+      - {<<: *kalla-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - kalla-blobs:/data/blobs
     depends_on:
-      rag-postgres: {condition: service_healthy}
-      rag-migrate: {condition: service_completed_successfully}
+      kalla-postgres: {condition: service_healthy}
+      kalla-migrate: {condition: service_completed_successfully}
     networks:
-      rag-edge: {}
-      rag-data: {}
+      kalla-edge: {}
+      kalla-data: {}
       llm: {gw_priority: 1}
-      #@joined # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, UME_INTEGRATION_API_URL).
+      #@joined # The gateway's adminapi, for its Integration API (https://adminapi:8443/integration/v1, FORS_INTEGRATION_API_URL).
       #@joined edge: {}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
+      test: [CMD, dotnet, Kalla.AdminApi.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
       start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
       retries: 3
 
-  rag-worker:
+  kalla-worker:
     <<: *hardened
-    image: ${RAG_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
+    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -356,55 +364,55 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
-      Parser__BaseUrl: https://rag-parser:8000
-      # ClamAv__Mode is a secret file from rag-bootstrap: on with the clamav profile (rag-clamav runs), else off, which
+      Parser__BaseUrl: https://kalla-parser:8000
+      # ClamAv__Mode is a secret file from kalla-bootstrap: on with the clamav profile (kalla-clamav runs), else off, which
       # stores files without a malware scan, marked so (#535). The worker reads it at start; the profiles here make a
-      # change of them recreate the worker after rag-bootstrap has written the new mode.
-      UME_RAG_PROFILES: ${COMPOSE_PROFILES:-}
-      ClamAv__Host: rag-clamav
+      # change of them recreate the worker after kalla-bootstrap has written the new mode.
+      KALLA_PROFILES: ${COMPOSE_PROFILES:-}
+      ClamAv__Host: kalla-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
       TMPDIR: /data/blobs/spool
-      #@joined Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set UME_RAG_GATEWAY_URL in deploy/.env}  #@alone
-      Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
+      Crawl__AllowedPrivateRanges: ${KALLA_CRAWL_ALLOW:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
-      OTEL_TRACES_SAMPLER: ${UME_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
-      OTEL_TRACES_SAMPLER_ARG: ${UME_OTEL_TRACES_SAMPLER_ARG:-0.1}
-      OTEL_SERVICE_NAME: rag-worker
+      OTEL_TRACES_SAMPLER: ${FORS_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${FORS_OTEL_TRACES_SAMPLER_ARG:-0.1}
+      OTEL_SERVICE_NAME: kalla-worker
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
-      - {<<: *rag-certs-mount, volume: {subpath: worker}}
-      - {<<: *rag-secrets-mount, volume: {subpath: worker}}
-      - {<<: *rag-secrets-mount, target: /run/keys, volume: {subpath: keys}}
-      - rag-blobs:/data/blobs
+      - {<<: *kalla-certs-mount, volume: {subpath: worker}}
+      - {<<: *kalla-secrets-mount, volume: {subpath: worker}}
+      - {<<: *kalla-secrets-mount, target: /run/keys, volume: {subpath: keys}}
+      - kalla-blobs:/data/blobs
     depends_on:
-      rag-postgres: {condition: service_healthy}
-      rag-migrate: {condition: service_completed_successfully}
+      kalla-postgres: {condition: service_healthy}
+      kalla-migrate: {condition: service_completed_successfully}
       # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while.
-      rag-parser: {condition: service_started}
+      kalla-parser: {condition: service_started}
       # Only with the clamav profile.
-      rag-clamav: {condition: service_started, required: false}
-    # rag-crawl holds the default route (the Internet); llm reaches the gateway.
+      kalla-clamav: {condition: service_started, required: false}
+    # kalla-crawl holds the default route (the Internet); llm reaches the gateway.
     networks:
-      rag-data: {}
+      kalla-data: {}
       llm: {}
-      rag-ingestion: {}
-      rag-parser: {}
-      rag-render: {}
-      rag-crawl: {gw_priority: 1}
+      kalla-ingestion: {}
+      kalla-parser: {}
+      kalla-render: {}
+      kalla-crawl: {gw_priority: 1}
     healthcheck:
-      test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
+      test: [CMD, dotnet, Kalla.Worker.dll, --health-check]
       interval: 30s        # a .NET process start each (~80 ms CPU, B-27 / #504)
       timeout: 10s
       start_period: 30s
       start_interval: 5s   # while starting, so up --wait and rolling updates don't wait 30 s
       retries: 3
 
-  rag-parser:
+  kalla-parser:
     <<: *hardened
-    image: ${RAG_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
+    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -419,17 +427,17 @@ services:
       PARSER_TLS_CERT_FILE: /run/certs/parser.crt
       PARSER_TLS_KEY_FILE: /run/certs/parser.key
     volumes:
-      - {<<: *rag-certs-mount, volume: {subpath: parser}}
+      - {<<: *kalla-certs-mount, volume: {subpath: parser}}
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
+      kalla-bootstrap: {condition: service_completed_successfully}
     # Internal network only: no egress at all (parser design §11).
-    networks: [rag-parser]
+    networks: [kalla-parser]
 
   # The malware scan. Add clamav to COMPOSE_PROFILES; without it the worker stores files unscanned, marked so.
-  rag-clamav:
+  kalla-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${RAG_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
+    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -437,19 +445,19 @@ services:
     mem_limit: 1.5g
     pids_limit: 128
     volumes:
-      - rag-clamav-db:/var/lib/clamav
-    # rag-mirror: freshclam's download; rag-ingestion: the worker's INSTREAM on 3310.
-    networks: [rag-ingestion, rag-mirror]
+      - kalla-clamav-db:/var/lib/clamav
+    # kalla-mirror: freshclam's download; kalla-ingestion: the worker's INSTREAM on 3310.
+    networks: [kalla-ingestion, kalla-mirror]
 
   # Chromium for JavaScript-rendered pages (connectors design §8.3). Off by default: add render to COMPOSE_PROFILES.
   # Chromium's sandbox needs user namespaces, which Docker's default seccomp profile blocks, and Portainer cannot read
   # images/renderer/seccomp.json from a file, so this service runs without Docker's seccomp filter (Chromium's own
   # sandbox stays on). Without it, the worker refuses rendering and indexes the pages' HTML as served.
   # On a Compose host, compose.hardened.yaml gives it that seccomp profile instead.  #@alone
-  rag-renderer:
+  kalla-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${RAG_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
+    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]
@@ -460,20 +468,20 @@ services:
     mem_limit: 2g
     pids_limit: 512
     # The image reads its secret path only from the environment: read it from the volume, then start as the image does.
-    entrypoint: [/bin/sh, -c, 'UME_RAG_RENDER_WS_PATH="$$(cat /run/render/ws-path)" exec /srv/renderer/start.sh']
+    entrypoint: [/bin/sh, -c, 'KALLA_RENDER_WS_PATH="$$(cat /run/render/ws-path)" exec /srv/renderer/start.sh']
     volumes:
-      - {type: volume, source: rag-secrets, target: /run/render, read_only: true, volume: {subpath: renderer}}
+      - {type: volume, source: kalla-secrets, target: /run/render, read_only: true, volume: {subpath: renderer}}
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
-    networks: [rag-render]
+      kalla-bootstrap: {condition: service_completed_successfully}
+    networks: [kalla-render]
 
-  rag-openwebui:
+  kalla-openwebui:
     # Open WebUI as the users' chat (chat design §14), with the profile
-    # openwebui. Plain HTTP for a TLS proxy in front; it calls rag-api inside the stack, trusting RAG's CA through
-    # openwebui/ca.pem (the public CAs, RAG's and the gateway's, from rag-bootstrap).
+    # openwebui. Plain HTTP for a TLS proxy in front; it calls kalla-api inside the stack, trusting RAG's CA through
+    # openwebui/ca.pem (the public CAs, RAG's and the gateway's, from kalla-bootstrap).
     <<: *hardened
     profiles: [openwebui]
-    # The pin also binds rag-openwebui-setup, which forges an Open WebUI session token from its internals (the user and auth
+    # The pin also binds kalla-openwebui-setup, which forges an Open WebUI session token from its internals (the user and auth
     # tables, session_stamp, utils/auth.py's claims; M-17 C6): before the digest moves, deploy/tests/portainer-boot.sh must
     # pass with the new image (it checks the minted feedback key).
     image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
@@ -485,27 +493,27 @@ services:
     mem_reservation: 512m
     mem_limit: 1.5g
     pids_limit: 256
-    ports: ["${UME_RAG_OPENWEBUI_BIND:-127.0.0.1}:${UME_RAG_OPENWEBUI_PORT:-3000}:8080"]
-    # Open WebUI takes the user-JWT secret, the service account's password, its key for rag-api and its OIDC settings only
-    # from its environment. The start wrapper (deploy/openwebui/start-with-sign-in.py, from rag-config) reads the three
-    # files from the volume, asks rag-api for the sign-in settings (identity design §19), starts Open WebUI as the image
+    ports: ["${KALLA_OPENWEBUI_BIND:-127.0.0.1}:${KALLA_OPENWEBUI_PORT:-3000}:8080"]
+    # Open WebUI takes the user-JWT secret, the service account's password, its key for kalla-api and its OIDC settings only
+    # from its environment. The start wrapper (deploy/openwebui/start-with-sign-in.py, from kalla-config) reads the three
+    # files from the volume, asks kalla-api for the sign-in settings (identity design §19), starts Open WebUI as the image
     # does (bash start.sh in /app/backend) and exits when the settings change, so this restart policy starts it anew.
     entrypoint: [python3, -I, /config/start-with-sign-in.py, --secrets-dir, /run/owui-secrets, --, bash, start.sh]
     environment:
-      UME_RAG_SIGN_IN_URL: https://rag-api:8443/internal/openwebui/sign-in
+      KALLA_SIGN_IN_URL: https://kalla-api:8443/internal/openwebui/sign-in
       HOME: /tmp
       DATA_DIR: /data
       SSL_CERT_FILE: /run/owui-secrets/ca.pem
       REQUESTS_CA_BUNDLE: /run/owui-secrets/ca.pem
       WEBUI_SECRET_KEY_FILE: /run/owui-secrets/webui_secret_key
-      WEBUI_URL: https://${UME_RAG_OPENWEBUI_HOST:-${UME_DOMAIN:+chat.}${UME_DOMAIN:-localhost}}
+      WEBUI_URL: https://${KALLA_OPENWEBUI_HOST:-${FORS_DOMAIN:+chat.}${FORS_DOMAIN:-localhost}}
       WEBUI_SESSION_COOKIE_SECURE: "true"
       WEBUI_AUTH_COOKIE_SECURE: "true"
       OFFLINE_MODE: "true"
       ENABLE_PERSISTENT_CONFIG: "false"
       ENABLE_OLLAMA_API: "false"
       ENABLE_OPENAI_API: "true"
-      OPENAI_API_BASE_URLS: https://rag-api:8443/v1
+      OPENAI_API_BASE_URLS: https://kalla-api:8443/v1
       OPENAI_API_CONFIGS: '{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}'
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
       BYPASS_MODEL_ACCESS_CONTROL: "true"
@@ -532,7 +540,7 @@ services:
       USER_PERMISSIONS_CHAT_PARAMS: "false"
       ENABLE_ADMIN_CHAT_ACCESS: "false"
       ENABLE_ADMIN_EXPORT: "false"
-      WEBUI_BANNERS: '[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":1793318400}]'
+      WEBUI_BANNERS: '[{"id":"kalla-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":1793318400}]'
       ENABLE_API_KEYS: "true"
       ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: "true"
       API_KEYS_ALLOWED_ENDPOINTS: /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
@@ -545,56 +553,56 @@ services:
       DEFAULT_USER_ROLE: user
       ENABLE_SIGNUP: "false"
       # ENABLE_OAUTH_SIGNUP, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_PROVIDER_URL and OAUTH_PROVIDER_NAME come from the
-      # start wrapper (rag-api's sign-in settings), never from here.
+      # start wrapper (kalla-api's sign-in settings), never from here.
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "false"
-      OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST:-${UME_DOMAIN:+chat.}${UME_DOMAIN:-localhost}}/oauth/oidc/login/callback
+      OPENID_REDIRECT_URI: https://${KALLA_OPENWEBUI_HOST:-${FORS_DOMAIN:+chat.}${FORS_DOMAIN:-localhost}}/oauth/oidc/login/callback
     volumes:
-      - rag-openwebui-data:/data
-      - {type: volume, source: rag-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
-      # Its start wrapper, which rag-bootstrap copies into rag-config: an inline config can't be read by a read-only container's user.
-      - {type: volume, source: rag-config, target: /config, read_only: true, volume: {subpath: openwebui}}
+      - kalla-openwebui-data:/data
+      - {type: volume, source: kalla-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
+      # Its start wrapper, which kalla-bootstrap copies into kalla-config: an inline config can't be read by a read-only container's user.
+      - {type: volume, source: kalla-config, target: /config, read_only: true, volume: {subpath: openwebui}}
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
-      rag-api: {condition: service_started}
-    networks: [rag-edge]
+      kalla-bootstrap: {condition: service_completed_successfully}
+      kalla-api: {condition: service_started}
+    networks: [kalla-edge]
 
-  rag-proxy:
+  kalla-proxy:
     # Profile proxy (M-17 C8, Decisions "Deploy configuration" D9): TLS for the five host names with the operator's
-    # certificate, re-encrypting to the services and verifying them against the internal CAs. rag-bootstrap writes its
-    # nginx.conf (deploy/proxy/nginx.portainer.conf.template) and the two CA certificates into rag-config/proxy.
+    # certificate, re-encrypting to the services and verifying them against the internal CAs. kalla-bootstrap writes its
+    # nginx.conf (deploy/proxy/nginx.portainer.conf.template) and the two CA certificates into kalla-config/proxy.
     <<: *hardened
     profiles: [proxy]
-    # nginx 1.31.6, as the browser tests' fixture site (src/Ume.Rag.AppHost); the index digest.
-    image: ${RAG_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
+    # nginx 1.31.6, as the browser tests' fixture site (src/Kalla.AppHost); the index digest.
+    image: ${KALLA_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
     user: "101:101"
     restart: unless-stopped
-    command: [nginx, -c, /etc/nginx/ume/nginx.conf, -g, "daemon off;"]
+    command: [nginx, -c, /etc/nginx/kalla/nginx.conf, -g, "daemon off;"]
     cpus: 0.5
     mem_limit: 128m
     pids_limit: 128
-    ports: ["${UME_RAG_PROXY_BIND:-0.0.0.0}:${UME_RAG_PROXY_PORT:-443}:8443"]
+    ports: ["${KALLA_PROXY_BIND:-0.0.0.0}:${KALLA_PROXY_PORT:-443}:8443"]
     volumes:
-      - {type: volume, source: rag-config, target: /etc/nginx/ume, read_only: true, volume: {subpath: proxy}}
+      - {type: volume, source: kalla-config, target: /etc/nginx/kalla, read_only: true, volume: {subpath: proxy}}
       # The operator's certificate: a host directory, not created when missing (the container then does not start).
       - type: bind
-        source: ${UME_RAG_PROXY_CERTS_DIR:-/etc/ume-rag/proxy-certs}
+        source: ${KALLA_PROXY_CERTS_DIR:-/etc/kalla/proxy-certs}
         target: /run/proxy-certs
         read_only: true
         bind: {create_host_path: false}
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
+      kalla-bootstrap: {condition: service_completed_successfully}
       #@joined gateway: {condition: service_started}
       #@joined adminapi: {condition: service_started}
-      rag-api: {condition: service_started}
-      rag-admin: {condition: service_started}
-    #@joined networks: [edge, rag-edge]
-    networks: [rag-edge]  #@alone
+      kalla-api: {condition: service_started}
+      kalla-admin: {condition: service_started}
+    #@joined networks: [edge, kalla-edge]
+    networks: [kalla-edge]  #@alone
 
-  rag-openwebui-setup:
-    # One-shot, profile openwebui (M-17 C6): the feedback service account's API key for rag-api's import, minted with a
+  kalla-openwebui-setup:
+    # One-shot, profile openwebui (M-17 C6): the feedback service account's API key for kalla-api's import, minted with a
     # short session token signed with Open WebUI's secret key, since password sign-in is off (deploy/openwebui/
     # feedback-key-setup.py). It runs Open WebUI's own image as Open WebUI's user, reads the account from its store and
-    # writes only rag-secrets/openwebui-feedback, which rag-api reads; a key that still works is kept.
+    # writes only kalla-secrets/openwebui-feedback, which kalla-api reads; a key that still works is kept.
     <<: *hardened
     profiles: [openwebui]
     image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
@@ -602,54 +610,61 @@ services:
     restart: "no"
     entrypoint: [python3, -I, /config/feedback-key-setup.py]
     environment:
-      OWUI_URL: http://rag-openwebui:8080
+      OWUI_URL: http://kalla-openwebui:8080
       WEBUI_ADMIN_EMAIL: feedback-import@localhost
     volumes:
-      # Its script, which rag-bootstrap copies into rag-config: an inline config can't be written into a read-only container.
-      - {type: volume, source: rag-config, target: /config, read_only: true, volume: {subpath: openwebui-setup}}
+      # Its script, which kalla-bootstrap copies into kalla-config: an inline config can't be written into a read-only container.
+      - {type: volume, source: kalla-config, target: /config, read_only: true, volume: {subpath: openwebui-setup}}
       # The store's WAL needs its directory writable even for a read-only connection.
-      - rag-openwebui-data:/data
-      - {type: volume, source: rag-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
-      - {type: volume, source: rag-secrets, target: /run/feedback, volume: {subpath: openwebui-feedback}}
+      - kalla-openwebui-data:/data
+      - {type: volume, source: kalla-secrets, target: /run/owui-secrets, read_only: true, volume: {subpath: openwebui}}
+      - {type: volume, source: kalla-secrets, target: /run/feedback, volume: {subpath: openwebui-feedback}}
     depends_on:
-      rag-openwebui: {condition: service_started}
-    networks: [rag-edge]
+      kalla-openwebui: {condition: service_started}
+    networks: [kalla-edge]
 
 configs:
-  rag-bootstrap-script:
+  kalla-bootstrap-script:
     file: ./portainer/bootstrap.sh
-  rag-postgres-init:
+  kalla-postgres-init:
     file: ./postgres/init.sql
-  rag-postgres-hba:
+  kalla-postgres-hba:
     file: ./postgres/pg_hba.conf
-  rag-postgres-conf:
+  kalla-postgres-conf:
     file: ./postgres/postgresql.conf
-  rag-app-roles:
+  kalla-app-roles:
     file: ./postgres/app-roles.sql
-  rag-openwebui-setup-script:
+  kalla-openwebui-setup-script:
     file: ./openwebui/feedback-key-setup.py
-  rag-openwebui-start-script:
+  kalla-openwebui-start-script:
     file: ./openwebui/start-with-sign-in.py
-  rag-proxy-conf-template:
+  kalla-proxy-conf-template:
     file: ./proxy/nginx.portainer.conf.template
 
 networks:
-  rag-edge: {driver: bridge}
-  rag-data: {driver: bridge, internal: true}
-  rag-ingestion: {driver: bridge, internal: true}
-  rag-parser: {driver: bridge, internal: true}
-  rag-render: {driver: bridge, internal: true}
-  rag-crawl: {driver: bridge}
-  rag-mirror: {driver: bridge}
-  # The gateway's network in the Portainer stack; here Ume.Rag's own, which holds the default route of rag-api and  #@alone
-  # rag-admin: they reach the gateway (UME_RAG_GATEWAY_URL) and the sign-in provider through it.  #@alone
+  kalla-edge: {driver: bridge}
+  kalla-data: {driver: bridge, internal: true}
+  kalla-ingestion: {driver: bridge, internal: true}
+  kalla-parser: {driver: bridge, internal: true}
+  kalla-render: {driver: bridge, internal: true}
+  kalla-crawl: {driver: bridge}
+  kalla-mirror: {driver: bridge}
+  # The gateway's network in the Portainer stack; here Källa's own, which holds the default route of kalla-api and  #@alone
+  # kalla-admin: they reach the gateway (KALLA_GATEWAY_URL) and the sign-in provider through it.  #@alone
   llm: {driver: bridge}  #@alone
 
 volumes:
-  rag-postgres-data:
-  rag-openwebui-data:
-  rag-certs:
-  rag-secrets:
-  rag-config:
-  rag-blobs:
-  rag-clamav-db:
+  kalla-postgres-data:
+  kalla-openwebui-data:
+  kalla-certs:
+  kalla-secrets:
+  kalla-config:
+  kalla-blobs:
+  kalla-clamav-db:
+  #@joined # Before the rename to Källa (0.8 and earlier): copied once into the kalla-* volumes by kalla-bootstrap, then unused.
+  #@joined # Remove them once the stack runs (docs/upgrade-guide.md, "0.9.0"); in a new stack they stay empty.
+  #@joined rag-postgres-data:
+  #@joined rag-openwebui-data:
+  #@joined rag-certs:
+  #@joined rag-secrets:
+  #@joined rag-blobs:

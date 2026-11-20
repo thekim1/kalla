@@ -159,7 +159,7 @@ jobs:
         env:
           RESOURCE_GROUP: ${{ vars.ENTRA_RESOURCE_GROUP }}
         run: |
-          az deployment group create --resource-group "$RESOURCE_GROUP" --name "ume-rag-entra-${{ github.run_id }}" \
+          az deployment group create --resource-group "$RESOURCE_GROUP" --name "kalla-entra-${{ github.run_id }}" \
             --template-file "$RUNNER_TEMP/main.json" --parameters "@$RUNNER_TEMP/parameters.json" \
             --query properties.outputs --output json > "$RUNNER_TEMP/outputs.json"
       - name: What still needs a person

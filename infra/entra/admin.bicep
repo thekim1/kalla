@@ -1,4 +1,4 @@
-// ume-rag-admin: the RAG admin BFF's own registration (plans/identity/design.md §1.6, §12.1), configured like the
+// kalla-admin: the RAG admin BFF's own registration (plans/identity/design.md §1.6, §12.1), configured like the
 // gateway's admin registration (docs/identity-and-roles.md, Entra ID steps 1-5) plus the rag-* roles, the group claim
 // and the acct claim. Its client secret is created by an operator, not here (§12.2).
 extension microsoftGraphV1
@@ -12,26 +12,26 @@ var graph = loadJsonContent('graph.json')
 // App role ids must never change once assigned, so they are derived from the role value, not generated per run. A role
 // is retired by deploying it with isEnabled false first; only then can it be removed.
 var roles = [
-  { value: 'rag-platform-admin', displayName: 'RAG platform admin', description: 'Ume.Rag: everything' }
-  { value: 'rag-department-admin', displayName: 'RAG department admin', description: 'Ume.Rag: own departments' }
-  { value: 'rag-pipeline-editor', displayName: 'RAG pipeline editor', description: 'Ume.Rag: pipelines' }
+  { value: 'rag-platform-admin', displayName: 'RAG platform admin', description: 'Källa: everything' }
+  { value: 'rag-department-admin', displayName: 'RAG department admin', description: 'Källa: own departments' }
+  { value: 'rag-pipeline-editor', displayName: 'RAG pipeline editor', description: 'Källa: pipelines' }
   {
     value: 'rag-reviewer'
     displayName: 'RAG reviewer'
-    description: 'Ume.Rag: feedback comments and conversations with a reason'
+    description: 'Källa: feedback comments and conversations with a reason'
   }
-  { value: 'rag-viewer', displayName: 'RAG viewer', description: 'Ume.Rag: read' }
+  { value: 'rag-viewer', displayName: 'RAG viewer', description: 'Källa: read' }
   {
     value: 'rag-editor'
     displayName: 'RAG editor'
-    description: 'Ume.Rag: assistants and linked skills in own departments (P2)'
+    description: 'Källa: assistants and linked skills in own departments (P2)'
   }
-  { value: 'rag-skill-editor', displayName: 'RAG skill editor', description: 'Ume.Rag: skills in own departments (P2)' }
+  { value: 'rag-skill-editor', displayName: 'RAG skill editor', description: 'Källa: skills in own departments (P2)' }
 ]
 
 var appRoles = [
   for role in roles: {
-    id: guid('ume-rag-admin', role.value)
+    id: guid('kalla-admin', role.value)
     value: role.value
     displayName: role.displayName
     description: role.description
@@ -41,8 +41,8 @@ var appRoles = [
 ]
 
 resource app 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: 'ume-rag-admin'
-  displayName: 'Umeå kommun – Ume.Rag admin'
+  uniqueName: 'kalla-admin'
+  displayName: 'Umeå kommun – Källa admin'
   signInAudience: 'AzureADMyOrg'
   web: {
     redirectUris: [

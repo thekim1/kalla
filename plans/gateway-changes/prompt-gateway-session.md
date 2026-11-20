@@ -1,19 +1,19 @@
-# Prompt: gateway session for the Ume.Rag pilot (release 1, shared Keycloak, production)
+# Prompt: gateway session for the Källa pilot (release 1, shared Keycloak, production)
 
 Paste everything below the line into a new Claude session started in a clone of the gateway repo. Written by the
-Ume.Rag main session, 2026-10-30; updated 2026-11-05 (gateway v0.8.9, identity providers).
+Källa main session, 2026-10-30; updated 2026-11-05 (gateway v0.8.9, identity providers).
 
 **Status (2026-11-06): done.** Release 1 shipped as gateway **v0.9.0** (2026-11-06): residency ceiling (ADR 018),
 embeddings checked per input, the FakeLlm's real-sized embeddings, the optional `POST /v1/rerank`, the optional Keycloak
 project (26.8.1, keycloak-config-cli with `additions/`) and the EUPL-1.2 licence. What remains on the gateway side is
-operations, not code: deploy v0.9.0 and the Keycloak project for the pilot, copy Ume.Rag's
+operations, not code: deploy v0.9.0 and the Keycloak project for the pilot, copy Källa's
 `deploy/keycloak/rag-additions.json` into `additions/`, pilot keys, and the Berget AI rerank provider. Keep this prompt
 as the record of what was asked; a new gateway session starts from the gateway's `HANDOVER.md`.
 
 ---
 
-You work in the **LLM gateway** repo (github.com/thekim1/llmgateway). The user owns it. A second project, **Ume.Rag**
-(github.com/thekim1/ume-rag-platform), a RAG and chat platform for Umeå kommun, calls this gateway for every model
+You work in the **LLM gateway** repo (github.com/thekim1/fors). The user owns it. A second project, **Källa**
+(github.com/thekim1/kalla), a RAG and chat platform for Umeå kommun, calls this gateway for every model
 call. Its pilot needs the things below from the gateway. The gateway runs only in dev today.
 
 **Start** with `git pull` on `main` (the latest release on `origin` was v0.8.9, 2026-11-03, when this was written). If this machine has no clone
@@ -41,9 +41,9 @@ difference instead of forcing it.
 
 Scope, exactly (`gateway-changes/design.md` §1 table):
 - **Feature B: per-request residency ceiling.**
-  - the `x-ume-max-residency` request header (§3.1);
+  - the `x-fors-max-residency` request header (§3.1);
   - semantics and placement in `GatewayRequestHandler` (§3.2);
-  - the 403 vs 503 rule and the `x-ume-residency` response header on every answer (§3.3);
+  - the 403 vs 503 rule and the `x-fors-residency` response header on every answer (§3.3);
   - interactions, including `/v1/models` filtered by the ceiling (§3.4, and the §2 pipeline table);
   - the key flag **`RequireMaxResidency`** and migration `KeyResidencyCeiling` (§3.5);
   - the tests of §3.6.
@@ -58,7 +58,7 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   window (worker setting), and an embedding deployment can be left without a `ContextWindow`.
 - **Rerank endpoint, pulled forward (user, 2026-11-05):** design §7.4 now, as its own small release that can land after
   release 1 without blocking it: path and request shape (query plus passages in, one score per passage), the
-  residency ceiling and `x-ume-residency` like every call, and an **EU-hosted reranker until on-prem hardware exists**
+  residency ceiling and `x-fors-residency` like every call, and an **EU-hosted reranker until on-prem hardware exists**
   (M2), `bge-reranker-v2-m3` on-prem later. Say which EU provider and model, and its price.
 - **Not in release 1:** feature C (member groups, tenant/guest refusal), feature A (delegation, run grouping headers).
   Those are release 2, in P2.
@@ -66,14 +66,14 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   upgrade-guide entry.
 
 Done when: release 1 is tagged by this repo's release practice. A RAG-side contract check passes: RAG's
-`Ume.Rag.FakeGateway` (in the RAG repo) enforces the same header semantics, so compare the two and list any
+`Kalla.FakeGateway` (in the RAG repo) enforces the same header semantics, so compare the two and list any
 difference.
 
 ## 2. Shared Keycloak (decided 2026-10-30)
 
-One Keycloak serves both the gateway admin and Ume.Rag (admin UI and Open WebUI) for the pilot. Entra ID comes in P2.
+One Keycloak serves both the gateway admin and Källa (admin UI and Open WebUI) for the pilot. Entra ID comes in P2.
 
-**Identity providers (user, 2026-11-05).** Ume.Rag already depends on the gateway, so for now it uses the gateway's
+**Identity providers (user, 2026-11-05).** Källa already depends on the gateway, so for now it uses the gateway's
 Keycloak. Two requirements shape how you build it:
 - **AD and Entra ID must work in production**, because some organisations will use them. Keep both routes open and
   document them in `docs/identity-and-roles.md`:
@@ -82,26 +82,26 @@ Keycloak. Two requirements shape how you build it:
     Mappers give the same token shape as a local account: roles (or groups that `Oidc:RoleGroups` maps),
     `departmentCodes`, `teamCodes` and `groups`, so neither app changes.
   - **Direct:** both apps point at Entra ID or AD FS without Keycloak, through the `Oidc:*` settings the gateway already
-    has. Ume.Rag does the same (Decisions "P1 pilot sign-in": switching is configuration, not code).
+    has. Källa does the same (Decisions "P1 pilot sign-in": switching is configuration, not code).
   - **Test the brokered route** in the realm's test set-up with a second Keycloak realm or container as a stand-in
     upstream OIDC provider: a brokered user signs in to both systems with the expected roles and `departmentCodes`.
     Also test LDAP federation, against a test LDAP container if that is cheap. List the Entra-specific steps (app
     registration, group claim, `tid`) as documented but unverified until a test tenant exists.
-- **Ume.Rag must be able to run standalone later**, with its own Keycloak or directly against the organisation's
+- **Källa must be able to run standalone later**, with its own Keycloak or directly against the organisation's
   Entra ID or AD FS, without the gateway's sign-in. The shared realm must not tie the two systems together:
-  - Ume.Rag's part stays a self-contained additions file (its clients and `rag-*` roles).
-  - Ume.Rag's sign-in needs nothing from the gateway's base realm except the shared user attributes
+  - Källa's part stays a self-contained additions file (its clients and `rag-*` roles).
+  - Källa's sign-in needs nothing from the gateway's base realm except the shared user attributes
     (`departmentCodes`, `teamCodes`), which a standalone realm declares itself.
   - Decide where the realm-wide settings live (Q3 below) so that both a shared and a standalone set-up can use them.
-  - Report anything on the gateway side that would make a standalone Ume.Rag harder.
+  - Report anything on the gateway side that would make a standalone Källa harder.
   - RAG's position on identity §16 Q2–Q4 and Q8 is in the Decisions row "M-2 open design calls"; settle
     them with it.
 - **Its own Compose project** in this repo (for example `deploy/keycloak/compose.yaml`), run on the gateway's
   production host and operated with the gateway. Its database is `keycloak` in the **gateway's Postgres** (a
   separate database and role), so the gateway's backups cover it.
-- **Realm `ume`**, holding this repo's clients and roles (from `dev/keycloak/ume-realm.json`, without test users)
-  plus a **realm-additions file that Ume.Rag's stream B delivers** (clients `ume-rag-admin`, `open-webui`,
-  `ume-rag-api`; the `rag-*` realm roles). Turn "full scope allowed" off per client, so a token carries only its own
+- **Realm `fors`**, holding this repo's clients and roles (from `dev/keycloak/fors-realm.json`, without test users)
+  plus a **realm-additions file that Källa's stream B delivers** (clients `kalla-admin`, `open-webui`,
+  `kalla-api`; the `rag-*` realm roles). Turn "full scope allowed" off per client, so a token carries only its own
   system's roles. `departmentCodes` stays a shared user attribute. Design how the two parts are imported and kept in
   step (an import job, `kcadm`, or a documented procedure), and say which.
 - **Production mode** per Keycloak's own docs: hostname, behind the municipal reverse proxy, `/health/ready` for the
@@ -112,15 +112,15 @@ Keycloak. Two requirements shape how you build it:
   municipal AD, or Entra ID brokering, comes later as realm configuration, with no app change (see *Identity
   providers* above).
 - Docs: a runbook section for account administration (create, disable, reset, OTP) and backups.
-- **Answer these before J11** (Ume.Rag `plans/identity/design.md` §16 "Open for P1", questions 1–4 and 6, numbered as
+- **Answer these before J11** (Källa `plans/identity/design.md` §16 "Open for P1", questions 1–4 and 6, numbered as
   there, full text there; added 2026-10-31):
-  - Q1: Who administers realm `ume` in production (accounts, role grants, `departmentCodes`, OTP resets, the realm's
+  - Q1: Who administers realm `fors` in production (accounts, role grants, `departmentCodes`, OTP resets, the realm's
     own admin users and their OTP), and who holds which Keycloak admin role.
-  - Q2: How Ume.Rag's realm additions are imported and kept in step with the base realm, how a later change to
-    Ume.Rag's `deploy/keycloak/**` reaches production and who applies it, and how a mistake in one system's part is
+  - Q2: How Källa's realm additions are imported and kept in step with the base realm, how a later change to
+    Källa's `deploy/keycloak/**` reaches production and who applies it, and how a mistake in one system's part is
     kept from breaking the other's sign-in.
   - Q3: Whether the realm-level settings (password policy, brute-force protection, the user profile with
-    `departmentCodes`/`teamCodes`, the OTP flow) live in this repo's base realm or in Ume.Rag's additions file.
+    `departmentCodes`/`teamCodes`, the OTP flow) live in this repo's base realm or in Källa's additions file.
   - Q4: Which accounts count as admins for OTP (every `rag-*` role, or only `rag-platform-admin`/`rag-department-admin`,
     plus `gateway-admin`) and how OTP is enforced (per-account required action or a conditional flow on role).
   - Q6: Account lifecycle: who creates, disables and removes pilot accounts, how initial credentials and OTP enrolment
@@ -130,11 +130,11 @@ Done when: the project starts locally in production mode, both systems' dev apps
 realm, and a database restore of the gateway brings Keycloak back.
 
 **Host (user, 2026-10-31):** the gateway's test/dev instance already runs on a fixed host with HTTPS (public
-certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `ume` for the RAG pilot
-(J11), and the instance is Ume.Rag's interim J10. Ume.Rag already runs against it with interim `Eu` keys and
+certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `fors` for the RAG pilot
+(J11), and the instance is Källa's interim J10. Källa already runs against it with interim `Eu` keys and
 `text-embedding-3-large` at 1024 dimensions (Decisions "Pilot embedding model, U-b"). Still missing: the instance on
-gateway v0.10.0 with the integration *Ume.Rag* and its three credential keys, `rag-admin`'s with the scope
-`organisation.read` for the organisation and model syncs (Ume.Rag admin design §4.10; no Data API key is needed any
+gateway v0.10.0 with the integration *Källa* and its three credential keys, `kalla-admin`'s with the scope
+`organisation.read` for the organisation and model syncs (Källa admin design §4.10; no Data API key is needed any
 more). Ask the user how to hand the keys over; never write them into either repository.
 
 ## 3. Gateway production (prepare now, deploy late)
@@ -150,13 +150,13 @@ about to go live (RAG phase P1b).
 
 ## 4. Licence (decided 2026-10-31)
 
-Ume.Rag is licensed under **EUPL-1.2** (its `LICENSE`, PR #65) and copies gateway files by design. The gateway has no
+Källa is licensed under **EUPL-1.2** (its `LICENSE`, PR #65) and copies gateway files by design. The gateway has no
 `LICENSE` yet: add the same EUPL-1.2 text (unchanged, SPDX `license-list-data/text/EUPL-1.2.txt`) and a README
-**Licence** section, as Ume.Rag's #65 did. Both repositories stay private until the municipality approves publication.
+**Licence** section, as Källa's #65 did. Both repositories stay private until the municipality approves publication.
 
 ## Reporting back
 
 The RAG main session tracks this as an external dependency in `plans/roadmap.md` ("Waiting on people"). When release 1 is tagged,
 and when the Keycloak project is ready, tell the user, or open an issue labelled `main` in
-github.com/thekim1/ume-rag-platform, with the tag or commit and anything that differs from
+github.com/thekim1/kalla, with the tag or commit and anything that differs from
 `gateway-changes/design.md`.

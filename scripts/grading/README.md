@@ -17,7 +17,7 @@ uvx ruff@0.17.2 check scripts/grading && uvx ruff@0.17.2 format --check scripts/
 ## `answer`: ask the gold set, write the CSV
 
 ```bash
-UME_RAG_API_KEY="$(cat pilot-grading.key)" \
+KALLA_API_KEY="$(cat pilot-grading.key)" \
   python3 -I scripts/grading/grading.py answer --questions gold-set.json \
     --base-url https://<api host> --assistant <pilot slug> [--not-found-text "<the assistant's not-found text>"]
 ```
@@ -27,7 +27,7 @@ UME_RAG_API_KEY="$(cat pilot-grading.key)" \
 | `--questions` | – | the `human` evaluation questions: a JSON list, one admin keyset page `{ items, next }` of `GET /api/collections/{id}/evaluation/questions?layer=human` (admin design §4.1, §4.5), a JSON list of such pages, or a CSV (`id`, `question`, `expected_answer`, `expected_documents` separated by `\|` or new lines) |
 | `--base-url` | – | the chat API (the `api` service), without `/v1` (a trailing `/v1` is accepted) |
 | `--assistant` | – | the pilot assistant's slug, sent as `model` (chat-api design §3.2) |
-| `--key-file` | `$UME_RAG_API_KEY` | an integration key (`ume-rag-sk-…`, identity design §3) of a client the pilot assistant's audience allows; read once, never printed or written, redacted from any server text |
+| `--key-file` | `$KALLA_API_KEY` | an integration key (`kalla-sk-…`, identity design §3) of a client the pilot assistant's audience allows; read once, never printed or written, redacted from any server text |
 | `--not-found-text` | the design's defaults | the assistant's own `Assistants.NotFound` text (sv and en); repeatable |
 | `--no-stream` | streamed | streamed is the pilot's real path (Open WebUI streams) and gives `ttft_ms` |
 | `--out` | `scripts/grading/results/<UTC time>-<slug>.csv` (git-ignored) | |
@@ -94,7 +94,7 @@ every such row listed. A row with a request `error` is graded as delivered; re-a
    open `/api/collections/<id>/evaluation/questions?layer=human` and save each page's JSON (follow `next`
    with `after=`) into one JSON list, or export a CSV with the columns above.
 2. **A key**: an integration client (kind `integration`, so citations come as `url_citation` annotations) in the pilot
-   assistant's audience, with an `ume-rag-sk-` key in a file readable only by you. The answers are real chats of
+   assistant's audience, with an `kalla-sk-` key in a file readable only by you. The answers are real chats of
    history mode `none` and count toward the assistant's statistics and cost.
 3. **Run `answer`** against the pilot deployment (the published assistant version that goes live), with the
    assistant's not-found texts as `--not-found-text`. 150–200 questions take about as many answers' time (one at a

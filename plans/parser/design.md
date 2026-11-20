@@ -1,6 +1,6 @@
 # Parser sidecar: detailed design
 
-Detail step 5 of the Ume.Rag design. Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (archived: history, not binding; this design states every rule, the plan's answered items in §18) within
+Detail step 5 of the Källa design. Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (archived: history, not binding; this design states every rule, the plan's answered items in §18) within
 the limits set by [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §2.4, §5.3, §6 and §9,
 [`../platform/data-model.md`](../platform/data-model.md) §2.2 and §9, and [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md)
 §4–§8. Built in `src/parser/` (P0 and P1a); items still to come are marked with their phase. Removed and deferred
@@ -570,7 +570,7 @@ Models baked (sizes approximate, *to verify* at P0):
 | Garble bigram table | built in-repo from public Swedish/English text | ≈ 50 KB | own |
 
 **Licence inventory**: `src/parser/LICENSES.md` replaces `MODELS.md` and ships in the image at
-`/usr/share/doc/ume-rag-parser/LICENSES.md`. `scripts/licences.py` writes it inside the image's `test-env` stage (the
+`/usr/share/doc/kalla-parser/LICENSES.md`. `scripts/licences.py` writes it inside the image's `test-env` stage (the
 runtime venv plus the dev group; the `test` stage runs pytest on top of it) from the installed `dist-info` metadata of
 the runtime packages (nothing imported; the SPDX `License-Expression` where a package gives one, else its trove
 classifiers), the Debian `copyright` files of installed packages, and the model table above. The file is checked in;
@@ -602,7 +602,7 @@ traces and metrics below are **P2**.
   timings back over the pipe and the supervisor records child spans (`parser.docling`, `parser.text_layer`,
   `parser.signals`) with explicit start and end times, so slot processes need no exporter. Span attributes: format,
   page count, range, pipeline, OCR mode, table mode, slot, outcome code, bytes. **Never** file names, titles or text.
-- **Metrics** (P2; meter `Ume.Rag.Parser`, names in the platform's `rag.` style):
+- **Metrics** (P2; meter `Kalla.Parser`, names in the platform's `rag.` style):
 
 | Metric | Type | Dimensions |
 |---|---|---|
@@ -664,7 +664,7 @@ confirm: 2 × 2 gives more pages per hour, 1 × 4 lower latency per document; th
 | NER | label mapping, limits, `busy`, code-point offsets with emoji and combining characters, windows over 512 tokens, quantised vs fp32 agreement (processing design §17) |
 | Schema | `export_schema.py` writes `convert-request`, `convert-result`, `inspect-result`, `ner-request`, `ner-result`, `info`, `error` schemas from the pydantic models; CI fails on `git diff` in `contracts/` (repo-and-deployment §8.2) |
 
-### 15.2 Contract tests (.NET, `tests/Ume.Rag.ContractTests`)
+### 15.2 Contract tests (.NET, `tests/Kalla.ContractTests`)
 
 - Start the parser image (Testcontainers), convert every fixture with the worker's real client, read the multipart
   response, validate `result.json` against `contracts/parser/v1/convert-result.schema.json` (in P0 a small test-only
@@ -696,7 +696,7 @@ manifest and scan fixture text for personnummer patterns other than Skatteverket
 | Malicious | zip bomb inside a DOCX; nested-zip "42"-style; PNG with 60 000 × 60 000 dimensions; PDF with `/OpenAction` JavaScript; PDF with an embedded file; PDF with a cyclic xref and deep object nesting; DOCX and ODT with an XXE entity to `file:///etc/passwd` (assert no `root:` in any output); macro-enabled `.docm` (refused) |
 
 Real internal documents used for the OCR acceptance check and benchmarks stay on the test host in an access-limited,
-encrypted directory (`/srv/ume-rag-bench/`), are never committed, and are reported as aggregate metrics only.
+encrypted directory (`/srv/kalla-bench/`), are never committed, and are reported as aggregate metrics only.
 
 ### 15.4 Robustness and fuzzing
 

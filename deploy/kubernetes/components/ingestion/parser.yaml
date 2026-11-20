@@ -1,18 +1,18 @@
-# rag-parser: Docling, OCR and the NER lane, HTTPS on 8000 with its internal certificate (name rag-parser). Called only
-# by rag-worker; it needs no egress (its models are baked into the image). It warms up for minutes.
+# kalla-parser: Docling, OCR and the NER lane, HTTPS on 8000 with its internal certificate (name kalla-parser). Called only
+# by kalla-worker; it needs no egress (its models are baked into the image). It warms up for minutes.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rag-parser
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+  name: kalla-parser
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-parser}
 spec:
   replicas: 1
   revisionHistoryLimit: 5
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-parser}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-parser}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -23,8 +23,8 @@ spec:
         fsGroup: 10001
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: rag-parser
-          image: ume-rag/parser:latest
+        - name: kalla-parser
+          image: kalla/parser:latest
           ports: [{name: https, containerPort: 8000}]
           env:
             - {name: PARSER_WORKERS, value: "1"}
@@ -57,15 +57,15 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: certs
-          secret: {secretName: ume-rag-parser-certs, defaultMode: 0440}
+          secret: {secretName: kalla-parser-certs, defaultMode: 0440}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 1Gi}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: rag-parser
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+  name: kalla-parser
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-parser}
 spec:
-  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-parser}
+  selector: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-parser}
   ports: [{name: https, port: 8000, targetPort: https}]

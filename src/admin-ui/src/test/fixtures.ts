@@ -70,11 +70,11 @@ export function collectionUser(overrides: Partial<CollectionUser> = {}): Collect
   }
 }
 
-/** rag-admin's sign-in values of `GET /bff/setup/state`, all defaults (a first run); override per value. */
+/** kalla-admin's sign-in values of `GET /bff/setup/state`, all defaults (a first run); override per value. */
 export function signInSettings(overrides: Partial<SignInSettings> = {}): SignInSettings {
   return {
     authority: { value: null, source: 'default' },
-    clientId: { value: 'ume-rag-admin', source: 'default' },
+    clientId: { value: 'kalla-admin', source: 'default' },
     clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false },
     roleClaim: { value: 'roles', source: 'default' },
     departmentClaim: { value: 'departmentCodes', source: 'default' },
@@ -96,11 +96,11 @@ export function wizardValues(overrides: Partial<OidcWizardValues> = {}): OidcWiz
   }
 }
 
-/** A passed test by a platform admin of the provider https://idp.example.org/realms/ume. */
+/** A passed test by a platform admin of the provider https://idp.example.org/realms/fors. */
 export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   return {
-    testId: 't1', target: 'rag-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
-    values: wizardValues({ authority: 'https://idp.example.org/realms/ume' }), clientSecret: 'typed',
+    testId: 't1', target: 'kalla-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
+    values: wizardValues({ authority: 'https://idp.example.org/realms/fors' }), clientSecret: 'typed',
     result: {
       subject: 'sub-1', name: 'Anna Andersson', roles: ['rag-platform-admin'], groups: ['rag-admins'], groupCount: 1, departmentCodes: ['1000'], teamCodes: [],
       isPlatformAdmin: true, claimsRead: { role: 'roles', group: 'groups', department: 'departmentCodes', team: 'teamCodes', tenantId: null, refuseGuests: true },
@@ -109,10 +109,10 @@ export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   }
 }
 
-/** Open WebUI's sign-in values of a first run with the sign-in provider https://idp.example.org/realms/ume: all defaults. */
+/** Open WebUI's sign-in values of a first run with the sign-in provider https://idp.example.org/realms/fors: all defaults. */
 export function openWebUiSignIn(overrides: Partial<OpenWebUiSignIn> = {}): OpenWebUiSignIn {
   return {
-    providerUrl: { value: 'https://idp.example.org/realms/ume/.well-known/openid-configuration', source: 'default' },
+    providerUrl: { value: 'https://idp.example.org/realms/fors/.well-known/openid-configuration', source: 'default' },
     clientId: { value: 'open-webui', source: 'default' },
     providerName: { value: 'Umeå kommun', source: 'default' },
     clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false },

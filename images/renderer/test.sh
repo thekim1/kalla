@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Image test for ume-rag/renderer (repo-and-deployment §5.4, connectors design §8.3). Runs the image as Compose does
+# Image test for kalla/renderer (repo-and-deployment §5.4, connectors design §8.3). Runs the image as Compose does
 # (user 10002, read-only root file system, tmpfs /tmp, no capabilities, no-new-privileges, images/renderer/seccomp.json,
 # an init process) on an internal network of its own, and checks:
-#   - it refuses to start without UME_RAG_RENDER_WS_PATH or with a path that breaks the rule ("/" + >= 16 of
+#   - it refuses to start without KALLA_RENDER_WS_PATH or with a path that breaks the rule ("/" + >= 16 of
 #     [A-Za-z0-9_-]), and Chromium refuses to launch under Docker's default seccomp profile (no sandbox, no browser);
 #   - the health check turns healthy without the secret; every process runs as uid 10002 on a read-only root;
 #   - a client on the network (the image's own playwright-core, as the worker's NuGet) connects with the path, renders a
@@ -12,14 +12,14 @@
 #     the name of a container on another network don't resolve, and public addresses, the metadata address and that
 #     container (which answers on its own network) can't be reached.
 #
-# Usage: images/renderer/test.sh [image]   (default image: ume-rag/renderer:dev)
+# Usage: images/renderer/test.sh [image]   (default image: kalla/renderer:dev)
 # RENDER_TEST_SUBNET [10.214.0.0/24] and RENDER_TEST_OUTSIDE_SUBNET [10.214.1.0/24] choose the test networks' subnets.
 set -euo pipefail
 
-image="${1:-ume-rag/renderer:dev}"
+image="${1:-kalla/renderer:dev}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 seccomp="$here/seccomp.json"
-id="ume-rag-rendertest-$$"
+id="kalla-rendertest-$$"
 net="$id-render"; outside_net="$id-outside"
 renderer="$id-renderer"; outside="$id-outside"
 subnet="${RENDER_TEST_SUBNET:-10.214.0.0/24}"
@@ -55,16 +55,16 @@ refuses() { # refuses EXPECTED-MESSAGE [docker run options...]
   [ "$code" != 0 ] || fail "started with $* (exit 0)"
   grep -qF "$expected" <<<"$out" || fail "with $*: expected '$expected', got: $out"
 }
-refuses "UME_RAG_RENDER_WS_PATH is required"
-refuses "must start with /" -e UME_RAG_RENDER_WS_PATH=abcdefghijklmnopqrstuvwxyz
-refuses "at least 16 characters" -e UME_RAG_RENDER_WS_PATH=/abc123
-refuses "may only hold" -e "UME_RAG_RENDER_WS_PATH=/abcdefghijklmnop/../x"
-ok "refuses to start without UME_RAG_RENDER_WS_PATH or with a path that breaks the rule"
+refuses "KALLA_RENDER_WS_PATH is required"
+refuses "must start with /" -e KALLA_RENDER_WS_PATH=abcdefghijklmnopqrstuvwxyz
+refuses "at least 16 characters" -e KALLA_RENDER_WS_PATH=/abc123
+refuses "may only hold" -e "KALLA_RENDER_WS_PATH=/abcdefghijklmnop/../x"
+ok "refuses to start without KALLA_RENDER_WS_PATH or with a path that breaks the rule"
 
 # Docker's default seccomp profile blocks the user namespaces Chromium's sandbox needs: the browser must not start.
 code=0
 out="$(docker run --name "$id-refuse" --network "$net" --user 10002:10002 --read-only --tmpfs /tmp --cap-drop ALL \
-  --security-opt no-new-privileges --init -e "UME_RAG_RENDER_WS_PATH=$ws_path" "$image" 2>&1)" || code=$?
+  --security-opt no-new-privileges --init -e "KALLA_RENDER_WS_PATH=$ws_path" "$image" 2>&1)" || code=$?
 docker rm -f "$id-refuse" >/dev/null 2>&1 || true
 [ "$code" != 0 ] || fail "launch-server ran under Docker's default seccomp profile"
 grep -q "No usable sandbox" <<<"$out" || fail "under Docker's default seccomp profile, expected 'No usable sandbox', got: $out"
@@ -72,7 +72,7 @@ grep -qF "${ws_path#/}" <<<"$out" && fail "the secret path appears in the log"
 ok "under Docker's default seccomp profile Chromium refuses to run without its sandbox (exit $code)"
 
 # --- Starts hardened and turns healthy --------------------------------------------
-docker run -d --name "$renderer" --network "$net" "${hardened[@]}" -e "UME_RAG_RENDER_WS_PATH=$ws_path" "$image" >/dev/null
+docker run -d --name "$renderer" --network "$net" "${hardened[@]}" -e "KALLA_RENDER_WS_PATH=$ws_path" "$image" >/dev/null
 for _ in $(seq 1 60); do
   [ "$(docker inspect -f '{{.State.Running}}' "$renderer")" = true ] || fail "the renderer exited"
   health="$(docker inspect -f '{{.State.Health.Status}}' "$renderer")"

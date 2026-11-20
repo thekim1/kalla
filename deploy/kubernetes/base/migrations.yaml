@@ -4,14 +4,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rag-migrate
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-migrate}
+  name: kalla-migrate
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-migrate}
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: 1800
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-migrate}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-migrate}
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
@@ -23,8 +23,8 @@ spec:
         fsGroup: 1654
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: rag-migrate
-          image: ume-rag/migrations:latest
+        - name: kalla-migrate
+          image: kalla/migrations:latest
           env:
             - {name: DOTNET_ENVIRONMENT, value: Production}
             - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}
@@ -47,10 +47,10 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: secrets
-          secret: {secretName: ume-rag-migrations-secrets, defaultMode: 0440}
+          secret: {secretName: kalla-migrations-secrets, defaultMode: 0440}
         - name: certs
-          secret: {secretName: ume-rag-migrations-certs, defaultMode: 0440}
+          secret: {secretName: kalla-migrations-certs, defaultMode: 0440}
         - name: roles
-          configMap: {name: ume-rag-app-roles}
+          configMap: {name: kalla-app-roles}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 64Mi}

@@ -2,14 +2,14 @@
 # Installs the host units of deploy/host/ (plans/platform/repo-and-deployment.md §6.1, §6.2, §7.4; README.md here):
 # the ingestion slice, the firewall, and the backup, backup-status, upload-copy, restart-unhealthy and certificate-expiry
 # timers. Each unit gets this deployment's directory in place of @DEPLOY_DIR@. Safe to re-run (after an upgrade or a
-# change of UME_RAG_HOST_MEMORY). It enables what deploy/.env's COMPOSE_FILE uses: the slice, the firewall and the
+# change of KALLA_HOST_MEMORY). It enables what deploy/.env's COMPOSE_FILE uses: the slice, the firewall and the
 # restart-unhealthy timer with compose.hardened.yaml (run it before the first `docker compose up` then: the ingestion
 # containers need the slice), the backup timers with compose.backup.yaml, the certificate check always.
 #
 #   sudo deploy/host/install.sh [--host-memory 16|24] [--no-enable]
 #
 # Options:
-#   --host-memory 16|24   [UME_RAG_HOST_MEMORY in deploy/.env, else 16] MemoryMax of rag-ingestion.slice: 7G or 11G
+#   --host-memory 16|24   [KALLA_HOST_MEMORY in deploy/.env, else 16] MemoryMax of rag-ingestion.slice: 7G or 11G
 #   --deploy-dir DIR      [the directory above this script] the deployment's deploy/ directory
 #   --unit-dir DIR        [/etc/systemd/system] where the units go; another directory only writes them (CI, review)
 #   --no-enable           write the units and reload systemd, but enable and start nothing
@@ -35,7 +35,7 @@ deploy_dir="$(cd "$deploy_dir" && pwd)"
 env_file="$deploy_dir/.env"
 # KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
 env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
-[ -n "$host_memory" ] || host_memory="$(env_value UME_RAG_HOST_MEMORY)"
+[ -n "$host_memory" ] || host_memory="$(env_value KALLA_HOST_MEMORY)"
 host_memory="${host_memory:-16}"
 case "$host_memory" in 16) memory_max=7G;; 24) memory_max=11G;; *) die "--host-memory must be 16 or 24";; esac
 system=0; [ "$unit_dir" = /etc/systemd/system ] && system=1
@@ -83,7 +83,7 @@ else
 fi
 if [[ "$compose_file" == *compose.backup.yaml* ]]; then
   timers+=(rag-backup.timer rag-backup-status.timer)
-  case "$(env_value UME_RAG_BACKUP_TARGET)" in
+  case "$(env_value KALLA_BACKUP_TARGET)" in
     s3://*) echo "rag-upload-backup.timer not enabled: an S3 backup target has no upload copy yet" >&2 ;;
     *) timers+=(rag-upload-backup.timer) ;;
   esac

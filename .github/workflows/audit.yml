@@ -37,11 +37,11 @@ jobs:
         with:
           dotnet-version: 10.0.401
       - name: Restore
-        run: dotnet restore UmeRag.slnx --nologo
+        run: dotnet restore Kalla.slnx --nologo
       - name: Audit .NET packages
         run: |
-          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
-          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json" --summary "$GITHUB_STEP_SUMMARY"
+          dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/kalla-package-audit.json"
+          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/kalla-package-audit.json" --summary "$GITHUB_STEP_SUMMARY"
 
   admin-ui:
     # As the admin-ui job in verify.yml: npm ci from the lock only (src/admin-ui/.npmrc: ignore-scripts,
@@ -159,7 +159,7 @@ jobs:
           version="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r '.tag_name | ltrimstr("v")')"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no latest release found ('$version')"; exit 1; }
-          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kalla"
           grype db update
           reports=()
           for name in api admin worker migrations postgres clamav renderer parser; do

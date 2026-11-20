@@ -11,7 +11,7 @@ calls in *Waiting on people*; item 3 is a P2 theme).
 
 ## 1. Assessment
 
-**Keep the service architecture.** Chat and knowledge share `Ume.Rag.Api`; the admin control plane, ingestion worker
+**Keep the service architecture.** Chat and knowledge share `Kalla.Api`; the admin control plane, ingestion worker
 and parser have useful separate responsibilities. Every model call goes through the gateway with an explicit
 residency ceiling. Postgres remains the search store and job queue until measured scaling triggers justify a change.
 The first hot-path benchmarks (#333) support this: the known limits (exact vector search below `exactScanMaxChunks`,
@@ -215,12 +215,12 @@ changing the organisation decision.
 
 ### References
 
-Repository evidence: [assistant entities](../../src/Ume.Rag.Domain/Entities/AssistantEntities.cs),
-[knowledge service](../../src/Ume.Rag.Answering/KnowledgeService.cs),
-[Open WebUI user validation](../../src/Ume.Rag.Api/OpenWebUiUserJwt.cs),
-[access policy](../../src/Ume.Rag.Domain/Access/AccessPolicy.cs),
-[coverage evaluation](../../src/Ume.Rag.Retrieval/CoverageEvaluator.cs),
-[result diversity](../../src/Ume.Rag.Retrieval/ResultDiversifier.cs), and [current handover](../../HANDOVER.md).
+Repository evidence: [assistant entities](../../src/Kalla.Domain/Entities/AssistantEntities.cs),
+[knowledge service](../../src/Kalla.Answering/KnowledgeService.cs),
+[Open WebUI user validation](../../src/Kalla.Api/OpenWebUiUserJwt.cs),
+[access policy](../../src/Kalla.Domain/Access/AccessPolicy.cs),
+[coverage evaluation](../../src/Kalla.Retrieval/CoverageEvaluator.cs),
+[result diversity](../../src/Kalla.Retrieval/ResultDiversifier.cs), and [current handover](../../HANDOVER.md).
 Binding details remain in the [decisions](../decisions.md), [organisation proposal](../archive/organisation-proposal.md),
 [knowledge design](../knowledge-api/design.md), [chat design](../chat-api/design.md),
 [connector design](../ingestion-worker/design-connectors.md), and [phase plan](../README.md).

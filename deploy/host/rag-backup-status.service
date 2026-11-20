@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: backup and WAL archive metrics (repo-and-deployment §7.4 rule 5)
+Description=Källa: backup and WAL archive metrics (repo-and-deployment §7.4 rule 5)
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service
@@ -8,7 +8,7 @@ After=docker.service
 Type=oneshot
 ExecStart=@DEPLOY_DIR@/backup-postgres.sh --status-only --env-file @DEPLOY_DIR@/.env
 TimeoutStartSec=90s
-StateDirectory=ume-rag
+StateDirectory=kalla
 StateDirectoryMode=0755
 UMask=0027
 NoNewPrivileges=yes

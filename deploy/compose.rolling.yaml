@@ -1,5 +1,5 @@
 # Optional overlay for updates without downtime (docs/zero-downtime-updates.md, repo-and-deployment §7.3). Runs a second
-# rag-api and rag-admin ("b" slots) next to the ones in compose.rag.yaml, on their own host ports, so a reverse proxy
+# kalla-api and kalla-admin ("b" slots) next to the ones in compose.rag.yaml, on their own host ports, so a reverse proxy
 # can send traffic to both while deploy/rolling-update.sh replaces one slot at a time.
 #
 #   ./deploy/init-deployment.sh ... --rolling     # adds this file to COMPOSE_FILE in deploy/.env
@@ -13,43 +13,43 @@
 # stopped before its replacement starts.
 
 services:
-  rag-api:
+  kalla-api:
     environment:
       # On the stop signal a slot first answers for 5 s more with "Connection: close" while its readiness fails, so the
       # proxy retires its pooled connections to it cleanly; then it closes its listener (the proxy retries new
       # requests on the other slot) and finishes the requests it has (long streamed answers) for up to 5 minutes.
-      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
-      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_RAG_SHUTDOWN_TIMEOUT_SECONDS:-300}"
-      OTEL_SERVICE_INSTANCE_ID: rag-api
+      Shutdown__DrainSeconds: "${KALLA_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${KALLA_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      OTEL_SERVICE_INSTANCE_ID: kalla-api
     stop_grace_period: 320s
 
-  rag-api-b:
-    extends: {file: compose.rag.yaml, service: rag-api}
-    ports: !override ["${UME_RAG_API_BIND:-0.0.0.0}:${UME_RAG_API_B_PORT:-8544}:8443"]
+  kalla-api-b:
+    extends: {file: compose.rag.yaml, service: kalla-api}
+    ports: !override ["${KALLA_API_BIND:-0.0.0.0}:${KALLA_API_B_PORT:-8544}:8443"]
     environment:
-      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
-      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_RAG_SHUTDOWN_TIMEOUT_SECONDS:-300}"
-      OTEL_SERVICE_INSTANCE_ID: rag-api-b
+      Shutdown__DrainSeconds: "${KALLA_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${KALLA_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      OTEL_SERVICE_INSTANCE_ID: kalla-api-b
     stop_grace_period: 320s
     depends_on:
-      rag-postgres: {condition: service_healthy}
-      rag-migrate: {condition: service_completed_successfully}
+      kalla-postgres: {condition: service_healthy}
+      kalla-migrate: {condition: service_completed_successfully}
 
-  rag-admin:
+  kalla-admin:
     environment:
-      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      Shutdown__DrainSeconds: "${KALLA_DRAIN_SECONDS:-5}"
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "60"
-      OTEL_SERVICE_INSTANCE_ID: rag-admin
+      OTEL_SERVICE_INSTANCE_ID: kalla-admin
     stop_grace_period: 70s
 
-  rag-admin-b:
-    extends: {file: compose.rag.yaml, service: rag-admin}
-    ports: !override ["${UME_RAG_ADMIN_BIND:-0.0.0.0}:${UME_RAG_ADMIN_B_PORT:-9544}:8443"]
+  kalla-admin-b:
+    extends: {file: compose.rag.yaml, service: kalla-admin}
+    ports: !override ["${KALLA_ADMIN_BIND:-0.0.0.0}:${KALLA_ADMIN_B_PORT:-9544}:8443"]
     environment:
-      Shutdown__DrainSeconds: "${UME_RAG_DRAIN_SECONDS:-5}"
+      Shutdown__DrainSeconds: "${KALLA_DRAIN_SECONDS:-5}"
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "60"
-      OTEL_SERVICE_INSTANCE_ID: rag-admin-b
+      OTEL_SERVICE_INSTANCE_ID: kalla-admin-b
     stop_grace_period: 70s
     depends_on:
-      rag-postgres: {condition: service_healthy}
-      rag-migrate: {condition: service_completed_successfully}
+      kalla-postgres: {condition: service_healthy}
+      kalla-migrate: {condition: service_completed_successfully}

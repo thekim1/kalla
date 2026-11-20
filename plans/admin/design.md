@@ -1,6 +1,6 @@
 # Admin API and admin UI: detailed design
 
-Detail step 10 of the Ume.Rag design. The rules of the weakness review and the simplification, performance and
+Detail step 10 of the Källa design. The rules of the weakness review and the simplification, performance and
 consistency passes are stated here (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §2, §5,
 §7–§10, §13, §15). Details [`../archive/area-plans/admin.md`](../archive/area-plans/admin.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §14) and the Decisions table
 in [`../decisions.md`](../decisions.md). Consumes, without redesigning: the BFF, claim mapping,
@@ -16,10 +16,10 @@ flags and evaluation sets of [`../ingestion-worker/design-processing.md`](../ing
 [`../chat-api/design.md`](../chat-api/design.md) (§8.2, §9.4, §10, §13–§14); skills, tool servers, approvals, grants,
 drift, policy, agent limits and `GatewayModels` of [`../tools/design.md`](../tools/design.md) (§3–§6, §9); projects,
 build, images, networks, CI and observability of [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md).
-Where the code exists (`src/Ume.Rag.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
+Where the code exists (`src/Kalla.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
 elsewhere: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
 
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); `AdminApi/` = `src/Ume.LlmGateway.AdminApi/`,
+Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); `AdminApi/` = `src/Fors.AdminApi/`,
 `ui/` = `src/admin-ui/src/`. "Copy" = copied with names changed; "adapt" = copied and changed as stated; "new" = no
 gateway counterpart.
 
@@ -37,13 +37,13 @@ gateway counterpart.
   `en-GB` (`:7-10`), time zone `Europe/Stockholm` (`:1`); Swedish names are marked `lang="sv"`
   (`ui/views/OrganisationView.vue:150`). The RAG admin UI follows the gateway: **English** texts and `lang="en"`, every
   string in a labels file (Decisions, "Admin UI in English").
-- No general ETag/If-Match handling: concurrency tokens only on keys (`src/Ume.LlmGateway.Infrastructure/Persistence/
+- No general ETag/If-Match handling: concurrency tokens only on keys (`src/Fors.Infrastructure/Persistence/
   GatewayDbContext.cs:71-72`); any `DbUpdateConcurrencyException`, unique (23505) or FK (23503) violation becomes a 409
   (`AdminApi/Program.cs:20-27`). The client has `GET/POST/PUT/DELETE` only (`ui/api/client.ts:8`).
 - The UI shows the server's `detail`/`title` verbatim (`ui/utils/problem.ts:7-8`); field errors are English
   (`docs/admin-api.md:5-6`, `AdminApi/KeyEndpoints.cs:31-55`).
 - Pagination `page`/`pageSize` ≤ 200, `PageDto(items, total)` (`AdminApi/ReportEndpoints.cs:268-271`, `:160-169`); the
-  Data API uses keyset feeds `after`/`limit` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:67-80`).
+  Data API uses keyset feeds `after`/`limit` (`src/Fors.DataApi/DataEndpoints.cs:67-80`).
 - The Data API catalogue has departments, teams, keys, providers (with `Residency`), models (name, kind, provider,
   residency), prices, budgets (`DataEndpoints.cs:139-160`) — **no routes/aliases**, no `Features`, no `ContextWindow`.
 - Accessibility target WCAG 2.2 AA incl. 24 px targets (`docs/accessibility-statement.md:9`), axe A/AA on every routed
@@ -61,19 +61,19 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 | Project | Owns (admin) | Notes |
 |---|---|---|
-| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8); P2 `AnswerEvaluationService` (run kind `answers`, processing §14.8), `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
-| `Ume.Rag.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker) | shared with the worker |
-| `Ume.Rag.Retrieval` | retrieval core | test panel |
-| **`Ume.Rag.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
-| `Ume.Rag.Tools` (P2) | in-process hub and MCP client (tools §2.1) | discovery, connection test, drift leader, test-panel tool calls |
-| `Ume.Rag.Domain` | `RagRole`, `AdminPolicy`, `PermissionMatrix` (data, §3.4), `ValidationCode`, `IAccessPolicy` (pure; used by explain access) | pure |
+| `Kalla.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8); P2 `AnswerEvaluationService` (run kind `answers`, processing §14.8), `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
+| `Kalla.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker) | shared with the worker |
+| `Kalla.Retrieval` | retrieval core | test panel |
+| **`Kalla.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
+| `Kalla.Tools` (P2) | in-process hub and MCP client (tools §2.1) | discovery, connection test, drift leader, test-panel tool calls |
+| `Kalla.Domain` | `RagRole`, `AdminPolicy`, `PermissionMatrix` (data, §3.4), `ValidationCode`, `IAccessPolicy` (pure; used by explain access) | pure |
 | `src/admin-ui` | Vue 3.5 + Vite 8 + Tailwind 4 + Pinia + vue-router (gateway `package.json`), copied shell, design system, client, composables (§5.1) | port 5174 |
 
 ### 2.2 Hosting, slots and background work
 
-- One slot `rag-admin` in the single-host pilot (one-slot deployment with a short announced maintenance window,
-  simplification pass §1); `rag-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
-  (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
+- One slot `kalla-admin` in the single-host pilot (one-slot deployment with a short announced maintenance window,
+  simplification pass §1); `kalla-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
+  (`config."AdminSessions"`, owned by `kalla-admin`; identity §1.1), so either slot serves any user; no Redis in P1
   (simplification pass §14).
 - Networks: `edge` (proxy, inbound only), `data` (Postgres), `llm` (the default route, so also the OIDC authority and,
   from P2, Graph for feature C; repo-and-deployment §6.1; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, the organisation and model syncs), P2 `mcp` (hosted MCP servers:
@@ -87,7 +87,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 | `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
-| `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the judge at the assistant's ceiling (processing §14.8) |
+| `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Kalla.Answering` and the judge at the assistant's ceiling (processing §14.8) |
 | `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Run test questions** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Run again** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
@@ -100,8 +100,8 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 ### 2.3 BFF, CSP and how the UI is served
 
-- BFF exactly as identity §1, against RAG's own registration `ume-rag-admin`: cookie names `__Host-ume-rag-admin`,
-  `__Host-ume-rag-csrf`, readable `RAG-XSRF-TOKEN` (so `ui/api/client.ts:3` changes only the constant),
+- BFF exactly as identity §1, against RAG's own registration `kalla-admin`: cookie names `__Host-kalla-admin`,
+  `__Host-kalla-csrf`, readable `RAG-XSRF-TOKEN` (so `ui/api/client.ts:3` changes only the constant),
   `/bff/login|logout|user|session/extend`, 401 for `/api` without a session, 403 for missing rights,
   6002/6003/6005/6006 events.
 - Pipeline order copied from `AdminApi/Program.cs:67-98`: security headers with the same CSP string
@@ -122,14 +122,14 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 | To | How | Used for |
 |---|---|---|
-| `config` | EF `RagDbContext`, role `ume_rag_admin` S I U D (data-model §1.2) | all configuration |
+| `config` | EF `RagDbContext`, role `kalla_admin` S I U D (data-model §1.2) | all configuration |
 | `content` | S, plus I on `Jobs`, I U on `EvaluationRuns`, `EvaluationResults` (`answers` and `assistant-tests` runs, P2 skill gate) | documents, runs, reports, evaluation, previews, site profiles, test panel retrieval |
 | `chat` | S, plus **U on `Feedback.ReviewState`** (§13) | feedback page, comment reveal, conversation review |
 | `audit` | S I on `AuditLog`, `ConversationAccess`, `AuthFailures`; S on tool tables (P2 S I on `ToolDefinitionObservations`) | audit list, access log |
-| Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
+| Blobs | `kalla-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
 | `IKeyProvider` | chat master keys (file provider in the pilot), once A1 allows stored content (weakness review §4) | comment and conversation decryption (§8) |
 | Gateway | the admin's credential key `Gateway__Key`, acting as an assistant's or knowledge base's assigned key from phase 2 (identity §4.7); from phase 3 the Integration API with the same key's `usage.read`; the same key's `organisation.read` for the organisation sync (§4.10) | test panel embedding + answer, `/v1/models` validation (§4.6 V8, V39), answer-level evaluation and assistant test questions with the judge, P2 skill gate, cost and budget status, §4.10 |
-| Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
+| Hosted MCP servers (P2) | in-process `Kalla.Tools`, `client-credentials` with the `kalla-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
 ## 3. Roles and permissions
 
@@ -152,7 +152,7 @@ roles add up.
 `Review` and `FeedbackComments` are **not** part of `Admin`. A platform admin who must review is also given
 `rag-reviewer` (visible in the audit actor roles). `rag-reviewer` is granted per department: in P1 as the realm role `rag-reviewer`
 in the shared Keycloak, given to the account or a Keycloak group per department (identity §1.6, §11.2, 2026-10-31);
-from P2 by assigning a group per department (Entra app role assignment on `ume-rag-admin` or
+from P2 by assigning a group per department (Entra app role assignment on `kalla-admin` or
 *Settings → Role groups*, `Settings.Identity.RoleGroups`). The UI mirrors the policies
 with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-69`), but the API decides.
 
@@ -255,7 +255,7 @@ or a grant through the platform team's normal intake; there is no request flow i
 
 ### 3.4 API actions per policy
 
-The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint authorisation and generated tests (§11.2).
+The matrix is data (`PermissionMatrix` in `Kalla.Domain`), used for endpoint authorisation and generated tests (§11.2).
 
 | Policy | Actions (department-scoped unless noted) |
 |---|---|
@@ -332,7 +332,7 @@ BEGIN; SET LOCAL lock_timeout = '5s'
   4. SaveChanges → row triggers write ConfigOutbox and bump ConfigVersion (data-model §5)
   5. SELECT "Version" FROM config."ConfigVersion" → v
   6. INSERT audit."AuditLog" (ActorOid…, Action, EntityType, EntityId, Details {before, after}, DepartmentId,
-     ConfigVersion = v, Reason, Classification, Service = 'rag-admin', the container and OTEL service name)
+     ConfigVersion = v, Reason, Classification, Service = 'kalla-admin', the container and OTEL service name)
   7. INSERT content."Jobs" (§4.7) when the action enqueues work + pg_notify('rag_jobs')
 COMMIT  → rag_config and rag_jobs notifications delivered
 ```
@@ -368,11 +368,11 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/organisation/departments` | Read | the mirror: departments in scope (all for a platform admin), active first, each with `SyncedAt`, its teams nested (name, code, active), its member groups and a sharing summary (`sharing`: its live knowledge bases per sharing level, and how many other departments its `selected` ones are shared with); there is no separate teams route |
 | `GET /api/organisation/departments/names` | Read | every active department's id and name, outside the caller's scope too (the *Selected departments* picker of the Sharing tab); names only, as pickers read platform objects (§3.2) |
 | `GET /api/organisation/sync`, `POST /api/organisation/sync` | Admin | last runs and outcome (held in memory per instance, §4.10); run now |
-| `GET /api/gateway/models` `?level=` | Read | `GatewayModels` with `modelKind` (`chat`/`embedding`/`rerank`), residencies, `SupportsTools`, context window, prices, `Source`, and **`available`** (`true`/`false`/`null`): listed by the gateway's `/v1/models` called with the admin's credential key at the level's ceiling (`level` = an assistant level; absent: the platform ceiling) and, with `gatewayKeyId` and from gateway phase 2, as that key (`x-ume-on-behalf-of`), cached 5 minutes per ceiling and key; a `gatewayKeyId` that is not a `GatewayKeys` row of a department in the caller's scope is refused (`404`) before any gateway call, as `GET /api/gateway/keys`; `null` when the gateway could not be asked (#447) |
+| `GET /api/gateway/models` `?level=` | Read | `GatewayModels` with `modelKind` (`chat`/`embedding`/`rerank`), residencies, `SupportsTools`, context window, prices, `Source`, and **`available`** (`true`/`false`/`null`): listed by the gateway's `/v1/models` called with the admin's credential key at the level's ceiling (`level` = an assistant level; absent: the platform ceiling) and, with `gatewayKeyId` and from gateway phase 2, as that key (`x-fors-on-behalf-of`), cached 5 minutes per ceiling and key; a `gatewayKeyId` that is not a `GatewayKeys` row of a department in the caller's scope is refused (`404`) before any gateway call, as `GET /api/gateway/keys`; `null` when the gateway could not be asked (#447) |
 | `POST /api/gateway/sync`; `PUT /api/gateway/models/{name}` | Admin | run the model sync now; manual row (aliases, `SupportsTools` until the gateway sends `features`; not built yet); on any row, `contextWindow` and `maxOutputTokens` (null clears; integers 1–10,000,000, `maxOutputTokens` ≤ `contextWindow` when both are set), kept by the sync until the gateway sends them on `/v1/models` (§4.10); from then on the sync's values replace them and the fields are read-only |
 | `GET /api/gateway/keys?departmentId=` | Read (the department in scope) | the key picker: the department's rows of `GatewayKeys` (§4.10), each with its read-only settings (models, residencies, PII policy, content guard, rate limits, output cap, `hasSystemPrompt`), status and expiry, `usable` (V39's status part and the gateway's own `usable`; an unusable key is shown, not selectable, with its reason) and the gateway link (`admin_url`); never a secret |
 | `GET /api/gateway/keys/{id}/budget` | Read (the key's department in scope) | from gateway phase 3: the key's active budgets from `/integration/v1/budgets?keyId=` (gateway-changes §5.6), each `scope` (`key`, `team`, `department`, from the gateway's `VirtualKey`, `Team`, `Department`), `unit` (`usd`, `tokens`), `limit`, `spent`, `percentUsed`, `exhausted`, `residency`, `period` with `periodStart`/`periodEnd`, cached 5 minutes per key; `null` when `Gateway:IntegrationApiUrl` is unset or the gateway cannot be asked (`401`/`403`/`429`: the *Gateway* page shows the reason) |
-| `GET /api/gateway/status` | Admin | per service key: one `x-ume-max-residency` embedding call; the context's `version` and `features`, and once they contain `act-as-key` one acted call's echo (`GET /v1/models` as the first usable mirrored key: no cost); each profile's canary: recorded, last check time and similarity |
+| `GET /api/gateway/status` | Admin | per service key: one `x-fors-max-residency` embedding call; the context's `version` and `features`, and once they contain `act-as-key` one acted call's echo (`GET /v1/models` as the first usable mirrored key: no cost); each profile's canary: recorded, last check time and similarity |
 | `GET /api/gateway/canary-check` | Admin | each active profile's last canary check from the database (`{ profileId, profile, recorded, similarity, passed, checkedAt }`, `passed` null when never checked); makes **no** gateway call, so opening the page costs nothing |
 | `POST /api/gateway/canary-check` | Admin | the embedding canary on demand (processing §11): for each active profile with a recorded canary, one embedding call at the profile's ceiling; stores `CanaryCheckedAt` and `CanarySimilarity`, audited `check-canary` on the profile; returns per profile `{ profileId, profile, similarity, passed, checkedAt, error, detail }` (`error` null when the check ran, else why it could not, e.g. `gateway_not_configured`; nothing is stored then). Nothing calls it on a timer. The platform's gateway models page has the button (§5.8) |
 | `GET /api/organisation/departments/{id}/map` | Read | the Map (§5.5.6) as rows: department → collection (own, and shared in with its owning department) → assistant (the department's own assistants: published links; draft-only links flagged; the link's topics) → audience (clients), each with its contact; an own collection that none of its own assistants links gets a row without an assistant (other departments' use is in the collection's `usedBy[]`); a platform admin may ask for any department; from the admin's snapshot; no content |
@@ -483,7 +483,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
 | `GET /api/assistants/{id}/stats?from=&to=` | Read | `AssistantDailyTotals` |
 | `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | writes the draft's `QuerySteps.agent`; V14 |
-| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Ume.Rag.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
+| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Kalla.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
 
 **Skills and tool servers (P2)** — rules as tools design §3.5–§3.7, §4.4–§4.5 and §9.2: `/api/skills` (draft, validate,
 publish → skill gate (run in the admin, tools §3.7), gate report, serve, rollback, retire, share list, re-run the gate), `/api/tool-servers`
@@ -498,7 +498,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 |---|---|---|
 | `GET/POST/PUT/DELETE /api/clients[/{id}]` | Read (pickers) / Admin | `CK_Clients_*` as field rules (V21); changing the ceiling (either way) or `StoresHistory` re-checks every assistant offered to the client with the updated client (V7, V9; for a published assistant its rule set and V8 at the gateway, V36 excepted), refusals as field errors (`classificationCeiling`, `storesHistory`) naming the assistant (#700) |
 | `GET /api/clients/{id}/health` | Admin | missing `X-Rag-Owui-Message-Id` warning (chat §11.4), feedback import state (§8.1) |
-| `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `ume-rag-sk-`/`-pk-` (identity §6.4) |
+| `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `kalla-sk-`/`-pk-` (identity §6.4) |
 | `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`, `identity`; `tools` from P2) | Admin | sections of `config."Settings"`; `chat` carries `maxAnswerTokens` (optional integer 256–1,000,000, absent = no platform ceiling; shown as **Longest answer, all assistants** with the hint "Caps every assistant's answer length, overrides included; leave empty to use each model's limit", chat §6.3, Decisions "Answer length from the model") and `prompts` (V38): the Settings page's **Prompt texts** panel shows the whole frame in order, each editable text as a field prefilled with its current value and a **Reset to default** link, the locked lines read-only between them, and a note that a save changes every assistant's answers at once (Decisions "Chat prompt texts configurable"); `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
 | `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; allowed history modes `none` only and the shredding switch off until A1 (weakness review §4) |
 | `GET /api/embedding-profiles[/{id}]` | Read | every profile, with `inUse` (true when a `ChunkSets` row of any state names it) and the canary state (recorded, last check). No profile is seeded: a platform admin creates the first one (next row). Until an active default profile exists, `GET /api/overview` answers `needsEmbeddingProfile: true` to a platform admin and Home shows a card that leads to the Embedding profiles panel; a new collection needs the profile (`no_embedding_profile`) |
@@ -573,7 +573,7 @@ Each rule: what it requires, the problem code(s) it answers with, when it is re-
 
 #### V8 Residency
 
-- **Rule:** the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling**, from gateway phase 2 as the assistant's key (V39) (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later)
+- **Rule:** the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-fors-max-residency` = the level's ceiling**, from gateway phase 2 as the assistant's key (V39) (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later)
 - **Code:** `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503), `gateway_key_missing` (503: the ceiling is above what this service may send, or until gateway phase 1 it holds no key of that level, identity §4.7)
 - **Re-checked when:** publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call)
 - **Source:** chat §8.2, simplification pass §7
@@ -787,7 +787,7 @@ Each rule: what it requires, the problem code(s) it answers with, when it is re-
 
 #### V39 Gateway key
 
-- **Rule:** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-ume-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on rag-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts
+- **Rule:** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-fors-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on kalla-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts
 - **Code:** `gateway_key_invalid` (unknown, not active, another department), `gateway_key_residency`, `gateway_key_model` (`affected[]` = the models the key's list and the residency cases don't explain), `gateway_key_model_residency` and `gateway_key_embedding_residency` (#720: the key allows the model, but within the ceiling it runs only at residencies the key doesn't allow; params `key`, `model`, `modelResidencies`, `keyResidencies`; the embedding variant names the knowledge base's embedding model, recognised by the mirror's `ModelKind`), `gateway_key_required` (409), `gateway_key_system_prompt` (warning only); `gateway_unavailable` (503)
 - **Re-checked when:** object save (key, level, audience); draft save (warnings on the version's models and links); publish; restore; key sync (a key turned unusable or narrowed: an attention item, §5.5.1)
 - **Source:** cost-attribution §4.2, data-model §2.1
@@ -845,8 +845,8 @@ What the commands do (engine design §9.1, §12):
   `Pipelines.PublishedVersionId`, then enqueue a `reprocess` with `Trigger = rollback`.
 
 Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
-worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,
-§2.2), which needs `Ume.Rag.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
+worker jobs either: like answer-level evaluation and the skill gate they run in `kalla-admin` (`AssistantTestRunner`,
+§2.2), which needs `Kalla.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
 state.
 
 The UI polls `GET /api/jobs/{id}` (or the run/evaluation it created) every 2 s, every 5 s after 30 s, every 15 s after 5
@@ -865,7 +865,7 @@ through the §4.2 table.
 
 ### 4.9 Test panel
 
-Runs `Ume.Rag.Answering` in the admin process (identity §4.8): principal `admin-console` with the admin's `oid`, access
+Runs `Kalla.Answering` in the admin process (identity §4.8): principal `admin-console` with the admin's `oid`, access
 by the admin's role scope (assistant's department ∈ caller's departments), assistant audiences ignored, **collections
 not yet published included**, every call as the assistant's gateway key (`GatewayKeyId`, from gateway phase 2;
 cost-attribution §4.1; knowledge §4.2, §4.5), residency ceiling at the assistant's level (with test history: chat §8.2's rule if the assistant has a history-resending client in its
@@ -875,15 +875,15 @@ answer. Nothing is stored but the **usage**: every model call of a test turn (co
 embedding, rerank, answer, follow-ups) is counted as chat counts it (chat §8.3: tokens, cached input, the gateway's cost
 or an estimate from the mirror's prices, kept apart), in `chat."AssistantDailyUsage"` under the assistant and the
 **`admin-console` client row** (identity §4.1's pilot row, so test traffic stays apart from real users' clients;
-data-model §2.3), upserted by `rag-admin` after the answer with the same per-step deltas and key order as the chat
+data-model §2.3), upserted by `kalla-admin` after the answer with the same per-step deltas and key order as the chat
 writer (chat §12.2), never in `AssistantDailyTotals` (test turns are not chat statistics; cost-attribution §5 C2). A
 failed write is logged and dropped; the test answer is unaffected. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
-key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
-panel ships in the same P1 release as the chat role, so it never runs a different `Ume.Rag.Answering` than chat does.
+key. **Release coupling**: `kalla-admin` and `kalla-api` are built and deployed from one release (`release.yml`), and the
+panel ships in the same P1 release as the chat role, so it never runs a different `Kalla.Answering` than chat does.
 
 | Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
 |---|---|
-| `question` (≤ 2,000 characters); optional `history[]` (≤ 10 messages of ≤ 4,000 characters, to test condense); assistant id and `target` (`draft` default, `published`); optional `generalKnowledge` (`off`/`supplement`/`fallback`/`open`, #726): the stricter of it and the target version's level, as a chat request's `ume.general_knowledge` (chat §3.8); the panel offers the levels up to the version's own, and the response's top-level `generalKnowledge` names the effective one | `target` and `versionNumber`; `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, `degraded`, candidates `{rank, documentId, title, url or file name, headingPath, text (600 characters, expandable), truncated, distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, outcome}`; `answer` `{raw, delivered, filtered (counts per kind), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, inputTokens, outputTokens, maxTokens, maxTokensSource, finishReason, costUsd, costEstimated}` (`costUsd` the sum over the turn's calls, `costEstimated` true when any part of it is an estimate; shown as "0,0012 USD", with "estimated" when so) (`maxTokens` = the `max_tokens` sent, null when left out; `maxTokensSource` `override`/`model`/`ceiling`/`key`/`provider`; `finishReason` from the gateway, the panel saying "The answer stopped at the length limit" for `length`; Decisions "Answer length from the model"); `durationMs` (`AssistantTestEndpoints.cs`). **P2** (user, 2026-11-07, M-3): a `collectionIds` subset, the condense step's rewritten question and why it was skipped, the prompt token budget per part, `filtered[]` as (kind, text) and `ttftMs`; `usesTools`, `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}` and skill inclusion with tools |
+| `question` (≤ 2,000 characters); optional `history[]` (≤ 10 messages of ≤ 4,000 characters, to test condense); assistant id and `target` (`draft` default, `published`); optional `generalKnowledge` (`off`/`supplement`/`fallback`/`open`, #726): the stricter of it and the target version's level, as a chat request's `kalla.general_knowledge` (chat §3.8); the panel offers the levels up to the version's own, and the response's top-level `generalKnowledge` names the effective one | `target` and `versionNumber`; `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, `degraded`, candidates `{rank, documentId, title, url or file name, headingPath, text (600 characters, expandable), truncated, distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, outcome}`; `answer` `{raw, delivered, filtered (counts per kind), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, inputTokens, outputTokens, maxTokens, maxTokensSource, finishReason, costUsd, costEstimated}` (`costUsd` the sum over the turn's calls, `costEstimated` true when any part of it is an estimate; shown as "0,0012 USD", with "estimated" when so) (`maxTokens` = the `max_tokens` sent, null when left out; `maxTokensSource` `override`/`model`/`ceiling`/`key`/`provider`; `finishReason` from the gateway, the panel saying "The answer stopped at the length limit" for `length`; Decisions "Answer length from the model"); `durationMs` (`AssistantTestEndpoints.cs`). **P2** (user, 2026-11-07, M-3): a `collectionIds` subset, the condense step's rewritten question and why it was skipped, the prompt token budget per part, `filtered[]` as (kind, text) and `ttftMs`; `usesTools`, `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}` and skill inclusion with tools |
 
 - Rate: 20 test questions per minute per user on the full panel (the retrieval-only variant has no limit), metric
   `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the content is the caller's own department's).
@@ -899,11 +899,11 @@ send `If-None-Match` with the last `ETag`, and write nothing on a `304`.
 
 | Sync | Source | Rule |
 |---|---|---|
-| Gateway context | `GET /v1/ume/context` (gateway integration phase 1) | `gateway.features` and `version` held in memory and shown on the *Gateway* page (`act-as-key` switches on the admin's acting as keys and V39's publish rule; the api and the worker read their own context for it, identity §4.7; `stream-cost` the stream cost comment, chat §8.3); `gateway.admin_url` for the links (§2.3); `assigned_keys` → `GatewayKeys` (data-model §2.1, `usable` included) upserted by id, only changed rows written, a key no longer listed (revoked) deleted. A key that turns unusable (not `Active`, owner inactive, gone) or loses a model or residency an object relies on raises the attention item of §5.5.1 for the objects that use it |
-| Departments | the context's `departments` (same call; the admin's credential key holds `organisation.read`, gateway-changes §5.5) | taken only when `gateway.features` contains `organisation` and `key.integration_scopes` contains `organisation.read`; otherwise departments and teams are left as they are and the *Gateway* page and health show `degraded` with the reason (without the scope the context lists only the assigned keys' departments, which would deactivate the rest). Upsert by id, `is_active` copied; only changed rows written; a department missing from the context → `IsActive = false`; member groups replace the stored array from `member_groups` when `features` contains `member-groups` (gateway v0.10.0; identity §2.1); they are never edited in Ume.Rag |
+| Gateway context | `GET /v1/fors/context` (gateway integration phase 1) | `gateway.features` and `version` held in memory and shown on the *Gateway* page (`act-as-key` switches on the admin's acting as keys and V39's publish rule; the api and the worker read their own context for it, identity §4.7; `stream-cost` the stream cost comment, chat §8.3); `gateway.admin_url` for the links (§2.3); `assigned_keys` → `GatewayKeys` (data-model §2.1, `usable` included) upserted by id, only changed rows written, a key no longer listed (revoked) deleted. A key that turns unusable (not `Active`, owner inactive, gone) or loses a model or residency an object relies on raises the attention item of §5.5.1 for the objects that use it |
+| Departments | the context's `departments` (same call; the admin's credential key holds `organisation.read`, gateway-changes §5.5) | taken only when `gateway.features` contains `organisation` and `key.integration_scopes` contains `organisation.read`; otherwise departments and teams are left as they are and the *Gateway* page and health show `degraded` with the reason (without the scope the context lists only the assigned keys' departments, which would deactivate the rest). Upsert by id, `is_active` copied; only changed rows written; a department missing from the context → `IsActive = false`; member groups replace the stored array from `member_groups` when `features` contains `member-groups` (gateway v0.10.0; identity §2.1); they are never edited in Källa |
 | Teams | the context's `teams` (`code` included) | as departments, under the same condition |
-| Models | `GET /v1/models` at the platform ceiling | `GatewayModels` row per chat/embedding/rerank model: `Kind = model`, `ModelKind` from `ume.kind` (`chat`/`embedding`/`rerank`), `Residencies` from `ume.residency`, prices from `ume.pricing`, `ContextWindow`, `MaxOutputTokens` and `SupportsTools` from `ume.context_window`, `ume.max_output_tokens` and `ume.features` (`tools`); while the gateway sends a null limit the manual value is kept (Decisions "Answer length from the model"), and the manual fields go once it sends them; the rows of models no longer listed are deleted (`GatewayModels` has no "disabled" column), so an assistant that still names one is refused by V34/V8 on its next publish. Ume.Rag's assumption: the admin's credential key has no model allow-list, so the list is the gateway's whole catalogue within the ceiling |
-| Route aliases | the aliases on `GET /v1/models` (`ume.residencies`) | `Kind = route`, `Residencies` = its targets' residencies, `Source = catalog`; servable at a ceiling when any target is within it. Until phase 1 they are manual rows (`Source = manual`). Multi-target model names are routes |
+| Models | `GET /v1/models` at the platform ceiling | `GatewayModels` row per chat/embedding/rerank model: `Kind = model`, `ModelKind` from `fors.kind` (`chat`/`embedding`/`rerank`), `Residencies` from `fors.residency`, prices from `fors.pricing`, `ContextWindow`, `MaxOutputTokens` and `SupportsTools` from `fors.context_window`, `fors.max_output_tokens` and `fors.features` (`tools`); while the gateway sends a null limit the manual value is kept (Decisions "Answer length from the model"), and the manual fields go once it sends them; the rows of models no longer listed are deleted (`GatewayModels` has no "disabled" column), so an assistant that still names one is refused by V34/V8 on its next publish. Källa's assumption: the admin's credential key has no model allow-list, so the list is the gateway's whole catalogue within the ceiling |
+| Route aliases | the aliases on `GET /v1/models` (`fors.residencies`) | `Kind = route`, `Residencies` = its targets' residencies, `Source = catalog`; servable at a ceiling when any target is within it. Until phase 1 they are manual rows (`Source = manual`). Multi-target model names are routes |
 
 The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is the authoritative check, because it
 asks the gateway what it will serve at that ceiling. The mirror is the gateway's whole catalogue, not what an
@@ -1083,10 +1083,10 @@ since cost may come from the test panel.
 **Deployment notices** (Decisions "Deployment values across releases"; user, 2026-11-16): for a platform admin,
 `GET /api/overview` returns `deploymentNotices`, a list of `{ code, names }`, shown at the top of Home after the secret
 reminders (§5.11) and hideable per browser for that code and those names. The codes: `retired_variables`, the
-deployment variables the stack still sets and this version no longer reads, which rag-admin gets from the bootstrap as
+deployment variables the stack still sets and this version no longer reads, which kalla-admin gets from the bootstrap as
 `Deployment:RetiredVariables` (a comma-separated list; only names of capital letters, digits and `_` are kept, at most
 50). The notice names them, says they have no effect and that the person who runs the deployment removes them, with
-`rag-bootstrap`'s log and the upgrade guide saying what replaced each. A setting that a person must choose after an
+`kalla-bootstrap`'s log and the upgrade guide saying what replaced each. A setting that a person must choose after an
 upgrade adds a code here (or a card as the embedding profile's). They are not the attention items below.
 
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
@@ -1231,10 +1231,10 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
 │ Instructions  [textarea, template filled in]     │ │ Question [Behöver jag bygglov för en altan?] [Test]│
 │ Knowledge bases [Bygglov ×] [Detaljplaner ×] [+] │ │ Suggestions: · Vad kostar ett bygglov? · …         │
 │ Skills (P2) [Bygglov ×] [+]                      │ │ Sources in the search (coverage: ok, 0,31 ≤ 0,50)  │
-│ Model  [ume/chat-eu ▾] EU · 128k                 │ │ 1 Altaner och uteplatser – umea.se/…  0,31  cited  │
+│ Model  [fors/chat-eu ▾] EU · 128k                 │ │ 1 Altaner och uteplatser – umea.se/…  0,31  cited  │
 │ Not found text (sv) [Jag hittar inget …]         │ │ Answer the user sees                  | Raw text   │
 │ Not found text (en) [I cannot find …]            │ │ Nej, om altanen är lägre än 1,8 m … [1]            │
-│ Contact links [Kontaktcenter 090-16 10 00]       │ │ Model ume/chat-eu · EU · 2,1 s · 0,0012 USD        │
+│ Contact links [Kontaktcenter 090-16 10 00]       │ │ Model fors/chat-eu · EU · 2,1 s · 0,0012 USD        │
 │ ▸ Advanced: follow-up questions, history, length │ │ [Save as test question]                            │
 │ ⚠ 1 warning (shown at Publish)                   │ │                                                    │
 │ [Save draft]  [Discard draft]                    │ │                                                    │
@@ -1395,7 +1395,7 @@ pages treat that as a first-class case, not as a crawl source without a crawl:
    assistants that use the knowledge base. *Replace* and *Delete* are there too.
 
 The main session owns this feature's code (user, 2026-11-09), on `main-session/` branches, in stream b's paths
-(`src/admin-ui/**`, `src/Ume.Rag.AdminApi/**`).
+(`src/admin-ui/**`, `src/Kalla.AdminApi/**`).
 
 ### 5.6 Empty and error states
 
@@ -1510,8 +1510,8 @@ Platform index). The list shows name, kind (its label), information class, enabl
    `toolPolicy` is not shown (P2): the server's default stays. `allowedOrigins` waits for `widget`.
 3. **First key**: "Create a key now" (on by default) with the key's name (default "<client name> key"). Created with
    the client in one transaction. The result shows the secret once with a copy button and the client's id with a copy
-   button; for `open-webui` also the two stack lines `UME_RAG_OPENWEBUI_API_KEY=<secret>` and
-   `UME_RAG_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
+   button; for `open-webui` also the two stack lines `KALLA_OPENWEBUI_API_KEY=<secret>` and
+   `KALLA_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
    stack is updated.
 
 **A client's drawer** has the facts (id with copy, kind, created/updated), the edit form of step 2 (the kind is fixed
@@ -1567,7 +1567,7 @@ Client, audience rows, key and their audit rows are one transaction.
 | `open-webui` | a sentence: the deployment connects Open WebUI by itself (identity design §5.2, M-17 C4). The kind is not offered in Add app ("Set up by the deployment"); the deployment's own client is marked "Managed by the deployment" in the list and the drawer, which hide New key, Rotate, Show key and Revoke for it (the API refuses them with `client_managed_by_deployment`); its settings and assistants are edited as any app's |
 
 The client id is under "Details", not in the main path. Without
-`apiBaseUrl` the address row says "Ask the platform team for rag-api's address".
+`apiBaseUrl` the address row says "Ask the platform team for kalla-api's address".
 
 **An app's drawer** gains **How to connect** (the same block, the key shown through *Show key*) and replaces *Used by*
 with the checklist of step 3 and a **Save** of its own. The list and the drawer show when each key was **last used**
@@ -1597,8 +1597,8 @@ no form asks for a typed GUID.
   assistant that changed. Answers `ClientDto`.
 - `ClientDto.assistants` items add `slug` and `classification`.
 - `GET /api/clients/connection` answers `{ apiBaseUrl: string | null }` from the deployment knob `Admin:ApiPublicUrl`.
-  The deployment templates give rag-admin the value rag-api already gets as `Knowledge:PublicBaseUrl`
-  (`UME_RAG_API_PUBLIC_URL`, or its default from the host once the proposal's C1 is in): no new variable to fill in.
+  The deployment templates give kalla-admin the value kalla-api already gets as `Knowledge:PublicBaseUrl`
+  (`KALLA_API_PUBLIC_URL`, or its default from the host once the proposal's C1 is in): no new variable to fill in.
 - `KeyDto` adds `lastUsedAt` (from `KeyLastUse`, data-model §2.1); `ClientSummary` adds `lastUsedAt`, the latest of its
   keys.
 
@@ -1638,7 +1638,7 @@ Site profiles and Data protection are lists (a row opens its form in a drawer, a
 index. **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
 platform admin, department admin, pipeline editor, reviewer, editor, viewer. A group must be a `rag-` name or an Entra
 object id; groups are trimmed and de-duplicated case-insensitively, and a role without groups isn't stored. The hints say
-that a role in the sign-in token counts too, that the deployment's break-glass group (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`)
+that a role in the sign-in token counts too, that the deployment's break-glass group (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`)
 always applies, and that a change applies at each user's next sign-in (identity §2.5, Decisions "Role groups as a setting").
 
 A section's form is built in two steps:
@@ -1655,11 +1655,11 @@ A section's form is built in two steps:
 `/setup`, outside the signed-in shell, before step 1 of §5.4. The rules it shows are identity §19. Texts are in
 `labels.ts` and `messages.ts`. While setup is closed the page says so and links to sign-in.
 
-1. **Setup code.** One field; where to find the code (the rag-admin container's output, with the command per deploy
+1. **Setup code.** One field; where to find the code (the kalla-admin container's output, with the command per deploy
    form). A wrong code and the attempt limit have their own messages.
-2. **Addresses.** The redirect URIs to register at the provider (sign-in and sign-out callback, as rag-admin builds
-   them for the address the wizard is opened at), each with a copy button, and what rag-admin's own configuration says
-   of the deployment (the gateway's address, the public API address, the break-glass platform-admin groups). rag-admin
+2. **Addresses.** The redirect URIs to register at the provider (sign-in and sign-out callback, as kalla-admin builds
+   them for the address the wizard is opened at), each with a copy button, and what kalla-admin's own configuration says
+   of the deployment (the gateway's address, the public API address, the break-glass platform-admin groups). kalla-admin
    has no list of the other host names, so there is no per-host test here.
 3. **Sign-in.** Provider address, client id, client secret, an optional expiry date of the secret; *Advanced* holds
    the token-shape values with a preset for Keycloak and for Entra ID. A value set by the deployment is locked with
@@ -1682,7 +1682,7 @@ A section's form is built in two steps:
    (no automatic navigation), then the *Get started* checklist (§5.5.1).
 
 The sign-in page offers **Set up sign-in** while setup is open (and no *Sign in* while sign-in isn't configured), and
-says to restart rag-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
+says to restart kalla-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
 in M-20 S4 (#769); the Open WebUI step follows S5.
 
 Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps; each notice can be hidden per browser (#773).
@@ -1728,7 +1728,7 @@ form library and no browser-side validator: the server validates.
 
 A template parameter's label is the UI's own text when `labels.ts` has one (`PIPELINE.params`, §5.7), else the
 template's `x-labels` (`en`, then `sv`), else the parameter name; templates set `x-labels` where the name says too
-little (`pathRules` is labelled Topics / Ämnen, tested in `Ume.Rag.Pipelines.Tests`).
+little (`pathRules` is labelled Topics / Ämnen, tested in `Kalla.Pipelines.Tests`).
 
 ### 6.4 Preview
 
@@ -1853,9 +1853,9 @@ Removed (simplification pass): no gate, so no overrides (§16).
   measured against the same questions; copying an assistant copies its set.
 - **When**: after every publish and restore (on the new published version), and on demand with **Run test questions** on
   the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
-- **How**: `AssistantTestRunner` in `rag-admin` (§2.2) runs each question once through `Ume.Rag.Answering` exactly as
+- **How**: `AssistantTestRunner` in `kalla-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
   the test panel does (principal `admin-console`, the target version's definition, residency at the assistant's level,
-  temperature as configured, `x-ume-step: assistant-test`), then:
+  temperature as configured, `x-fors-step: assistant-test`), then:
   - **expected document**: cited or not (deterministic, from the answer's citations);
   - **expected phrase**: present in the delivered answer or not (case-insensitive, after Unicode normalisation);
   - **expected behaviour**: the answer judge (`Settings.EvaluationJudgeModel`, V32, called at the assistant's level; the prompt family of the
@@ -1934,7 +1934,7 @@ What assistants and knowledge bases cost, finer than the gateway shows (cost-att
 `chat."AssistantDailyUsage"` (every model call of chat, chat §8.3, and of the test panel, §4.9) and
 `content."CollectionDailyUsage"` (the worker's indexing and evaluation calls, engine §10.6), data-model §2.2, §2.3.
 **Reporting only**: no budget, limit or stop is set here; a per-assistant budget is its gateway key's (cost-attribution
-§4.2), and the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see). The
+§4.2), and the gateway is the record for charging (it also counts fallbacks and retries Källa does not see). The
 gateway's cost and the estimated cost (calls without a gateway cost, priced from the model mirror) are always shown apart.
 
 | Method and path | Policy | Returns |
@@ -1961,11 +1961,11 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   C11; sent to only over `https`), the
   assistant's and knowledge base's *Cost* cards show the gateway's figures for the object's key next to these:
   `GET /api/gateway/keys/{id}/usage` `?from=&to=&granularity=day|month` (Read, the key's department in scope) reads
-  `/integration/v1/usage?groupBy=step&keyId=` with `rag-admin`'s credential key (`usage.read`; gateway-changes §5.6)
+  `/integration/v1/usage?groupBy=step&keyId=` with `kalla-admin`'s credential key (`usage.read`; gateway-changes §5.6)
   and returns per period and step `requests`, `successfulRequests`, `inputTokens`, `cachedInputTokens`,
   `outputTokens`, `costUsd`, cached 5 minutes per key and query (the gateway allows 60 requests a minute per key), at
   most 366 days (else 400 `period_too_long`); and the budget status (`GET /api/gateway/keys/{id}/budget`, §4.5). The
-  gateway's figures are the key's: when several objects share a key the card says so. Ume.Rag's stored figures are
+  gateway's figures are the key's: when several objects share a key the card says so. Källa's stored figures are
   never overwritten by the gateway's. Without the read-back each view links to the gateway's usage report
   (`admin_url`). How to read the two side by side is in `docs/runbook.md` (cost-attribution §5 C6).
 
@@ -2073,7 +2073,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 - Copied: `AdminActivityMiddleware` (6006 throttled), 6001–6007, log scopes incl. `ConfigVersion`, `RequestId`; no
   content in telemetry (test-panel questions, comments, conversation text, URLs of `sensitive` sources never logged).
-- Metrics (meter `Ume.Rag`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
+- Metrics (meter `Källa`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
   kind}`, `rag.admin.sync{kind,outcome}`, `rag.admin.test_panel{outcome}` + `.duration`,
   `rag.admin.conversation_access{scope,level}`, `rag.admin.uploads{outcome}` + `.bytes`, `rag.admin.publish{kind,
   outcome}`, `rag.admin.config_lock.wait` (histogram, s; one per config write attempt, the two syncs included), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),
@@ -2082,7 +2082,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 ## 11. Tests
 
-### 11.1 Unit (`Ume.Rag.AdminApi.Tests`, `Ume.Rag.Domain.Tests`, `Ume.Rag.Pipelines.Tests`)
+### 11.1 Unit (`Kalla.AdminApi.Tests`, `Kalla.Domain.Tests`, `Kalla.Pipelines.Tests`)
 
 - `ConfigRules`: one table-driven test per active V-rule (pass, fail, boundary; the re-check triggers of §4.6).
 - `PermissionMatrix` invariants: `Admin` never implies `Review`/`FeedbackComments`; every endpoint has a policy.
@@ -2129,7 +2129,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 - **Owner-team scoping (P2)**: with `EditOwnerTeamOnly` an editor outside the owner team gets 403 `owner_team_only`
   on assistant, collection, source and skill writes and still reads them; a department admin is unaffected.
 
-### 11.3 Worker in the loop (`Ume.Rag.IntegrationTests`)
+### 11.3 Worker in the loop (`Kalla.IntegrationTests`)
 
 Admin-enqueued preview (with site-profile before/after on the umea.se fixture pages), publish plan, re-process and
 post-publish evaluation, deletion confirm, PII clear, site-profile rollback and upload commit consumed by a real worker;

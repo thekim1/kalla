@@ -64,7 +64,7 @@ const signInUrl = ref<string | null>(null)
 const now = ref(Date.now())
 const errors = useFormErrors({ authority: 'setup-authority', tenantId: 'setup-tenantId' })
 let popup: Window | null = null
-/** Open WebUI's form, as rag-admin's: the secret lives here only. */
+/** Open WebUI's form, as kalla-admin's: the secret lives here only. */
 const openWebUiForm = ref<OpenWebUiForm | null>(null)
 const openWebUiSecretEdited = ref(false)
 /** After a save in this session: whether the check confirmed the client; null while nothing was saved. */
@@ -82,7 +82,7 @@ const savedValues = computed(() => {
   if (canFinish(t, stale.value)) return t.values
   return form.value && state.value ? valuesOf(form.value, state.value.signIn) : null
 })
-/** The session's latest rag-admin test passed as a platform admin: what saving Open WebUI's values needs (not that it is current). */
+/** The session's latest kalla-admin test passed as a platform admin: what saving Open WebUI's values needs (not that it is current). */
 const adminTestPassed = computed(() => test.value?.status === 'passed' && test.value.result?.isPlatformAdmin === true)
 const openWebUiTest = computed(() => state.value?.openWebUi.latestTest ?? null)
 const openWebUiStale = computed(() => !!openWebUiForm.value && !!state.value

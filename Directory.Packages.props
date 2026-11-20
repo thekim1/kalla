@@ -67,7 +67,7 @@
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.16.0" />
-    <!-- Generic containers (the parser image in Ume.Rag.ContractTests); 2026-10-08, the same release as the modules above. -->
+    <!-- Generic containers (the parser image in Kalla.ContractTests); 2026-10-08, the same release as the modules above. -->
     <PackageVersion Include="Testcontainers" Version="4.16.0" />
   </ItemGroup>
   <ItemGroup Label="Benchmarks">

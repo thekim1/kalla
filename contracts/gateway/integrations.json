@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Ume LLM Gateway: integration contract",
+    "title": "Fors: integration contract",
     "version": "1",
-    "description": "What a platform that runs as an integration reads from the gateway (docs/integrations.md): GET /v1/ume/context and the ume facts on GET /v1/models on the gateway, the request headers of the data plane, and the Integration API on the admin API. Changed by addition only: new properties, features, scopes and enum values can appear, so clients must ignore what they do not know. A test in the gateway repository (IntegrationContractTests) keeps the schemas equal to the answers. The model endpoints themselves follow their providers' formats and are in the gateway's own /openapi/v1.json."
+    "description": "What a platform that runs as an integration reads from the gateway (docs/integrations.md): GET /v1/fors/context and the fors facts on GET /v1/models on the gateway, the request headers of the data plane, and the Integration API on the admin API. Changed by addition only: new properties, features, scopes and enum values can appear, so clients must ignore what they do not know. A test in the gateway repository (IntegrationContractTests) keeps the schemas equal to the answers. The model endpoints themselves follow their providers' formats and are in the gateway's own /openapi/v1.json."
   },
   "servers": [
     {
@@ -21,10 +21,10 @@
     }
   ],
   "paths": {
-    "/v1/ume/context": {
+    "/v1/fors/context": {
       "get": {
         "summary": "What the presented key is and may use",
-        "description": "For a credential key: its integration, the integration's assigned keys with their settings, and departments and teams. With x-ume-on-behalf-of: the context of the assigned key. Not accounted, no rate limit of its own.",
+        "description": "For a credential key: its integration, the integration's assigned keys with their settings, and departments and teams. With x-fors-on-behalf-of: the context of the assigned key. Not accounted, no rate limit of its own.",
         "parameters": [
           {
             "$ref": "#/components/parameters/OnBehalfOf"
@@ -39,7 +39,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UmeContext"
+                  "$ref": "#/components/schemas/ForsContext"
                 }
               }
             },
@@ -49,7 +49,7 @@
                   "type": "string"
                 }
               },
-              "x-ume-on-behalf-of": {
+              "x-fors-on-behalf-of": {
                 "description": "Echo, when the request was made as an assigned key.",
                 "schema": {
                   "type": "string",
@@ -86,8 +86,8 @@
     },
     "/v1/models": {
       "get": {
-        "summary": "The models the key may use, with the gateway's facts under ume",
-        "description": "With x-ume-on-behalf-of: the assigned key's models within both keys' residencies. With x-ume-max-residency: within that ceiling.",
+        "summary": "The models the key may use, with the gateway's facts under fors",
+        "description": "With x-fors-on-behalf-of: the assigned key's models within both keys' residencies. With x-fors-max-residency: within that ceiling.",
         "parameters": [
           {
             "$ref": "#/components/parameters/OnBehalfOf"
@@ -115,7 +115,7 @@
                   "type": "string"
                 }
               },
-              "x-ume-on-behalf-of": {
+              "x-fors-on-behalf-of": {
                 "description": "Echo, when the request was made as an assigned key.",
                 "schema": {
                   "type": "string",
@@ -148,7 +148,7 @@
             }
           },
           "403": {
-            "description": "As /v1/ume/context",
+            "description": "As /v1/fors/context",
             "content": {
               "application/json": {
                 "schema": {
@@ -183,7 +183,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The provider format's answer. Headers: x-ume-on-behalf-of (echo), x-ume-residency, x-ume-cost-usd (complete answers)."
+            "description": "The provider format's answer. Headers: x-fors-on-behalf-of (echo), x-fors-residency, x-fors-cost-usd (complete answers)."
           },
           "402": {
             "description": "budget_exceeded: names the scope",
@@ -352,12 +352,12 @@
       "gatewayKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A gateway key (ume-sk-...). For an integration: one of its credential keys."
+        "description": "A gateway key (fors-sk-...). For an integration: one of its credential keys."
       }
     },
     "parameters": {
       "OnBehalfOf": {
-        "name": "x-ume-on-behalf-of",
+        "name": "x-fors-on-behalf-of",
         "in": "header",
         "required": false,
         "description": "The id of an assigned key of the credential key's integration: the request is made as that key. The answer echoes it; treat a missing echo as a failure (an older instance ignores the header). 400 invalid_request when it is not one GUID; 403 delegation_not_allowed when the caller is not a credential key, the id is not an assigned key of its integration, or the two keys allow no residency in common; 403 key_disabled, key_expired or key_revoked when it is disabled (or its owner inactive), expired or revoked; never 401, which is about the credential key itself.",
@@ -367,7 +367,7 @@
         }
       },
       "MaxResidency": {
-        "name": "x-ume-max-residency",
+        "name": "x-fors-max-residency",
         "in": "header",
         "required": false,
         "description": "The request's residency ceiling. Required (400) when the presented key or the key acted as has require_max_residency.",
@@ -381,7 +381,7 @@
         }
       },
       "RunId": {
-        "name": "x-ume-run-id",
+        "name": "x-fors-run-id",
         "in": "header",
         "required": false,
         "description": "Opaque id stored on the usage record; at most 100 characters kept; never refused.",
@@ -390,7 +390,7 @@
         }
       },
       "Step": {
-        "name": "x-ume-step",
+        "name": "x-fors-step",
         "in": "header",
         "required": false,
         "description": "Opaque step name stored on the usage record; at most 100 characters kept; never refused.",
@@ -399,10 +399,10 @@
         }
       },
       "StreamCost": {
-        "name": "x-ume-stream-cost",
+        "name": "x-fors-stream-cost",
         "in": "header",
         "required": false,
-        "description": "1 = a streamed answer ends with the SSE comment ': ume-cost-usd=<cost>' (before 'data: [DONE]' where the stream has one).",
+        "description": "1 = a streamed answer ends with the SSE comment ': fors-cost-usd=<cost>' (before 'data: [DONE]' where the stream has one).",
         "schema": {
           "const": "1"
         }
@@ -426,7 +426,7 @@
           "External"
         ]
       },
-      "UmeContext": {
+      "ForsContext": {
         "type": "object",
         "required": [
           "object",
@@ -439,7 +439,7 @@
         ],
         "properties": {
           "object": {
-            "const": "ume.context"
+            "const": "fors.context"
           },
           "gateway": {
             "$ref": "#/components/schemas/ContextGateway"
@@ -840,7 +840,7 @@
           "object",
           "created",
           "owned_by",
-          "ume"
+          "fors"
         ],
         "properties": {
           "id": {
@@ -855,8 +855,13 @@
           "owned_by": {
             "type": "string"
           },
-          "ume": {
+          "fors": {
             "$ref": "#/components/schemas/ModelFacts"
+          },
+          "ume": {
+            "$ref": "#/components/schemas/ModelFacts",
+            "deprecated": true,
+            "description": "A copy of fors under its name before the rename to Fors; listed until 0.13."
           }
         }
       },

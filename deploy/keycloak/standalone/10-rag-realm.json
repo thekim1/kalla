@@ -1,7 +1,7 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM:-fors)",
   "enabled": true,
-  "displayName": "$(env:UME_RAG_REALM_DISPLAY_NAME:-Ume.Rag)",
+  "displayName": "$(env:KALLA_REALM_DISPLAY_NAME:-Källa)",
   "sslRequired": "external",
   "registrationAllowed": false,
   "resetPasswordAllowed": false,

@@ -7,7 +7,7 @@
 #   - a first run writes what the manifests' secrets hold: the connection strings to the host `postgres` (and to
 #     --postgres-host), certificates for the host names under --domain, the credential key of a service, the declared
 #     client secret, the S3 repository settings, the worker's Render__Endpoint only with --renderer
-#   - --ca-file reaches the trust store of rag-api, rag-admin, rag-worker and rag-migrate; your own certificates
+#   - --ca-file reaches the trust store of kalla-api, kalla-admin, kalla-worker and kalla-migrate; your own certificates
 #     (--api-cert ...) are used instead of the internal CA's
 #   - a second run with none of the value options keeps every secret and every value: the keys, the client secret, the
 #     repository settings, the certificates
@@ -41,22 +41,22 @@ run --domain example.se --gateway-credential-key-file api="$t/api.key" --oidc-cl
   --oidc-refuse-guests false --ca-file "$t/other-ca.pem" --datastores --backup-target s3://s3.example.se/bucket/rag \
   --backup-s3-credentials-file "$t/s3.cred" --renderer > "$t/first.log" 2>&1 || { cat "$t/first.log"; fail "the first run failed"; }
 for svc in api admin worker migrations; do
-  grep -q '^Host=postgres;Database=ragdb;Username=ume_rag_' "$s/$svc/ConnectionStrings__ragdb" || fail "$svc: the connection string is not to the host postgres"
+  grep -q '^Host=postgres;Database=ragdb;Username=kalla_' "$s/$svc/ConnectionStrings__ragdb" || fail "$svc: the connection string is not to the host postgres"
 done
 san() { openssl x509 -in "$1" -noout -ext subjectAltName | tr -d ' \n'; }
 [[ "$(san "$c/postgres/postgres.crt")" == *DNS:postgres,DNS:localhost* ]] || fail "postgres' certificate is not for the host postgres"
-[[ "$(san "$c/api/api.crt")" == *DNS:rag.example.se* ]] || fail "rag-api's certificate lacks rag.example.se"
-[[ "$(san "$c/admin/admin.crt")" == *DNS:rag-admin.example.se* ]] || fail "rag-admin's certificate lacks rag-admin.example.se"
-[ "$(cat "$s/api/Gateway__Key")" = api-key ] || fail "rag-api's credential key"
+[[ "$(san "$c/api/api.crt")" == *DNS:rag.example.se* ]] || fail "kalla-api's certificate lacks rag.example.se"
+[[ "$(san "$c/admin/admin.crt")" == *DNS:rag-admin.example.se* ]] || fail "kalla-admin's certificate lacks rag-admin.example.se"
+[ "$(cat "$s/api/Gateway__Key")" = api-key ] || fail "kalla-api's credential key"
 [ ! -e "$s/admin/Gateway__Key" ] && [ ! -e "$s/worker/Gateway__Key" ] || fail "a credential key nobody gave"
 grep -q 'no credential key for admin worker' "$t/first.log" || fail "the missing keys are not named"
 [ "$(cat "$s/admin/Oidc__ClientSecret")" = client-secret ] || fail "the client secret"
 [ "$(cat "$s/admin/Oidc__RefuseGuests")" = false ] || fail "Oidc__RefuseGuests"
-[ -s "$s/admin/Setup__Secret" ] || fail "rag-admin's setup secret"
+[ -s "$s/admin/Setup__Secret" ] || fail "kalla-admin's setup secret"
 for line in repo1-s3-bucket=bucket repo1-path=/rag repo1-s3-key=ACCESS repo1-s3-key-secret=SECRET; do
   grep -qx "$line" "$s/pgbackrest/repo.conf" || fail "the pgBackRest repository settings lack $line"
 done
-grep -q '^ws://rag-renderer:3000/[0-9a-f]\{64\}$' "$s/worker/Render__Endpoint" || fail "the worker's Render__Endpoint"
+grep -q '^ws://kalla-renderer:3000/[0-9a-f]\{64\}$' "$s/worker/Render__Endpoint" || fail "the worker's Render__Endpoint"
 [ "/$(basename "$(cat "$s/worker/Render__Endpoint")")" = "$(cat "$s/renderer/ws-path")" ] || fail "the renderer's path is not the endpoint's"
 for svc in api admin worker migrations; do
   grep -qF "$(sed -n 2p "$t/other-ca.pem")" "$c/$svc/ca.pem" || fail "$svc does not trust the CA of --ca-file"
@@ -80,9 +80,9 @@ run --domain example.se --postgres-host db.example.se --gateway-credential-key-f
   --api-cert "$t/api-own.crt" --api-key "$t/api-own.key" --admin-cert "$t/admin-own.crt" --admin-key "$t/admin-own.key" \
   > "$t/third.log" 2>&1 || { cat "$t/third.log"; fail "the third run failed"; }
 grep -q '^Host=db.example.se;' "$s/api/ConnectionStrings__ragdb" || fail "--postgres-host is not in the connection string"
-[ "$(cat "$s/worker/Gateway__Key")" = worker-key ] && [ "$(cat "$s/api/Gateway__Key")" = api-key ] || fail "the worker's new key, or rag-api's kept one"
-cmp -s "$c/api/api.crt" "$t/api-own.crt" || fail "your own certificate for rag-api is not used"
-cmp -s "$c/admin/admin.key" "$t/admin-own.key" || fail "your own key for rag-admin is not used"
+[ "$(cat "$s/worker/Gateway__Key")" = worker-key ] && [ "$(cat "$s/api/Gateway__Key")" = api-key ] || fail "the worker's new key, or kalla-api's kept one"
+cmp -s "$c/api/api.crt" "$t/api-own.crt" || fail "your own certificate for kalla-api is not used"
+cmp -s "$c/admin/admin.key" "$t/admin-own.key" || fail "your own key for kalla-admin is not used"
 [ ! -e "$s/worker/Render__Endpoint" ] || fail "Render__Endpoint without --renderer"
 grep -Ev '^[0-9a-f]+  (certs/(api|admin|postgres)/|secrets/[a-z]+/ConnectionStrings__ragdb|secrets/worker/(Gateway__Key|Render__Endpoint)|certs/(worker|migrations)/ca\.pem|secrets/openwebui/ca\.pem)' "$t/sums1" > "$t/kept1"
 sums "$t/k" | grep -Ev '^[0-9a-f]+  (certs/(api|admin|postgres)/|secrets/[a-z]+/ConnectionStrings__ragdb|secrets/worker/(Gateway__Key|Render__Endpoint)|certs/(worker|migrations)/ca\.pem|secrets/openwebui/ca\.pem)' > "$t/kept3"
@@ -108,7 +108,7 @@ openssl verify -CAfile "$c/ca.pem" "$t/r/certs/worker/worker.crt" >/dev/null 2>&
 escrow --secrets-dir "$t/r/secrets" --certs-dir "$t/r/certs" --verify "$t/escrow" | grep -q '^PASS' || fail "the set does not verify after the restore"
 openssl rand -hex 48 > "$t/r/secrets/.pepper"
 out="$(escrow --secrets-dir "$t/r/secrets" --certs-dir "$t/r/certs" --restore "$t/escrow" 2>&1)" && fail "a restore over a different pepper was accepted"
-grep -q 'rag-secrets/.pepper .* differs from the set' <<< "$out" || fail "a restore over a different pepper: $out"
+grep -q 'kalla-secrets/.pepper .* differs from the set' <<< "$out" || fail "a restore over a different pepper: $out"
 ok "the escrow set restores the pepper, the keys, the role passwords, the conversation id key, the Data Protection certificate and the CA; a different file is refused"
 
 echo "== refusals"

@@ -20,7 +20,7 @@ GHSA = "GHSA-xvch-5gv4-984h"
 
 # The check verify.yml's backend job ran inline before audit.py, kept here to show both agree on the fixtures.
 OLD_DOTNET = (
-    "import json, os; d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'ume-package-audit.json'))); "
+    "import json, os; d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'kalla-package-audit.json'))); "
     "p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages',"
     "'transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; "
     "assert not p, 'Vulnerable .NET dependencies detected'"
@@ -75,7 +75,7 @@ class DotnetTests(Temp):
     def test_agrees_with_the_old_inline_check(self) -> None:
         for name, expected in (("dotnet-clean.json", 0), ("dotnet-vulnerable.json", 1)):
             with self.subTest(name):
-                self.write("ume-package-audit.json", (FIXTURES / name).read_text(encoding="utf-8"))
+                self.write("kalla-package-audit.json", (FIXTURES / name).read_text(encoding="utf-8"))
                 env = {**os.environ, "RUNNER_TEMP": str(self.dir)}
                 argv = [sys.executable, "-I", "-c", OLD_DOTNET]
                 old = subprocess.run(argv, env=env, capture_output=True, check=False)  # noqa: S603

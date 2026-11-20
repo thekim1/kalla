@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Runs the backend test projects of a built tree (dotnet build UmeRag.slnx -c <configuration>), every project as a
+# Runs the backend test projects of a built tree (dotnet build Kalla.slnx -c <configuration>), every project as a
 # process of its own and all of them at once, as `dotnet test --solution` does, with one difference:
-# Ume.Rag.AdminApi.Tests runs as five processes (shards).
+# Kalla.AdminApi.Tests runs as five processes (shards).
 #
 # Why: that project set the backend job's time (5 min 56 s of 7 min 40 s, 2026-11-15). Its test collections wait for one
 # another inside one process: the same tests took 234-259 s in one process with four or with eight database collections,
 # and 148 s as two processes side by side (measured locally; a larger thread pool, Postgres without fsync and the server
 # garbage collector changed nothing). What they wait for is not found yet; processes don't share it.
 #
-# The shards: the classes of the database collections admin-db-N (tests/Ume.Rag.AdminApi.Tests, AdminDatabaseGroupN) go
+# The shards: the classes of the database collections admin-db-N (tests/Kalla.AdminApi.Tests, AdminDatabaseGroupN) go
 # to shard (N-1) mod 4, read from the sources, so a new class or collection is placed without a change here; every
 # other class runs in a fifth process that excludes those. Each class therefore runs in exactly one shard.
 #
@@ -23,7 +23,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 logs="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/backend-tests.XXXXXX")"
 shards=4
-admin=Ume.Rag.AdminApi.Tests
+admin=Kalla.AdminApi.Tests
 skip=(-trait- "Category=Flaky" -trait- "Category=EvaluationSmoke")
 
 exe() { echo "tests/$1/bin/$configuration/net10.0/$1"; }
@@ -36,10 +36,10 @@ start() { # start <name> <executable> [arguments]
 }
 
 # Every test project but the shared kit (a library) and the benchmarks (a console app run by hand).
-for dir in tests/Ume.Rag.*/; do
+for dir in tests/Kalla.*/; do
   project="$(basename "$dir")"
-  case "$project" in Ume.Rag.TestKit|Ume.Rag.Benchmarks|"$admin") continue ;; esac
-  [ -x "$(exe "$project")" ] || { echo "error: $(exe "$project") is not built (dotnet build UmeRag.slnx -c $configuration)" >&2; exit 1; }
+  case "$project" in Kalla.TestKit|Kalla.Benchmarks|"$admin") continue ;; esac
+  [ -x "$(exe "$project")" ] || { echo "error: $(exe "$project") is not built (dotnet build Kalla.slnx -c $configuration)" >&2; exit 1; }
   start "$project" "$(exe "$project")" "${skip[@]}"
 done
 

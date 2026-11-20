@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kalla.TestKit\Kalla.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Kalla.Api\Kalla.Api.csproj" />
+    <!-- Its top-level Program would clash with the api's: referenced under an alias (FakeGatewayFactory). -->
+    <ProjectReference Include="..\..\src\Kalla.FakeGateway\Kalla.FakeGateway.csproj" Aliases="fakegateway" />
+  </ItemGroup>
+</Project>

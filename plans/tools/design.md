@@ -4,7 +4,7 @@
 `GatewayModels` sync (admin design §4.10), and its assistants have instructions and directly linked collections, no
 skills or tools.
 
-Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
+Detail step 9 of the Källa design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
 §10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (archived: history, not binding; this design states
 every rule, the plan's answered questions and its recommendation for question 1 in §14) and the Decisions table in
 [`../decisions.md`](../decisions.md). All of it is **P2 scope** unless marked (OBO, write tools,
@@ -26,7 +26,7 @@ documents: §13; questions: §14; unverified facts: §15; deferred or removed: �
 
 | Source | Version | Used for |
 |---|---|---|
-| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5); "Pipeline" = `src/Ume.LlmGateway.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
+| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5); "Pipeline" = `src/Fors.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
 | Bifrost `~/git/rag-platforms/bifrost` | `a09cea0` (2026-10-29) | list/call filter symmetry, two lists, skill versions |
 | Agent Skills spec `github.com/agentskills/agentskills` (cloned into the scratchpad) | `69ef37e` (2026-08-09) | `docs/specification.mdx`, `docs/client-implementation/adding-skills-support.mdx`, `docs/skill-creation/evaluating-skills.mdx`, `skills-ref/src/skills_ref/validator.py` |
 | Anthropic skills `github.com/anthropics/skills` | `ca45fc4` (2026-10-28) | `template/SKILL.md`, `spec/` (points to agentskills.io) |
@@ -62,13 +62,13 @@ Moved to [`../archive/design-history/tools.md`](../archive/design-history/tools.
 
 | Project | Owns (tools) | Notes |
 |---|---|---|
-| `Ume.Rag.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
-| **`Ume.Rag.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
-| `Ume.Rag.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
-| `Ume.Rag.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
-| `Ume.Rag.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
-| `Ume.Rag.AdminApi` | skill editor, publish/serve/rollback, share lists, `SkillGateRunner` (§3.7, read-only tools through the in-process hub), tool-server registration, discovery and connection test (in-process MCP client), approvals, pre-registrations, grants, drift leader; `GatewayModels` sync from P1 (admin design §4.10) | – |
-| `templates/mcp-server/` | `dotnet new ume-mcp-server` template (§8.1) | packaged as `Ume.Rag.Templates` |
+| `Kalla.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Fors.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
+| **`Kalla.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Kalla.Api` and `Kalla.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
+| `Kalla.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
+| `Kalla.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
+| `Kalla.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
+| `Kalla.AdminApi` | skill editor, publish/serve/rollback, share lists, `SkillGateRunner` (§3.7, read-only tools through the in-process hub), tool-server registration, discovery and connection test (in-process MCP client), approvals, pre-registrations, grants, drift leader; `GatewayModels` sync from P1 (admin design §4.10) | – |
+| `templates/mcp-server/` | `dotnet new ume-mcp-server` template (§8.1) | packaged as `Kalla.Templates` |
 
 The skills runtime is in the chat role: skills are configuration the chat role already holds in its snapshot (`api`
 has `SELECT` on `Skills`, `SkillVersions`, `SkillVersionLinks`, data-model §1.2), and `load_skill` must not cost a
@@ -78,10 +78,10 @@ network hop.
 
 | From → to | Path | Authentication | Carries |
 |---|---|---|---|
-| `rag-api` (chat role) → hosted MCP servers | internal network `mcp` | `client-credentials` token of the tool identity (§4.6) | tool calls (MCP over Streamable HTTP) |
-| `rag-admin` → hosted MCP servers | `mcp` | same | discovery, connection test, drift polling (leader), P2 agent test-panel tool calls (admin design §4.9), skill gate tool calls (read-only, §3.7) |
+| `kalla-api` (chat role) → hosted MCP servers | internal network `mcp` | `client-credentials` token of the tool identity (§4.6) | tool calls (MCP over Streamable HTTP) |
+| `kalla-admin` → hosted MCP servers | `mcp` | same | discovery, connection test, drift polling (leader), P2 agent test-panel tool calls (admin design §4.9), skill gate tool calls (read-only, §3.7) |
 | hosted MCP server → wrapped system | one network per server `mcp-<name>-egress`, firewall to its systems only | the server's own credential | – |
-| `rag-admin` → gateway | `llm` (existing) | its credential key (until the gateway's integration phase 1 its keys of every level), as the assistant's gateway key | skill gate model calls |
+| `kalla-admin` → gateway | `llm` (existing) | its credential key (until the gateway's integration phase 1 its keys of every level), as the assistant's gateway key | skill gate model calls |
 
 **Bulkheads** (`ServerBulkhead`, per server and process): at most `ToolServers.MaxConcurrentCalls` (proposed 8) calls in
 flight per instance, further calls wait ≤ 1 s then `unavailable`; the call timeout of §4.7; a circuit that opens after
@@ -97,7 +97,7 @@ credentials and egress belong in one process again (§16).
 ### 2.3 Interfaces
 
 ```csharp
-// Ume.Rag.Domain
+// Kalla.Domain
 public interface IToolHub
 {
     Task<ToolCallOutcome> CallAsync(ToolCallRequest request, CancellationToken ct);
@@ -143,10 +143,10 @@ What the specification says (`agentskills/docs/specification.mdx`):
 
 | Item | Spec | Our rule |
 |---|---|---|
-| Layout | a directory with at least `SKILL.md`; optional `scripts/`, `references/`, `assets/`, "any additional files" (`:8-17`) | `SKILL.md`, `references/`, `assets/` (text only), `evals/evals.json`, `ume-rag.json`; **`scripts/` refused** (plan §2) |
+| Layout | a directory with at least `SKILL.md`; optional `scripts/`, `references/`, `assets/`, "any additional files" (`:8-17`) | `SKILL.md`, `references/`, `assets/` (text only), `evals/evals.json`, `kalla.json`; **`scripts/` refused** (plan §2) |
 | `name` | required, 1–64 characters, lowercase alphanumeric and hyphens, no leading/trailing or double hyphen, must match the directory name (`:25-27`, `:58-65`); the reference validator accepts any Unicode letter after NFKC (`skills-ref/src/skills_ref/validator.py:25-67`) | = `Skills.Slug`; **ASCII only** `^[a-z0-9]+(-[a-z0-9]+)*$`, ≤ 64; å, ä → a, ö → o when an editor types a Swedish title |
 | `description` | required, 1–1,024 characters, "what the skill does and when to use it" (`:28`, `:91-97`) | required, ≤ 1,024; the editor warns above 300 (the catalogue is paid on every progressive agent call) |
-| `license`, `compatibility` (≤ 500), `metadata` (string → string), `allowed-tools` (space-separated, experimental) (`:29-32`) | optional | `license` kept; `compatibility` and `metadata` (`ume-rag.*`) written on export only (P3); **`allowed-tools` ignored on import and never trusted** (§5), unlike Bifrost where it is free text (`framework/configstore/tables/skills.go:91`) |
+| `license`, `compatibility` (≤ 500), `metadata` (string → string), `allowed-tools` (space-separated, experimental) (`:29-32`) | optional | `license` kept; `compatibility` and `metadata` (`kalla.*`) written on export only (P3); **`allowed-tools` ignored on import and never trusted** (§5), unlike Bifrost where it is free text (`framework/configstore/tables/skills.go:91`) |
 | Unknown frontmatter fields | rejected by the reference validator (`validator.py:15-23`, `:104-115`) | never written; on import dropped with a warning |
 | Body | Markdown; < 5,000 tokens and < 500 lines recommended (`:176-185`, `:216-224`) | ≤ 20,000 characters (≈ 6,700 tokens at chat's ÷ 3, chat §6.3); warning above 12,000 (static budget, §3.9) |
 | References | relative paths, one level deep, loaded on demand (`:200-207`, `:226-237`) | `read_skill_file(name, path)` with an enum of the skill's files (§3.8) |
@@ -167,7 +167,7 @@ bygglov/
 │   ├── avgifter.md              # read on demand with read_skill_file
 │   └── vanliga-fragor.md
 ├── evals/evals.json             # test questions (Agent Skills eval convention + our fields)
-└── ume-rag.json                 # platform manifest (ignored by other Agent Skills clients)
+└── kalla.json                 # platform manifest (ignored by other Agent Skills clients)
 ```
 
 ```markdown
@@ -182,10 +182,10 @@ Svara utifrån plan- och bygglagen som kommunen tillämpar den. Fråga efter åt
 inom detaljplan innan du anger om lov krävs. Använd verktyget för avgifter i stället för att räkna själv …
 ```
 
-`ume-rag.json` (schema `contracts/skill/v1/manifest.schema.json`, validated on save):
+`kalla.json` (schema `contracts/skill/v1/manifest.schema.json`, validated on save):
 
 ```json
-{ "schema": "ume-rag-skill/1",
+{ "schema": "kalla-skill/1",
   "version": "1.4.0",
   "classification": "public",
   "owner": { "department": "SBF" },
@@ -202,11 +202,11 @@ inom detaljplan innan du anger om lov krävs. Använd verktyget för avgifter i 
     { "id": 1, "prompt": "Behöver jag bygglov för en altan på 25 kvadratmeter?",
       "expected_output": "Nej om altanen är lägre än 1,8 m och inte närmare tomtgränsen än 4,5 m; annars ja.",
       "assertions": [ "Nämner höjdgränsen", "Hänvisar till kommunens sida om altaner" ],
-      "ume-rag": { "expected_documents": [ { "url": "https://www.umea.se/bygga/bygglov/altan" } ],
+      "kalla": { "expected_documents": [ { "url": "https://www.umea.se/bygga/bygglov/altan" } ],
                    "expect_skill": true, "expected_tools": [] } },
     { "id": 2, "prompt": "Vad kostar bygglov för en tillbyggnad på 25 m²?",
-      "ume-rag": { "expect_skill": true, "expected_tools": [ "kommun/calculate_fee" ] } },
-    { "id": 3, "prompt": "När töms soptunnorna på Ålidhem?", "ume-rag": { "expect_skill": false } } ] }
+      "kalla": { "expect_skill": true, "expected_tools": [ "kommun/calculate_fee" ] } },
+    { "id": 3, "prompt": "När töms soptunnorna på Ålidhem?", "kalla": { "expect_skill": false } } ] }
 ```
 
 Negative cases (`expect_skill: false`) test that the skill's tools are not used (and, when progressive, that it is not
@@ -284,7 +284,7 @@ skill (the list is shown).
 
 ### 3.7 Skill gate (`GateKind.SkillPublish`, advisory)
 
-Runs in **`rag-admin`** (R1: never on the data plane), which already runs `Ume.Rag.Answering` for the test panel and
+Runs in **`kalla-admin`** (R1: never on the data plane), which already runs `Kalla.Answering` for the test panel and
 holds the gateway keys of every level. Publishing a version starts the run as a
 background task of the admin (one run per version, under `pg_try_advisory_xact_lock` on the version id; a run left
 unfinished by a restart is started again); results in `EvaluationRuns` with the version id (`Trigger =
@@ -294,9 +294,9 @@ no part.
 - **Models**: every distinct `GatewayModel` of the published versions of active assistants linking the skill (on publish of a first version,
   `Settings.Tools.SkillGateModel`, on-prem and tool-capable), each at the residency ceiling of the linking assistant's
   level.
-- **End to end**: each question runs through `Ume.Rag.Answering` exactly as the assistant would (the agent loop with
+- **End to end**: each question runs through `Kalla.Answering` exactly as the assistant would (the agent loop with
   the skill included or loaded when the version under test carries tools, otherwise the RAG path), **executing the skill's read-only tools** through the
-  admin's in-process hub (hosted servers, §2.2); `x-ume-step: skill-gate`, temperature 0. Tool calls are audited with
+  admin's in-process hub (hosted servers, §2.2); `x-fors-step: skill-gate`, temperature 0. Tool calls are audited with
   `SubjectKind = service` and count against the tools' per-tool rate limits.
 
 | Measure | Questions | Shown as |
@@ -368,8 +368,8 @@ level (platform plan §6).
 ### 3.11 Import and export (P3, designed now)
 
 - **Export** (`GET /api/skills/{id}/versions/{v}/export`): zip of the folder of §3.2 with frontmatter `name`,
-  `description`, `license`, `compatibility`, `metadata` (`ume-rag.version`, `ume-rag.classification`,
-  `ume-rag.owner`); requires `EditSkills` on the skill's department; audited `skill.export`.
+  `description`, `license`, `compatibility`, `metadata` (`kalla.version`, `kalla.classification`,
+  `kalla.owner`); requires `EditSkills` on the skill's department; audited `skill.export`.
 - **Import**: zip ≤ 2 MB, ≤ 100 entries, no links, no absolute or `..` paths, text files only, one top-level folder whose
   name equals `name`; `scripts/` and binary files refused; YAML frontmatter parsed by an in-house parser of the six spec
   fields; tool links resolved by `server/tool` within the importer's department (a `collections` entry from an older
@@ -377,7 +377,7 @@ manifest is dropped with a warning) (unresolved → dropped with a
   warning). The result is a **draft** that a `rag-platform-admin` must approve (a person reads the body; audited
   `skill.import.approve`) before it can be published (plan §6 rule 7).
 
-## 4. Tool hub (`Ume.Rag.Tools`, in process)
+## 4. Tool hub (`Kalla.Tools`, in process)
 
 ### 4.1 Registry and snapshot
 
@@ -404,7 +404,7 @@ var transport = new HttpClientTransport(new HttpClientTransportOptions
 
 var client = await McpClient.CreateAsync(transport, new McpClientOptions
 {
-    ClientInfo = new() { Name = "ume-rag-tools", Version = BuildInfo.Version },
+    ClientInfo = new() { Name = "kalla-tools", Version = BuildInfo.Version },
     DiscoverProbeTimeout = TimeSpan.FromSeconds(2),
     InitializationTimeout = TimeSpan.FromSeconds(5),
     Capabilities = new(),                                    // no sampling, roots or elicitation offered
@@ -489,7 +489,7 @@ public sealed record ToolAuth(IReadOnlyDictionary<string, string> Headers, DateT
 
 | Mode | Phase | Stored | Resolution |
 |---|---|---|---|
-| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://ume-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `ume-rag-tools`, one of RAG's own registrations, identity design §1.6) in `/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `UME_RAG_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
+| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://ume-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `kalla-tools`, one of RAG's own registrations, identity design §1.6) in `/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `KALLA_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
 | `obo` | P3 | – | identity §9, with `rag-tools` |
 | `api-key`, `none` | P3 | – | with `municipal`/`external` servers |
 
@@ -549,9 +549,9 @@ the gateway's pattern, `RedisStores.cs:13-44`):
 
 | Key | Default | Set by |
 |---|---|---|
-| `ume-rag:rl:tool:{toolId}:{minute}` | `Tools.CallsPerMinute` 600 | platform admin (protects the wrapped system) |
-| `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}` | `Tools.CallsPerMinutePerUser` 30 | platform admin |
-| `ume-rag:rl:tools:{subjectHash}:{minute}` | `Settings.Tools.CallsPerMinutePerUser` 60 over all tools | platform setting |
+| `kalla:rl:tool:{toolId}:{minute}` | `Tools.CallsPerMinute` 600 | platform admin (protects the wrapped system) |
+| `kalla:rl:tooluser:{toolId}:{subjectHash}:{minute}` | `Tools.CallsPerMinutePerUser` 30 | platform admin |
+| `kalla:rl:tools:{subjectHash}:{minute}` | `Settings.Tools.CallsPerMinutePerUser` 60 over all tools | platform setting |
 
 `subjectHash` = the same HMAC as chat's per-user key. Over a limit → `outcome = rate_limited`. With Redis: Redis down →
 per-instance in-memory limits, logged once a minute; the per-message call limit (§6.5) still
@@ -599,7 +599,7 @@ under the run's `IAccessPolicy` decisions) and never reach a tool server. No lay
 ### 5.2 One function for listing and calling
 
 ```csharp
-// Ume.Rag.Domain, pure
+// Kalla.Domain, pure
 public static class ToolPolicy
 {
     public static IReadOnlyList<ToolBinding> Visible(RunPolicyState run, PolicySnapshot config);   // the model's tools
@@ -732,12 +732,12 @@ All four count as tool calls when the model calls them (answered 1), are stored 
 | Topic | Rule |
 |---|---|
 | Format | OpenAI Chat Completions function tools: `tools[] { type: "function", function: { name, description, parameters } }`, `tool_choice: "auto"` (final call `"none"`, §6.5); `parallel_tool_calls` not sent |
-| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Ume.LlmGateway.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by gateway release 1's tests (gateway-changes §7.2, weakness review §5). We never send provider tools |
+| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Fors.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by gateway release 1's tests (gateway-changes §7.2, weakness review §5). We never send provider tools |
 | Model names | built-ins as named; server tools `{serverSlug}_{toolName}` (`^[a-zA-Z0-9_-]{1,64}$`; a longer name is cut to 55 characters + `_` + 8 hex of its SHA-256) |
 | Descriptions and schemas | the **pinned** definition's `description` (≤ 1,024 characters, tag-neutralised) and `inputSchema`; `title`, annotations, icons and `_meta` are never sent |
-| Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Ume.LlmGateway.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
+| Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Fors.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Fors.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
 | Residency | as chat §8.1–§8.2 per call, at the run's effective level; `sensitive` assistants that use tools need an **on-prem tool-capable** model (*to verify*, §15); the admin refuses publishing such an assistant (or serving a skill version that makes one use tools) when its model cannot be served within that residency or lacks `SupportsTools` (admin design §4.6 V8, V14) |
-| Headers | chat §8.1 plus `x-ume-step: agent-{n}` and `x-ume-run-id` = message id; `x-ume-session` = conversation id |
+| Headers | chat §8.1 plus `x-fors-step: agent-{n}` and `x-fors-run-id` = message id; `x-fors-session` = conversation id |
 
 ### 6.5 Limits and cost (answered 1)
 
@@ -751,9 +751,9 @@ Stored in the assistant version's `QuerySteps.agent = { maxToolCalls, maxSeconds
 hard caps in `Settings.Tools` (`AgentDefaults`, `AgentHardCaps`); raising above the defaults is a platform-admin action
 (audited `assistant.limits`). The final answer's stream is bounded by chat's `MaxAnswerDuration` (chat §8.3).
 
-**Cost estimate mid-loop.** Streamed answers carry no `x-ume-cost-usd` (`Pipeline/GatewayHeaders.cs:20-21`), so after each
+**Cost estimate mid-loop.** Streamed answers carry no `x-fors-cost-usd` (`Pipeline/GatewayHeaders.cs:20-21`), so after each
 step `CostEstimate.Calculate(usage, price)` uses the step's usage chunk and the price of the deployment that answered
-(`x-ume-model`) from `GatewayModels` — the gateway's own formula (`CostCalculator.cs:37-61`, text terms only). Before
+(`x-fors-model`) from `GatewayModels` — the gateway's own formula (`CostCalculator.cs:37-61`, text terms only). Before
 each step: `next` = (prompt characters ÷ 3) × input price + the step's `max_tokens` × output price; `reserve` = the same
 estimate for a final answer call.
 
@@ -851,7 +851,7 @@ builder.Services.AddMcpServer(o => o.ServerInfo = new() { Name = "umea-kommun-ku
 app.MapMcp("/mcp").RequireAuthorization("McpUse");
 ```
 
-- **Stateless** (knowledge §14): no `Mcp-Session-Id`; any `rag-api` instance serves any request.
+- **Stateless** (knowledge §14): no `Mcp-Session-Id`; any `kalla-api` instance serves any request.
 - Server `instructions` (our own, Swedish/English, ≤ 600 characters): what the server offers and that results are
   municipal data with citations.
 - Endpoint group only when `Rag:Roles` contains `mcp` (repo-and-deployment §3); body limit 256 KB.
@@ -884,7 +884,7 @@ app.MapMcp("/mcp").RequireAuthorization("McpUse");
 
 ### 7.6 Rate limits
 
-`/mcp` tools count on `ume-rag:rl:mcp:{subjectHash}:{minute}` (`IRateLimitStore`, as §4.9) at
+`/mcp` tools count on `kalla:rl:mcp:{subjectHash}:{minute}` (`IRateLimitStore`, as §4.9) at
 `Mcp:CallsPerMinutePerUser` 60. Over limit → `isError` "För många anrop, försök igen om en stund." plus HTTP 429 with
 `Retry-After` when the limit is hit before the JSON-RPC body is parsed (identity §6.3).
 
@@ -892,7 +892,7 @@ app.MapMcp("/mcp").RequireAuthorization("McpUse");
 
 ### 8.1 .NET template (answered 3: .NET only)
 
-`dotnet new ume-mcp-server -n Ume.Mcp.Kommun` from `templates/mcp-server/` (package `Ume.Rag.Templates`):
+`dotnet new ume-mcp-server -n Ume.Mcp.Kommun` from `templates/mcp-server/` (package `Kalla.Templates`):
 
 ```
 Ume.Mcp.Kommun/
@@ -911,7 +911,7 @@ Ume.Mcp.Kommun/
 | Convention | Rule |
 |---|---|
 | Transport | `MapMcp("/mcp")`, `HttpServerSessionMode.Stateless`, no legacy SSE |
-| Auth | Entra (Keycloak in dev) JWT: `aud` = the server's own app registration (`api://ume-mcp-<name>`), `tid` checked, app-only tokens only (`idtyp = app`), **app role `Tools.Invoke`** assigned only to the platform's tool identity `ume-rag-tools`; everything else 401/403 |
+| Auth | Entra (Keycloak in dev) JWT: `aud` = the server's own app registration (`api://ume-mcp-<name>`), `tid` checked, app-only tokens only (`idtyp = app`), **app role `Tools.Invoke`** assigned only to the platform's tool identity `kalla-tools`; everything else 401/403 |
 | Tools | `[McpServerTool(Name = "calculate_fee", Title = "…", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]`; a unit test fails on any tool without `ReadOnly = true` (P2) |
 | Descriptions | Swedish, ≤ 600 characters, what and when, no instructions about other tools, no URLs; parameter descriptions on every property; enums for closed value sets |
 | Output | structured result + the SDK's text mirror; ≤ 64 KiB; no personal data in P2; each result names its data source and validity date |
@@ -928,12 +928,12 @@ Dropped: none of the first tools has an OpenAPI source (§16).
 
 - Each server is its own container in `deploy/compose.mcp.yaml` (an overlay like `compose.ingestion.yaml`), image pinned
   by digest, the hardened anchor (read-only, `cap_drop: [ALL]`, `no-new-privileges`), zone `tools-hosted` (§2.2).
-- Networks: `mcp` (internal; members the server and the processes that run the hub: `rag-api` and `rag-admin`; never
-  `rag-worker`) and, when the server wraps systems, its own `mcp-<name>-egress` network with a `DOCKER-USER` rule
+- Networks: `mcp` (internal; members the server and the processes that run the hub: `kalla-api` and `kalla-admin`; never
+  `kalla-worker`) and, when the server wraps systems, its own `mcp-<name>-egress` network with a `DOCKER-USER` rule
   allowing only those systems' addresses and ports (the `llm` network pattern, repo-and-deployment §6.1). A server
   never joins `data`, `llm` or `crawl`.
-- Secrets per server under `${UME_RAG_SECRETS_DIR}/mcp-<name>` (key-per-file); the server's Entra registration
-  (`ume-mcp-<name>`, app role `Tools.Invoke`, assignment to `ume-rag-tools`) is added to RAG's Bicep package (identity
+- Secrets per server under `${KALLA_SECRETS_DIR}/mcp-<name>` (key-per-file); the server's Entra registration
+  (`ume-mcp-<name>`, app role `Tools.Invoke`, assignment to `kalla-tools`) is added to RAG's Bicep package (identity
   §12).
 
 ### 8.4 Registration, ownership, versioning
@@ -991,7 +991,7 @@ One row per hub call (every outcome, including `denied`), batched by `ToolCallAu
 or 1 s per insert, 3 retries then drop with `rag.tools.audit.dropped`; the call result is never held back by the
 audit): `Timestamp`, `AssistantId`, `ToolId`, `SubjectId`, `ClientId`, `ConversationId`, `DurationMs`, `Outcome`,
 `ArgumentsBytes`, `ResultBytes`, `ArgumentsHmac`, `ToolServerId`, `DefinitionId`, `SkillVersionId`, `RunId` (message id;
-joins the gateway's usage records by `x-ume-run-id`), `CallIndex`, `Classification` (effective level), `ResultLevel`,
+joins the gateway's usage records by `x-fors-run-id`), `CallIndex`, `Classification` (effective level), `ResultLevel`,
 `ErrorCode`, `Truncated`. Never arguments or results. `ArgumentsHmac` is keyed, because arguments are often guessable.
 Retention: audit's 2 years (data-model §8). Built-in tool calls are not in `audit` (they are normal retrieval).
 
@@ -1017,7 +1017,7 @@ changed without a pre-registration), 5013 bursts, any 5015 `level_refused`, repe
 
 ## 10. Observability
 
-Meter and activity source `Ume.Rag` (repo-and-deployment §9); low-cardinality dimensions only (no tool names on hot
+Meter and activity source `Källa` (repo-and-deployment §9); low-cardinality dimensions only (no tool names on hot
 histograms; tool ids appear in logs and the audit).
 
 | Metric | Type | Dimensions |
@@ -1049,7 +1049,7 @@ histograms; tool ids appear in logs and the audit).
 
 ## 11. Tests
 
-### 11.1 Unit (`Ume.Rag.Domain.Tests`, `Ume.Rag.Tools.Tests`, `Ume.Rag.Api.Tests`)
+### 11.1 Unit (`Kalla.Domain.Tests`, `Kalla.Tools.Tests`, `Kalla.Api.Tests`)
 
 - **Policy matrix** (table-driven): every layer of §5.1 × client kinds × levels × grants × approvals × drift state ×
   static/progressive; property test: `Authorize(name) ≠ null ⇔ name ∈ Visible()`.
@@ -1070,7 +1070,7 @@ histograms; tool ids appear in logs and the audit).
 
 ### 11.2 Integration (Testcontainers: Postgres, Keycloak, Redis for the multi-host rate limits; FakeGateway; `FakeMcpServer`)
 
-`FakeMcpServer` (in `Ume.Rag.TestKit`, built on the SDK 2.3.0 server) has modes: normal, slow (> timeout), huge
+`FakeMcpServer` (in `Kalla.TestKit`, built on the SDK 2.3.0 server) has modes: normal, slow (> timeout), huge
 (> 256 KiB), `isError`, image/audio/resource-link content, changed definition after N lists, added/removed tool,
 401/403, invalid JSON-RPC, redirect. FakeGateway gains **scripted tool modes** (per-step assistant messages with
 `tool_calls` streamed in deltas, or text), so loop tests are deterministic.
@@ -1082,11 +1082,11 @@ histograms; tool ids appear in logs and the audit).
   a hosted URL resolving outside the `mcp` subnet refused.
 - Drift: pre-registered change → repin by the leader, no disable; unexpected change → disabled in memory, observation,
   leader sets `disabled-changed`, chat no longer lists it after the outbox; re-approval with two different approvers.
-- Database roles (`DatabaseRoleTests`): `ume_rag_api` inserts `ToolCallEvents` and `ToolDefinitionObservations`, cannot
-  write `config`; `ume_rag_admin` reads skill and tool tables for the gate; the worker reads none of them.
+- Database roles (`DatabaseRoleTests`): `kalla_api` inserts `ToolCallEvents` and `ToolDefinitionObservations`, cannot
+  write `config`; `kalla_admin` reads skill and tool tables for the gate; the worker reads none of them.
 - Storage: `chat."ToolCalls"` decrypts with the bucket key; mode `none` writes metadata only; `ArgumentsHmac` equal in
   `chat` and `audit`.
-- Skill gate in `rag-admin` with FakeGateway and `FakeMcpServer`: report per model, comparison with the served
+- Skill gate in `kalla-admin` with FakeGateway and `FakeMcpServer`: report per model, comparison with the served
   version, a run interrupted by a restart started again, no serve without a finished run.
 
 ### 11.3 Prompt-injection suites (deterministic in CI, live nightly)
@@ -1146,7 +1146,7 @@ Moved to [`../archive/design-history/tools.md`](../archive/design-history/tools.
 - **Open WebUI v0.12.5**: status events from an external OpenAI connection are forwarded
   (`ow/utils/middleware.py:4838`), stored and rendered next to `source` events; `hidden: true`; SSE comment lines ignored.
 - **Agent Skills**: spec changes after `69ef37e`; `evals/evals.json` is guidance, not part of the specification.
-- **Entra**: `private_key_jwt` client credentials from on-prem for `ume-rag-tools`; app-only tokens with `idtyp = app`
+- **Entra**: `private_key_jwt` client credentials from on-prem for `kalla-tools`; app-only tokens with `idtyp = app`
   and app role `Tools.Invoke`; Keycloak client-credentials tokens with an audience mapper for dev.
 - **Platform**: one `DOCKER-USER` rule per `mcp-<name>-egress` network and their subnets (172.30.8.0/21 proposed).
 - **Static budget** (new): that ≈ 4,000 tokens of skill bodies in the system prompt keeps tool choice and answer

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/sources/v1/upload.schema.json",
+  "$id": "https://kalla.local/contracts/sources/v1/upload.schema.json",
   "title": "Upload source settings",
   "type": "object",
   "properties": {

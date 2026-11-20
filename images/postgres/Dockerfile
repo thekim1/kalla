@@ -1,6 +1,6 @@
-# ume-rag/postgres: the stock pgvector image plus the PGDG pgbackrest package and its configuration, nothing else
+# kalla/postgres: the stock pgvector image plus the PGDG pgbackrest package and its configuration, nothing else
 # (plans/platform/repo-and-deployment.md §5.2, simplification pass §14). Build from the repository root:
-#   docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
+#   docker build -f images/postgres/Dockerfile -t kalla/postgres:latest .
 # Dockerfile.dockerignore next to this file limits the context to the one file copied below.
 # postgresql.conf, pg_hba.conf, init.sql, certificates and the pgBackRest repository settings are mounted, not baked.
 
@@ -22,7 +22,7 @@ USER 999:999
 # invalidate the cache of the layers above. Only the labels read these values.
 ARG VERSION=dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+LABEL org.opencontainers.image.source="https://github.com/thekim1/kalla" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/postgres"
+      org.opencontainers.image.title="kalla/postgres"

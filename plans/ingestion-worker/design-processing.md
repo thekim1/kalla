@@ -1,6 +1,6 @@
 # Ingestion worker, part C: processing stages, personal data, embedding and evaluation
 
-Detail step 6c of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
+Detail step 6c of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
 states every rule, the plan's answered items in §20) and
 specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a) marks "6c" in its stage table
 (`design-engine.md` §6). It consumes, without redesigning: the stage values (6a §2.2), the stage interface and results
@@ -252,7 +252,7 @@ insufficient) cuts sections above 1,500 tokens into parent windows at block boun
 - `Microsoft.ML.Tokenizers` 2.0.1 (MIT, stable; the KM report already chose it for counting,
   `../../platforms/kernel-memory-and-dotnet.md:183`), `SentencePieceTokenizer.Create(stream, addBeginOfSentence:
   false, addEndOfSentence: false)` over BGE-M3's `sentencepiece.bpe.model` (5.07 MB, MIT), embedded as a resource in
-  `Ume.Rag.Worker` with its SHA-256 checked at startup. The model is Unigram with `nmt_nfkc` (checked, see preamble);
+  `Kalla.Worker` with its SHA-256 checked at startup. The model is Unigram with `nmt_nfkc` (checked, see preamble);
   2.0.1 contains the Unigram model and precompiled-charsmap normaliser. Counting needs no ids, so the fairseq id
   offset of XLM-R does not matter; the gateway adds `<s>`/`</s>` (2 tokens).
 - Parity test: 1,000 Swedish and English passages from the fixture corpus, counts equal to Hugging Face
@@ -382,7 +382,7 @@ counts and flag **on the chunk set** (6a §14). Every execution that produces a 
 produces its state. Text is NFC with NBSP and soft hyphens already normalised (§4.2), which matters for phone numbers
 and names.
 
-### 9.1 Patterns (.NET, `Ume.Rag.Worker/Pii`)
+### 9.1 Patterns (.NET, `Kalla.Worker/Pii`)
 
 | Type | Candidate (regex, with `\b`-style boundaries: no digit, letter or `-` directly before/after, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
 |---|---|---|
@@ -534,12 +534,12 @@ Swedish pitfalls (fixtures in §17):
 | Input | the embedded string of §6.5 (prefix + body); no instruction prefix (BGE-M3 dense retrieval uses none, *to verify*); queries are embedded raw by the Knowledge API with the same NFC normalisation |
 | Cache | per document: one `SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)`; misses deduplicated, embedded, inserted `ON CONFLICT DO NOTHING` in their own short transaction (6a §7.6); `LastUsedAt` touched at most once a day per row; unused 30 days → deleted (platform plan §8). Dify's cached embedding is the precedent (`../../platforms/dify.md:218`). **Later (P2):** the lookup goes through `Chunks` (index `IX_Chunks_Profile_TextHash` on (`EmbeddingProfileId`, `TextHash`) `WHERE "Kind" = 'child'`), and `EmbeddingCache` keeps only texts not in a live set, as `halfvec` |
 | Batching | ≤ 64 inputs per request, all misses of one document, with **no token cap per request**: from gateway v0.9.0 the gateway compares each input (the longest) with the model's `ContextWindow`, not the whole body (gateway #65; to-verify #43), so the embedding deployment may set its `ContextWindow`. Each input stays far below it because the chunker caps chunks (template `chunkTokens` ≤ 800 with the tail merge, §6.2); an input the gateway still refuses ends as fatal `embed.input_rejected`. Checked live 2026-11-06: 64 Swedish inputs, 59,584 tokens, one request (#429) |
-| Request | `POST /v1/embeddings` `{model: <profile's GatewayModel>, input: [...], encoding_format: "float"}`, plus `dimensions` when the profile asks for it; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = the collection's `GatewayKeyId` (from gateway phase 2; none without a key), `x-ume-max-residency` = the profile's `MaxResidency` (at most the platform ceiling; `Eu` until M2) with the worker's credential key (until the gateway's integration phase 1 its key of that level), `x-ume-run-id`, `x-ume-step: embed` |
-| Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
-| Usage and cost | every embedding call, preview's included, records `usage.prompt_tokens` and its cost: `x-ume-cost-usd`, or without it an estimate from the mirror's prices, marked as estimated (engine §10.6); the document's sum goes to `RunItems.CostUsd`, the day's to `CollectionDailyUsage` under step `embed` (cost-attribution §5 C3). Cache hits make no call and cost nothing |
+| Request | `POST /v1/embeddings` `{model: <profile's GatewayModel>, input: [...], encoding_format: "float"}`, plus `dimensions` when the profile asks for it; headers by the engine (6a §7.7): `x-fors-on-behalf-of` = the collection's `GatewayKeyId` (from gateway phase 2; none without a key), `x-fors-max-residency` = the profile's `MaxResidency` (at most the platform ceiling; `Eu` until M2) with the worker's credential key (until the gateway's integration phase 1 its key of that level), `x-fors-run-id`, `x-fors-step: embed` |
+| Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-fors-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
+| Usage and cost | every embedding call, preview's included, records `usage.prompt_tokens` and its cost: `x-fors-cost-usd`, or without it an estimate from the mirror's prices, marked as estimated (engine §10.6); the document's sum goes to `RunItems.CostUsd`, the day's to `CollectionDailyUsage` under step `embed` (cost-attribution §5 C3). Cache hits make no call and cost nothing |
 | Canary | on demand only: the worker makes no canary calls of its own. A platform admin runs the check from the admin UI (admin design §4.5 `POST /api/gateway/canary-check`): the admin API embeds each active profile's `CanaryText` at the profile's ceiling and compares it with `EmbeddingProfiles.CanaryEmbedding`, storing `CanaryCheckedAt` and `CanarySimilarity`. Cosine < 0.999 means the gateway alias now serves another model, which would silently mix vector spaces: until a later check passes, the worker refuses the profile for embedding, preview and evaluation (`embed.canary_mismatch`, transient) and the worker's health is `unhealthy`. A profile never checked, or without a recorded canary, is allowed. The admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced. Run the check after any change to the gateway's models (Decisions, "Embedding canary on demand") |
-| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `ume-rag:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
-| Chat protection at the gateway | a knowledge base's calls run as its own gateway key, so its rate and concurrency limits (429 + `Retry-After`, honoured: requeued without an attempt) are separate from an assistant's; the credential key's limits do not apply to acted calls (gateway-changes §5.3), so the worker keeps its own embedding concurrency limit (`Worker:Concurrency:embed`, below) and the gateway is asked for no platform-wide cap (#580). Until the gateway's integration phase 1 the pilot team's key of the profile's level carries the gateway's `MaxConcurrentRequests` cap, so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-ume-step: query-embed`) only when the performance pass's §6 trigger fires ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9, §6) |
+| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `kalla:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
+| Chat protection at the gateway | a knowledge base's calls run as its own gateway key, so its rate and concurrency limits (429 + `Retry-After`, honoured: requeued without an attempt) are separate from an assistant's; the credential key's limits do not apply to acted calls (gateway-changes §5.3), so the worker keeps its own embedding concurrency limit (`Worker:Concurrency:embed`, below) and the gateway is asked for no platform-wide cap (#580). Until the gateway's integration phase 1 the pilot team's key of the profile's level carries the gateway's `MaxConcurrentRequests` cap, so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-fors-step: query-embed`) only when the performance pass's §6 trigger fires ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9, §6) |
 | Bulk loads | **Later (P2):** bulk runs (first crawls, re-embeds) at `Priority` −5 in the night window, forecast from the measured tokens/s, and never above `Settings.Ingestion.bulkEmbedShare` (0.75) of the global cap |
 | Profile guard | a platform admin may edit a profile until a chunk set uses it (admin design §4.5, Decisions "Editable embedding profiles before use"), so the vectors' writes check that the profile still has the model, dimensions and `RequestDimensions` they were embedded with: the chunk-set insert and each cache write run `content.rag_lock_profile_if_unchanged` (owner's rights, the profile row `FOR SHARE` until commit) in their transaction. If it returns false, nothing is written and the document is requeued without an attempt (`embed.profile_changed`) to embed with the new values. The admin's save locks the row `FOR UPDATE`, so the two serialise |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
@@ -584,7 +584,7 @@ noisy site would churn its whole index.
 | Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from documents detected as another language than Swedish (`Documents.Language` set and not `sv`: translations such as umea.se's `/languages/` pages have a Swedish original, so a Swedish question about them has two right documents; the translations stay searchable); not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (`Chunks.LargeTable`, true on the second and later row groups of a table over 2,000 rows, is excluded) |
 | Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind (`Chunks.ContentKind` `table`/`list`; `list` = list items are at least half of the body tokens): a minimum of max(⌈share × candidates⌉, min(5, available)) per kind, taken first and inside the per-document cap |
 | Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; the round is `EvaluationSets.Round`, the round the next generation uses: every round that generated writes round + 1, also one that kept nothing (the next round is the larger of `Round` and the newest question's `Origin.round` + 1) |
-| Model | `Settings.EvaluationModel` (a chat model in the gateway catalogue) at the **collection's ceiling**: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`), lowered to the worker's ceiling from its credential key (identity design §4.7); `x-ume-step: eval-generate`; no `temperature` (the model's default); JSON output (`response_format` `json_object`; a reply in a code fence is accepted). Unset refuses with `eval.model_unset` (no implicit default); the job refuses with `eval.model_not_at_ceiling` unless `/v1/models` at that ceiling lists the model, read through its own client (`gateway-eval-models`) with `x-ume-max-residency` and the worker's key of that ceiling (`eval.no_key` without one; `ResidencyCeilingHandler` exempts `GET /v1/models` from the answer check, chat §8.1) |
+| Model | `Settings.EvaluationModel` (a chat model in the gateway catalogue) at the **collection's ceiling**: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`), lowered to the worker's ceiling from its credential key (identity design §4.7); `x-fors-step: eval-generate`; no `temperature` (the model's default); JSON output (`response_format` `json_object`; a reply in a code fence is accepted). Unset refuses with `eval.model_unset` (no implicit default); the job refuses with `eval.model_not_at_ceiling` unless `/v1/models` at that ceiling lists the model, read through its own client (`gateway-eval-models`) with `x-fors-max-residency` and the worker's key of that ceiling (`eval.no_key` without one; `ResidencyCeilingHandler` exempts `GET /v1/models` from the answer check, chat §8.1) |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
 
@@ -603,7 +603,7 @@ Questions are Swedish whatever the document language (BGE-M3 is cross-lingual). 
    English, or if it has ≥ 8 words and is not detected as Swedish (the detector needs 8 words).
 2. **Answer leakage**: the normalised expected answer is not contained in the question (matched on whole
    words); share of the question's content words found verbatim in the chunk ≤ 0.8.
-3. Judge (`Settings.EvaluationJudgeModel`, default the same model, same ceiling, no `temperature`, `x-ume-step: eval-judge`): rates
+3. Judge (`Settings.EvaluationJudgeModel`, default the same model, same ceiling, no `temperature`, `x-fors-step: eval-judge`): rates
    *answerable from the text*, *understandable without the text*, *specific to this content* on 1–5; keep only all ≥ 4.
 4. Near-duplicates: cosine ≥ 0.92 between kept questions (the collection's embedding profile) → keep one.
 5. Never filter on whether retrieval finds the document: that would bias the set towards the current pipeline.
@@ -615,7 +615,7 @@ Expected documents: the source chunk's document plus every live document of the 
 **Cost** per kept question ≈ 2,000 on-prem tokens (generation 1.6 × ≈ 880, judge ≈ 620): a full set ≈ 200,000 tokens,
 shown before generation as a forecast. The calls run as the knowledge base's gateway key (engine §7.7) and each is
 recorded under the collection by step (`eval-generate`, `eval-judge`, `eval-dedup`) in `CollectionDailyUsage` with the
-gateway's `x-ume-cost-usd` or an estimate (engine §10.6), so the real cost shows beside the forecast (admin §8.6).
+gateway's `x-fors-cost-usd` or an estimate (engine §10.6), so the real cost shows beside the forecast (admin §8.6).
 
 ### 13.2 Why documents, not chunks
 
@@ -668,14 +668,14 @@ gateway's `x-ume-cost-usd` or an estimate (engine §10.6), so the real cost show
   them. An `on-demand` run covers the whole active set, `human` layer first. The result is recorded (to-verify #168);
   hybrid and the decompounder stay only if they beat vector-only on the gold set.
 - **Later (P2):** questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free
-  question is kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as
+  question is kept, with the collection's classification); skill test questions run by the skill gate in `kalla-admin` as
   the tools design specifies.
 - Results are reported per layer, and **reports lead with the gold-set (`human`) results**; the generated layer is a
   regression signal only (weakness review §2).
 
 ### 13.5 Running retrieval as the Knowledge API does
 
-- Shared project **`Ume.Rag.Retrieval`** (used by `Ume.Rag.Api`, the worker and the admin test panel): runs the
+- Shared project **`Kalla.Retrieval`** (used by `Kalla.Api`, the worker and the admin test panel): runs the
   keyword and vector candidate statements (knowledge design §6.2) with the collection's `RetrievalSettings` and
   profile literal, the same `SwedishDecompounder` on the query, then fuses in .NET (RRF, then the age decay and
   `demote` multipliers, weakness review §3) and applies the same dedup by
@@ -725,7 +725,7 @@ public interface IEvaluator
 }
 public sealed record EvaluationSubject(EvaluationKind Kind, Guid CollectionId, Guid? PipelineVersionId,
     JsonElement? CandidateSettings);
-public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // worker: the first three; rag-admin: Answers (§14.8)
+public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // worker: the first three; kalla-admin: Answers (§14.8)
 ```
 
 The harness measures retrieval; answers are judged by people. For the go-live gate, `scripts/grading/grading.py` sends
@@ -779,13 +779,13 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Publish report, nightly | ≤ 100 queries on the full collection | < 1 min |
 | On-demand settings comparison | 2 × 100 queries | < 1 min |
 | Set generation | ≈ 200k on-prem LLM tokens | model-bound, ≈ 10–20 min |
-| Answer-level run (P2; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
+| Answer-level run (P2; `kalla-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
 
 The re-processing itself is forecast by the publish flow (6a §12.2); the `eval` class (concurrency 1, on at most two
 worker instances) runs only generation and measuring. **Recorded cost**: every model call of a retrieval run (query
 embeddings that miss the cache, `query-embed`; rerank variants, `rerank`) carries the evaluation run's id as
-`x-ume-run-id` and is counted under the collection in `CollectionDailyUsage` by step, with the gateway's cost or an
-estimate (engine §10.6; cost-attribution §5 C3). Answer-level runs (P2, `rag-admin`) are an assistant's calls and are
+`x-fors-run-id` and is counted under the collection in `CollectionDailyUsage` by step, with the gateway's cost or an
+estimate (engine §10.6; cost-attribution §5 C3). Answer-level runs (P2, `kalla-admin`) are an assistant's calls and are
 counted in `chat."AssistantDailyUsage"` under the client `admin-console` (admin §4.9, §8.6). **Later (P2):** its reads go to the standby when read routing
 exists.
 
@@ -797,18 +797,18 @@ exists.
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
 - **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through
-  `Ume.Rag.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
-  assistant's ceiling, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
+  `Kalla.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
+  assistant's ceiling, `x-fors-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
   rate from live chat is shown next to them (chat design). At most 100 questions per assistant and night (the
   `human` layer first, then the newest generated questions), and the run records its cost. Run kind `answers`; it
-  runs in **`rag-admin`**, which already runs `Ume.Rag.Answering` for the test panel and holds the gateway keys of
-  every level. The worker runs only retrieval evaluation (through `Ume.Rag.Retrieval`) and references neither
-  `Ume.Rag.Answering` nor `Ume.Rag.Tools`.
+  runs in **`kalla-admin`**, which already runs `Kalla.Answering` for the test panel and holds the gateway keys of
+  every level. The worker runs only retrieval evaluation (through `Kalla.Retrieval`) and references neither
+  `Kalla.Answering` nor `Kalla.Tools`.
 
 ## 15. Observability
 
-Meter `Ume.Rag` (6a §17), low-cardinality dimensions only:
+Meter `Källa` (6a §17), low-cardinality dimensions only:
 
 | Metric | Type | Dimensions |
 |---|---|---|
@@ -849,16 +849,16 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 
 | Kind | Project / location | Content |
 |---|---|---|
-| Golden per stage and version | `Ume.Rag.Worker.Tests`, `tests/fixtures/processing/` | input → expected output for `detect`, parse planning (signals → plan), HTML extraction (presets and profiles), `plain-text`, `csv-table`, `clean`, split, `chunk` (incl. breadcrumb prefix and `SearchText`), metadata, quality facts, `personal-data` (with a fake NER client); a changed output without a version bump fails (6a §19) |
+| Golden per stage and version | `Kalla.Worker.Tests`, `tests/fixtures/processing/` | input → expected output for `detect`, parse planning (signals → plan), HTML extraction (presets and profiles), `plain-text`, `csv-table`, `clean`, split, `chunk` (incl. breadcrumb prefix and `SearchText`), metadata, quality facts, `personal-data` (with a fake NER client); a changed output without a version bump fails (6a §19) |
 | umea.se acceptance (P1) | `tests/fixtures/umea/` (20 saved HTML pages and 1 PDF with goldens and `MANIFEST.csv`, byte-identical to what umea.se served, to-verify #138) | the example page (simplification pass §13.2) extracts to exactly its main text without share widget, short-URL line and child-link list, breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar, verksamheter › Teknik och fastighet" (as on the live page), date 2026-01-15; the set is a regression corpus |
 | Tokenizer parity | same | 1,000 passages, counts equal to the Hugging Face tokenizer (§6.1) |
 | Swedish fixture corpus | `tests/fixtures/processing/` (public or synthetic, `MANIFEST.csv` as parser §15.3) | umea.se pages with deep navigation and contact blocks; a protokoll with `§` items and justering block; föreskrifter with `kap.`/`§`/`Bilaga`; a taxa with fee tables across pages; a report with TOC, footnotes and `1.2.3` numbering; hyphenation and suspended compounds; a PDF whose layout headings have wrong levels; a page with only headings; a 300-row XLSX; a two-column newsletter |
-| Planner | `Ume.Rag.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
+| Planner | `Kalla.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
 | PII precision/recall | `tests/fixtures/pii/` (synthetic only) | generated Swedish texts with Skatteverket test personnummer and samordningsnummer, organisationsnummer, OCR references, bankgiro, case numbers, phone numbers in every §9.1 format, obfuscated emails, names from SCB statistics in running text, tables, all caps, genitive and hyphenated forms; **targets**: personnummer/samordningsnummer precision and recall ≥ 0.99, email ≥ 0.99, phone ≥ 0.95, names (NER) recall ≥ 0.85 and precision ≥ 0.80; the NER model is accepted for P1 only if it reaches them (answered 18) |
-| NER gating and client | `Ume.Rag.Worker.Tests`, `Ume.Rag.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
-| Flag lifecycle | `Ume.Rag.Worker.Tests` (`PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
-| Noise | `Ume.Rag.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
-| Evaluation reproducibility | `tests/Ume.Rag.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`) with FakeGateway (deterministic embeddings and LLM answers): every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
+| NER gating and client | `Kalla.Worker.Tests`, `Kalla.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
+| Flag lifecycle | `Kalla.Worker.Tests` (`PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
+| Noise | `Kalla.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
+| Evaluation reproducibility | `tests/Kalla.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`) with FakeGateway (deterministic embeddings and LLM answers): every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
 
 ## 18. Milestones
 
@@ -896,7 +896,7 @@ Moved to [`../archive/design-history/ingestion-processing.md`](../archive/design
   comparison with Postgres `ispell` (simplification pass §3).
 - The evaluation model through the gateway: JSON output mode, and that judge scores at the model's default temperature
   are stable enough for the ≥ 4 filter; run-to-run variance of nightly runs on an unchanged collection (input to any future gate).
-- Cost per assistant of the answer-level nightly run in `rag-admin`.
+- Cost per assistant of the answer-level nightly run in `kalla-admin`.
 - All planning numbers of §14.7 and §16, measured in the R1 test.
 
 ## 22. Deferred or removed (simplification pass)

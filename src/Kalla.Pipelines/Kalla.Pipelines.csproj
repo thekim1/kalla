@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Shared by kalla-admin and kalla-worker (engine design §3, §4; admin design §2.1): the worker contracts as C# records
+    (source settings, pipeline definition and templates, job payloads and results, site profiles) and their exported
+    JSON Schemas (contracts/), the pipeline validator, stage keys and settings hashes.
+  -->
+  <ItemGroup>
+    <PackageReference Include="LateApexEarlySpeed.Json.Schema" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kalla.Pipelines.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The P1 templates the migrator seeds (engine design §13.1), built in so the admin and the worker validate against the same versions. -->
+    <EmbeddedResource Include="..\Kalla.MigrationService\Templates\*.json" LogicalName="Kalla.Pipelines.Templates.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kalla.Domain\Kalla.Domain.csproj" />
+  </ItemGroup>
+</Project>

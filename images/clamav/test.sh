@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Image test for ume-rag/clamav (repo-and-deployment §5.5). Runs the image hardened as in Compose (its own non-root
+# Image test for kalla/clamav (repo-and-deployment §5.5). Runs the image hardened as in Compose (its own non-root
 # user, read-only root file system, tmpfs /tmp, no capabilities) and talks to clamd over TCP 3310 the way the worker
 # will (connectors design §11): zPING, zVERSION, an EICAR zINSTREAM is FOUND, a clean 50 MB stream is OK, a stream over
 # StreamMaxLength (60M) is refused, and the image's health check turns healthy.
@@ -10,13 +10,13 @@
 #   --online   the image's entrypoint on an empty volume: freshclam downloads the real signatures (about 115 MB) from
 #              database.clamav.net. Then a second container on the same volume must reuse them without a download.
 #
-# Usage: images/clamav/test.sh [--online] [image]   (default image: ume-rag/clamav:dev)
+# Usage: images/clamav/test.sh [--online] [image]   (default image: kalla/clamav:dev)
 set -euo pipefail
 
 online=false
 if [ "${1:-}" = "--online" ]; then online=true; shift; fi
-image="${1:-ume-rag/clamav:dev}"
-id="ume-rag-clamtest-$$"
+image="${1:-kalla/clamav:dev}"
+id="kalla-clamtest-$$"
 volume="$id-db"
 eicar='X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
 
@@ -104,7 +104,7 @@ if $online; then
   start
 else
   # HDB signature: MD5 and size of the EICAR file. Written by the image's own user into the fresh volume.
-  printf '44d88612fea8a8f36de82e1278abb02f:68:Ume.Rag.Test.EICAR\n' |
+  printf '44d88612fea8a8f36de82e1278abb02f:68:Kalla.Test.EICAR\n' |
     docker run --rm -i -v "$volume:/var/lib/clamav" --entrypoint sh "$image" -c 'cat > /var/lib/clamav/test.hdb'
   start --entrypoint clamd -- --foreground
 fi
