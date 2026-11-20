@@ -32,6 +32,7 @@ public static class CommandExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, EditParseRuleHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, DisableParseRuleHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, CheckHnswIndexHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, DeleteSourceHandler>());
         return services;
     }
 }

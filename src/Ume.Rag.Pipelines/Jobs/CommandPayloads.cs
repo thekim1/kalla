@@ -26,12 +26,13 @@ public static class CommandKinds
     public const string EditParseRule = "edit-parse-rule";
     public const string DisableParseRule = "disable-parse-rule";
     public const string CheckHnswIndex = "check-hnsw-index";
+    public const string DeleteSource = "delete-source";
 
     public static IReadOnlyList<string> All { get; } =
     [
         CancelRun, EditSiteProfile, RollbackSiteProfile, EditEvalQuestion,
         ConfirmDeletion, RejectDeletion, ReleaseHold, ClearPiiFlag, ReprocessDocument, EditParseRule, DisableParseRule,
-        CheckHnswIndex,
+        CheckHnswIndex, DeleteSource,
     ];
 }
 
@@ -176,6 +177,20 @@ public sealed record RejectDeletionCommand : JobPayload
     [MinLength(1)]
     [MaxLength(200)]
     public required string DecidedBy { get; init; }
+}
+
+/// <summary>
+/// <c>delete-source</c> (Decisions "Deleting knowledge bases, sources and assistants"; data-model §8): queued by the admin's
+/// delete of a source, with it. Dedup <see cref="JobDedupKeys.DeleteSource"/>.
+/// </summary>
+[Description("Payload of the command delete-source (data-model §8): the deleted source's running runs are cancelled, its documents and the chunks of their live sets soft-deleted (PurgeAfter after the 14-day grace), and its upload slots deleted with their blobs tombstoned. Refused for a source that is not deleted. Dedup delete-source:{sourceId}.")]
+public sealed record DeleteSourceCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"delete-source\"")]
+    public string Kind { get; init; } = CommandKinds.DeleteSource;
+
+    public required Guid SourceId { get; init; }
 }
 
 /// <summary><c>release-hold</c> (connectors design §13.3): the source's held documents become candidates at the next reconcile.</summary>

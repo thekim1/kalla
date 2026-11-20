@@ -42,6 +42,7 @@ public sealed class P1bJobContractTests
             new ConfirmDeletionCommand { RunId = Id, DecidedBy = "6f1c2d3e-0000-4000-8000-000000000001" },
             new RejectDeletionCommand { RunId = Id, DecidedBy = "6f1c2d3e-0000-4000-8000-000000000001" },
             new ReleaseHoldCommand { SourceId = Id },
+            new DeleteSourceCommand { SourceId = Id },
             new ClearPiiFlagCommand { DocumentId = Id, DecidedBy = "6f1c2d3e-0000-4000-8000-000000000001" },
             new ReprocessDocumentCommand { DocumentId = Id },
             new ReprocessDocumentCommand { DocumentId = Id, FromStage = "fetch" },
@@ -83,6 +84,7 @@ public sealed class P1bJobContractTests
             new DeletionCommandResult { Deleted = 12, Dropped = 1 },
             new DeletionCommandResult { Held = 30 },
             new ReleaseHoldResult { Released = 30 },
+            new DeleteSourceResult { Documents = 13, Uploads = 13, CancelledJobs = 2 },
             new ClearPiiFlagResult { ReleasedChunkSetId = Id },
             new ClearPiiFlagResult(),
             new ReprocessDocumentResult { RunId = Id, ExecutionId = Id },
@@ -107,7 +109,7 @@ public sealed class P1bJobContractTests
         [
             "cancel-run", "edit-site-profile", "rollback-site-profile", "edit-eval-question",
             "confirm-deletion", "reject-deletion", "release-hold", "clear-pii-flag", "reprocess-document", "edit-parse-rule", "disable-parse-rule",
-            "check-hnsw-index",
+            "check-hnsw-index", "delete-source",
         ]);
         ContractJson.Serialize(new ReprocessDocumentCommand { DocumentId = Id }).ShouldBe($$"""{"kind":"reprocess-document","documentId":"{{G}}","fromStage":"parse"}""");
         ContractJson.Serialize(new StagePreviewPayload { PipelineVersionId = Id, CollectionId = Id, DocumentIds = [Id] })
@@ -125,6 +127,7 @@ public sealed class P1bJobContractTests
     [InlineData(typeof(ConfirmDeletionCommand), $$"""{"kind":"reject-deletion","runId":"{{G}}","decidedBy":"x"}""")]
     [InlineData(typeof(RejectDeletionCommand), $$"""{"runId":"{{G}}","decidedBy":"x"}""")]
     [InlineData(typeof(ReleaseHoldCommand), $$"""{"sourceId":"{{G}}"}""")]
+    [InlineData(typeof(DeleteSourceCommand), $$"""{"kind":"release-hold","sourceId":"{{G}}"}""")]
     [InlineData(typeof(ClearPiiFlagCommand), $$"""{"documentId":"{{G}}","decidedBy":"x"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), $$"""{"documentId":"{{G}}"}""")]
     [InlineData(typeof(CheckHnswIndexCommand), $$"""{"embeddingProfileId":"{{G}}","trigger":"nightly"}""")]
@@ -141,6 +144,7 @@ public sealed class P1bJobContractTests
     [InlineData(typeof(ConfirmDeletionCommand), $$"""{"kind":"confirm-deletion","runId":"{{G}}"}""")]
     [InlineData(typeof(RejectDeletionCommand), $$"""{"kind":"reject-deletion","runId":"{{G}}","decidedBy":""}""")]
     [InlineData(typeof(ReleaseHoldCommand), """{"kind":"release-hold"}""")]
+    [InlineData(typeof(DeleteSourceCommand), """{"kind":"delete-source"}""")]
     [InlineData(typeof(ClearPiiFlagCommand), $$"""{"kind":"clear-pii-flag","documentId":"{{G}}"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), """{"kind":"reprocess-document","fromStage":"parse"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), $$"""{"kind":"reprocess-document","documentId":"{{G}}","fromStage":"ocr"}""")]
@@ -227,6 +231,7 @@ public sealed class P1bJobContractTests
             JobDedupKeys.ReleaseHold(Id), JobDedupKeys.PiiClear(Id), JobDedupKeys.Reprocess(Id),
         }.ShouldBe([$"pii-preview:{G}", $"plan:{G}", $"eval-generate:{G}", $"deletion:{G}", $"release-hold:{G}", $"pii-clear:{G}", $"reprocess:{G}"]);
         JobDedupKeys.EvalReport(Id).ShouldBe($"eval-report:{G}");
+        JobDedupKeys.DeleteSource(Id).ShouldBe($"delete-source:{G}");
         JobDedupKeys.EvalNightly(Id).ShouldNotBe(JobDedupKeys.Eval(Id));
     }
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.delete-source.result.schema.json",
+  "title": "delete-source command result",
+  "type": "object",
+  "properties": {
+    "documents": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "uploads": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "cancelledJobs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "documents",
+    "uploads",
+    "cancelledJobs"
+  ],
+  "description": "Result of the command delete-source: the documents soft-deleted, the upload slots deleted (their blobs tombstoned) and the run jobs cancelled."
+}

@@ -230,6 +230,9 @@ public static class JobDedupKeys
 
     public static string ReleaseHold(Guid sourceId) => $"release-hold:{sourceId}";
 
+    /// <summary><c>delete-source:{sourceId}</c>: the deleted source's content leaves the index once.</summary>
+    public static string DeleteSource(Guid sourceId) => $"delete-source:{sourceId}";
+
     public static string PiiClear(Guid documentId) => $"pii-clear:{documentId}";
 
     public static string Reprocess(Guid documentId) => $"reprocess:{documentId}";

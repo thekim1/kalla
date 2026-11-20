@@ -541,6 +541,19 @@ public sealed record ReleaseHoldResult
     public required int Released { get; init; }
 }
 
+[Description("Result of the command delete-source: the documents soft-deleted, the upload slots deleted (their blobs tombstoned) and the run jobs cancelled.")]
+public sealed record DeleteSourceResult
+{
+    [Range(0, int.MaxValue)]
+    public required int Documents { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int Uploads { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int CancelledJobs { get; init; }
+}
+
 /// <summary>Result of <c>check-hnsw-index</c> (knowledge design §6.4).</summary>
 [Description("Result of the command check-hnsw-index: the HNSW-searched collections and query chunks measured, recall@10 of the index against exact search (absent when no collection of the profile is searched through HNSW or the profile has no index), and, after a rebuild, the recall measured again.")]
 public sealed record CheckHnswIndexResult
