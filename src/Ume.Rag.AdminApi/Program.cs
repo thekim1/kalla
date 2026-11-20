@@ -65,7 +65,9 @@ builder.Services.AddSingleton(sp => new Ume.Rag.Infrastructure.Access.PolicySnap
     sp.GetRequiredService<ConfigVersionState>(), sp.GetRequiredService<ILogger<Ume.Rag.Infrastructure.Access.PolicySnapshotStore>>()));
 builder.Services.AddSingleton<Ume.Rag.Domain.Access.IAccessPolicy>(new Ume.Rag.Domain.Access.AccessPolicy(new HashSet<string>(
     builder.Configuration.GetSection("Knowledge:OpenToClientKinds").Get<string[]>() ?? ["internal"], StringComparer.Ordinal)));
-builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+// An empty address is unset (#865): the one service file renders Admin__GatewayAdminUrl as "" when no host or domain is set.
+builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).PostConfigure(AdminOptions.BlankAddressesUnset)
+    .ValidateDataAnnotations().ValidateOnStart();
 // The ceilings V37 checks host politeness profiles against (connectors design §6.6): the worker's Crawl keys and Render:MaxConcurrent.
 builder.Services.AddOptions<CrawlCeilingOptions>().BindConfiguration(CrawlCeilingOptions.SectionName)
     .Configure<IConfiguration>((o, configuration) => o.MaxRenderPerHost = configuration.GetValue("Render:MaxConcurrent", o.MaxRenderPerHost))
