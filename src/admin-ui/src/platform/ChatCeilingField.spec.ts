@@ -23,7 +23,7 @@ async function openChat(value: Record<string, unknown>) {
   document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/openapi/v1.json') return Promise.resolve(json(doc))
-    if (url === '/api/gateway/models') return Promise.resolve(json([{ name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: true }]))
+    if (url === '/api/gateway/models') return Promise.resolve(json([{ name: 'fors/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: true }]))
     if (init?.method === 'PUT') return Promise.resolve(json({ value: {}, version: '2' }))
     return Promise.resolve(json({ value, version: '1' }))
   })
@@ -42,7 +42,7 @@ async function submit(fetch: ReturnType<typeof vi.fn>) {
 
 describe('Settings, chat: the platform answer ceiling (Decisions "Answer length from the model", admin design §4.5)', () => {
   it('edits maxAnswerTokens as a field of its own and saves it in the section', async () => {
-    const { wrapper, fetch } = await openChat({ condenseModel: 'ume/chat-eu', allowedLinkHosts: ['umea.se'] })
+    const { wrapper, fetch } = await openChat({ condenseModel: 'fors/chat-eu', allowedLinkHosts: ['umea.se'] })
     const ceiling = document.body.querySelector<HTMLInputElement>('input#settings-chat-maxAnswerTokens')!
     expect(ceiling.value).toBe('')
     expect(document.body.textContent).toContain(PLATFORM.fields.maxAnswerTokens)
@@ -51,19 +51,19 @@ describe('Settings, chat: the platform answer ceiling (Decisions "Answer length 
     ceiling.dispatchEvent(new Event('input'))
 
     const body = await submit(fetch)
-    expect(body.value).toEqual({ condenseModel: 'ume/chat-eu', allowedLinkHosts: ['umea.se'], maxAnswerTokens: 4000 })
+    expect(body.value).toEqual({ condenseModel: 'fors/chat-eu', allowedLinkHosts: ['umea.se'], maxAnswerTokens: 4000 })
     wrapper.unmount()
   })
 
   it('emptied, the ceiling is left out of the section', async () => {
-    const { wrapper, fetch } = await openChat({ condenseModel: 'ume/chat-eu', maxAnswerTokens: 4000 })
+    const { wrapper, fetch } = await openChat({ condenseModel: 'fors/chat-eu', maxAnswerTokens: 4000 })
     const ceiling = document.body.querySelector<HTMLInputElement>('input#settings-chat-maxAnswerTokens')!
     expect(ceiling.value).toBe('4000')
     ceiling.value = ''
     ceiling.dispatchEvent(new Event('input'))
 
     const body = await submit(fetch)
-    expect(body.value).toEqual({ condenseModel: 'ume/chat-eu' })
+    expect(body.value).toEqual({ condenseModel: 'fors/chat-eu' })
     wrapper.unmount()
   })
 })

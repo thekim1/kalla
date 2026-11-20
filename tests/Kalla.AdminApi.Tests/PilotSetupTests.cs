@@ -75,9 +75,9 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
                 }
             }
 
-            if (!await db.GatewayModels.AnyAsync(m => m.Name == "ume/chat-eu", Ct))
+            if (!await db.GatewayModels.AnyAsync(m => m.Name == "fors/chat-eu", Ct))
             {
-                db.GatewayModels.Add(new GatewayModel { Name = "ume/chat-eu", Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+                db.GatewayModels.Add(new GatewayModel { Name = "fors/chat-eu", Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
             }
 
             if (!await db.EmbeddingProfiles.AnyAsync(p => p.IsDefault, Ct))
@@ -169,7 +169,7 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
         var assistantId = assistant.GetProperty("id").GetGuid();
         var draft = await Ok(await admin.PutAsJsonAsync($"/api/assistants/{assistantId}/draft", new
         {
-            gatewayModel = "ume/chat-eu", systemPrompt = "Svara kort och hänvisa till källorna.", collectionLinks = new[] { new { collectionId, tags = Array.Empty<string>() } },
+            gatewayModel = "fors/chat-eu", systemPrompt = "Svara kort och hänvisa till källorna.", collectionLinks = new[] { new { collectionId, tags = Array.Empty<string>() } },
             version = assistant.GetProperty("draft").GetProperty("version").GetString(),
         }, Ct));
         // The pilot runs on the platform's credential key until a gateway key is chosen (V39's warning, B-36).

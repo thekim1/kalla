@@ -61,7 +61,7 @@ describe('Assistants (admin design §5.3, §5.5.4)', () => {
       total: 2,
       items: [
         assistantSummary({
-          id: 'a1', name: 'Bygglov', collections: [{ id: 'c1', name: 'Blanketter' }, { id: 'c2', name: 'umea.se' }], model: 'ume/chat-eu', publishedVersion: 3,
+          id: 'a1', name: 'Bygglov', collections: [{ id: 'c1', name: 'Blanketter' }, { id: 'c2', name: 'umea.se' }], model: 'fors/chat-eu', publishedVersion: 3,
           publishedAt: '2026-11-10T09:00:00Z', questions7d: 1234,
         }),
         assistantSummary({ id: 'a2', name: 'Skola', published: false, publishedVersion: null, publishedAt: null, hasDraft: true }),
@@ -74,7 +74,7 @@ describe('Assistants (admin design §5.3, §5.5.4)', () => {
     expect(wrapper.findAll('th[scope=col]').map((h) => h.text())).toEqual(['Name', 'Information class', 'Knowledge bases', 'Model', 'Published', 'Questions, 7 days'])
     const [first, second] = wrapper.findAll('tbody tr')
     expect(first!.get('[data-test=collections-a1]').text()).toBe('Blanketter, umea.se')
-    expect(first!.text()).toContain('ume/chat-eu')
+    expect(first!.text()).toContain('fors/chat-eu')
     expect(first!.get('[data-test=published-a1]').text()).toContain('Version 3')
     expect(first!.get('[data-test=published-a1]').text()).toContain('10 Nov 2026')
     expect(first!.text()).toMatch(/1\s234/)

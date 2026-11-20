@@ -27,7 +27,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncLifetime
 {
-    private const string Model = "ume/chat-onprem";
+    private const string Model = "fors/chat-onprem";
     private const string Category = "Kalla.Worker.Evaluation.Generation.EvalSetGenerator";
 
     /// <summary>Six Swedish questions with little wording in common; {0} is the topic, {1} the test's tag.</summary>
@@ -387,9 +387,9 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
     }
 
     [Theory]
-    [InlineData(Classification.Sensitive, "ume/chat-eu", null, EvalModelClient.ModelNotAtCeiling)]
-    [InlineData(Classification.Sensitive, Model, "ume/chat-eu", EvalModelClient.ModelNotAtCeiling)]
-    [InlineData(Classification.Public, "ume/chat-advanced", null, EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Sensitive, "fors/chat-eu", null, EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Sensitive, Model, "fors/chat-eu", EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Public, "fors/chat-advanced", null, EvalModelClient.ModelNotAtCeiling)]
     [InlineData(Classification.Internal, "fake-drained", null, EvalModelClient.ModelNotAtCeiling)]
     [InlineData(Classification.Internal, "fake-wrong-residency", null, EvalModelClient.ResidencyAboveCeiling)]
     [InlineData(Classification.Internal, null, null, EvalSetGenerator.ModelUnset)]

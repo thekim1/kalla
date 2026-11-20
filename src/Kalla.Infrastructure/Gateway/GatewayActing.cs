@@ -16,7 +16,7 @@ namespace Kalla.Infrastructure.Gateway;
 /// </summary>
 public sealed record GatewayCall(Guid? GatewayKeyId, string? Step = null, Guid? AssistantId = null, Guid? CollectionId = null)
 {
-    internal static readonly HttpRequestOptionsKey<GatewayCall> OptionsKey = new("ume.gateway.call");
+    internal static readonly HttpRequestOptionsKey<GatewayCall> OptionsKey = new("kalla.gateway.call");
 }
 
 /// <summary>
@@ -47,7 +47,7 @@ public static class GatewayCallScope
 
 /// <summary>
 /// The gateway's <c>features</c> and this service's credential key's residency ceiling as this service last read them from
-/// its own <c>GET /v1/ume/context</c> (identity §4.7, gateway-changes §5.2), held in memory. Empty and unknown until the
+/// its own <c>GET /v1/fors/context</c> (identity §4.7, gateway-changes §5.2), held in memory. Empty and unknown until the
 /// first answer, so no call acts as a key and every call's ceiling is <c>OnPrem</c> before then (<see cref="GatewayCeiling"/>).
 /// </summary>
 public sealed class GatewayFeatures
@@ -75,7 +75,7 @@ public sealed class GatewayFeatures
 
     public IReadOnlySet<string> Current => _features;
 
-    /// <summary>Calls for an object with a gateway key send <c>x-ume-on-behalf-of</c> (phase 2).</summary>
+    /// <summary>Calls for an object with a gateway key send <c>x-fors-on-behalf-of</c> (phase 2).</summary>
     public bool ActAsKey => _features.Contains(ActAsKeyFeature);
 
     /// <summary>
@@ -158,7 +158,7 @@ public sealed class GatewayFeatures
 }
 
 /// <summary>
-/// Reads this service's own <c>GET /v1/ume/context</c> with its credential key at start and every
+/// Reads this service's own <c>GET /v1/fors/context</c> with its credential key at start and every
 /// <see cref="GatewayOptions.ContextInterval"/>, with <c>If-None-Match</c>, into <see cref="GatewayFeatures"/> (identity §4.7), and
 /// ahead of the interval when a caller asks (<see cref="EnsureFirstReadAsync"/>, <see cref="RefreshAsync"/>). Off without a gateway
 /// or a key. A failed read keeps the last features.
@@ -321,7 +321,7 @@ public sealed partial class GatewayContextReader(
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/ume/context", UriKind.Relative));
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/fors/context", UriKind.Relative));
             if (_etag is not null)
             {
                 request.Headers.TryAddWithoutValidation("If-None-Match", _etag);

@@ -43,24 +43,24 @@ public sealed record QueryEmbedding(ReadOnlyMemory<float> Vector, GatewayCallUsa
 /// <summary>
 /// Embeds a normalised query with the profile's model at the profile's ceiling (knowledge design §5; P1 README §8 O1:
 /// the ceiling comes from the profile) on the gateway client <see cref="HttpClientName"/>, whose
-/// <see cref="ResidencyCeilingHandler"/> checks key, ceiling and <c>x-ume-residency</c>. L1 cache keyed by
+/// <see cref="ResidencyCeilingHandler"/> checks key, ceiling and <c>x-fors-residency</c>. L1 cache keyed by
 /// (profile, HMAC of the query) so no query text is held as a key; concurrent misses share one call; one retry only for
 /// a connection failure, a 502/504 (<c>all_providers_failed</c>, with the same ceiling, #390) or a 503 without
 /// <c>Retry-After</c>; after 5 failures in 30 s the circuit skips the call for 15 s,
 /// then one call decides. Every failure is a <see cref="QueryEmbeddingUnavailableException"/> whose reason is the
 /// <c>degraded</c> value (§5.5), and every failed call logs a warning with that reason and what happened (a time-out, the
 /// gateway's status). The query text is never logged. A call's usage (step <c>query-embed</c>, its input tokens
-/// and the gateway's <c>x-ume-cost-usd</c>; chat design §8.3) goes to the request whose miss made the call: a cache hit, or a
+/// and the gateway's <c>x-fors-cost-usd</c>; chat design §8.3) goes to the request whose miss made the call: a cache hit, or a
 /// request that joined another's call, gets none, so each call is recorded once.
 /// </summary>
 public sealed partial class GatewayQueryEmbedder : IDisposable
 {
     public const string HttpClientName = "gateway-query";
-    public const string RunIdHeader = "x-ume-run-id";
-    public const string StepHeader = "x-ume-step";
-    public const string PiiHeader = "x-ume-pii";
+    public const string RunIdHeader = "x-fors-run-id";
+    public const string StepHeader = "x-fors-step";
+    public const string PiiHeader = "x-fors-pii";
 
-    /// <summary>The <c>x-ume-step</c> of the call.</summary>
+    /// <summary>The <c>x-fors-step</c> of the call.</summary>
     public const string Step = "query-embed";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -251,7 +251,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         // A redacted or blocked query would embed other text than asked (§5.2).
         if (response.Headers.TryGetValues(PiiHeader, out var pii) && pii.Any(v => v is "redacted" or "blocked"))
         {
-            throw Unavailable("The gateway changed the query (x-ume-pii).");
+            throw Unavailable("The gateway changed the query (x-fors-pii).");
         }
 
         var body = await response.Content.ReadFromJsonAsync<GatewayEmbeddingResponse>(Json, cancellationToken);

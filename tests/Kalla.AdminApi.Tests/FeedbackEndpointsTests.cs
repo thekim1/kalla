@@ -64,7 +64,7 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database, AdminH
         await db.SaveChangesAsync(Ct);
         var version = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 3, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            AssistantId = assistant.Id, Number = 3, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
         };
         db.AddRange(version, new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });

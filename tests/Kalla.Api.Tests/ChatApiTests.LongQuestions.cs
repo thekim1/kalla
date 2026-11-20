@@ -41,7 +41,7 @@ public sealed partial class ChatApiTests
         Rejected,
     }
 
-    /// <summary>One request the chat role sent to the gateway: path, <c>x-ume-step</c>, ceiling and JSON body.</summary>
+    /// <summary>One request the chat role sent to the gateway: path, <c>x-fors-step</c>, ceiling and JSON body.</summary>
     private sealed record GatewayCall(string Path, string? Step, string? Ceiling, JsonElement Body);
 
     /// <summary>The FakeGateway behind a recorder; the <c>condense-long</c> call may be failed as <paramref name="fault"/> says.</summary>
@@ -96,7 +96,7 @@ public sealed partial class ChatApiTests
         var bygg = snapshot.Assistants[db.AssistantId];
         snapshot = snapshot with
         {
-            ChatSettings = condenseModel ? """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" : null,
+            ChatSettings = condenseModel ? """{"condenseModel":"fors/chat-eu","condenseReasoningEffort":"none"}""" : null,
             Assistants = new Dictionary<Guid, AssistantEntry>
             {
                 [db.AssistantId] = bygg with
@@ -201,7 +201,7 @@ public sealed partial class ChatApiTests
         condense.Step.ShouldBe(Condenser.LongStep);
         condense.Ceiling.ShouldBe("Eu");
         (condense.Body.GetProperty("model").GetString(), condense.Body.GetProperty("max_tokens").GetInt32(), condense.Body.GetProperty("reasoning_effort").GetString())
-            .ShouldBe(("ume/chat-eu", 96, "none"));
+            .ShouldBe(("fors/chat-eu", 96, "none"));
         condense.Body.TryGetProperty("temperature", out _).ShouldBeFalse();
         var user = condense.Body.GetProperty("messages")[1].GetProperty("content").GetString()!;
         user.ShouldBe("Meddelande: " + longer);

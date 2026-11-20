@@ -9,7 +9,7 @@ using FakeChatScripts = fakegateway::Kalla.FakeGateway.FakeChatScripts;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// FakeGateway's scripted JSON chat answers for the worker's evaluation steps (issue #129): keyed by <c>x-ume-step</c>,
+/// FakeGateway's scripted JSON chat answers for the worker's evaluation steps (issue #129): keyed by <c>x-fors-step</c>,
 /// from <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (string or cycling array), built-in defaults otherwise, after the
 /// usual access checks; any other call keeps the echo answer.
 /// </summary>
@@ -23,7 +23,7 @@ public sealed class FakeChatScriptsTests(FakeGatewayFactory fake) : IClassFixtur
         using var client = host.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
         {
-            Content = new StringContent(JsonSerializer.Serialize(new { model = "ume/chat-onprem", messages = new[] { new { role = "user", content = user } } }),
+            Content = new StringContent(JsonSerializer.Serialize(new { model = "fors/chat-onprem", messages = new[] { new { role = "user", content = user } } }),
                 System.Text.Encoding.UTF8, "application/json"),
         };
         if (key is not null)
@@ -31,7 +31,7 @@ public sealed class FakeChatScriptsTests(FakeGatewayFactory fake) : IClassFixtur
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         }
 
-        request.Headers.TryAddWithoutValidation("x-ume-max-residency", "OnPrem");
+        request.Headers.TryAddWithoutValidation("x-fors-max-residency", "OnPrem");
         if (step is not null)
         {
             request.Headers.TryAddWithoutValidation(FakeChatScripts.StepHeader, step);

@@ -2,7 +2,7 @@
 
 BenchmarkDotNet benchmarks of the code that runs per chat turn, per search, per streamed token and per crawled page.
 They find what is already cheap and what is worth optimising, and they catch a regression in those paths before it
-ships. The setup is modelled on the gateway's `benchmarks/Ume.LlmGateway.Benchmarks`.
+ships. The setup is modelled on the gateway's `benchmarks/Fors.Benchmarks`.
 
 **Local only.** The project is not in `Kalla.slnx`, so no workflow builds or runs it (`verify.yml` builds and tests the
 solution). Run it by hand:

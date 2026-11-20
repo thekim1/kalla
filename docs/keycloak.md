@@ -3,7 +3,7 @@
 Ume Rag's admin UI signs in with OIDC (`Oidc:*`, client `ume-rag-admin`). Any OIDC provider works; this page covers
 Keycloak, which the gateway can run for both products. Keycloak itself (the Compose project, production settings,
 two-factor sign-in, brokering Entra ID or AD, accounts, backup) is operated as in the gateway's
-[Keycloak guide](https://github.com/thekim1/llmgateway/blob/main/docs/keycloak.md): Ume Rag adds realm files to it, it
+[Keycloak guide](https://github.com/thekim1/fors/blob/main/docs/keycloak.md): Ume Rag adds realm files to it, it
 does not run its own. The realm files and their placeholders are described in
 [`deploy/keycloak/README.md`](../deploy/keycloak/README.md).
 

@@ -26,7 +26,7 @@ documents: §13; questions: §14; unverified facts: §15; deferred or removed: �
 
 | Source | Version | Used for |
 |---|---|---|
-| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5); "Pipeline" = `src/Ume.LlmGateway.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
+| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5); "Pipeline" = `src/Fors.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
 | Bifrost `~/git/rag-platforms/bifrost` | `a09cea0` (2026-10-29) | list/call filter symmetry, two lists, skill versions |
 | Agent Skills spec `github.com/agentskills/agentskills` (cloned into the scratchpad) | `69ef37e` (2026-08-09) | `docs/specification.mdx`, `docs/client-implementation/adding-skills-support.mdx`, `docs/skill-creation/evaluating-skills.mdx`, `skills-ref/src/skills_ref/validator.py` |
 | Anthropic skills `github.com/anthropics/skills` | `ca45fc4` (2026-10-28) | `template/SKILL.md`, `spec/` (points to agentskills.io) |
@@ -62,7 +62,7 @@ Moved to [`../archive/design-history/tools.md`](../archive/design-history/tools.
 
 | Project | Owns (tools) | Notes |
 |---|---|---|
-| `Kalla.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
+| `Kalla.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Fors.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
 | **`Kalla.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Kalla.Api` and `Kalla.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
 | `Kalla.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
 | `Kalla.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
@@ -296,7 +296,7 @@ no part.
   level.
 - **End to end**: each question runs through `Kalla.Answering` exactly as the assistant would (the agent loop with
   the skill included or loaded when the version under test carries tools, otherwise the RAG path), **executing the skill's read-only tools** through the
-  admin's in-process hub (hosted servers, §2.2); `x-ume-step: skill-gate`, temperature 0. Tool calls are audited with
+  admin's in-process hub (hosted servers, §2.2); `x-fors-step: skill-gate`, temperature 0. Tool calls are audited with
   `SubjectKind = service` and count against the tools' per-tool rate limits.
 
 | Measure | Questions | Shown as |
@@ -732,12 +732,12 @@ All four count as tool calls when the model calls them (answered 1), are stored 
 | Topic | Rule |
 |---|---|
 | Format | OpenAI Chat Completions function tools: `tools[] { type: "function", function: { name, description, parameters } }`, `tool_choice: "auto"` (final call `"none"`, §6.5); `parallel_tool_calls` not sent |
-| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Ume.LlmGateway.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by gateway release 1's tests (gateway-changes §7.2, weakness review §5). We never send provider tools |
+| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Fors.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by gateway release 1's tests (gateway-changes §7.2, weakness review §5). We never send provider tools |
 | Model names | built-ins as named; server tools `{serverSlug}_{toolName}` (`^[a-zA-Z0-9_-]{1,64}$`; a longer name is cut to 55 characters + `_` + 8 hex of its SHA-256) |
 | Descriptions and schemas | the **pinned** definition's `description` (≤ 1,024 characters, tag-neutralised) and `inputSchema`; `title`, annotations, icons and `_meta` are never sent |
-| Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Ume.LlmGateway.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
+| Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Fors.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Fors.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
 | Residency | as chat §8.1–§8.2 per call, at the run's effective level; `sensitive` assistants that use tools need an **on-prem tool-capable** model (*to verify*, §15); the admin refuses publishing such an assistant (or serving a skill version that makes one use tools) when its model cannot be served within that residency or lacks `SupportsTools` (admin design §4.6 V8, V14) |
-| Headers | chat §8.1 plus `x-ume-step: agent-{n}` and `x-ume-run-id` = message id; `x-ume-session` = conversation id |
+| Headers | chat §8.1 plus `x-fors-step: agent-{n}` and `x-fors-run-id` = message id; `x-fors-session` = conversation id |
 
 ### 6.5 Limits and cost (answered 1)
 
@@ -751,9 +751,9 @@ Stored in the assistant version's `QuerySteps.agent = { maxToolCalls, maxSeconds
 hard caps in `Settings.Tools` (`AgentDefaults`, `AgentHardCaps`); raising above the defaults is a platform-admin action
 (audited `assistant.limits`). The final answer's stream is bounded by chat's `MaxAnswerDuration` (chat §8.3).
 
-**Cost estimate mid-loop.** Streamed answers carry no `x-ume-cost-usd` (`Pipeline/GatewayHeaders.cs:20-21`), so after each
+**Cost estimate mid-loop.** Streamed answers carry no `x-fors-cost-usd` (`Pipeline/GatewayHeaders.cs:20-21`), so after each
 step `CostEstimate.Calculate(usage, price)` uses the step's usage chunk and the price of the deployment that answered
-(`x-ume-model`) from `GatewayModels` — the gateway's own formula (`CostCalculator.cs:37-61`, text terms only). Before
+(`x-fors-model`) from `GatewayModels` — the gateway's own formula (`CostCalculator.cs:37-61`, text terms only). Before
 each step: `next` = (prompt characters ÷ 3) × input price + the step's `max_tokens` × output price; `reserve` = the same
 estimate for a final answer call.
 
@@ -991,7 +991,7 @@ One row per hub call (every outcome, including `denied`), batched by `ToolCallAu
 or 1 s per insert, 3 retries then drop with `rag.tools.audit.dropped`; the call result is never held back by the
 audit): `Timestamp`, `AssistantId`, `ToolId`, `SubjectId`, `ClientId`, `ConversationId`, `DurationMs`, `Outcome`,
 `ArgumentsBytes`, `ResultBytes`, `ArgumentsHmac`, `ToolServerId`, `DefinitionId`, `SkillVersionId`, `RunId` (message id;
-joins the gateway's usage records by `x-ume-run-id`), `CallIndex`, `Classification` (effective level), `ResultLevel`,
+joins the gateway's usage records by `x-fors-run-id`), `CallIndex`, `Classification` (effective level), `ResultLevel`,
 `ErrorCode`, `Truncated`. Never arguments or results. `ArgumentsHmac` is keyed, because arguments are often guessable.
 Retention: audit's 2 years (data-model §8). Built-in tool calls are not in `audit` (they are normal retrieval).
 

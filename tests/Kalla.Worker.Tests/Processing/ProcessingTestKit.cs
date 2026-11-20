@@ -70,8 +70,8 @@ public static class TestUsage
 }
 
 /// <summary>
-/// A gateway call as the worker sent it and the gateway answered it: its path, <c>x-ume-step</c>, <c>x-ume-run-id</c>, body,
-/// status, <c>x-ume-cost-usd</c> and the tokens of the answer's <c>usage</c>.
+/// A gateway call as the worker sent it and the gateway answered it: its path, <c>x-fors-step</c>, <c>x-fors-run-id</c>, body,
+/// status, <c>x-fors-cost-usd</c> and the tokens of the answer's <c>usage</c>.
 /// </summary>
 public sealed record RecordedCall(string Path, string Step, string? RunId, string Body, int Status, decimal? CostUsd, long InputTokens, long CachedInputTokens,
     long OutputTokens);
@@ -104,8 +104,8 @@ public sealed class GatewayCallRecorder
             }
 
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
-            var step = Header(request, "x-ume-step") ?? string.Empty;
-            var runId = Header(request, "x-ume-run-id");
+            var step = Header(request, "x-fors-step") ?? string.Empty;
+            var runId = Header(request, "x-fors-run-id");
             var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
             if (recorder.RefuseFirst == step && Interlocked.Exchange(ref recorder._refused, 1) == 0)
             {
@@ -121,7 +121,7 @@ public sealed class GatewayCallRecorder
             var response = await base.SendAsync(request, cancellationToken);
             await response.Content.LoadIntoBufferAsync(cancellationToken);
             var (input, cached, output) = Tokens(await response.Content.ReadAsStringAsync(cancellationToken));
-            var cost = response.Headers.TryGetValues("x-ume-cost-usd", out var values)
+            var cost = response.Headers.TryGetValues("x-fors-cost-usd", out var values)
                 ? decimal.Parse(values.Single(), System.Globalization.CultureInfo.InvariantCulture)
                 : (decimal?)null;
             recorder.Calls.Enqueue(new RecordedCall(path, step, runId, body, (int)response.StatusCode, cost, input, cached, output));
@@ -523,7 +523,7 @@ internal static class TestGatewayKeys
     public static Task AssignAsync(RagDatabaseFixture database, Guid collectionId, Guid key) =>
         Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "GatewayKeyId" = $2 WHERE "Id" = $1""", collectionId, key);
 
-    /// <summary>The requests <paramref name="fake"/> served with <c>x-ume-run-id</c> <paramref name="runId"/>, under the key each ran as.</summary>
+    /// <summary>The requests <paramref name="fake"/> served with <c>x-fors-run-id</c> <paramref name="runId"/>, under the key each ran as.</summary>
     public static IReadOnlyList<fakegateway::Kalla.FakeGateway.FakeUsageRecord> Served(WebApplicationFactory<fakegateway::Program> fake, Guid runId) =>
         [.. fake.Services.GetRequiredService<fakegateway::Kalla.FakeGateway.FakeUsage>().Records.Where(r => r.RunId == runId.ToString())];
 }

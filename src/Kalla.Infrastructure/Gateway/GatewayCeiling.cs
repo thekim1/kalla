@@ -5,7 +5,7 @@ namespace Kalla.Infrastructure.Gateway;
 
 /// <summary>
 /// The highest ceiling this service's model calls may carry (Decisions "Residency per level", identity design §4.7; M-17
-/// C9): its credential key's residencies from its own <c>GET /v1/ume/context</c> (<see cref="GatewayFeatures.CredentialMaximum"/>),
+/// C9): its credential key's residencies from its own <c>GET /v1/fors/context</c> (<see cref="GatewayFeatures.CredentialMaximum"/>),
 /// lowered to the service's own maximum (<see cref="GatewayOptions.ServiceMaximum"/>, the worker's <c>Eu</c>). The gateway
 /// owns the ceiling: there is no second copy in Källa's configuration that could disagree. Before the first context answer
 /// it is <c>OnPrem</c> (fail closed); the first call waits for that answer (<see cref="FirstReadWait"/>) instead of running

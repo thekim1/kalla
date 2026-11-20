@@ -46,8 +46,8 @@ public sealed class CondenserTests
     public void Platform_settings_come_from_settings_chat_over_the_deployment_knobs()
     {
         var fallback = new ChatOptions();
-        var parsed = PlatformChatSettings.Parse("""{"condenseModel":"ume/small","allowedLinkHosts":["umea.se"],"messagesPerMinutePerUser":5,"notFound":{"sv":"Inget."}}""", fallback);
-        (parsed.CondenseModel, parsed.MessagesPerMinutePerUser, parsed.NotFound).ShouldBe(("ume/small", 5, """{"sv":"Inget."}"""));
+        var parsed = PlatformChatSettings.Parse("""{"condenseModel":"fors/small","allowedLinkHosts":["umea.se"],"messagesPerMinutePerUser":5,"notFound":{"sv":"Inget."}}""", fallback);
+        (parsed.CondenseModel, parsed.MessagesPerMinutePerUser, parsed.NotFound).ShouldBe(("fors/small", 5, """{"sv":"Inget."}"""));
         parsed.AllowedLinkHosts.ShouldBe(["umea.se"]);
 
         var empty = PlatformChatSettings.Parse(null, fallback);

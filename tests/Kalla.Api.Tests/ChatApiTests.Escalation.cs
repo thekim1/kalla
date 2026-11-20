@@ -101,7 +101,7 @@ public sealed partial class ChatApiTests
         EscalationFault fault = EscalationFault.None, string? output = null, string? notFound = HelpLinks, string generalKnowledge = "off",
         string chatSettings = "", bool condenseModel = true, string embeddingModel = "bge-m3", params (string Key, string Value)[] settings)
     {
-        var platform = condenseModel ? $$"""{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"{{chatSettings}}}""" : "{}";
+        var platform = condenseModel ? $$"""{"condenseModel":"fors/chat-eu","condenseReasoningEffort":"none"{{chatSettings}}}""" : "{}";
         var snapshot = Snapshot(embeddingModel) with { ChatSettings = platform };
         snapshot = WithAssistant(snapshot, a => a with
         {
@@ -183,7 +183,7 @@ public sealed partial class ChatApiTests
         var call = calls.Where(c => c.Step == Escalation.Step).ShouldHaveSingleItem();
         call.Ceiling.ShouldBe("Eu");
         (call.Body.GetProperty("model").GetString(), call.Body.GetProperty("max_tokens").GetInt32(), call.Body.GetProperty("stream").GetBoolean())
-            .ShouldBe(("ume/chat-eu", Escalation.MaxTokens, false));
+            .ShouldBe(("fors/chat-eu", Escalation.MaxTokens, false));
         var messages = call.Body.GetProperty("messages");
         messages[0].GetProperty("content").GetString()!.ShouldEndWith("\n" + PromptTexts.Locked.EscalationSwedish);
         var user = messages[1].GetProperty("content").GetString()!;

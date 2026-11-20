@@ -8,15 +8,15 @@ namespace Kalla.Infrastructure.Gateway;
 
 /// <summary>
 /// On every gateway <see cref="HttpClient"/> (chat design §8.1, identity design §4.7, engine design §7.7): refuses,
-/// before anything is sent, a request without exactly one valid <c>x-ume-max-residency</c>, one whose ceiling is above
+/// before anything is sent, a request without exactly one valid <c>x-fors-max-residency</c>, one whose ceiling is above
 /// the service's maximum (<see cref="GatewayCeiling"/>: its credential key's residencies, the worker's at most <c>Eu</c>;
 /// logged), or one whose key is
 /// not this service's, and adds the service's credential key when the caller set none (<see cref="GatewayOptions.KeyFor"/>). On a successful answer it checks
-/// <c>x-ume-residency</c> against the ceiling before the caller reads a byte: a missing header or a residency above the
+/// <c>x-fors-residency</c> against the ceiling before the caller reads a byte: a missing header or a residency above the
 /// ceiling disposes the response (which cancels a stream at the gateway), raises event 5003 and throws. <c>GET /v1/models</c>
 /// is the exception: no model answers it, so it carries no residency (the gateway's <c>GatewayRequestHandler</c>).
-/// <c>GET /v1/ume/context</c> needs no ceiling either: it gets the service's credential key and nothing else is checked.
-/// From gateway phase 2 it also sends <c>x-ume-on-behalf-of</c> for a call made for an object's key (<see cref="GatewayCall"/>,
+/// <c>GET /v1/fors/context</c> needs no ceiling either: it gets the service's credential key and nothing else is checked.
+/// From gateway phase 2 it also sends <c>x-fors-on-behalf-of</c> for a call made for an object's key (<see cref="GatewayCall"/>,
 /// <see cref="GatewayFeatures.ActAsKey"/>), checks the echo (event 5011) and turns a refusal of the key into
 /// <see cref="GatewayKeyRefusedException"/> (identity §4.7, gateway-changes §5.2, §5.7).
 /// </summary>
@@ -56,7 +56,7 @@ public sealed partial class ResidencyCeilingHandler(
         // gateway acts as keys; the id goes in the D form, the gateway's own.
         request.Headers.Remove(GatewayHeaders.OnBehalfOf);
         var call = request.Options.TryGetValue(GatewayCall.OptionsKey, out var c) ? c : GatewayCallScope.Current;
-        if (call is { Step: null } && request.Headers.TryGetValues("x-ume-step", out var steps))
+        if (call is { Step: null } && request.Headers.TryGetValues("x-fors-step", out var steps))
         {
             call = call with { Step = steps.FirstOrDefault() }; // event 5011 names the step the client sent
         }
@@ -80,7 +80,7 @@ public sealed partial class ResidencyCeilingHandler(
 
         if (IsModelList(request))
         {
-            return response; // a model list carries no model output; the gateway sets x-ume-residency only when a deployment answers
+            return response; // a model list carries no model output; the gateway sets x-fors-residency only when a deployment answers
         }
 
         var observed = response.Headers.TryGetValues(GatewayHeaders.Residency, out var values) ? string.Join(",", values) : null;
@@ -157,7 +157,7 @@ public sealed partial class ResidencyCeilingHandler(
         }
     }
 
-    [LoggerMessage(LogLevel.Error, "Gateway call to {Path} as the key {GatewayKeyId} answered 400 invalid_request: a bug in Källa's x-ume-on-behalf-of (gateway-changes §5.7)")]
+    [LoggerMessage(LogLevel.Error, "Gateway call to {Path} as the key {GatewayKeyId} answered 400 invalid_request: a bug in Källa's x-fors-on-behalf-of (gateway-changes §5.7)")]
     private static partial void LogActingInvalid(ILogger logger, string path, Guid gatewayKeyId);
 
     [LoggerMessage(LogLevel.Warning,
@@ -180,10 +180,10 @@ public sealed partial class ResidencyCeilingHandler(
         }
     }
 
-    /// <summary><c>GET /v1/ume/context</c>: what the presented key is and may use; answered by no model.</summary>
+    /// <summary><c>GET /v1/fors/context</c>: what the presented key is and may use; answered by no model.</summary>
     private static bool IsContext(HttpRequestMessage request) =>
         request.Method == HttpMethod.Get && request.RequestUri is { } uri &&
-        (uri.IsAbsoluteUri ? uri.AbsolutePath : "/" + uri.OriginalString.TrimStart('/')).EndsWith("/v1/ume/context", StringComparison.Ordinal);
+        (uri.IsAbsoluteUri ? uri.AbsolutePath : "/" + uri.OriginalString.TrimStart('/')).EndsWith("/v1/fors/context", StringComparison.Ordinal);
 
     /// <summary><c>GET /v1/models</c> (V8's check, gateway-changes §3.4): filtered by the ceiling, answered by no model.</summary>
     private static bool IsModelList(HttpRequestMessage request) =>
@@ -194,13 +194,13 @@ public sealed partial class ResidencyCeilingHandler(
     {
         if (!request.Headers.TryGetValues(GatewayHeaders.MaxResidency, out var values))
         {
-            throw new GatewayCallRefusedException("A gateway call must carry an explicit x-ume-max-residency.");
+            throw new GatewayCallRefusedException("A gateway call must carry an explicit x-fors-max-residency.");
         }
 
         var list = values.ToList();
         if (list.Count != 1 || list[0].Contains(',', StringComparison.Ordinal) || !ResidencyCeiling.TryParse(list[0], out var ceiling))
         {
-            throw new GatewayCallRefusedException("x-ume-max-residency must be exactly one of OnPrem, Eu, External.");
+            throw new GatewayCallRefusedException("x-fors-max-residency must be exactly one of OnPrem, Eu, External.");
         }
 
         return ceiling;
@@ -242,7 +242,7 @@ public static class GatewayRequestExtensions
 
     /// <summary>
     /// What the call is made for (cost-attribution §4.1): <see cref="GatewayCall.GatewayKeyId"/> is the object's assigned key,
-    /// which <see cref="ResidencyCeilingHandler"/> sends as <c>x-ume-on-behalf-of</c> while the gateway acts as keys.
+    /// which <see cref="ResidencyCeilingHandler"/> sends as <c>x-fors-on-behalf-of</c> while the gateway acts as keys.
     /// </summary>
     public static HttpRequestMessage For(this HttpRequestMessage request, GatewayCall call)
     {
@@ -253,7 +253,7 @@ public static class GatewayRequestExtensions
     }
 
     /// <summary>
-    /// <c>x-ume-stream-cost: 1</c> (chat design §8.1, gateway-changes §5.4): the streamed answer ends with the cost comment,
+    /// <c>x-fors-stream-cost: 1</c> (chat design §8.1, gateway-changes §5.4): the streamed answer ends with the cost comment,
     /// which <see cref="SseReader"/> takes; a gateway without the feature ignores the header.
     /// </summary>
     public static HttpRequestMessage WithStreamCost(this HttpRequestMessage request)

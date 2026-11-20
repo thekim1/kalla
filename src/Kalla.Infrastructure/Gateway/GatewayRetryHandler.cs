@@ -7,7 +7,7 @@ namespace Kalla.Infrastructure.Gateway;
 /// On the gateway clients of <c>AddGatewayClient</c> (Decisions "Gateway release 1 and shared Keycloak as built", #390
 /// Feature B point 1): a <c>502</c> or <c>504</c> (<c>all_providers_failed</c>: every target within the ceiling failed) is
 /// sent once more after <c>Gateway:RetryDelay</c>, as the same request with the same headers, so with the <b>same</b>
-/// <c>x-ume-max-residency</c>, never a wider one. So is a <b>connection failure</b> with no response (chat design §8.3,
+/// <c>x-fors-max-residency</c>, never a wider one. So is a <b>connection failure</b> with no response (chat design §8.3,
 /// B-17: <see cref="HttpRequestError.ConnectionError"/>, e.g. a refused connection), within 300 ms (the default delay is
 /// 250 ms). One retry in all: a second failure reaches the caller. Nothing else is retried here: <c>403 max_residency_not_met</c> can never
 /// work, a <c>503</c> with <c>Retry-After</c> asks the caller to wait, and a stream that has started is never re-sent (the

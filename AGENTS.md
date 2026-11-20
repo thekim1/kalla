@@ -26,7 +26,7 @@ is not ticked and not waiting, and tick it in the PR that does the work. Each it
 waits on and the design sections to read. Where the project stands: `plans/roadmap.md`. Start prompts:
 `plans/work/prompts/`. Design sessions (not stream work) start from `HANDOVER.md`.
 
-The gateway (`~/git/llmgateway`, github.com/thekim1/llmgateway) is the reference implementation. When a design says
+The gateway (`~/git/llmgateway`, github.com/thekim1/fors) is the reference implementation. When a design says
 **copy**, take the gateway file unchanged. When it says **adapt**, change only what the design lists. Keep the
 gateway's conventions for names, config keys, claims, key format and security events.
 

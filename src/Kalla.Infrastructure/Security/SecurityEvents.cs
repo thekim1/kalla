@@ -108,7 +108,7 @@ public static partial class SecurityEvents
 
     /// <summary>
     /// 5011 (identity design §10, gateway-changes §5.2): a <c>2xx</c> or <c>304</c> answer to a call made as an assigned key
-    /// lacks the <c>x-ume-on-behalf-of</c> echo of the key id sent, or echoes another; the call was aborted before use.
+    /// lacks the <c>x-fors-on-behalf-of</c> echo of the key id sent, or echoes another; the call was aborted before use.
     /// </summary>
     [LoggerMessage(5011, LogLevel.Warning,
         "Gateway call {Step} aborted: no echo of the gateway key {GatewayKeyId} (assistant {AssistantId}, collection {CollectionId}, gateway request {GatewayRequestId})",

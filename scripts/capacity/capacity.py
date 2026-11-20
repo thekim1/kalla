@@ -10,9 +10,9 @@ Commands:
   answer-ttft        answer model TTFT p50/p95/p99 and total time, streamed, full 16k-token prompt  #149
   all                the four above in that order, one result file each
 
-Every request carries Authorization: Bearer <key>, x-ume-max-residency: <ceiling>, x-ume-run-id and x-ume-step, as the
+Every request carries Authorization: Bearer <key>, x-fors-max-residency: <ceiling>, x-fors-run-id and x-fors-step, as the
 services do (knowledge-api design §5.2, chat-api design §5, §8.1, design-processing §11). Every 2xx answer must carry
-x-ume-residency at or below the ceiling; otherwise the run stops, because it would not be measuring on-prem capacity.
+x-fors-residency at or below the ceiling; otherwise the run stops, because it would not be measuring on-prem capacity.
 Each command writes <out-dir>/<UTC time>-<command>.json and a .txt summary that prints the design estimate next to each
 measured number. --smoke marks a run against a fake gateway: its numbers test the script, not the hardware.
 """
@@ -291,9 +291,9 @@ class Gateway:
         return {
             "Authorization": f"Bearer {self.key}",
             "Content-Type": "application/json",
-            "x-ume-max-residency": self.ceiling,
-            "x-ume-run-id": self.run_id,
-            "x-ume-step": step,
+            "x-fors-max-residency": self.ceiling,
+            "x-fors-run-id": self.run_id,
+            "x-fors-step": step,
         }
 
     def post(self, path: str, payload: dict, step: str, stream: bool = False) -> Response:
@@ -348,16 +348,16 @@ class Gateway:
 
     def _check(self, response: Response, path: str) -> None:
         if 200 <= response.status < 300:
-            residency = response.headers.get("x-ume-residency")
+            residency = response.headers.get("x-fors-residency")
             with self._lock:
-                for name in ("x-ume-residency", "x-ume-provider", "x-ume-model"):
+                for name in ("x-fors-residency", "x-fors-provider", "x-fors-model"):
                     counts = self.observed.setdefault(name, {})
                     value = response.headers.get(name, "(missing)")
                     counts[value] = counts.get(value, 0) + 1
             allowed = {c.lower() for c in CEILINGS[: CEILINGS.index(self.ceiling) + 1]}
             if residency is None or residency.strip().lower() not in allowed:
                 raise RunAborted(
-                    f"{path} answered with x-ume-residency '{residency or '(missing)'}' above the ceiling "
+                    f"{path} answered with x-fors-residency '{residency or '(missing)'}' above the ceiling "
                     f"{self.ceiling}: this is not a measurement of capacity within that ceiling."
                 )
         elif response.status in (400, 401, 403, 404):
@@ -958,20 +958,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--key-file",
         required=True,
         type=Path,
-        help="file holding the gateway key of the ceiling's level (ume-sk-…); never printed",
+        help="file holding the gateway key of the ceiling's level (fors-sk-…); never printed",
     )
     parser.add_argument(
         "--ceiling",
         default="OnPrem",
         choices=CEILINGS,
-        help="x-ume-max-residency sent on every call (default OnPrem: on-prem capacity)",
+        help="x-fors-max-residency sent on every call (default OnPrem: on-prem capacity)",
     )
     parser.add_argument("--embedding-model", default="bge-m3")
-    parser.add_argument("--condense-model", default="ume/small-onprem", help="Settings.Chat.CondenseModel")
+    parser.add_argument("--condense-model", default="fors/small-onprem", help="Settings.Chat.CondenseModel")
     parser.add_argument(
         "--answer-models",
         type=str_list,
-        default=["ume/chat-onprem"],
+        default=["fors/chat-onprem"],
         help="comma-separated; the slowest pilot answer model decides #149",
     )
     parser.add_argument("--duration", type=float, help="measured seconds per step (default per command)")
@@ -1055,8 +1055,8 @@ def run(command: str, args: argparse.Namespace, key: str) -> Path:
     header = [
         f"{'SMOKE TEST (fake gateway): these numbers test the script, not capacity. ' if args.smoke else ''}"
         f"{command} {run_id} ({started:%Y-%m-%d %H:%M}-{finished:%H:%M} UTC){' - ' + args.label if args.label else ''}",
-        f"  gateway {args.base_url}, x-ume-max-residency {args.ceiling} sent on every call; answered from "
-        f"{gateway.observed.get('x-ume-residency', {})}, providers {gateway.observed.get('x-ume-provider', {})}",
+        f"  gateway {args.base_url}, x-fors-max-residency {args.ceiling} sent on every call; answered from "
+        f"{gateway.observed.get('x-fors-residency', {})}, providers {gateway.observed.get('x-fors-provider', {})}",
     ]
     verdicts = [
         f"  check: {c['check']}: {fmt(c['measured'])} {c['op']} {fmt(c['limit'])} → {VERDICT[c['pass']]} ({c['ref']})"

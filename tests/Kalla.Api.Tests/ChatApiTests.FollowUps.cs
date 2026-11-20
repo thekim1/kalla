@@ -109,7 +109,7 @@ public sealed partial class ChatApiTests
         FollowUpFault fault = FollowUpFault.None, string? output = null, TaskCompletionSource? started = null, Func<PolicySnapshot, PolicySnapshot>? change = null,
         Kalla.Domain.Residency ceiling = Kalla.Domain.Residency.External, params (string Key, string Value)[] settings)
     {
-        var snapshot = Snapshot() with { ChatSettings = """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" };
+        var snapshot = Snapshot() with { ChatSettings = """{"condenseModel":"fors/chat-eu","condenseReasoningEffort":"none"}""" };
         snapshot = change?.Invoke(snapshot) ?? snapshot;
         var signal = started ?? new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>
@@ -203,7 +203,7 @@ public sealed partial class ChatApiTests
         calls.Select(c => c.Step).Where(s => s is not null).ShouldBe(["chat-answer", FollowUps.Step]); // after the answer
         call.Ceiling.ShouldBe("Eu");
         (call.Body.GetProperty("model").GetString(), call.Body.GetProperty("max_tokens").GetInt32(), call.Body.GetProperty("reasoning_effort").GetString(),
-            call.Body.GetProperty("stream").GetBoolean()).ShouldBe(("ume/chat-eu", 3 * FollowUps.TokensPerQuestion, "none", false));
+            call.Body.GetProperty("stream").GetBoolean()).ShouldBe(("fors/chat-eu", 3 * FollowUps.TokensPerQuestion, "none", false));
         call.Body.TryGetProperty("temperature", out _).ShouldBeFalse();
         var messages = call.Body.GetProperty("messages");
         messages[0].GetProperty("content").GetString()!.ShouldStartWith("Föreslå högst 3 korta följdfrågor");
@@ -387,7 +387,7 @@ public sealed partial class ChatApiTests
         else if (kind == "on-prem")
         {
             // An OnPrem turn: the deployment's ceiling is OnPrem and the assistant's model runs there (no condense model until M2).
-            change = s => WithAssistant(s, a => a with { Published = a.Published! with { GatewayModel = "ume/chat-onprem" } });
+            change = s => WithAssistant(s, a => a with { Published = a.Published! with { GatewayModel = "fors/chat-onprem" } });
             ceiling = Kalla.Domain.Residency.OnPrem; // the credential key allows OnPrem only (M-17 C9)
         }
 

@@ -196,7 +196,7 @@ and `deploy/compose.backup.yaml` (members, `gw_priority`), `deploy/compose.harde
 `src/Kalla.Worker/Connectors/Egress/EgressGuard.cs` (schemes and ports of the crawler).
 
 **The organisation and model syncs.** rag-admin reads the organisation, its assigned gateway keys and the model list
-from the gateway itself, `GET /v1/ume/context` and `GET /v1/models` at `Gateway:BaseUrl`, with its credential key, which
+from the gateway itself, `GET /v1/fors/context` and `GET /v1/models` at `Gateway:BaseUrl`, with its credential key, which
 holds the scope `organisation.read` ([production-setup.md](production-setup.md), *Gateway credential keys*;
 `src/Kalla.AdminApi/OrganisationSync.cs`, `GatewayModelSync.cs`). They take the gateway's row of `llm` above. The
 only other gateway service RAG calls is the gateway's Admin API, for rag-admin's cost and budget read-back

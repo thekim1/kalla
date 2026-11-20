@@ -12,12 +12,12 @@ public sealed record FakeUsageRecord(
 
 /// <summary>
 /// The served requests in memory (repo-and-deployment §4.3, B-42; the Integration API's <c>usage</c> reads them in B-45).
-/// <c>x-ume-run-id</c> and <c>x-ume-step</c> are trimmed and cut at 100 characters, as the gateway stores them.
+/// <c>x-fors-run-id</c> and <c>x-fors-step</c> are trimmed and cut at 100 characters, as the gateway stores them.
 /// </summary>
 public sealed class FakeUsage
 {
-    public const string RunIdHeader = "x-ume-run-id";
-    public const string StepHeader = "x-ume-step";
+    public const string RunIdHeader = "x-fors-run-id";
+    public const string StepHeader = "x-fors-step";
     private const int MaxMetadata = 100;
 
     private readonly ConcurrentQueue<FakeUsageRecord> _records = new();

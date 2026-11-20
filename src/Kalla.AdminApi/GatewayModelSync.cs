@@ -252,7 +252,7 @@ public sealed partial class GatewayModelSync(
         return new GatewayModelSyncResult(written, removed, 0);
     }
 
-    /// <summary>The mirror's <c>ModelKind</c> of the gateway's <c>ume.kind</c> (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>); null for a kind not mirrored.</summary>
+    /// <summary>The mirror's <c>ModelKind</c> of the gateway's <c>fors.kind</c> (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>); null for a kind not mirrored.</summary>
     internal static string? ModelKindOf(string kind) => kind switch
     {
         "Chat" => GatewayModelModelKinds.Chat,

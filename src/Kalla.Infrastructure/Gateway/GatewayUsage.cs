@@ -13,8 +13,8 @@ namespace Kalla.Infrastructure.Gateway;
 public readonly record struct GatewayTokens(long InputTokens, long CachedInputTokens, long OutputTokens);
 
 /// <summary>
-/// What one model call cost as the gateway reported it (chat design §8.3; cost-attribution §5): the <c>x-ume-step</c> it
-/// sent, the model asked for, its tokens and the gateway's cost in USD (<c>x-ume-cost-usd</c> or the stream comment),
+/// What one model call cost as the gateway reported it (chat design §8.3; cost-attribution §5): the <c>x-fors-step</c> it
+/// sent, the model asked for, its tokens and the gateway's cost in USD (<c>x-fors-cost-usd</c> or the stream comment),
 /// null when the gateway gave none (an aborted stream, a gateway without the feature, <c>fake-no-cost</c>). Turned into a
 /// <see cref="UsageRecord"/> with the model's mirrored prices.
 /// </summary>
@@ -100,14 +100,14 @@ public sealed record UsageRecord(
 
 /// <summary>
 /// Reads a call's usage from a gateway answer (chat design §8.3; gateway-changes §5.4), once for every caller: the chat
-/// path, the reranker, the query embedder and the worker (A-31). The cost comes from <c>x-ume-cost-usd</c> on a complete
-/// JSON answer, or from the stream comment <c>: ume-cost-usd=&lt;usd&gt;</c> that <see cref="SseReader"/> takes; neither
+/// path, the reranker, the query embedder and the worker (A-31). The cost comes from <c>x-fors-cost-usd</c> on a complete
+/// JSON answer, or from the stream comment <c>: fors-cost-usd=&lt;usd&gt;</c> that <see cref="SseReader"/> takes; neither
 /// leaves it null, for <see cref="UsageRecord.From"/> to estimate.
 /// </summary>
 public static class GatewayUsageReader
 {
     /// <summary>The stream comment's prefix, as the gateway writes it (<c>GatewayRequestHandler.WriteCostComment</c>).</summary>
-    public const string CostCommentPrefix = ": ume-cost-usd=";
+    public const string CostCommentPrefix = ": fors-cost-usd=";
 
     /// <summary>The call's usage: the tokens of <paramref name="body"/> (<see cref="Tokens"/>, 0 when it reports none) and the cost header.</summary>
     public static GatewayCallUsage Read(HttpResponseMessage response, JsonElement body, string step, string model)
@@ -118,7 +118,7 @@ public static class GatewayUsageReader
         return new GatewayCallUsage(step, model, Tokens(body) ?? default, CostHeader(response));
     }
 
-    /// <summary><c>x-ume-cost-usd</c> as a non-negative decimal (invariant culture); null when it is missing, repeated or not a number.</summary>
+    /// <summary><c>x-fors-cost-usd</c> as a non-negative decimal (invariant culture); null when it is missing, repeated or not a number.</summary>
     public static decimal? CostHeader(HttpResponseMessage response)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -126,7 +126,7 @@ public static class GatewayUsageReader
     }
 
     /// <summary>
-    /// Whether <paramref name="line"/> is the gateway's stream cost comment <c>: ume-cost-usd=&lt;usd&gt;</c>; its cost in
+    /// Whether <paramref name="line"/> is the gateway's stream cost comment <c>: fors-cost-usd=&lt;usd&gt;</c>; its cost in
     /// <paramref name="costUsd"/> (null when the figure is not a non-negative number: the comment is still the gateway's and
     /// is not passed on).
     /// </summary>
@@ -189,8 +189,8 @@ public static class GatewayUsageReader
 }
 
 /// <summary>
-/// Reads a gateway stream line by line (chat design §8.3, §9.1): the cost comment <c>: ume-cost-usd=&lt;usd&gt;</c>, which the
-/// gateway writes just before <c>data: [DONE]</c> when the request carried <c>x-ume-stream-cost: 1</c>, is taken as the call's
+/// Reads a gateway stream line by line (chat design §8.3, §9.1): the cost comment <c>: fors-cost-usd=&lt;usd&gt;</c>, which the
+/// gateway writes just before <c>data: [DONE]</c> when the request carried <c>x-fors-stream-cost: 1</c>, is taken as the call's
 /// <see cref="CostUsd"/> and never returned, so it cannot reach a client of ours. Every other line is returned as read.
 /// </summary>
 public sealed class SseReader(TextReader reader)

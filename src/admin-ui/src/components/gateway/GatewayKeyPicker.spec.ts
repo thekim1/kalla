@@ -8,7 +8,7 @@ import GatewayKeyPicker from './GatewayKeyPicker.vue'
 function key(id: string, name: string, extra: Partial<GatewayKey> = {}): GatewayKey {
   return {
     id, name, teamId: 't1', teamName: 'Kontaktcenter', departmentId: 'd1', status: 'Active', ownerActive: true, expiresAt: null,
-    allowedModels: ['ume/chat-eu', 'bge-m3'], allowedResidencies: ['Eu'], piiPolicy: 'Mask', contentGuardPolicy: 'Block', requestsPerMinute: 60,
+    allowedModels: ['fors/chat-eu', 'bge-m3'], allowedResidencies: ['Eu'], piiPolicy: 'Mask', contentGuardPolicy: 'Block', requestsPerMinute: 60,
     tokensPerMinute: null, maxConcurrentRequests: null, maxOutputTokens: 4096, hasSystemPrompt: false, usable: true, selectable: true, reason: null,
     syncedAt: '2026-11-12T10:00:00Z', usedBy: 1, ...extra,
   }
@@ -46,7 +46,7 @@ describe('Gateway key picker (admin design §5.5.4, B-36)', () => {
     const { wrapper } = await picker('k1')
     const settings = wrapper.find('[data-test="key-settings"]')
     expect(settings.text()).toContain('Kontaktcenter')
-    expect(settings.find('[data-test="key-models"]').text()).toBe('ume/chat-eu, bge-m3')
+    expect(settings.find('[data-test="key-models"]').text()).toBe('fors/chat-eu, bge-m3')
     expect(settings.text()).toContain('Mask')
     expect(settings.text()).toMatch(/4[\s\u00a0\u202f,]?096 tokens/)
     expect(settings.findAll('input, select, textarea')).toHaveLength(0)

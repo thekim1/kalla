@@ -23,7 +23,7 @@ namespace Kalla.Worker.Evaluation;
 /// the run makes such a <c>human</c> question <c>stale</c>, and a <c>stale</c> one whose documents are back active again, in
 /// the same transaction (processing design §13.3). A question whose embedding fails fails the run (knowledge design §5.5):
 /// the job is retried as the gateway error says, and nothing of it is kept. Each run's model calls (query embeddings that missed the cache, rerank
-/// calls) carry its id as <c>x-ume-run-id</c> and are counted under the collection; the job's commit adds them to
+/// calls) carry its id as <c>x-fors-run-id</c> and are counted under the collection; the job's commit adds them to
 /// <c>CollectionDailyUsage</c> (processing design §14.7; engine design §10.6).
 /// </summary>
 public sealed partial class EvaluationRunner(

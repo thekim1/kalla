@@ -4,20 +4,20 @@ using Microsoft.Extensions.Options;
 using Kalla.FakeGateway;
 
 // OpenAI-compatible fake of the team's LLM gateway for local runs and tests (repo-and-deployment §4.3). Behaves like
-// gateway release 1 as built (thekim1/llmgateway#66, #390): per-level dev keys that require x-ume-max-residency (400
-// invalid_request when it is missing, empty, repeated or not one of the three names), x-ume-residency on every answer,
+// gateway release 1 as built (thekim1/llmgateway#66, #390): per-level dev keys that require x-fors-max-residency (400
+// invalid_request when it is missing, empty, repeated or not one of the three names), x-fors-residency on every answer,
 // 403 max_residency_not_met vs 503 no_eligible_provider + Retry-After, no circuit-open 503 (failing in-ceiling targets end
 // in 502/504 all_providers_failed), /v1/models filtered by the ceiling, the optional Cohere-compatible /v1/rerank
-// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and /v1/ume/context. Behaviour by model name
+// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and /v1/fors/context. Behaviour by model name
 // (appsettings.json):
 //   fake-fail-500 → 502 all_providers_failed; fake-fail-timeout → 504; fake-fail-fallback → its OnPrem target fails, so
-//   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-ume-residency
+//   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-fors-residency
 //   External; fake-drained → 503 + Retry-After (its in-ceiling targets are drained);
 //   fake-stream-broken | -stall | -no-done | -empty-deltas | -length → streaming edge cases (chat design §18.4);
-//   fake-no-cost → answers without x-ume-cost-usd and without the stream cost comment.
+//   fake-no-cost → answers without x-fors-cost-usd and without the stream cost comment.
 // With stream_options.include_usage the last chunk carries usage only, as OpenAI's do. The cost as gateway phase 2
-// (gateway-changes §5.4, GatewayRequestHandler at v0.10.0): x-ume-cost-usd (eight decimals) on every complete JSON answer,
-// and with x-ume-stream-cost: 1 (exactly "1") the comment ": ume-cost-usd=<usd>" (six decimals) just before data: [DONE]
+// (gateway-changes §5.4, GatewayRequestHandler at v0.10.0): x-fors-cost-usd (eight decimals) on every complete JSON answer,
+// and with x-fors-stream-cost: 1 (exactly "1") the comment ": fors-cost-usd=<usd>" (six decimals) just before data: [DONE]
 // (after the last event of a stream without one), both at the catalogue's prices (FakeCatalog.Cost).
 // FakeGateway:CachedInputTokens scripts the cached prompt tokens of chat answers. NOT for production.
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -53,8 +53,8 @@ app.MapGet("/v1/models", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOpt
     }
 
     // As the gateway's ModelListEndpoint (thekim1/llmgateway#84): only models with an available target within the
-    // ceiling (gateway design §3.4); a multi-target name is a route alias (ume.residencies, the limits all its targets
-    // have), a single-target one a deployment (ume.residency); ume.kind is the gateway's ModelKind name; an ETag.
+    // ceiling (gateway design §3.4); a multi-target name is a route alias (fors.residencies, the limits all its targets
+    // have), a single-target one a deployment (fors.residency); fors.kind is the gateway's ModelKind name; an ETag.
     var data = new JsonArray();
     foreach (var (model, residencies) in o.Served
                  .Select(m => (Model: m, Residencies: FakeAccess.ServableResidencies(m, call)))
@@ -93,16 +93,16 @@ app.MapGet("/v1/models", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOpt
             ["object"] = "model",
             ["created"] = 0,
             ["owned_by"] = alias ? "ume-llm-gateway" : FakeCatalog.ProviderName(residencies[0]),
-            ["ume"] = facts,
+            ["fors"] = facts,
         });
     }
 
     await CacheableJson.WriteAsync(ctx, new JsonObject { ["object"] = "list", ["data"] = data }, ctx.RequestAborted);
 });
 
-// GET /v1/ume/context (gateway integration phase 1, docs/integrations.md "Discovery"): the presented key, its
+// GET /v1/fors/context (gateway integration phase 1, docs/integrations.md "Discovery"): the presented key, its
 // integration, assigned keys and organisation, with an ETag. No ceiling is read, as the gateway's ContextEndpoint.
-app.MapGet("/v1/ume/context", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
+app.MapGet("/v1/fors/context", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
 {
     if (FakeAccess.Authenticate(ctx, options.Value, out var error) is not { } key)
     {
@@ -218,7 +218,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
         // last event of a stream without one; only when asked with exactly "1".
         if (ctx.Request.Headers[FakeContent.StreamCostHeader] == "1" && model.Name != FakeCatalog.NoCostModel)
         {
-            await ctx.Response.WriteAsync(string.Create(System.Globalization.CultureInfo.InvariantCulture, $": ume-cost-usd={decimal.Round(cost, 6):0.000000}\n\n"));
+            await ctx.Response.WriteAsync(string.Create(System.Globalization.CultureInfo.InvariantCulture, $": fors-cost-usd={decimal.Round(cost, 6):0.000000}\n\n"));
         }
 
         if (model.Name != "fake-stream-no-done")
@@ -390,7 +390,7 @@ static async Task<List<float[]>> UpstreamEmbeddingsAsync(HttpClient client, stri
         .Select(e => e.GetProperty("embedding").EnumerateArray().Select(x => x.GetSingle()).ToArray())];
 }
 
-// x-ume-cost-usd on a complete JSON answer, as the gateway writes it (eight decimals); never for fake-no-cost.
+// x-fors-cost-usd on a complete JSON answer, as the gateway writes it (eight decimals); never for fake-no-cost.
 static void SetCost(HttpContext ctx, FakeModel model, decimal cost)
 {
     if (model.Name != FakeCatalog.NoCostModel)

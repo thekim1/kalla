@@ -97,15 +97,15 @@ public sealed partial class ChatApiTests
     /// FakeGateway that scripts the condense query and reports <see cref="CostCachedTokens"/> cached tokens, behind
     /// <see cref="CostGateway"/> for chat, rerank and the query embedding.
     /// </summary>
-    private WebApplicationFactory<Program> CostHost(ConcurrentQueue<CostCall> calls, WebApplicationFactory<fakegateway::Program> gateway, string model = "ume/chat-eu",
+    private WebApplicationFactory<Program> CostHost(ConcurrentQueue<CostCall> calls, WebApplicationFactory<fakegateway::Program> gateway, string model = "fors/chat-eu",
         bool rerank = true, string? failStep = null, Guid? gatewayKeyId = null, GatewayKeyEntry? keyRow = null)
     {
         var snapshot = Snapshot();
         var bygg = snapshot.Assistants[db.AssistantId];
         snapshot = snapshot with
         {
-            ChatSettings = """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""",
-            RetrievalSettings = rerank ? """{"rerankModel":"ume/chat-eu"}""" : null,
+            ChatSettings = """{"condenseModel":"fors/chat-eu","condenseReasoningEffort":"none"}""",
+            RetrievalSettings = rerank ? """{"rerankModel":"fors/chat-eu"}""" : null,
             Assistants = new Dictionary<Guid, AssistantEntry>
             {
                 [db.AssistantId] = bygg with
@@ -120,7 +120,7 @@ public sealed partial class ChatApiTests
                 : new Dictionary<Guid, GatewayKeyEntry>(),
             ModelPrices = new Dictionary<string, ModelPricesEntry>(StringComparer.Ordinal)
             {
-                ["ume/chat-eu"] = ChatPrices, [FakeCatalog.NoCostModel] = ChatPrices, ["fake-stream-broken"] = ChatPrices,
+                ["fors/chat-eu"] = ChatPrices, [FakeCatalog.NoCostModel] = ChatPrices, ["fake-stream-broken"] = ChatPrices,
             },
         };
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>
@@ -242,7 +242,7 @@ public sealed partial class ChatApiTests
         var answer = byStep[GatewayChatClient.AnswerStep];
         (answer.Streamed, answer.StreamCostAsked).ShouldBe((true, true));
         calls.Where(c => c.Step != GatewayChatClient.AnswerStep).ShouldAllBe(c => !c.StreamCostAsked && !c.Streamed);
-        wire.ShouldNotContain("ume-cost-usd");
+        wire.ShouldNotContain("fors-cost-usd");
         wire.Split('\n').ShouldNotContain(l => l.StartsWith(':'));
         answer.Tokens.CachedInputTokens.ShouldBe(CostCachedTokens);
         byStep[Condenser.Step].Tokens.CachedInputTokens.ShouldBe(CostCachedTokens);
@@ -280,7 +280,7 @@ public sealed partial class ChatApiTests
         using (var stream = await AskCost(client, "Behöver jag bygglov för en altan?", stream: true))
         {
             stream.StatusCode.ShouldBe(HttpStatusCode.OK);
-            (await stream.Content.ReadAsStringAsync(Ct)).ShouldNotContain("ume-cost-usd");
+            (await stream.Content.ReadAsStringAsync(Ct)).ShouldNotContain("fors-cost-usd");
         }
 
         var answers = calls.Where(c => c.Step == GatewayChatClient.AnswerStep).ToList();

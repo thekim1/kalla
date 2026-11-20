@@ -377,7 +377,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     }
 
     /// <summary>
-    /// A daily usage table's columns: <c>Step</c> up to 100 characters (the gateway keeps 100 of <c>x-ume-step</c>,
+    /// A daily usage table's columns: <c>Step</c> up to 100 characters (the gateway keeps 100 of <c>x-fors-step</c>,
     /// gateway-changes §7.1), every counter <c>NOT NULL DEFAULT 0</c>, the costs <c>numeric(18,8)</c>, IX (<c>DepartmentId</c>,
     /// <c>Day</c>) for the cost report by department.
     /// </summary>

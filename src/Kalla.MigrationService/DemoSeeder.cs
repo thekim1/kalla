@@ -39,7 +39,7 @@ public static class DemoSeeder
     public const string AssistantName = "Demo-assistent";
 
     /// <summary>A FakeGateway chat model served from the EU and on-prem, so any key or ceiling serves it.</summary>
-    public const string ChatModel = "ume/chat-standard";
+    public const string ChatModel = "fors/chat-standard";
 
     /// <summary>
     /// FakeGateway's feature-hashing embeddings put a question's best chunk 0.33–0.78 away, so the smoke set's coverage

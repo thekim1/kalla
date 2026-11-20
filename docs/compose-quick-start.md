@@ -53,7 +53,7 @@ host names, and add `--proxy-address` to Ume.Rag's script.
 ## 2. The gateway
 
 ```bash
-curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
+curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
 tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
 sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0 --yes
 sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait

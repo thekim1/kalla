@@ -12,7 +12,7 @@ namespace Kalla.AdminApi;
 /// <summary>
 /// V8 (admin design §4.6, identity §4.7, gateway-changes §13.4): a model is servable at a ceiling when the mirror knows it
 /// with a residency within the ceiling, and the gateway's <c>/v1/models</c> called with that level's key and ceiling lists
-/// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-ume-on-behalf-of</c>.
+/// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-fors-on-behalf-of</c>.
 /// The ceiling is lowered to rag-admin's credential key's residencies first, as chat lowers it (#237, M-17 C9).
 /// </summary>
 /// <remarks>
@@ -425,7 +425,7 @@ public static class GatewayEndpoints
 
         // The limits of a row the gateway sends none for (Decisions "Answer length from the model", admin §4.10): once
         // /v1/models carries them (LimitsSource catalog) the manual fields go, and a write is refused (platform_rule).
-        // Model names hold slashes (ume/chat-eu): a catch-all segment, unescaped, so a client may send the slash or %2F.
+        // Model names hold slashes (fors/chat-eu): a catch-all segment, unescaped, so a client may send the slash or %2F.
         gateway.MapPut("/models/{**name}", async (string name, GatewayModelLimitsRequest request, AdminContext admin, CancellationToken ct) =>
                 GatewayModelDto.Of(await admin.WriteAsync(async attempt =>
                 {

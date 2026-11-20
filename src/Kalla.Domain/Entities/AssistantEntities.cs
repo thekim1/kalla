@@ -236,18 +236,18 @@ public sealed class GatewayModel
     /// <summary><c>chat</c>, <c>embedding</c> or <c>rerank</c> (<see cref="GatewayModelModelKinds"/>).</summary>
     public string ModelKind { get; set; } = GatewayModelModelKinds.Chat;
 
-    /// <summary>The <c>x-ume-residency</c> values (<c>OnPrem</c>, <c>Eu</c>, <c>External</c>) the model or route's targets run at.</summary>
+    /// <summary>The <c>x-fors-residency</c> values (<c>OnPrem</c>, <c>Eu</c>, <c>External</c>) the model or route's targets run at.</summary>
     public string[] Residencies { get; set; } = [];
 
     public string Source { get; set; } = GatewayModelSources.Catalog;
     public bool SupportsTools { get; set; }
     public string SupportsToolsSource { get; set; } = GatewayModelSources.Manual;
-    /// <summary>The model's context window in tokens: from the gateway's <c>ume.context_window</c>, else manual (the Gateway models page).</summary>
+    /// <summary>The model's context window in tokens: from the gateway's <c>fors.context_window</c>, else manual (the Gateway models page).</summary>
     public int? ContextWindow { get; set; }
 
     /// <summary>
     /// The longest output the model produces, in tokens (Decisions "Answer length from the model"; chat design §6.3): the
-    /// answer's <c>max_tokens</c> unless the assistant overrides it. From <c>ume.max_output_tokens</c>, else manual.
+    /// answer's <c>max_tokens</c> unless the assistant overrides it. From <c>fors.max_output_tokens</c>, else manual.
     /// </summary>
     public int? MaxOutputTokens { get; set; }
 

@@ -103,15 +103,15 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     public async Task A_platform_admin_sets_a_models_limits_the_sync_keeps_them_and_a_bad_pair_is_refused()
     {
         // Decisions "Answer length from the model" (admin design §4.5, §4.10): ContextWindow and MaxOutputTokens are manual
-        // while the gateway sends none for the model (ume/chat-onprem), and come from /v1/models once it does (ume/chat-eu).
+        // while the gateway sends none for the model (fors/chat-onprem), and come from /v1/models once it does (fors/chat-eu).
         await using var gateway = database.Gateway();
         await using var admin = database.AdminApi(gateway, Residency.Eu);
         await SyncedAsync(admin);
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
-        const string Name = "ume/chat-onprem";
+        const string Name = "fors/chat-onprem";
         var url = $"/api/gateway/models/{Name}";
 
-        var fromGateway = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == "ume/chat-eu");
+        var fromGateway = (await platform.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.Single(m => m.Name == "fors/chat-eu");
         (fromGateway.ContextWindow, fromGateway.MaxOutputTokens, fromGateway.LimitsSource).ShouldBe((128_000, 16_384, GatewayModelSources.Catalog));
         using (var refused = await platform.PutAsJsonAsync("/api/gateway/models/ume/chat-eu", new { contextWindow = 1000 }, Ct))
         {
@@ -207,23 +207,23 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
 
         using var reader = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Reviewer, "1000");
         var models = (await reader.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.ToDictionary(m => m.Name);
-        models["ume/chat-eu"].Residencies.ShouldBe(["Eu"]);
-        models["ume/chat-eu"].Kind.ShouldBe(GatewayModelKinds.Model);
-        models["ume/chat-eu"].ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // ume.kind "Chat" (#363 point 1)
-        models["ume/chat-eu"].Source.ShouldBe(GatewayModelSources.Catalog);
-        models["ume/chat-eu"].OutputPerMillionUsd.ShouldBe(0.60m);
-        models["ume/chat-eu"].SupportsTools.ShouldBeTrue(); // ume.features "tools"
+        models["fors/chat-eu"].Residencies.ShouldBe(["Eu"]);
+        models["fors/chat-eu"].Kind.ShouldBe(GatewayModelKinds.Model);
+        models["fors/chat-eu"].ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // fors.kind "Chat" (#363 point 1)
+        models["fors/chat-eu"].Source.ShouldBe(GatewayModelSources.Catalog);
+        models["fors/chat-eu"].OutputPerMillionUsd.ShouldBe(0.60m);
+        models["fors/chat-eu"].SupportsTools.ShouldBeTrue(); // fors.features "tools"
         models["bge-m3"].Residencies.ShouldBe(["OnPrem"]);
         models["bge-m3"].InputPerMillionUsd.ShouldBe(0.02m);
         models["bge-m3"].Kind.ShouldBe(GatewayModelKinds.Model);
-        models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // ume.kind "Embedding"
+        models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // fors.kind "Embedding"
         models["bge-m3"].SupportsTools.ShouldBeFalse();
         // An alias is a route with its targets' residencies, from the catalogue.
-        models["ume/chat-standard"].Kind.ShouldBe(GatewayModelKinds.Route);
-        models["ume/chat-standard"].Source.ShouldBe(GatewayModelSources.Catalog);
-        models["ume/chat-standard"].Residencies.ShouldBe(["OnPrem", "Eu"]);
+        models["fors/chat-standard"].Kind.ShouldBe(GatewayModelKinds.Route);
+        models["fors/chat-standard"].Source.ShouldBe(GatewayModelSources.Catalog);
+        models["fors/chat-standard"].Residencies.ShouldBe(["OnPrem", "Eu"]);
         // The list is the gateway's within the admin's ceiling (Eu here), and this gateway has no rerank model (B-16).
-        models.ShouldNotContainKey("ume/chat-advanced");
+        models.ShouldNotContainKey("fors/chat-advanced");
         models.ShouldNotContainKey("bge-reranker-v2-m3");
 
         var version = await ConfigVersionAsync();
@@ -278,7 +278,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         {
             db.GatewayModels.Add(new GatewayModel { Name = gone, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
             db.GatewayModels.Add(new GatewayModel { Name = alias, Kind = GatewayModelKinds.Route, Residencies = ["OnPrem", "Eu"], Source = GatewayModelSources.Manual });
-            var changed = await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct);
+            var changed = await db.GatewayModels.SingleAsync(m => m.Name == "fors/chat-eu", Ct);
             changed.OutputPerMillionUsd = 9m;
             // A row whose ModelKind is wrong (the migration's default 'chat') is corrected by the next run: no compatibility step.
             var embedding = await db.GatewayModels.SingleAsync(m => m.Name == "bge-m3", Ct);
@@ -308,7 +308,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             var kept = await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct);
             kept.Residencies.ShouldBe(["OnPrem", "Eu"]);
             kept.ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // manual route rows are chat
-            (await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct)).OutputPerMillionUsd.ShouldBe(0.60m);
+            (await db.GatewayModels.SingleAsync(m => m.Name == "fors/chat-eu", Ct)).OutputPerMillionUsd.ShouldBe(0.60m);
             (await db.GatewayModels.SingleAsync(m => m.Name == "bge-m3", Ct)).ModelKind.ShouldBe(GatewayModelModelKinds.Embedding);
             var audit = await db.AuditLog.Where(a => a.EntityType == "gateway-models" && a.ConfigVersion == version).ToListAsync(Ct);
             audit.ShouldHaveSingleItem().Actor.ShouldBe(GatewayModelSync.SystemActor);
@@ -358,17 +358,17 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
 
         await using var scope = admin.Services.CreateAsyncScope();
         var check = scope.ServiceProvider.GetRequiredService<GatewayModelCheck>();
-        await check.EnsureServableAsync("ume/chat-eu", Residency.Eu, Ct);
+        await check.EnsureServableAsync("fors/chat-eu", Residency.Eu, Ct);
         await check.EnsureServableAsync("bge-m3", Residency.Eu, Ct); // an OnPrem model is within an Eu ceiling
 
-        (await Code(() => check.EnsureServableAsync("ume/chat-advanced", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
+        (await Code(() => check.EnsureServableAsync("fors/chat-advanced", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
         (await Code(() => check.EnsureServableAsync("no-such-model", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
         // The mirror allows it at OnPrem, but its OnPrem target is drained: the gateway does not list it (gateway-changes §3.4).
         (await Code(() => check.EnsureServableAsync(drained, Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.ModelNotListed.Code);
         // An instance without a credential key cannot ask the gateway, and the code says the key is missing (#237).
         await using var keyless = database.AdminApi(gateway, key: false);
         await using var keylessScope = keyless.Services.CreateAsyncScope();
-        (await Code(() => keylessScope.ServiceProvider.GetRequiredService<GatewayModelCheck>().EnsureServableAsync("ume/chat-eu", Residency.Eu, Ct)))
+        (await Code(() => keylessScope.ServiceProvider.GetRequiredService<GatewayModelCheck>().EnsureServableAsync("fors/chat-eu", Residency.Eu, Ct)))
             .ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
     }
 
@@ -383,8 +383,8 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         var check = scope.ServiceProvider.GetRequiredService<GatewayModelCheck>();
 
         // A public assistant asks for External; M2's cap checks it at Eu, with the Eu key (#237).
-        await check.EnsureServableAsync("ume/chat-eu", Residency.External, Ct);
-        var refused = await Should.ThrowAsync<ApiFaultException>(() => check.EnsureServableAsync("ume/chat-advanced", Residency.External, Ct));
+        await check.EnsureServableAsync("fors/chat-eu", Residency.External, Ct);
+        var refused = await Should.ThrowAsync<ApiFaultException>(() => check.EnsureServableAsync("fors/chat-advanced", Residency.External, Ct));
         refused.Extensions!["code"].ShouldBe(AdminErrorCodes.ModelResidency.Code);
         ((IReadOnlyDictionary<string, string>)refused.Extensions["params"]!)["ceiling"].ShouldBe("Eu"); // the capped ceiling
         // The cap only lowers: an OnPrem ceiling stays OnPrem, checked with the same credential key.
@@ -602,11 +602,11 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             request.RequestUri!.AbsolutePath.EndsWith("/embeddings", StringComparison.Ordinal) &&
-            request.Headers.TryGetValues("x-ume-max-residency", out var ceiling) && ceiling.Single() == "OnPrem"
+            request.Headers.TryGetValues("x-fors-max-residency", out var ceiling) && ceiling.Single() == "OnPrem"
                 ? new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent("not json", System.Text.Encoding.UTF8, "application/json"),
-                    Headers = { { "x-ume-residency", "OnPrem" } },
+                    Headers = { { "x-fors-residency", "OnPrem" } },
                 }
                 : await base.SendAsync(request, cancellationToken);
     }

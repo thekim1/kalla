@@ -61,7 +61,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-# The key level must match the ceiling (FakeGateway's StrictKeyLevel); ume/chat-eu answers at Eu.
-bash "$here/run.sh" --dry-run --mode "$mode" --base-url "http://127.0.0.1:$port" --model ume/chat-eu \
-  --key-file "$work/key" --header 'x-ume-max-residency: Eu' --duration "$duration" --warmup "$warmup" \
+# The key level must match the ceiling (FakeGateway's StrictKeyLevel); fors/chat-eu answers at Eu.
+bash "$here/run.sh" --dry-run --mode "$mode" --base-url "http://127.0.0.1:$port" --model fors/chat-eu \
+  --key-file "$work/key" --header 'x-fors-max-residency: Eu' --duration "$duration" --warmup "$warmup" \
   --fake-latency 400,25,30,200 --out "$out" ${extra[@]+"${extra[@]}"}

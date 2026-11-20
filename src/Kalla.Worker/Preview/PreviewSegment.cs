@@ -24,7 +24,7 @@ namespace Kalla.Worker.Preview;
 /// <summary>
 /// What one preview job runs with: its pipeline version, the collection, the stages up to <c>untilStage</c>, its store, and
 /// the attempt's model calls (an <c>embed: true</c> preview's embeddings, counted under the collection with the job's id as
-/// <c>x-ume-run-id</c>, engine design §10.6).
+/// <c>x-fors-run-id</c>, engine design §10.6).
 /// </summary>
 public sealed record PreviewRun(Guid JobId, PipelineRun Pipeline, PreviewCollectionRow Collection, IReadOnlyList<string> Stages, PreviewStore Store, JobUsage Usage)
 {

@@ -16,11 +16,11 @@ off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
 ### Product names
 
 The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the LLM gateway is **Fors**; the working
-names Ume.Rag and Ume.LlmGateway go. The rename of code, images, documents and deployment names is stream b's work
+names Ume.Rag and Fors go. The rename of code, images, documents and deployment names is stream b's work
 (the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
 The names on the wire change too, in both products in one step (no backward compatibility before production): Källa's
 own Chat API members `ume.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
-gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts become `x-fors-*`, `/v1/fors/context` and
+gateway's `x-fors-*` headers, `/v1/fors/context` and the `ume.*` model facts become `x-fors-*`, `/v1/fors/context` and
 `fors.*`; the two renames land together. The rename comes before `v0.9.0`. This answers N1.
 
 *From:* decided by user, 2026-11-20.
@@ -392,7 +392,7 @@ P2. Detail: `admin/design.md` §5.5.1; `deploy/portainer/bootstrap.sh`.
 ### .NET runtime settings
 
 Every .NET container sets `DOTNET_GCHeapHardLimitPercent=0x4B` (hexadecimal). `AuditLog.Service` is the OTel service
-name; the query-embedding step is `x-ume-step: query-embed`. Detail: `platform/repo-and-deployment.md` §6.2;
+name; the query-embedding step is `x-fors-step: query-embed`. Detail: `platform/repo-and-deployment.md` §6.2;
 `platform/data-model.md` §2.4.
 
 *From:* log row 70; decided by main session, 2026-10-30.
@@ -446,9 +446,9 @@ Every assistant and every knowledge base runs on an **assigned gateway key** of 
 the department's assigned keys; Ume.Rag stores the key's id, never a secret. Every call of a chat turn (condense, query
 embedding, rerank, answer, follow-ups) and the admin's test panel run as the assistant's key; indexing, re-embedding and
 evaluation of a knowledge base run as the knowledge base's key. The gateway charges, limits and budgets each call as
-that key, its team and department, and is the record of cost: Ume.Rag takes the cost from `x-ume-cost-usd`, from the
-stream comment it asks for with `x-ume-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
-finer split per step, joined on `x-ume-run-id` and `x-ume-step`. A per-assistant budget is the key's budget in the
+that key, its team and department, and is the record of cost: Ume.Rag takes the cost from `x-fors-cost-usd`, from the
+stream comment it asks for with `x-fors-stream-cost: 1`, and from the Integration API's `usage.read`, and keeps its own
+finer split per step, joined on `x-fors-run-id` and `x-fors-step`. A per-assistant budget is the key's budget in the
 gateway, shown read-only in Ume.Rag; `OwnerTeamId` keeps one meaning, the edit scope. An object without a key runs as
 the service's credential key and is charged to the integration's owner team; once the gateway's `features` contain
 `act-as-key`, publishing an assistant needs a key. Ume.Rag's own record (stage 1) is one row per day, object, step
@@ -512,9 +512,9 @@ Master keys are protected files (file key provider) while no `sensitive` data ex
 
 Each Ume.Rag service (api, admin, worker) holds **one credential key** of the gateway integration *Ume.Rag*, as a secret
 file, with `AllowedIpRanges` and `RequireMaxResidency`. A call for an assistant or a knowledge base sends
-`x-ume-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
+`x-fors-on-behalf-of: <assigned key id>` and runs as that key (its models, residencies, PII policy, limits, budgets and
 usage record); the answer's echo of the header is checked, and a missing or different echo fails closed
-(`Gateway:RequireDelegationEcho`). Every call still sends `x-ume-max-residency` from the data's level, and the worker
+(`Gateway:RequireDelegationEcho`). Every call still sends `x-fors-max-residency` from the data's level, and the worker
 never sends `External`. The gateway bounds an acted request by the credential key too: `RequireMaxResidency` applies
 when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
 user, 2026-11-12, #580; built in thekim1/llmgateway#84, feature `credential-residencies`). So each service's
@@ -524,14 +524,14 @@ departments, teams, models with their limits and prices, and a key's models, res
 rate limits, output cap and budgets are the gateway's and shown read-only; which key an object runs on, prompts,
 retrieval and answer settings, who may call an assistant and the content's level are Ume.Rag's. Configuration comes
 from the gateway's data plane with the credential key, not the Data API: the gateway's features, the assigned keys and
-the models with their limits and prices from `GET /v1/ume/context` and `GET /v1/models`, polled with `If-None-Match`;
+the models with their limits and prices from `GET /v1/fors/context` and `GET /v1/models`, polled with `If-None-Match`;
 departments and teams from the same context, where `rag-admin`'s credential key (and only it) holds the scope
 `organisation.read` (every department and team, inactive ones included; feature `organisation`), so the Data API key
 goes. Department member groups come from the same context (`member_groups` per department, feature `member-groups`,
 gateway v0.10.0) and are never edited in Ume.Rag (the user chose to wait for the gateway rather than build another
 source, 2026-11-12, #580). The contract is the gateway's OpenAPI document `docs/openapi/integrations.json` (pinned at a
 release tag), which changes by addition only. Each service reads the gateway's `features` from its own
-`/v1/ume/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
+`/v1/fors/context`, so it acts as a key only once its own gateway instance says `act-as-key`. From then on a published assistant always has a
 key of its own department: publishing or restoring one without a key is refused, and so is a save that clears the key of a
 published assistant (V39, `gateway_key_required`); to drop its key, an admin unpublishes it or picks another key, so it never
 runs on rag-api's credential key outside its department's budget (confirmed by user, 2026-11-13). Detail:
@@ -542,7 +542,7 @@ groups by hand until the gateway has them, decided by user, 2026-11-12 (#580); V
 
 ### Gateway releases
 
-The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-ume-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/ume/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-ume-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Ume.Rag tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
+The gateway never depends on Ume.Rag; any key may send a residency ceiling. Release 1 (live since gateway v0.9.1): `x-fors-max-residency` (also on the admission path), FakeLlm `dimensions`, embeddings checked per input. Release 2 (P2): member groups from claims, tenant and guest refusal. The integration features follow the gateway's own phases: phase 1 credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; phase 2 acting as an assigned key (`x-fors-on-behalf-of` and its echo), run metadata and the stream cost; phase 3 the Integration API (`usage.read`). Ume.Rag tests a capability by the context's `features`, never by version. Rerank is a separate optional endpoint. Ume.Rag retries `502`/`504` with the same ceiling, never a wider one; `403 max_residency_not_met` is final; `503` + `Retry-After` means in-ceiling targets are drained; a bad or (with `RequireMaxResidency`) missing header is `400`. Detail: `gateway-changes/design.md` §1, §3.3, §5, §13.
 
 *From:* log rows 33, 34, 55, 66, 74; decided by user, 2026-11-06; the integration phases decided by user, 2026-11-11
 (#580).
@@ -566,7 +566,7 @@ Levels are `public`, `internal` and `sensitive`; `sensitive`, the municipality's
 
 Every model call sends an explicit ceiling from its data's level: `public` `External`, `internal` `Eu`, `sensitive`
 `OnPrem`. The worker never sends `External`, so its calls run `public` at `Eu`; embedding calls use the profile's
-`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/ume/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; built in M-17 C9, #691). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-ume-residency` is checked before use. Detail: `identity/design.md` §4.7.
+`MaxResidency`. Each client in the registry has its own classification ceiling. The ceiling of each service is its gateway credential key's `allowed_residencies` from `/v1/fors/context` (empty: all), so the gateway owns it and `Gateway:MaxResidency` goes; before the first context every call is `OnPrem` (user 2026-11-13, deploy-configuration D1; built in M-17 C9, #691). Under register M2 the keys allow `Eu` at most, so everything is EU-hosted. Chat runs at the assistant's level; with a client that keeps history every turn runs at max(assistant level, client ceiling). The answer's `x-fors-residency` is checked before use. Detail: `identity/design.md` §4.7.
 
 *From:* log rows 14, 17, 25, 55, 77, 100; decided by user, 2026-10-30.
 
@@ -906,9 +906,9 @@ else left out when the limit is unknown (the prompt budget then keeps its 1,024-
 4,096 ceiling. An optional platform-wide ceiling, `Settings.Chat.MaxAnswerTokens` (unset by default), guards against
 long, costly answers on models with large output limits: when set, it caps every answer's `max_tokens`, override
 included, and `max_tokens` is then always sent, also when the model's limit is unknown. A platform admin enters both
-limits on the mirror row until the gateway sends them (`ume.context_window`, `ume.max_output_tokens` on
+limits on the mirror row until the gateway sends them (`fors.context_window`, `fors.max_output_tokens` on
 `GET /v1/models`); then the sync fills them and the manual fields go. The assistant's gateway key's output cap
-(`max_output_tokens` in `/v1/ume/context`), when set, caps every answer too. The test panel shows the `max_tokens`
+(`max_output_tokens` in `/v1/fors/context`), when set, caps every answer too. The test panel shows the `max_tokens`
 sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
@@ -1035,7 +1035,7 @@ after Save, naming the affected objects. Detail: `admin/design.md` §5.5.2, §5.
 
 Model pickers mark each mirror model available or not from the gateway's `/v1/models`, asked with the service's
 credential key at the relevant ceiling and, for an assistant or knowledge base with a gateway key, as that key
-(`x-ume-on-behalf-of`, once the gateway's `features` contain `act-as-key`), cached 5 minutes per ceiling and key. A model
+(`x-fors-on-behalf-of`, once the gateway's `features` contain `act-as-key`), cached 5 minutes per ceiling and key. A model
 the key may not use is greyed out and cannot be chosen; if the gateway cannot be asked, all stay choosable with a hint.
 V8 (publish), V32 (save) and V39 (the object's key) stay authoritative. Detail: `admin/design.md` §4.5, §4.6, §4.10.
 

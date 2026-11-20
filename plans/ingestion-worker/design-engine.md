@@ -18,12 +18,12 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 
 | Convention | Gateway source | Here |
 |---|---|---|
-| Long-running loops are `BackgroundService`s driven by `PeriodicTimer(interval, TimeProvider)`; a final flush in `StopAsync` | `src/Ume.LlmGateway.Gateway/Pipeline/AuthFailureRecorder.cs:115-145`, `UsageWriter.cs:130-143` | dispatcher, heartbeat, reaper, scheduler, finalizer (§9) |
-| `TimeProvider` injected everywhere, registered with `TryAddSingleton(TimeProvider.System)` | `src/Ume.LlmGateway.Infrastructure/InfrastructureExtensions.cs:89` | all time decisions (leases, back-off, cron), `FakeTimeProvider` in tests |
-| Options classes with `SectionName`, data annotations, `ValidateDataAnnotations().ValidateOnStart()` | `src/Ume.LlmGateway.AdminApi/RetentionService.cs:11-26`, `InfrastructureExtensions.cs:57-58` | `WorkerOptions` (`Worker:*`) |
-| Local schedule in Europe/Stockholm via `BudgetPeriods.Stockholm` | `src/Ume.LlmGateway.Domain/Services/BudgetPeriods.cs:11`, `RetentionService.cs:44-62` | cron evaluation (§9.6) |
-| One instance does a periodic job: `pg_try_advisory_xact_lock` inside an execution-strategy transaction | `src/Ume.LlmGateway.AdminApi/ModelListSync.cs:148-153` | reaper, scheduler, finalizer and maintenance leadership |
-| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Ume.Rag`, `rag.*` names (repo-and-deployment §9) |
+| Long-running loops are `BackgroundService`s driven by `PeriodicTimer(interval, TimeProvider)`; a final flush in `StopAsync` | `src/Fors.Gateway/Pipeline/AuthFailureRecorder.cs:115-145`, `UsageWriter.cs:130-143` | dispatcher, heartbeat, reaper, scheduler, finalizer (§9) |
+| `TimeProvider` injected everywhere, registered with `TryAddSingleton(TimeProvider.System)` | `src/Fors.Infrastructure/InfrastructureExtensions.cs:89` | all time decisions (leases, back-off, cron), `FakeTimeProvider` in tests |
+| Options classes with `SectionName`, data annotations, `ValidateDataAnnotations().ValidateOnStart()` | `src/Fors.AdminApi/RetentionService.cs:11-26`, `InfrastructureExtensions.cs:57-58` | `WorkerOptions` (`Worker:*`) |
+| Local schedule in Europe/Stockholm via `BudgetPeriods.Stockholm` | `src/Fors.Domain/Services/BudgetPeriods.cs:11`, `RetentionService.cs:44-62` | cron evaluation (§9.6) |
+| One instance does a periodic job: `pg_try_advisory_xact_lock` inside an execution-strategy transaction | `src/Fors.AdminApi/ModelListSync.cs:148-153` | reaper, scheduler, finalizer and maintenance leadership |
+| Meters from `IMeterFactory` with one telemetry name; `[LoggerMessage]` source-generated logs | `UsageWriter.cs:616-636`, `:565-583`; `src/Fors.ServiceDefaults/Extensions.cs:21`, `:83-89` | meter `Ume.Rag`, `rag.*` names (repo-and-deployment §9) |
 
 ## 1. Summary of decisions
 
@@ -329,9 +329,9 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429, or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
 | Gateway `402 budget_exceeded` (budget used up: the knowledge base's key, its team or department; the gateway's message names which) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted`; the admin raises the attention item (admin §5.5.1) |
-| The knowledge base's gateway key unusable, on a call sent with `x-ume-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `403 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
+| The knowledge base's gateway key unusable, on a call sent with `x-fors-on-behalf-of`: gateway `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `403 key_expired` (gateway-changes §5.7) | transient | yes | as 402, reason `gateway.key_unavailable` |
 | Gateway 403 `max_residency_not_met`; 400 | fatal, reason `gateway.<code>` | – | – |
-| Gateway answer above the residency ceiling (`x-ume-residency`) | fatal, result discarded, event 5003 | – | – |
+| Gateway answer above the residency ceiling (`x-fors-residency`) | fatal, result discarded, event 5003 | – | – |
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |
 | Stage version not supported here (§5.2) | transient | no | 30 s |
 | Unhandled exception in a stage | transient (`node.exception`; type name only, never the message) | yes | back-off |
@@ -413,20 +413,20 @@ call of a job runs as the **knowledge base's gateway key** (`Collections.Gateway
 evaluation are charged, limited and budgeted as that key (cost-attribution §4.1). A collection without a key, and
 every call before the gateway's `features` contain `act-as-key`, runs as the credential key. **Until the gateway's
 integration phase 1** (P1, weakness review §5) the worker holds the pilot department's team's own `OnPrem` and `Eu`
-keys, every call is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is checked).
+keys, every call is charged to that team, and no `x-fors-on-behalf-of` is sent (so no echo is checked).
 
 | Header | Value |
 |---|---|
-| `x-ume-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
-| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
-| `x-ume-run-id`, `x-ume-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
+| `x-fors-on-behalf-of` | from gateway phase 2: the document's collection's `GatewayKeyId` (gateway design §5.2); none without a key |
+| `x-fors-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker never sends `External`) |
+| `x-fors-run-id`, `x-fors-step` | `RunId` (GUID; for calls outside a run, the evaluation run's id or, for set generation and preview, the job's id, so every call joins the gateway's usage, §10.6) and stage **type** (`embed`, `query-embed`, `rerank`, `eval-generate`, `eval-judge`, `eval-dedup`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 
-The worker learns `act-as-key` from its own `GET /v1/ume/context` (identity §4.7). The response is checked before
-anything is stored: `x-ume-residency` within the ceiling (else fatal + 5003); when `x-ume-on-behalf-of` was sent, a
+The worker learns `act-as-key` from its own `GET /v1/fors/context` (identity §4.7). The response is checked before
+anything is stored: `x-fors-residency` within the ceiling (else fatal + 5003); when `x-fors-on-behalf-of` was sent, a
 `2xx` answer's echo must be the GUID sent (`Gateway:RequireDelegationEcho`; gateway-changes §5.2), else fatal
 `gateway.delegation_not_applied` (event 5011); an error answer goes by §7.3. The call's usage (input, cached input
-and output tokens) and its cost are added to the stage's `NodeUsage`: `x-ume-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
+and output tokens) and its cost are added to the stage's `NodeUsage`: `x-fors-cost-usd`, the gateway's cost of the call, or, when the answer carries none,
 an estimate from the model mirror's prices, kept apart as estimated (§10.6).
 
 HTTP clients come from `IHttpClientFactory`, one per downstream: the named gateway clients (`AddGatewayClient`) with
@@ -694,7 +694,7 @@ phases, reconcile included.
 `Reason` is a code plus short fixed text, `<area>.<code>` (`parser.timeout`, `http.404`, `gateway.budget_exhausted`,
 `pii.flagged`), never library messages or document text (parser §7.5 rule). A document served by another source's
 frontier request gets its real outcome and the fact `fetch.shared` (6b §6.2). `Strategy` holds the route (§7.2);
-`CostUsd` the cost of this document's model calls in this run (the gateway's `x-ume-cost-usd`, plus the estimates of
+`CostUsd` the cost of this document's model calls in this run (the gateway's `x-fors-cost-usd`, plus the estimates of
 §10.6 for calls without it); `DurationMs` wall time across its jobs; `ParserBuildHash` as
 parser §13.1.
 
@@ -736,10 +736,10 @@ reporting only; the gateway is the record for charging (it also counts fallbacks
 |---|---|
 | Calls | every gateway call of §7.7: indexing, re-embedding and preview (`embed`), set generation (`eval-generate`, `eval-judge`, `eval-dedup`), retrieval evaluation's query embeddings (`query-embed`, only cache misses) and rerank (`rerank`); `GET /v1/models` costs nothing and is not recorded |
 | Usage | from the answer's `usage`: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (0 when absent), `completion_tokens` (none for embeddings); an answer without `usage` counts 0 tokens |
-| Cost | `x-ume-cost-usd` on the answer (every worker call is non-streamed, so the gateway sends it on every successful call); without it an **estimate** from `GatewayModels` (per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd`, the input price when that is null, + output × `OutputPerMillionUsd`; 0 for a model without prices), counted as estimated; the same rule as chat §8.3. A call answered with an error status records nothing |
+| Cost | `x-fors-cost-usd` on the answer (every worker call is non-streamed, so the gateway sends it on every successful call); without it an **estimate** from `GatewayModels` (per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd`, the input price when that is null, + output × `OutputPerMillionUsd`; 0 for a model without prices), counted as estimated; the same rule as chat §8.3. A call answered with an error status records nothing |
 | Per document | `RunItems.CostUsd` is the cost of the document's calls in the attempt that writes the item (gateway cost plus estimates, §10.2); the finalizer's `Runs.CostUsd` sums it (§10.4). Calls of an earlier attempt that failed are in the daily table only; the retry finds their embeddings in the cache and does not pay again |
 | Per day | `content."CollectionDailyUsage"` (data-model §2.2) per (Europe/Stockholm day, collection, level, step): calls, input, cached input and output tokens, `CostUsd` (the gateway's), `EstimatedCalls`, `EstimatedCostUsd`. Each job attempt that made a model call adds its deltas, keys sorted, as the **last statement of the transaction that records the attempt's outcome** (the run item's commit, the job's retry or completion; §14's swap transaction for a document that is indexed), so a retried or failed attempt's calls are counted once and the hot row's lock is held only until that commit (performance pass §3.2). A retry, a failure and a release are written by the job queue without a transaction of the caller's, so their usage follows in a transaction of its own right after the queue call: a crash between the two loses that attempt's usage (an undercount, never a double count). An attempt whose lease was lost writes none. The row's level is the collection's. Calls outside a run (preview, evaluation) are counted the same way under the source's or the evaluation set's collection |
-| Run ids | every call carries `x-ume-run-id` (§7.7), so the split per step joins the gateway's usage on `x-ume-run-id` and `x-ume-step` (gateway-changes §7.1) |
+| Run ids | every call carries `x-fors-run-id` (§7.7), so the split per step joins the gateway's usage on `x-fors-run-id` and `x-fors-step` (gateway-changes §7.1) |
 | Why a daily table | `RunItems` are kept 90 days and `Runs` 13 months (data-model §8), set generation is no run, and the per-run figures do not keep gateway and estimated cost apart; the cost report (admin §8.6) reads the daily table, the run pages keep showing the per-run cost |
 
 ## 11. Preview

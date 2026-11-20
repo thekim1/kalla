@@ -201,7 +201,7 @@ public sealed class CollectionDailyUsage
     public Guid CollectionId { get; set; }
     public required string Classification { get; set; }
 
-    /// <summary>The <c>x-ume-step</c> the calls sent: <c>embed</c>, <c>query-embed</c>, <c>rerank</c>, <c>eval-generate</c>, <c>eval-judge</c>, <c>eval-dedup</c>.</summary>
+    /// <summary>The <c>x-fors-step</c> the calls sent: <c>embed</c>, <c>query-embed</c>, <c>rerank</c>, <c>eval-generate</c>, <c>eval-judge</c>, <c>eval-dedup</c>.</summary>
     public required string Step { get; set; }
 
     /// <summary>The collection's department at the time of the calls.</summary>
@@ -212,7 +212,7 @@ public sealed class CollectionDailyUsage
     public long CachedInputTokens { get; set; }
     public long OutputTokens { get; set; }
 
-    /// <summary>The gateway's cost (<c>x-ume-cost-usd</c>).</summary>
+    /// <summary>The gateway's cost (<c>x-fors-cost-usd</c>).</summary>
     public decimal CostUsd { get; set; }
 
     /// <summary>The calls without a gateway cost, priced from <c>GatewayModels</c> into <see cref="EstimatedCostUsd"/>.</summary>

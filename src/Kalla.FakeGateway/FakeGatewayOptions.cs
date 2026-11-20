@@ -21,10 +21,10 @@ public sealed class FakeGatewayOptions
     /// </summary>
     public Dictionary<string, FakeCredentialKey> CredentialKeys { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>What <c>/v1/ume/context</c> says about the gateway (<c>gateway.version</c>, <c>admin_url</c>, <c>features</c>).</summary>
+    /// <summary>What <c>/v1/fors/context</c> says about the gateway (<c>gateway.version</c>, <c>admin_url</c>, <c>features</c>).</summary>
     public FakeGatewayInfo Gateway { get; set; } = new();
 
-    /// <summary>The integration the credential keys belong to (<c>/v1/ume/context</c>'s <c>integration</c>).</summary>
+    /// <summary>The integration the credential keys belong to (<c>/v1/fors/context</c>'s <c>integration</c>).</summary>
     public FakeIntegration Integration { get; set; } = new();
 
     /// <summary>
@@ -41,7 +41,7 @@ public sealed class FakeGatewayOptions
 
     /// <summary>
     /// The dev keys' <c>RequireMaxResidency</c> (default on, as every Källa key): a request without
-    /// <c>x-ume-max-residency</c> is refused with 400 <c>invalid_request</c>. Off, such a request has no ceiling and reaches
+    /// <c>x-fors-max-residency</c> is refused with 400 <c>invalid_request</c>. Off, such a request has no ceiling and reaches
     /// what the key's level allows.
     /// </summary>
     public bool RequireMaxResidency { get; set; } = true;
@@ -62,7 +62,7 @@ public sealed class FakeGatewayOptions
     public int CachedInputTokens { get; set; }
 
     /// <summary>
-    /// Answers a request made as an assigned key without the <c>x-ume-on-behalf-of</c> echo (<c>FakeGateway:DropOnBehalfOfEcho</c>),
+    /// Answers a request made as an assigned key without the <c>x-fors-on-behalf-of</c> echo (<c>FakeGateway:DropOnBehalfOfEcho</c>),
     /// as an older gateway instance during a rolling update would: Källa must abort the call (event 5011, identity §4.7).
     /// </summary>
     public bool DropOnBehalfOfEcho { get; set; }
@@ -107,16 +107,16 @@ public sealed class FakeModel
 
     public List<FakeTarget> Targets { get; set; } = [];
 
-    /// <summary>An alias's description on <c>/v1/models</c> (<c>ume.description</c>).</summary>
+    /// <summary>An alias's description on <c>/v1/models</c> (<c>fors.description</c>).</summary>
     public string? Description { get; set; }
 
-    /// <summary><c>ume.context_window</c>; null when the gateway does not know it.</summary>
+    /// <summary><c>fors.context_window</c>; null when the gateway does not know it.</summary>
     public int? ContextWindow { get; set; }
 
-    /// <summary><c>ume.max_output_tokens</c>; null when the gateway does not know it.</summary>
+    /// <summary><c>fors.max_output_tokens</c>; null when the gateway does not know it.</summary>
     public int? MaxOutputTokens { get; set; }
 
-    /// <summary><c>ume.features</c> (<c>tools</c>, ...).</summary>
+    /// <summary><c>fors.features</c> (<c>tools</c>, ...).</summary>
     public List<string> Features { get; set; } = [];
 }
 
@@ -167,7 +167,7 @@ public sealed class FakeCredentialKey
     public List<string> Scopes { get; set; } = [];
 }
 
-/// <summary>The gateway part of <c>/v1/ume/context</c>.</summary>
+/// <summary>The gateway part of <c>/v1/fors/context</c>.</summary>
 public sealed class FakeGatewayInfo
 {
     public string? Version { get; set; } = "0.10.0-fake";
@@ -213,7 +213,7 @@ public sealed class FakeIntegration
     public Guid OwnerTeamId { get; set; } = FakeCatalog.DigitaliseringTeamId;
 }
 
-/// <summary>An assigned key as <c>/v1/ume/context</c> lists it (the contract's <c>AssignedKey</c>; never a secret).</summary>
+/// <summary>An assigned key as <c>/v1/fors/context</c> lists it (the contract's <c>AssignedKey</c>; never a secret).</summary>
 public sealed class FakeAssignedKey
 {
     public Guid Id { get; set; }

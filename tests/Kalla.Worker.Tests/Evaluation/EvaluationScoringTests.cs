@@ -77,13 +77,13 @@ public sealed class EvaluationScoringTests
     {
         QuestionOutcome[] outcomes =
         [
-            Outcome(total: 900, rerank: 800, new GatewayCallUsage("rerank", "ume/chat-eu", 1_000, 0, 50, null)),
-            Outcome(total: 1_100, rerank: 1_000, new GatewayCallUsage("rerank", "ume/chat-eu", 3_000, 0, 150, null)),
+            Outcome(total: 900, rerank: 800, new GatewayCallUsage("rerank", "fors/chat-eu", 1_000, 0, 50, null)),
+            Outcome(total: 1_100, rerank: 1_000, new GatewayCallUsage("rerank", "fors/chat-eu", 3_000, 0, 150, null)),
             Outcome(total: 30_100, rerank: 30_000, null, RetrievalDegradation.RerankUnavailable),
         ];
 
         var model = EvaluationScoring.RerankModel(outcomes, reranked: true, platformModel: "other");
-        model.ShouldBe("ume/chat-eu", "the model that answered");
+        model.ShouldBe("fors/chat-eu", "the model that answered");
         var stats = EvaluationScoring.Search(outcomes, reranked: true, model, new ModelPrice(2m, 8m));
 
         stats.ShouldBe(new EvaluationSearchStats
@@ -94,7 +94,7 @@ public sealed class EvaluationScoringTests
             RerankP50Ms = 1_000,
             RerankP95Ms = 30_000,
             RerankUnavailable = 1,
-            RerankModel = "ume/chat-eu",
+            RerankModel = "fors/chat-eu",
             RerankPromptTokens = 4_000,
             RerankCompletionTokens = 200,
             // (4,000 x 2 + 200 x 8) / 1,000,000 / 3 questions, the fallback included.
@@ -107,18 +107,18 @@ public sealed class EvaluationScoringTests
     {
         QuestionOutcome[] outcomes = [Outcome(total: 40, rerank: 0, null)];
 
-        var plain = EvaluationScoring.Search(outcomes, reranked: false, EvaluationScoring.RerankModel(outcomes, reranked: false, "ume/chat-eu"), null);
+        var plain = EvaluationScoring.Search(outcomes, reranked: false, EvaluationScoring.RerankModel(outcomes, reranked: false, "fors/chat-eu"), null);
         plain.ShouldBe(new EvaluationSearchStats { Searches = 1, TotalP50Ms = 40, TotalP95Ms = 40 }, "no rerank model, latency, tokens or cost");
 
-        var unpriced = EvaluationScoring.Search(outcomes, reranked: true, "ume/chat-eu", new ModelPrice(2m, null));
+        var unpriced = EvaluationScoring.Search(outcomes, reranked: true, "fors/chat-eu", new ModelPrice(2m, null));
         unpriced.RerankCostPerQueryUsd.ShouldBe(0, "no tokens at all: the input price suffices");
-        QuestionOutcome[] completions = [Outcome(total: 40, rerank: 30, new GatewayCallUsage("rerank", "ume/chat-eu", 1_000, 0, 50, null))];
-        EvaluationScoring.Search(completions, reranked: true, "ume/chat-eu", new ModelPrice(2m, null)).RerankCostPerQueryUsd
+        QuestionOutcome[] completions = [Outcome(total: 40, rerank: 30, new GatewayCallUsage("rerank", "fors/chat-eu", 1_000, 0, 50, null))];
+        EvaluationScoring.Search(completions, reranked: true, "fors/chat-eu", new ModelPrice(2m, null)).RerankCostPerQueryUsd
             .ShouldBeNull("completion tokens need the output price");
         QuestionOutcome[] gateway = [Outcome(total: 40, rerank: 30, new GatewayCallUsage("rerank", "bge-reranker-v2-m3", 2_000, 0, 0, null))];
         EvaluationScoring.Search(gateway, reranked: true, "bge-reranker-v2-m3", new ModelPrice(0.1m, null)).RerankCostPerQueryUsd
             .ShouldBe(0.0002, "a gateway rerank model bills input tokens only (#414)");
-        EvaluationScoring.RerankModel(outcomes, reranked: true, "ume/chat-eu").ShouldBe("ume/chat-eu", "none answered: the platform's model");
+        EvaluationScoring.RerankModel(outcomes, reranked: true, "fors/chat-eu").ShouldBe("fors/chat-eu", "none answered: the platform's model");
     }
 
     private static QuestionOutcome Outcome(double total, double rerank, GatewayCallUsage? usage, string? degraded = null) => new(

@@ -54,7 +54,7 @@ public sealed class ExplainAccessTests(AdminDatabaseFixture database, AdminHost 
         await db.SaveChangesAsync(Ct);
         var version = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.",
+            AssistantId = assistant.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.",
             CollectionLinks = [CollectionLink.Whole(collection.Id)], PublishedAt = DateTimeOffset.UtcNow, PublishedBy = "o-seed",
         };
         db.Add(version);

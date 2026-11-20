@@ -13,7 +13,7 @@ public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling, bool Crede
 {
     public Residency Max => Ceiling is { } ceiling && ceiling < KeyLevel ? ceiling : KeyLevel;
 
-    /// <summary>The assigned key the request runs as (<c>x-ume-on-behalf-of</c>, gateway phase 2), or null.</summary>
+    /// <summary>The assigned key the request runs as (<c>x-fors-on-behalf-of</c>, gateway phase 2), or null.</summary>
     public FakeAssignedKey? Acting { get; init; }
 
     /// <summary>The presenting credential key's id (the "via" key of the usage record), or null for a per-level key.</summary>
@@ -33,20 +33,20 @@ public sealed record FakeKey(Residency Level, FakeCredentialKey? Credential);
 /// <summary>
 /// The gateway's step 1 and 1b and candidate selection as release 1 builds them (gateway PR thekim1/llmgateway#66:
 /// <c>RequestStages.ReadMaxResidency</c>, <c>RouteResolver.SelectCandidatesAsync</c>, <c>GatewayErrors</c>): the key, then
-/// <c>x-ume-max-residency</c> (required for every dev key, as <c>RequireMaxResidency</c>), then the model, its kind, and
+/// <c>x-fors-max-residency</c> (required for every dev key, as <c>RequireMaxResidency</c>), then the model, its kind, and
 /// the targets within the ceiling with the 403/503 split, then the attempts (502/504 when every one fails). Errors use the
 /// gateway's OpenAI error shape and messages.
 /// </summary>
 public static class FakeAccess
 {
-    public const string MaxResidencyHeader = "x-ume-max-residency";
-    public const string ResidencyHeader = "x-ume-residency";
-    public const string OnBehalfOfHeader = "x-ume-on-behalf-of";
-    public const string SessionHeader = "x-ume-session";
+    public const string MaxResidencyHeader = "x-fors-max-residency";
+    public const string ResidencyHeader = "x-fors-residency";
+    public const string OnBehalfOfHeader = "x-fors-on-behalf-of";
+    public const string SessionHeader = "x-fors-session";
     public const string RequestIdHeader = "x-request-id";
 
     /// <summary>
-    /// Authenticates the key only (the gateway's <c>RequestStages.AuthenticateAsync</c>, which <c>/v1/ume/context</c> uses
+    /// Authenticates the key only (the gateway's <c>RequestStages.AuthenticateAsync</c>, which <c>/v1/fors/context</c> uses
     /// without a ceiling): a per-level dev key or a credential key; null = 401 (the error is in <paramref name="error"/>).
     /// </summary>
     public static FakeKey? Authenticate(HttpContext context, FakeGatewayOptions options, out IResult? error)
@@ -70,7 +70,7 @@ public static class FakeAccess
         }
 
         error = Error(context, StatusCodes.Status401Unauthorized, "invalid_api_key",
-            "The API key is missing or invalid. Send it as 'Authorization: Bearer ume-sk-…'.");
+            "The API key is missing or invalid. Send it as 'Authorization: Bearer fors-sk-…'.");
         return null;
     }
 
@@ -97,13 +97,13 @@ public static class FakeAccess
             if (options.RequireMaxResidency)
             {
                 error = Error(context, StatusCodes.Status400BadRequest, "invalid_request",
-                    "This API key requires the x-ume-max-residency header (OnPrem, Eu or External).");
+                    "This API key requires the x-fors-max-residency header (OnPrem, Eu or External).");
                 return null;
             }
         }
         else if (header.Count > 1 || !ResidencyCeiling.TryParse(header[0] ?? "", out var parsed))
         {
-            error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", "x-ume-max-residency must be one of OnPrem, Eu, External.");
+            error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", "x-fors-max-residency must be one of OnPrem, Eu, External.");
             return null;
         }
         else
@@ -141,7 +141,7 @@ public static class FakeAccess
     }
 
     /// <summary>
-    /// <c>x-ume-on-behalf-of</c> as the gateway resolves it right after authentication (gateway v0.10.0
+    /// <c>x-fors-on-behalf-of</c> as the gateway resolves it right after authentication (gateway v0.10.0
     /// <c>RequestStages.cs:118-180</c>; gateway-changes §5.2): none = the presented key; not one GUID or repeated = 400; a
     /// caller that is no credential key, an id not assigned to the integration, or no residency in common = 403
     /// <c>delegation_not_allowed</c>; a disabled key or an inactive owner = 403 <c>key_disabled</c>; revoked or expired = 403 <c>key_revoked</c>/<c>key_expired</c> (gateway v0.10.1; a 401 is only ever the credential key's).
@@ -159,7 +159,7 @@ public static class FakeAccess
 
         if (header.Count > 1 || !Guid.TryParse(header[0], out var id))
         {
-            error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", "x-ume-on-behalf-of must be one key id (a GUID).");
+            error = Error(context, StatusCodes.Status400BadRequest, "invalid_request", "x-fors-on-behalf-of must be one key id (a GUID).");
             return false;
         }
 
@@ -206,7 +206,7 @@ public static class FakeAccess
 
     /// <summary>
     /// Resolves <paramref name="modelName"/> for an endpoint serving <paramref name="kind"/>, selects its target within the
-    /// call's ceiling and sets <c>x-ume-residency</c>: 404 <c>model_not_found</c> for an unknown model (a rerank model
+    /// call's ceiling and sets <c>x-fors-residency</c>: 404 <c>model_not_found</c> for an unknown model (a rerank model
     /// while <see cref="FakeGatewayOptions.RerankEnabled"/> is off included), 403 <c>model_not_allowed</c> for a key whose
     /// level is not in <see cref="FakeModel.KeyLevels"/>, 400 <c>invalid_request</c> for a model of
     /// another kind, then, with no candidate, 403 <c>max_residency_not_met</c> when no target is configured within the

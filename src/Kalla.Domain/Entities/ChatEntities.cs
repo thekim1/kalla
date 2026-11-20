@@ -267,7 +267,7 @@ public sealed class AssistantDailyUsage
 
     public required string Classification { get; set; }
 
-    /// <summary>The <c>x-ume-step</c> the calls sent: <c>condense</c>, <c>condense-long</c>, <c>query-embed</c>, <c>rerank</c>, <c>chat-answer</c>, <c>follow-ups</c>.</summary>
+    /// <summary>The <c>x-fors-step</c> the calls sent: <c>condense</c>, <c>condense-long</c>, <c>query-embed</c>, <c>rerank</c>, <c>chat-answer</c>, <c>follow-ups</c>.</summary>
     public required string Step { get; set; }
 
     /// <summary>The assistant's department at the time of the calls.</summary>
@@ -278,7 +278,7 @@ public sealed class AssistantDailyUsage
     public long CachedInputTokens { get; set; }
     public long OutputTokens { get; set; }
 
-    /// <summary>The gateway's cost (<c>x-ume-cost-usd</c> or the stream comment).</summary>
+    /// <summary>The gateway's cost (<c>x-fors-cost-usd</c> or the stream comment).</summary>
     public decimal CostUsd { get; set; }
 
     /// <summary>The calls without a gateway cost, priced from <c>GatewayModels</c> into <see cref="EstimatedCostUsd"/>.</summary>

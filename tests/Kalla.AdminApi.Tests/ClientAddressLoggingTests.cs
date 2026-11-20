@@ -34,7 +34,7 @@ public sealed class ClientAddressLoggingTests(AdminDatabaseFixture database)
         });
         using var client = factory.Services.GetRequiredService<IHttpClientFactory>().CreateClient(name);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://gateway-secret.invalid:8443/v1/models");
-        request.Headers.Add("x-ume-max-residency", "Eu"); // the gateway clients refuse a call without a ceiling; their callers give one
+        request.Headers.Add("x-fors-max-residency", "Eu"); // the gateway clients refuse a call without a ceiling; their callers give one
 
         await Should.ThrowAsync<Exception>(() => client.SendAsync(request, Ct));
         logs.Text.ShouldNotContain("gateway-secret", Case.Insensitive);

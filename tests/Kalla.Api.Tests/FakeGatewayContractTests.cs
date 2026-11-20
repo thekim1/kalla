@@ -95,25 +95,25 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
     {
         using var client = Client(FakeGatewayFactory.ApiCredentialKey);
         using var request = new HttpRequestMessage(HttpMethod.Get, "v1/models");
-        request.Headers.Add("x-ume-max-residency", ResidencyCeiling.ToHeader(ceiling));
+        request.Headers.Add("x-fors-max-residency", ResidencyCeiling.ToHeader(ceiling));
         using var response = await client.SendAsync(request, Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var list = JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!;
 
         GatewayContract.Differences(list, "ModelList").ShouldBeEmpty();
-        var models = list["data"]!.AsArray().ToDictionary(m => m!["id"]!.GetValue<string>(), m => m!["ume"]!);
+        var models = list["data"]!.AsArray().ToDictionary(m => m!["id"]!.GetValue<string>(), m => m!["fors"]!);
         models.ShouldNotBeEmpty();
         if (ceiling >= Residency.Eu)
         {
-            models["ume/chat-eu"]["context_window"]!.GetValue<int>().ShouldBe(128000);
-            models["ume/chat-eu"]["max_output_tokens"]!.GetValue<int>().ShouldBe(16384);
-            models["ume/chat-eu"]["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldBe(["tools"]);
-            models["ume/chat-eu"]["pricing"]!["output_per_million_usd"]!.GetValue<decimal>().ShouldBe(0.60m);
+            models["fors/chat-eu"]["context_window"]!.GetValue<int>().ShouldBe(128000);
+            models["fors/chat-eu"]["max_output_tokens"]!.GetValue<int>().ShouldBe(16384);
+            models["fors/chat-eu"]["features"]!.AsArray().Select(f => f!.GetValue<string>()).ShouldBe(["tools"]);
+            models["fors/chat-eu"]["pricing"]!["output_per_million_usd"]!.GetValue<decimal>().ShouldBe(0.60m);
         }
     }
 
     [Theory]
-    [InlineData("v1/ume/context")]
+    [InlineData("v1/fors/context")]
     [InlineData("v1/models")]
     public async Task An_unchanged_answer_is_an_empty_304_for_its_etag(string path)
     {
@@ -156,18 +156,18 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
     public async Task The_context_needs_a_known_key_but_no_ceiling()
     {
         using var anonymous = fake.CreateClient();
-        using var refused = await anonymous.SendAsync(Get("v1/ume/context"), Ct);
+        using var refused = await anonymous.SendAsync(Get("v1/fors/context"), Ct);
         refused.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
 
         using var client = Client(FakeGatewayFactory.AdminCredentialKey);
-        using var answered = await client.SendAsync(Get("v1/ume/context"), Ct); // no x-ume-max-residency
+        using var answered = await client.SendAsync(Get("v1/fors/context"), Ct); // no x-fors-max-residency
         answered.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     private async Task<JsonObject> ContextAsync(string key)
     {
         using var client = Client(key);
-        using var response = await client.SendAsync(Get("v1/ume/context"), Ct);
+        using var response = await client.SendAsync(Get("v1/fors/context"), Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!.AsObject();
     }
@@ -185,7 +185,7 @@ public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFi
         var request = new HttpRequestMessage(HttpMethod.Get, path);
         if (path == "v1/models")
         {
-            request.Headers.Add("x-ume-max-residency", "Eu");
+            request.Headers.Add("x-fors-max-residency", "Eu");
         }
 
         return request;

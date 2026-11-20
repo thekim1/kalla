@@ -70,7 +70,7 @@ public sealed class OrgSyncFixture : RagDatabase, IAsyncLifetime
 }
 
 /// <summary>
-/// The organisation sync from the FakeGateway's <c>/v1/ume/context</c> (admin design §4.10, identity §2.1, data-model §2.1
+/// The organisation sync from the FakeGateway's <c>/v1/fors/context</c> (admin design §4.10, identity §2.1, data-model §2.1
 /// <c>GatewayKeys</c>): departments, teams, member groups and the assigned keys' mirror.
 /// </summary>
 public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixture<OrgSyncFixture>
@@ -134,7 +134,7 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
             var chatbot = keys[ChatbotKey];
             (chatbot.Usable, chatbot.Status, chatbot.OwnerActive, chatbot.DepartmentId).ShouldBe((true, "Active", true, FakeCatalog.KommunledningskontoretId));
             (chatbot.RequestsPerMinute, chatbot.MaxOutputTokens).ShouldBe((60, 4096));
-            chatbot.AllowedModels.ShouldBe(["ume/chat-standard", "ume/chat-eu", "bge-m3"]);
+            chatbot.AllowedModels.ShouldBe(["fors/chat-standard", "fors/chat-eu", "bge-m3"]);
         }
 
         sync.Status.Degraded.ShouldBeNull();

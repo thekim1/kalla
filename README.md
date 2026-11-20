@@ -1,7 +1,7 @@
 # Ume.Rag
 
 RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top of the team's LLM gateway
-([thekim1/llmgateway](https://github.com/thekim1/llmgateway)), a Python Docling parser and PostgreSQL with pgvector,
+([thekim1/llmgateway](https://github.com/thekim1/fors)), a Python Docling parser and PostgreSQL with pgvector,
 orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGENTS.md`](AGENTS.md) and
 [`HANDOVER.md`](HANDOVER.md).
 

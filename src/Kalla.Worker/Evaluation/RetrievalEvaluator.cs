@@ -127,7 +127,7 @@ public sealed class EvaluationSession : IDisposable
     /// The request a question is searched with: the same <see cref="SearchRequest"/> <c>POST /v1/retrieve</c> builds for
     /// this scope (issue #120), with the variant's mode and decompounding and <c>AllowDegraded = false</c>; a reranked
     /// variant adds the rerank call with its reranker at <see cref="RerankCeiling"/>. <paramref name="runId"/> is the
-    /// <c>x-ume-run-id</c> of the query embedding and the rerank call, and <paramref name="usage"/> takes the embedding's usage.
+    /// <c>x-fors-run-id</c> of the query embedding and the rerank call, and <paramref name="usage"/> takes the embedding's usage.
     /// </summary>
     public SearchRequest Request(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid runId, UsageSink usage)
     {

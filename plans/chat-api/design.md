@@ -15,7 +15,7 @@ versioning, envelope encryption with bucket keys, retention and Redis rules of
 elsewhere: §20; questions: §21; unverified facts: §22; removed or deferred: §23.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); "Pipeline" means
-`src/Ume.LlmGateway.Gateway/Pipeline/`. Open WebUI citations are `path:line` in `~/git/rag-platforms/open-webui` at
+`src/Fors.Gateway/Pipeline/`. Open WebUI citations are `path:line` in `~/git/rag-platforms/open-webui` at
 `f7ac7ee` (**v0.12.5**, 2026-10-29); `ow/` means `backend/open_webui/`, `src/` the Svelte front end. The deployed pin
 is **v0.12.5** (`deploy/compose.openwebui.yaml`, §4.3; go-live pin review A-4, #457), the version these citations are
 at. No new NuGet package
@@ -157,7 +157,7 @@ Non-streaming (`object: chat.completion`):
 
 - `id` = `chatcmpl-` + the assistant message id (`Guid.CreateVersion7()`, `N` format): the client can send it back to
   `/v1/feedback`; `model` = the slug, never the gateway model.
-- Response headers: `x-rag-conversation-id` (§11.1), `x-request-id`. No `x-ume-*` header is passed through (internal).
+- Response headers: `x-rag-conversation-id` (§11.1), `x-request-id`. No `x-fors-*` header is passed through (internal).
 - Streaming: `text/event-stream` with `chat.completion.chunk` objects (§9.1).
 - A request with a `ume` object (§3.8) gets a top-level `ume` member next to `choices` and `usage`; without it the
   response has none.
@@ -210,7 +210,7 @@ Swedish user-facing variants only in the fixed texts of §10.
 | 429 | `rate_limited` | per-user limit (§4.1 step 4) or the gateway's 429 (its `Retry-After` passed on) |
 | 502 | `upstream_error` | gateway 5xx other than 503, malformed answer, a failed residency or key-echo check (§8.2; the message never names the residency); gateway `403 max_residency_not_met` (no configured target within the ceiling: a configuration fault the save-time model validation should prevent; logged at Error) |
 | 503 | `config_unconfirmed`, `membership_unavailable`, `search_unavailable`, `upstream_unavailable` | identity steps 0/11, knowledge §3.6, gateway unreachable or `503 no_eligible_provider` (in-ceiling targets drained or circuit-open; its `Retry-After` passed on) |
-| 503 | `assistant_unavailable` | the assistant's gateway key is unusable: not `Active`, its owner inactive or missing from `GatewayKeys` (checked at step 7, before any model call), or the gateway refuses it (`403 delegation_not_allowed`, `403 key_disabled`, or `403 key_revoked`/`key_expired` on a call sent with `x-ume-on-behalf-of`, gateway-changes §5.7); the message names the reason without the key's name; the turn's outcome is `unavailable` and the admin raises the attention item (admin §5.5.1) |
+| 503 | `assistant_unavailable` | the assistant's gateway key is unusable: not `Active`, its owner inactive or missing from `GatewayKeys` (checked at step 7, before any model call), or the gateway refuses it (`403 delegation_not_allowed`, `403 key_disabled`, or `403 key_revoked`/`key_expired` on a call sent with `x-fors-on-behalf-of`, gateway-changes §5.7); the message names the reason without the key's name; the turn's outcome is `unavailable` and the admin raises the attention item (admin §5.5.1) |
 
 After the first byte only an SSE error chunk is possible (§9.6).
 
@@ -376,7 +376,7 @@ request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:
 | Input | the last ≤ 6 messages before the question, user messages ≤ 500 characters each, assistant messages ≤ 600 characters with `[n]` markers and links removed; plus the question; total ≤ 4,000 characters |
 | Model | `Settings.Chat.CondenseModel` = the gateway alias of a small instruct model, one platform-wide value (a per-assistant override comes with the assistant forms). Until on-prem model hardware exists (register M2) it is called at ceiling `Eu`, never above the turn's own ceiling; a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` for every level when the hardware exists |
 | Why this model | once on-prem (from M2), `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
-| Call | non-streaming `/v1/chat/completions`, `max_tokens: 96`, no `temperature`, and `reasoning_effort` = `Settings.Chat.CondenseReasoningEffort` when set (**`none`** for the EU model: a reasoning model otherwise spends the 96 tokens on hidden reasoning), headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
+| Call | non-streaming `/v1/chat/completions`, `max_tokens: 96`, no `temperature`, and `reasoning_effort` = `Settings.Chat.CondenseReasoningEffort` when set (**`none`** for the EU model: a reasoning model otherwise spends the 96 tokens on hidden reasoning), headers as §8.1 with `x-fors-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-fors-step: condense` |
 | Budget | `Chat:CondenseTimeout` **1,200 ms** hard timeout (no retry) while the model is on the EU route (`gpt-6-luna` with reasoning off answers in ≈ 0.8 s, P1 item 19); 600 ms once it is on-prem |
 | Accept the output if | 2–400 characters after trim, one line, not a refusal pattern, no `### Task`, residency within the call's ceiling, PII header absent or `detected` |
 | Otherwise | the raw question is used for retrieval and coverage `Low` is not turned into the not-found text (§6.2); outcome counted (`timeout`, `error`, `residency`, `rejected`) |
@@ -407,7 +407,7 @@ question is condensed into one.
 | When | the question's query form (§3.2) is over 2,000 characters, on **every** turn, the first included. It replaces the follow-up condense of §5 for that turn (one condense call per turn at most). Such a question is never conversational (§6.2: ≤ 60 characters) |
 | Off | `QuerySteps.condense.enabled = false`, no `Settings.Chat.condenseModel`, or a turn with ceiling `OnPrem` (no condense model, §5 Model row): the fallback below, outcome `disabled` |
 | Input | the §5 transcript of the last ≤ 6 messages before the question (same cuts, ≤ 4,000 characters), then `Meddelande: ` + the question's query form (≤ 16,000 characters). Estimated ≤ 7,000 input tokens |
-| Model and call | as §5: `Settings.Chat.condenseModel`, `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 96, `x-ume-max-residency` = the condense ceiling (`Eu` until M2, never above the turn's ceiling, `Condenser.Ceiling`), residency checked as §8.2 (event 5003 on failure), `x-ume-run-id` = the message id, **`x-ume-step: condense-long`** (opaque to the gateway, gateway-changes §7.1) |
+| Model and call | as §5: `Settings.Chat.condenseModel`, `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 96, `x-fors-max-residency` = the condense ceiling (`Eu` until M2, never above the turn's ceiling, `Condenser.Ceiling`), residency checked as §8.2 (event 5003 on failure), `x-fors-run-id` = the message id, **`x-fors-step: condense-long`** (opaque to the gateway, gateway-changes §7.1) |
 | Budget | **`Chat:LongQuestionCondenseTimeout` 3,000 ms** hard timeout (deployment knob, as `Chat:CondenseTimeout`), no retry. Proposed from the EU route's ≈ 0.8 s for a short condense (P1 item 19) plus the longer input; measured on the pilot model (§22) |
 | Accept | the §5 rule: 2–400 characters after trim, one line, no refusal pattern, no `### Task`; then `QueryNormalizer.Normalize` |
 | Fallback | on timeout, error, residency refusal, rejection or `disabled`: the **first 2,000 characters** of the query form, cut back to the last space when one lies in its last 200 characters (else cut at 2,000: a log line may have no spaces). Counted `rag.chat.condense{kind=long,outcome}`; one Information log per turn with the message id and the reason, never the text |
@@ -460,7 +460,7 @@ retrieval and the gate instead of drawing the not-found text.
 ### 6.3 Token budget (whole prompt)
 
 Exact tokenizers of the answer models are unknown to us (on-prem and EU models differ; the gateway itself estimates ≈ 4
-characters per token, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:64`). The chat role estimates **tokens =
+characters per token, `src/Fors.Domain/Services/CostCalculator.cs:64`). The chat role estimates **tokens =
 ⌈characters / 3⌉ + 4 per message**: Swedish compounds tokenise denser than English, so ÷ 3 errs on the safe side.
 The ratio estimate/actual is measured on every answer from the reported `prompt_tokens` (`rag.chat.prompt.estimate_ratio`)
 and `Chat:CharsPerToken` is tuned from it; no tokenizer package is added to the API.
@@ -657,24 +657,24 @@ it separately and the frame is prepended at run time). P2: each linked skill's b
 ```http
 POST {Gateway:BaseUrl}/v1/chat/completions
 Authorization: Bearer <rag-api's credential key>
-x-ume-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2, features act-as-key; none without a key)
-x-ume-stream-cost: 1                                     (every streamed call; exactly "1"; features stream-cost, gateway-changes §5.4)
-x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
-x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
-x-ume-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in rag-admin, admin design §7.4; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
-x-ume-session: <conversation id>                         (session affinity for on-prem prefix caches)
+x-fors-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2, features act-as-key; none without a key)
+x-fors-stream-cost: 1                                     (every streamed call; exactly "1"; features stream-cost, gateway-changes §5.4)
+x-fors-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
+x-fors-run-id: <message id, N format>                     (opaque, gateway §7.1)
+x-fors-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in rag-admin, admin design §7.4; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
+x-fors-session: <conversation id>                         (session affinity for on-prem prefix caches)
 traceparent: …
 
 { "model": "<Assistants.GatewayModel>", "messages": [ … ], "stream": true,
   "stream_options": { "include_usage": true }, "max_tokens": <§6.3; left out when unknown> }
 ```
 
-- `x-ume-session` makes the gateway send every turn of a conversation to the same target so vLLM/Ollama prefix caches
+- `x-fors-session` makes the gateway send every turn of a conversation to the same target so vLLM/Ollama prefix caches
   are reused (`Pipeline/GatewayHeaders.cs:33`, `docs/routing-rules.md:166-171`); the value is an opaque id.
 - `include_usage: true` is sent so the gateway passes the usage chunk through to us (it always asks the provider,
-  `src/Ume.LlmGateway.Domain/Services/RequestRewriter.cs:35-42`, but strips the usage-only chunk unless the client asked,
+  `src/Fors.Domain/Services/RequestRewriter.cs:35-42`, but strips the usage-only chunk unless the client asked,
   `Pipeline/GatewayRequestHandler.cs:256`,
-  `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
+  `src/Fors.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
 - `max_tokens` as §6.3: the assistant's override, else the model's `MaxOutputTokens` minus the estimated prompt,
   else left out, each capped by the platform ceiling `Settings.Chat.MaxAnswerTokens` when set (which also fills an
   unknown limit) (Decisions "Answer length from the model"). An answer that stops at it ends with
@@ -685,18 +685,18 @@ traceparent: …
 **Keys and ceiling** (gateway design §5, §13.4; identity §4.7). **Every call of a turn runs as the assistant's
 gateway key**: the answer, condense and long-question condense, the query embedding (knowledge §5.2), rerank and the
 follow-up suggestions, so a turn's cost, limits and budget are the assistant's key's (cost-attribution §4.1). rag-api
-authenticates with its one credential key; from gateway phase 2 each call adds `x-ume-on-behalf-of` with the
+authenticates with its one credential key; from gateway phase 2 each call adds `x-fors-on-behalf-of` with the
 assistant's `GatewayKeyId`, and an assistant without a key runs as the credential key. **Until the gateway's
 integration phase 1** (P1; reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control))
 rag-api holds the pilot department's team's own keys per level (`OnPrem`-only, `Eu`-max, open; `AllowedIpRanges`,
 `RequireMaxResidency`), picks the one of the call's ceiling, and every call is charged to the pilot team.
 
 `ResidencyCeilingHandler`, a `DelegatingHandler` on every gateway `HttpClient`, refuses (throws before sending) any
-request without an explicit `x-ume-max-residency` or with a ceiling above the service's maximum, sets `x-ume-on-behalf-of` from the call's object key and checks its echo;
+request without an explicit `x-fors-max-residency` or with a ceiling above the service's maximum, sets `x-fors-on-behalf-of` from the call's object key and checks its echo;
 unit-tested for every call site (answer, condense, follow-ups, query embedding, rerank, judge, evaluation generation;
 the worker's NER/LLM stages use the same handler). Keys are secret files, never logged; the worker never sends
 `External`. The
-handler exempts `GET /v1/models` from the `x-ume-residency` check of §8.2, because the gateway sets that header only
+handler exempts `GET /v1/models` from the `x-fors-residency` check of §8.2, because the gateway sets that header only
 when a deployment answers; the ceiling and key checks still apply.
 
 ### 8.2 Checks before the first byte (R4)
@@ -706,12 +706,12 @@ The call uses `HttpCompletionOption.ResponseHeadersRead`; nothing is written to 
 1. **Status**: 2xx, `Content-Type: text/event-stream` (stream) or JSON. Errors map per §3.6 (gateway body parsed for
    `error.code`; its message is not passed through except `budget_exceeded`'s, which names the key's, team's or
    department's budget, gateway-changes §5.4).
-2. **Residency**: `x-ume-residency` (`Pipeline/GatewayHeaders.cs:15`; written as `OnPrem`/`Eu`/`External`) parsed
+2. **Residency**: `x-fors-residency` (`Pipeline/GatewayHeaders.cs:15`; written as `OnPrem`/`Eu`/`External`) parsed
    case-insensitively and compared by `OnPrem < Eu < External` with the call's ceiling. Missing or above → abort
    (dispose the response, which cancels the gateway stream), event **5003** `rag.residency.refused`, 502
    `upstream_error`. `public` calls carry `External`, so the check always applies.
-3. **Key echo** (when `x-ume-on-behalf-of` was sent and `Gateway:RequireDelegationEcho` is set): the `2xx` answer's
-   `x-ume-on-behalf-of` parses as the GUID sent (the gateway writes the `D` form); else abort, event **5011**
+3. **Key echo** (when `x-fors-on-behalf-of` was sent and `Gateway:RequireDelegationEcho` is set): the `2xx` answer's
+   `x-fors-on-behalf-of` parses as the GUID sent (the gateway writes the `D` form); else abort, event **5011**
    `rag.gateway.delegation_missing`, 502. An error status was already mapped by step 1, echo or not
    (gateway-changes §5.2).
 4. **PII header** (`GatewayHeaders.cs:36`): recorded and counted (`rag.chat.gateway.pii{action}`); `blocked` arrives as
@@ -733,13 +733,13 @@ WebUI use EU or on-prem models.
 
 | Topic | Rule |
 |---|---|
-| HttpClient | named `gateway-chat`, standard resilience handler **removed** (`RemoveStandardResilienceHandler()`, as knowledge §5.3 and the gateway, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:51-68`); `SocketsHttpHandler` with `PooledConnectionLifetime` 5 min, no automatic decompression |
+| HttpClient | named `gateway-chat`, standard resilience handler **removed** (`RemoveStandardResilienceHandler()`, as knowledge §5.3 and the gateway, `src/Fors.ServiceDefaults/Extensions.cs:51-68`); `SocketsHttpHandler` with `PooledConnectionLifetime` 5 min, no automatic decompression |
 | Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22). The check's "full 16k-token prompt" is **15,360 prompt tokens + `max_tokens` 1,024**: `ContextTokens` 16,384 minus the answer reserve (§6.3); `scripts/capacity/capacity.py answer-ttft` measures it (`--prompt-tokens` changes it); settled at the P0 integration sync point |
 | Idle timeout | `Chat:StreamIdleTimeout` **60 s** between events: the gateway relays a stream as long as the client is connected and has no idle limit (`OpenAICompatibleAdapter.cs:44`), so we impose one |
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | one 502/504 retry with the same ceiling and key after `Gateway:RetryDelay` (250 ms) (`GatewayRetryHandler`; Decisions "Gateway release 1 and shared Keycloak as built"): the gateway answers 502/504 only before the first byte, after its own fallbacks; never a wider ceiling, never after the first byte; 403, 404 and 503 are not retried. One retry for a **connection failure** (no response) within 300 ms (B-17) |
 | Client disconnect | `HttpContext.RequestAborted` cancels the gateway read and disposes the response; the gateway accounts it as `ClientCancelled` 499 (`GatewayRequestHandler.cs:418-422`); the partial answer is recorded with `Outcome = cancelled` (§12), with the user's message, the turn's usage of §8.3 (the aborted answer at its prompt estimate) and `AssistantDailyTotals.Cancelled` counted in the same transaction (not built yet: B-48) |
-| Usage and cost | **Every model call of a turn** (condense, long-question condense, query embedding, rerank, answer, follow-ups; cost-attribution §5 C1) yields one usage record: its step (the `x-ume-step` it sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`), model, input, cached input (`usage.prompt_tokens_details.cached_tokens`, 0 when absent) and output tokens from the final chunk's `usage` (stream) or the JSON body (an embedding's `usage.prompt_tokens`, no output), and its cost, taken in this order: (1) `x-ume-cost-usd` on a complete JSON answer (`GatewayHeaders.cs:20-21`); (2) on a stream, which is always sent with `x-ume-stream-cost: 1` (gateway phase 2; an older gateway ignores it), the SSE comment `: ume-cost-usd=<usd>` (six decimals) the gateway writes just before the closing `data: [DONE]`: `SseReader` reads it as the call's cost and **never forwards it** to rag-api's clients (§9.1); (3) otherwise an **estimate** from the model mirror's prices (`GatewayModels`, per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd` (the input price when that is null) + output × `OutputPerMillionUsd`; 0 for a model without prices), marked as estimated. Gateway and estimated cost are stored apart (data-model §2.3 `AssistantDailyUsage`), so a report always says how much of a figure is estimated. A query embedding served from the cache makes no call and records nothing; a call answered with an error status records nothing (the gateway charges no failed request), while a `2xx` answer whose body then can't be used (rerank output that doesn't parse, a condense or follow-up body that fails its check) keeps its usage, since the gateway charged it; a non-streamed call that times out (condense, follow-ups) records nothing, as no usage reaches Ume.Rag (the read-back by run id covers it, cost-attribution §6 B7); an aborted stream (client disconnect, idle or total timeout) has neither usage nor cost comment and is recorded with the prompt estimate of §6.3 as input, no output, at an estimated cost (gateway phase 3's read-back by run id, cost-attribution §6 B7, can replace such estimates; §12.4). **Reporting only**: no figure stops a turn; the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see), and the split per step joins its usage on `x-ume-run-id` (the message id) and `x-ume-step` (gateway-changes §7.1) |
+| Usage and cost | **Every model call of a turn** (condense, long-question condense, query embedding, rerank, answer, follow-ups; cost-attribution §5 C1) yields one usage record: its step (the `x-fors-step` it sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`), model, input, cached input (`usage.prompt_tokens_details.cached_tokens`, 0 when absent) and output tokens from the final chunk's `usage` (stream) or the JSON body (an embedding's `usage.prompt_tokens`, no output), and its cost, taken in this order: (1) `x-fors-cost-usd` on a complete JSON answer (`GatewayHeaders.cs:20-21`); (2) on a stream, which is always sent with `x-fors-stream-cost: 1` (gateway phase 2; an older gateway ignores it), the SSE comment `: fors-cost-usd=<usd>` (six decimals) the gateway writes just before the closing `data: [DONE]`: `SseReader` reads it as the call's cost and **never forwards it** to rag-api's clients (§9.1); (3) otherwise an **estimate** from the model mirror's prices (`GatewayModels`, per million tokens: (input − cached) × `InputPerMillionUsd` + cached × `CachedInputPerMillionUsd` (the input price when that is null) + output × `OutputPerMillionUsd`; 0 for a model without prices), marked as estimated. Gateway and estimated cost are stored apart (data-model §2.3 `AssistantDailyUsage`), so a report always says how much of a figure is estimated. A query embedding served from the cache makes no call and records nothing; a call answered with an error status records nothing (the gateway charges no failed request), while a `2xx` answer whose body then can't be used (rerank output that doesn't parse, a condense or follow-up body that fails its check) keeps its usage, since the gateway charged it; a non-streamed call that times out (condense, follow-ups) records nothing, as no usage reaches Ume.Rag (the read-back by run id covers it, cost-attribution §6 B7); an aborted stream (client disconnect, idle or total timeout) has neither usage nor cost comment and is recorded with the prompt estimate of §6.3 as input, no output, at an estimated cost (gateway phase 3's read-back by run id, cost-attribution §6 B7, can replace such estimates; §12.4). **Reporting only**: no figure stops a turn; the gateway is the record for charging (it also counts fallbacks and retries Ume.Rag does not see), and the split per step joins its usage on `x-fors-run-id` (the message id) and `x-fors-step` (gateway-changes §7.1) |
 
 ## 9. Streaming and citations
 
@@ -859,8 +859,8 @@ Decisions "Follow-up suggestions". Short next questions the user can click, writ
 | Topic | Rule |
 |---|---|
 | When | `ume.follow_ups` ≥ 1 and outcome `answered` or `answered-general`, after the model's answer ended without an error. **Skipped** (`[]`) for fixed texts (not found, unavailable), conversational messages, `Chat:FollowUpTimeout` 0, no `Settings.Chat.condenseModel`, a turn with ceiling `OnPrem` (no condense model, §5), and after an error chunk or a disconnect (nothing more is written) |
-| Model and call | one non-streaming `/v1/chat/completions` call to `Settings.Chat.condenseModel` (the platform's only task model, §23), `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 40 × N (≤ 200), `x-ume-run-id` = the message id, **`x-ume-step: follow-ups`** (opaque to the gateway, gateway-changes §7.1) |
-| Residency | the condense ceiling, `Condenser.Ceiling(answer ceiling)`: `Eu` until M2 and **never above the answer's ceiling**; `x-ume-residency` checked as §8.2 (outside → no suggestions, event 5003, outcome `residency`). the service's maximum from its credential key caps it as every call (identity §4.7) |
+| Model and call | one non-streaming `/v1/chat/completions` call to `Settings.Chat.condenseModel` (the platform's only task model, §23), `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 40 × N (≤ 200), `x-fors-run-id` = the message id, **`x-fors-step: follow-ups`** (opaque to the gateway, gateway-changes §7.1) |
+| Residency | the condense ceiling, `Condenser.Ceiling(answer ceiling)`: `Eu` until M2 and **never above the answer's ceiling**; `x-fors-residency` checked as §8.2 (outside → no suggestions, event 5003, outcome `residency`). the service's maximum from its credential key caps it as every call (identity §4.7) |
 | Input | user message: `Fråga: ` + the turn's search query (≤ 2,000 characters: the question, or its condensed form, §5, §5.1); `Svar: ` + the delivered answer without our caveat line and contact links, markers and Markdown links removed (`PromptBuilder.StripMarkers`, the §5 link rule), cut to its first 3,000 characters; `Källor: ` + the titles of the prompt's documents, cited first, ≤ 10, each ≤ 200 characters on its own line, neutralised as §7.2 (the section is left out when there are no titles, as for `answered-general`). The streaming writer keeps the delivered text only when follow-ups were asked |
 | Language | the turn's language (§10.3; `answer.language = sv` forces Swedish), told to the model in the prompt's last line |
 | Budget | **`Chat:FollowUpTimeout` 2,000 ms** hard timeout from sending the call (deployment knob, as `Chat:CondenseTimeout`), no retry; 0 switches the feature off. `[DONE]` (or the JSON response) is delayed by at most this budget; time to first token is unchanged. The client's disconnect cancels the call |
@@ -900,7 +900,7 @@ a person and a summary to paste into the second-line ticket, so nobody retypes t
 |---|---|
 | When | `ume.escalation` `true` and outcome `not-found`, `answered-general` or `unavailable` (§3.8): the object below. Outcome `answered`, a conversational message: `"escalation": null`, no call. After an error chunk or a disconnect nothing more is written |
 | Object | `{ "reason": "not-found" \| "answered-general" \| "unavailable", "contacts": [ { "title", "url" } ], "summary": "…" \| null }`. `reason` is the turn's outcome. `contacts` are the links the answer text ends with (§10.1, §10.2, §10.4): the version's `NotFound.links`, else `Settings.Chat`'s, `[]` when neither has any; their hosts passed §9.4 on save (admin V15), so they are not filtered again. `summary` is below |
-| Summary call | **Skipped** (`summary: null`, the object in the first `ume` chunk) when `Chat:EscalationTimeout` is 0, there is no `Settings.Chat.condenseModel`, or the turn's ceiling is `OnPrem` (no condense model, §5). Otherwise one non-streaming `/v1/chat/completions` call to `Settings.Chat.condenseModel`, `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 200, `x-ume-run-id` = the message id, **`x-ume-step: escalation`**, as the assistant's gateway key (`x-ume-on-behalf-of`, §8.1, cost-attribution §4.1). It starts when the answer has ended (for a fixed text, at once), at the same time as the follow-up call (§9.8) |
+| Summary call | **Skipped** (`summary: null`, the object in the first `ume` chunk) when `Chat:EscalationTimeout` is 0, there is no `Settings.Chat.condenseModel`, or the turn's ceiling is `OnPrem` (no condense model, §5). Otherwise one non-streaming `/v1/chat/completions` call to `Settings.Chat.condenseModel`, `reasoning_effort` = `Settings.Chat.condenseReasoningEffort` when set, no `temperature`, `max_tokens` 200, `x-fors-run-id` = the message id, **`x-fors-step: escalation`**, as the assistant's gateway key (`x-fors-on-behalf-of`, §8.1, cost-attribution §4.1). It starts when the answer has ended (for a fixed text, at once), at the same time as the follow-up call (§9.8) |
 | Residency | the condense ceiling, `Condenser.Ceiling(answer ceiling)`, checked as §8.2 (outside → `summary: null`, event 5003, outcome `residency`), as §9.8 |
 | Input | user message: `Ärende: ` + the turn's last user message as sent (≤ 4,000 characters; a longer one cut at the last space before 4,000, §5.1's cut) and, when the search query differs from it (condensed, §5, §5.1), `Sökfråga: ` + the search query; `Utfall: ` + one fixed line per reason: `Inget svar hittades i källorna.`, `Besvarat med allmän kunskap, utan källor.` or `Sökningen var otillgänglig.`. The answer text is not sent: the summary describes the user's problem, not the assistant's reply |
 | Language | the turn's language (§10.3; `answer.language = sv` forces Swedish), told in the prompt's last line |
@@ -1112,7 +1112,7 @@ embedding were paid) is enqueued as a **usage-only** turn: no conversation or me
 - Crash (no drain): turns queued or in the uncommitted batch are lost: normally ≤ 250 ms of traffic; during a database
   outage up to the capacity. The answer was delivered; what is lost is our record, its statistics and the possibility
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
-- Cost: from the call itself (`x-ume-cost-usd`, or the stream cost comment, §8.3); a call that carries neither (an
+- Cost: from the call itself (`x-fors-cost-usd`, or the stream cost comment, §8.3); a call that carries neither (an
   aborted stream, a gateway without the feature) is estimated from the mirror's prices and counted as estimated, and
   TTFT stays null when it was not measured. Reconciling estimates with the gateway's own figures through the
   Integration API's usage by run id (`GET /integration/v1/usage?runId=`, scope `usage.read`, gateway phase 3;
@@ -1306,7 +1306,7 @@ totals).
 | `rag.chat.citations` | counter | `kind` (`valid`, `invalid`, `uncited_answer`) |
 | `rag.chat.filtered` | counter | `kind` (`image`, `html`, `link`, `bare_url`) |
 | `rag.chat.tokens` | counter | `direction` (`input`: all input tokens, cached ones included, as the gateway counts them and `AssistantDailyUsage.InputTokens` holds them; `cached-input`: the cached part; `output`), `step` (`chat-answer`, `condense`, `condense-long`, `follow-ups`, `escalation`, `rerank`, `query-embed`): every model call of §8.3 |
-| `rag.chat.cost` | counter, USD | `step` (as above), `source` (`gateway`: `x-ume-cost-usd` or the stream comment; `estimate`: the mirror's prices, §8.3); a rising `estimate` share means the gateway stopped sending cost |
+| `rag.chat.cost` | counter, USD | `step` (as above), `source` (`gateway`: `x-fors-cost-usd` or the stream comment; `estimate`: the mirror's prices, §8.3); a rising `estimate` share means the gateway stopped sending cost |
 | `rag.chat.prompt.estimate_ratio` | histogram | – |
 | `rag.chat.stream.stalls` | counter | waits ≥ 1 s between gateway events (gateway `StreamGaps.StallThreshold`, `Pipeline/StreamGaps.cs:10-11`) |
 | `rag.chat.writer.queue`, `.queue_bytes` | observable gauge | – |
@@ -1348,9 +1348,9 @@ totals).
 - Request parsing table: every field of §3.2 (accepted, ignored, refused), content parts, sizes, last-message rule.
 - `MessageKind`: greetings and thanks (sv/en) conversational; short questions with one content word (`bygglov?`) not;
   condense skip heuristic on a labelled set of follow-ups.
-- `ResidencyCeilingHandler`: a request without `x-ume-max-residency` is refused before sending; a ceiling above the
+- `ResidencyCeilingHandler`: a request without `x-fors-max-residency` is refused before sending; a ceiling above the
   service's maximum is refused; every call site (answer per level, condense, follow-ups, query embedding, rerank,
-  judge) sends the expected ceiling and, for an assistant with a key, its `x-ume-on-behalf-of`; a missing or different
+  judge) sends the expected ceiling and, for an assistant with a key, its `x-fors-on-behalf-of`; a missing or different
   echo aborts with 5011; the stream cost comment is read and never reaches the client.
 - Coverage handling (§6.2): `Low` → not-found; `Low` after condense timeout → model answer; conversational → no
   retrieval, no-sources frame.
@@ -1375,8 +1375,8 @@ totals).
 - Full turn persisted: conversation upsert, `Seq`, `MessageSources` numbers, daily totals; mode `none` writes no
   ciphertext and no `DataKeys` row (P1). When A1 allows stored content: ciphertext decrypts with
   the bucket key and fails with another conversation's AAD; `session` expiry.
-- Cost per step (§8.3, FakeGateway: `x-ume-cost-usd` on JSON answers, the `: ume-cost-usd=` comment on a stream asked
-  with `x-ume-stream-cost: 1`, neither for `fake-no-cost`): a turn with condense, query embedding, rerank, answer and
+- Cost per step (§8.3, FakeGateway: `x-fors-cost-usd` on JSON answers, the `: fors-cost-usd=` comment on a stream asked
+  with `x-fors-stream-cost: 1`, neither for `fake-no-cost`): a turn with condense, query embedding, rerank, answer and
   follow-ups writes one `AssistantDailyUsage` row per step with the FakeGateway's tokens and cost; the comment never
   reaches the client's stream; `fake-no-cost` gives an estimate from the mirror's prices in `EstimatedCostUsd` (cached
   input at its own price) and nothing in `CostUsd`; a failed answer call still writes condense's and the embedding's
@@ -1406,7 +1406,7 @@ turn `cancelled`), multi-byte UTF-8 split across network reads, very long single
 `fake-wrong-residency` on answer and condense calls → 502 before any byte, 5003, condense falls back; missing
 response header → abort; missing echo with `RequireDelegationEcho` → abort + 5011; a `public` assistant from a client
 without history sends `External`; the first message **and** a follow-up on a `public` assistant from Open WebUI both
-carry `x-ume-max-residency: Eu` with the `Eu` key; gateway `503` + `Retry-After` → 503 `upstream_unavailable` with
+carry `x-fors-max-residency: Eu` with the `Eu` key; gateway `503` + `Retry-After` → 503 `upstream_unavailable` with
 `Retry-After`; gateway `403 max_residency_not_met` → 502 and an Error log.
 
 ### 18.6 Security and negative
@@ -1452,7 +1452,7 @@ waits for or depends on it.
 
 ### 18.9 Support-assistant extensions (§3.8, §4.1 step 4, §5.1, §9.7, §9.8, §9.9)
 
-Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per `x-ume-step`, `FakeGateway:ChatScripts:<step>`):
+Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per `x-fors-step`, `FakeGateway:ChatScripts:<step>`):
 
 - **Rate limit per key**: an integration key with `RequestsPerMinute` 60 gets 60 messages a minute and 429
   `rate_limited` with `Retry-After` on the 61st; a key without a value gets `Settings.Chat.messagesPerMinutePerUser`;
@@ -1476,7 +1476,7 @@ Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per
 - **Follow-ups**: scripted output "1. Hur …?\n- Vad …?\n…" gives clean lines, at most N; lines with `[1]`, a link,
   `@`, `19800101-1234` or `090-16 10 00`, over 150 characters or equal to the question are dropped; timeout → `[]`
   and `[DONE]` within the budget + 100 ms; `Chat:FollowUpTimeout` 0, a fixed text, a conversational message, an
-  `OnPrem` turn → no call; the call carries `x-ume-step: follow-ups` and the condense ceiling (`Eu` for an `External`
+  `OnPrem` turn → no call; the call carries `x-fors-step: follow-ups` and the condense ceiling (`Eu` for an `External`
   answer); nothing of the suggestions in logs, traces or the writer's turn (telemetry scan test, §17); the usage
   chunk is the answer call's only.
 - **Escalation**: `ume.escalation` `true` with a not-found turn gives `reason`, the version's contact links (the
@@ -1488,7 +1488,7 @@ Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per
   or refusal text gives `null`. Timeout → `summary: null` and `[DONE]` within the budget + 100 ms; with follow-ups
   asked too on `answered-general`, both calls run at once (the FakeGateway delays each by 1.5 s; `[DONE]` before 3 s);
   `Chat:EscalationTimeout` 0, no condense model and an `OnPrem` turn → no call, `summary: null` in the first chunk;
-  the call carries `x-ume-step: escalation`, the condense ceiling and the assistant's key; its input holds the last
+  the call carries `x-fors-step: escalation`, the condense ceiling and the assistant's key; its input holds the last
   user message, the search query only when condensed, and no answer text (FakeGateway's recorded request); nothing of
   the summary in logs, traces or the writer's turn (telemetry scan test, §17).
 - **Topics per request**: an assistant with one link without topics and one with `vpn`, `skrivare`: `ume.topics`

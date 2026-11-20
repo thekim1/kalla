@@ -84,9 +84,9 @@ Europe/Stockholm day:
 Each row holds calls, input tokens (cached ones included, as the gateway counts them), cached input tokens, output
 tokens, and the cost in two parts that are never mixed:
 
-- **From the AI gateway** (`CostUsd`): the gateway's own figure, from the `x-ume-cost-usd` header on a complete answer,
-  or from the stream comment `: ume-cost-usd=<usd>` the gateway writes before `data: [DONE]` (rag-api asks for it with
-  `x-ume-stream-cost: 1` and never passes it on).
+- **From the AI gateway** (`CostUsd`): the gateway's own figure, from the `x-fors-cost-usd` header on a complete answer,
+  or from the stream comment `: fors-cost-usd=<usd>` the gateway writes before `data: [DONE]` (rag-api asks for it with
+  `x-fors-stream-cost: 1` and never passes it on).
 - **Estimated** (`EstimatedCostUsd`, `EstimatedCalls`): a call that came back without a gateway cost, priced from the
   model list's mirrored prices: (input − cached) × input price + cached × cached price (the input price when that is
   empty) + output × output price, per million tokens, rounded to 8 decimals. A model without prices is estimated at 0.
@@ -122,7 +122,7 @@ When rag-admin's gateway context names the Integration API (`integration_api_url
 `UME_INTEGRATION_API_URL`) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
 key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=step&keyId=…`) for the same period:
 
-- a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-ume-step`;
+- a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-fors-step`;
 - a line "The AI gateway counted … in … requests for the key." The requests include failed and cancelled ones, so
   compare Ume.Rag's calls with the gateway's successful requests, not with this figure;
 - the note that the gateway's figures are the key's: if other assistants or knowledge bases share the key, their calls
@@ -198,17 +198,17 @@ the knowledge base's `embed` row and the gateway's for the same day; reconcile w
 
 ### Matching per step and per run
 
-Every call carries `x-ume-step` (the step names above) and `x-ume-run-id`, which the gateway stores on its usage record
+Every call carries `x-fors-step` (the step names above) and `x-fors-run-id`, which the gateway stores on its usage record
 (gateway phase 2, `features` `run-metadata`):
 
-| Calls | `x-ume-run-id` |
+| Calls | `x-fors-run-id` |
 |---|---|
 | a chat turn's calls | the turn's message id: the answer's `chatcmpl-<id>` with the hyphens put back |
 | an ingestion run's calls | the run's id (the address of its run page, `/runs/<id>`) |
 | an evaluation run's calls | the evaluation run's id |
 | set generation and preview | the job's id |
 
-- **Per step:** the Cost card's **Gateway** column is the gateway's sum per `x-ume-step` for the key and period; set it
+- **Per step:** the Cost card's **Gateway** column is the gateway's sum per `x-fors-step` for the key and period; set it
   beside Ume.Rag's row of the same step.
 - **Per run or turn:** in the gateway's usage page, filter the request list by the key and a time range around the run
   or turn, and open a request: its *Run* row shows the run id and step. At gateway v0.10.1 the request list has no
@@ -223,13 +223,13 @@ of it is `gateway`; the estimate is the aborted streams. When the `estimate` sha
 - by step `chat-answer` only, with more cancelled turns (`AssistantDailyTotals.Cancelled`): users leave or answers hit
   the idle or total timeout. Look at the model's speed in the gateway;
 - on every step at once: the gateway stopped sending its cost. Check that the gateway is at a release with the stream
-  cost and `x-ume-cost-usd`, and that nothing between rag-api and the gateway strips the header;
+  cost and `x-fors-cost-usd`, and that nothing between rag-api and the gateway strips the header;
 - an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Models*, filled by the model sync).
 
 `rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. For knowledge bases,
 `rag.ingestion.cost` (USD) counts every worker call's cost by job `class` and `source` in the same way, and
 `rag.embed.tokens` the input tokens of its embedding calls; every worker call has a gateway cost, so any `estimate`
-there means the gateway stopped sending `x-ume-cost-usd`.
+there means the gateway stopped sending `x-fors-cost-usd`.
 
 ### A worked example
 
@@ -743,7 +743,7 @@ Also for G1 and W2:
 
 Each service calls the gateway with its own **credential key** (production-setup.md, *Gateway credential keys*). From
 the gateway's integration phase 2, a call for an assistant or knowledge base that has a gateway key of its own is made
-**as that key**: the service sends its credential key and the object's key id (`x-ume-on-behalf-of`), and the gateway
+**as that key**: the service sends its credential key and the object's key id (`x-fors-on-behalf-of`), and the gateway
 charges the call to that key's budget and limits (identity design §4.7). So two different keys can fail:
 
 - **The object's key** belongs to a department. The gateway refuses it with `403 delegation_not_allowed`,
@@ -757,7 +757,7 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 
 | Symptom | Meaning | Fix |
 |---|---|---|
-| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-ume-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
+| Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-fors-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
 | Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
 | Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
 | Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T rag-postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |

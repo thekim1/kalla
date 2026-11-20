@@ -10,29 +10,29 @@ using Kalla.Worker.Processing.Persistence;
 namespace Kalla.Worker.Processing.Embedding;
 
 /// <summary>
-/// Who an embedding call is for (engine design §7.7 headers, §10.6): the run id it carries as <c>x-ume-run-id</c> (the run's,
+/// Who an embedding call is for (engine design §7.7 headers, §10.6): the run id it carries as <c>x-fors-run-id</c> (the run's,
 /// the evaluation run's, or the job's id for set generation and preview), where its usage is counted, and the step type.
 /// </summary>
 public sealed record EmbeddingCall(Guid RunId, UsageSink Usage, string Step = EmbeddingClient.EmbedStep);
 
 /// <summary>
 /// <c>POST /v1/embeddings</c> through the worker's gateway client <see cref="HttpClientName"/> (<c>AddGatewayClient</c> with its
-/// <see cref="ResidencyCeilingHandler"/>): the profile's model, the profile's ceiling as <c>x-ume-max-residency</c> (so the
+/// <see cref="ResidencyCeilingHandler"/>): the profile's model, the profile's ceiling as <c>x-fors-max-residency</c> (so the
 /// worker's key of that level, <c>Eu</c> for the P1a pilot), <c>dimensions</c> when the profile requests it,
-/// <c>x-ume-run-id</c> and <c>x-ume-step</c>. The answer is checked before anything is stored: one vector per input in input
+/// <c>x-fors-run-id</c> and <c>x-fors-step</c>. The answer is checked before anything is stored: one vector per input in input
 /// order, each of the profile's dimensions and finite (else fatal <c>embed.bad_vector</c>); the residency is checked by the
 /// handler (above the ceiling: fatal, event 5003). The call runs as the knowledge base's gateway key
 /// (<see cref="UsageOwner.Acting"/>, engine design §7.7): a refusal of the key waits until the next full hour with an attempt
 /// counted (<see cref="GatewayRefusals"/>), and an answer without the key's echo is fatal <c>gateway.delegation_not_applied</c>
 /// before a vector is read (event 5011 by the handler). Status codes map per engine design §7.3. Every answered call's usage
-/// (<c>usage.prompt_tokens</c> and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the call's
+/// (<c>usage.prompt_tokens</c> and <c>x-fors-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the call's
 /// <see cref="EmbeddingCall.Usage"/> before the vectors are checked, since the gateway charged it; an error answer records nothing.
 /// </summary>
 public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clock)
 {
     public const string HttpClientName = "gateway-embed";
-    public const string RunIdHeader = "x-ume-run-id";
-    public const string StepHeader = "x-ume-step";
+    public const string RunIdHeader = "x-fors-run-id";
+    public const string StepHeader = "x-fors-step";
     public const string EmbedStep = "embed";
 
     private static readonly Uri EmbeddingsPath = new("v1/embeddings", UriKind.Relative);

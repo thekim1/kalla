@@ -18,7 +18,7 @@ namespace Kalla.Retrieval.Tests;
 /// </summary>
 public sealed partial class ChatModelRerankerTests : IDisposable
 {
-    private const string Model = "ume/small-eu";
+    private const string Model = "fors/small-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // The engine tests' lists: fused and deduped order 5, 1, 2, 6, 3, 4; chunks 1–4 are document 7 (cap 3).
@@ -65,9 +65,9 @@ public sealed partial class ChatModelRerankerTests : IDisposable
 
         var call = gateway.Calls.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/chat/completions");
-        call.Headers["x-ume-max-residency"].ShouldBe("Eu");
-        call.Headers["x-ume-step"].ShouldBe(ChatModelReranker.Step);
-        call.Headers["x-ume-run-id"].ShouldBe("01929b6e-0000-7000-8000-0000000000aa");
+        call.Headers["x-fors-max-residency"].ShouldBe("Eu");
+        call.Headers["x-fors-step"].ShouldBe(ChatModelReranker.Step);
+        call.Headers["x-fors-run-id"].ShouldBe("01929b6e-0000-7000-8000-0000000000aa");
         using var body = JsonDocument.Parse(call.Body);
         body.RootElement.GetProperty("model").GetString().ShouldBe(Model);
         body.RootElement.GetProperty("temperature").GetDouble().ShouldBe(0);
@@ -93,7 +93,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         using var body = JsonDocument.Parse(gateway.Calls.ShouldHaveSingleItem().Body);
         body.RootElement.TryGetProperty("temperature", out _).ShouldBeFalse();
         ChatModelReranker.SendsTemperature("eu/Claude-Sonnet-4-5").ShouldBeFalse();
-        ChatModelReranker.SendsTemperature("ume/small-eu").ShouldBeTrue();
+        ChatModelReranker.SendsTemperature("fors/small-eu").ShouldBeTrue();
     }
 
     [Theory]

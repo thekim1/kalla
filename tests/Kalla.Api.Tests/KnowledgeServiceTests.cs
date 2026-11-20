@@ -238,7 +238,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             Collection(DeptACollection, Classification.Public, true), Collection(DeptBCollection, Classification.Public, true),
         }.ToDictionary(c => c.Id);
         var assistant = new AssistantEntry(AssistantId, "bygg", "Bygg", Classification.Internal, HistoryModes.None, AssistantStates.Active, Guid.Empty, null,
-            new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [CollectionLink.Whole(PublicCollection), CollectionLink.Whole(UnpublishedCollection)]),
+            new PublishedVersionEntry(Guid.NewGuid(), 1, "fors/chat-eu", [CollectionLink.Whole(PublicCollection), CollectionLink.Whole(UnpublishedCollection)]),
             [new AudienceEntry(AssistantAudienceKinds.Client, OwuiClient, null)]);
         return PolicySnapshot.Empty with
         {
@@ -334,7 +334,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     {
         // B-12 (Decisions "Rerank pulled forward"): QuerySteps.retrieval.rerank turns it on, off by default; chat then passes its
         // turn's ceiling as RerankCeiling, and the model is Settings.Retrieval.rerankModel.
-        var plain = db.Snapshot() with { RetrievalSettings = """{"rerankModel": "ume/small-eu"}""" };
+        var plain = db.Snapshot() with { RetrievalSettings = """{"rerankModel": "fors/small-eu"}""" };
         var assistant = plain.Assistants[db.AssistantId];
         var reranking = plain with
         {
@@ -356,7 +356,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var reranked = await service.RetrieveAsync(who,
             new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId, RerankCeiling: Residency.Eu), Ct);
         var call = reranker.Requests.ShouldHaveSingleItem();
-        (call.Model, call.Ceiling, call.RunId, call.Query).ShouldBe(("ume/small-eu", Residency.Eu, (Guid?)runId, "bygglov altan"));
+        (call.Model, call.Ceiling, call.RunId, call.Query).ShouldBe(("fors/small-eu", Residency.Eu, (Guid?)runId, "bygglov altan"));
         call.Passages.Count.ShouldBeGreaterThan(1);
         call.Passages.ShouldAllBe(p => p.Text.Length > 0); // the texts come from the hydrator's extra statement
         reranked.Degraded.ShouldBeNull();
@@ -910,7 +910,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task The_call_reports_the_fake_gateways_tokens_and_cost()
     {
-        // The FakeGateway bills an embedding's input at its catalogue price, 0.02 USD per million tokens (x-ume-cost-usd).
+        // The FakeGateway bills an embedding's input at its catalogue price, 0.02 USD per million tokens (x-fors-cost-usd).
         var costs = new List<string>();
         var (embedder, host) = Build(new CostRecording(fake.Server.CreateHandler(), costs));
         using var _ = host;
@@ -923,13 +923,13 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         costs.ShouldHaveSingleItem().ShouldBe(embedding.Usage!.CostUsd!.Value.ToString("0.00000000", System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    /// <summary>Keeps the <c>x-ume-cost-usd</c> of every answer, as the FakeGateway sent it.</summary>
+    /// <summary>Keeps the <c>x-fors-cost-usd</c> of every answer, as the FakeGateway sent it.</summary>
     private sealed class CostRecording(HttpMessageHandler inner, List<string> costs) : DelegatingHandler(inner)
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var response = await base.SendAsync(request, cancellationToken);
-            costs.AddRange(response.Headers.TryGetValues("x-ume-cost-usd", out var values) ? values : []);
+            costs.AddRange(response.Headers.TryGetValues("x-fors-cost-usd", out var values) ? values : []);
             return response;
         }
     }
@@ -1069,7 +1069,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            ceilings.Add(string.Join(",", request.Headers.GetValues("x-ume-max-residency")));
+            ceilings.Add(string.Join(",", request.Headers.GetValues("x-fors-max-residency")));
             return base.SendAsync(request, cancellationToken);
         }
     }

@@ -44,14 +44,14 @@ public sealed class FakeIntegrationApiTests(FakeGatewayFactory fake) : IClassFix
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
         {
-            Content = new StringContent("""{"model":"ume/chat-eu","messages":[{"role":"user","content":"Hej på dig"}]}""", Encoding.UTF8, "application/json"),
+            Content = new StringContent("""{"model":"fors/chat-eu","messages":[{"role":"user","content":"Hej på dig"}]}""", Encoding.UTF8, "application/json"),
         };
-        request.Headers.Add("x-ume-max-residency", "Eu");
-        request.Headers.Add("x-ume-step", step);
-        request.Headers.Add("x-ume-run-id", runId.ToString());
+        request.Headers.Add("x-fors-max-residency", "Eu");
+        request.Headers.Add("x-fors-step", step);
+        request.Headers.Add("x-fors-run-id", runId.ToString());
         if (actingAs is { } key)
         {
-            request.Headers.Add("x-ume-on-behalf-of", key.ToString());
+            request.Headers.Add("x-fors-on-behalf-of", key.ToString());
         }
 
         using var response = await api.SendAsync(request, Ct);

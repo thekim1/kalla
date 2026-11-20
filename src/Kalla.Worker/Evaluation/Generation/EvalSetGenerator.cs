@@ -25,7 +25,7 @@ namespace Kalla.Worker.Evaluation.Generation;
 /// runs at the collection's ceiling (<see cref="EvalModelClient.CeilingForAsync"/>); a model the gateway does not serve there
 /// refuses the job with <see cref="EvalModelClient.ModelNotAtCeiling"/>. Result <see cref="EvalSetResult"/>. Every model call
 /// (<c>eval-generate</c>, <c>eval-judge</c>, the near-duplicate embeddings <c>eval-dedup</c>) carries the job's id as
-/// <c>x-ume-run-id</c>, runs as the collection's gateway key and is counted under the collection; the round's commit adds them
+/// <c>x-fors-run-id</c>, runs as the collection's gateway key and is counted under the collection; the round's commit adds them
 /// to <c>CollectionDailyUsage</c> (engine design §7.7, §10.6).
 /// </summary>
 public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient models, EmbeddingClient embeddings, IEmbeddingProfileStore profiles,

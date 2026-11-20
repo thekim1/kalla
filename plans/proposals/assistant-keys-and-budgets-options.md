@@ -1,7 +1,7 @@
 # Keys and budgets per assistant: options
 
 > **Decided (user, 2026-11-11, #580), outbound:** an assistant, and a knowledge base, runs on an **assigned gateway key**
-> of its department, used by reference: Ume.Rag stores the key's id and sends `x-ume-on-behalf-of: <key id>` with its
+> of its department, used by reference: Ume.Rag stores the key's id and sends `x-fors-on-behalf-of: <key id>` with its
 > credential key; the per-assistant budget is that key's budget in the gateway. None of options A–E below is taken as
 > written. The rules are in Decisions "Cost attribution" and "Gateway keys", [`cost-attribution.md`](../platform/cost-attribution.md)
 > §4 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §5. The inbound questions (§3, Q5) stay open.
@@ -21,7 +21,7 @@ Gateway facts are from `~/git/llmgateway` at `origin/main` v0.9.2 (`df6bf5e`), r
 
 | | Inbound | Outbound |
 |---|---|---|
-| Whose key | Ume.Rag's own (`ume-rag-sk-…`) | the gateway's (`ume-sk-…`) |
+| Whose key | Ume.Rag's own (`ume-rag-sk-…`) | the gateway's (`fors-sk-…`) |
 | Who presents it | an app that calls an assistant through rag-api | Ume.Rag, when it calls a model |
 | What it decides | who may use the assistant, from where, how often | who pays, which budget counts, which models are allowed |
 | Section | §3 | §4–§6 |
@@ -82,11 +82,11 @@ part of cost-attribution step C1.
 
 | Fact | Where |
 |---|---|
-| Budgets have three scopes: department, team, key. USD or tokens. Periods hourly to yearly. A spent budget answers 402 and names the scope | `src/Ume.LlmGateway.Domain/BudgetEnums.cs`, `Entities/Budget.cs`, `Gateway/Budgets/BudgetService.cs` |
-| A usage record holds the key, its team and its department. Nothing per request (no tag, no end user) | `src/Ume.LlmGateway.Domain/Entities/UsageRecord.cs` |
-| A key carries its own model, provider and residency allow-lists, IP ranges, rate limits and `RequireMaxResidency` | `src/Ume.LlmGateway.Domain/Entities/VirtualKey.cs` |
+| Budgets have three scopes: department, team, key. USD or tokens. Periods hourly to yearly. A spent budget answers 402 and names the scope | `src/Fors.Domain/BudgetEnums.cs`, `Entities/Budget.cs`, `Gateway/Budgets/BudgetService.cs` |
+| A usage record holds the key, its team and its department. Nothing per request (no tag, no end user) | `src/Fors.Domain/Entities/UsageRecord.cs` |
+| A key carries its own model, provider and residency allow-lists, IP ranges, rate limits and `RequireMaxResidency` | `src/Fors.Domain/Entities/VirtualKey.cs` |
 | The admin API (create a key, set a budget) is cookie sign-in only. No machine credential can create keys | gateway `docs/admin-api.md` |
-| Delegation (`x-ume-on-behalf-of`) is designed for release 2 and **not built** | [`../gateway-changes/design.md`](../gateway-changes/design.md) §5 |
+| Delegation (`x-fors-on-behalf-of`) is designed for release 2 and **not built** | [`../gateway-changes/design.md`](../gateway-changes/design.md) §5 |
 | Under the delegation design, team and department budgets follow the named team; key budgets stay with the delegating key, so a key budget would cap the whole platform, not one assistant | gateway-changes §5.4 |
 | Ume.Rag today: keys per level and deployable, secret files, owned by the pilot team. All chat traffic is one line in the gateway | Decisions "Gateway keys"; gateway-changes §13.4 |
 
@@ -97,7 +97,7 @@ can be a team or a key. Anything else is new gateway work.
 
 ### A. A gateway team per assistant (the current plan)
 
-Delegating platform keys per level; every call sends `x-ume-on-behalf-of: <owner team id>`. A department that wants a
+Delegating platform keys per level; every call sends `x-fors-on-behalf-of: <owner team id>`. A department that wants a
 limit on one assistant creates a gateway team for it (e.g. *DoIT › Supportassistenten*), sets the budget on that team
 and makes it the assistant's owner team (cost-attribution §4.2).
 
@@ -113,7 +113,7 @@ and makes it the assistant's owner team (cost-attribution §4.2).
     change to those lists (cost-attribution §7 Q2).
   - Not available until release 2.
 - **Variant A2:** split the two meanings: keep `OwnerTeamId` for edit scope and add a `BillingTeamId` that is sent as
-  `x-ume-on-behalf-of`. Removes the collision; the fake teams remain.
+  `x-fors-on-behalf-of`. Removes the collision; the fake teams remain.
 
 ### B. A real gateway key per assistant
 
@@ -159,7 +159,7 @@ gateway counts and stops on the line as well as on the team and the department. 
 against its team only.
 
 - **Needs:** a change to gateway-changes §5 before release 2 is built: a fourth budget scope, a column on the usage
-  record, a second header or a second part of `x-ume-on-behalf-of`, the echo, the UI. Ume.Rag: the assistant stores
+  record, a second header or a second part of `x-fors-on-behalf-of`, the echo, the UI. Ume.Rag: the assistant stores
   the line's id (mirrored by the organisation sync) and sends it.
 - **For:**
   - The gateway is the only enforcer (R3), with no secret per assistant and no fake teams.

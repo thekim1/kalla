@@ -62,9 +62,9 @@ public sealed class GatewayRerankerTests : IDisposable
 
         var call = gateway.Calls.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/rerank");
-        call.Headers["x-ume-max-residency"].ShouldBe("Eu");
-        call.Headers["x-ume-step"].ShouldBe(GatewayReranker.Step);
-        call.Headers["x-ume-run-id"].ShouldBe("01929b6e-0000-7000-8000-0000000000bb");
+        call.Headers["x-fors-max-residency"].ShouldBe("Eu");
+        call.Headers["x-fors-step"].ShouldBe(GatewayReranker.Step);
+        call.Headers["x-fors-run-id"].ShouldBe("01929b6e-0000-7000-8000-0000000000bb");
         using var body = JsonDocument.Parse(call.Body);
         body.RootElement.GetProperty("model").GetString().ShouldBe(Model);
         body.RootElement.GetProperty("query").GetString().ShouldBe("altan bygglov");

@@ -81,7 +81,7 @@ if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
       tag="v$tag" ;;
     *) tag="$gateway" ;;
   esac
-  curl -fsSL -o "$tmp" "https://github.com/thekim1/llmgateway/releases/download/$tag/compose.portainer.yaml" \
+  curl -fsSL -o "$tmp" "https://github.com/thekim1/fors/releases/download/$tag/compose.portainer.yaml" \
     || { echo "could not download compose.portainer.yaml of the gateway's release $tag" >&2; exit 1; }
   echo "The gateway's stack from its release $tag"
   gateway="$tmp"

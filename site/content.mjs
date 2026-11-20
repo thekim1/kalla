@@ -1,9 +1,9 @@
 // Everything the website says that is not a Markdown page. The documentation pages themselves are the Markdown files
 // listed in DOCS; the build renders them, so the repository and the website never disagree. The build and the styles
-// are the gateway's site (github.com/thekim1/llmgateway, site/), adapted.
+// are the gateway's site (github.com/thekim1/fors, site/), adapted.
 
 export const GH = 'https://github.com/thekim1/ume-rag-platform'
-export const GATEWAY_SITE = 'https://thekim1.github.io/llmgateway/'
+export const GATEWAY_SITE = 'https://thekim1.github.io/fors/'
 
 /**
  * Documentation sidebar, grouped by what the reader came to do: try or install it, run it, check it, or look something
@@ -125,7 +125,7 @@ git config core.hooksPath .githooks` },
   { id: 'production', title: 'Deploy a release', body: 'A Linux Docker host, the LLM gateway and your own login provider.', icon: 'dns',
     prereqs: ['Linux + Docker 28+', 'Compose 2.33.1+', '8 cores, 20 GB RAM (with the gateway)', 'An OIDC provider', 'The LLM gateway'],
     steps: [
-      { title: 'Set up the gateway', body: 'Ume.Rag calls every model through the Ume AI Gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
+      { title: 'Set up the gateway', body: 'Ume.Rag calls every model through the Ume AI Gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
 tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
 sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0 --yes
 sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait` },

@@ -52,8 +52,8 @@ public sealed class EvalStopException : Exception
 /// Other status codes map as the embedding client's (engine design §7.3). Every completion runs as the knowledge base's gateway
 /// key (<see cref="UsageOwner.Acting"/>, engine design §7.7): a refusal of the key waits until the next full hour
 /// (<see cref="GatewayRefusals"/>), an answer without the key's echo ends the job with <c>gateway.delegation_not_applied</c>.
-/// The catalogue read goes without the key (a plain client, no model call). Every completion carries <c>x-ume-run-id</c> and
-/// its answered call's usage (tokens and <c>x-ume-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the caller's
+/// The catalogue read goes without the key (a plain client, no model call). Every completion carries <c>x-fors-run-id</c> and
+/// its answered call's usage (tokens and <c>x-fors-cost-usd</c>, <see cref="GatewayUsageReader"/>) goes to the caller's
 /// <see cref="UsageSink"/> (engine design §7.7, §10.6); the catalogue read costs nothing and is not recorded.
 /// </summary>
 public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> gateway, GatewayCeiling serviceCeiling, TimeProvider clock)
@@ -62,7 +62,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
 
     /// <summary>
     /// The catalogue read (<c>GET /v1/models</c>): a list of model names, no model output, so the gateway sends no
-    /// <c>x-ume-residency</c> and the answer check of <see cref="ResidencyCeilingHandler"/> does not apply. The call still
+    /// <c>x-fors-residency</c> and the answer check of <see cref="ResidencyCeilingHandler"/> does not apply. The call still
     /// carries the ceiling and this process's key of that level.
     /// </summary>
     public const string CatalogueClientName = "gateway-eval-models";
@@ -119,8 +119,8 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     }
 
     /// <summary>
-    /// One chat completion with JSON output at <paramref name="ceiling"/>, with <c>x-ume-step</c> <paramref name="step"/> and
-    /// <c>x-ume-run-id</c> <paramref name="runId"/>; its usage goes to <paramref name="usage"/>. No <c>temperature</c> is sent:
+    /// One chat completion with JSON output at <paramref name="ceiling"/>, with <c>x-fors-step</c> <paramref name="step"/> and
+    /// <c>x-fors-run-id</c> <paramref name="runId"/>; its usage goes to <paramref name="usage"/>. No <c>temperature</c> is sent:
     /// some models refuse it, and the model's default applies.
     /// </summary>
     public async Task<ChatReply> CompleteAsync(string model, string step, Residency ceiling, string system, string user, Guid runId, UsageSink usage,

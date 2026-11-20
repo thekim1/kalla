@@ -6,7 +6,7 @@ using Kalla.Infrastructure.Gateway;
 namespace Kalla.TestKit;
 
 /// <summary>
-/// A test host whose gateway clients go to a fake or a stub handler that does not answer <c>GET /v1/ume/context</c> as the
+/// A test host whose gateway clients go to a fake or a stub handler that does not answer <c>GET /v1/fors/context</c> as the
 /// service's own credential key would: the credential key's residency ceiling is known from the start, as if the context
 /// had been read (M-17 C9; production starts at <c>OnPrem</c> and takes it from the context, see <see cref="GatewayCeiling"/>).
 /// Call after the service registers its gateway clients (in <c>ConfigureTestServices</c>, or after <c>AddGatewayClient</c>).

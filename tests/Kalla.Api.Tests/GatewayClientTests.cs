@@ -52,8 +52,8 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
 
     [Theory]
     [InlineData(Residency.OnPrem, "bge-m3", "v1/embeddings")]
-    [InlineData(Residency.Eu, "ume/chat-standard", "v1/chat/completions")]
-    [InlineData(Residency.External, "ume/chat-advanced", "v1/chat/completions")]
+    [InlineData(Residency.Eu, "fors/chat-standard", "v1/chat/completions")]
+    [InlineData(Residency.External, "fors/chat-advanced", "v1/chat/completions")]
     public async Task The_credential_key_is_sent_at_every_ceiling_up_to_the_maximum(Residency ceiling, string model, string path)
     {
         // B-37: one key per service (identity design §4.7); the fake accepts it at any ceiling up to its residencies.
@@ -286,9 +286,9 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         // served only at External has no target within it (403 max_residency_not_met).
         using var host = Build(fake.Server.CreateHandler(), key: FakeGatewayFactory.WorkerCredentialKey);
 
-        using var advanced = await SendAsync(host, Post("v1/chat/completions", """{"model":"ume/chat-advanced","messages":[{"role":"user","content":"Hej"}]}""")
+        using var advanced = await SendAsync(host, Post("v1/chat/completions", """{"model":"fors/chat-advanced","messages":[{"role":"user","content":"Hej"}]}""")
             .WithMaxResidency(Residency.External));
-        using var response = await SendAsync(host, Post("v1/chat/completions", """{"model":"ume/chat-standard","messages":[{"role":"user","content":"Hej"}]}""")
+        using var response = await SendAsync(host, Post("v1/chat/completions", """{"model":"fors/chat-standard","messages":[{"role":"user","content":"Hej"}]}""")
             .WithMaxResidency(Residency.External));
 
         advanced.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
@@ -324,7 +324,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task The_model_list_needs_no_residency_header_but_still_its_ceiling_and_key()
     {
-        // No deployment answers GET /v1/models, so the gateway sends no x-ume-residency (V8's check, item 13).
+        // No deployment answers GET /v1/models, so the gateway sends no x-fors-residency (V8's check, item 13).
         var counting = new CountingHandler { Residency = null };
         using var host = Build(counting);
         using var list = await SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/models").WithMaxResidency(Residency.Eu));
@@ -339,7 +339,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     {
         using var host = Build(fake.Server.CreateHandler());
 
-        using var notMet = await SendAsync(host, Post("v1/chat/completions", """{"model":"ume/chat-eu","messages":[]}""").WithMaxResidency(Residency.OnPrem));
+        using var notMet = await SendAsync(host, Post("v1/chat/completions", """{"model":"fors/chat-eu","messages":[]}""").WithMaxResidency(Residency.OnPrem));
         notMet.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         using var drained = await SendAsync(host, Post("v1/chat/completions", """{"model":"fake-drained","messages":[]}""").WithMaxResidency(Residency.OnPrem));
@@ -372,7 +372,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         var recording = new RecordingHandler(fake.Server.CreateHandler()) { FailFirst = HttpStatusCode.BadGateway };
         using var host = Build(recording);
 
-        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu));
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu));
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
@@ -386,7 +386,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Theory]
-    [InlineData("ume/chat-eu", HttpStatusCode.Forbidden)] // 403 max_residency_not_met: can never work
+    [InlineData("fors/chat-eu", HttpStatusCode.Forbidden)] // 403 max_residency_not_met: can never work
     [InlineData("fake-drained", HttpStatusCode.ServiceUnavailable)] // 503 + Retry-After: the caller waits
     [InlineData("no-such-model", HttpStatusCode.NotFound)]
     public async Task Other_refusals_are_not_retried(string model, HttpStatusCode status)
@@ -429,7 +429,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
         using var host = Build(recording);
 
-        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu));
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu));
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
@@ -466,7 +466,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var host = Build(sockets);
 
         var thrown = await Should.ThrowAsync<HttpRequestException>(() =>
-            SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu)));
+            SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu)));
 
         thrown.HttpRequestError.ShouldBe(HttpRequestError.ConnectionError);
         connects.ShouldBe(2); // one retry in all
@@ -490,7 +490,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         var breaking = new BreakingStreamHandler();
         using var host = Build(breaking);
 
-        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.OnPrem));
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.OnPrem));
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var stream = await response.Content.ReadAsStreamAsync(Ct);
         var buffer = new byte[64];
@@ -518,7 +518,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var host = Build(recording, retryFailed: false);
 
         await Should.ThrowAsync<HttpRequestException>(() =>
-            SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu)));
+            SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu)));
         recording.Calls.Count.ShouldBe(1);
     }
 

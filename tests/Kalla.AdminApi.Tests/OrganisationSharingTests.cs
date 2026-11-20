@@ -20,7 +20,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup7.Name)]
 public sealed class OrganisationSharingTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
-    private const string Model = "ume/chat-eu";
+    private const string Model = "fors/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private sealed record Seed(

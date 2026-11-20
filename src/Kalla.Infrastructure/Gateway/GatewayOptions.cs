@@ -31,7 +31,7 @@ public sealed class GatewayOptions
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
 
     /// <summary>
-    /// A <c>2xx</c> or <c>304</c> answer to a call made as an assigned key must echo the key id in <c>x-ume-on-behalf-of</c>,
+    /// A <c>2xx</c> or <c>304</c> answer to a call made as an assigned key must echo the key id in <c>x-fors-on-behalf-of</c>,
     /// or the call is aborted with event 5011 (<c>Gateway:RequireDelegationEcho</c>, default on; identity design §4.7): an
     /// older gateway instance during a rolling update ignores the header and would charge the credential key.
     /// </summary>
@@ -43,7 +43,7 @@ public sealed class GatewayOptions
     /// </summary>
     public TimeSpan? FirstContextWait { get; set; }
 
-    /// <summary>How often each service reads its own <c>GET /v1/ume/context</c> for the gateway's features (identity §4.7).</summary>
+    /// <summary>How often each service reads its own <c>GET /v1/fors/context</c> for the gateway's features (identity §4.7).</summary>
     public TimeSpan ContextInterval { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
@@ -56,17 +56,17 @@ public sealed class GatewayOptions
 /// <summary>Header names shared with the gateway (<c>Pipeline/GatewayHeaders.cs</c>, gateway design §2.1).</summary>
 public static class GatewayHeaders
 {
-    public const string MaxResidency = "x-ume-max-residency";
-    public const string Residency = "x-ume-residency";
-    public const string OnBehalfOf = "x-ume-on-behalf-of";
+    public const string MaxResidency = "x-fors-max-residency";
+    public const string Residency = "x-fors-residency";
+    public const string OnBehalfOf = "x-fors-on-behalf-of";
     public const string RequestId = "x-request-id";
 
     /// <summary>The call's cost in USD on a complete JSON answer (eight decimals; gateway-changes §5.4).</summary>
-    public const string CostUsd = "x-ume-cost-usd";
+    public const string CostUsd = "x-fors-cost-usd";
 
     /// <summary>
     /// Request header: exactly <c>1</c> asks the gateway to end a streamed answer with the SSE comment
-    /// <c>: ume-cost-usd=&lt;usd&gt;</c> (gateway-changes §5.4); any other value asks for nothing.
+    /// <c>: fors-cost-usd=&lt;usd&gt;</c> (gateway-changes §5.4); any other value asks for nothing.
     /// </summary>
-    public const string StreamCost = "x-ume-stream-cost";
+    public const string StreamCost = "x-fors-stream-cost";
 }

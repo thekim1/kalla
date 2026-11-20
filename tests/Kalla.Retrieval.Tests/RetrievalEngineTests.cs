@@ -28,13 +28,13 @@ public sealed class RetrievalEngineTests : IDisposable
     private static Task<ReadOnlyMemory<float>> Embed(string query, CancellationToken ct) => Task.FromResult<ReadOnlyMemory<float>>(new float[] { 1, 0, 0 });
 
     private static Task<ReadOnlyMemory<float>> Unavailable(string query, CancellationToken ct) =>
-        throw new QueryEmbeddingUnavailableException(RetrievalDegradation.EmbeddingResidency, "x-ume-residency was Eu");
+        throw new QueryEmbeddingUnavailableException(RetrievalDegradation.EmbeddingResidency, "x-fors-residency was Eu");
 
     private RetrievalEngine Engine(IReranker? reranker = null, RetrievalEngineOptions? options = null) =>
         new(_index, _sizes, options, reranker, new FakeTexts());
 
     /// <summary>One collection on a platform with a model for both rerankers.</summary>
-    private static SearchScope RerankScope(string? chatModel = "ume/small-eu", string? gatewayModel = "bge-reranker-v2-m3") =>
+    private static SearchScope RerankScope(string? chatModel = "fors/small-eu", string? gatewayModel = "bge-reranker-v2-m3") =>
         Scope(RetrievalPlatformSettings.Default with { RerankModel = chatModel, GatewayRerankModel = gatewayModel }, (CollectionA, RetrievalSettings.Default));
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class RetrievalEngineTests : IDisposable
             Embed: Embed, Rerank: call), Ct);
         (reranker.Last!.Reranker, reranker.Last.Model).ShouldBe((kind, (string?)null));
         await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: call), Ct);
-        reranker.Last!.Model.ShouldBe(kind == RerankerKind.Gateway ? "bge-reranker-v2-m3" : "ume/small-eu");
+        reranker.Last!.Model.ShouldBe(kind == RerankerKind.Gateway ? "bge-reranker-v2-m3" : "fors/small-eu");
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class RetrievalEngineTests : IDisposable
         var chat = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Kalla.Domain.Residency.Eu)), Ct);
         chat.Degraded.ShouldBeNull();
         chat.Hits[0].Candidate.ChunkId.ShouldBe(Id(6));
-        (slow.Last!.Reranker, slow.Last.Model).ShouldBe((RerankerKind.ChatModel, "ume/small-eu"));
+        (slow.Last!.Reranker, slow.Last.Model).ShouldBe((RerankerKind.ChatModel, "fors/small-eu"));
 
         var gateway = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed,
             Rerank: new RerankCall(Kalla.Domain.Residency.Eu, Reranker: RerankerKind.Gateway)), Ct);

@@ -41,7 +41,7 @@ public sealed class AdminSession
 }
 
 /// <summary>
-/// Mirror of a gateway department (data-model §2.1), synced from the gateway's <c>/v1/ume/context</c> (admin design §4.10).
+/// Mirror of a gateway department (data-model §2.1), synced from the gateway's <c>/v1/fors/context</c> (admin design §4.10).
 /// The id is the gateway's. <see cref="MemberGroups"/> are group-claim values that place a signed-in admin in this
 /// department (identity design §2.1): the context's <c>member_groups</c>, never edited in Källa.
 /// </summary>
@@ -56,7 +56,7 @@ public sealed class Department
     public List<Team> Teams { get; set; } = [];
 }
 
-/// <summary>Mirror of a gateway team (data-model §2.1), from <c>/v1/ume/context</c>; <see cref="Code"/> is for display.</summary>
+/// <summary>Mirror of a gateway team (data-model §2.1), from <c>/v1/fors/context</c>; <see cref="Code"/> is for display.</summary>
 public sealed class Team
 {
     public Guid Id { get; set; }
@@ -70,7 +70,7 @@ public sealed class Team
 
 /// <summary>
 /// Mirror of an assigned gateway key of the integration (data-model §2.1 <c>GatewayKeys</c>, admin design §4.10), from
-/// <c>/v1/ume/context</c> <c>assigned_keys</c>: the key picker's list and the read-only settings on an assistant or knowledge
+/// <c>/v1/fors/context</c> <c>assigned_keys</c>: the key picker's list and the read-only settings on an assistant or knowledge
 /// base. The id is the gateway's key id; never a secret. A revoked key's row is deleted.
 /// </summary>
 public sealed class GatewayKey

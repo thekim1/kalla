@@ -42,7 +42,7 @@ describe('problemLines for the gateway key (B-36, B-43, #720)', () => {
       code: 'gateway_key_required',
       problems: [
         { code: 'gateway_key_required' },
-        { code: 'gateway_key_model', params: { key: 'Kontaktcenter – chatbot' }, affected: ['ume/chat-standard'] },
+        { code: 'gateway_key_model', params: { key: 'Kontaktcenter – chatbot' }, affected: ['fors/chat-standard'] },
         {
           code: 'gateway_key_embedding_residency',
           params: { key: 'Kontaktcenter – chatbot', model: 'bge-m3', modelResidencies: 'OnPrem', keyResidencies: 'Eu' },
@@ -50,8 +50,8 @@ describe('problemLines for the gateway key (B-36, B-43, #720)', () => {
         },
         {
           code: 'gateway_key_model_residency',
-          params: { key: 'Kontaktcenter – chatbot', model: 'ume/chat-onprem', modelResidencies: 'OnPrem', keyResidencies: 'Eu, External' },
-          affected: ['ume/chat-onprem'],
+          params: { key: 'Kontaktcenter – chatbot', model: 'fors/chat-onprem', modelResidencies: 'OnPrem', keyResidencies: 'Eu, External' },
+          affected: ['fors/chat-onprem'],
         },
         { code: 'gateway_key_invalid', params: { key: 'Bokning', reason: 'key_disabled' } },
         { code: 'gateway_key_residency', params: { key: 'Webb', ceiling: 'OnPrem' }, affected: ['External'] },
@@ -60,9 +60,9 @@ describe('problemLines for the gateway key (B-36, B-43, #720)', () => {
     })
     expect(problemLines(error)).toEqual([
       'No AI gateway key is chosen. Choose one under Edit details: the assistant can’t be published without one, and until then its calls are charged to the platform’s owner team.',
-      'The AI gateway key Kontaktcenter – chatbot does not allow every model this uses. (ume/chat-standard)',
+      'The AI gateway key Kontaktcenter – chatbot does not allow every model this uses. (fors/chat-standard)',
       'The AI gateway key Kontaktcenter – chatbot reaches bge-m3, the knowledge base’s embedding model, only at OnPrem, which the key does not allow (it allows Eu). (bge-m3)',
-      'The AI gateway key Kontaktcenter – chatbot reaches ume/chat-onprem only at OnPrem, which the key does not allow (it allows Eu, External). (ume/chat-onprem)',
+      'The AI gateway key Kontaktcenter – chatbot reaches fors/chat-onprem only at OnPrem, which the key does not allow (it allows Eu, External). (fors/chat-onprem)',
       'The AI gateway key Bokning cannot be used (key_disabled). Choose an active key of this department.',
       'The AI gateway key Webb allows no residency within OnPrem. Choose a key that may run at this information class. (External)',
       expect.stringContaining('AI gateway'),

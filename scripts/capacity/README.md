@@ -21,9 +21,9 @@ host, and it needs threads and streamed HTTP, which the Python standard library 
 
 Every request is what the services send: `POST /v1/embeddings` with `encoding_format: float`, or
 `POST /v1/chat/completions` (`stream_options.include_usage` when streamed), with `Authorization: Bearer <key>`,
-`x-ume-max-residency: <ceiling>` (default `OnPrem`), `x-ume-run-id: capacity-<time>-<random>` and `x-ume-step`
+`x-fors-max-residency: <ceiling>` (default `OnPrem`), `x-fors-run-id: capacity-<time>-<random>` and `x-fors-step`
 (`embed`, `query-embed`, `condense`, `answer`; knowledge-api §5.2, chat-api §5, §8.1, design-processing §11).
-Every 2xx answer must carry `x-ume-residency` at or below the ceiling, as `ResidencyCeilingHandler` checks: if one does
+Every 2xx answer must carry `x-fors-residency` at or below the ceiling, as `ResidencyCeilingHandler` checks: if one does
 not, the run stops (exit 2), because it would not be measuring on-prem capacity. A 400, 401, 403 or 404 also stops it
 (wrong key, ceiling or model). 429 and 503 are counted and honoured (`Retry-After`, at most 10 s), as the worker does.
 
@@ -44,8 +44,8 @@ python3 -I scripts/capacity/capacity.py --help
 |---|---|---|
 | `--base-url` | – | the gateway, as `Gateway:BaseUrl` (a trailing `/v1` is accepted) |
 | `--key-file` | – | file holding the gateway key of the ceiling's level; read once, never printed or stored |
-| `--ceiling` | `OnPrem` | `x-ume-max-residency` on every call |
-| `--embedding-model`, `--condense-model`, `--answer-models` | `bge-m3`, `ume/small-onprem`, `ume/chat-onprem` | the gateway's aliases; `--answer-models a,b` measures each (the slowest decides #149) |
+| `--ceiling` | `OnPrem` | `x-fors-max-residency` on every call |
+| `--embedding-model`, `--condense-model`, `--answer-models` | `bge-m3`, `fors/small-onprem`, `fors/chat-onprem` | the gateway's aliases; `--answer-models a,b` measures each (the slowest decides #149) |
 | `--duration`, `--warmup` | per command: 60/10, 120/15, 120/10, 600/30 s | measured and discarded seconds per step; the first request of each client thread is always warm-up |
 | `--concurrency` | `1,2,4` for `embed-throughput`, else 1 | client threads (`embed-throughput` runs every value; the others take the first) |
 | `--batch-sizes`, `--chunk-tokens` | `1,8,16,32,64`, 450 | `embed-throughput` (450 tokens per chunk, design-engine §18) |
@@ -69,8 +69,8 @@ fully parsed (only the vector count and `usage`) so a large batch does not delay
 
 ## Smoke test against the local FakeGateway
 
-The FakeGateway enforces what release 1 of the gateway will (a dev key requires `x-ume-max-residency`, refuses a
-ceiling that is not the key's level, answers with `x-ume-residency`), which the gateway in `~/git/llmgateway` (v0.8.5)
+The FakeGateway enforces what release 1 of the gateway will (a dev key requires `x-fors-max-residency`, refuses a
+ceiling that is not the key's level, answers with `x-fors-residency`), which the gateway in `~/git/llmgateway` (v0.8.5)
 does not do yet. Its numbers test the script only: label such runs `--smoke` and never record them as results.
 
 ```bash
@@ -91,7 +91,7 @@ The fake answers embeddings at once; to see head-of-line blocking in `query-unde
 
 1. **A host that reaches the production gateway** (or one with the same on-prem hardware and models) over the network
    path the services will use, with Python 3.12+. The test host (H6) will do if it reaches the gateway.
-2. **The pilot team's `OnPrem` gateway key** (`ume-sk-…`, `RequireMaxResidency`) in a file readable only by the person
+2. **The pilot team's `OnPrem` gateway key** (`fors-sk-…`, `RequireMaxResidency`) in a file readable only by the person
    running the script; its `MaxConcurrentRequests`, rate limit and budget must allow the load (or the 429s are counted
    and the throughput is the key's, not the hardware's).
 3. **The gateway's model aliases** for BGE-M3, the condense model (`Settings.Chat.CondenseModel`) and every pilot answer
@@ -101,7 +101,7 @@ The fake answers embeddings at once; to see head-of-line blocking in `query-unde
    `answer-ttft` sends 15k-token prompts, so other teams' calls slow down meanwhile.
 5. **What the hardware is** (GPU class or CPU, replicas per model, gateway version, whether release 1 is deployed),
    for `--label` and for comparison with the estimates. Without release 1 the gateway ignores
-   `x-ume-max-residency`; the `x-ume-residency` check still makes sure every measured answer came from on-prem.
+   `x-fors-max-residency`; the `x-fors-residency` check still makes sure every measured answer came from on-prem.
 
 The user runs `all` (or lets the agent run it on the test host) and hands over the result directory.
 
@@ -111,7 +111,7 @@ The user runs `all` (or lets the agent run it on the test host) and hands over t
 2. Record each row of `plans/to-verify.md` in `plans/archive/p0/results-a.md`: #98 and #125 from `embed-throughput` and
    `query-under-load`, #99 from the `idle` phase of `query-under-load`, #104 from `condense`, #149 from `answer-ttft`.
    Evidence: the command line, the summary lines and the run ids (also visible in the gateway's usage by
-   `x-ume-run-id`). Attach the JSON files to the PR or issue; they are not committed.
+   `x-fors-run-id`). Attach the JSON files to the PR or issue; they are not committed.
 3. Compare each number with the estimate printed next to it. A `FAIL` on embedding throughput (below the pilot's 10k
    tokens/s), on condense p95 (above 600 ms) or on answer TTFT p99 (15 s or more) is a shortfall: tell the user, so
    register M2 is decided before P1. Query-embedding p95 under load above 2 × the idle p95 is the performance pass §6

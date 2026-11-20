@@ -17,14 +17,14 @@ namespace Kalla.Api.Tests;
 /// <summary>
 /// B-42 (#580, gateway phase 2; identity §4.7, gateway-changes §5.2, §5.7): the shared gateway client acting as an object's
 /// assigned key, the echo check (event 5011) and the typed refusal, against the FakeGateway's dev assigned keys; and the
-/// FakeGateway resolving <c>x-ume-on-behalf-of</c> as the gateway does and recording each request under the key it ran as.
+/// FakeGateway resolving <c>x-fors-on-behalf-of</c> as the gateway does and recording each request under the key it ran as.
 /// </summary>
 public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>
 {
     private const string Client = "acting-test";
 
     // The FakeGateway's dev assigned keys (its appsettings.json).
-    private static readonly Guid Chatbot = new("019a0000-0000-7000-8000-00000000b001"); // Eu only; ume/chat-standard, ume/chat-eu, bge-m3
+    private static readonly Guid Chatbot = new("019a0000-0000-7000-8000-00000000b001"); // Eu only; fors/chat-standard, fors/chat-eu, bge-m3
     private static readonly Guid OnPromOnly = new("019a0000-0000-7000-8000-00000000b002");
     private static readonly Guid Paused = new("019a0000-0000-7000-8000-00000000b003"); // Disabled
     private static readonly Guid ExternalOnly = new("019a0000-0000-7000-8000-00000000b004");
@@ -81,7 +81,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         host.Services.GetRequiredService<GatewayFeatures>().ActAsKey.ShouldBeTrue();
         (await reader.ReadAsync(Ct)).ShouldBeTrue();
         recording.Requests.Select(r => r.Status).ShouldBe([HttpStatusCode.OK, HttpStatusCode.NotModified]);
-        recording.Requests.ShouldAllBe(r => r.OnBehalfOf == null && r.Path == "/v1/ume/context");
+        recording.Requests.ShouldAllBe(r => r.OnBehalfOf == null && r.Path == "/v1/fors/context");
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         var recording = new Recording(fake.Server.CreateHandler());
         using var host = Build(recording, Acting);
         var runId = Guid.NewGuid().ToString();
-        var request = Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot, "chat-answer", AssistantId: Guid.NewGuid()));
+        var request = Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot, "chat-answer", AssistantId: Guid.NewGuid()));
         request.Headers.Add(FakeUsage.RunIdHeader, runId);
         request.Headers.Add(FakeUsage.StepHeader, "chat-answer");
 
@@ -99,7 +99,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         recording.Requests.Single().OnBehalfOf.ShouldBe(Chatbot.ToString("D"));
         var record = fake.Services.GetRequiredService<FakeUsage>().Records.Single(r => r.RunId == runId);
-        (record.KeyId, record.Step, record.Model).ShouldBe((Chatbot, "chat-answer", "ume/chat-eu"));
+        (record.KeyId, record.Step, record.Model).ShouldBe((Chatbot, "chat-answer", "fors/chat-eu"));
         record.ViaKeyId.ShouldNotBeNull().ShouldNotBe(Chatbot);
     }
 
@@ -108,16 +108,16 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     {
         var recording = new Recording(fake.Server.CreateHandler());
         using (var host = Build(recording, features: []))
-        using (var response = await SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot))))
+        using (var response = await SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot))))
         {
             response.StatusCode.ShouldBe(HttpStatusCode.OK);
         }
 
         using (var host = Build(recording, Acting))
         {
-            using var keyless = await SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(null)));
-            using var plain = await SendAsync(host, Post(Chat("ume/chat-eu")));
-            using var context = await SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/ume/context").For(new GatewayCall(Chatbot)));
+            using var keyless = await SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(null)));
+            using var plain = await SendAsync(host, Post(Chat("fors/chat-eu")));
+            using var context = await SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/fors/context").For(new GatewayCall(Chatbot)));
             context.StatusCode.ShouldBe(HttpStatusCode.OK);
         }
 
@@ -134,7 +134,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using (var host = Build(dropping.Server.CreateHandler(), Acting, logs: logs))
         {
             var refused = await Should.ThrowAsync<GatewayDelegationEchoException>(() =>
-                SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot, "chat-answer", AssistantId: assistant))));
+                SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot, "chat-answer", AssistantId: assistant))));
             refused.GatewayKeyId.ShouldBe(Chatbot);
         }
 
@@ -144,7 +144,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         entry.Message.ShouldContain(assistant.ToString());
 
         using var lenient = Build(dropping.Server.CreateHandler(), Acting, requireEcho: false);
-        using var passed = await SendAsync(lenient, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot)));
+        using var passed = await SendAsync(lenient, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot)));
         passed.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
@@ -158,12 +158,12 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
         if (upperCase)
         {
-            using var response = await SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot)));
+            using var response = await SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot)));
             response.StatusCode.ShouldBe(HttpStatusCode.OK);
         }
         else
         {
-            (await Should.ThrowAsync<GatewayDelegationEchoException>(() => SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot))))).Echo.ShouldBe(echo);
+            (await Should.ThrowAsync<GatewayDelegationEchoException>(() => SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot))))).Echo.ShouldBe(echo);
         }
     }
 
@@ -178,12 +178,12 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         var recording = new Recording(gateway.Server.CreateHandler());
         using var host = Build(recording, Acting);
 
-        async Task<GatewayKeyRefusedException> RefusedAsync(Guid key, string model = "ume/chat-eu", Residency ceiling = Residency.Eu) =>
+        async Task<GatewayKeyRefusedException> RefusedAsync(Guid key, string model = "fors/chat-eu", Residency ceiling = Residency.Eu) =>
             await Should.ThrowAsync<GatewayKeyRefusedException>(() => SendAsync(host, Post(Chat(model), new GatewayCall(key), ceiling)));
 
         (await RefusedAsync(Guid.NewGuid())).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("delegation_not_allowed"));
         (await RefusedAsync(Paused)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_disabled"));
-        (await RefusedAsync(OnPromOnly, "ume/chat-onprem", Residency.OnPrem)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_expired"));
+        (await RefusedAsync(OnPromOnly, "fors/chat-onprem", Residency.OnPrem)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_expired"));
         (await RefusedAsync(Revoked)).ShouldSatisfyAllConditions(e => e.Status.ShouldBe(403), e => e.Code.ShouldBe("key_revoked"));
         var budget = await RefusedAsync(Chatbot);
         (budget.Status, budget.Code, budget.GatewayKeyId).ShouldBe((402, "budget_exceeded", Chatbot));
@@ -195,7 +195,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task The_worker_key_and_an_external_only_key_share_no_residency_so_acting_is_not_allowed()
     {
         using var host = Build(fake.Server.CreateHandler(), Acting, key: FakeGatewayFactory.WorkerCredentialKey);
-        var refused = await Should.ThrowAsync<GatewayKeyRefusedException>(() => SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(ExternalOnly))));
+        var refused = await Should.ThrowAsync<GatewayKeyRefusedException>(() => SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(ExternalOnly))));
         (refused.Status, refused.Code).ShouldBe((403, "delegation_not_allowed"));
     }
 
@@ -203,10 +203,10 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task A_bad_request_on_an_acted_call_is_logged_at_error_and_returned()
     {
         var logs = new CapturingLoggerProvider();
-        var stub = new Answering(HttpStatusCode.BadRequest, """{"error":{"code":"invalid_request","message":"x-ume-on-behalf-of must be one key id"}}""");
+        var stub = new Answering(HttpStatusCode.BadRequest, """{"error":{"code":"invalid_request","message":"x-fors-on-behalf-of must be one key id"}}""");
         using var host = Build(stub, Acting, logs: logs);
 
-        using var response = await SendAsync(host, Post(Chat("ume/chat-eu"), new GatewayCall(Chatbot)));
+        using var response = await SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot)));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         stub.Calls.ShouldBe(1);
@@ -224,7 +224,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var ids = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("data").EnumerateArray()
             .Select(m => m.GetProperty("id").GetString()).ToList();
-        ids.ShouldBe(["ume/chat-standard", "ume/chat-eu"], ignoreOrder: true); // bge-m3 runs OnPrem only, outside the key's Eu
+        ids.ShouldBe(["fors/chat-standard", "fors/chat-eu"], ignoreOrder: true); // bge-m3 runs OnPrem only, outside the key's Eu
     }
 
     [Theory]
@@ -233,9 +233,9 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task The_fake_refuses_a_malformed_or_repeated_header_and_a_key_that_is_no_credential_key(string header)
     {
         using var client = fake.CreateClient();
-        using var malformed = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = new StringContent(Chat("ume/chat-eu"), Encoding.UTF8, "application/json") };
+        using var malformed = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = new StringContent(Chat("fors/chat-eu"), Encoding.UTF8, "application/json") };
         malformed.Headers.Authorization = new("Bearer", FakeGatewayFactory.ApiCredentialKey);
-        malformed.Headers.Add("x-ume-max-residency", "Eu");
+        malformed.Headers.Add("x-fors-max-residency", "Eu");
         foreach (var value in header.Split(", "))
         {
             malformed.Headers.TryAddWithoutValidation(GatewayHeaders.OnBehalfOf, value);
@@ -243,14 +243,14 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
         (await client.SendAsync(malformed, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
-        using var ordinary = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = new StringContent(Chat("ume/chat-eu"), Encoding.UTF8, "application/json") };
+        using var ordinary = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = new StringContent(Chat("fors/chat-eu"), Encoding.UTF8, "application/json") };
         ordinary.Headers.Authorization = new("Bearer", FakeGatewayFactory.EuKey);
-        ordinary.Headers.Add("x-ume-max-residency", "Eu");
+        ordinary.Headers.Add("x-fors-max-residency", "Eu");
         ordinary.Headers.Add(GatewayHeaders.OnBehalfOf, Chatbot.ToString());
         (await client.SendAsync(ordinary, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
-    /// <summary>Passes each request on and records its path, <c>x-ume-on-behalf-of</c> and the answer's status.</summary>
+    /// <summary>Passes each request on and records its path, <c>x-fors-on-behalf-of</c> and the answer's status.</summary>
     private sealed class Recording(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
         public List<(string Path, string? OnBehalfOf, HttpStatusCode Status)> Requests { get; } = [];
@@ -263,7 +263,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         }
     }
 
-    /// <summary>Answers every request itself with <paramref name="status"/>, the body, an <c>x-ume-residency</c> of Eu and the echo given.</summary>
+    /// <summary>Answers every request itself with <paramref name="status"/>, the body, an <c>x-fors-residency</c> of Eu and the echo given.</summary>
     private sealed class Answering(HttpStatusCode status, string body = "{}", string? echo = null) : HttpMessageHandler
     {
         public int Calls { get; private set; }

@@ -65,13 +65,13 @@ public sealed class EscalationMemberConverter : JsonConverter<EscalationMember>
 
 /// <summary>
 /// The escalation hand-off's summary (chat design §9.9, Decisions "Escalation hand-off"): one non-streaming call to the platform
-/// condense model at the condense ceiling (<c>x-ume-step: escalation</c>, <c>max_tokens</c> 200) from the user's last message,
+/// condense model at the condense ceiling (<c>x-fors-step: escalation</c>, <c>max_tokens</c> 200) from the user's last message,
 /// the search query when it was condensed, and one line naming the outcome; never the answer text. The output passes
 /// <see cref="Accept"/>: links and markers removed, personal identity numbers, e-mail addresses and phone numbers masked.
 /// </summary>
 public static partial class Escalation
 {
-    /// <summary>The <c>x-ume-step</c> of the call (opaque to the gateway, gateway-changes §7.1).</summary>
+    /// <summary>The <c>x-fors-step</c> of the call (opaque to the gateway, gateway-changes §7.1).</summary>
     public const string Step = "escalation";
 
     /// <summary>The default of <c>Chat:EscalationTimeout</c> (§9.9; 0 switches the summary off).</summary>

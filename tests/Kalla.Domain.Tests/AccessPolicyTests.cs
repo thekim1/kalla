@@ -25,7 +25,7 @@ public sealed class AccessPolicyTests
             new ClientEntry(IntegrationId, "Integration", ClientKinds.Integration, Classification.Internal, false, true),
             new ClientEntry(WidgetId, "Widget", ClientKinds.Widget, Classification.Public, false, true),
         }.ToDictionary(c => c.Id);
-        PublishedVersionEntry Version() => new(Guid.NewGuid(), 1, "ume/chat-eu", [CollectionLink.Whole(PublicCollection)]);
+        PublishedVersionEntry Version() => new(Guid.NewGuid(), 1, "fors/chat-eu", [CollectionLink.Whole(PublicCollection)]);
         AssistantEntry Assistant(Guid id, string level, PublishedVersionEntry? version, params AudienceEntry[] audiences) =>
             new(id, id.ToString("N"), "A", level, HistoryModes.None, AssistantStates.Active, Department, null, version, audiences);
         AudienceEntry ClientAudience(Guid client) => new(AssistantAudienceKinds.Client, client, null);

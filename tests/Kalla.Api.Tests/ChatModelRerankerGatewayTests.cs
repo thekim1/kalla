@@ -19,7 +19,7 @@ namespace Kalla.Api.Tests;
 
 /// <summary>
 /// <see cref="ChatModelReranker"/> through the services' gateway client (<see cref="Infrastructure.Gateway.ResidencyCeilingHandler"/>:
-/// the level's key, the ceiling, <c>x-ume-residency</c>) to the FakeGateway, which answers the rerank prompt deterministically
+/// the level's key, the ceiling, <c>x-fors-residency</c>) to the FakeGateway, which answers the rerank prompt deterministically
 /// (B-12; <c>FakeChatScripts.DefaultRerank</c>); and the assistant setting that turns rerank on.
 /// </summary>
 public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>
@@ -65,7 +65,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
     {
         var (reranker, host) = Build(fake);
         using var _ = host;
-        var request = new RerankRequest("bygglov altan", Passages, "ume/chat-eu", Residency.Eu, Guid.NewGuid());
+        var request = new RerankRequest("bygglov altan", Passages, "fors/chat-eu", Residency.Eu, Guid.NewGuid());
 
         var first = await reranker.ScoreAsync(request, Ct);
         var second = await reranker.ScoreAsync(request, Ct);
@@ -73,7 +73,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
         // Share of the question's words in each passage, on the 0–10 scale, returned as 0–1.
         first!.Scores.ShouldBe([0.0, 1.0, 0.5]);
         second!.Scores.ShouldBe(first.Scores);
-        first.Usage!.Model.ShouldBe("ume/chat-eu");
+        first.Usage!.Model.ShouldBe("fors/chat-eu");
         first.Usage.Step.ShouldBe(ChatModelReranker.Step);
         first.Usage.InputTokens.ShouldBeGreaterThan(0);
         first.Usage.OutputTokens.ShouldBeGreaterThan(0);
@@ -82,16 +82,16 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
     [Fact]
     public async Task The_usage_is_what_the_fake_gateway_reported_for_the_call()
     {
-        // Chat design §8.3: the tokens of the JSON body and the cost of x-ume-cost-usd, as the FakeGateway sent them (its
+        // Chat design §8.3: the tokens of the JSON body and the cost of x-fors-cost-usd, as the FakeGateway sent them (its
         // chat price: 0.15 USD per million input and 0.60 per million output tokens).
         var reported = new List<(string Cost, long Input, long Output)>();
         var (reranker, host) = Build(fake, new Reporting(reported));
         using var _ = host;
 
-        var scores = await reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "ume/chat-eu", Residency.Eu, Guid.NewGuid()), Ct);
+        var scores = await reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "fors/chat-eu", Residency.Eu, Guid.NewGuid()), Ct);
 
         var (cost, input, output) = reported.ShouldHaveSingleItem();
-        scores!.Usage.ShouldBe(new GatewayCallUsage(ChatModelReranker.Step, "ume/chat-eu", input, 0, output, decimal.Parse(cost, CultureInfo.InvariantCulture)));
+        scores!.Usage.ShouldBe(new GatewayCallUsage(ChatModelReranker.Step, "fors/chat-eu", input, 0, output, decimal.Parse(cost, CultureInfo.InvariantCulture)));
         scores.Usage!.CostUsd.ShouldBe(Math.Round((input * 0.15m + output * 0.60m) / 1_000_000m, 8));
     }
 
@@ -113,7 +113,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
         scores.Usage!.CostUsd.ShouldBe(Math.Round(input * 0.10m / 1_000_000m, 8));
     }
 
-    /// <summary>Keeps each answer's <c>x-ume-cost-usd</c> and its body's tokens, as the FakeGateway sent them.</summary>
+    /// <summary>Keeps each answer's <c>x-fors-cost-usd</c> and its body's tokens, as the FakeGateway sent them.</summary>
     private sealed class Reporting(List<(string Cost, long Input, long Output)> reported) : DelegatingHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -122,7 +122,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
             await response.Content.LoadIntoBufferAsync(cancellationToken);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             var usage = json.RootElement.GetProperty("usage");
-            reported.Add((response.Headers.GetValues("x-ume-cost-usd").Single(), usage.GetProperty("prompt_tokens").GetInt64(),
+            reported.Add((response.Headers.GetValues("x-fors-cost-usd").Single(), usage.GetProperty("prompt_tokens").GetInt64(),
                 usage.TryGetProperty("completion_tokens", out var completion) ? completion.GetInt64() : 0));
             return response;
         }
@@ -134,9 +134,9 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
         var (reranker, host) = Build(fake);
         using var _ = host;
 
-        // ume/chat-advanced runs only at External: the gateway answers 403 max_residency_not_met at Eu.
+        // fors/chat-advanced runs only at External: the gateway answers 403 max_residency_not_met at Eu.
         await Should.ThrowAsync<HttpRequestException>(() =>
-            reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "ume/chat-advanced", Residency.Eu, null), Ct));
+            reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "fors/chat-advanced", Residency.Eu, null), Ct));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
         using var _ = host;
 
         await Should.ThrowAsync<RerankOutputException>(() =>
-            reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "ume/chat-eu", Residency.Eu, null), Ct));
+            reranker.ScoreAsync(new RerankRequest("bygglov altan", Passages, "fors/chat-eu", Residency.Eu, null), Ct));
     }
 
     [Fact]

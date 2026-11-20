@@ -10,7 +10,7 @@ through `gh auth git-credential`, handbook *Environment notes*).
 ## What this is
 
 **Ume.Rag** (working name, N1) is a RAG / crawling / chatbot platform for Umeå kommun: small .NET 10 services on top
-of the team's **LLM gateway** (https://github.com/thekim1/llmgateway, `~/git/llmgateway`), as an add-on to it (Decisions
+of the team's **LLM gateway** (https://github.com/thekim1/fors, `~/git/llmgateway`), as an add-on to it (Decisions
 "Shared sign-in with the gateway"). The user owns the gateway and wants to do better than **Eneo**, a slow "kitchen
 sink" monolith. Design and code live in this repo.
 
@@ -212,7 +212,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   sign-in is not set up yet (the fake announces the feature with no address).
 - **Try the gateway's wizard locally:** in a gateway worktree, `Setup__Try=true Seed__Enabled=false
   DataApi__Enabled=false DevelopmentVolumes__Postgres=<a throwaway name>`, `aspire start --apphost
-  src/Ume.LlmGateway.AppHost/Ume.LlmGateway.AppHost.csproj`, then `npx playwright test specs/setup.spec.ts` in
+  src/Fors.AppHost/Fors.AppHost.csproj`, then `npx playwright test specs/setup.spec.ts` in
   `tests/e2e` (the gateway's `docs/local-development.md`, *Trying setup mode*). Port 5173 is taken here: set
   `ADMIN_UI_URL` to the port `aspire logs admin-ui` names and add that address's `/signin-oidc` to the `ume-admin`
   client in the bundled Keycloak.

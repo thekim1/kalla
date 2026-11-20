@@ -90,10 +90,10 @@ public static partial class FakeContent
     public const string MaxTokensHeader = "x-fake-max-tokens";
 
     /// <summary>The gateway's cost header on a complete JSON answer (gateway <c>GatewayHeaders.CostUsd</c>).</summary>
-    public const string CostHeader = "x-ume-cost-usd";
+    public const string CostHeader = "x-fors-cost-usd";
 
     /// <summary>The request header <c>1</c> that asks for the stream cost comment (gateway <c>GatewayHeaders.StreamCost</c>).</summary>
-    public const string StreamCostHeader = "x-ume-stream-cost";
+    public const string StreamCostHeader = "x-fors-stream-cost";
 
     /// <summary>The text cut to at most <paramref name="tokens"/> by <see cref="Tokens"/>, at a word boundary when there is one.</summary>
     public static string Truncate(string text, int tokens)

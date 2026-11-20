@@ -54,7 +54,7 @@ public sealed class SmokeEvaluationTests(SmokeFixture smoke) : IClassFixture<Smo
         var collection = new CollectionEntry(SmokeSet.CollectionId, "smoke", "Smoke", Guid.Empty, Classification.Public, db.ProfileId, SmokeSet.RetrievalSettings,
             DateTimeOffset.UnixEpoch, false);
         var assistant = new AssistantEntry(SmokeAssistant, Model, "Smoke", Classification.Internal, HistoryModes.None, AssistantStates.Active, Guid.Empty, null,
-            new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [CollectionLink.Whole(SmokeSet.CollectionId)]),
+            new PublishedVersionEntry(Guid.NewGuid(), 1, "fors/chat-eu", [CollectionLink.Whole(SmokeSet.CollectionId)]),
             [new AudienceEntry(AssistantAudienceKinds.Client, db.IntegrationClient, null)]);
         return snapshot with
         {

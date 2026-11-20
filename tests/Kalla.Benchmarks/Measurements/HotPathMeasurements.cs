@@ -773,7 +773,7 @@ public static class HotPathMeasurements
 
             return new AssistantVersion
             {
-                AssistantId = a.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = prompt.ToString(), NotFound = """{"sv":"Inget svar i källorna."}""",
+                AssistantId = a.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = prompt.ToString(), NotFound = """{"sv":"Inget svar i källorna."}""",
                 CollectionLinks = [.. collections.Select(CollectionLink.Whole)], CreatedAt = now, UpdatedAt = now,
             };
         }).ToList();

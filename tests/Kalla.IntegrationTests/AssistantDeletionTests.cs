@@ -130,7 +130,7 @@ public sealed class AssistantDeletionTests(RagDatabaseFixture database)
         await db.SaveChangesAsync(Ct);
         var v1 = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", State = AssistantVersionStates.Published, CreatedAt = now, UpdatedAt = now,
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", State = AssistantVersionStates.Published, CreatedAt = now, UpdatedAt = now,
             PublishedAt = now, PublishedBy = "test",
         };
         db.AssistantVersions.Add(v1);

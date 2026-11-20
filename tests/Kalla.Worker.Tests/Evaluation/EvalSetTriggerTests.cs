@@ -24,7 +24,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EvalSetTriggerTests(RagDatabaseFixture database) : IAsyncLifetime
 {
-    private const string Model = "ume/chat-onprem";
+    private const string Model = "fors/chat-onprem";
 
     private PlatformSettings? _previous;
 

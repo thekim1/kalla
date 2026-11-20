@@ -196,7 +196,7 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         return row.Id;
     }
 
-    /// <summary>An assistant with a draft on <c>ume/chat-eu</c> over an unpublished collection with one document, embedded as the FakeGateway embeds.</summary>
+    /// <summary>An assistant with a draft on <c>fors/chat-eu</c> over an unpublished collection with one document, embedded as the FakeGateway embeds.</summary>
     private async Task<Assistant> SeedAsync(Infrastructure.Persistence.RagDbContext db, string code)
     {
         await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin),
@@ -216,7 +216,7 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         };
         var draft = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
         };
         var pipeline = new Pipeline { Name = "usage-" + code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };

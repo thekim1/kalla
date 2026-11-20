@@ -131,9 +131,9 @@ Clients: `ume-rag-admin` (the admin BFF, code + PKCE), `ume-rag-api-dev` (client
 
 Every model call goes through the gateway; locally that is `Kalla.FakeGateway`
 ([`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.3). It serves 1024-dimension embeddings,
-chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and `/v1/ume/context` (the
-organisation and the assigned keys, which the admin's syncs read). Like the real gateway it requires `x-ume-max-residency` and answers
-with `x-ume-residency`. Each service has its own dev credential key, as the gateway integration *Ume.Rag* gives
+chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and `/v1/fors/context` (the
+organisation and the assigned keys, which the admin's syncs read). Like the real gateway it requires `x-fors-max-residency` and answers
+with `x-fors-residency`. Each service has its own dev credential key, as the gateway integration *Ume.Rag* gives
 (production-setup.md, *Gateway credential keys*): the service gets it as `Gateway__Key`, and the fake accepts api's and
 admin's at every ceiling and the worker's up to `Eu`, narrowing a higher ceiling to the key's residencies as the gateway
 does. Only the admin's holds the scope `organisation.read`.
@@ -144,14 +144,14 @@ the ceiling fails; there is no circuit-open 503), `fake-fail-timeout` (504 `all_
 `fake-fail-fallback` (its `OnPrem` target fails: 502 at `OnPrem`, an answer from `Eu` at `Eu`), `fake-slow`,
 `fake-wrong-residency`, `fake-wrong-residency-embed`, `fake-drained` (503 `no_eligible_provider` + `Retry-After`) and
 the stream faults `fake-stream-broken`, `fake-stream-stall`, `fake-stream-no-done`, `fake-stream-empty-deltas` and
-`fake-stream-length`. `fake-no-cost` answers without `x-ume-cost-usd` and without the stream cost comment, as a
+`fake-stream-length`. `fake-no-cost` answers without `x-fors-cost-usd` and without the stream cost comment, as a
 gateway that can't price the call (the usage is then recorded at Ume.Rag's estimate).
 
 Switches:
 - `FakeGateway:RerankEnabled` (default `false`): rerank is optional, so by default `/v1/rerank` answers 404
   `model_not_found` like a gateway without a rerank model. `true` serves `bge-reranker-v2-m3` as an `Eu` target (like
   Berget AI).
-- `FakeGateway:RequireMaxResidency` (default `true`): `false` lets a request without `x-ume-max-residency` run with
+- `FakeGateway:RequireMaxResidency` (default `true`): `false` lets a request without `x-fors-max-residency` run with
   no ceiling.
 - `FakeGateway:StrictKeyLevel` (default `true`): with one of the fake's per-level keys (`FakeGateway:Keys:<level>`,
   which the AppHost does not set), a ceiling other than the key's level answers 403 `key_level_mismatch` (fake-only).

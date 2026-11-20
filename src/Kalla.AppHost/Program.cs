@@ -349,7 +349,7 @@ if (redis is not null)
 // Every model call goes through the gateway: locally the fake one (AGENTS.md).
 if (fakeGateway is not null)
 {
-    // The admin's organisation and model syncs read /v1/ume/context and /v1/models with its credential key (admin §4.10).
+    // The admin's organisation and model syncs read /v1/fors/context and /v1/models with its credential key (admin §4.10).
     foreach (var (name, service) in new[] { ("api", api), ("worker", worker), ("admin", adminApi) })
     {
         service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway)

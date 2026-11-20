@@ -232,7 +232,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
             await db.SaveChangesAsync(Ct);
             var version = new AssistantVersion
             {
-                AssistantId = shown.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", PublishedAt = now, PublishedBy = "seed",
+                AssistantId = shown.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", PublishedAt = now, PublishedBy = "seed",
                 CreatedAt = now, UpdatedAt = now,
             };
             db.AddRange(version,
@@ -447,7 +447,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
     }
 
     private const string AdminKey = "fake-eu-key-client-checks-0123456"; // rag-admin's credential key
-    private const string Listed = "ume/chat-eu"; // the FakeGateway serves it at Eu
+    private const string Listed = "fors/chat-eu"; // the FakeGateway serves it at Eu
 
     /// <summary>
     /// Counts the gateway's <c>/v1/models</c> calls on the way to the FakeGateway, and those made while a config write holds the

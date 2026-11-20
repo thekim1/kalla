@@ -243,7 +243,7 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     }
 
     /// <summary>
-    /// The preview's embedding calls carry the job's id as <c>x-ume-run-id</c> and are counted under the payload's collection
+    /// The preview's embedding calls carry the job's id as <c>x-fors-run-id</c> and are counted under the payload's collection
     /// with the job's completion (engine design §10.6), the one usage write a preview makes.
     /// </summary>
     [Fact]

@@ -108,12 +108,12 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         using var client = gateway.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
         {
-            Content = new StringContent("""{"model":"ume/chat-eu","messages":[{"role":"user","content":"Hej"}]}""", Encoding.UTF8, "application/json"),
+            Content = new StringContent("""{"model":"fors/chat-eu","messages":[{"role":"user","content":"Hej"}]}""", Encoding.UTF8, "application/json"),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
-        request.Headers.Add("x-ume-max-residency", "Eu");
-        request.Headers.Add("x-ume-step", step);
-        request.Headers.Add("x-ume-on-behalf-of", Chatbot.ToString());
+        request.Headers.Add("x-fors-max-residency", "Eu");
+        request.Headers.Add("x-fors-step", step);
+        request.Headers.Add("x-fors-on-behalf-of", Chatbot.ToString());
         using var response = await client.SendAsync(request, Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
     }

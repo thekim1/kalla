@@ -289,7 +289,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/llmgateway/migrations:0.11.0@sha256:10d2b1fd7c7fdcfdc92e1277bf001971695b1e2296b6f2242f5941c2b39cd793}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.11.0@sha256:10d2b1fd7c7fdcfdc92e1277bf001971695b1e2296b6f2242f5941c2b39cd793}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -312,7 +312,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/llmgateway/gateway:0.11.0@sha256:e1fa9aa1c82062adf5d17fd06db7d922581cbe0bef2301302d252f0e5d073162}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.11.0@sha256:e1fa9aa1c82062adf5d17fd06db7d922581cbe0bef2301302d252f0e5d073162}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -325,12 +325,12 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/gateway.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/gateway.key
       Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
-      # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
+      # Integrations (docs/integrations.md): the admin console's address, for links in /v1/fors/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       # Rewritten by the RAG repository's build-stack.sh: adminapi's own address in this stack as the default, used
       # only while the variable is unset. Set and empty, the gateway announces no Integration API.
       Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL-https://adminapi:8443/integration/v1}
-      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md). Empty
+      # The admin console's sign-in provider, handed to integrations on /v1/fors/context (docs/integrations.md). Empty
       # hands out the authority saved in the setup wizard.
       Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
@@ -346,7 +346,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data, llm]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.Gateway.dll, --health-check]
+      test: [CMD, dotnet, Fors.Gateway.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -354,7 +354,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/llmgateway/adminapi:0.11.0@sha256:deb6b0696f36147d196a4bfde4d60d8177edfcb50a828c2065e95fb48f754a63}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.11.0@sha256:deb6b0696f36147d196a4bfde4d60d8177edfcb50a828c2065e95fb48f754a63}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
@@ -398,7 +398,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.AdminApi.dll, --health-check]
+      test: [CMD, dotnet, Fors.AdminApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -409,7 +409,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/llmgateway/dataapi:0.11.0@sha256:ef4f9885d371e1cd51a660726a813260901d4d2153dae960cbca05b3c270b369}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.11.0@sha256:ef4f9885d371e1cd51a660726a813260901d4d2153dae960cbca05b3c270b369}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
@@ -435,7 +435,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.DataApi.dll, --health-check]
+      test: [CMD, dotnet, Fors.DataApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s

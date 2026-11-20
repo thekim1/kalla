@@ -135,7 +135,7 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** "the support assistant costs $0.004 per answered ticket and $0.001 per not-found". This gives a
   basis for chargeback and for choosing between models on the gold set.
-- **Fit:** `AssistantDailyUsage` already splits cost per step from the gateway's `x-ume-cost-usd`, and outcomes are
-  stored per message. Join them on the run (`x-ume-run-id`) into a per-outcome column on the Costs page.
+- **Fit:** `AssistantDailyUsage` already splits cost per step from the gateway's `x-fors-cost-usd`, and outcomes are
+  stored per message. Join them on the run (`x-fors-run-id`) into a per-outcome column on the Costs page.
 - **Eneo:** has no per-space or per-assistant cost (`B/token_usage` routers: tenant and user only). Cost is estimated
   in the browser (`usage-page.tsx:183`).

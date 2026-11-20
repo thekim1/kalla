@@ -29,8 +29,8 @@ namespace Kalla.AdminApi.Tests;
 public sealed class ChecksAsKeyTests(AdminDatabaseFixture database, ChecksAsKeyTests.Host host) : IClassFixture<ChecksAsKeyTests.Host>
 {
     private const string AdminKey = "sk-ume-checks-as-key-0000000000000";
-    private const string AnswerModel = "ume/chat-eu";
-    private const string CondenseModel = "ume/chat-standard";
+    private const string AnswerModel = "fors/chat-eu";
+    private const string CondenseModel = "fors/chat-standard";
 
     // Assigned keys of the FakeGateway's integration, added for these tests (indexes after its five dev keys).
     private static readonly Guid AnswerOnly = new("019a0000-0000-7000-8000-00000000b0c1"); // allows only the answer model

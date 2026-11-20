@@ -74,7 +74,7 @@ Nothing in the repository changes. You set values in one of two places:
 |---|---|---|
 | The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--gateway-ca-file`) |
 | Its credential keys of the integration *Ume.Rag*, one per service (production-setup.md, *Gateway credential keys*) | `Gateway:Services:api:Key=<key>`, `Gateway:Services:admin:Key=<key>`, `Gateway:Services:worker:Key=<key>`. The AppHost stops on an unknown service | `--gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key --gateway-credential-key-file worker=rag-worker.key` |
-| The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/ume/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
+| The admin's organisation and model syncs | nothing more: they read the gateway's `/v1/fors/context` and `/v1/models` with `Gateway:Services:admin:Key`, which needs the scope `organisation.read`. The AppHost stops on `OrgSync:BaseUrl` and `OrgSync:DataApiKey`, the Data API settings of before | nothing more: the admin's key (`--gateway-credential-key-file admin=...`) with the scope `organisation.read` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | the setup wizard (`https://<admin host>/setup`, the setup code in rag-admin's log) takes the realm and the secret of `ume-rag-admin`; declared instead: `--oidc-authority https://<keycloak host>/realms/ume --set-file UME_RAG_OIDC_CLIENT_SECRET=ume-rag-admin.secret` |
 | The shared Keycloak for Open WebUI | the AppHost's `open-webui` resource | `openwebui` in `--profiles`, and the setup wizard's Open WebUI step takes the secret (declared instead: `--set-file UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=open-webui.secret`); client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--set UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME=...` sets the sign-in button's label (default *Umeå kommun*) |
 | Open WebUI's client in rag-api | created by the AppHost seed | nothing: `rag-bootstrap` generates its key and `rag-migrate` registers it as the deployment's own Open WebUI client (identity design §5.2) |
@@ -140,7 +140,7 @@ assistant's calls carry the ceiling `Eu`, read from the gateway's context.
 The AppHost forwards every `Gateway:*` value. The
 embedding profile is no secret: you create it in the admin UI after the start (§4.3).
 
-The admin's organisation and model syncs read the gateway itself (`GET /v1/ume/context`, `GET /v1/models`) with
+The admin's organisation and model syncs read the gateway itself (`GET /v1/fors/context`, `GET /v1/models`) with
 `Gateway:Services:admin:Key`; there is no Data API key. Without the scope `organisation.read` on that key the
 organisation sync keeps departments and teams as they are and the admin's gateway status says why (`degraded`). Until
 the model sync has run, the model mirror is empty and every model setting is refused (V32).

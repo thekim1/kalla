@@ -99,7 +99,7 @@ public sealed class GatewayChatClientTests
         new ChatOptions().CondenseTimeout.ShouldBe(TimeSpan.FromMilliseconds(1200));
     }
 
-    /// <summary>A gateway that answers every call with <paramref name="body"/> as <paramref name="mediaType"/>, with <c>x-ume-cost-usd</c> when given.</summary>
+    /// <summary>A gateway that answers every call with <paramref name="body"/> as <paramref name="mediaType"/>, with <c>x-fors-cost-usd</c> when given.</summary>
     private sealed class CostingGateway(string body, string mediaType, string? cost = null) : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
@@ -120,7 +120,7 @@ public sealed class GatewayChatClientTests
     [Fact]
     public async Task A_stream_asks_for_its_cost_and_ends_with_the_comments_cost_which_is_never_passed_on()
     {
-        // Chat design §8.1, §8.3, §9.1: x-ume-stream-cost: 1 on the stream; the comment just before [DONE] is the call's cost.
+        // Chat design §8.1, §8.3, §9.1: x-fors-stream-cost: 1 on the stream; the comment just before [DONE] is the call's cost.
         const string Stream = """
             data: {"choices":[{"index":0,"delta":{"content":"Hej"},"finish_reason":null}],"usage":null}
 
@@ -128,7 +128,7 @@ public sealed class GatewayChatClientTests
 
             data: {"choices":[],"usage":{"prompt_tokens":900,"completion_tokens":40,"total_tokens":940,"prompt_tokens_details":{"cached_tokens":512}}}
 
-            : ume-cost-usd=0.000123
+            : fors-cost-usd=0.000123
 
             data: [DONE]
 
@@ -137,7 +137,7 @@ public sealed class GatewayChatClientTests
         using var loggers = LoggerFactory.Create(_ => { });
         var client = new GatewayChatClient(new Clients(gateway), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
 
-        using var response = await client.OpenStreamAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 64, null, Guid.CreateVersion7(), Ct);
+        using var response = await client.OpenStreamAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 64, null, Guid.CreateVersion7(), Ct);
         var events = new List<GatewayStreamEvent>();
         await foreach (var item in client.ReadAsync(response, Ct))
         {
@@ -159,11 +159,11 @@ public sealed class GatewayChatClientTests
         var client = new GatewayChatClient(new Clients(gateway), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
         var usage = new List<GatewayCallUsage>();
 
-        var answer = await client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null, Guid.CreateVersion7(), "condense", Ct,
+        var answer = await client.CompleteAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null, Guid.CreateVersion7(), "condense", Ct,
             usage: usage.Add);
 
         (answer.Text, answer.PromptTokens, answer.CompletionTokens).ShouldBe(("Svar.", 1200, 80));
-        usage.ShouldBe([new GatewayCallUsage("condense", "ume/chat-eu", 1200, 1024, 80, 0.00012345m)]);
+        usage.ShouldBe([new GatewayCallUsage("condense", "fors/chat-eu", 1200, 1024, 80, 0.00012345m)]);
         gateway.Requests.ShouldHaveSingleItem().Headers.Contains(GatewayHeaders.StreamCost).ShouldBeFalse();
 
         // A 2xx answer without choices, or not JSON at all, was still charged: its usage first, then the failure.
@@ -172,9 +172,9 @@ public sealed class GatewayChatClientTests
             using var malformed = new CostingGateway(broken, "application/json", "0.00000100");
             var brokenClient = new GatewayChatClient(new Clients(malformed), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
             usage.Clear();
-            await Should.ThrowAsync<Exception>(() => brokenClient.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null,
+            await Should.ThrowAsync<Exception>(() => brokenClient.CompleteAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null,
                 Guid.CreateVersion7(), "follow-ups", Ct, usage: usage.Add));
-            usage.ShouldBe([new GatewayCallUsage("follow-ups", "ume/chat-eu", 0, 0, 0, 0.000001m)]);
+            usage.ShouldBe([new GatewayCallUsage("follow-ups", "fors/chat-eu", 0, 0, 0, 0.000001m)]);
         }
     }
 
@@ -197,11 +197,11 @@ public sealed class GatewayChatClientTests
         using var loggers = LoggerFactory.Create(_ => { });
         var client = new GatewayChatClient(new Clients(gateway), options, loggers.CreateLogger<GatewayChatClient>());
 
-        var answer = await client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct);
+        var answer = await client.CompleteAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct);
         answer.Text.ShouldBe("Svar.");
 
         var stream = await Should.ThrowAsync<ChatException>(() =>
-            client.OpenStreamAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), Ct));
+            client.OpenStreamAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), Ct));
         (stream.Status, stream.Code).ShouldBe((503, "upstream_unavailable"));
     }
 
@@ -214,7 +214,7 @@ public sealed class GatewayChatClientTests
         var client = new GatewayChatClient(new Clients(gateway), options, loggers.CreateLogger<GatewayChatClient>());
 
         var refused = await Should.ThrowAsync<ChatException>(() =>
-            client.CompleteAsync("ume/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct)
+            client.CompleteAsync("fors/chat-eu", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 2000, null, Guid.CreateVersion7(), "chat-answer", Ct)
                 .WaitAsync(TimeSpan.FromSeconds(10), Ct));
         (refused.Status, refused.Code).ShouldBe((503, "upstream_unavailable"));
     }

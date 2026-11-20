@@ -14,7 +14,7 @@ namespace Kalla.Api.Tests;
 /// <summary>
 /// The FakeGateway behaves like gateway release 1 as built (repo-and-deployment §4.3, gateway design §3, #390 Feature B
 /// points 1–4 and 8, checked against thekim1/llmgateway#66 and #68): keys that require a ceiling, the 400/403/503 split
-/// with <c>Retry-After</c> only on the ceiling 503, 502/504 instead of a circuit-open 503, <c>x-ume-residency</c>,
+/// with <c>Retry-After</c> only on the ceiling 503, 502/504 instead of a circuit-open 503, <c>x-fors-residency</c>,
 /// <c>/v1/models</c> by ceiling, 1024-dim embeddings, cited answers, the stream modes of chat design §18.4, the optional
 /// Cohere-compatible rerank and the catalogue.
 /// </summary>
@@ -24,14 +24,14 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
     [Theory]
     [InlineData("/v1/models", null)]
-    [InlineData("/v1/chat/completions", """{"model":"ume/chat-onprem","messages":[{"role":"user","content":"Hej"}]}""")]
+    [InlineData("/v1/chat/completions", """{"model":"fors/chat-onprem","messages":[{"role":"user","content":"Hej"}]}""")]
     [InlineData("/v1/embeddings", """{"model":"bge-m3","input":"Hej"}""")]
     [InlineData("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""")]
     public async Task Every_endpoint_requires_the_ceiling_for_dev_keys(string path, string? body)
     {
         using var rerank = Rerank();
         using var noCeiling = await SendAsync(path, body, FakeGatewayFactory.EuKey, ceiling: null, rerank);
-        await AssertErrorAsync(noCeiling, HttpStatusCode.BadRequest, "invalid_request", "This API key requires the x-ume-max-residency header (OnPrem, Eu or External).");
+        await AssertErrorAsync(noCeiling, HttpStatusCode.BadRequest, "invalid_request", "This API key requires the x-fors-max-residency header (OnPrem, Eu or External).");
 
         using var noKey = await SendAsync(path, body, key: null, ceiling: "Eu", rerank);
         await AssertErrorAsync(noKey, HttpStatusCode.Unauthorized, "invalid_api_key");
@@ -53,10 +53,10 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task A_malformed_or_empty_ceiling_is_refused_on_every_endpoint(string ceiling)
     {
         // #390 Feature B point 4: one message for every malformed value (RequestStages.ReadMaxResidency).
-        foreach (var (path, body) in new[] { ("/v1/models", (string?)null), ("/v1/chat/completions", """{"model":"ume/chat-onprem","messages":[]}""") })
+        foreach (var (path, body) in new[] { ("/v1/models", (string?)null), ("/v1/chat/completions", """{"model":"fors/chat-onprem","messages":[]}""") })
         {
             using var response = await SendAsync(path, body, FakeGatewayFactory.OnPremKey, ceiling);
-            await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-ume-max-residency must be one of OnPrem, Eu, External.");
+            await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-fors-max-residency must be one of OnPrem, Eu, External.");
         }
     }
 
@@ -69,11 +69,11 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
             c.Request.Method = "GET";
             c.Request.Path = "/v1/models";
             c.Request.Headers.Authorization = "Bearer " + FakeGatewayFactory.OnPremKey;
-            c.Request.Headers["x-ume-max-residency"] = "";
+            c.Request.Headers["x-fors-max-residency"] = "";
         }, Ct);
         context.Response.StatusCode.ShouldBe(400);
         using var json = await JsonDocument.ParseAsync(context.Response.Body, cancellationToken: Ct);
-        json.RootElement.GetProperty("error").GetProperty("message").GetString().ShouldBe("x-ume-max-residency must be one of OnPrem, Eu, External.");
+        json.RootElement.GetProperty("error").GetProperty("message").GetString().ShouldBe("x-fors-max-residency must be one of OnPrem, Eu, External.");
     }
 
     [Fact]
@@ -82,9 +82,9 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var client = fake.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/models");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.OnPremKey);
-        request.Headers.TryAddWithoutValidation("x-ume-max-residency", ["OnPrem", "OnPrem"]).ShouldBeTrue();
+        request.Headers.TryAddWithoutValidation("x-fors-max-residency", ["OnPrem", "OnPrem"]).ShouldBeTrue();
         using var response = await client.SendAsync(request, Ct);
-        await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-ume-max-residency must be one of OnPrem, Eu, External.");
+        await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-fors-max-residency must be one of OnPrem, Eu, External.");
     }
 
     [Fact]
@@ -93,9 +93,9 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         // The key's level alone applies; the drained model's 503 is the plain no_eligible_provider, without Retry-After
         // (gateway: Retry-After only on the ceiling 503).
         using var optional = fake.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c => c.AddInMemoryCollection([new("FakeGateway:RequireMaxResidency", "false")])));
-        using var answered = await SendAsync("/v1/chat/completions", Chat("ume/chat-standard"), FakeGatewayFactory.EuKey, ceiling: null, optional);
+        using var answered = await SendAsync("/v1/chat/completions", Chat("fors/chat-standard"), FakeGatewayFactory.EuKey, ceiling: null, optional);
         answered.StatusCode.ShouldBe(HttpStatusCode.OK);
-        answered.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+        answered.Headers.GetValues("x-fors-residency").ShouldBe(["Eu"]);
 
         using var drained = await SendAsync("/v1/chat/completions", Chat("fake-drained"), FakeGatewayFactory.OnPremKey, ceiling: null, optional);
         await AssertErrorAsync(drained, HttpStatusCode.ServiceUnavailable, "no_eligible_provider", "No available provider can handle the request for this alias within the key's restrictions.");
@@ -115,20 +115,20 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         // #390 Feature B point 8: only what the ceiling allows, an alias's residencies narrowed (ModelListEndpoint).
         var onPrem = await ModelsAsync(FakeGatewayFactory.OnPremKey, "OnPrem");
         onPrem.Keys.ShouldContain("bge-m3");
-        onPrem.Keys.ShouldContain("ume/chat-onprem");
-        onPrem["ume/chat-standard"].ShouldBe(["OnPrem"]);
-        onPrem.Keys.ShouldNotContain("ume/chat-eu");
-        onPrem.Keys.ShouldNotContain("ume/chat-advanced");
+        onPrem.Keys.ShouldContain("fors/chat-onprem");
+        onPrem["fors/chat-standard"].ShouldBe(["OnPrem"]);
+        onPrem.Keys.ShouldNotContain("fors/chat-eu");
+        onPrem.Keys.ShouldNotContain("fors/chat-advanced");
         onPrem.Keys.ShouldNotContain("fake-drained"); // its in-ceiling target is drained
 
         var eu = await ModelsAsync(FakeGatewayFactory.EuKey, "Eu");
-        eu["ume/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
-        eu["ume/chat-eu"].ShouldBe(["Eu"]);
-        eu.Keys.ShouldNotContain("ume/chat-advanced");
+        eu["fors/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
+        eu["fors/chat-eu"].ShouldBe(["Eu"]);
+        eu.Keys.ShouldNotContain("fors/chat-advanced");
 
         var external = await ModelsAsync(FakeGatewayFactory.ExternalKey, "External");
-        external["ume/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
-        external["ume/chat-advanced"].ShouldBe(["External"]);
+        external["fors/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
+        external["fors/chat-advanced"].ShouldBe(["External"]);
         external["fake-drained"].ShouldBe(["External"]);
     }
 
@@ -139,7 +139,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var models = json.RootElement.GetProperty("data").EnumerateArray().ToDictionary(m => m.GetProperty("id").GetString()!, m => m.Clone());
 
-        var alias = models["ume/chat-standard"].GetProperty("ume");
+        var alias = models["fors/chat-standard"].GetProperty("ume");
         alias.GetProperty("type").GetString().ShouldBe("alias");
         alias.GetProperty("kind").GetString().ShouldBe("Chat");
         var deployment = models["bge-m3"];
@@ -153,9 +153,9 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     public async Task No_target_within_the_ceiling_is_403_and_a_drained_one_is_503_with_retry_after()
     {
         // #390 Feature B point 2, with the gateway's messages (GatewayError.MaxResidencyNotMet, NoProviderWithin).
-        using var notMet = await ChatAsync("ume/chat-eu", "Hej");
+        using var notMet = await ChatAsync("fors/chat-eu", "Hej");
         await AssertErrorAsync(notMet, HttpStatusCode.Forbidden, "max_residency_not_met",
-            "No provider for 'ume/chat-eu' is configured at or below the residency 'OnPrem' that the request allows.");
+            "No provider for 'fors/chat-eu' is configured at or below the residency 'OnPrem' that the request allows.");
         notMet.Headers.RetryAfter.ShouldBeNull();
 
         using var drained = await ChatAsync("fake-drained", "Hej");
@@ -179,10 +179,10 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         // Its OnPrem target fails: at OnPrem nothing else is within the ceiling, so 502; at Eu the gateway falls back to Eu.
         using var onPrem = await ChatAsync("fake-fail-fallback", "Hej");
         await AssertErrorAsync(onPrem, HttpStatusCode.BadGateway, "all_providers_failed");
-        onPrem.Headers.Contains("x-ume-residency").ShouldBeFalse();
+        onPrem.Headers.Contains("x-fors-residency").ShouldBeFalse();
         using var eu = await ChatAsync("fake-fail-fallback", "Hej", FakeGatewayFactory.EuKey, "Eu");
         eu.StatusCode.ShouldBe(HttpStatusCode.OK);
-        eu.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+        eu.Headers.GetValues("x-fors-residency").ShouldBe(["Eu"]);
     }
 
     [Fact]
@@ -199,29 +199,29 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         error.GetProperty("request_id").GetString().ShouldBe(requestId);
         error.GetProperty("param").ValueKind.ShouldBe(JsonValueKind.Null);
 
-        using var wrongKind = await SendAsync("/v1/embeddings", """{"model":"ume/chat-onprem","input":"x"}""", FakeGatewayFactory.OnPremKey, "OnPrem");
-        await AssertErrorAsync(wrongKind, HttpStatusCode.BadRequest, "invalid_request", "The model 'ume/chat-onprem' cannot be used with this endpoint.");
+        using var wrongKind = await SendAsync("/v1/embeddings", """{"model":"fors/chat-onprem","input":"x"}""", FakeGatewayFactory.OnPremKey, "OnPrem");
+        await AssertErrorAsync(wrongKind, HttpStatusCode.BadRequest, "invalid_request", "The model 'fors/chat-onprem' cannot be used with this endpoint.");
     }
 
     [Fact]
     public async Task Answers_carry_their_residency_and_wrong_residency_lies_about_it()
     {
-        using var standard = await ChatAsync("ume/chat-standard", "Hej", key: FakeGatewayFactory.EuKey, ceiling: "Eu");
-        standard.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+        using var standard = await ChatAsync("fors/chat-standard", "Hej", key: FakeGatewayFactory.EuKey, ceiling: "Eu");
+        standard.Headers.GetValues("x-fors-residency").ShouldBe(["Eu"]);
 
-        using var onPrem = await ChatAsync("ume/chat-standard", "Hej");
-        onPrem.Headers.GetValues("x-ume-residency").ShouldBe(["OnPrem"]);
+        using var onPrem = await ChatAsync("fors/chat-standard", "Hej");
+        onPrem.Headers.GetValues("x-fors-residency").ShouldBe(["OnPrem"]);
 
         using var wrong = await ChatAsync("fake-wrong-residency", "Hej");
         wrong.StatusCode.ShouldBe(HttpStatusCode.OK);
-        wrong.Headers.GetValues("x-ume-residency").ShouldBe(["External"]);
+        wrong.Headers.GetValues("x-fors-residency").ShouldBe(["External"]);
     }
 
     [Fact]
     public async Task A_chat_answer_echoes_the_question_and_cites_the_sources_in_its_context()
     {
         using var response = await SendAsync("/v1/chat/completions", """
-            {"model":"ume/chat-onprem","messages":[
+            {"model":"fors/chat-onprem","messages":[
               {"role":"system","content":"Källor: [1] Bygglov ... [2] Avgifter ..."},
               {"role":"user","content":"Vad kostar bygglov?"}]}
             """, FakeGatewayFactory.OnPremKey, "OnPrem");
@@ -237,7 +237,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task A_stream_sends_words_a_usage_only_final_chunk_and_done()
     {
-        var events = await StreamAsync("ume/chat-onprem", includeUsage: true);
+        var events = await StreamAsync("fors/chat-onprem", includeUsage: true);
         events[^1].ShouldBe("[DONE]");
         using var usage = JsonDocument.Parse(events[^2]);
         usage.RootElement.GetProperty("choices").GetArrayLength().ShouldBe(0);
@@ -266,7 +266,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         var question = string.Join(' ', Enumerable.Repeat("Hur lång får en altan vara utan bygglov i Umeå?", 20));
         string Body(int? maxTokens) => JsonSerializer.Serialize(new Dictionary<string, object?>
         {
-            ["model"] = "ume/chat-onprem", ["messages"] = new[] { new { role = "user", content = question } }, ["max_tokens"] = maxTokens,
+            ["model"] = "fors/chat-onprem", ["messages"] = new[] { new { role = "user", content = question } }, ["max_tokens"] = maxTokens,
         }.Where(p => p.Value is not null).ToDictionary());
 
         using var open = await SendAsync("/v1/chat/completions", Body(null), FakeGatewayFactory.OnPremKey, "OnPrem");
@@ -306,7 +306,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var bytes = Convert.FromBase64String(json.RootElement.GetProperty("data")[0].GetProperty("embedding").GetString()!);
         System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes).ToArray().ShouldBe(floats);
-        response.Headers.GetValues("x-ume-residency").ShouldBe(["OnPrem"]);
+        response.Headers.GetValues("x-fors-residency").ShouldBe(["OnPrem"]);
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
             {"model":"bge-reranker-v2-m3","query":"bygglov avgift","documents":["Matsedel",{"text":"Avgift för bygglov"},"Bygglov"],"top_n":2}
             """, FakeGatewayFactory.EuKey, "Eu", rerank);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        response.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+        response.Headers.GetValues("x-fors-residency").ShouldBe(["Eu"]);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var results = json.RootElement.GetProperty("results");
         results.GetArrayLength().ShouldBe(2);
@@ -346,8 +346,8 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var noDocuments = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"bygglov","documents":[]}""", FakeGatewayFactory.EuKey, "Eu", rerank);
         await AssertErrorAsync(noDocuments, HttpStatusCode.BadRequest, "invalid_request");
 
-        using var chatModel = await SendAsync("/v1/rerank", """{"model":"ume/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu", rerank);
-        await AssertErrorAsync(chatModel, HttpStatusCode.BadRequest, "invalid_request", "The model 'ume/chat-eu' cannot be used with this endpoint.");
+        using var chatModel = await SendAsync("/v1/rerank", """{"model":"fors/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu", rerank);
+        await AssertErrorAsync(chatModel, HttpStatusCode.BadRequest, "invalid_request", "The model 'fors/chat-eu' cannot be used with this endpoint.");
 
         using var onChat = await SendAsync("/v1/chat/completions", Chat("bge-reranker-v2-m3"), FakeGatewayFactory.EuKey, "Eu", rerank);
         await AssertErrorAsync(onChat, HttpStatusCode.BadRequest, "invalid_request");
@@ -368,7 +368,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var unknown = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
         await AssertErrorAsync(unknown, HttpStatusCode.NotFound, "model_not_found");
 
-        using var chatModel = await SendAsync("/v1/rerank", """{"model":"ume/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
+        using var chatModel = await SendAsync("/v1/rerank", """{"model":"fors/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
         await AssertErrorAsync(chatModel, HttpStatusCode.BadRequest, "invalid_request");
 
         (await ModelsAsync(FakeGatewayFactory.ExternalKey, "External")).Keys.ShouldNotContain("bge-reranker-v2-m3");
@@ -376,7 +376,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var enabled = Rerank();
         using var enabledClient = enabled.CreateClient();
         enabledClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.ApiCredentialKey);
-        enabledClient.DefaultRequestHeaders.Add("x-ume-max-residency", "External");
+        enabledClient.DefaultRequestHeaders.Add("x-fors-max-residency", "External");
         (await enabledClient.GetStringAsync("/v1/models", Ct)).ShouldContain("\"kind\":\"Rerank\"");
     }
 
@@ -385,10 +385,10 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     {
         // Gateway-changes §5.4: the cost of a complete JSON answer, eight decimals; the fake's prices per million tokens are
         // chat 0.15 in and 0.60 out, embeddings 0.02, rerank 0.10 (FakeCatalog.PriceOf).
-        using var chat = await ChatAsync("ume/chat-onprem", "Hur söker jag bygglov för en altan?");
+        using var chat = await ChatAsync("fors/chat-onprem", "Hur söker jag bygglov för en altan?");
         var chatUsage = (await chat.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage");
         Cost(chat).ShouldBe(Usd((chatUsage.GetProperty("prompt_tokens").GetInt64() * 0.15m + chatUsage.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m));
-        chat.Headers.GetValues("x-ume-cost-usd").Single().ShouldMatch(@"^\d+\.\d{8}$");
+        chat.Headers.GetValues("x-fors-cost-usd").Single().ShouldMatch(@"^\d+\.\d{8}$");
 
         using var embedding = await SendAsync("/v1/embeddings", """{"model":"bge-m3","input":["Ansök om bygglov","Matsedel"]}""", FakeGatewayFactory.OnPremKey, "OnPrem");
         var embeddingTokens = (await embedding.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage").GetProperty("prompt_tokens").GetInt64();
@@ -404,19 +404,19 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task A_stream_asked_for_its_cost_ends_with_the_comment_just_before_done_and_only_then()
     {
-        // Gateway-changes §5.4: x-ume-stream-cost exactly "1" → ": ume-cost-usd=<usd>" (six decimals) before data: [DONE].
-        var events = await RawStreamAsync("ume/chat-onprem", streamCost: "1");
+        // Gateway-changes §5.4: x-fors-stream-cost exactly "1" → ": fors-cost-usd=<usd>" (six decimals) before data: [DONE].
+        var events = await RawStreamAsync("fors/chat-onprem", streamCost: "1");
         events[^1].ShouldBe("data: [DONE]");
-        events[^2].ShouldStartWith(": ume-cost-usd=");
+        events[^2].ShouldStartWith(": fors-cost-usd=");
         using var usage = JsonDocument.Parse(events[^3]["data: ".Length..]);
         var tokens = usage.RootElement.GetProperty("usage");
         var cost = (tokens.GetProperty("prompt_tokens").GetInt64() * 0.15m + tokens.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m;
-        events[^2].ShouldBe(": ume-cost-usd=" + decimal.Round(cost, 6).ToString("0.000000", CultureInfo.InvariantCulture));
+        events[^2].ShouldBe(": fors-cost-usd=" + decimal.Round(cost, 6).ToString("0.000000", CultureInfo.InvariantCulture));
         events.Count(e => e.StartsWith(':')).ShouldBe(1);
 
         foreach (var other in new[] { null, "0", "true", "01" })
         {
-            (await RawStreamAsync("ume/chat-onprem", streamCost: other)).ShouldNotContain(e => e.StartsWith(':'), $"x-ume-stream-cost: {other}");
+            (await RawStreamAsync("fors/chat-onprem", streamCost: other)).ShouldNotContain(e => e.StartsWith(':'), $"x-fors-stream-cost: {other}");
         }
     }
 
@@ -425,7 +425,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     {
         using var json = await ChatAsync("fake-no-cost", "Hej");
         json.StatusCode.ShouldBe(HttpStatusCode.OK);
-        json.Headers.Contains("x-ume-cost-usd").ShouldBeFalse();
+        json.Headers.Contains("x-fors-cost-usd").ShouldBeFalse();
 
         var events = await RawStreamAsync("fake-no-cost", streamCost: "1");
         events[^1].ShouldBe("data: [DONE]");
@@ -441,25 +441,25 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     {
         // FakeGateway:CachedInputTokens: usage.prompt_tokens_details.cached_tokens (at most the prompt), priced at 0.075.
         using var cached = fake.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c => c.AddInMemoryCollection([new("FakeGateway:CachedInputTokens", "4")])));
-        using var response = await SendAsync("/v1/chat/completions", Chat("ume/chat-onprem"), FakeGatewayFactory.OnPremKey, "OnPrem", cached);
+        using var response = await SendAsync("/v1/chat/completions", Chat("fors/chat-onprem"), FakeGatewayFactory.OnPremKey, "OnPrem", cached);
         var usage = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage");
         var prompt = usage.GetProperty("prompt_tokens").GetInt64();
         var cachedTokens = usage.GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64();
         cachedTokens.ShouldBe(Math.Min(4, prompt));
         Cost(response).ShouldBe(Usd(((prompt - cachedTokens) * 0.15m + cachedTokens * 0.075m + usage.GetProperty("completion_tokens").GetInt64() * 0.60m) / 1_000_000m));
 
-        var events = await RawStreamAsync("ume/chat-onprem", streamCost: "1", cached);
+        var events = await RawStreamAsync("fors/chat-onprem", streamCost: "1", cached);
         using var chunk = JsonDocument.Parse(events[^3]["data: ".Length..]);
         chunk.RootElement.GetProperty("usage").GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64()
             .ShouldBe(Math.Min(4, chunk.RootElement.GetProperty("usage").GetProperty("prompt_tokens").GetInt64()));
 
         // Unscripted, nothing is cached.
-        using var plain = await ChatAsync("ume/chat-onprem", "Hej");
+        using var plain = await ChatAsync("fors/chat-onprem", "Hej");
         (await plain.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("usage").GetProperty("prompt_tokens_details").GetProperty("cached_tokens").GetInt64().ShouldBe(0);
     }
 
     private static decimal Cost(HttpResponseMessage response) =>
-        decimal.Parse(response.Headers.GetValues("x-ume-cost-usd").Single(), CultureInfo.InvariantCulture);
+        decimal.Parse(response.Headers.GetValues("x-fors-cost-usd").Single(), CultureInfo.InvariantCulture);
 
     private static decimal Usd(decimal usd) => Math.Round(usd, 8, MidpointRounding.AwayFromZero);
 
@@ -482,7 +482,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task The_data_api_catalogue_is_gone()
     {
-        // B-35: the organisation is in /v1/ume/context and the models' facts on /v1/models (FakeGatewayContractTests).
+        // B-35: the organisation is in /v1/fors/context and the models' facts on /v1/models (FakeGatewayContractTests).
         using var client = fake.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.AdminCredentialKey);
         foreach (var path in new[] { "departments", "teams", "providers", "models", "prices" })
@@ -514,17 +514,17 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
         if (ceiling is not null)
         {
-            request.Headers.TryAddWithoutValidation("x-ume-max-residency", ceiling);
+            request.Headers.TryAddWithoutValidation("x-fors-max-residency", ceiling);
         }
 
         if (onBehalfOf is not null)
         {
-            request.Headers.Add("x-ume-on-behalf-of", onBehalfOf);
+            request.Headers.Add("x-fors-on-behalf-of", onBehalfOf);
         }
 
         if (streamCost is not null)
         {
-            request.Headers.Add("x-ume-stream-cost", streamCost);
+            request.Headers.Add("x-fors-stream-cost", streamCost);
         }
 
         return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Ct);
@@ -555,7 +555,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         return choices.GetArrayLength() > 0 && choices[0].GetProperty("delta").TryGetProperty("content", out var c) ? c.GetString() ?? "" : "-";
     }
 
-    /// <summary>The listed models and their residencies (an alias's <c>ume.residencies</c>, a deployment's <c>ume.residency</c>).</summary>
+    /// <summary>The listed models and their residencies (an alias's <c>fors.residencies</c>, a deployment's <c>fors.residency</c>).</summary>
     private async Task<Dictionary<string, string[]>> ModelsAsync(string key, string ceiling, WebApplicationFactory<fakegateway::Program>? factory = null)
     {
         using var response = await SendAsync("/v1/models", null, key, ceiling, factory);

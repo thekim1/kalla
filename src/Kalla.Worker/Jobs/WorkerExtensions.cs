@@ -81,7 +81,7 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<ContentMaintenance>();
         builder.Services.TryAddSingleton<WorkerIdentity>();
         builder.Services.TryAddSingleton<RunningJobs>();
-        // The mirror's prices for the estimate of a model call without x-ume-cost-usd (engine design §10.6).
+        // The mirror's prices for the estimate of a model call without x-fors-cost-usd (engine design §10.6).
         builder.Services.TryAddSingleton<IGatewayModelPrices, PostgresGatewayModelPrices>();
         builder.Services.TryAddSingleton<JobMetrics>();
         // What registration, cancel-run and maintenance need from the engine (the rest is AddRagEngine's).

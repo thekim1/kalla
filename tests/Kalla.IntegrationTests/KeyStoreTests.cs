@@ -87,7 +87,7 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
     {
         using var host = await StartApiAsync();
         var store = host.Services.GetRequiredService<KeyStore>();
-        (await store.FindAsync("ume-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc", Ct)).ShouldBeNull();
+        (await store.FindAsync("fors-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc", Ct)).ShouldBeNull();
         (await store.FindAsync(null, Ct)).ShouldBeNull();
         (await store.FindAsync(Hasher.Generate().PlainText, Ct)).ShouldBeNull();
     }

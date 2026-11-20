@@ -1,7 +1,7 @@
 namespace Kalla.Infrastructure.Gateway;
 
 /// <summary>
-/// <c>GET /v1/ume/context</c> as the gateway's contract describes it (<c>ForsContext</c>, <c>contracts/gateway/integrations.json</c>
+/// <c>GET /v1/fors/context</c> as the gateway's contract describes it (<c>ForsContext</c>, <c>contracts/gateway/integrations.json</c>
 /// at gateway <c>v0.10.0</c>; gateway-changes §5.5), with the fields Källa reads. Unknown fields are ignored: the gateway
 /// adds fields, features and scopes over time.
 /// </summary>

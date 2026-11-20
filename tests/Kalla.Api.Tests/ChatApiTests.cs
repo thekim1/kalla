@@ -501,7 +501,7 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         var bygg = snapshot.Assistants[db.AssistantId];
         snapshot = snapshot with
         {
-            ChatSettings = """{"condenseModel":"ume/chat-eu","notFound":{"sv":"Plattformens svar: inget hittades."}}""",
+            ChatSettings = """{"condenseModel":"fors/chat-eu","notFound":{"sv":"Plattformens svar: inget hittades."}}""",
             Assistants = new Dictionary<Guid, AssistantEntry> { [db.AssistantId] = bygg with { Published = bygg.Published! with { NotFound = "{}" } } },
         };
         await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web =>

@@ -50,10 +50,10 @@ Measured on `main` at `81bed53c` (v0.5.1):
 
 **What the gateway gives** (read at `origin/main` = v0.10.1, not the checked-out tree):
 
-- `/v1/ume/context` has `gateway.admin_url` (from the gateway's `UME_ADMIN_PUBLIC_URL`), the credential key's
+- `/v1/fors/context` has `gateway.admin_url` (from the gateway's `UME_ADMIN_PUBLIC_URL`), the credential key's
   `allowed_residencies` and `require_max_residency`, departments with `member_groups`, teams and assigned keys. It has
   **no** Integration API URL, OIDC settings, role mapping or organisation name.
-- `/v1/models` gives each model's `ume.kind` (`Embedding` among them), residency and `context_window`, but **no
+- `/v1/models` gives each model's `fors.kind` (`Embedding` among them), residency and `context_window`, but **no
   embedding dimensions**.
 - The Integration API (`/integration/v1/usage`, `/budgets`, scope `usage.read`) is served **only by adminapi**, which
   isn't on the `llm` network. That is why the variable exists.
@@ -61,7 +61,7 @@ Measured on `main` at `81bed53c` (v0.5.1):
   gateway admin): there is **no machine-to-machine path**, no bootstrap token and no seeding. The gateway's
   `bootstrap.sh` makes certificates and passwords only.
 - The gateway enforces a credential key's residencies server-side (the effective set is the assigned key's ∩ the
-  credential key's; `x-ume-max-residency` only narrows).
+  credential key's; `x-fors-max-residency` only narrows).
 - The gateway's own group→role mapping is environment-only, like Ume.Rag's. Its Keycloak realm import takes Ume.Rag's
   clients from `rag-additions.json` in its additions directory.
 
@@ -152,7 +152,7 @@ template for all five host names.
 | G1 (llmgateway#87) | **Integration manifest:** the gateway reads a declared integration (name, owner team code, credential keys with scopes, residencies, address list) at migration or start, creates it if absent (and the owner team if the manifest names one that doesn't exist), and writes each new key's secret to a file in a volume the stack shares; it never rewrites an existing key. A machine path that needs no admin session | C7, D8 |
 | G2 (llmgateway#88) | A one-step "Add integration *Ume.Rag*" in the gateway's admin: the integration with its three credential keys, scopes and residencies preset, the three secrets shown once together | D8, Compose deployments |
 | G3 (not asked) | Optional: an embedding model's dimensions in `/v1/models` (`ume.dimensions`) | C5 (measuring is enough without it) |
-| G4 (llmgateway#89) | The organisation name from the gateway's branding in `/v1/ume/context` (`gateway.organisation_name`) | D5 |
+| G4 (llmgateway#89) | The organisation name from the gateway's branding in `/v1/fors/context` (`gateway.organisation_name`) | D5 |
 | G5 (llmgateway#90) | The Integration API also on the gateway host (`https://gateway:8443/integration/v1`), same auth and rate limit | D7 |
 
 The contract is the gateway's `docs/openapi/integrations.json` and changes by addition only (Decisions "Gateway keys"),
@@ -173,7 +173,7 @@ Small steps in order; each is one PR or less. Streams by `.github/stream-ownersh
 | C4 | Open WebUI's client automatic (D3): key generated, client upserted by rag-migrate, rag-api finds it by kind, the UI shows it as deployment-managed | `src/Kalla.MigrationService/`, `src/Kalla.Api/` (b); bootstrap, template, `init-deployment.sh` (a); the client page's text (b) | A fresh stack with `openwebui` answers a chat through Open WebUI with no client created by hand; `UME_RAG_OPENWEBUI_API_KEY`/`_CLIENT_ID` and `--openwebui-api-key-file`/`--openwebui-rag-client-id` gone | b, then a | D3 |
 | C5 | The embedding profile created in the admin UI: create endpoint with measured dimensions, the picker, a first-run checklist item; the seed and its five variables removed | `src/Kalla.AdminApi/` (b), `src/admin-ui/src/platform/` (a), `src/Kalla.MigrationService/` (b), deploy files (a) | On a fresh stack a platform admin creates the profile from the gateway's embedding model and the canary passes; no `EMBEDDING` variable left | b, then a | – |
 | C6 | The feedback service account's key automatic: spike at Open WebUI v0.12.5 first (which route works with password sign-in off), then the route it picks | spike in the scratchpad; then deploy files (a) or `src/Kalla.Api/` (b) | Feedback from Open WebUI reaches Ume.Rag on a fresh stack with nothing done by hand; `UME_RAG_OPENWEBUI_ADMIN_API_KEY` and `_PASSWORD_AUTH` gone | a or b | spike |
-| C7 | Gateway credential keys automatic (G1). **As the gateway accepted it (#580, 2026-11-14):** the gateway's MigrationService provisions the integration from a manifest, create-only (an existing key is never changed or re-issued; differences are logged), and writes the keys to a dedicated volume, not `ume-certs`; rag-bootstrap copies them from there. Rotation stays in the gateway's admin UI. The variables stay only for a gateway elsewhere. The one-step add (G2, llmgateway#88) is generic with a preset: Ume.Rag owns `deploy/integration-presets/ume-rag.json` in the gateway repo and sends changes there | `deploy/portainer/` | A fresh stack reaches `act-as-key` with no key pasted | a | G1 released and pinned |
+| C7 | Gateway credential keys automatic (G1). **As the gateway accepted it (#580, 2026-11-14):** the gateway's MigrationService provisions the integration from a manifest, create-only (an existing key is never changed or re-issued; differences are logged), and writes the keys to a dedicated volume, not `ume-certs`; rag-bootstrap copies them from there. Rotation stays in the gateway's admin UI. The variables stay only for a gateway elsewhere. The one-step add (G2, llmgateway#88) is generic with a preset: Ume.Rag owns `deploy/integration-presets/kalla.json` in the gateway repo and sends changes there | `deploy/portainer/` | A fresh stack reaches `act-as-key` with no key pasted | a | G1 released and pinned |
 | C8 | Optional TLS proxy profile (deploy-ease 4, D9): `proxy` in `COMPOSE_PROFILES` fronts the five host names with the operator's certificates | `deploy/portainer/`, `deploy/proxy/`, `docs/portainer.md` | C0's boot test also runs with `proxy` and reaches each host by name | a | D9 |
 | C9 | Residency ceiling from the gateway (D1): every reader takes it per use from the context; the variable and `Gateway:MaxResidency` removed; Decisions and identity §4.7 updated by main first | `src/Kalla.Infrastructure/Gateway/`, readers in Api/AdminApi (b); deploy files (a) | With a credential key limited to `OnPrem`+`Eu` no call sends `External`; before the first context every call is `OnPrem` | b | D1 |
 | C10 | Role groups as a setting (D2): `Settings.Identity.RoleGroups` with its page; sign-in reads it per sign-in; four variables removed | `src/Kalla.AdminApi/`, settings model (b); the settings page (a) | A platform admin maps a group and a new sign-in gets the role without a restart; the break-glass still works | b, then a | D2 |

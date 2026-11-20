@@ -16,7 +16,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup8.Name)]
 public sealed class GatewayKeyRulesTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
 {
-    private const string AnswerModel = "ume/chat-eu";
+    private const string AnswerModel = "fors/chat-eu";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

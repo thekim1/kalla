@@ -31,7 +31,7 @@ to it.
 
 | Area | Gateway source | Here |
 |---|---|---|
-| OIDC code + PKCE BFF, server-side cookie session, CSRF, 8 h / 12 h sessions | `src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
+| OIDC code + PKCE BFF, server-side cookie session, CSRF, 8 h / 12 h sessions | `src/Fors.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
 | Claim mapping (`roles`, `departmentCodes`, `teamCodes`, group → role) | `AdminAuthentication.cs:18-65`, `AdminOptions.cs:107-131` | §1.3 (copy) |
 | Department scope from `departmentCodes` matched on cost-centre code | `AdminContext.cs:81-90`, `docs/identity-and-roles.md:26-31` | §1.3, §2 (copy + feature C) |
 | Virtual keys: HMAC + pepper, cache incl. negative cache, failure buckets, per-address throttle, 24 h grace, audited reveal | `Domain/Services/VirtualKeyHasher.cs`, `Gateway/Pipeline/KeyAuthenticator.cs`, `AuthFailureRecorder.cs`, `AuthFailureThrottle.cs`, `Domain/Services/KeyRotation.cs`, `AdminApi/KeyEndpoints.cs:79-133` | §6 (adapt) |
@@ -78,7 +78,7 @@ to it.
 
 ### 1.2 Class map
 
-| Gateway (`Ume.LlmGateway.AdminApi`) | Ume.Rag (`Kalla.AdminApi`) | How |
+| Gateway (`Fors.AdminApi`) | Ume.Rag (`Kalla.AdminApi`) | How |
 |---|---|---|
 | `AdminAuthentication.ApplyClaimMapping`, `CopyClaims` (`AdminAuthentication.cs:18-65`) | same | copy |
 | `AdminAuthentication.AddAdminAuthentication` (`:71-174`) | same | adapt: cookie names (below), policies for `rag-*` roles, `OnTokenValidated` adds §1.7 and §2.3 |
@@ -220,7 +220,7 @@ may sign in to Open WebUI is open (§5.3, §16).
 ## 2. Feature C: department scope from member groups (both systems, claims only)
 
 **Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/llmgateway#85, 2026-11-12): each
-department of `GET /v1/ume/context` carries `member_groups` under the scope `organisation.read` (feature
+department of `GET /v1/fors/context` carries `member_groups` under the scope `organisation.read` (feature
 `member-groups`). Department scope comes from the `departmentCodes` claim **plus the mirrored member groups**, matched
 against the `groups` claim by the resolver (§2.3). The user chose to wait for the gateway rather than build another
 source (2026-11-12), so the interim hand entry on Ume.Rag's department record goes with the sync that reads them
@@ -232,10 +232,10 @@ gateway (one value scopes the user in both systems), and a member group is a Key
 - **Gateway (source of truth)**: `Department` (`Domain/Entities/Entities.cs:8-19`) gains `MemberGroups`
   (`varchar(256)[]`, default empty), edited by gateway admins on the *Organisation* page; every change is an audit
   entry (`admin.change`).
-- **Gateway context**: each department in `GET /v1/ume/context` carries `member_groups` under the scope
+- **Gateway context**: each department in `GET /v1/fors/context` carries `member_groups` under the scope
   `organisation.read` (feature `member-groups`, gateway v0.10.0; gateway-changes §5.5).
 - **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
-  The admin API's `OrgSync` job reads departments and teams from `GET /v1/ume/context` every **5 minutes** and on
+  The admin API's `OrgSync` job reads departments and teams from `GET /v1/fors/context` every **5 minutes** and on
   demand (*Sync now* on our organisation page), with `rag-admin`'s credential key, which holds the scope
   `organisation.read` (gateway design §5.5, admin design §4.10); there is no Data API key. The credential key needs no
   IdP registration, which keeps the "no registration before the pilot" rule (plan §2). Only changed rows are written,
@@ -314,7 +314,7 @@ admins (who need no departments) are never locked out.
    `OnTokenValidated` after `ApplyClaimMapping` (`AdminAuthentication.cs:123-127`).
 4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
    (tenant/guest refusals).
-5. Integration context: `member_groups` on each department of `GET /v1/ume/context` under `organisation.read` (teams
+5. Integration context: `member_groups` on each department of `GET /v1/fors/context` under `organisation.read` (teams
    already carry `code`). Built in v0.10.0 (thekim1/llmgateway#85).
 6. `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
@@ -536,14 +536,14 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 `MaxResidency` comes from the **level of the data in the call** (platform plan §6), not from the client, and is
 **always explicit**:
 
-| Effective level | `x-ume-max-residency` |
+| Effective level | `x-fors-max-residency` |
 |---|---|
 | `public` | `External` (the worker: `Eu`) |
 | `internal` | `Eu` |
 | `sensitive` | `OnPrem` |
 
 **The gateway sets each service's maximum** (Decisions "Residency per level"; M-17 C9): the highest of its credential
-key's `allowed_residencies` in its own `GET /v1/ume/context` (an empty list allows every residency, `External`; a list
+key's `allowed_residencies` in its own `GET /v1/fors/context` (an empty list allows every residency, `External`; a list
 with no value Ume.Rag knows gives `OnPrem`), lowered to the service's fixed maximum (the worker's `Eu`). There is no
 residency knob in Ume.Rag's configuration. Every call's ceiling is `min(ForLevel(level), maximum)`: chat (and its
 condense call), the admin's V8 `/v1/models` check, model pickers and test panel, and the worker's evaluation. Register
@@ -570,24 +570,24 @@ name, is never changed, a difference is only logged. It writes each new key's se
 `UME_RAG_*_GATEWAY_KEY` wins over the file (keys made by hand, or a gateway elsewhere). Rotation is in the gateway's
 admin (with a grace period), then deleting the key's file and updating the stack: a missing file is written again from
 the key's stored secret (audited as a reveal). Compose and Kubernetes take the keys from files as before
-(`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/ume-rag.json`
+(`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/kalla.json`
 is Ume.Rag's to change (thekim1/llmgateway#95: rag-api and rag-admin limited to `OnPrem`+`Eu` too).
 
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
-assistant or a knowledge base that has a `GatewayKeyId` also sends `x-ume-on-behalf-of: <that key id>` (cost-attribution
+assistant or a knowledge base that has a `GatewayKeyId` also sends `x-fors-on-behalf-of: <that key id>` (cost-attribution
 §4.1 says which object a call belongs to); a call without an object, or for an object without a key, sends none and
-runs as the credential key. Each service (api, admin, worker) reads the features from its own `GET /v1/ume/context`
+runs as the credential key. Each service (api, admin, worker) reads the features from its own `GET /v1/fors/context`
 with its credential key, at start and every 5 minutes with `If-None-Match` (gateway-changes §5.2), held in memory;
 until the first answer it sends no header. A `2xx` or `304` answer must echo the id sent (the gateway writes it in the
-GUID's `D` form; compared as a GUID): a missing or different `x-ume-on-behalf-of` aborts the call before a byte is
+GUID's `D` form; compared as a GUID): a missing or different `x-fors-on-behalf-of` aborts the call before a byte is
 used (fail closed, event 5011) while `Gateway:RequireDelegationEcho` is on (default `true`; an older gateway instance
 during a rolling update ignores the header and would charge the credential key). An error answer goes by its code:
 `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked` or `key_expired` and `402 budget_exceeded` mean
 the object's key cannot be used now (gateway-changes §5.7; chat §3.6, engine §7.3).
 
-**Two guards on every call.** The ceiling header and the `x-ume-residency` check are Ume.Rag's residency rule on every
+**Two guards on every call.** The ceiling header and the `x-fors-residency` check are Ume.Rag's residency rule on every
 call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
-assigned key needs `x-ume-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
+assigned key needs `x-fors-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
 residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3,
 built in thekim1/llmgateway#84, feature `credential-residencies`). An older gateway instance during a rolling update
 does not apply the bound, which is one more reason the ceiling header goes on every call. Each service's credential key is therefore capped at the highest level that service serves: the worker's at
@@ -596,7 +596,7 @@ while register M2 holds). The
 handler below stays required on every gateway client and tested at every call site.
 
 A `DelegatingHandler` in the gateway client (`ResidencyCeilingHandler`) refuses any request without an explicit
-ceiling, or with a ceiling above the service's maximum (the worker: `Eu`), sets `x-ume-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
+ceiling, or with a ceiling above the service's maximum (the worker: `Eu`), sets `x-fors-on-behalf-of` from the call's object key and checks its echo; it is unit-tested
 for every call site (chat, condense, follow-ups, query embedding, rerank, judge, evaluation generation, NER/LLM stages).
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
@@ -606,10 +606,10 @@ from another assistant, so model and residency do not change between turn 1 and 
 plan §6). For P2 agent runs it is fixed at the run's start and never rises: tool servers are bounded by clearance
 (assistant level ≤ clearance) and result level (result level ≤ assistant level) (tools design §5.3).
 
-The Chat API sends the header from `AccessDecision.MaxResidency` and, from phase 2, `x-ume-on-behalf-of` = the
+The Chat API sends the header from `AccessDecision.MaxResidency` and, from phase 2, `x-fors-on-behalf-of` = the
 assistant's `GatewayKeyId` on every call of the turn (gateway design §5.2; the FakeGateway echoes too). Header values
 are the gateway's
-`DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-ume-residency` is
+`DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-fors-residency` is
 checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). Retries are
 chat-api §8.3's (`GatewayRetryHandler`): a gateway `502`/`504` is sent once more with the same ceiling; a `503` with
 `Retry-After` (in-ceiling targets drained or circuit-open) is not retried but passed on, so the caller can wait and
@@ -618,7 +618,7 @@ try again; `403 max_residency_not_met` (no target configured within the ceiling)
 **Model validation on publish**: when an assistant version is published (and when its level or audience is saved), the
 admin calls the gateway's `GET /v1/models` with its credential key and the ceiling of the assistant's effective level
 (for an audience client that keeps history, max(level, client ceiling)), from phase 2 as the assistant's key
-(`x-ume-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
+(`x-fors-on-behalf-of`), and refuses the action if a model the version uses is not listed (gateway design §3.4, §5.5;
 admin design V8, V39).
 
 ### 4.8 Internal callers
@@ -761,7 +761,7 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 
 | | Gateway | Ume.Rag |
 |---|---|---|
-| Secret key | `ume-sk-` + 43 base62 (`VirtualKeyHasher.cs:9-17`) | `ume-rag-sk-` + 43 base62 |
+| Secret key | `fors-sk-` + 43 base62 (`VirtualKeyHasher.cs:9-17`) | `ume-rag-sk-` + 43 base62 |
 | Public (widget) key | – | `ume-rag-pk-` + 43 base62 |
 | Display prefix | 11 chars (`:19`) | 15 chars (`ume-rag-sk-AbC1`) |
 | Hash | hex HMAC-SHA256(pepper, key) (`:46-51`), pepper ≥ 32 bytes (`:23-31`, `Security.cs:13-18`) | same, **own** pepper `Security:KeyPepper` (never the gateway's) |
@@ -1026,7 +1026,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
-| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | a `2xx` or `304` response lacks the `x-ume-on-behalf-of` echo of the key id sent, or echoes another GUID, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2; error answers go by their code, gateway-changes §5.7) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
+| 5011 | `rag.gateway.delegation_missing` | api, admin, worker (Warning) | a `2xx` or `304` response lacks the `x-fors-on-behalf-of` echo of the key id sent, or echoes another GUID, and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2; error answers go by their code, gateway-changes §5.7) | `Step`, `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId` |
 | 5012 | `rag.tool.definition_changed` | api, admin (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
 | 5013 | `rag.tool.upstream_refused` | api, admin (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
 | 5014 | `rag.content.tag_neutralised` | api, admin (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
@@ -1292,11 +1292,11 @@ membership of the pilot groups is maintained by IT, not by IaC.
 
 | Gateway test | Ours | Notes |
 |---|---|---|
-| `OidcClaimMappingTests` (`tests/Ume.LlmGateway.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Kalla.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
+| `OidcClaimMappingTests` (`tests/Fors.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Kalla.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
 | `AdminSessionTests` (`AdminSessionTests.cs:38`, `:57`, `:73`, `:97`) | same | ticket store, 12 h limit; plus a `PostgresAdminSessionStore` test (expired row not returned, sign-out deletes the row) |
-| `AuthFailureThrottleTests` (`tests/Ume.LlmGateway.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Kalla.Api.Tests` | unchanged |
+| `AuthFailureThrottleTests` (`tests/Fors.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Kalla.Api.Tests` | unchanged |
 | Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Kalla.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
-| `DataApiKeyTests` (`tests/Ume.LlmGateway.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Kalla.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
+| `DataApiKeyTests` (`tests/Fors.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Kalla.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
 
 ### 13.2 Unit (`Kalla.Domain.Tests`, `Kalla.AdminApi.Tests`)
 
@@ -1356,7 +1356,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 | Valid JWT with an `integration` key, or with no key | 401 / 403 `credential_not_allowed` |
 | Plain `X-OpenWebUI-User-Id` header without JWT | 401 `user_jwt_missing` |
 | Guessed `X-OpenWebUI-Chat-Id` of another user | new conversation for the caller; the other user's never readable |
-| Gateway key `ume-sk-…` sent to our API; our key sent with `Bearer` and `x-api-key` both set | `invalid_key` (nothing derived logged); the `Authorization` value wins as in the gateway |
+| Gateway key `fors-sk-…` sent to our API; our key sent with `Bearer` and `x-api-key` both set | `invalid_key` (nothing derived logged); the `Authorization` value wins as in the gateway |
 | 61 unknown keys from one address in a minute | 429 for that address, cached valid keys from it still work, event 5006 |
 | `pk` key with a foreign `Origin`, no `Origin`, or for an `internal` assistant | 403 `origin_not_allowed` / 404 |
 | Token from another tenant (Keycloak second realm in the test), guest token, unknown `azp` | 401 `wrong_tenant` / `guest_refused` / 403 `client_unknown` |

@@ -184,7 +184,7 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database, Admi
             await db.SaveChangesAsync(Ct);
             var published = new AssistantVersion
             {
-                AssistantId = assistant.Id, Number = 1, State = AssistantVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow, PublishedBy = "test", GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(id)],
+                AssistantId = assistant.Id, Number = 1, State = AssistantVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow, PublishedBy = "test", GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(id)],
                 CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
             };
             db.AssistantVersions.Add(published);

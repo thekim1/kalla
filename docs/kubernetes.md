@@ -1,7 +1,7 @@
 # Kubernetes
 
 `deploy/kubernetes` has Kustomize manifests for running Ume Rag on Kubernetes, with updates that do not interrupt
-clients, in the shape of the gateway's (its [Kubernetes guide](https://github.com/thekim1/llmgateway/blob/main/docs/kubernetes.md)).
+clients, in the shape of the gateway's (its [Kubernetes guide](https://github.com/thekim1/fors/blob/main/docs/kubernetes.md)).
 They are the same services, settings, certificates and secrets as the [Docker Compose setup](production-setup.md), and
 the certificates and secrets come from the same script as theirs (`deploy/portainer/bootstrap.sh`, which
 `create-secrets.sh` runs on your machine). Docker Compose stays the default. The design is

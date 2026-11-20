@@ -16,7 +16,7 @@ public delegate Task<ReadOnlyMemory<float>> RunQueryEmbedder(string normalizedQu
 /// <summary>
 /// The evaluator's query embedder (processing design §13.5, knowledge design §5): the normalised question
 /// through the worker's gateway client with the collection's profile (its model, dimensions and ceiling, <c>Eu</c> for
-/// the P1a pilot) and <c>x-ume-step: query-embed</c> with the evaluation run's id as <c>x-ume-run-id</c>, cached durably in
+/// the P1a pilot) and <c>x-fors-step: query-embed</c> with the evaluation run's id as <c>x-fors-run-id</c>, cached durably in
 /// <c>EmbeddingCache</c> by the question's hash at the collection's level; a cache miss's call is counted under the
 /// collection (processing design §14.7). A failed call throws <see cref="QueryEmbeddingUnavailableException"/> with the gateway
 /// error inside; the evaluator passes <c>AllowDegraded = false</c>, so the run fails rather than falling back (§5.5).

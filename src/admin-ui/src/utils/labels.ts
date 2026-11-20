@@ -2388,7 +2388,7 @@ export const COSTS = {
   step: 'Step',
   client: 'Client',
   cost: 'Cost',
-  /** The model call steps (`x-ume-step`, chat design §8.3, engine design §10.6); P2 agent steps fall back to their code. */
+  /** The model call steps (`x-fors-step`, chat design §8.3, engine design §10.6); P2 agent steps fall back to their code. */
   steps: {
     'chat-answer': 'Answer',
     condense: 'Condense',

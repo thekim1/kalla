@@ -6,7 +6,7 @@ namespace Kalla.FakeGateway;
 /// <summary>
 /// The gateway's Integration API (gateway phase 3; gateway-changes §5.6; repo-and-deployment §4.3), read-only:
 /// <c>GET /integration/v1/usage</c> from the requests this fake served (<see cref="FakeUsage"/>: the key each ran as, its
-/// <c>x-ume-step</c> and <c>x-ume-run-id</c>), and <c>GET /integration/v1/budgets</c> from
+/// <c>x-fors-step</c> and <c>x-fors-run-id</c>), and <c>GET /integration/v1/budgets</c> from
 /// <c>FakeGateway:AssignedKeys:&lt;n&gt;:Budgets</c>. <c>Authorization: Bearer</c> with a credential key holding the scope
 /// <c>usage.read</c>: any other key or none is <c>401</c>, a credential key without the scope <c>403</c>. Errors are problem
 /// details, as the gateway's Admin API.

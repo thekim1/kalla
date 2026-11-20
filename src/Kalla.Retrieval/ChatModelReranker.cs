@@ -13,13 +13,13 @@ namespace Kalla.Retrieval;
 /// <summary>
 /// The interim reranker (Decisions "Rerank pulled forward", user 2026-11-05): one listwise call through the gateway's chat
 /// endpoint (<c>POST /v1/chat/completions</c>) with the platform's rerank model (<c>Settings.Retrieval.rerankModel</c>) at the
-/// call's ceiling (<see cref="RerankRequest.Ceiling"/>, sent as <c>x-ume-max-residency</c>; the gateway client's
-/// <see cref="ResidencyCeilingHandler"/> adds the level's key and checks <c>x-ume-residency</c>), the question and the
+/// call's ceiling (<see cref="RerankRequest.Ceiling"/>, sent as <c>x-fors-max-residency</c>; the gateway client's
+/// <see cref="ResidencyCeilingHandler"/> adds the level's key and checks <c>x-fors-residency</c>), the question and the
 /// passages, asking for JSON scores 0–10 per passage (<see cref="Prompt"/>). Scores come back divided by 10 (0–1). No
 /// <c>temperature</c> for Claude models (#275), 0 for every other model. An answer that scores at least half the
 /// passages is used and the rest stay unscored (<see cref="Parse"/>, #403); anything less throws
 /// <see cref="RerankOutputException"/>, a refused or failed call its own exception; the engine then keeps the fused order
-/// with <c>rerank_unavailable</c>. The call's usage (tokens, <c>x-ume-cost-usd</c>) is read by <see cref="GatewayUsageReader"/>.
+/// with <c>rerank_unavailable</c>. The call's usage (tokens, <c>x-fors-cost-usd</c>) is read by <see cref="GatewayUsageReader"/>.
 /// The question and the passages are never logged. Replaced by <c>GatewayReranker</c> when the
 /// gateway's rerank endpoint exists (gateway-changes §7.4).
 /// </summary>
@@ -29,7 +29,7 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
     /// <summary>The gateway client of the reranker (<c>AddGatewayClient</c>).</summary>
     public const string HttpClientName = "gateway-rerank";
 
-    /// <summary>The <c>x-ume-step</c> of the call (the FakeGateway answers it with scores, <c>FakeChatScripts</c>).</summary>
+    /// <summary>The <c>x-fors-step</c> of the call (the FakeGateway answers it with scores, <c>FakeChatScripts</c>).</summary>
     public const string Step = "rerank";
 
     /// <summary>The highest score the prompt asks for; scores are returned divided by it.</summary>
@@ -76,10 +76,10 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
                 stream = false,
             }, options: RequestJson),
         }.WithMaxResidency(request.Ceiling);
-        message.Headers.Add("x-ume-step", Step);
+        message.Headers.Add("x-fors-step", Step);
         if (request.RunId is { } runId)
         {
-            message.Headers.Add("x-ume-run-id", runId.ToString());
+            message.Headers.Add("x-fors-run-id", runId.ToString());
         }
 
         using var response = await clients.CreateClient(httpClientName).SendAsync(message, cancellationToken);
@@ -119,7 +119,7 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
 
     /// <summary>
     /// The JSON body of a <c>2xx</c> rerank answer; a body that is not JSON throws <see cref="RerankOutputException"/> with the
-    /// call's usage (no tokens, the gateway's <c>x-ume-cost-usd</c>), because the gateway charged the call.
+    /// call's usage (no tokens, the gateway's <c>x-fors-cost-usd</c>), because the gateway charged the call.
     /// </summary>
     internal static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response, string step, string model, CancellationToken cancellationToken)
     {

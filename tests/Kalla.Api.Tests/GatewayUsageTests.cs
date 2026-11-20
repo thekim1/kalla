@@ -7,7 +7,7 @@ namespace Kalla.Api.Tests;
 
 /// <summary>
 /// The shared usage reading and estimate (chat design §8.3; gateway-changes §5.4; cost-attribution §5): tokens from the
-/// answer's <c>usage</c> (cached from <c>prompt_tokens_details.cached_tokens</c>), the cost from <c>x-ume-cost-usd</c>, else
+/// answer's <c>usage</c> (cached from <c>prompt_tokens_details.cached_tokens</c>), the cost from <c>x-fors-cost-usd</c>, else
 /// from the stream comment, which the reader never passes on, else none and an estimate from the mirror's prices, kept
 /// apart from the gateway's cost.
 /// </summary>
@@ -23,7 +23,7 @@ public sealed class GatewayUsageTests
         var response = new HttpResponseMessage(HttpStatusCode.OK);
         if (cost is not null)
         {
-            response.Headers.TryAddWithoutValidation("x-ume-cost-usd", cost);
+            response.Headers.TryAddWithoutValidation("x-fors-cost-usd", cost);
         }
 
         return response;
@@ -37,11 +37,11 @@ public sealed class GatewayUsageTests
             """);
         using var response = Answer("0.00012345");
 
-        var call = GatewayUsageReader.Read(response, body.RootElement, "condense", "ume/chat-eu");
+        var call = GatewayUsageReader.Read(response, body.RootElement, "condense", "fors/chat-eu");
 
-        call.ShouldBe(new GatewayCallUsage("condense", "ume/chat-eu", 1200, 1024, 80, 0.00012345m));
+        call.ShouldBe(new GatewayCallUsage("condense", "fors/chat-eu", 1200, 1024, 80, 0.00012345m));
         var record = UsageRecord.From(call, ChatPrices);
-        record.ShouldBe(new UsageRecord("condense", "ume/chat-eu", 1200, 1024, 80, 0.00012345m, 0m, Estimated: false));
+        record.ShouldBe(new UsageRecord("condense", "fors/chat-eu", 1200, 1024, 80, 0.00012345m, 0m, Estimated: false));
     }
 
     [Theory]
@@ -83,21 +83,21 @@ public sealed class GatewayUsageTests
     public void A_repeated_cost_header_is_no_cost()
     {
         using var response = Answer("0.00000100");
-        response.Headers.TryAddWithoutValidation("x-ume-cost-usd", "0.00000200");
+        response.Headers.TryAddWithoutValidation("x-fors-cost-usd", "0.00000200");
         GatewayUsageReader.CostHeader(response).ShouldBeNull();
     }
 
     [Fact]
     public async Task A_streams_cost_is_the_comment_and_the_comment_is_not_passed_on()
     {
-        // As the gateway writes a stream asked with x-ume-stream-cost: 1 (GatewayRequestHandler.WriteCostComment): the
+        // As the gateway writes a stream asked with x-fors-stream-cost: 1 (GatewayRequestHandler.WriteCostComment): the
         // comment just before data: [DONE], six decimals.
         const string stream = """
             data: {"choices":[{"index":0,"delta":{"content":"Hej"},"finish_reason":null}],"usage":null}
 
             data: {"choices":[],"usage":{"prompt_tokens":900,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":512}}}
 
-            : ume-cost-usd=0.000123
+            : fors-cost-usd=0.000123
 
             data: [DONE]
 
@@ -110,7 +110,7 @@ public sealed class GatewayUsageTests
         }
 
         reader.CostUsd.ShouldBe(0.000123m);
-        lines.ShouldNotContain(l => l.Contains("ume-cost-usd", StringComparison.Ordinal));
+        lines.ShouldNotContain(l => l.Contains("fors-cost-usd", StringComparison.Ordinal));
         lines.Where(l => l.Length > 0).ShouldBe([
             """data: {"choices":[{"index":0,"delta":{"content":"Hej"},"finish_reason":null}],"usage":null}""",
             """data: {"choices":[],"usage":{"prompt_tokens":900,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":512}}}""",
@@ -119,8 +119,8 @@ public sealed class GatewayUsageTests
 
         // The stream's usage is the last chunk's; with the comment's cost the call is not estimated.
         using var chunk = JsonDocument.Parse(lines[2]["data: ".Length..]);
-        var call = new GatewayCallUsage("chat-answer", "ume/chat-eu", GatewayUsageReader.Tokens(chunk.RootElement)!.Value, reader.CostUsd);
-        UsageRecord.From(call, ChatPrices).ShouldBe(new UsageRecord("chat-answer", "ume/chat-eu", 900, 512, 40, 0.000123m, 0m, Estimated: false));
+        var call = new GatewayCallUsage("chat-answer", "fors/chat-eu", GatewayUsageReader.Tokens(chunk.RootElement)!.Value, reader.CostUsd);
+        UsageRecord.From(call, ChatPrices).ShouldBe(new UsageRecord("chat-answer", "fors/chat-eu", 900, 512, 40, 0.000123m, 0m, Estimated: false));
     }
 
     [Fact]
@@ -136,11 +136,11 @@ public sealed class GatewayUsageTests
     }
 
     [Theory]
-    [InlineData(": ume-cost-usd=0.000123", true, "0.000123")]
-    [InlineData(": ume-cost-usd=0", true, "0")]
-    [InlineData(": ume-cost-usd=x", true, null)]
+    [InlineData(": fors-cost-usd=0.000123", true, "0.000123")]
+    [InlineData(": fors-cost-usd=0", true, "0")]
+    [InlineData(": fors-cost-usd=x", true, null)]
     [InlineData(": keep-alive", false, null)]
-    [InlineData("data: {\"x\":\": ume-cost-usd=1\"}", false, null)]
+    [InlineData("data: {\"x\":\": fors-cost-usd=1\"}", false, null)]
     public void Only_the_gateways_comment_is_the_cost_comment(string line, bool isComment, string? cost)
     {
         GatewayUsageReader.IsCostComment(line, out var usd).ShouldBe(isComment);
@@ -174,7 +174,7 @@ public sealed class GatewayUsageTests
     [Fact]
     public void The_estimate_uses_the_mirrored_prices_of_a_gateway_model()
     {
-        var model = new GatewayModel { Name = "ume/chat-eu", InputPerMillionUsd = 2m, CachedInputPerMillionUsd = 0.5m, OutputPerMillionUsd = 8m };
+        var model = new GatewayModel { Name = "fors/chat-eu", InputPerMillionUsd = 2m, CachedInputPerMillionUsd = 0.5m, OutputPerMillionUsd = 8m };
         ModelPrices.Of(model).ShouldBe(new ModelPrices(2m, 0.5m, 8m));
         ModelPrices.Of(model).Estimate(1_000_000, 500_000, 100_000).ShouldBe(1m + 0.25m + 0.8m);
     }

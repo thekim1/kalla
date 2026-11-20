@@ -62,7 +62,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
         });
     });
 
-    /// <summary>Records each request's path and <c>x-ume-on-behalf-of</c>.</summary>
+    /// <summary>Records each request's path and <c>x-fors-on-behalf-of</c>.</summary>
     private sealed class Sent(HttpMessageHandler inner, ConcurrentQueue<(string, string?)> sent) : DelegatingHandler(inner)
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -99,7 +99,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
         };
         var draft = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
         };
         var pipeline = new Pipeline { Name = "acting-" + code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
@@ -133,7 +133,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         }
 
-        var panel = _sent.Where(s => s.Path != "/v1/ume/context").ToList();
+        var panel = _sent.Where(s => s.Path != "/v1/fors/context").ToList();
         panel.ShouldContain(s => s.Path == "/v1/chat/completions");
         panel.ShouldAllBe(s => s.OnBehalfOf == AssistantKey.ToString("D"));
         gateway.Services.GetRequiredService<FakeUsage>().Records.Where(r => r.Step == "chat-answer").ShouldAllBe(r => r.KeyId == AssistantKey);

@@ -3,7 +3,7 @@ using Kalla.Domain;
 namespace Kalla.FakeGateway;
 
 /// <summary>
-/// The fake organisation, listed by <c>/v1/ume/context</c> (<see cref="FakeContext"/>), and the models' prices on
+/// The fake organisation, listed by <c>/v1/fors/context</c> (<see cref="FakeContext"/>), and the models' prices on
 /// <c>/v1/models</c>. Same departments and teams as the gateway's dev seed, with fixed ids so the admin's org sync is
 /// repeatable.
 /// </summary>
@@ -65,7 +65,7 @@ public static class FakeCatalog
     };
 
     /// <summary>
-    /// The chat model that answers without a cost: no <c>x-ume-cost-usd</c> and no stream comment, as a gateway without
+    /// The chat model that answers without a cost: no <c>x-fors-cost-usd</c> and no stream comment, as a gateway without
     /// the feature (chat design §18.2); it is priced like every chat model, so a caller's estimate has prices to use.
     /// </summary>
     public const string NoCostModel = "fake-no-cost";

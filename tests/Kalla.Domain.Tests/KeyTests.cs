@@ -72,8 +72,8 @@ public class KeyHasherTests
     [InlineData("sk-openai-123")]
     [InlineData("ume-rag-sk-short")]
     [InlineData("ume-rag-sk-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")]
-    // A gateway key (ume-sk-, 50 chars) is never a Källa key.
-    [InlineData("ume-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
+    // A gateway key (fors-sk-, 50 chars) is never a Källa key.
+    [InlineData("fors-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
     [InlineData("ume-rag-xk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
     public void LooksLikeKey_rejects_malformed(string? value) =>
         KeyHasher.LooksLikeKey(value).ShouldBeFalse();

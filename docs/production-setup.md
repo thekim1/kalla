@@ -346,7 +346,7 @@ it had.
 
 Each RAG service calls the LLM gateway with its own key: rag-api, rag-admin and rag-worker each hold one **credential
 key** of the gateway integration *Ume.Rag* (identity design §4.7, gateway-changes §5.1; the gateway's
-`docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-ume-max-residency`), and
+`docs/integrations.md`). A service sends every call with its key and an explicit ceiling (`x-fors-max-residency`), and
 never holds another service's key. The three keys come about in one of three ways:
 
 - **A gateway on this host creates them from a manifest**, and `rag-bootstrap` reads them: copy
@@ -383,7 +383,7 @@ never holds another service's key. The three keys come about in one of three way
      queries, rag-admin the canary check), and a redacting key would silently change text with personal identity
      numbers in it.
    - **Models**: none listed (all) or every model the platform calls, the embedding model among them.
-   - **Scopes** on rag-admin's key only: `organisation.read` (the whole organisation in `GET /v1/ume/context`, which the
+   - **Scopes** on rag-admin's key only: `organisation.read` (the whole organisation in `GET /v1/fors/context`, which the
      admin's organisation sync reads) and `usage.read` (the cost and budget read-back, below). rag-api's and the
      worker's keys hold no scope, so a key that serves public chat reads nothing else.
    - An expiry as your key policy sets it; rotate before it (below).

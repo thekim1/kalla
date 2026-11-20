@@ -155,7 +155,7 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
 
         var v1 = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionLinks = [new CollectionLink(collection.Id, ["bygglov", "strandskydd"])],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", CollectionLinks = [new CollectionLink(collection.Id, ["bygglov", "strandskydd"])],
             CreatedAt = now, UpdatedAt = now,
         };
         db.AssistantVersions.Add(v1);
@@ -165,7 +165,7 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         v1.PublishedBy = "test";
         assistant.PublishedVersionId = v1.Id;
         await db.SaveChangesAsync(Ct);
-        var v2 = new AssistantVersion { AssistantId = assistant.Id, Number = 2, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(unpublished.Id)], CreatedAt = now, UpdatedAt = now };
+        var v2 = new AssistantVersion { AssistantId = assistant.Id, Number = 2, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(unpublished.Id)], CreatedAt = now, UpdatedAt = now };
         db.AssistantVersions.Add(v2);
         db.AssistantAudiences.Add(new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });
         await db.SaveChangesAsync(Ct);

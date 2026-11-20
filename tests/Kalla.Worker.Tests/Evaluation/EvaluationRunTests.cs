@@ -143,7 +143,7 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
     [Fact]
     public async Task Hybrid_and_hybrid_rerank_report_recall_latency_cost_per_question_and_fallbacks_side_by_side()
     {
-        const string model = "ume/chat-eu"; // Eu in the FakeGateway's catalogue: within an internal collection's ceiling
+        const string model = "fors/chat-eu"; // Eu in the FakeGateway's catalogue: within an internal collection's ceiling
         var fixture = await EvalKit.SeedAsync(database);
         var restore = await SetRetrievalAsync($$"""{"rerankModel":"{{model}}"}""");
         await Sql.ExecuteAsync(database.Connection(null), """

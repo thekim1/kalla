@@ -80,7 +80,7 @@ public sealed record RetrievalRequest(
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
-    Guid? RunId = null);                       // sent as x-ume-run-id (chat: the message id)
+    Guid? RunId = null);                       // sent as x-fors-run-id (chat: the message id)
 
 public sealed record RetrievalFilters(
     IReadOnlyList<string>? Tags, IReadOnlyList<string>? DocumentTypes, DateTimeOffset? ModifiedAfter);
@@ -224,7 +224,7 @@ metadata (no index, would break the rule that every filter runs on an index).
 | `config_version` | int | snapshot the decision was made at (R7) |
 
 Headers: `Cache-Control: no-store` (gateway `UseKallaSecurityHeaders` with `NoStorePrefixes` `/v1`,
-`src/Ume.LlmGateway.DataApi/Program.cs:47`, `WebDefaults.cs:26`), `x-request-id`. No timing headers outside
+`src/Fors.DataApi/Program.cs:47`, `WebDefaults.cs:26`), `x-request-id`. No timing headers outside
 Development (they would let a caller time-probe sizes of other scopes).
 
 ### 3.3 `GET /v1/collections`
@@ -273,7 +273,7 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 
 Knowledge routes answer RFC 9457 problem details exactly like the gateway's Data API: `AddKallaWebDefaults` +
 `ApiExceptionHandler` turn an `ApiFaultException(status, detail, extensions)` into `Results.Problem`
-(`src/Ume.LlmGateway.ServiceDefaults/ApiExceptionHandler.cs:30-55`, `ApiFaultException.cs:1-34`), validation faults
+(`src/Fors.ServiceDefaults/ApiExceptionHandler.cs:30-55`, `ApiFaultException.cs:1-34`), validation faults
 into `ValidationProblem` with field errors, and anything else into a 500 that logs only the exception type
 (`ApiExceptionHandler.cs:49`). The machine-readable reason goes into the `code` extension.
 
@@ -296,7 +296,7 @@ The chat role keeps the OpenAI shape (identity §4.4) for its own routes; the in
 
 ### 3.7 OpenAPI and Scalar
 
-As the Data API (`src/Ume.LlmGateway.DataApi/Program.cs:22-29`, `:47-56`): `AddOpenApi("knowledge", …)` with a document
+As the Data API (`src/Fors.DataApi/Program.cs:22-29`, `:47-56`): `AddOpenApi("knowledge", …)` with a document
 transformer (title "Ume.Rag Knowledge API", description of authentication, grants and limits), `MapOpenApi`,
 `MapScalarApiReference(o => o.WithTitle(…).WithNonce().DisableDefaultFonts())`, `UseApiReferencePolicy("/scalar", …)`,
 published when `Knowledge:PublishApiReference` (default `true`, off in production until P2). The chat role publishes its
@@ -382,7 +382,7 @@ mac     = base64url(HMAC-SHA256(Security:DownloadGrantKeys[kid], "g1." + kid + "
 |---|---|
 | Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest (the greatest kid in ordinal order; kids are dated, e.g. `2026-10`) signs, all verify, so a key can be rotated with a one-lifetime overlap. `Knowledge:PublicBaseUrl` (rag-api's staff-network address) makes the link absolute; unset, it is relative |
 | Lifetime | `Knowledge:DownloadGrantLifetime` **7 days** for `public`/`internal` (answered 5), **1 hour** for `sensitive` (no `sensitive` client stores history). Links in Open WebUI chats older than 7 days stop working (Open WebUI keeps chats 90 days); asking again issues a new link |
-| Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:93-97`) |
+| Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Fors.ServiceDefaults/Extensions.cs:93-97`) |
 | Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason; reasons without an identity §4.3 code are `grant_scope` (another document) and `key_unusable`) |
 | Failure on the token | 401 `grant_invalid` / `grant_expired`, counted as 5001 with `Credential = grant`; a browser request (`Accept: text/html`) gets a minimal static Swedish page instead ("Länken har gått ut. Ställ frågan igen för att få en ny länk."), same status, CSP `default-src 'none'` |
 | Scope | only `GET /v1/documents/{d}` and `/content` for that one document; never `/v1/retrieve` |
@@ -399,7 +399,7 @@ download path, binding the download to the user.
 |---|---|
 | 5001 `rag.auth.failed` | credential failures incl. grants (`Credential` `grant`, reasons `grant_invalid`, `grant_expired`) |
 | 5002 `rag.access.denied` / 5005 `rag.ceiling.refused` | explicit denials: a requested collection, a document id, a grant re-check (throttled once a minute per subject, reason, resource, identity §10) |
-| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-ume-residency` above the profile's ceiling (§5.2) |
+| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-fors-residency` above the profile's ceiling (§5.2) |
 | 5004 `rag.config.stale_refused` | `config_unconfirmed` |
 
 - **No audit rows** for retrievals or downloads: they are normal use, not privileged reads, and would be the
@@ -437,15 +437,15 @@ statement gets the **query search text** = the normalised string plus the parts 
 
 `IGatewayClient.EmbedQueryAsync(profile, text, attribution, ct)` on a named `HttpClient` `gateway-query`, whose
 residency-ceiling `DelegatingHandler` (shared with every gateway client, chat §8.1) refuses a request without an
-explicit `x-ume-max-residency` and checks that the key matches it:
+explicit `x-fors-max-residency` and checks that the key matches it:
 
 ```http
 POST {Gateway:BaseUrl}/v1/embeddings
 Authorization: Bearer <rag-api's credential key>
-x-ume-on-behalf-of: <gateway key id>        (from gateway phase 2; none when the object has no key)
-x-ume-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
-x-ume-run-id: <RunId or retrieval id>
-x-ume-step: query-embed
+x-fors-on-behalf-of: <gateway key id>        (from gateway phase 2; none when the object has no key)
+x-fors-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
+x-fors-run-id: <RunId or retrieval id>
+x-fors-step: query-embed
 traceparent: …
 
 { "model": "<EmbeddingProfiles.GatewayModel>", "input": "<normalised query>", "encoding_format": "float",
@@ -457,9 +457,9 @@ traceparent: …
 | Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (data-model §2.1). The pilot profile is `text-embedding-3-large` from an `Eu` provider at **1024** dimensions, requested with `dimensions` (Decisions "Pilot embedding model, U-b"); an on-prem BGE-M3 profile (register M2, once on-prem hardware exists; moving to it re-embeds every chunk) never sends `dimensions` (gateway design §6) |
 | Attribution | the call runs as a gateway key (cost-attribution §4.1; identity §4.7): chat and the assistant test panel: the assistant's `GatewayKeyId`; integration keys, token callers and MCP: the first searched collection's `GatewayKeyId`; the retrieval test: the collection's. An object without a key, and every call until rag-api's own context shows `act-as-key` (identity §4.7), runs as the credential key. Until the gateway's integration phase 1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). The key must allow the profile's model (admin V39) |
 | Residency | the profile's `EmbeddingProfiles.MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile until M2, `OnPrem` for an on-prem profile (Decisions "M2 and test hosting"); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
-| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); when `x-ume-on-behalf-of` was sent, the `2xx` answer's echo must be the GUID sent while `Gateway:RequireDelegationEcho` is set, else discard + 5011 (gateway-changes §5.2); a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded`, gateway-changes §5.7) is an embedding failure of §5.5 for Knowledge API callers, and in a chat turn the assistant's unavailability (chat §3.6); exactly one vector of `Dimensions` finite floats, not all zero |
-| Key | rag-api's credential key (`Gateway__Key`), checked by the `ResidencyCeilingHandler`. The `PiiPolicy` that applies is the acting key's: an assigned key used for chat or search must have `PiiPolicy` `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); the credential key's own is checked at startup by one canary embedding (§5.6), an assigned key's by the `x-ume-pii` check above on every call and shown on the assistant page (admin §5.5.4) |
-| Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-ume-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
+| Response checks | `x-fors-residency` (`src/Fors.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-fors-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); when `x-fors-on-behalf-of` was sent, the `2xx` answer's echo must be the GUID sent while `Gateway:RequireDelegationEcho` is set, else discard + 5011 (gateway-changes §5.2); a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded`, gateway-changes §5.7) is an embedding failure of §5.5 for Knowledge API callers, and in a chat turn the assistant's unavailability (chat §3.6); exactly one vector of `Dimensions` finite floats, not all zero |
+| Key | rag-api's credential key (`Gateway__Key`), checked by the `ResidencyCeilingHandler`. The `PiiPolicy` that applies is the acting key's: an assigned key used for chat or search must have `PiiPolicy` `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); the credential key's own is checked at startup by one canary embedding (§5.6), an assigned key's by the `x-fors-pii` check above on every call and shown on the assistant page (admin §5.5.4) |
+| Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-fors-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
 
 ### 5.3 Timeouts, retries, circuit
 
@@ -490,7 +490,7 @@ traceparent: …
 `queryMac` = hex of the first 16 bytes of `HMAC-SHA256(Security:CacheKeyPepper, normalised query)`: a plain SHA-256
 of a short question is reversible by dictionary, the HMAC is not without the pepper (a secret file like the key pepper,
 identity §6.1). `RedisKeys.QueryEmbedding(Guid profileId, string queryMac)` is added to the copied `RedisKeys` class
-(gateway `src/Ume.LlmGateway.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
+(gateway `src/Fors.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
 comment). L2 goes through `ISharedCache`: P1 has no Redis (single slot), so P1 registers the
 no-op implementation (every L2 read is a miss, every write is dropped) and L1 alone is the cache; a second in-memory
 copy would only duplicate L1. From the first multi-host deployment (P2) `ConnectionStrings:redis` selects
@@ -792,7 +792,7 @@ in `Kalla.Retrieval`, routed by `RerankerKind`:
 | `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 1.5 s (covers the POC model's p95 of 1.4 s, #421) | input tokens |
 
 Both go through the `gateway-rerank` client with the call's residency ceiling (the assistant's turn ceiling) and
-`x-ume-step: rerank`; the 502/504 retry applies. Only a caller with a ceiling asks for it: chat and the test panel (the
+`x-fors-step: rerank`; the 502/504 retry applies. Only a caller with a ceiling asks for it: chat and the test panel (the
 turn's ceiling) and the evaluator's `hybrid-rerank` variants (the collection level's, capped at `Eu`).
 `POST /v1/retrieve` with an `assistant_id` keeps the fused order, since that route has no turn ceiling to pass.
 Placement: after fusion and dedup, before the per-document cap, over the top `rerankCandidates` (20) whose texts are read in one extra statement. Unscored passages keep their fused
@@ -1069,9 +1069,9 @@ Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `
 
 ## 15. Observability
 
-Meter and activity source **`Ume.Rag`** (repo-and-deployment §9; the gateway's equivalent is `Ume.LlmGateway`,
-`src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:21`, `:83`, `:89`). Instruments created once from `IMeterFactory`
-as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:616-636`); durations in **ms** like
+Meter and activity source **`Ume.Rag`** (repo-and-deployment §9; the gateway's equivalent is `Fors`,
+`src/Fors.ServiceDefaults/Extensions.cs:21`, `:83`, `:89`). Instruments created once from `IMeterFactory`
+as `GatewayMetrics` does (`src/Fors.Gateway/Pipeline/UsageWriter.cs:616-636`); durations in **ms** like
 `ume.gateway.request.duration` (`:627`); low-cardinality dimensions only.
 
 | Metric | Type | Dimensions |

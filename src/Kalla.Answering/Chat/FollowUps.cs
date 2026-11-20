@@ -5,13 +5,13 @@ namespace Kalla.Answering.Chat;
 
 /// <summary>
 /// Follow-up suggestions (chat design §9.8, Decisions "Follow-up suggestions"): after a model answer, one non-streaming call to
-/// the platform condense model at the condense ceiling (<c>x-ume-step: follow-ups</c>, ≤ 40 tokens per question) writes up to N
+/// the platform condense model at the condense ceiling (<c>x-fors-step: follow-ups</c>, ≤ 40 tokens per question) writes up to N
 /// short next questions from the search query, the delivered answer and the prompt's source titles. The output is filtered
 /// line by line (<see cref="Accept"/>): a line is dropped, never edited. Suggestions are never stored or logged.
 /// </summary>
 public static partial class FollowUps
 {
-    /// <summary>The <c>x-ume-step</c> of the call (opaque to the gateway, gateway-changes §7.1).</summary>
+    /// <summary>The <c>x-fors-step</c> of the call (opaque to the gateway, gateway-changes §7.1).</summary>
     public const string Step = "follow-ups";
 
     /// <summary>The default of <c>Chat:FollowUpTimeout</c> (§9.8; 0 switches the feature off).</summary>

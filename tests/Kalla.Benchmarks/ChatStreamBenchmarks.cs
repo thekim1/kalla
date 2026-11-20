@@ -30,7 +30,7 @@ public class ChatStreamBenchmarks
         _upstreamLines = [.. _deltas.Select(d =>
             "data: " + JsonSerializer.Serialize(new
             {
-                id = "chatcmpl-1", @object = "chat.completion.chunk", created = 1_762_000_000, model = "ume/chat-eu",
+                id = "chatcmpl-1", @object = "chat.completion.chunk", created = 1_762_000_000, model = "fors/chat-eu",
                 choices = new[] { new { index = 0, delta = new { content = d }, finish_reason = (string?)null } },
             }))];
     }

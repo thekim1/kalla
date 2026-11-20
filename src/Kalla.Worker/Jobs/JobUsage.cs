@@ -15,7 +15,7 @@ public sealed record UsageOwner(Guid CollectionId, string Classification, Guid D
 {
     /// <summary>
     /// What a call of <paramref name="step"/> for this knowledge base is made for: <see cref="ResidencyCeilingHandler"/> sends
-    /// <c>x-ume-on-behalf-of</c> with <see cref="GatewayKeyId"/> once the gateway acts as keys, and checks the echo (identity §4.7).
+    /// <c>x-fors-on-behalf-of</c> with <see cref="GatewayKeyId"/> once the gateway acts as keys, and checks the echo (identity §4.7).
     /// </summary>
     public GatewayCall Acting(string? step) => new(GatewayKeyId, step, CollectionId: CollectionId);
 }
@@ -91,7 +91,7 @@ public sealed class PostgresGatewayModelPrices(JobDatabase database, TimeProvide
 /// <summary>
 /// The model calls of one job attempt that are not committed yet (engine design §10.6; cost-attribution §5 C3). Every gateway
 /// call of the worker that answered adds its <see cref="UsageRecord"/> (<see cref="GatewayUsageReader"/>: the tokens and
-/// <c>x-ume-cost-usd</c>, else the estimate from the mirror's prices, kept apart) under its knowledge base and the
+/// <c>x-fors-cost-usd</c>, else the estimate from the mirror's prices, kept apart) under its knowledge base and the
 /// Europe/Stockholm day of the call. The transaction that records the attempt's outcome adds them to
 /// <c>content."CollectionDailyUsage"</c> as its last statement (<see cref="WriteAsync"/>, keys sorted) and drops them once it
 /// has committed (<see cref="Committed"/>), so a rolled-back outcome leaves them for the next one and a retried attempt

@@ -6,7 +6,7 @@ using Kalla.Domain;
 namespace Kalla.FakeGateway;
 
 /// <summary>
-/// <c>GET /v1/ume/context</c> as the gateway builds it (<c>ContextEndpoint.Build</c>, thekim1/llmgateway
+/// <c>GET /v1/fors/context</c> as the gateway builds it (<c>ContextEndpoint.Build</c>, thekim1/llmgateway
 /// <c>v0.10.2</c>; the contract's <c>ForsContext</c>, <c>contracts/gateway/integrations.json</c>): the presented key, and for
 /// a credential key its integration, the assigned keys that are not revoked, and their teams and departments; with the
 /// scope <c>organisation.read</c> every department and team, an inactive one included, and the departments' member
@@ -47,7 +47,7 @@ public static class FakeContext
         var ownResidencies = Ladder.Where(r => r <= key.Level).ToList();
         return new JsonObject
         {
-            ["object"] = "ume.context",
+            ["object"] = "fors.context",
             ["gateway"] = new JsonObject
             {
                 ["version"] = options.Gateway.Version,

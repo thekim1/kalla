@@ -209,7 +209,7 @@ public sealed partial class ChatApiTests
 
         if (condenseModel)
         {
-            snapshot = snapshot with { ChatSettings = """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" };
+            snapshot = snapshot with { ChatSettings = """{"condenseModel":"fors/chat-eu","condenseReasoningEffort":"none"}""" };
         }
 
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>

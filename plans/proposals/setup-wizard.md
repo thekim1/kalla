@@ -307,7 +307,7 @@ Proposed as issues in thekim1/llmgateway once this proposal is agreed; none bloc
 | # | Change | For |
 |---|---|---|
 | WG1 | **`UME_DOMAIN` in the gateway's stack file:** `UME_GATEWAY_HOST` defaults to `llm.<domain>`, `UME_ADMIN_HOST` to `llm-admin.<domain>`, `UME_GATEWAY_PUBLIC_URL` to `https://<gateway host>` | 5 host values → 1 |
-| WG2 | **The sign-in provider's address in `/v1/ume/context`** (`gateway.oidc_authority`, an addition as `organisation_name` was): Ume.Rag's wizard uses it as the default, so the address is typed once for the stack | the shared authority |
+| WG2 | **The sign-in provider's address in `/v1/fors/context`** (`gateway.oidc_authority`, an addition as `organisation_name` was): Ume.Rag's wizard uses it as the default, so the address is typed once for the stack | the shared authority |
 | WG3 | **The same setup mode in the gateway's admin:** a setup code in adminapi's log, a test sign-in before saving, the deployment's value wins, re-open by a variable. This proposal's §4.2–§4.6 is the contract; the gateway's role groups are its own to decide | `UME_OIDC_AUTHORITY`, `UME_OIDC_CLIENT_ID`, `UME_OIDC_CLIENT_SECRET` |
 | WG4 | Optional. **The manifest without an edit:** the owner department chosen in the gateway's admin after the first sign-in (the integration created without an owner, or in a default department), so `UME_INTEGRATION_MANIFEST` can ship as a default in the stack file | the department code inside the JSON line |
 

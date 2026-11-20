@@ -102,17 +102,17 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         await db.SaveChangesAsync(Ct);
         var draft = new AssistantVersion
         {
-            AssistantId = draftOnly.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(halfway.Id)], CreatedAt = now, UpdatedAt = now,
+            AssistantId = draftOnly.Id, Number = 1, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(halfway.Id)], CreatedAt = now, UpdatedAt = now,
         };
         var published = new AssistantVersion
         {
-            AssistantId = live.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(ready.Id)],
+            AssistantId = live.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(ready.Id)],
             PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
         };
         // Another department's published, available assistant linking Fresh (a shared collection): not this checklist's.
         var foreignVersion = new AssistantVersion
         {
-            AssistantId = foreign.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(fresh.Id)],
+            AssistantId = foreign.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(fresh.Id)],
             PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
         };
         db.AddRange(draft, published, foreignVersion, new AssistantAudience { AssistantId = live.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id },
@@ -227,7 +227,7 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
 
         AssistantVersion Version(Assistant a, int number) => new()
         {
-            AssistantId = a.Id, Number = number, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(own.Id)],
+            AssistantId = a.Id, Number = number, State = AssistantVersionStates.Published, GatewayModel = "fors/chat-eu", CollectionLinks = [CollectionLink.Whole(own.Id)],
             PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
         };
         var quietV1 = Version(quiet, 1);

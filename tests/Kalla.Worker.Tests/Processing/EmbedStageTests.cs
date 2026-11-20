@@ -361,7 +361,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     }
 
     /// <summary>
-    /// Engine design §10.6: an answered call's tokens and <c>x-ume-cost-usd</c> go to the attempt's usage; without the header
+    /// Engine design §10.6: an answered call's tokens and <c>x-fors-cost-usd</c> go to the attempt's usage; without the header
     /// the cost is the estimate from the mirror's prices (here 0.02 USD per million input tokens).
     /// </summary>
     [Fact]
@@ -397,7 +397,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
 
     /// <summary>
     /// #703: an answer whose body is not JSON is fatal <c>embed.bad_vector</c>, and the call still counts with the gateway's
-    /// <c>x-ume-cost-usd</c> and no tokens, since the gateway charged it.
+    /// <c>x-fors-cost-usd</c> and no tokens, since the gateway charged it.
     /// </summary>
     [Fact]
     public async Task An_answer_whose_body_cannot_be_read_is_fatal_and_counts_its_gateway_cost_alone()
@@ -495,7 +495,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         }
     }
 
-    /// <summary>The gateway's answer without <c>x-ume-cost-usd</c>, as a gateway without the feature sends it.</summary>
+    /// <summary>The gateway's answer without <c>x-fors-cost-usd</c>, as a gateway without the feature sends it.</summary>
     private sealed class WithoutCostHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -506,7 +506,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         }
     }
 
-    /// <summary>The gateway's answer, headers kept, with a body cut off mid-JSON and <c>x-ume-cost-usd</c> set to <see cref="CostUsd"/>.</summary>
+    /// <summary>The gateway's answer, headers kept, with a body cut off mid-JSON and <c>x-fors-cost-usd</c> set to <see cref="CostUsd"/>.</summary>
     private sealed class MalformedBodyHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
         public const decimal CostUsd = 0.00042m;

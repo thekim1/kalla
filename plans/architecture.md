@@ -4,7 +4,7 @@ Mermaid views of the Ume.Rag design as it stands after the simplification pass
 ([`archive/passes/simplification-pass.md`](archive/passes/simplification-pass.md)) and the P1 split of the
 [weakness review §1](archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
 [§5](archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show the gateway's integration phase 2; in P1 the keys are the pilot team's and no
-`x-ume-on-behalf-of` or echo is sent). Sources: networks and containers
+`x-fors-on-behalf-of` or echo is sent). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
 [`knowledge-api/design.md`](knowledge-api/design.md) §6, ingestion
@@ -67,7 +67,7 @@ flowchart LR
     proxy --> api
     proxy --> admin
 
-    api -- "chat, condense, query embeddings<br/>credential key; x-ume-on-behalf-of = the assistant's key<br/>(gateway phase 2), explicit x-ume-max-residency" --> gateway
+    api -- "chat, condense, query embeddings<br/>credential key; x-fors-on-behalf-of = the assistant's key<br/>(gateway phase 2), explicit x-fors-max-residency" --> gateway
     admin -- "test panel, Data API sync,<br/>/v1/models at the level's ceiling,<br/>answer judge, skill gate (P2)" --> gateway
     worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
@@ -131,7 +131,7 @@ sequenceDiagram
     C->>C: effective level = max(assistant level, client ceiling), fixed from the first message
     C->>C: per-user rate limit (in process in the pilot, Redis from P2)
     opt follow-up question that is not self-contained (length, anaphora)
-        C->>G: condense on Settings.Chat.CondenseModel (x-ume-step: condense, explicit ceiling)
+        C->>G: condense on Settings.Chat.CondenseModel (x-fors-step: condense, explicit ceiling)
         G-->>C: standalone query (timeout 600 ms or failure: raw question)
     end
     C->>K: RetrieveAsync(assistant, query, top_k 10, expand section) over the version's direct collections
@@ -148,8 +148,8 @@ sequenceDiagram
     alt coverage low (best distance above threshold and keyword list below its floor)
         C-->>U: generalKnowledge off or supplement: fixed not-found text + contact links (no model call); fallback or open: model answer without sources behind a fixed caveat line
     else coverage ok or degraded, or no content words (gate skipped, no-sources frame)
-        C->>G: stream answer (per-level key, x-ume-on-behalf-of from P2, explicit x-ume-max-residency)
-        G-->>C: headers: x-ume-residency, key echo from gateway phase 2 (503 + Retry-After when targets are drained)
+        C->>G: stream answer (per-level key, x-fors-on-behalf-of from P2, explicit x-fors-max-residency)
+        G-->>C: headers: x-fors-residency, key echo from gateway phase 2 (503 + Retry-After when targets are drained)
         C->>C: check residency and echo before the first byte
         G-->>C: SSE deltas
         C-->>U: filtered text, [n] renumbered, Open WebUI source events
@@ -223,7 +223,7 @@ sequenceDiagram
     participant H as Tool hub (in-process, chat role)
     participant S as Hosted MCP server
 
-    M->>G: step n with tools = ToolPolicy.Visible (explicit x-ume-max-residency)
+    M->>G: step n with tools = ToolPolicy.Visible (explicit x-fors-max-residency)
     G-->>M: tool_calls (streamed deltas)
     M->>M: ToolPolicy.Authorize (same function), lethal-trifecta check (hard refusal), limits 8 calls / 60 s / $0.05
     M->>H: IToolHub call (pinned definition id)

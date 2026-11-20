@@ -11,7 +11,7 @@ public enum Residency
     External = 2,
 }
 
-/// <summary>The <c>x-ume-max-residency</c> / <c>x-ume-residency</c> values (gateway design §3.1, identity design §4.7).</summary>
+/// <summary>The <c>x-fors-max-residency</c> / <c>x-fors-residency</c> values (gateway design §3.1, identity design §4.7).</summary>
 public static class ResidencyCeiling
 {
     /// <summary>

@@ -163,7 +163,7 @@ read the CA only at start.
      (the role in the token, or a group in `UME_OIDC_GROUPS_GATEWAY_ADMIN`).
 
    The gateway's own steps and failure cases:
-   [its runbook](https://github.com/thekim1/llmgateway/blob/main/docs/runbook.md#first-start-without-an-authority-the-setup-wizard),
+   [its runbook](https://github.com/thekim1/fors/blob/main/docs/runbook.md#first-start-without-an-authority-the-setup-wizard),
    *First start without an authority: the setup wizard*.
 5. **Set up Ume.Rag's sign-in.** rag-admin opens its setup wizard on the first start and prints a setup code.
    - **Find the code:** *Containers → rag-admin → Logs*, the line
@@ -316,7 +316,7 @@ with its variables and applying the new file over it. **Your stack keeps its var
 wizard:** it sets `UME_OIDC_AUTHORITY`, so the gateway counts its setup as done at its first start, and with
 `UME_RAG_OIDC_CLIENT_SECRET` beside it rag-admin does the same. Every change and why:
 [upgrade-guide.md](upgrade-guide.md), and the gateway's
-[upgrade guide](https://github.com/thekim1/llmgateway/blob/main/docs/upgrade-guide.md).
+[upgrade guide](https://github.com/thekim1/fors/blob/main/docs/upgrade-guide.md).
 
 **Before the update**
 

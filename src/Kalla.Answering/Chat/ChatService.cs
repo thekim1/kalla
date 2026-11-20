@@ -359,7 +359,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     /// <summary>
     /// The escalation hand-off with its summary (§9.9): one call at the condense ceiling as the assistant's key with
-    /// <c>x-ume-step: escalation</c> and <c>max_tokens</c> 200, from the user's last <paramref name="question"/>, the search query
+    /// <c>x-fors-step: escalation</c> and <c>max_tokens</c> 200, from the user's last <paramref name="question"/>, the search query
     /// when condensed and the outcome's line, bounded by <c>Chat:EscalationTimeout</c>; then the accept rule. Timeout, error,
     /// residency refusal or a rejected text give a null summary, counted, never retried; the route still comes. The summary
     /// is never logged. The caller's cancellation (a disconnect) cancels the call and is thrown.
@@ -399,7 +399,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         _escalation?.Add(1, new TagList { { "reason", ChatOutcomes.Name(plan.Outcome) }, { "summary", summary } });
 
     /// <summary>
-    /// The follow-up suggestions (§9.8): one call at the condense ceiling with <c>x-ume-step: follow-ups</c> and <c>max_tokens</c>
+    /// The follow-up suggestions (§9.8): one call at the condense ceiling with <c>x-fors-step: follow-ups</c> and <c>max_tokens</c>
     /// 40 × <paramref name="count"/>, from the turn's search query, the <paramref name="delivered"/> answer and the prompt's titles
     /// (<paramref name="cited"/> first), bounded by <c>Chat:FollowUpTimeout</c>; then the accept rule against the
     /// <paramref name="question"/> and the query. Timeout, error, residency refusal or nothing accepted give <c>[]</c>, counted,

@@ -29,7 +29,7 @@ public sealed record RerankPassage(Guid ChunkId, string Text);
 /// What a search asks of the reranker: the normalised query, the passages in fused order, the platform's model for
 /// <paramref name="Reranker"/> (<c>Settings.Retrieval.rerankModel</c> or <c>gatewayRerankModel</c>; the engine never asks
 /// while it is unset), the residency ceiling of the call (the assistant's, as for its chat answer), the run id sent as
-/// <c>x-ume-run-id</c> and the reranker to use.
+/// <c>x-fors-run-id</c> and the reranker to use.
 /// </summary>
 public sealed record RerankRequest(string Query, IReadOnlyList<RerankPassage> Passages, string? Model, Residency Ceiling, Guid? RunId,
     RerankerKind Reranker = RerankerKind.ChatModel);

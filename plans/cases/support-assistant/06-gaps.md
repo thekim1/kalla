@@ -62,7 +62,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 - **Asked.** Pasted tickets with mail threads and logs exceeded the 2,000-character question.
 - **Done** in #431 (M-6): the question may be 1–16,000 characters (`src/Kalla.Answering/Chat/ChatRequest.cs:60`);
-  over 2,000 the condense model writes the search query (`x-ume-step: condense-long`, `Chat:LongQuestionCondenseTimeout`
+  over 2,000 the condense model writes the search query (`x-fors-step: condense-long`, `Chat:LongQuestionCondenseTimeout`
   3 s), with a fallback to the first 2,000 characters cut at a word boundary
   (`src/Kalla.Answering/Chat/Condenser.cs:150-171`); the answer model reads the full text with its line breaks
   (chat §3.2, §5.1). Measured on a 16,000-character ticket: `gpt-6-luna` 2.3–2.9 s, `claude-haiku-5-5` about 1.1 s

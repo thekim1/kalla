@@ -23,7 +23,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLifetime
 {
-    private const string Model = "ume/chat-onprem";
+    private const string Model = "fors/chat-onprem";
     private const string NoCostModel = "fake-no-cost";
 
     /// <summary>Six Swedish questions with little wording in common; {0} is the topic, {1} the test's tag.</summary>
@@ -117,7 +117,7 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
     [Fact]
     public async Task On_a_model_without_a_gateway_cost_the_calls_are_estimated_from_the_mirrors_prices_and_kept_apart()
     {
-        // fake-no-cost answers without x-ume-cost-usd; the mirror prices it (per million: 0.15 in, 0.075 cached, 0.60 out).
+        // fake-no-cost answers without x-fors-cost-usd; the mirror prices it (per million: 0.15 in, 0.075 cached, 0.60 out).
         await EvalSeeds.SetModelsAsync(database, NoCostModel);
         await Sql.ExecuteAsync(database.Connection(null), """
             INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource", "InputPerMillionUsd",
@@ -188,7 +188,7 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
     [Fact]
     public async Task A_retrieval_run_adds_its_query_embeddings_on_cache_misses_only_and_its_rerank_calls_under_the_runs_id()
     {
-        const string rerankModel = "ume/chat-eu"; // Eu in the FakeGateway's catalogue: within an internal collection's ceiling
+        const string rerankModel = "fors/chat-eu"; // Eu in the FakeGateway's catalogue: within an internal collection's ceiling
         await using var gateway = new FakeGatewayFactory();
         var fixture = await EvalKit.SeedAsync(database);
         // The fixture's questions may be in the embedding cache from an earlier test; this one is new.

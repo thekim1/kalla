@@ -180,7 +180,7 @@ ok "every long-running service up and every one with a health check healthy ($((
 dc ps -a --format 'table {{.Service}}\t{{.Status}}' | sed 's/^/  /'
 # setup_code / gateway_setup_code: the last setup code on rag-admin's / adminapi's output (empty while there is none).
 # adminapi's line is "adminapi: setup mode is open until <yyyy-MM-dd HH:mm UTC>. Setup code: <code>" (the gateway's
-# src/Ume.LlmGateway.AdminApi/Setup/SetupStartup.cs). In GitHub Actions each is masked as soon as it is read, so no later
+# src/Fors.AdminApi/Setup/SetupStartup.cs). In GitHub Actions each is masked as soon as it is read, so no later
 # step can show it.
 setup_code() {
   dc logs --no-color --no-log-prefix rag-admin 2>/dev/null | sed -n 's/^rag-admin: setup mode is open until .*\. Setup code: //p' | tail -n 1
@@ -247,19 +247,19 @@ for svc in api admin worker; do
     || fail "integration-secrets/Ume.Rag/rag-$svc is missing: the gateway did not provision the manifest"
   [ "$key" = "$manifest_key" ] || fail "rag-$svc's Gateway__Key is not the manifest's key"
   status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$work/gateway-ca.pem" \
-    --resolve "gateway:$gateway_port:127.0.0.1" -H "Authorization: Bearer $key" "https://gateway:$gateway_port/v1/ume/context")"
-  [ "$status" = 200 ] || fail "the gateway's /v1/ume/context answered $status to rag-$svc's key, expected 200"
+    --resolve "gateway:$gateway_port:127.0.0.1" -H "Authorization: Bearer $key" "https://gateway:$gateway_port/v1/fors/context")"
+  [ "$status" = 200 ] || fail "the gateway's /v1/fors/context answered $status to rag-$svc's key, expected 200"
 done
-ok "rag-api, rag-admin and rag-worker each have the manifest's key, and the gateway accepts it (/v1/ume/context = 200)"
+ok "rag-api, rag-admin and rag-worker each have the manifest's key, and the gateway accepts it (/v1/fors/context = 200)"
 context="$(docker run --rm --network none -v "${project}_rag-secrets:/s:ro" --entrypoint cat "$gw_helper" /s/admin/Gateway__Key)"
 gateway_context="$(curl -sS --max-time 15 --cacert "$work/gateway-ca.pem" --resolve "gateway:$gateway_port:127.0.0.1" \
-  -H "Authorization: Bearer $context" "https://gateway:$gateway_port/v1/ume/context" | jq -c '.gateway')"
+  -H "Authorization: Bearer $context" "https://gateway:$gateway_port/v1/fors/context" | jq -c '.gateway')"
 api_url="$(jq -r '.integration_api_url' <<< "$gateway_context")"
 [ "$api_url" = https://adminapi:8443/integration/v1 ] || fail "the context's integration_api_url is '$api_url'"
 ok "the context names the Integration API at https://adminapi:8443/integration/v1"
 # Nothing declares the gateway's sign-in and its wizard is not completed, so it hands out no provider; no
 # UME_ADMIN_PUBLIC_URL, so no admin_url either (rag-admin takes Admin__GatewayAdminUrl). The gateway's
-# src/Ume.LlmGateway.Gateway/Requests/ContextEndpoint.cs.
+# src/Fors.Gateway/Requests/ContextEndpoint.cs.
 jq -e '.oidc_authority == null and .admin_url == null and (.features | index("oidc-authority")) != null' >/dev/null <<< "$gateway_context" \
   || fail "the context's gateway block: $(jq -c '{oidc_authority, admin_url, features}' <<< "$gateway_context")"
 ok "the context announces oidc-authority with none set, and no admin_url"

@@ -4,7 +4,7 @@ By default Ume Rag runs one instance of each service, and an update stops `rag-a
 database and starts the new version: a minute or two in which Open WebUI, MCP clients and the admin UI get errors. If
 they must keep working through an update, run two instances of `rag-api` and `rag-admin` behind the reverse proxy and
 replace them one at a time. It is opt-in, as in the gateway (whose
-[guide](https://github.com/thekim1/llmgateway/blob/main/docs/zero-downtime-updates.md) this follows): nothing changes
+[guide](https://github.com/thekim1/fors/blob/main/docs/zero-downtime-updates.md) this follows): nothing changes
 for an installation that does not ask for it. The design is [`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §7.3.
 
 | You deploy with | Single instance (default) | Without downtime |

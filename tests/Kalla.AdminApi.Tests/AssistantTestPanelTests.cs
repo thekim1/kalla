@@ -94,7 +94,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         };
         var draft = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             // B-16: set to rerank with the gateway on a platform without a rerank model (the usual setup): plain retrieval.
             QuerySteps = """{"retrieval": {"rerank": "gateway"}}""",
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
@@ -146,7 +146,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
             answer.GetProperty("raw").GetString().ShouldNotBeNullOrWhiteSpace();
             answer.GetProperty("delivered").GetString().ShouldNotBeNullOrWhiteSpace();
             var call = result.GetProperty("gateway");
-            (call.GetProperty("model").GetString(), call.GetProperty("residency").GetString()).ShouldBe(("ume/chat-eu", "Eu"));
+            (call.GetProperty("model").GetString(), call.GetProperty("residency").GetString()).ShouldBe(("fors/chat-eu", "Eu"));
             call.GetProperty("inputTokens").GetInt32().ShouldBeGreaterThan(0);
             // B-31: the model's limit is unknown here, so max_tokens was left out and the provider's default applied.
             call.GetProperty("maxTokens").ValueKind.ShouldBe(JsonValueKind.Null);
@@ -156,7 +156,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         // With the model's limits on its mirror row: its output limit (less the prompt within the window) is sent.
         await db.Database.ExecuteSqlAsync($"""
             INSERT INTO config."GatewayModels" ("Name", "Kind", "ModelKind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource", "ContextWindow", "MaxOutputTokens")
-            VALUES ('ume/chat-eu', 'model', 'chat', ARRAY['Eu']::varchar(10)[], 'catalog', false, 'manual', 32768, 2000)
+            VALUES ('fors/chat-eu', 'model', 'chat', ARRAY['Eu']::varchar(10)[], 'catalog', false, 'manual', 32768, 2000)
             ON CONFLICT ("Name") DO UPDATE SET "ContextWindow" = 32768, "MaxOutputTokens" = 2000
             """, Ct);
         try
@@ -168,7 +168,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         }
         finally
         {
-            await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = NULL, "MaxOutputTokens" = NULL WHERE "Name" = 'ume/chat-eu'""", Ct);
+            await db.Database.ExecuteSqlAsync($"""UPDATE config."GatewayModels" SET "ContextWindow" = NULL, "MaxOutputTokens" = NULL WHERE "Name" = 'fors/chat-eu'""", Ct);
         }
 
         (await editor.PostAsJsonAsync(path, new { question = word, target = "Published" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -235,7 +235,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         };
         var draft = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             QuerySteps = """{"answer":{"generalKnowledge":"fallback"}}""", NotFound = """{"links":[{"title":"Kontaktcenter","url":"https://www.umea.se/kontakt"}]}""",
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
         };

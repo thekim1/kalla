@@ -13,7 +13,7 @@ this document and those PRs differ, the PRs win; §3.3, §3.5 and §7.4 below st
 gateway never depends on Ume.Rag; every change is a generic gateway feature.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5), superseded by the PRs above. "Pipeline" means
-`src/Ume.LlmGateway.Gateway/Pipeline/`; "Entities.cs" means `src/Ume.LlmGateway.Domain/Entities/Entities.cs`.
+`src/Fors.Gateway/Pipeline/`; "Entities.cs" means `src/Fors.Domain/Entities/Entities.cs`.
 
 ## 1. Overview
 
@@ -26,9 +26,9 @@ test/dev instance (§13.4). The letters name features:
 
 | Feature | Content | Migration | RAG platform afterwards |
 |---|---|---|---|
-| **B** (release 1) | Residency ceiling `x-ume-max-residency`, key flag `RequireMaxResidency`, 403/503 rule (§3) | `KeyResidencyCeiling` | sends an explicit ceiling on every call (`External` for `public`), with the pilot team's per-level keys until release 2 (§13.4) |
+| **B** (release 1) | Residency ceiling `x-fors-max-residency`, key flag `RequireMaxResidency`, 403/503 rule (§3) | `KeyResidencyCeiling` | sends an explicit ceiling on every call (`External` for `public`), with the pilot team's per-level keys until release 2 (§13.4) |
 | **C** (release 2) | Department member groups from the group claim, `/bff/user` `departmentSources` (§4); tenant and guest refusal for admin sign-in and Data API tokens (§4.6); `code` on catalog teams | `DepartmentMemberGroups` | syncs `memberGroups` and team codes; same group rule as the gateway; same `TenantId`/`RefuseGuests` |
-| **A** (gateway integration phases 1–3) | Integration with credential and assigned keys, `GET /v1/ume/context` and the model facts on `GET /v1/models`; acting as an assigned key with `x-ume-on-behalf-of`; run metadata (§7.1); stream cost; Integration API (§5) | the gateway's own (`Integrations`, `UsageRunMetadata`) | one credential key per service; each assistant and knowledge base as its own assigned key (§13.4) |
+| **A** (gateway integration phases 1–3) | Integration with credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; acting as an assigned key with `x-fors-on-behalf-of`; run metadata (§7.1); stream cost; Integration API (§5) | the gateway's own (`Integrations`, `UsageRunMetadata`) | one credential key per service; each assistant and knowledge base as its own assigned key (§13.4) |
 | Development (release 1) | FakeLlm embedding dimensions (§6); tool passthrough tests (§7.2) | none | local development against a real gateway with FakeLlm (optional; the FakeGateway is the default) |
 
 Not in either release's scope: the optional rerank endpoint (§7.4, thekim1/llmgateway#68), which shipped alongside
@@ -63,14 +63,14 @@ eligibility only, in `ListModelsAsync` (`GatewayRequestHandler.Models.cs:10-22`)
 
 All are read once in step 1b by a new `GatewayRequestHeaders.Read(HttpRequest)` (`Pipeline/GatewayRequestHeaders.cs`)
 that returns a `readonly record struct RequestDirectives(DataResidency? MaxResidency, string? RunId, string? Step,
-GatewayError? Error)`; `x-ume-on-behalf-of` is read by the gateway's own integration stage (§5.2). Absent headers cost one `HeaderDictionary` lookup each and allocate nothing;
+GatewayError? Error)`; `x-fors-on-behalf-of` is read by the gateway's own integration stage (§5.2). Absent headers cost one `HeaderDictionary` lookup each and allocate nothing;
 `StringValues` from Kestrel is used as is.
 
 | Header | Feature | Value | Malformed → |
 |---|---|---|---|
-| `x-ume-max-residency` | B | `OnPrem`, `Eu` or `External`, case-insensitive (§3.1); required when the key has `RequireMaxResidency` | `400 invalid_request` (also when required and missing) |
-| `x-ume-on-behalf-of` | A | assigned key id (GUID) (§5.2) | `400 invalid_request` |
-| `x-ume-run-id`, `x-ume-step` | A | opaque metadata, trimmed, at most 100 characters kept, control characters replaced (§7.1) | never refused |
+| `x-fors-max-residency` | B | `OnPrem`, `Eu` or `External`, case-insensitive (§3.1); required when the key has `RequireMaxResidency` | `400 invalid_request` (also when required and missing) |
+| `x-fors-on-behalf-of` | A | assigned key id (GUID) (§5.2) | `400 invalid_request` |
+| `x-fors-run-id`, `x-fors-step` | A | opaque metadata, trimmed, at most 100 characters kept, control characters replaced (§7.1) | never refused |
 
 More than one value (repeated header or a comma-separated list) for the first two is `400 invalid_request`: two
 ceilings or two keys have no safe meaning. No client header is forwarded to providers today except `OpenAI-Beta` on
@@ -82,21 +82,21 @@ Constants go into `GatewayHeaders` (`GatewayHeaders.cs:6-40`): `MaxResidency`, `
 
 ### 3.1 Header and parsing
 
-- Values are the `DataResidency` names (`src/Ume.LlmGateway.Domain/Enums.cs:4-14`: `OnPrem = 0`, `Eu = 1`,
+- Values are the `DataResidency` names (`src/Fors.Domain/Enums.cs:4-14`: `OnPrem = 0`, `Eu = 1`,
   `External = 2`), compared with `OrdinalIgnoreCase`, after trimming spaces. `EU`, `eu`, `onprem` all work.
 - **No aliases.** `Any` is not accepted: omitting the header means "no ceiling", and `External` is the widest value.
   Numeric strings (`0`, `1`) are refused: `Enum.TryParse` would accept them, so the parser is a hand-written switch over
   the three names (`ResidencyCeiling.TryParse(ReadOnlySpan<char>, out DataResidency)` in
-  `src/Ume.LlmGateway.Domain/Services/ResidencyCeiling.cs`).
-- Empty value, unknown name, several values → `400 invalid_request`, message *"x-ume-max-residency must be one of
+  `src/Fors.Domain/Services/ResidencyCeiling.cs`).
+- Empty value, unknown name, several values → `400 invalid_request`, message *"x-fors-max-residency must be one of
   OnPrem, Eu, External."* Ignoring a bad ceiling would fail open.
 - The order of the enum is the order of the ceiling (`OnPrem < Eu < External`); the code relies on it, and a unit test
   pins it so a new enum member cannot silently change the meaning.
-- The response header `x-ume-residency` keeps writing `Residency.ToString()` (`GatewayRequestHandler.Stages.cs:342`),
+- The response header `x-fors-residency` keeps writing `Residency.ToString()` (`GatewayRequestHandler.Stages.cs:342`),
   i.e. `OnPrem`, `Eu`, `External`. Callers compare case-insensitively. The canonical spelling in the gateway docs and
   the RAG documents is `Eu`.
 - **Key flag `RequireMaxResidency`** (`VirtualKey`, default `false`): a request from such a key without the header is
-  refused in step 1b with `400 invalid_request`, *"This API key requires the x-ume-max-residency header (OnPrem, Eu or External)."* A caller
+  refused in step 1b with `400 invalid_request`, *"This API key requires the x-fors-max-residency header (OnPrem, Eu or External)."* A caller
   whose code forgets the header then fails instead of running without a ceiling. Every Ume.Rag key sets it.
 
 ### 3.2 Semantics and placement
@@ -122,8 +122,8 @@ restriction:
 
 | Situation | Status, code | Message |
 |---|---|---|
-| Malformed, empty or repeated header | `400 invalid_request` | *"x-ume-max-residency must be one of OnPrem, Eu, External."* (whitespace trimmed; no aliases, no numbers) |
-| Header missing with `RequireMaxResidency` | `400 invalid_request` | *"This API key requires the x-ume-max-residency header (OnPrem, Eu or External)."* |
+| Malformed, empty or repeated header | `400 invalid_request` | *"x-fors-max-residency must be one of OnPrem, Eu, External."* (whitespace trimmed; no aliases, no numbers) |
+| Header missing with `RequireMaxResidency` | `400 invalid_request` | *"This API key requires the x-fors-max-residency header (OnPrem, Eu or External)."* |
 | Candidates empty, ceiling set, and **no configured target** of the planned models is within the ceiling (after the key's residency and provider lists and the endpoint, whatever the targets' state) | `403 max_residency_not_met` (new code in `GatewayErrorCodes`, `GatewayErrors.cs:10-40`) | *"No provider for '<model>' is configured at or below the residency 'OnPrem' that the request allows."* |
 | Candidates empty, ceiling set, and targets within the ceiling exist but are **drained or disabled** | `503 no_eligible_provider` + `Retry-After` | *"No provider for '<model>' within the residency 'OnPrem' is available right now. Try again later."* |
 | Ceiling set, targets within it exist, and every attempt failed (circuit-open targets included) | unchanged `502`/`504 all_providers_failed`: the same failure answers the same with or without a ceiling. Ume.Rag retries with the **same** ceiling, never a wider one | unchanged |
@@ -132,7 +132,7 @@ restriction:
 The 403/503 test runs only on the failure path: `SelectCandidatesAsync` re-checks the plan's targets against the
 ceiling and the key's lists, ignoring enabled/drained state, when the list comes out empty. `Retry-After` is
 added only to the ceiling 503, not to other `no_eligible_provider` answers; it is
-`CircuitBreaker:BreakDuration` in seconds (30 s default, `src/Ume.LlmGateway.Infrastructure/Stores/Stores.cs:203`).
+`CircuitBreaker:BreakDuration` in seconds (30 s default, `src/Fors.Infrastructure/Stores/Stores.cs:203`).
 403 is reserved for "this can never work" and matches the existing "key may not use any provider that offers …"
 (`GatewayErrors.cs:111-112`); a drained or broken in-ceiling provider is temporary, so the caller waits and never
 retries wider. The RAG FakeGateway behaves the same (`../platform/repo-and-deployment.md` §4.3).
@@ -142,7 +142,7 @@ Realtime `error` events on live sessions. The refusal is accounted like every re
 `GatewayRequestHandler.Stages.cs:294-298`), with `ErrorCode = max_residency_not_met`. It is **not** a security event:
 the client restricted itself.
 
-Response headers: none new. `x-ume-residency` (`GatewayHeaders.cs:15`, set in `SetRoutingHeaders`,
+Response headers: none new. `x-fors-residency` (`GatewayHeaders.cs:15`, set in `SetRoutingHeaders`,
 `GatewayRequestHandler.Stages.cs:338-344`) reports the answering provider and is documented in `docs/admin-api.md`,
 whose header list (`docs/admin-api.md:382`) misses it today. A caller that must be sure checks it before using the
 answer: during the rolling update an older instance ignores the request header.
@@ -151,7 +151,7 @@ answer: during the rolling update an older instance ignores the request header.
 
 | With | Behaviour |
 |---|---|
-| Routing rules | Rules run first and may choose an on-prem model for a ceiling request; conditions see the header like any header (`GatewayRequestHandler.Stages.cs:363-371`), e.g. `headers["x-ume-max-residency"] == "OnPrem"` (value as the client sent it). A matched rule whose targets are all above the ceiling ends in `max_residency_not_met`: no return to the requested model (ADR 013). |
+| Routing rules | Rules run first and may choose an on-prem model for a ceiling request; conditions see the header like any header (`GatewayRequestHandler.Stages.cs:363-371`), e.g. `headers["x-fors-max-residency"] == "OnPrem"` (value as the client sent it). A matched rule whose targets are all above the ceiling ends in `max_residency_not_met`: no return to the requested model (ADR 013). |
 | PII on-prem restriction | Intersected; `OnPrem` is within every ceiling, so the PII restriction alone decides when both are set. |
 | Key residency list | Intersected. A key limited to `Eu` with ceiling `OnPrem` has no eligible residency → `max_residency_not_met`. |
 | Fallback, retry, circuits | Only filtered candidates are attempted; open circuits still go last (`RouteResolver.cs:176-180`) but never return a removed target; all attempts failing → `502`/`504` as without a ceiling (§3.3). |
@@ -167,7 +167,7 @@ answer: during the rolling update an older instance ignores the request header.
 | `/v1/embeddings` | yes | Ume.Rag sends its embedding profile's ceiling: `Eu` for the pilot's EU-hosted profile until on-prem hardware exists (register M2), `OnPrem` for an on-prem profile |
 | `/v1/audio/transcriptions`, `/v1/audio/translations`, `/v1/images/generations`, `/v1/images/edits` | yes | same `SelectRouteAsync` path |
 | `/v1/realtime`, `/v1/realtime/translations` | yes | read from the WebSocket upgrade request; passed at `GatewayRequestHandler.Realtime.cs:82`; the client-chosen input transcription model is checked with the same set (`:215`) |
-| `GET /v1/models` | yes | **Today** it lists the routes and deployments allowed for the key (`IsModelAllowed`, `IsAllowedFor`) that have a target eligible under the key's own `AllowedResidencies` and `AllowedProviders` (`EffectiveResidencies(key.AllowedResidencies, null)`, `GatewayRequestHandler.Models.cs:22`) on an enabled deployment of an enabled, not drained provider (`RouteSelector.cs:186-200`, `Entities.cs:276`); `ume.residencies` lists those targets' residencies (`:44`); there is no request-side filter. **The release adds** the request's ceiling to that intersection (the `ceiling` overload at `:22`) for every key, delegating keys included, so a caller can ask "what may I use at `OnPrem`" and `ume.residencies` shows only residencies within the ceiling; `RequireMaxResidency` applies here too; `x-ume-on-behalf-of` is validated but does not change the list (§5.11). A model whose in-ceiling targets are all drained is not listed (as today), whereas a chat call to it answers 503. Ume.Rag validates an assistant's model this way on save (identity design §4.7, admin design §4.6 V8) |
+| `GET /v1/models` | yes | **Today** it lists the routes and deployments allowed for the key (`IsModelAllowed`, `IsAllowedFor`) that have a target eligible under the key's own `AllowedResidencies` and `AllowedProviders` (`EffectiveResidencies(key.AllowedResidencies, null)`, `GatewayRequestHandler.Models.cs:22`) on an enabled deployment of an enabled, not drained provider (`RouteSelector.cs:186-200`, `Entities.cs:276`); `fors.residencies` lists those targets' residencies (`:44`); there is no request-side filter. **The release adds** the request's ceiling to that intersection (the `ceiling` overload at `:22`) for every key, delegating keys included, so a caller can ask "what may I use at `OnPrem`" and `fors.residencies` shows only residencies within the ceiling; `RequireMaxResidency` applies here too; `x-fors-on-behalf-of` is validated but does not change the list (§5.11). A model whose in-ceiling targets are all drained is not listed (as today), whereas a chat call to it answers 503. Ume.Rag validates an assistant's model this way on save (identity design §4.7, admin design §4.6 V8) |
 
 ### 3.5 Code changes
 
@@ -178,11 +178,11 @@ answer: during the rolling update an older instance ignores the request header.
 
 | File | Change |
 |---|---|
-| `src/Ume.LlmGateway.Domain/Services/ResidencyCeiling.cs` (new) | `TryParse`; `Mask(DataResidency)`; eight precomputed `DataResidency[]` (one per subset) so intersections never allocate |
-| `src/Ume.LlmGateway.Domain/Services/RouteSelector.cs:213-223` | overload with `ceiling`; bit-mask intersection, returns a precomputed array or null |
-| `src/Ume.LlmGateway.Domain/Entities/Entities.cs:158-166` | `IndexAllowLists` also stores `AllowedResidencyMask` (private field like the model index) |
+| `src/Fors.Domain/Services/ResidencyCeiling.cs` (new) | `TryParse`; `Mask(DataResidency)`; eight precomputed `DataResidency[]` (one per subset) so intersections never allocate |
+| `src/Fors.Domain/Services/RouteSelector.cs:213-223` | overload with `ceiling`; bit-mask intersection, returns a precomputed array or null |
+| `src/Fors.Domain/Entities/Entities.cs:158-166` | `IndexAllowLists` also stores `AllowedResidencyMask` (private field like the model index) |
 | `Entities.cs:46-116` (`VirtualKey`) | `public bool RequireMaxResidency { get; set; }` (column in migration `KeyResidencyCeiling`, release 1, §8.1); copied by `KeyRotation.Rotate` (`KeyRotation.cs:64-87`, an explicit field list) |
-| `src/Ume.LlmGateway.AdminApi/KeyEndpoints.cs:11-56` (`KeyRequest`), `KeyDto`, key form | `requireMaxResidency`; a checkbox *Require residency header* on the key form; on a credential key only gateway admins change it (§5.1) |
+| `src/Fors.AdminApi/KeyEndpoints.cs:11-56` (`KeyRequest`), `KeyDto`, key form | `requireMaxResidency`; a checkbox *Require residency header* on the key form; on a credential key only gateway admins change it (§5.1) |
 | `Pipeline/GatewayRequestHeaders.cs` (new) | §2.1 |
 | `Pipeline/RouteResolver.cs:49-50`, `:143-188` | `ceiling` parameter; 403/503 rule on the failure path (§3.3) |
 | `Pipeline/GatewayRequestHandler.cs`, `.Stages.cs`, `.Realtime.cs`, `.Models.cs` | step 1b; pass the ceiling; 503 + `Retry-After` when every attempted candidate was circuit-open (`:251-373`) |
@@ -198,13 +198,13 @@ answer: during the rolling update an older instance ignores the request header.
 | `EffectiveResidencies` truth table: key list × ceiling × `restrictTo` (27 cases), never wider than any input, no allocation for the 3-argument path (`GC.GetAllocatedBytesForCurrentThread`) | `Domain.Tests` |
 | Route with on-prem priority 2 and EU priority 1: ceiling `OnPrem` attempts only on-prem; EU never called even when on-prem fails (stub counts calls) | `Gateway.Tests/DataPlaneTests.cs` |
 | Fallback chain and last-candidate retry never exceed the ceiling | `Gateway.Tests` |
-| Routing rule sending to an EU model with ceiling `OnPrem` → 403 `max_residency_not_met`; rule on `headers["x-ume-max-residency"]` routes to on-prem | `Gateway.Tests/RoutingRuleGatewayTests.cs` |
+| Routing rule sending to an EU model with ceiling `OnPrem` → 403 `max_residency_not_met`; rule on `headers["x-fors-max-residency"]` routes to on-prem | `Gateway.Tests/RoutingRuleGatewayTests.cs` |
 | On-prem target drained, EU target up, ceiling `OnPrem` → 503 `no_eligible_provider` with `Retry-After`; on-prem circuit open and its attempt failing → 503 with `Retry-After`; no on-prem target configured → 403 | `Gateway.Tests/DataPlaneTests.cs` |
 | `RequireMaxResidency`: header missing → 400 on every endpoint incl. `/v1/models` and the realtime upgrade; present → served; flag copied on rotation | `Gateway.Tests`, `Domain.Tests` |
 | PII reroute + ceiling `Eu` → on-prem; PII reroute with no on-prem target → 503 with the PII message | `Gateway.Tests` |
-| Streaming: 403 before any SSE byte; `x-ume-residency` on success | `Gateway.Tests` |
+| Streaming: 403 before any SSE byte; `x-fors-residency` on success | `Gateway.Tests` |
 | Every endpoint in the table of §3.4 honours it (theory over `GatewayEndpoints.All`) incl. `/v1/models` listing and realtime upgrade | `Gateway.Tests`, `RealtimeTests.cs` |
-| `/v1/models` with an `[OnPrem, Eu]` key: ceiling `OnPrem` lists only models with an on-prem target and `ume.residencies = [OnPrem]`; no header on a `RequireMaxResidency` key → 400 | `Gateway.Tests` |
+| `/v1/models` with an `[OnPrem, Eu]` key: ceiling `OnPrem` lists only models with an on-prem target and `fors.residencies = [OnPrem]`; no header on a `RequireMaxResidency` key → 400 | `Gateway.Tests` |
 | Malformed header → 400 in OpenAI and Anthropic shapes; accounted with `invalid_request` | `Gateway.Tests` |
 | Token quota limited to `External` not reserved when the ceiling is `Eu` | `Gateway.Tests/TokenQuotaTests.cs` |
 
@@ -221,7 +221,7 @@ read. Alignment notes are in §4.10.
   '{}'`. Additive; the previous version ignores the column. **No GIN index** (§4.10).
 - Grants: `Departments` is granted whole-table to all three roles (`deploy/postgres/app-roles.sql:17`, `:25`, `:47`),
   so no change.
-- Validation (`DepartmentRequest`, `src/Ume.LlmGateway.AdminApi/OrganisationEndpoints.cs:10-13`): optional
+- Validation (`DepartmentRequest`, `src/Fors.AdminApi/OrganisationEndpoints.cs:10-13`): optional
   `List<string>? MemberGroups` (omitted = unchanged, `[]` clears), at most 50, each 1–256 characters after trimming, no
   control characters, duplicates removed case-insensitively.
 
@@ -229,23 +229,23 @@ read. Alignment notes are in §4.10.
 
 | Item | Change |
 |---|---|
-| `PUT /api/departments/{id}` (`OrganisationEndpoints.cs:59-67`, already gateway-admin only) | takes `memberGroups`; audit `Update Department` with `DepartmentAudit` (`src/Ume.LlmGateway.AdminApi/AuditSnapshots.cs:65-67`) gaining `MemberGroups`; invalidation unchanged (`Config` + `Keys`, `:65`) |
-| `DepartmentDto` (`src/Ume.LlmGateway.AdminApi/Contracts.cs:18`) | `memberGroups` (visible to every role that reads departments: department admins and viewers read their own) |
+| `PUT /api/departments/{id}` (`OrganisationEndpoints.cs:59-67`, already gateway-admin only) | takes `memberGroups`; audit `Update Department` with `DepartmentAudit` (`src/Fors.AdminApi/AuditSnapshots.cs:65-67`) gaining `MemberGroups`; invalidation unchanged (`Config` + `Keys`, `:65`) |
+| `DepartmentDto` (`src/Fors.AdminApi/Contracts.cs:18`) | `memberGroups` (visible to every role that reads departments: department admins and viewers read their own) |
 | `src/admin-ui/src/components/org/DepartmentFormDrawer.vue` | *Member groups* field: chips, free text with the hint "Values of the group claim: Entra object ids, AD FS or Keycloak group names" |
 | `DepartmentDetail.vue` | lists member groups |
 
 ### 4.3 Sign-in resolution
 
-New in `src/Ume.LlmGateway.AdminApi/Identity/` (same shape as the RAG copy, identity design §2.7 last paragraph):
+New in `src/Fors.AdminApi/Identity/` (same shape as the RAG copy, identity design §2.7 last paragraph):
 
 - `DepartmentMembershipResolver.Resolve(ClaimsPrincipal, IReadOnlyList<DepartmentGroups>, OidcOptions) →
   MembershipResult(Codes, Sources)` implementing steps 1–4 of identity design §2.3. `DepartmentGroups` = (cost-centre
   code, member groups) of **active** departments with at least one member group, loaded in one query per sign-in
   (sign-ins are rare; no cache).
-- Called from `OnTokenValidated` (`src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs:123-127`) right after
+- Called from `OnTokenValidated` (`src/Fors.AdminApi/AdminAuthentication.cs:123-127`) right after
   `ApplyClaimMapping`, after the tenant/guest check (§4.6). The handler becomes async (the department query).
 - Group codes are added as ordinary `departmentCodes` claims, so `AdminContext.Departments()`
-  (`src/Ume.LlmGateway.AdminApi/AdminContext.cs:81-90`) and every scoped query are unchanged. Roles are never added.
+  (`src/Fors.AdminApi/AdminContext.cs:81-90`) and every scoped query are unchanged. Roles are never added.
 - The sources are stored in the ticket's `AuthenticationProperties.Items` (`.ume.departmentSources` as compact JSON):
   `TokenValidatedContext.Properties` flows into the cookie sign-in, the ticket lives in Redis (`AdminSessions.cs`), and
   *Stay signed in* re-signs with the same properties (`AdminAuthentication.cs:217-228`), so nothing is recomputed on
@@ -279,17 +279,17 @@ No session is created. The admin UI shows *"Your account cannot sign in here (gu
 2008 `admin.signin.refused` (Warning): `Reason`, `Actor` (the token's `sub`), `SourceAddress` (as `AdminActor`
 truncates it).
 
-**Data API.** `AddJwtBearer` (`src/Ume.LlmGateway.DataApi/DataApiAuthentication.cs:38-47`) gets an
+**Data API.** `AddJwtBearer` (`src/Fors.DataApi/DataApiAuthentication.cs:38-47`) gets an
 `OnTokenValidated` with the same two checks from `DataApi:TenantId` and `DataApi:RefuseGuests`. Client-credentials
 tokens carry no `acct`/`idp`, so only delegated user tokens can trip the guest check. Refusal = `ctx.Fail(...)` (401)
 and event 3003 `data.token.refused`: `Reason`, `Client` (`DataApiAuthentication.ClientId`, `:80-85`), at most once a
-minute per (client, reason) with `Count` (a misconfigured job retries constantly). Data API keys (`ume-dk-`) are not
+minute per (client, reason) with `Count` (a misconfigured job retries constantly). Data API keys (`fors-dk-`) are not
 affected.
 
 ### 4.7 Data API
 
-- `GET /v1/catalog/departments` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`, and each
-  department of `GET /v1/ume/context` adds `member_groups` under `organisation.read` (where Ume.Rag reads them, §5.5;
+- `GET /v1/catalog/departments` (`src/Fors.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`, and each
+  department of `GET /v1/fors/context` adds `member_groups` under `organisation.read` (where Ume.Rag reads them, §5.5;
   the gateway owner's plan on #580, feature C not scheduled).
 - `GET /v1/catalog/teams` (`:143-145`) adds `code`. **Gap found**: Ume.Rag's `Teams` mirror has a `Code` column
   (data-model §2.1) that the catalog does not deliver today. Not needed for acting as a key (§5.2), but cheap and useful
@@ -337,7 +337,7 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
 in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
 groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). Ume.Rag pins **v0.10.1** (#86: a refusal of the assigned key is always `403`, §5.7). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
-`/v1/ume/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
+`/v1/fors/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
 by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
 does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Ume.Rag relies on; where it and the
 gateway's document differ, the gateway's document wins and this section is a bug to report. Which call runs as which
@@ -346,8 +346,8 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 
 | Gateway phase | Content | Ume.Rag can then |
 |---|---|---|
-| 1 (v0.10.0, #81) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/ume/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
-| 2 (v0.10.0, #82; the credential bound in #84) | `x-ume-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
+| 1 (v0.10.0, #81) | the integration, credential and assigned keys, scopes, the model output limit, the model facts on `GET /v1/models`, `GET /v1/fors/context` | run each service on one credential key; fill the organisation, the key picker and the model limits from the gateway (§5.5) |
+| 2 (v0.10.0, #82; the credential bound in #84) | `x-fors-on-behalf-of` and its echo, event 1006, run metadata stored (§7.1), the stream cost | run each assistant and knowledge base as its own key (§5.2) |
 | 3 (v0.10.0, #83) | the Integration API (`usage.read`) | show the gateway's cost and budget status per assistant and knowledge base (§5.6) |
 
 ### 5.1 Model
@@ -356,7 +356,7 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
   roles:
   - **Credential keys**: one per Ume.Rag service (`rag-api`, `rag-admin`, `rag-worker`), in the owner team, with a
     secret, `AllowedIpRanges`, an expiry and rotation. Their settings, scopes included, are changed by gateway admins
-    only. A call without `x-ume-on-behalf-of` runs as the credential key itself and is charged to the owner team
+    only. A call without `x-fors-on-behalf-of` runs as the credential key itself and is charged to the owner team
     (the syncs, the canary, model checks without a key, and every call of an object without a key).
   - **Assigned keys**: ordinary keys that a department's or team's admins make in their own team and mark *used
     through: Ume.Rag*. One assistant or knowledge base runs on one; its models, residencies, PII policy, content guard,
@@ -368,9 +368,9 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 
 ### 5.2 Header, resolution and echo
 
-`x-ume-on-behalf-of: <assigned key id>` (a GUID) on a request authenticated by a credential key. The gateway
+`x-fors-on-behalf-of: <assigned key id>` (a GUID) on a request authenticated by a credential key. The gateway
 resolves it right after authenticating the credential key, before the body is read (gateway v0.10.0,
-`src/Ume.LlmGateway.Gateway/Requests/RequestStages.cs:118-180`; the codes in `GatewayErrors.cs:61-79`):
+`src/Fors.Gateway/Requests/RequestStages.cs:118-180`; the codes in `GatewayErrors.cs:61-79`):
 
 | Case | Gateway answer |
 |---|---|
@@ -379,10 +379,10 @@ resolves it right after authenticating the credential key, before the body is re
 | Caller not a credential key, the id not an assigned key of the same integration (unknown ids answer the same), or the two keys sharing no residency (§5.3) | `403 delegation_not_allowed` |
 | Assigned key disabled, or its team or department inactive | `403 key_disabled` |
 | Assigned key revoked or expired | `403 key_revoked` / `403 key_expired` (gateway v0.10.1, #86; v0.10.0 answered `401 key_expired` and, for a revoked key, `403 delegation_not_allowed`). A `401` is always the credential key's own refusal |
-| Usable | the request runs as the assigned key; the answer carries `x-ume-on-behalf-of` with the applied id |
+| Usable | the request runs as the assigned key; the answer carries `x-fors-on-behalf-of` with the applied id |
 
 - Ume.Rag sends the key's id, never a name, and only once the latest context's `gateway.features` contains
-  `act-as-key` (phase 2). Each service learns the features from its own `GET /v1/ume/context` with its credential key
+  `act-as-key` (phase 2). Each service learns the features from its own `GET /v1/fors/context` with its credential key
   (`If-None-Match`, at start and every 5 minutes; not accounted, no rate limit; identity §4.7), so no service depends
   on the admin's sync for it.
 - **The echo** is the assigned key's id in the GUID's `D` form (lower case, `RequestStages.cs:132`); Ume.Rag parses it
@@ -393,14 +393,14 @@ resolves it right after authenticating the credential key, before the body is re
   event 5011), because an older gateway instance during a rolling update ignores the header and would charge the
   credential key. An error answer is handled by its code (§5.7), with or without an echo.
 - Every endpoint that reaches a model honours the header, and so do `GET /v1/models` (the assigned key's models,
-  §5.5) and `GET /v1/ume/context` (answered as if the assigned key had been presented; Ume.Rag never sends the header
+  §5.5) and `GET /v1/fors/context` (answered as if the assigned key had been presented; Ume.Rag never sends the header
   there).
 
 ### 5.3 What applies to a request made as an assigned key
 
 | From the credential key and the request | From the assigned key |
 |---|---|
-| the client address list; the ceiling header `x-ume-max-residency` (§3), which still narrows every request | models, providers, residencies, PII policy, attachments, provider tools and storage, content guard; rate, token and concurrency limits; the request policy of the key, its team and department; routing rules; budgets and token quotas; the usage record and security events (which log the credential key's id too) |
+| the client address list; the ceiling header `x-fors-max-residency` (§3), which still narrows every request | models, providers, residencies, PII policy, attachments, provider tools and storage, content guard; rate, token and concurrency limits; the request policy of the key, its team and department; routing rules; budgets and token quotas; the usage record and security events (which log the credential key's id too) |
 
 The assigned key's team's request policy applies, so a team system prompt would change Ume.Rag's prompts; the admin
 warns when the chosen key has one (`has_system_prompt`, admin §5.5.4).
@@ -416,10 +416,10 @@ With both, the worker's `Eu`-capped credential key keeps the worker below `Exter
 credential reaches no more than its own residencies. As built (#84, feature `credential-residencies`): an empty list
 means all, on either key; no residency in common answers `403 delegation_not_allowed` before the body is read (event
 1006, reason `no_common_residency`); a model outside the bound answers `503 no_eligible_provider`, or `403
-max_residency_not_met` when the ceiling header excludes it; `/v1/models` with `x-ume-on-behalf-of` lists only models
-within both keys' residencies, so V8 and V39 see the bound. Ume.Rag's own ceiling header and `x-ume-residency` check stay
+max_residency_not_met` when the ceiling header excludes it; `/v1/models` with `x-fors-on-behalf-of` lists only models
+within both keys' residencies, so V8 and V39 see the bound. Ume.Rag's own ceiling header and `x-fors-residency` check stay
 (identity §4.7); this is the gateway-side guard beside them. Until the gateway release with it is deployed, Ume.Rag
-sends no `x-ume-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
+sends no `x-fors-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
 
 ### 5.4 Budgets, rate limits and cost
 
@@ -432,21 +432,21 @@ sends no `x-ume-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
 - **Rate limits** are the assigned key's, so each assistant and each knowledge base has its own; indexing and chat
   already hit different limits. Ume.Rag asks for no platform-wide cap (review point 4 on #580); the worker keeps its
   own embedding concurrency limit (processing §11).
-- **Cost**: `x-ume-cost-usd` on complete JSON answers (eight decimals). A streamed call sends `x-ume-stream-cost: 1`
+- **Cost**: `x-fors-cost-usd` on complete JSON answers (eight decimals). A streamed call sends `x-fors-stream-cost: 1`
   (exactly `1`; any other value asks for nothing) and the gateway writes one Server-Sent Events comment
-  `: ume-cost-usd=<usd>` (six decimals, USD) **before the closing `data: [DONE]`** of an OpenAI-style stream such as
+  `: fors-cost-usd=<usd>` (six decimals, USD) **before the closing `data: [DONE]`** of an OpenAI-style stream such as
   `/v1/chat/completions`, or after the last event of a stream without one (phase 2; `features` `stream-cost`;
   `GatewayRequestHandler.cs:445-521`). The figure is the one the usage record gets, from the provider's token counts
   when the stream reports them (Ume.Rag sends `stream_options.include_usage`), else from the gateway's estimate. An
   aborted or broken stream has none, and the gateway's usage record stays the record. rag-api reads the comment and
   never forwards it to its own clients (chat §8.3). Run metadata: §7.1. Read-back: §5.6.
 
-### 5.5 Discovery: `GET /v1/ume/context` and `GET /v1/models`
+### 5.5 Discovery: `GET /v1/fors/context` and `GET /v1/models`
 
 Both are answered from the gateway's memory with an `ETag`; Ume.Rag polls with `If-None-Match` (usually `304`), and
 neither is accounted as a model request. The admin's sync is admin §4.10.
 
-- **`GET /v1/ume/context`** (phase 1, a credential key). What Ume.Rag reads: `gateway` (`version`, `admin_url`,
+- **`GET /v1/fors/context`** (phase 1, a credential key). What Ume.Rag reads: `gateway` (`version`, `admin_url`,
   `features`), `integration`, `key` (with `integration_scopes` and `allowed_residencies`, the credential key's own
   list), `departments` (`id`, `name`, `cost_center_code`, `is_active`), `teams` (`id`,
   `department_id`, `name`, `code`, `is_active`) and `assigned_keys` (`id`, `name`, `team_id`, `department_id`,
@@ -461,7 +461,7 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
 - **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
   `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
   `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
-  With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models within both keys' residencies (§5.3) and the
+  With `x-fors-on-behalf-of` (phase 2) it lists the assigned key's models within both keys' residencies (§5.3) and the
   ceiling header, which the call still needs (the credential key's `RequireMaxResidency`): the key's model picker and
   the save checks (admin §4.6 V8, V39). It answers the refusals and the echo of §5.2; the `ETag` is over the body, so
   each key has its own.
@@ -474,7 +474,7 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
 v0.10.2, M-17 C11), authenticated with
 `Authorization: Bearer` and a credential key of an active integration that carries the scope `usage.read`: `401` for
 any other key or none, `403` without the scope (gateway v0.10.0,
-`src/Ume.LlmGateway.AdminApi/Integrations/IntegrationApiEndpoints.cs`, `IntegrationApiService.cs`). Only
+`src/Fors.AdminApi/Integrations/IntegrationApiEndpoints.cs`, `IntegrationApiService.cs`). Only
 `rag-admin`'s credential key gets the scope, so the keys that serve chat can read nothing. The key's status, expiry
 and address list apply as on the gateway; its own rate limit per key, `Admin:IntegrationRequestsPerMinute` (60,
 `429` beyond it); every read is the gateway's security event 2006 `admin.data.read`. Errors are problem details; names
@@ -488,7 +488,7 @@ responsible for the money.
 
 ### 5.7 Errors and security events
 
-| Gateway answer to a request with `x-ume-on-behalf-of` | Ume.Rag |
+| Gateway answer to a request with `x-fors-on-behalf-of` | Ume.Rag |
 |---|---|
 | `400 invalid_request` on the header | a bug in Ume.Rag: logged at Error, never retried |
 | `403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`, `403 key_expired` | the object's key is unusable; final for the call: chat answers the assistant as unavailable (chat §3.6), the worker job waits (engine §7.3), and the admin raises an attention item (admin §5.5.1) |
@@ -504,7 +504,7 @@ The gateway logs its refusals (not the malformed header) as security event 1006 
 
 ## 6. FakeLlm: embedding dimensions (plan §3c)
 
-`/v1/embeddings` (`src/Ume.LlmGateway.FakeLlm/Program.cs:93-116`) returns `Vector(text)`, 8 values from SHA-256 bytes
+`/v1/embeddings` (`src/Fors.FakeLlm/Program.cs:93-116`) returns `Vector(text)`, 8 values from SHA-256 bytes
 (`:496-500`). Change:
 
 - **Dimensions** from, in order: the OpenAI `dimensions` parameter (1–4 096; outside → 400 like OpenAI); else a model
@@ -518,7 +518,7 @@ The gateway logs its refusals (not the malformed header) as security event 1006 
 - **`encoding_format: "base64"`**: little-endian float32 bytes, base64. Several OpenAI SDKs ask for base64 by default
   (to verify for the .NET SDK Ume.Rag uses); without it the fake would break those clients.
 - The gateway passes `dimensions` through unchanged (JSON passthrough, ADR 006; no rewrite of it in `src/`).
-- Tests: a FakeLlm unit test (new `tests/Ume.LlmGateway.Gateway.Tests/FakeLlmEmbeddingTests.cs` via
+- Tests: a FakeLlm unit test (new `tests/Fors.Gateway.Tests/FakeLlmEmbeddingTests.cs` via
   `WebApplicationFactory` of FakeLlm, or a small `FakeLlm.Tests`): default unchanged, dimensions honoured, suffix,
   cosine(similar) > cosine(unrelated), base64 round trip.
 - Ships in release 1: no schema, development only; it lets Ume.Rag developers run against a real local
@@ -531,7 +531,7 @@ The gateway logs its refusals (not the malformed header) as security event 1006 
 Stored from gateway phase 2 on (`features` `run-metadata`); Ume.Rag already sends them and an older gateway ignores
 them.
 
-- `x-ume-run-id` and `x-ume-step`: any key may send them, acting or not; request headers only, never echoed on the
+- `x-fors-run-id` and `x-fors-step`: any key may send them, acting or not; request headers only, never echoed on the
   answer (`RequestStages.cs:182-199`). Trimmed; at most 100 characters kept (longer values are
   truncated, never refused: metadata must not fail a model call); control characters replaced
   (`SecurityEvents.Printable`, `SecurityEvents.cs:30-49`, which allocates nothing when there is nothing to replace).
@@ -568,7 +568,7 @@ catalogue: `context_window`, `max_output_tokens` (a new nullable `ModelDeploymen
 `features` (tags incl. `tools`), `kind`, the residencies and `pricing`. The admin's sync fills
 `GatewayModels.ContextWindow`, `MaxOutputTokens` and `SupportsTools` from them and the manual entries go (admin §4.10;
 Decisions "Answer length from the model"); until the gateway sends them, a platform admin enters them on the RAG
-mirror. Route aliases are listed on `GET /v1/models` with their targets' residencies (`ume.residencies`), so the sync
+mirror. Route aliases are listed on `GET /v1/models` with their targets' residencies (`fors.residencies`), so the sync
 takes them from there too and no manual route rows remain.
 
 ### 7.4 Rerank endpoint (its own release after release 1; #390, thekim1/llmgateway#68)
@@ -578,7 +578,7 @@ by any provider with the *Rerank* capability and a model of kind *Rerank* (vLLM,
 `{ model, query, documents: (string | { text })[], top_n?, return_documents? }`; the provider's answer passes through
 unchanged (`results[]` with `index`, `relevance_score`, `document` when asked; `usage` when reported); only `model` is
 rewritten. Billed per input token (`usage.prompt_tokens`/`total_tokens` or Cohere `meta.billed_units`); no
-context-window check; request policies cannot change `query` or `documents`. Authentication, `x-ume-max-residency`,
+context-window check; request policies cannot change `query` or `documents`. Authentication, `x-fors-max-residency`,
 `RequireMaxResidency`, budgets and usage work as on every endpoint. With no rerank model configured the gateway answers
 404/400 like any unknown or wrong-kind model, and Ume.Rag falls back to unreranked retrieval.
 
@@ -654,7 +654,7 @@ Benchmarks:
 
 | Benchmark | Expectation |
 |---|---|
-| `PipelineBenchmarks` (chat, stream, embeddings; `benchmarks/Ume.LlmGateway.Benchmarks/PipelineBenchmarks.cs`) | unchanged within noise; allocated bytes unchanged (no headers sent) |
+| `PipelineBenchmarks` (chat, stream, embeddings; `benchmarks/Fors.Benchmarks/PipelineBenchmarks.cs`) | unchanged within noise; allocated bytes unchanged (no headers sent) |
 | `PipelineBenchmarks` new case *Chat completion, ceiling + run id* | ≤ +1 % time, ≤ +200 B allocated vs. plain chat (the larger usage record) |
 | `RoutingBenchmarks.SelectCandidates` (`RoutingBenchmarks.cs:70`) + new case with ceiling | 0 B more than without |
 | `audit` | every scenario: 0 Postgres on the request path, same Redis command count |
@@ -666,9 +666,9 @@ Compatible with improvement-plan item 2 (one Redis round trip, `docs/performance
 
 | Page | Feature | Change |
 |---|---|---|
-| `docs/admin-api.md` (data plane `:360-415`, keys `:95-125`, organisation `:73-94`) | B, C | request headers `x-ume-max-residency`, `x-ume-run-id`, `x-ume-step`; response headers incl. the missing `x-ume-residency`; codes `max_residency_not_met`, the 403/503 rule; `/v1/models` with a ceiling; `memberGroups`; `requireMaxResidency`; `/bff/user` `departmentSources` |
+| `docs/admin-api.md` (data plane `:360-415`, keys `:95-125`, organisation `:73-94`) | B, C | request headers `x-fors-max-residency`, `x-fors-run-id`, `x-fors-step`; response headers incl. the missing `x-fors-residency`; codes `max_residency_not_met`, the 403/503 rule; `/v1/models` with a ceiling; `memberGroups`; `requireMaxResidency`; `/bff/user` `departmentSources` |
 | `docs/routing-rules.md` (`:181-206`) | B | ceiling as a hard constraint after rules (*Rules never widen access*); example rule on the header |
-| `docs/providers-and-models.md` | B | residency section: what callers can enforce per request, `RequireMaxResidency`, what `x-ume-residency` reports |
+| `docs/providers-and-models.md` | B | residency section: what callers can enforce per request, `RequireMaxResidency`, what `x-fors-residency` reports |
 | `docs/identity-and-roles.md` (`:26-35`, Entra `:160-186`, check `:217-229`) | C | department scope from member groups in the group claim (how to make Entra emit them); tenant and guest refusal; check-the-setup steps for `departmentSources` |
 | `docs/data-access.md` (events `:64-77`, permissions `:159-162`, aggregate rule `:237`) | C | events 2008, 3003; new fields |
 | `docs/security-events.md` (`:20-46`) | C | SIEM alerts of §10; guests refused by default |
@@ -706,7 +706,7 @@ pulled forward from P2, and is no go-live gate (Decisions "Rerank pulled forward
 integration phases'. **Rolling update: yes** for both, with these rules in the upgrade guide:
 
 1. Set `RequireMaxResidency` on a key only after every gateway instance runs release 1: an old instance ignores
-   `x-ume-max-residency` (callers must check `x-ume-residency`). The same holds for `x-ume-on-behalf-of` in the
+   `x-fors-max-residency` (callers must check `x-fors-residency`). The same holds for `x-fors-on-behalf-of` in the
    integration phase 2: an old instance ignores it and sends no echo, which is why Ume.Rag checks the echo (§5.2).
 2. Do not rotate a key with `RequireMaxResidency` until the admin API is fully upgraded: an old instance's rotation
    does not copy the flag.
@@ -715,9 +715,9 @@ integration phases'. **Rolling update: yes** for both, with these rules in the u
 
 ### 13.3 Upgrade-guide outline
 
-**Release 1.** *Rolling update: yes* (rules above). New request header `x-ume-max-residency` and error code
+**Release 1.** *Rolling update: yes* (rules above). New request header `x-fors-max-residency` and error code
 `max_residency_not_met`; `503` with `Retry-After` for unavailable in-ceiling targets; `/v1/models` honours the
-ceiling; `x-ume-residency` now documented; key flag `RequireMaxResidency`; FakeLlm takes `dimensions` /
+ceiling; `x-fors-residency` now documented; key flag `RequireMaxResidency`; FakeLlm takes `dimensions` /
 `fake-embed-<n>` (development only). Nothing changes for clients that send no ceiling.
 
 **Release 2.** *Rolling update: yes* (rules above). *Check before upgrading*: guests are now refused at sign-in by
@@ -737,7 +737,7 @@ embedding and chat models; it is the interim J10, and the same host's Keycloak h
 Address and keys live only in user secrets or `deploy/.env` and secret files, never in the repository. Everything is
 EU-hosted until on-prem hardware exists (register M2): the pilot embedding profile is `text-embedding-3-large` at 1024
 dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 1: every call carries
-`x-ume-max-residency` with the level's key and the answer's `x-ume-residency` is checked before a byte is used
+`x-fors-max-residency` with the level's key and the answer's `x-fors-residency` is checked before a byte is used
 (`ResidencyCeilingHandler`); v0.8.5 ignores the request header, so until release 1 the ceiling rests on the keys'
 `AllowedResidencies` and that check. `GET /v1/models` is not yet filtered by the ceiling.
 
@@ -747,15 +747,15 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
   (all), each issued per deployable that needs it with `AllowedIpRanges` of that deployable's hosts (`Entities.cs:89`)
   and `RequireMaxResidency = true`. The worker never holds the open key. Which deployable holds which level is the
   platform plan's (§6). Every Ume.Rag call is charged to the pilot team. The team's admins can edit these keys (no
-  delegation, so not gateway-admin only); the explicit ceiling and the `x-ume-residency` check still hold whatever
+  delegation, so not gateway-admin only); the explicit ceiling and the `x-fors-residency` check still hold whatever
   they change. The gateway applies the team's request policy to non-delegated requests, so the pilot team keeps none.
   The worker's keys also carry the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`), so a
   misconfigured worker cannot starve chat (processing design §11).
-- Every call carries `x-ume-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
-  from the integration phase 2 on; older gateways ignore them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
-- The admin's sync reads departments, teams and member groups from `GET /v1/ume/context` with its credential key and
+- Every call carries `x-fors-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
+  from the integration phase 2 on; older gateways ignore them); no `x-fors-on-behalf-of`. The answer's `x-fors-residency` is verified.
+- The admin's sync reads departments, teams and member groups from `GET /v1/fors/context` with its credential key and
   the scope `organisation.read` (§5.1; B-35). No Data API key is used.
-- Saving an assistant calls `GET /v1/models` with the level's key and `x-ume-max-residency` = the level's ceiling,
+- Saving an assistant calls `GET /v1/models` with the level's key and `x-fors-max-residency` = the level's ceiling,
   and refuses a model that is not listed (§3.4, admin design §4.6 V8).
 
 **With the gateway's integration phases** (§5; cost-attribution §6 orders Ume.Rag's work):
@@ -763,13 +763,13 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
 - **Phase 1:** a gateway admin makes the integration *Ume.Rag* and one credential key per service (`rag-api`,
   `rag-admin`, `rag-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
   worker's has `AllowedResidencies = [OnPrem, Eu]` (an upper bound on every key it acts as, #84, §5.3);
-  `rag-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-ume-max-residency`; calls
+  `rag-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-fors-max-residency`; calls
   run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned
   keys, the models and (with `organisation.read`) every department and team with its member groups from
-  `GET /v1/ume/context` and `GET /v1/models` (admin §4.10); the Data API key is revoked.
+  `GET /v1/fors/context` and `GET /v1/models` (admin §4.10); the Data API key is revoked.
   Department admins make assigned keys, and editors choose them on assistants and knowledge bases.
 - **Phase 2** (`features` `act-as-key`): every call of an assistant or knowledge base with a key sends
-  `x-ume-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
+  `x-fors-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
   check models with `GET /v1/models` as the object's key (admin §4.6 V8, V39); publishing an assistant needs a key.
 - **Phase 3:** `rag-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
   per assistant and knowledge base (§5.6).

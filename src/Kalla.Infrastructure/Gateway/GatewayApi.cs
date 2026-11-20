@@ -10,8 +10,8 @@ namespace Kalla.Infrastructure.Gateway;
 /// <summary>
 /// The admin's and the status page's gateway calls (gateway-changes §13.4, identity §4.7) on a client registered with
 /// <c>AddGatewayClient(GatewayApi.HttpClientName)</c>, so every call carries an explicit ceiling and the level's key and its
-/// answer's <c>x-ume-residency</c> is checked by <see cref="ResidencyCeilingHandler"/>. P1 sends no
-/// <c>x-ume-on-behalf-of</c> (gateway release 2).
+/// answer's <c>x-fors-residency</c> is checked by <see cref="ResidencyCeilingHandler"/>. P1 sends no
+/// <c>x-fors-on-behalf-of</c> (gateway release 2).
 /// </summary>
 public sealed class GatewayApi(IHttpClientFactory clients)
 {
@@ -29,13 +29,13 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     private static readonly JsonSerializerOptions SnakeCase = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     /// <summary>
-    /// <c>GET /v1/ume/context</c> with this service's credential key (gateway-changes §5.5): no ceiling, since no model
+    /// <c>GET /v1/fors/context</c> with this service's credential key (gateway-changes §5.5): no ceiling, since no model
     /// answers it. With <paramref name="etag"/> it sends <c>If-None-Match</c>, and an unchanged context comes back as
     /// <see cref="GatewayContextAnswer.Context"/> null (<c>304</c>).
     /// </summary>
     public async Task<GatewayContextAnswer> GetContextAsync(string? etag, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/ume/context", UriKind.Relative));
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("v1/fors/context", UriKind.Relative));
         if (!string.IsNullOrEmpty(etag))
         {
             request.Headers.TryAddWithoutValidation("If-None-Match", etag);

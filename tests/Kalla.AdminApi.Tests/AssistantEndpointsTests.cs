@@ -28,7 +28,7 @@ namespace Kalla.AdminApi.Tests;
 public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, AssistantEndpointsTests.Host host) : IClassFixture<AssistantEndpointsTests.Host>
 {
     private const string AdminKey = "fake-eu-key-assistants-0123456789"; // rag-admin\'s credential key
-    private const string Model = "ume/chat-eu";
+    private const string Model = "fors/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -546,9 +546,9 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
         await using (var db = TestPostgres.Context(database.Connection(null)))
         {
-            if (!await db.GatewayModels.AnyAsync(m => m.Name == "ume/chat-advanced", Ct))
+            if (!await db.GatewayModels.AnyAsync(m => m.Name == "fors/chat-advanced", Ct))
             {
-                db.GatewayModels.Add(new GatewayModel { Name = "ume/chat-advanced", Residencies = ["External"], Source = GatewayModelSources.Catalog });
+                db.GatewayModels.Add(new GatewayModel { Name = "fors/chat-advanced", Residencies = ["External"], Source = GatewayModelSources.Catalog });
                 await db.SaveChangesAsync(Ct);
             }
         }
@@ -561,7 +561,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         var id = assistant.GetProperty("id").GetGuid();
         using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
         {
-            gatewayModel = "ume/chat-advanced", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, version = assistant.GetProperty("draft").GetProperty("version").GetString(),
+            gatewayModel = "fors/chat-advanced", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, version = assistant.GetProperty("draft").GetProperty("version").GetString(),
         }, Ct);
         var draftVersion = (await Json(draft)).GetProperty("version").GetString();
 

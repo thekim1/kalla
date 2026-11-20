@@ -32,7 +32,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Do:** chat §9.9: the request member `ume.escalation` (§3.8, `true`/`false`, 400 otherwise); for `not-found`,
   `answered-general` and `unavailable` the object `reason`, `contacts` (the version's `NotFound.links`, else
   `Settings.Chat`'s) and `summary`, `null` for `answered` and conversational turns; the summary call (`Escalation.cs`
-  beside `FollowUps.cs`: the condense model at the condense ceiling as the assistant's key, `x-ume-step: escalation`,
+  beside `FollowUps.cs`: the condense model at the condense ceiling as the assistant's key, `x-fors-step: escalation`,
   `max_tokens` 200, `Chat:EscalationTimeout` 2,000 ms, run at the same time as the follow-up call) with its input,
   language and accept rule; the second `ume` chunk carries `follow_ups` and `escalation` (§3.8 Delivery);
   `Settings.Chat.Prompts.escalation` with its locked lines (`PromptTexts`, V38 ≤ 2,000, the prompt texts endpoint's
@@ -175,7 +175,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Do:** admin §7.4: `config."AssistantTestQuestions"` (data-model), `GET/POST/PUT/DELETE
   /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in rag-admin (each question through
   `Kalla.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
-  judge `Settings.EvaluationJudgeModel` at the assistant's level, `x-ume-step: assistant-test`), the
+  judge `Settings.EvaluationJudgeModel` at the assistant's level, `x-fors-step: assistant-test`), the
   `EvaluationRuns`/`EvaluationResults` rows of kind `assistant-tests` and `AssistantVersions.TestRunId`, the run after
   every publish and restore and **Run test questions** on demand (one run per assistant at a time), the cost shown
   before, the report card (§7.2) with **Keep** and **Restore the previous version**, **Save as test question** in the
@@ -192,7 +192,7 @@ tables in one migration of its own (no backward compatibility before production)
 ### [ ] B-58 The nightly answer run
 - **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in rag-admin, nightly per published assistant: the
   evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
-  judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-ume-step: eval-answer`) rating faithfulness
+  judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-fors-step: eval-answer`) rating faithfulness
   and citation precision; run kind `answers` with results per question; the assistant's Statistics tab shows the
   latest run's counts beside the live `uncited_answer` rate; `rag.evaluation.llm_tokens{step=answer}`; at most 100
   questions per assistant and night, and the night's cost in the run (§14.8).
@@ -217,9 +217,9 @@ tables in one migration of its own (no backward compatibility before production)
 
 ### [ ] B-42 Gateway phase 2: every api and admin call as the object's key, the echo check, the FakeGateway acting (#580, cost-attribution B5)
 - **Do:** in the shared client (`src/Kalla.Infrastructure/Gateway/`): each service reads `gateway.features` from its
-  own `GET /v1/ume/context` with its credential key, at start and every 5 minutes with `If-None-Match`, held in memory
+  own `GET /v1/fors/context` with its credential key, at start and every 5 minutes with `If-None-Match`, held in memory
   (identity §4.7); the call's object key travels on the request and `ResidencyCeilingHandler` sets
-  `x-ume-on-behalf-of` from it only while the features contain `act-as-key`; on every `2xx`/`304` answer the echo is
+  `x-fors-on-behalf-of` from it only while the features contain `act-as-key`; on every `2xx`/`304` answer the echo is
   parsed and compared as a GUID, and a missing or different one throws before use with event 5011 (`Step`,
   `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId`) while `Gateway:RequireDelegationEcho` (default
   `true`) is on; the refusals of gateway-changes §5.7 on an acted call (`403 delegation_not_allowed`, `403
@@ -235,7 +235,7 @@ tables in one migration of its own (no backward compatibility before production)
   key's models and bounded residencies, the id echoed in the `D` form on every later answer; `/v1/models` with the
   header lists the key's models; `FakeGateway:DropOnBehalfOfEcho`; `FakeGateway:AssignedKeys:<n>:BudgetExceeded`
   (`Key`, `Team`, `Department`: `402 budget_exceeded` with the gateway's message); each served request recorded with
-  the key it ran as, its `x-ume-run-id`, `x-ume-step`, tokens and cost (for B-45). `docs/security-events.md`'s 5011 row
+  the key it ran as, its `x-fors-run-id`, `x-fors-step`, tokens and cost (for B-45). `docs/security-events.md`'s 5011 row
   to the key form (it still names a team).
 - **Paths:** `src/Kalla.Infrastructure/Gateway/**`, `src/Kalla.Answering/**`, `src/Kalla.Retrieval/**`,
   `src/Kalla.Api/**`, `src/Kalla.AdminApi/**` (`AssistantTestEndpoints.cs`, `TestRetrievalEndpoints.cs`, the
@@ -253,14 +253,14 @@ tables in one migration of its own (no backward compatibility before production)
   run id and steps.
 - **Code merged** (#616, #617; review follow-ups #629, #631): only the live check is left.
 - **Waits on:** B-35 (the contract pinned at v0.10.0, the FakeGateway's assigned keys), B-36 (`GatewayKeyId` on
-  assistants and collections and in rag-api's snapshot). The stream cost (`x-ume-stream-cost`, the comment) and the
+  assistants and collections and in rag-api's snapshot). The stream cost (`x-fors-stream-cost`, the comment) and the
   usage records are B-38's: not repeated here.
 - **Read:** gateway-changes §5.2, §5.3, §5.4, §5.7, §7.1; identity §4.7, §10; chat §8.1, §8.2; knowledge §5.2;
   cost-attribution §4.1; repo-and-deployment §4.3.
 
 ### [ ] B-43 Gateway phase 2: save checks as the key, publish needs a key, the acted status check (#580, cost-attribution B5, admin part)
 - **Do:** once the admin's context shows `act-as-key`: V8's and V39's `GET /v1/models` as the object's key
-  (`x-ume-on-behalf-of`) at the ceiling (admin §4.6): each missing model named (`gateway_key_model`), a refusal of the
+  (`x-fors-on-behalf-of`) at the ceiling (admin §4.6): each missing model named (`gateway_key_model`), a refusal of the
   key `gateway_key_invalid`, a missing echo `gateway_unavailable` with 5011; `GET /api/gateway/models?gatewayKeyId=`
   computes `available` as that key (admin §4.5); publish and restore refuse an assistant without a key
   (`gateway_key_required`, 409), and a knowledge base without one keeps saving and indexing on the credential key with

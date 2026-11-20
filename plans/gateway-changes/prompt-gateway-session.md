@@ -12,7 +12,7 @@ as the record of what was asked; a new gateway session starts from the gateway's
 
 ---
 
-You work in the **LLM gateway** repo (github.com/thekim1/llmgateway). The user owns it. A second project, **Ume.Rag**
+You work in the **LLM gateway** repo (github.com/thekim1/fors). The user owns it. A second project, **Ume.Rag**
 (github.com/thekim1/ume-rag-platform), a RAG and chat platform for Umeå kommun, calls this gateway for every model
 call. Its pilot needs the things below from the gateway. The gateway runs only in dev today.
 
@@ -41,9 +41,9 @@ difference instead of forcing it.
 
 Scope, exactly (`gateway-changes/design.md` §1 table):
 - **Feature B: per-request residency ceiling.**
-  - the `x-ume-max-residency` request header (§3.1);
+  - the `x-fors-max-residency` request header (§3.1);
   - semantics and placement in `GatewayRequestHandler` (§3.2);
-  - the 403 vs 503 rule and the `x-ume-residency` response header on every answer (§3.3);
+  - the 403 vs 503 rule and the `x-fors-residency` response header on every answer (§3.3);
   - interactions, including `/v1/models` filtered by the ceiling (§3.4, and the §2 pipeline table);
   - the key flag **`RequireMaxResidency`** and migration `KeyResidencyCeiling` (§3.5);
   - the tests of §3.6.
@@ -58,7 +58,7 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   window (worker setting), and an embedding deployment can be left without a `ContextWindow`.
 - **Rerank endpoint, pulled forward (user, 2026-11-05):** design §7.4 now, as its own small release that can land after
   release 1 without blocking it: path and request shape (query plus passages in, one score per passage), the
-  residency ceiling and `x-ume-residency` like every call, and an **EU-hosted reranker until on-prem hardware exists**
+  residency ceiling and `x-fors-residency` like every call, and an **EU-hosted reranker until on-prem hardware exists**
   (M2), `bge-reranker-v2-m3` on-prem later. Say which EU provider and model, and its price.
 - **Not in release 1:** feature C (member groups, tenant/guest refusal), feature A (delegation, run grouping headers).
   Those are release 2, in P2.

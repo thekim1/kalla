@@ -6,7 +6,7 @@ namespace Kalla.FakeGateway;
 
 /// <summary>
 /// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker, the
-/// long-question condense and the follow-up suggestions: a chat call with <c>x-ume-step</c> <c>eval-generate</c>,
+/// long-question condense and the follow-up suggestions: a chat call with <c>x-fors-step</c> <c>eval-generate</c>,
 /// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c>, <c>follow-ups</c> or <c>escalation</c> is answered from
 /// <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order, cycling per step and process), after
 /// the usual key, ceiling and target checks. Without a script, built-in answers keep a dev run of <c>generate-set</c>, a
@@ -16,7 +16,7 @@ namespace Kalla.FakeGateway;
 /// </summary>
 public sealed partial class FakeChatScripts(IConfiguration configuration)
 {
-    public const string StepHeader = "x-ume-step";
+    public const string StepHeader = "x-fors-step";
     public const string GenerateStep = "eval-generate";
     public const string JudgeStep = "eval-judge";
     public const string RerankStep = "rerank";

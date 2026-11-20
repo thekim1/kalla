@@ -27,7 +27,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) : IAsyncLifetime
 {
-    private const string Model = "ume/chat-onprem";
+    private const string Model = "fors/chat-onprem";
     private const int Documents = 3;
     private const int ChunksPerDocument = 4;
 

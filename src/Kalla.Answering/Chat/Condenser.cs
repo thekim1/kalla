@@ -103,7 +103,7 @@ public static partial class Condenser
     /// <summary>The default of <c>Chat:LongQuestionCondenseTimeout</c> (§5.1).</summary>
     public static readonly TimeSpan DefaultLongTimeout = TimeSpan.FromSeconds(3);
 
-    /// <summary>The <c>x-ume-step</c> of the follow-up condense (§5) and of the long-question condense (§5.1).</summary>
+    /// <summary>The <c>x-fors-step</c> of the follow-up condense (§5) and of the long-question condense (§5.1).</summary>
     public const string Step = "condense";
     public const string LongStep = "condense-long";
 

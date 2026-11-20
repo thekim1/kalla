@@ -92,7 +92,7 @@ Each app has an information class ceiling and says whether it keeps chat history
   and it can expire. A department admin manages the keys of their department's teams.
 - **Rotate** makes a new key with the same limits, and the old one stops at once or after 24 hours. **Revoke** stops
   it within seconds.
-- Gateway keys (`ume-sk-…`) and Ume.Rag keys are separate: neither system accepts the other's.
+- Gateway keys (`fors-sk-…`) and Ume.Rag keys are separate: neither system accepts the other's.
 
 The app sends its key as `Authorization: Bearer <key>`, or in `x-api-key`. What a key reaches:
 

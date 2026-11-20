@@ -42,7 +42,7 @@ public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, Date
     OrgSyncResult? LastResult, GatewayContextInfo? Gateway, string? Degraded, string? AdminUrl = null, IntegrationReadback? Integration = null);
 
 /// <summary>
-/// Mirrors the gateway's <c>GET /v1/ume/context</c> (admin design §4.10, gateway-changes §5.5) with the admin's credential
+/// Mirrors the gateway's <c>GET /v1/fors/context</c> (admin design §4.10, gateway-changes §5.5) with the admin's credential
 /// key, every <c>OrgSync:IntervalMinutes</c> and on demand: <c>assigned_keys</c> into <c>config."GatewayKeys"</c>, and
 /// departments and teams into <c>config."Departments"</c>/<c>"Teams"</c> when the gateway has the feature
 /// <c>organisation</c> and the key the scope <c>organisation.read</c> (otherwise they are left as they are and the status

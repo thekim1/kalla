@@ -42,7 +42,7 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
 
     private static ChatTurn Turn(Guid? issued, string? chat, Guid assistant, Guid client, string subject, string level = "public") => new(
         Guid.CreateVersion7(), issued, chat, assistant, Guid.CreateVersion7(), Guid.CreateVersion7(), client, chat is null ? "application" : "owui-user", subject, level,
-        "none", 90, "answered", "ok", null, "sv", false, "ume/chat-eu", "Eu", 10, 5, 100, null, [], DateTimeOffset.UtcNow);
+        "none", 90, "answered", "ok", null, "sv", false, "fors/chat-eu", "Eu", 10, 5, 100, null, [], DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task The_writer_refuses_another_owners_or_assistants_conversation_and_keeps_open_webui_chats_apart()

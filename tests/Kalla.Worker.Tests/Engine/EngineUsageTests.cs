@@ -15,7 +15,7 @@ namespace Kalla.Worker.Tests.Engine;
 
 /// <summary>
 /// A-31's done-when for ingestion (engine design §7.7, §10.2, §10.4, §10.6; processing design §11) against the FakeGateway,
-/// whose every embedding answer carries <c>x-ume-cost-usd</c>: a sync of two documents gives each run item the sum of its
+/// whose every embedding answer carries <c>x-fors-cost-usd</c>: a sync of two documents gives each run item the sum of its
 /// embedding calls' gateway cost and the run that sum, <c>CollectionDailyUsage</c> holds the day's <c>embed</c> row with the
 /// same calls, tokens and cost, every call carried the run's id, and a second run, all cache hits, adds nothing. A-40's
 /// done-when (engine design §17): every answered call counts in <c>rag.embed.tokens</c> and <c>rag.ingestion.cost</c>, the
@@ -60,14 +60,14 @@ public sealed class EngineUsageTests(RagDatabaseFixture database, FakeGatewayFac
             var calls = recorder.Answered;
             calls.Count.ShouldBe(recorder.Calls.Count, "every call was answered");
             calls.ShouldAllBe(c => c.Path == "/v1/embeddings" && c.Step == EmbeddingClient.EmbedStep && c.CostUsd > 0 && c.InputTokens > 0);
-            calls.ShouldAllBe(c => c.RunId == runId.ToString(), "every call carries the run's id as x-ume-run-id");
+            calls.ShouldAllBe(c => c.RunId == runId.ToString(), "every call carries the run's id as x-fors-run-id");
             var items = await RunItemCostsAsync(runId);
             foreach (var name in new[] { "alfa", "beta" })
             {
                 var own = calls.Where(c => c.Body.Contains(Title(name), StringComparison.Ordinal)).ToList();
                 own.ShouldNotBeEmpty(name);
                 items.Single(i => i.Identity.EndsWith("/p/" + name, StringComparison.Ordinal)).CostUsd.ShouldBe(own.Sum(c => c.CostUsd!.Value),
-                    $"{name}: the sum of its embedding calls' x-ume-cost-usd");
+                    $"{name}: the sum of its embedding calls' x-fors-cost-usd");
             }
 
             var total = calls.Sum(c => c.CostUsd!.Value);
@@ -100,7 +100,7 @@ public sealed class EngineUsageTests(RagDatabaseFixture database, FakeGatewayFac
     [Fact]
     public async Task Every_answered_embedding_call_counts_its_input_tokens_and_its_cost_split_by_source_with_the_job_class_as_the_only_other_tag()
     {
-        // fake-no-cost, served as an embedding model by this test's fake, answers without x-ume-cost-usd; the mirror prices it
+        // fake-no-cost, served as an embedding model by this test's fake, answers without x-fors-cost-usd; the mirror prices it
         // (per million: 0.15 in), so its calls are estimated. bge-m3's answers carry the gateway's cost.
         await Sql.ExecuteAsync(database.Connection(null), """
             INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource", "InputPerMillionUsd",
@@ -156,7 +156,7 @@ public sealed class EngineUsageTests(RagDatabaseFixture database, FakeGatewayFac
             var bySource = cost.GroupBy(m => m.Tags["source"]).ToDictionary(g => g.Key!, g => g.ToList());
             bySource.Keys.Order().ShouldBe(["estimate", "gateway"]);
             bySource["gateway"].Count.ShouldBe(gatewayCalls.Count);
-            bySource["gateway"].Sum(m => m.Value).ShouldBe((double)gatewayCalls.Sum(c => c.CostUsd!.Value), 1e-9, "the gateway's x-ume-cost-usd");
+            bySource["gateway"].Sum(m => m.Value).ShouldBe((double)gatewayCalls.Sum(c => c.CostUsd!.Value), 1e-9, "the gateway's x-fors-cost-usd");
             var estimate = estimatedCalls.Sum(c => Math.Round(c.InputTokens * 0.15m / 1_000_000m, 8, MidpointRounding.AwayFromZero));
             estimate.ShouldBeGreaterThan(0m);
             bySource["estimate"].Count.ShouldBe(estimatedCalls.Count);

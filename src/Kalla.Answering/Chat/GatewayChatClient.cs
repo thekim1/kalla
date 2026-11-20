@@ -20,7 +20,7 @@ public abstract record GatewayStreamEvent
     public sealed record Finish(string Reason) : GatewayStreamEvent;
 
     /// <summary>
-    /// The stream ended (<c>data: [DONE]</c> or its last line): the cost from the comment <c>: ume-cost-usd=</c>, null when the
+    /// The stream ended (<c>data: [DONE]</c> or its last line): the cost from the comment <c>: fors-cost-usd=</c>, null when the
     /// gateway wrote none. A stream that breaks off has no end event.
     /// </summary>
     public sealed record End(decimal? CostUsd) : GatewayStreamEvent;
@@ -31,17 +31,17 @@ public sealed record GatewayAnswer(string Text, int PromptTokens, int Completion
 
 /// <summary>
 /// Chat calls to the gateway (chat design §8): <c>POST /v1/chat/completions</c> with the assistant's gateway model, an explicit
-/// <c>x-ume-max-residency</c> (the <see cref="ResidencyCeilingHandler"/> adds that level's key and checks <c>x-ume-residency</c>
-/// before a byte is read), <c>x-ume-step: chat-answer</c> and <c>x-ume-run-id</c> = the message id. Streams are opened with
+/// <c>x-fors-max-residency</c> (the <see cref="ResidencyCeilingHandler"/> adds that level's key and checks <c>x-fors-residency</c>
+/// before a byte is read), <c>x-fors-step: chat-answer</c> and <c>x-fors-run-id</c> = the message id. Streams are opened with
 /// <see cref="HttpCompletionOption.ResponseHeadersRead"/>, so every check runs before our first byte, and with
-/// <c>x-ume-stream-cost: 1</c>; they are read through <see cref="SseReader"/>, so the cost comment never reaches a client of
+/// <c>x-fors-stream-cost: 1</c>; they are read through <see cref="SseReader"/>, so the cost comment never reaches a client of
 /// ours. Errors map to §3.6. Each call's usage is read once (<see cref="GatewayUsageReader"/>, §8.3).
 /// </summary>
 public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatOptions> options, ILogger<GatewayChatClient> logger)
 {
     public const string HttpClientName = "gateway-chat";
 
-    /// <summary>The <c>x-ume-step</c> of the answer call.</summary>
+    /// <summary>The <c>x-fors-step</c> of the answer call.</summary>
     public const string AnswerStep = "chat-answer";
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
 
     /// <summary>
     /// One JSON answer. Once the gateway has answered <c>2xx</c> the call's usage goes to <paramref name="usage"/> (its tokens and
-    /// <c>x-ume-cost-usd</c>; a body that is not JSON, or one cut off by the time limit, gives no tokens), before the body is read
+    /// <c>x-fors-cost-usd</c>; a body that is not JSON, or one cut off by the time limit, gives no tokens), before the body is read
     /// for the text: the call was charged even when the body then fails. The headers of a non-streamed answer come only after the
     /// whole answer is generated, so the call is bounded by <c>Chat:MaxAnswerDurationSeconds</c>, not the headers timeout (#695);
     /// a caller with a shorter budget (condense, follow-ups) cancels <paramref name="ct"/> itself.
@@ -98,7 +98,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     }
 
     /// <summary>
-    /// Opens the stream with <c>x-ume-stream-cost: 1</c> (§8.1): status and residency are checked when this returns; the caller
+    /// Opens the stream with <c>x-fors-stream-cost: 1</c> (§8.1): status and residency are checked when this returns; the caller
     /// then writes its first byte.
     /// </summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
@@ -174,8 +174,8 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
             request.WithStreamCost();
         }
 
-        request.Headers.Add("x-ume-step", step);
-        request.Headers.Add("x-ume-run-id", runId.ToString());
+        request.Headers.Add("x-fors-step", step);
+        request.Headers.Add("x-fors-run-id", runId.ToString());
         using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
         headers.CancelAfter(headersLimit);
         HttpResponseMessage response;
