@@ -13,6 +13,15 @@ off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
 
 ## Phases and planning
 
+### Product names
+
+The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the LLM gateway is **Fors**; the working
+names Ume.Rag and Ume.LlmGateway go. The rename of code, images, documents and deployment names is stream b's work
+(the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
+This answers N1.
+
+*From:* decided by user, 2026-11-20.
+
 ### First version
 
 The pilot covers URL lists, a website crawl and uploads, the Chat and Knowledge APIs, and Open WebUI for one pilot
