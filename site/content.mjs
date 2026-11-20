@@ -12,6 +12,7 @@ export const GATEWAY_SITE = 'https://thekim1.github.io/llmgateway/'
 export const DOCS = [
   { group: 'Get started', items: [
     { slug: '', title: 'Introduction', source: 'docs/introduction.md', lead: 'What Ume.Rag does, how it sits on the LLM gateway, and where to go next.' },
+    { slug: 'how-it-works', title: 'How it fits together', source: 'docs/how-it-works.md', lead: 'Knowledge bases, assistants, apps and keys, gateway keys and sign-in, and how a request is checked.' },
     { slug: 'compose-quick-start', title: 'Quick start with Compose', source: 'docs/compose-quick-start.md', lead: 'From an empty Linux host to a first knowledge base: the gateway and Ume.Rag on one machine.' },
     { slug: 'local-development', title: 'Local development', source: 'docs/local-development.md', lead: 'Run the full stack with Aspire, demo data, the fake gateway and the test users, and run the tests.' },
   ] },

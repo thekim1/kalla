@@ -38,6 +38,7 @@ same services run as one Portainer stack together with the gateway, or on Kubern
 
 ## Where to go next
 
+- How knowledge bases, assistants, apps and keys and sign-in work together: [how it fits together](how-it-works.md).
 - Try it on your machine: [local development](local-development.md).
 - Install a release next to the gateway: [quick start with Compose](compose-quick-start.md), or
   [Portainer](portainer.md).
