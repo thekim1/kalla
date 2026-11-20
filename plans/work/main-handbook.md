@@ -255,6 +255,15 @@ main session needs:
 - **Six pull requests at once fill both runners for an hour** (session 47): open the small ones first, and dispatch a
   dry run only after the pull request's own checks are done.
 
+- **A rename must not touch what is stored** (session 50, #902 and thekim1/fors#116): Data Protection's application
+  name and purposes, AES-GCM associated data, HMAC contexts, check-constraint values and applied migrations are
+  format, not product text. Both products' renames changed them, which an upgraded install would have paid for
+  with its secrets and encrypted blobs; fresh-database tests cannot see it. Review a rename by grepping the old
+  name in `CreateProtector`, `SetApplicationName`, `GetBytes(` and `Migrations/`.
+- **A second agent's sweep of a large diff** (session 50, #902: 1,353 files): give it the stated intent and the list
+  of deliberate exceptions, ask for producer/consumer mismatches with both sides read, and check each finding in
+  the files before posting. It found the data-losing ones; the main session's own reading found the Kubernetes one.
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
