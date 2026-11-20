@@ -30,8 +30,9 @@
 - **Compose:** from the new release's directory, with the old installation running, run
   `./deploy/upgrade/upgrade-to-0.9.sh`. It renames the variables in `deploy/.env` (keeping `.env.pre-0.9`), stops the
   old project `ume-rag` except Postgres, renames the roles, removes the old containers and copies the volumes
-  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). Then run `./deploy/init-deployment.sh` and start the
-  release as usual. Remove the old volumes once it runs.
+  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). A run that stopped part-way is safe to repeat: a
+  volume whose copy did not finish is copied again. Then run `./deploy/init-deployment.sh` and start the release as
+  usual. Remove the old volumes once it runs.
 - **Portainer** (one stack with the gateway):
   1. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, every `RAG_*_IMAGE` to
      `KALLA_*_IMAGE`, then every `UME_*` to `FORS_*` (with Fors's own defaults to keep, its guide, *Portainer*). A
@@ -39,14 +40,42 @@
      `KALLA_OIDC_CLIENT_ID=ume-rag-admin`.
   2. **Update the stack** with the release's `compose.portainer.yaml`, with *Prune services* on. `kalla-bootstrap`
      copies the volumes `rag-certs`, `rag-secrets`, `rag-blobs`, `rag-openwebui-data` and `rag-postgres-data` into the
-     `kalla-*` volumes once (its log says so); it stops instead when the old database is still open. `kalla-migrate`
-     then fails to sign in, because the roles do not have their new names yet.
+     `kalla-*` volumes once (its log says so); it stops instead when the old database is still open. If the copy fails
+     part-way (a full disk), free the space and update the stack again: the copy is done again from the start.
+     `kalla-migrate` then fails to sign in, because the roles do not have their new names yet.
   3. **Rename the roles:** open a console (`/bin/sh`) on `kalla-postgres` and run
      `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -f -`, then paste
      the content of `deploy/upgrade/0.9-rename-roles.sql` and end with Ctrl-D. Do the same for the gateway's `postgres`
      (Fors's guide), then **redeploy the stack**.
   4. Remove the old `rag-*` volumes once the stack runs.
-- **Kubernetes:** the Secrets, ConfigMaps, Deployments and Services `rag-*` become `kalla-*`. Scale the old
-  Deployments to zero, run `deploy/upgrade/0.9-rename-roles.sql` as the database's superuser, create the secrets again
-  with `create-secrets.sh` (it reads the existing certificates and secrets), apply the new manifests and delete the
-  old objects.
+- **Kubernetes** (read through, not run: no Kubernetes installation has been upgraded yet). The Secrets, ConfigMaps,
+  Deployments, Services, Ingresses, NetworkPolicies and the migration Job `rag-*` and `ume-rag-*` become `kalla-*`.
+  The data stays where it is: the blob claim keeps its name `rag-blobs`, and the StatefulSet `postgres` keeps its name
+  and so its claims `data-postgres-0` and `pgbackrest-postgres-0`.
+  1. **Keep your namespace.** The example overlay now says `kalla`; the claims are in the namespace you installed in
+     (`ume-rag` by the old example) and cannot move. Take the new `example/` as your overlay, carry your changes over
+     (the ConfigMaps and patch targets have new names) and set your namespace in `kustomization.yaml` and
+     `namespace.yaml`.
+  2. Scale the old Deployments to zero (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`,
+     `rag-renderer`), then rename the roles as the database's superuser. With the `datastores` component:
+     `kubectl -n <namespace> exec -i statefulset/postgres -- psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres
+     < deploy/upgrade/0.9-rename-roles.sql`.
+  3. Create the secrets again under their new names: `create-secrets.sh` with the options of the installation and
+     `--namespace <namespace>`. It reads the certificates and secrets in `deploy/certs` and `deploy/secrets` and
+     generates nothing that exists.
+  4. With the `datastores` component: `kubectl -n <namespace> delete statefulset postgres`. A StatefulSet's selector
+     cannot change, so the new one cannot be applied over the old; deleting the StatefulSet stops Postgres and keeps
+     its two claims, which the new StatefulSet of the same name takes over. Do not delete the claims.
+  5. Run `deploy.sh` with the new overlay.
+  6. Delete the old objects, by name: the Deployments, Services, Ingresses and PodDisruptionBudgets `rag-*`, the Job
+     `rag-migrate`, the NetworkPolicies, ConfigMaps and Secrets `ume-rag-*`, and the claim `rag-clamav-db` (the new
+     `kalla-clamav-db` downloads the signatures again). **Never `rag-blobs`, `data-postgres-0` or
+     `pgbackrest-postgres-0`.**
+- **Host units** (`deploy/host/install.sh`): the units keep their `rag-*` names, but their state directory is
+  `/var/lib/kalla` (was `/var/lib/ume-rag`). After installing the new units, point node_exporter's textfile collector
+  (or the collector that reads `backup.prom`, `upload-backup.prom` and `certs.prom`) at the new directory and remove
+  the old one, whose files are no longer updated. `backup-last-run` starts anew at the next backup.
+- **Telemetry and the SIEM:** security events are logged under the category `Kalla.Security` (was
+  `Ume.Rag.Security`), and the meter and trace source are named `Kalla` (was `Ume.Rag`). Change the collector's
+  filter that forwards security events (`deploy/otel/collector-siem.example.yaml`) and any SIEM rule or collector
+  filter that names the old category or source. The metric names (`rag.*`) are unchanged.

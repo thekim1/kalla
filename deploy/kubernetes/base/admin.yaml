@@ -108,7 +108,7 @@ spec:
         - name: blob-key
           secret: {secretName: kalla-blob-key, defaultMode: 0440}
         - name: blobs
-          persistentVolumeClaim: {claimName: kalla-blobs}
+          persistentVolumeClaim: {claimName: rag-blobs}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 64Mi}
 ---

@@ -425,7 +425,7 @@ export const OVERVIEW = {
   showHidden: (n: number) => `Show ${n} hidden`,
   /** The reminder before a client secret stored by the setup wizard expires (admin design §5.11), for platform admins. */
   secretExpiry: {
-    clients: { 'kalla-admin': 'the admin UI', 'open-webui': 'Open WebUI' },
+    clients: { 'rag-admin': 'the admin UI', 'open-webui': 'Open WebUI' },
     expires: (client: string, date: string, days: number) =>
       `The sign-in client secret of ${client} expires on ${date} (${days === 0 ? 'today' : days === 1 ? 'in 1 day' : `in ${days} days`}).`,
     expired: (client: string, date: string, days: number) =>

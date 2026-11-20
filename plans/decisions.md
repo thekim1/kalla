@@ -28,6 +28,9 @@ gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts becam
 ones are `kalla-sk-` and `kalla-pk-`. The names that are part of stored ciphertext keep the old name, as format
 constants nobody sees (`StoredFormatNames`: the Data Protection application name `Ume.Rag`, its purposes `Ume.Rag.*`
 and the blob key wrap's `ume-rag-wrap:`), so what an installation has encrypted stays readable (thekim1/fors#116).
+The same holds for a stored value under a constraint of an applied migration, and for a name that data is bound to and
+that cannot be renamed: the setup test's target `rag-admin` (`CK_SetupTests_Target`) and the Kubernetes blob claim
+`rag-blobs`. An applied migration is never edited for a name.
 The public host-name defaults (`rag.`, `rag-admin.`, `chat.<domain>`) and the host units (`rag-*.service`,
 `rag-ingestion.slice`) stay too. The rename comes before `v0.9.0`. This answers N1.
 

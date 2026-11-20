@@ -16,7 +16,7 @@
 #                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
 # Set by the stack file or stack.env.example, nothing to type
-#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Källa with its three
+#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Kalla with its three
 #                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
 #                             its own (kalla) that a gateway admin can move. The gateway's migrations create what is
 #                             missing (never change what exists) and write each new key to the volume
@@ -24,7 +24,7 @@
 #                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
 #                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
 #   KALLA_API_GATEWAY_KEY, KALLA_ADMIN_GATEWAY_KEY, KALLA_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Källa; set, it wins over the
+#                             each service's credential key of the gateway integration Kalla; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
 #                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
 #                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.

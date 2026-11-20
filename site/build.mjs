@@ -226,7 +226,7 @@ function homePage() {
 <section class="wrap pt-120" aria-labelledby="sdk-h">
   <div class="split">
     <div class="stack-16 order-2">${eyebrow('OpenAI-compatible')}<h2 id="sdk-h" class="h-l">Open WebUI on day one, your own app the day after.</h2>
-      <p class="body-l">The chat API speaks the OpenAI chat completions format, so Open WebUI and the OpenAI SDKs work unchanged: an assistant is a model. The optional <code>ume</code> member adds the answer's outcome, related documents, follow-up questions and a hand-off to support. The knowledge API gives search without an answer.</p>
+      <p class="body-l">The chat API speaks the OpenAI chat completions format, so Open WebUI and the OpenAI SDKs work unchanged: an assistant is a model. The optional <code>kalla</code> member adds the answer's outcome, related documents, follow-up questions and a hand-off to support. The knowledge API gives search without an answer.</p>
       <div class="chips">${C.ENDPOINTS.map(e => `<span class="chip mono">${esc(e)}</span>`).join('')}</div>
     </div>
     <div class="sdk order-1" data-tabs>

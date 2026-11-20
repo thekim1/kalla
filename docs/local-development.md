@@ -133,7 +133,7 @@ Every model call goes through the gateway; locally that is `Kalla.FakeGateway`
 ([`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §4.3). It serves 1024-dimension embeddings,
 chat completions built from the prompt (streamed or not), `/v1/models`, `/v1/rerank` and `/v1/fors/context` (the
 organisation and the assigned keys, which the admin's syncs read). Like the real gateway it requires `x-fors-max-residency` and answers
-with `x-fors-residency`. Each service has its own dev credential key, as the gateway integration *Källa* gives
+with `x-fors-residency`. Each service has its own dev credential key, as the gateway integration *Kalla* gives
 (production-setup.md, *Gateway credential keys*): the service gets it as `Gateway__Key`, and the fake accepts api's and
 admin's at every ceiling and the worker's up to `Eu`, narrowing a higher ceiling to the key's residencies as the gateway
 does. Only the admin's holds the scope `organisation.read`.
@@ -169,7 +169,7 @@ By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secre
 `StallProbability`, `StallMs`.
 
 **Against a real local gateway** (its AppHost running): set `FakeGateway:Enabled=false`,
-`Gateway:BaseUrl=https://localhost:<gateway port>` and each service's credential key of a local integration *Källa*
+`Gateway:BaseUrl=https://localhost:<gateway port>` and each service's credential key of a local integration *Kalla*
 in the AppHost user secrets, made as production-setup.md, *Gateway credential keys*, says:
 `Gateway:Services:<service>:Key` (service `api`, `admin` or `worker`), which the service gets as `Gateway:Key`. The
 AppHost stops on an unknown service, and on the per-level keys of before B-37 (`Gateway:Keys:<level>`): remove them.

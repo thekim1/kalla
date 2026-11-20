@@ -76,7 +76,7 @@ configMapGenerator:
       # - ClamAv__Mode=off
 patches:
   # change: a ReadWriteMany storage class for the blob volume (kalla-api, kalla-admin and kalla-worker mount it).
-  - target: {kind: PersistentVolumeClaim, name: kalla-blobs}
+  - target: {kind: PersistentVolumeClaim, name: rag-blobs}
     patch: |-
       - op: add
         path: /spec/storageClassName

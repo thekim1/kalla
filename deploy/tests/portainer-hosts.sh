@@ -32,7 +32,7 @@ example="$here/../portainer/stack.env.example"
 for tool in docker jq; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 # The stack file and the case's variables are under test: an inherited variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^UME_|^COMPOSE_PROFILES$' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME|FORS|KALLA)_|^COMPOSE_PROFILES$' || true)
 grep -vE '^(FORS_DOMAIN|KALLA_API_HOST|KALLA_ADMIN_HOST|KALLA_OPENWEBUI_HOST|FORS_GATEWAY_HOST|FORS_GATEWAY_PUBLIC_URL|FORS_ADMIN_HOST|FORS_ADMIN_PUBLIC_URL|COMPOSE_PROFILES)=' \
   "$example" > "$work/base.env"
 

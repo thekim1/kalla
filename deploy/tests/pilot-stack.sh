@@ -26,7 +26,7 @@ for tool in docker jq; do command -v "$tool" >/dev/null || { echo "error: $tool 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 # The files and these placeholders are under test: an inherited variable would override them.
-while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME_|RAG_|COMPOSE_|OPENWEBUI_IMAGE$)' || true)
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME_|RAG_|FORS_|KALLA_|COMPOSE_|OPENWEBUI_IMAGE$)' || true)
 export FORS_DOMAIN=example.se KALLA_GATEWAY_URL=https://llm.example.se KALLA_BACKUP_TARGET=local
 
 failures=0
