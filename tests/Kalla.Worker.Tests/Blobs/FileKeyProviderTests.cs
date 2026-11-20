@@ -34,6 +34,26 @@ public sealed class FileKeyProviderTests : IDisposable
         await Should.ThrowAsync<KeyProviderException>(() => provider.UnwrapAsync(wrapped with { Ciphertext = damaged }, Ct));
     }
 
+    [Fact]
+    public async Task A_data_key_wrapped_before_the_rename_to_Kalla_still_unwraps()
+    {
+        // Wrapped as 0.8.0 did: AES-256-GCM, nonce ‖ ciphertext ‖ tag, and "ume-rag-wrap:{name}:{version}" as associated data.
+        // Written out here on purpose: a renamed context would leave every stored upload unreadable (thekim1/fors#116).
+        TestBlobKeys.WriteKey(_keys.FullName, "rag-blob-internal");
+        var masterKey = Convert.FromBase64String((await File.ReadAllTextAsync(Path.Combine(_keys.FullName, "rag-blob-internal"), Ct)).Trim());
+        var dataKey = RandomNumberGenerator.GetBytes(32);
+        var stored = new byte[12 + 32 + 16];
+        RandomNumberGenerator.Fill(stored.AsSpan(0, 12));
+        using (var aes = new AesGcm(masterKey, 16))
+        {
+            aes.Encrypt(stored.AsSpan(0, 12), dataKey, stored.AsSpan(12, 32), stored.AsSpan(44), "ume-rag-wrap:rag-blob-internal:1"u8);
+        }
+
+        var unwrapped = await TestBlobKeys.Provider(_keys.FullName).UnwrapAsync(new WrappedKey("rag-blob-internal", "1", stored), Ct);
+
+        unwrapped.ShouldBe(dataKey);
+    }
+
     [Theory]
     [InlineData("not base64 !", "is not base64")]
     [InlineData("AAAA", "holds 3 bytes")]

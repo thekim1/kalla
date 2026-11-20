@@ -18,6 +18,9 @@
   - **Keycloak:** Källa's realm files name the realm `$(env:FORS_KEYCLOAK_REALM:-fors)`, as Fors 0.12's own. A Keycloak
     kept from before the rename keeps realm `ume`: set `FORS_KEYCLOAK_REALM=ume` where its import runs (Fors's
     upgrade script does that for the gateway's bundled Keycloak; do the same for Källa's standalone realm).
+- **What stays readable:** everything an installation has encrypted (the encrypted uploads, the sign-in client secrets
+  saved in the setup wizard, the stored key secrets). The names that are part of the ciphertext keep their names from
+  before the rename. The public host names (`rag.`, `rag-admin.`, `chat.<domain>`) stay too.
 - **What keeps working:** keys issued before the rename (`ume-rag-sk-…`, `ume-rag-pk-…`), and the gateway credential
   keys' files under `Ume.Rag/` in the integration secrets (read when `Kalla/` has none). In the gateway, rename the
   integration `Ume.Rag` to `Kalla` under *Integrations* before provisioning from Fors 0.12's manifest, or a second

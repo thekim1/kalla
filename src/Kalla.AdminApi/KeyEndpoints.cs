@@ -262,7 +262,7 @@ public static class KeyEndpoints
         key.IsEnabled = request.IsEnabled;
     }
 
-    private static IDataProtector Protector(IDataProtectionProvider protection) => protection.CreateProtector("Kalla.AdminApi.KeySecret.v1");
+    private static IDataProtector Protector(IDataProtectionProvider protection) => protection.CreateProtector(Kalla.Infrastructure.Security.StoredFormatNames.KeySecretPurpose);
 }
 
 /// <summary>The key hasher with <c>Security:KeyPepper</c>; 503 <c>keys_unavailable</c> when the pepper is missing or short.</summary>

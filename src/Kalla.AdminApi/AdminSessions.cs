@@ -16,7 +16,7 @@ namespace Kalla.AdminApi;
 /// </summary>
 public sealed class AdminTicketStore(IAdminSessionStore store, IDataProtectionProvider protection, TimeProvider time) : ITicketStore
 {
-    private readonly IDataProtector _protector = protection.CreateProtector("Kalla.AdminApi.Session.v1");
+    private readonly IDataProtector _protector = protection.CreateProtector(Kalla.Infrastructure.Security.StoredFormatNames.AdminSessionPurpose);
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket)
     {

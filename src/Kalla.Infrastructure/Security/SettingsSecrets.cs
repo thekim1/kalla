@@ -11,13 +11,13 @@ namespace Kalla.Infrastructure.Security;
 public sealed class StoredSecret
 {
     /// <summary>kalla-admin's client secret, <c>Settings.Identity.Oidc.ClientSecret</c>.</summary>
-    public static readonly StoredSecret IdentityOidcClientSecret = new("Kalla.Settings.Identity.Oidc.ClientSecret");
+    public static readonly StoredSecret IdentityOidcClientSecret = new(StoredFormatNames.IdentityOidcClientSecretPurpose);
 
     /// <summary>Open WebUI's client secret, <c>Settings.OpenWebUi.Oidc.ClientSecret</c>: the only stored secret kalla-api unprotects.</summary>
-    public static readonly StoredSecret OpenWebUiOidcClientSecret = new("Kalla.Settings.OpenWebUi.Oidc.ClientSecret");
+    public static readonly StoredSecret OpenWebUiOidcClientSecret = new(StoredFormatNames.OpenWebUiOidcClientSecretPurpose);
 
     /// <summary>A setup test sign-in's candidate values, PKCE verifier and nonce (<c>config."SetupTests"."Protected"</c>, identity design §19).</summary>
-    public static readonly StoredSecret SetupTest = new("Kalla.Setup.Test");
+    public static readonly StoredSecret SetupTest = new(StoredFormatNames.SetupTestPurpose);
 
     private StoredSecret(string purpose) => Purpose = purpose;
 

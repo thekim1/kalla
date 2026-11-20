@@ -25,7 +25,11 @@ The names on the wire change too, in both products in one step (no backward comp
 own Chat API members `ume.*` became `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
 gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts became `x-fors-*`, `/v1/fors/context` and
 `fors.*`; Källa needs Fors 0.12 or later. Keys issued before the rename (`ume-rag-sk-`, `ume-rag-pk-`) stay valid; new
-ones are `kalla-sk-` and `kalla-pk-`. The rename comes before `v0.9.0`. This answers N1.
+ones are `kalla-sk-` and `kalla-pk-`. The names that are part of stored ciphertext keep the old name, as format
+constants nobody sees (`StoredFormatNames`: the Data Protection application name `Ume.Rag`, its purposes `Ume.Rag.*`
+and the blob key wrap's `ume-rag-wrap:`), so what an installation has encrypted stays readable (thekim1/fors#116).
+The public host-name defaults (`rag.`, `rag-admin.`, `chat.<domain>`) and the host units (`rag-*.service`,
+`rag-ingestion.slice`) stay too. The rename comes before `v0.9.0`. This answers N1.
 
 *From:* decided by user, 2026-11-20 (#894, #899: deployment names, the key prefixes and how far `kalla-*` goes).
 

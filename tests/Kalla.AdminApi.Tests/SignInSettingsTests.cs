@@ -115,7 +115,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
 
         // Another key ring (a replaced certificate, a lost key), a damaged value, and a payload of another purpose.
         var otherRing = Protector(new EphemeralDataProtectionProvider()).Protect(StoredSecret.IdentityOidcClientSecret, WizardSecret);
-        var otherPurpose = provider.CreateProtector("Kalla.AdminApi.KeySecret.v1").Protect(WizardSecret);
+        var otherPurpose = provider.CreateProtector("Ume.Rag.AdminApi.KeySecret.v1").Protect(WizardSecret);
         foreach (var bad in new[] { otherRing, "not-a-payload", otherPurpose })
         {
             var result = protector.Unprotect(StoredSecret.IdentityOidcClientSecret, bad);

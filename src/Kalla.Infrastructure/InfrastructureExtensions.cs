@@ -20,7 +20,7 @@ namespace Kalla.Infrastructure;
 public static class InfrastructureExtensions
 {
     public const string DatabaseResourceName = "ragdb";
-    public const string DataProtectionApplicationName = "Kalla";
+    public const string DataProtectionApplicationName = Security.StoredFormatNames.DataProtectionApplication;
 
     /// <summary>The file names <c>Security:ExtraSecretsDirectory</c> may hold (M-17 C6).</summary>
     public static IReadOnlyList<string> ExtraSecretKeys { get; } = ["OpenWebUi__AdminApiKey"];
