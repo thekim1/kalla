@@ -325,6 +325,23 @@ Detail: `proposals/deploy-simplification.md` (S1); work: `work/main.md` M-22. De
 path the same day; the bind default and what is gone confirmed, and hardening as an optional step chosen by the main
 session on the user's "do what you think is best", 2026-11-16).
 
+### Host names
+
+Each service keeps a host name of its own: the gateway API, the gateway's admin, rag-api, Ume.Rag's admin and Open
+WebUI. They are not served under paths of one shared name. Separate names keep the two admin consoles and the APIs
+apart as browser origins (their session cookies and scripts do not reach each other), and need no change in either
+product.
+
+The guides ask for as little DNS as that allows: every name is one label under `UME_DOMAIN`, so one wildcard record
+and one wildcard certificate for a sub-domain of the installation's own cover them all. A test host needs only its
+own name: without a proxy the services share it on their ports (the Compose quick start).
+
+Paths under one name are not built. If an organisation can get exactly one name, the APIs go first (prefixes the
+proxy strips, since both serve `/v1`), Open WebUI keeps a name of its own, and the admin consoles need a base path in
+each UI and admin API, in both products, with the shared origin decided explicitly.
+
+*From:* decided by user, 2026-11-20 (session 49, after the quick start was run end to end).
+
 ### Deployment values across releases
 
 A release may add, move or retire deployment variables without stopping a deployment that upgrades from the guides.
@@ -962,6 +979,27 @@ move itself is audited under both. The admin sees what the move changes and conf
 
 *From:* decided by user, 2026-11-17 (#811): platform admins only, shares keep the links; the owner-team rule from
 the main session's review on #811.
+
+### Deleting knowledge bases, sources and assistants
+
+A knowledge base, a source and an assistant can each be deleted in the admin UI, and a deleted one's name is free at
+once: a slug is unique among the objects that are not deleted.
+
+- **An assistant** is deleted directly (`Manage`), from any state, after a confirmation that lists the apps it is
+  offered to and its recent use and asks for its name. It is a soft delete: no client lists or reaches it from that
+  moment, as with archive, and it does not come back. Its conversations and feedback stay until their own retention
+  removes them, and its statistics for their own time; where the assistant's row is gone they read *Deleted
+  assistant*. The row, its versions and audiences are purged 30 days later, once no conversation of it remains.
+- **A knowledge base** is deleted when no assistant that is active or archived links it (published version or draft;
+  a deleted assistant does not block) and it has no source that is not deleted. **A source** is deleted at any time.
+  Either way the documents leave the index at once and are purged by the rules for removed documents (14 days) and
+  their files by the blob purge delay.
+- **Nothing is restored** in the UI. A delete is in the audit log with the object's last values.
+
+Archive stays, for an assistant that may come back.
+
+*From:* #878; decided by user, 2026-11-20 (six questions with four alternatives each).
+*Also:* replaces "a slug is never reused" (the unique index over deleted rows too).
 
 ### Level change in the edit drawer
 

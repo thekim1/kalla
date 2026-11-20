@@ -8,6 +8,9 @@ settles their design deviations. Start each session from [`../../HANDOVER.md`](.
 - Review every stream PR (live in the browser where it touches a page), settle its "Design deviations" in the design,
   merge when ready. Keep [`../roadmap.md`](../roadmap.md) and the stream queues current.
 - New work is written as a queue item (goal, paths, done-when, waits on, read) in the owning stream's file.
+- **Operator pages without project vocabulary** (M-22 S8; user, 2026-11-20): whoever edits a page under `docs/`
+  that an operator reads takes the phase names, item IDs and issue numbers out of what they touch. No pass of its
+  own.
 
 ## Queue
 
@@ -18,7 +21,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   grading use `scripts/grading/` (README there).
 - **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
 
-### [ ] M-22 Deploy simplification (user, 2026-11-16)
+### [x] M-22 Deploy simplification (user, 2026-11-16; closed 2026-11-20, S8 as a standing rule)
 - **Do:** [`../proposals/deploy-simplification.md`](../proposals/deploy-simplification.md), starting with S1 (one
   bootstrap for Compose and Portainer; decided 2026-11-16, Decisions "One deployment bootstrap"; the proposal's S1
   lists its five steps, one pull request each), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for

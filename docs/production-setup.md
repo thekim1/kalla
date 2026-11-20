@@ -627,8 +627,16 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 
 The listeners are published on `0.0.0.0:8543` (rag-api) and `0.0.0.0:9543` (rag-admin) by default, so whoever reaches
 the host reaches them; `UME_RAG_API_BIND` and `UME_RAG_ADMIN_BIND` (`--set`) publish them on another address, such as
-`127.0.0.1`. Open WebUI's plain-HTTP port is published on `127.0.0.1:3000` (`UME_RAG_OPENWEBUI_BIND`). Two ways to put
-TLS with real certificates in front:
+`127.0.0.1`. Open WebUI's plain-HTTP port is published on `127.0.0.1:3000` (`UME_RAG_OPENWEBUI_BIND`).
+
+**The names.** Each service has a host name of its own; none is served under a path of a shared name. With
+`--domain` they are `rag.<domain>`, `rag-admin.<domain>` and `chat.<domain>` (the gateway's: `llm.` and
+`llm-admin.<domain>`), all one label under the domain, so **one wildcard DNS record (`*.<domain>`) and one wildcard
+certificate cover them**: ask for a sub-domain of the installation's own (`ai.example.se`, the record
+`*.ai.example.se`) instead of a record per service. A test host needs no name beyond its own: without a proxy the
+services share the host's name on their ports ([quick start](compose-quick-start.md), *The addresses*).
+
+Two ways to put TLS with real certificates in front:
 
 - **The stack's own TLS proxy**, the profile `proxy` (`--profiles clamav,proxy`): `rag-proxy`, nginx on
   `UME_RAG_PROXY_BIND:UME_RAG_PROXY_PORT` (`0.0.0.0:443`), in front of rag-api, rag-admin and, with the profile

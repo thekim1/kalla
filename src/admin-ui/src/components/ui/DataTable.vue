@@ -98,7 +98,7 @@ function open(row: Row, event: MouseEvent): void {
               <RouterLink v-if="rowTo" :to="rowTo(row)" class="-mx-1 inline-block rounded-chip px-1 text-left text-fg hover:text-fg hover:underline" data-test="row-link">
                 <slot :name="`cell-${col.key}`" :row="row" />
               </RouterLink>
-              <button v-else-if="clickable" type="button" class="-mx-1 rounded-chip px-1 text-left">
+              <button v-else-if="clickable" type="button" class="-mx-1 min-h-6 rounded-chip px-1 text-left">
                 <slot :name="`cell-${col.key}`" :row="row" />
               </button>
               <slot v-else :name="`cell-${col.key}`" :row="row" />
