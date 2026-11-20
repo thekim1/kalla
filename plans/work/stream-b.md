@@ -105,7 +105,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Topics per request"; chat §3.8, §18.9; knowledge §4.2, §6.2; processing §7 (the tag
   format); admin V11.
 
-### [ ] B-53 Purge the rows of deleted sources and knowledge bases (#878)
+### [x] B-53 Purge the rows of deleted sources and knowledge bases (#878)
 - **Do:** data-model §8: `config.rag_retention_config_step` deletes a `Sources` row with `DeletedAt` once no
   `content."Documents"` row of the source remains and none of its blob tombstones waits for its purge, and a
   `Collections` row with `DeletedAt` once its sources are gone. Deletion proposals, frontier and run rows of the
