@@ -18,7 +18,8 @@ namespace Ume.Rag.Worker.Evaluation;
 /// <list type="bullet">
 /// <item>the nightly runs (processing design §14.8): it takes the latest occurrence of <see cref="Cron"/> (Europe/Stockholm,
 /// after the nightly syncs and the drift sweep) that has passed and enqueues one <c>nightly</c> job with
-/// <c>ScheduledFor</c> = that occurrence for every published collection with an active question and no <c>nightly</c> job
+/// <c>ScheduledFor</c> = that occurrence for every published collection with a question a run reads (an active one, or a
+/// <c>stale</c> <c>human</c> one the run makes active again once its documents are back) and no <c>nightly</c> job
 /// enqueued since it (dedup <c>eval-nightly:{collectionId}</c>). Missed occurrences after an outage collapse into one run;
 /// a job that failed is not enqueued again before the next night;</item>
 /// <item>the set jobs of <see cref="EvalSetTriggers"/> (processing design §13.1, §13.3): <c>generate-set</c> after a
@@ -45,7 +46,7 @@ public sealed partial class EvalScheduler(JobDatabase database, IJobQueue queue,
         FROM config."Collections" c
         WHERE c."PublishedAt" IS NOT NULL AND c."DeletedAt" IS NULL
           AND EXISTS (SELECT 1 FROM content."EvaluationSets" s JOIN content."EvaluationQuestions" q ON q."SetId" = s."Id"
-                      WHERE s."CollectionId" = c."Id" AND q."State" = '{EvaluationQuestionStates.Active}')
+                      WHERE s."CollectionId" = c."Id" AND {EvaluationStore.RunQuestionFilter})
           AND NOT EXISTS (SELECT 1 FROM content."Jobs" j
                           WHERE j."Class" = '{JobClasses.Eval}' AND j."DedupKey" = 'eval-nightly:' || c."Id"::text AND j."EnqueuedAt" >= $1)
         ORDER BY c."Id"

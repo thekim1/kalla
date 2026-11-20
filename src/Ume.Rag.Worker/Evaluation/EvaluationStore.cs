@@ -13,19 +13,27 @@ using Ume.Rag.Worker.Processing.Persistence;
 namespace Ume.Rag.Worker.Evaluation;
 
 /// <summary>
-/// One active question of the set as the run found it at its start (processing design §13.3); no expected documents means
-/// the expected outcome is "not found" (weakness review §2).
+/// One question of the set as the run found it at its start (processing design §13.3): an active one, or a <c>human</c> one
+/// made <c>stale</c> by a run because an expected document was gone. No expected documents means the expected outcome is
+/// "not found" (weakness review §2).
 /// </summary>
 public sealed record EvaluationQuestionRow(Guid Id, EvaluationLayer Layer, string Question, IReadOnlyList<Guid> ExpectedDocumentIds)
 {
     public bool Answerable => ExpectedDocumentIds.Count > 0;
+
+    /// <summary>A <c>human</c> question in state <c>stale</c> (not retired): a run found an expected document gone.</summary>
+    public bool Stale { get; init; }
+
+    /// <summary>An expected document is gone: its <c>DeletedAt</c> is set, or its row is purged.</summary>
+    public bool DocumentGone { get; init; }
 }
 
 /// <summary>
 /// The collection under evaluation: its level, department, profile and resolved retrieval settings (knowledge design
 /// §12.1), its live sources' compiled <c>demote</c> patterns (§6.5), and its set's active questions, <c>human</c> first
 /// (processing design §13.4), and its assigned gateway key, which the run's model calls run as (engine design §7.7; null: the
-/// worker's credential key).
+/// worker's credential key). <see cref="Questions"/> are the questions the run searches; <see cref="Gone"/> are those whose
+/// expected document is gone, left out of every run and counted as <c>documentGone</c> (processing design §13.3).
 /// </summary>
 public sealed record EvaluationTarget(
     Guid CollectionId,
@@ -38,8 +46,18 @@ public sealed record EvaluationTarget(
     RetrievalSettings Settings,
     IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> Demote,
     Guid? SetId,
-    IReadOnlyList<EvaluationQuestionRow> Questions)
+    IReadOnlyList<EvaluationQuestionRow> Questions,
+    IReadOnlyList<EvaluationQuestionRow> Gone)
 {
+    /// <summary>The set has a question to run or to count as gone.</summary>
+    public bool HasQuestions => Questions.Count > 0 || Gone.Count > 0;
+
+    /// <summary>The <c>human</c> questions the run makes <c>stale</c>: an expected document is gone and they are still active.</summary>
+    public IReadOnlyList<Guid> NewlyStale => [.. Gone.Where(q => q.Layer == EvaluationLayer.Human && !q.Stale).Select(q => q.Id)];
+
+    /// <summary>The <c>stale</c> <c>human</c> questions whose expected documents are all back: the run makes them active again.</summary>
+    public IReadOnlyList<Guid> Revived => [.. Questions.Where(q => q.Stale).Select(q => q.Id)];
+
     /// <summary>
     /// The evaluator's scope (processing design §13.5): the one collection over its live sets with every level and its
     /// sources' demote patterns, under <paramref name="settings"/> (the collection's own, or an on-demand run's candidate
@@ -77,11 +95,36 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         ORDER BY "Id"
         """;
 
-    // Human first (reports lead with the gold set), then in creation order (UUIDv7 ids): a fixed order per set.
+    /// <summary>
+    /// The questions a run reads (alias <c>q</c>): the active ones, and the <c>stale</c> <c>human</c> ones not retired, which
+    /// a run makes active again once their expected documents are back (processing design §13.3).
+    /// </summary>
+    public const string RunQuestionFilter = $"""
+        (q."State" = '{EvaluationQuestionStates.Active}'
+         OR (q."State" = '{EvaluationQuestionStates.Stale}' AND q."Layer" = '{EvaluationLayers.Human}' AND q."RetiredAt" IS NULL))
+        """;
+
+    // Human first (reports lead with the gold set), then in creation order (UUIDv7 ids): a fixed order per set. A question's
+    // expected document is gone when its row has DeletedAt set or is purged (processing design §13.3).
     private const string QuestionsSql = $"""
-        SELECT "Id", "Layer", "Question", "ExpectedDocumentIds" FROM content."EvaluationQuestions"
-        WHERE "SetId" = $1 AND "State" = '{EvaluationQuestionStates.Active}' AND "Layer" IN ('{EvaluationLayers.Human}', '{EvaluationLayers.Generated}')
-        ORDER BY ("Layer" = '{EvaluationLayers.Human}') DESC, "Id"
+        SELECT q."Id", q."Layer", q."Question", q."ExpectedDocumentIds", q."State" = '{EvaluationQuestionStates.Stale}' AS "Stale",
+               EXISTS (SELECT 1 FROM unnest(q."ExpectedDocumentIds") AS e("Id") LEFT JOIN content."Documents" d ON d."Id" = e."Id"
+                       WHERE d."Id" IS NULL OR d."DeletedAt" IS NOT NULL) AS "DocumentGone"
+        FROM content."EvaluationQuestions" q
+        WHERE q."SetId" = $1 AND q."Layer" IN ('{EvaluationLayers.Human}', '{EvaluationLayers.Generated}') AND {RunQuestionFilter}
+        ORDER BY (q."Layer" = '{EvaluationLayers.Human}') DESC, q."Id"
+        """;
+
+    // Only human questions change state at a run; a generated one is retired at the next top-up (processing design §13.3).
+    // Each guard skips a question an editor retired or changed since the run read it.
+    private const string StaleSql = $"""
+        UPDATE content."EvaluationQuestions" SET "State" = '{EvaluationQuestionStates.Stale}'
+        WHERE "Id" = ANY($1) AND "Layer" = '{EvaluationLayers.Human}' AND "State" = '{EvaluationQuestionStates.Active}' AND "RetiredAt" IS NULL
+        """;
+
+    private const string RevivedSql = $"""
+        UPDATE content."EvaluationQuestions" SET "State" = '{EvaluationQuestionStates.Active}'
+        WHERE "Id" = ANY($1) AND "Layer" = '{EvaluationLayers.Human}' AND "State" = '{EvaluationQuestionStates.Stale}' AND "RetiredAt" IS NULL
         """;
 
     // Publish reports and nightly runs only: they use the collection's own settings in the hybrid variant. On-demand runs
@@ -124,7 +167,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         FROM unnest($3::uuid[], $4::int[], $5::bool[], $6::text[], $7::real[], $8::real[]) AS u(q, r, h, c, d, k)
         """;
 
-    /// <summary>The collection with its set and questions; null when it is unknown or deleted.</summary>
+    /// <summary>The collection with its set and questions (those to run and those gone); null when it is unknown or deleted.</summary>
     /// <exception cref="FormatException">The collection's or the platform's retrieval settings do not resolve.</exception>
     public async Task<EvaluationTarget?> LoadAsync(Guid collectionId, CancellationToken cancellationToken)
     {
@@ -168,7 +211,8 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
 
         var demote = await DemoteAsync(collectionId, cancellationToken);
         var questions = setId is { } set ? await QuestionsAsync(set, cancellationToken) : [];
-        return new EvaluationTarget(collectionId, classification, department, gatewayKeyId, publishedAt, profile, platform, settings, demote, setId, questions);
+        return new EvaluationTarget(collectionId, classification, department, gatewayKeyId, publishedAt, profile, platform, settings, demote, setId,
+            [.. questions.Where(q => !q.DocumentGone)], [.. questions.Where(q => q.DocumentGone)]);
     }
 
     /// <summary>The last publish report or nightly run of the set that started before <paramref name="before"/>, with its ranks.</summary>
@@ -245,16 +289,28 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
     }
 
     /// <summary>
-    /// Writes the runs and their results and completes the job with <paramref name="result"/> in one transaction, with the
-    /// job's model calls (<paramref name="usage"/>) added to <c>CollectionDailyUsage</c> last; the completion is the fence (a
-    /// job that lost its lease writes nothing).
+    /// Writes the runs and their results, the <c>human</c> questions of <paramref name="target"/> the run made <c>stale</c> or
+    /// active again (processing design §13.3), and completes the job with <paramref name="result"/> in one transaction, with
+    /// the job's model calls (<paramref name="usage"/>) added to <c>CollectionDailyUsage</c> last; the completion is the fence
+    /// (a job that lost its lease writes nothing).
     /// </summary>
-    public async Task<JobResult> CompleteAsync<TResult>(LeasedJob job, IJobQueue queue, WorkerIdentity identity, IReadOnlyList<EvaluationRunRecord> runs,
-        TResult result, JobUsage usage, CancellationToken cancellationToken)
+    public async Task<JobResult> CompleteAsync<TResult>(LeasedJob job, IJobQueue queue, WorkerIdentity identity, EvaluationTarget target,
+        IReadOnlyList<EvaluationRunRecord> runs, TResult result, JobUsage usage, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(runs);
         await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
+        if (target.NewlyStale is { Count: > 0 } stale)
+        {
+            await CommandCommit.ExecuteAsync(commit, StaleSql, cancellationToken, Db.P(stale.ToArray()));
+        }
+
+        if (target.Revived is { Count: > 0 } revived)
+        {
+            await CommandCommit.ExecuteAsync(commit, RevivedSql, cancellationToken, Db.P(revived.ToArray()));
+        }
+
         foreach (var (run, results) in runs)
         {
             await CommandCommit.ExecuteAsync(commit, InsertRunSql, cancellationToken,
@@ -300,7 +356,11 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         while (await reader.ReadAsync(cancellationToken))
         {
             var layer = reader.GetString(1) == EvaluationLayers.Human ? EvaluationLayer.Human : EvaluationLayer.Generated;
-            questions.Add(new EvaluationQuestionRow(reader.GetGuid(0), layer, reader.GetString(2), reader.GetFieldValue<Guid[]>(3)));
+            questions.Add(new EvaluationQuestionRow(reader.GetGuid(0), layer, reader.GetString(2), reader.GetFieldValue<Guid[]>(3))
+            {
+                Stale = reader.GetBoolean(4),
+                DocumentGone = reader.GetBoolean(5),
+            });
         }
 
         return questions;

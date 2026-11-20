@@ -162,7 +162,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
         var corpus = await SeedAsync();
         await using var worker = await StartWorkerAsync();
         var setId = await GenerateAsync(corpus);
-        var willWin = await HumanQuestionAsync(corpus, setId, $"Var kan man låna böcker och tidskrifter hos {corpus.Tag}?", Guid.NewGuid());
+        var willWin = await HumanQuestionAsync(corpus, setId, $"Var kan man låna böcker och tidskrifter hos {corpus.Tag}?", await UnindexedDocumentAsync(corpus));
         var willLose = await HumanQuestionAsync(corpus, setId, $"Hur går man till väga för att få bygglov hos {corpus.Tag}?", corpus.DocumentIds[1]);
         await EvalKit.PublishAsync(database, corpus.Seed.CollectionId);
         try
@@ -178,12 +178,12 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
             Numbers(b).ShouldBe(Numbers(a with { ComparedRunId = a.EvaluationRunId }));
             var resultsB = await EvalKit.ResultsAsync(database, b.EvaluationRunId);
             resultsB.OrderBy(r => r.Key).ShouldBe((await EvalKit.ResultsAsync(database, a.EvaluationRunId)).OrderBy(r => r.Key));
-            resultsB[willWin].Hit.ShouldBe(false, "its expected document is not in the collection");
+            resultsB[willWin].Hit.ShouldBe(false, "its expected document is not in the index");
             resultsB[willLose].Hit.ShouldBe(true);
 
             // An editor fixes one question's expected document and breaks another's (edit-eval-question).
             await ExpectAsync(willWin, corpus.DocumentIds[0]);
-            await ExpectAsync(willLose, Guid.NewGuid());
+            await ExpectAsync(willLose, await UnindexedDocumentAsync(corpus));
             var c = await NightlyAsync(corpus);
 
             c.ComparedRunId.ShouldBe(b.EvaluationRunId);
@@ -285,6 +285,24 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
             VALUES ($1, $2, $3, 'human', $4, $5, 'active')
             """, id, setId, corpus.Seed.Classification, question, new[] { expected });
         return id;
+    }
+
+    /// <summary>
+    /// A document of the corpus's source without a live set: an expected document that is never found but not gone (a deleted
+    /// or purged one leaves the question out of the run, processing design §13.3).
+    /// </summary>
+    private async Task<Guid> UnindexedDocumentAsync(Corpus corpus)
+    {
+        await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin), EvalKit.Embed);
+        return (await writer.AddDocumentAsync(new FixtureDocumentSpec
+        {
+            CollectionId = corpus.Seed.CollectionId,
+            EmbeddingProfileId = EngineKit.ProfileId,
+            SourceId = corpus.Seed.SourceId,
+            Classification = corpus.Seed.Classification,
+            Url = $"https://site.test/repro/unindexed/{Guid.NewGuid():N}",
+            SetState = "writing",
+        }, [new FixtureChunk($"Ett dokument som ännu inte är sökbart hos {corpus.Tag}.")], Ct)).Id;
     }
 
     private Task ExpectAsync(Guid questionId, Guid document) =>

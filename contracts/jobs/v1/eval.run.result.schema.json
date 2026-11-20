@@ -28,6 +28,13 @@
       "minimum": 0,
       "maximum": 2147483647
     },
+    "documentGone": {
+      "type": "integer",
+      "description": "Questions left out because an expected document is gone (Documents.DeletedAt set, or the row purged): not searched and not counted in recall@k, MRR@k, wins or losses (processing design §13.3).",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
     "wins": {
       "type": "integer",
       "description": "Questions found now and not in the compared run, and the reverse.",
@@ -178,6 +185,13 @@
           "unanswerable": {
             "type": "integer",
             "description": "Questions without expected documents (expected outcome \"not found\"); not counted in recall@k and MRR@k.",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "default": 0
+          },
+          "documentGone": {
+            "type": "integer",
+            "description": "Questions left out because an expected document is gone (Documents.DeletedAt set, or the row purged): not searched and not counted in recall@k, MRR@k, wins or losses (processing design §13.3).",
             "minimum": 0,
             "maximum": 2147483647,
             "default": 0

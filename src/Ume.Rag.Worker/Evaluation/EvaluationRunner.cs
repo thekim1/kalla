@@ -19,8 +19,10 @@ namespace Ume.Rag.Worker.Evaluation;
 /// reranked variant whose reranker has no platform model is skipped (<c>no_rerank_model</c>), not run as all fallbacks. Every run reports its search latency, and a reranked run its
 /// rerank latency, cost per question and <c>rerank_unavailable</c> count (<see cref="EvaluationSearchStats"/>, #399). Each job
 /// searches the set as it was at the start, then writes its runs, their per-question results and its completion in one
-/// transaction. A question whose embedding fails fails the run (knowledge design §5.5): the job is retried as the
-/// gateway error says, and nothing of it is kept. Each run's model calls (query embeddings that missed the cache, rerank
+/// transaction. A question whose expected document is gone is not searched and counts as <c>documentGone</c>, not as a miss;
+/// the run makes such a <c>human</c> question <c>stale</c>, and a <c>stale</c> one whose documents are back active again, in
+/// the same transaction (processing design §13.3). A question whose embedding fails fails the run (knowledge design §5.5):
+/// the job is retried as the gateway error says, and nothing of it is kept. Each run's model calls (query embeddings that missed the cache, rerank
 /// calls) carry its id as <c>x-ume-run-id</c> and are counted under the collection; the job's commit adds them to
 /// <c>CollectionDailyUsage</c> (processing design §14.7; engine design §10.6).
 /// </summary>
@@ -49,7 +51,7 @@ public sealed partial class EvaluationRunner(
                 return new JobResult.FatalError(CollectionUnknown);
             }
 
-            if (target.SetId is null || target.Questions.Count == 0)
+            if (target.SetId is null || !target.HasQuestions)
             {
                 return new JobResult.FatalError(NoQuestions);
             }
@@ -99,8 +101,9 @@ public sealed partial class EvaluationRunner(
                         EvaluationRunId = record.Run.Id,
                         QuestionCount = record.Run.QuestionCount ?? 0,
                         Found = record.Run.Found ?? 0,
+                        DocumentGone = target.Gone.Count,
                         Candidate = isCandidate,
-                        Layers = EvaluationScoring.Layers(outcomes),
+                        Layers = EvaluationScoring.Layers(outcomes, target.Gone),
                         Coverage = coverage,
                         RecallAtK = (double?)record.Run.RecallAtK,
                         Mrr = (double?)record.Run.Mrr,
@@ -110,7 +113,7 @@ public sealed partial class EvaluationRunner(
             }
 
             metrics.Runs(EvaluationRunKinds.OnDemand, records.Count);
-            return await store.CompleteAsync(job, queue, identity, records, new EvalOnDemandResult { Runs = refs, Skipped = skipped.Count > 0 ? skipped : null }, usage,
+            return await store.CompleteAsync(job, queue, identity, target, records, new EvalOnDemandResult { Runs = refs, Skipped = skipped.Count > 0 ? skipped : null }, usage,
                 cancellationToken);
         });
 
@@ -124,7 +127,7 @@ public sealed partial class EvaluationRunner(
                 return new JobResult.FatalError(CollectionUnknown);
             }
 
-            if (target.SetId is not { } setId || target.Questions.Count == 0)
+            if (target.SetId is not { } setId || !target.HasQuestions)
             {
                 return new JobResult.Success();
             }
@@ -136,7 +139,8 @@ public sealed partial class EvaluationRunner(
             var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.PublishReport, EvaluationVariant.Hybrid, target.Settings, Calls(target, usage),
                 cancellationToken, compared, payload.PipelineVersionId, version);
             metrics.Runs(EvaluationRunKinds.PublishReport, 1);
-            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, recallAlert: false), usage, cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, target, [record], RunResult(target, record, outcomes, search, recallAlert: false), usage,
+                cancellationToken);
         });
 
     /// <summary>
@@ -147,7 +151,7 @@ public sealed partial class EvaluationRunner(
         GuardedAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(payload);
-            if (await store.LoadAsync(payload.CollectionId, cancellationToken) is not { PublishedAt: not null, SetId: { } setId } target || target.Questions.Count == 0)
+            if (await store.LoadAsync(payload.CollectionId, cancellationToken) is not { PublishedAt: not null, SetId: { } setId } target || !target.HasQuestions)
             {
                 return new JobResult.Success();
             }
@@ -169,7 +173,7 @@ public sealed partial class EvaluationRunner(
             }
 
             metrics.Runs(EvaluationRunKinds.Nightly, 1);
-            return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, alert), usage, cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, target, [record], RunResult(target, record, outcomes, search, alert), usage, cancellationToken);
         });
 
     /// <summary>The <c>EvaluationRuns</c> text of a variant; both reranked variants are <c>hybrid</c> with <c>Reranked</c> set.</summary>
@@ -225,16 +229,18 @@ public sealed partial class EvaluationRunner(
     private static UsageSink Calls(EvaluationTarget target, JobUsage usage) =>
         new(usage, new UsageOwner(target.CollectionId, target.Classification, target.DepartmentId, target.GatewayKeyId));
 
-    private static EvalRunResult RunResult(EvaluationRunRecord record, IReadOnlyList<QuestionOutcome> outcomes, EvaluationSearchStats search, bool recallAlert) => new()
+    private static EvalRunResult RunResult(EvaluationTarget target, EvaluationRunRecord record, IReadOnlyList<QuestionOutcome> outcomes, EvaluationSearchStats search,
+        bool recallAlert) => new()
     {
         EvaluationRunId = record.Run.Id,
         ComparedRunId = record.Run.ComparedRunId,
         QuestionCount = record.Run.QuestionCount ?? 0,
         Found = record.Run.Found ?? 0,
+        DocumentGone = target.Gone.Count,
         Wins = record.Run.Wins ?? 0,
         Losses = record.Run.Losses ?? 0,
         RecallAlert = recallAlert,
-        Layers = EvaluationScoring.Layers(outcomes),
+        Layers = EvaluationScoring.Layers(outcomes, target.Gone),
         RecallAtK = (double?)record.Run.RecallAtK,
         Mrr = (double?)record.Run.Mrr,
         Search = search,
