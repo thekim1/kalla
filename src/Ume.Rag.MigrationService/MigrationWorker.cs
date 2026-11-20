@@ -1,5 +1,9 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
+using Ume.Rag.Infrastructure.Blobs;
+using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Definitions;
@@ -14,7 +18,7 @@ namespace Ume.Rag.MigrationService;
 /// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>), the
 /// test panel's client (<see cref="AdminConsoleClientSeeder"/>), the deployment's Open WebUI client (<see cref="OpenWebUiClientSeeder"/>) when
 /// <c>OpenWebUi:ApiKey</c> is set, and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
-/// client when <c>Seed:DevKey</c> is set), and exits
+/// client when <c>Seed:DevKey</c> is set, and the <see cref="DemoSeeder"/> when <c>Seed:DemoDirectory</c> is set), and exits
 /// (data-model §10; the platform's embedding profile is created by a platform admin in the admin UI, Decisions "Deploy
 /// configuration", as the gateway's MigrationWorker). The services wait for this to complete, so they never run against
 /// an older schema.
@@ -69,6 +73,15 @@ public sealed partial class MigrationWorker(
                     await DevSeeder.SeedDevClientAsync(db, hasher, devKey, configuration["Seed:DevClientPortalUrl"], TimeProvider.System,
                         stoppingToken);
                 }
+
+                // The demo content (repo-and-deployment §4.4), after the dev client it offers the assistant to.
+                if (configuration["Seed:DemoDirectory"] is { Length: > 0 } demoDirectory)
+                {
+                    var blobs = new FileSystemBlobStore(Options.Create(configuration.GetSection(BlobStoreOptions.SectionName).Get<BlobStoreOptions>() ?? new BlobStoreOptions()),
+                        TimeProvider.System);
+                    var jobs = new PostgresJobQueue(new JobDatabase(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>()), new JobWakeUps(TimeProvider.System));
+                    LogDemo(logger, await DemoSeeder.SeedAsync(db, blobs, jobs, demoDirectory, TimeProvider.System, stoppingToken));
+                }
             }
 
             if (logger.IsEnabled(LogLevel.Information))
@@ -91,6 +104,9 @@ public sealed partial class MigrationWorker(
 
     [LoggerMessage(LogLevel.Information, "The admin test panel's client admin-console: {Outcome}")]
     private static partial void LogAdminConsoleClient(ILogger logger, AdminConsoleClientSeeder.Outcome outcome);
+
+    [LoggerMessage(LogLevel.Information, "The demo content: {Outcome}")]
+    private static partial void LogDemo(ILogger logger, DemoSeeder.Outcome outcome);
 
     [LoggerMessage(LogLevel.Information, "The deployment's Open WebUI client: {Outcome}")]
     private static partial void LogOpenWebUiClient(ILogger logger, OpenWebUiClientSeeder.Outcome outcome);
