@@ -52,6 +52,12 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     public string? Query { get; init; }
 
     /// <summary>
+    /// With <c>ume.topics</c> (§3.8): the asked topics that at least one link searched, in the request's order (the retrieval's
+    /// when it ran, else the published links' narrowing); null without.
+    /// </summary>
+    public IReadOnlyList<string>? SearchedTopics { get; init; }
+
+    /// <summary>
     /// The usage records of the turn's model calls (§8.3, §12.1): condense and retrieval have added theirs; the answer and the
     /// follow-ups add theirs when they answer.
     /// </summary>

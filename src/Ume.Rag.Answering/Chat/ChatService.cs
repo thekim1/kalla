@@ -109,6 +109,20 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings, limits, platform.Texts);
         CondenseOutcome? condense = null;
         string? query = null;
+
+        // §3.8 (Decisions "Topics per request"): the asked topics narrow the published links; with none of the live links left the
+        // turn ends not-found before any condense call or search, and a turn without retrieval reports what its links would search.
+        var askedTopics = chat.Ume?.Topics is { Count: > 0 } asked ? asked : null;
+        IReadOnlyList<string>? linkTopics = null;
+        var noLinkLeft = false;
+        if (askedTopics is not null)
+        {
+            var live = assistant.Published.CollectionLinks
+                .Where(l => snapshot.Collections.TryGetValue(l.CollectionId, out var collection) && collection.IsLive).Select(l => l.Tags).ToList();
+            linkTopics = TopicNarrowing.Searched(live, askedTopics);
+            noLinkLeft = live.All(l => TopicNarrowing.Narrow(l, askedTopics) is null);
+        }
+
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded)
         {
             // §3.2: the client's max_tokens lowers the turn's limit, never raises it; with no known limit it is the limit.
@@ -122,6 +136,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 condense)
             {
                 Query = query,
+                SearchedTopics = retrieval?.SearchedTopics ?? linkTopics,
                 MaxTokensSource = source,
                 Usage = usage,
             };
@@ -129,6 +144,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         RetrievalResult? retrieval = null;
         var conversational = MessageKind.IsConversational(chat.Question);
+        if (!conversational && noLinkLeft)
+        {
+            return Plan(FixedTexts.NotFound(assistant.Published.NotFound, platform.NotFound, language), ChatOutcome.NotFound, null, null, false);
+        }
+
         if (!conversational)
         {
             // §5, §5.1: a follow-up that is not self-contained, or any question over 2,000 characters, is rewritten for retrieval
@@ -139,7 +159,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
                 retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
                     Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId,
-                    RerankCeiling: settings.Rerank is not null ? ceiling : null, Reranker: settings.Rerank ?? RerankerKind.ChatModel), usage.Add, ct);
+                    RerankCeiling: settings.Rerank is not null ? ceiling : null, Reranker: settings.Rerank ?? RerankerKind.ChatModel, Topics: askedTopics),
+                    usage.Add, ct);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
             {

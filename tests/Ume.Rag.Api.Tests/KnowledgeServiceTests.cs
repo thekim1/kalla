@@ -583,6 +583,65 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     }
 
     [Fact]
+    public async Task A_chat_requests_topics_narrow_the_published_links_and_never_widen_them()
+    {
+        // Chat §3.8, knowledge §4.2 (Decisions "Topics per request"): the altan page carries "altan"; the upload and the section
+        // collection's pages carry no tag.
+        PolicySnapshot Linked(params CollectionLink[] links)
+        {
+            var plain = db.Snapshot();
+            var assistant = plain.Assistants[db.AssistantId];
+            return plain with
+            {
+                Assistants = new Dictionary<Guid, AssistantEntry>
+                {
+                    [db.AssistantId] = assistant with { Published = assistant.Published! with { CollectionLinks = links } },
+                },
+            };
+        }
+
+        async Task<RetrievalResult> Ask(PolicySnapshot snapshot, params string[]? topics)
+        {
+            var (service, _, host) = Build(snapshot);
+            using var _ = host;
+            return await service.RetrieveAsync(db.Who(db.OwuiClient, snapshot), new RetrievalRequest("bygglov altan", db.AssistantId, null, Topics: topics), Ct);
+        }
+
+        var mixed = Linked(new CollectionLink(db.PublicCollection, ["altan", "skrivare"]), CollectionLink.Whole(db.SectionCollection));
+        var all = await Ask(mixed, null);
+        all.SearchedTopics.ShouldBeNull();
+        all.Results.ShouldContain(r => r.DocumentId == db.Altan.Id);
+        all.Results.ShouldNotContain(r => r.DocumentId == db.Upload.Id); // nothing asked: the links as they are (the upload has no topic)
+
+        var altan = await Ask(mixed, "altan");
+        altan.Results.Select(r => r.DocumentId).Distinct().ShouldBe([db.Altan.Id]); // the whole link is searched for "altan" too
+        altan.SearchedTopics.ShouldBe(["altan"]);
+
+        var konton = await Ask(mixed, "konton", "skrivare");
+        konton.Results.ShouldBeEmpty();
+        konton.SearchedTopics.ShouldBe(["konton", "skrivare"]);
+
+        // Never widens: the link's "skrivare" with "altan" asked leaves the public collection out, though its page carries "altan".
+        var narrow = Linked(new CollectionLink(db.PublicCollection, ["skrivare"]), CollectionLink.Whole(db.SectionCollection));
+        var outside = await Ask(narrow, "altan");
+        outside.Results.ShouldNotContain(r => r.CollectionId == db.PublicCollection);
+        outside.SearchedTopics.ShouldBe(["altan"]);
+
+        // No link left: nothing is searched and nothing is listed.
+        var none = await Ask(Linked(new CollectionLink(db.PublicCollection, ["altan"])), "okänt");
+        (none.Results.Count, none.Coverage.Status).ShouldBe((0, CoverageStatus.Low));
+        none.SearchedTopics.ShouldBeEmpty();
+        none.Timings.KeywordMs.ShouldBe(0);
+
+        // A direct caller (no assistant) is not narrowed.
+        var (service, _, host) = Build(mixed);
+        using var __ = host;
+        var direct = await service.RetrieveAsync(db.Who(db.InternalClient, mixed), Search(db.PublicCollection) with { Topics = ["skrivare"] }, Ct);
+        direct.Results.Select(r => r.DocumentId).ShouldBe([db.Altan.Id, db.Upload.Id], ignoreOrder: true);
+        direct.SearchedTopics.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task An_assistant_searches_only_its_live_collections_and_narrowing_outside_them_is_404()
     {
         var snapshot = db.Snapshot();

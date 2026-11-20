@@ -90,7 +90,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; identity §4.3;
   data-model §2.1, §2.2, §8.
 
-### [ ] B-52 Narrow a chat turn by topic: `ume.topics` (F8)
+### [x] B-52 Narrow a chat turn by topic: `ume.topics` (F8)
 - **Do:** chat §3.8: the request member `ume.topics` (an array of 1–20 tag-format strings; 400 `invalid_request`
   with `param` `ume.topics` otherwise; absent, `null` and `[]` change nothing; ignored for Open WebUI) and the
   answer's `ume.topics` (the asked topics that a link searched); the narrowing of the published version's links
