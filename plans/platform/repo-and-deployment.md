@@ -448,7 +448,7 @@ vectors when we run against a real local gateway.
 | `kalla/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `kalla/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | budget ≤ 4.0 GB with the NER model (measured 2.88 GB; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`; parser design §12) |
 | `kalla/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4.6_base` (1.4 LTS, `_base` = no bundled signatures; digest-pinned; 1.4.6 from `v0.1.0`) | 1000 (the image's `clamav`; entrypoint `/init-unprivileged`) | read-only, volume `/var/lib/clamav`, tmpfs `/tmp` (clamd's local socket) | a real scan of a small file through clamd (`clamdscan`), not `--ping`: after a failed reload clamd still answers PONG with no engine (§5.5) | 223 MB (measured) + ~110 MB signatures in the volume |
-| `kalla/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.64.1-noble`, digest-pinned, its Ubuntu packages upgraded at build time (so a build is not reproducible bit for bit; the release records the digest and the SBOM), npm and yarn removed, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
+| `kalla/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.65.1-noble`, digest-pinned, its Ubuntu packages upgraded at build time (so a build is not reproducible bit for bit; the release records the digest and the SBOM), npm and yarn removed, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
 
 All Dockerfiles: digest-pinned `FROM`, multi-stage, `apt-get` versions from the pinned base only, no package caches,
 `LABEL org.opencontainers.image.source/version/revision`, `USER` numeric, no shell needed at runtime for the .NET
@@ -494,7 +494,7 @@ in dev, TLS through `PARSER_TLS_*` in production Compose. Size budget ≤ 4.0 GB
 ### 5.4 Renderer image (`images/renderer/Dockerfile`)
 
 Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8), checked in the spike (A-9, results-a row
-29): the official Playwright image pinned by digest (`mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a7…`,
+29): the official Playwright image pinned by digest (`mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc…`,
 2.56 GB with Firefox and WebKit), kept to the Chromium headless shell and flattened to one layer (1.48 GB, A-10), plus
 `playwright-core` installed at
 build time from a lockfile (`npm ci`; the image carries no Playwright package, and `npx` would download at start,
