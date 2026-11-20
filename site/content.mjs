@@ -95,14 +95,11 @@ export const PILLARS = [
   { icon: 'shield_lock', tone: 'warn', title: 'Built for a municipality', body: 'Runs on your own servers, behind your own login. Each department owns its knowledge bases and assistants, and pays for its model use through its own gateway key.', points: ['Residency ceilings: on-prem, EU', 'Sign-in with Keycloak, Entra ID or AD FS', 'Audit log and security events for your SIEM'] },
 ]
 
-/** The admin UI's areas; the home page shows them as cards until it has screenshots. */
-export const ADMIN_AREAS = [
-  { icon: 'library_books', title: 'Knowledge bases', body: 'Sources, crawls and uploads, test questions, evaluation and publish with rollback.' },
-  { icon: 'smart_toy', title: 'Assistants', body: 'Instructions, knowledge bases, answer settings and contact links, with a test panel and versions.' },
-  { icon: 'key', title: 'Apps and keys', body: 'Connect Open WebUI or your own application, with keys per app and the connection details.' },
-  { icon: 'payments', title: 'Costs', body: 'Model use per department, knowledge base and assistant, from the gateway\'s keys.' },
-  { icon: 'tune', title: 'Settings', body: 'Models, embedding profiles, prompt texts and the platform\'s defaults.' },
-  { icon: 'rocket_launch', title: 'Setup wizard', body: 'Sign-in set in the browser with a setup code and a test sign-in.' },
+/** Screenshots from a local stack with demo content (site/public/screenshots, each in light, dark and Lumen). */
+export const UI_SHOTS = [
+  { file: 'knowledge-base', alt: 'A knowledge base\'s overview: its contact, the assistants that use it, documents, last fetch, quality and cost', title: 'Knowledge bases', body: 'Sources, fetches, test questions and quality, then publish, with what it costs.' },
+  { file: 'assistant', alt: 'An assistant\'s draft: its instructions in Swedish and the knowledge base it searches', title: 'Assistants', body: 'Instructions, knowledge bases and answer settings, with a test panel and versions.' },
+  { file: 'map', alt: 'The map: each department\'s knowledge bases, the assistants that use them, the channel and who is responsible', title: 'Map', body: 'Who owns what: from a knowledge base to the assistant and the channel that offers it.' },
 ]
 
 export const DEPLOYS = [

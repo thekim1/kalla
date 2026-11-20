@@ -197,7 +197,8 @@ function homePage() {
   <p class="lead">Ume.Rag crawls your websites and documents, keeps them current, and answers questions in chat with a citation and a date for every claim. Every model call goes through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, under a residency ceiling.</p>
   <div class="actions"><a class="btn btn-primary" href="${url('start/')}">Get started${icon('arrow_forward')}</a><a class="btn btn-ghost" href="${url('docs/')}">Read the docs</a></div>
 </section>
-<section class="wrap pt-64" aria-label="At a glance">
+<div class="wrap pt-64"><div class="frame frame-lg">${shot('overview-desktop', 'The admin UI\'s home page: an assistant\'s questions, not-found answers, feedback and cost this week, and the platform\'s health', 'r-20')}</div></div>
+<section class="wrap pt-80" aria-label="At a glance">
   <div class="proof">${C.PROOF.map(p => `<div><span class="big">${p.value}</span><span class="b">${p.label}</span><span class="sub">${p.sub}</span></div>`).join('')}</div>
   <p class="fine">Ume.Rag is in its pilot phase (P1): built and released, with the live block (the real gateway, the umea.se crawl and the gold set) ahead. <a href="${url('docs/changelog/')}">What each release added</a></p>
 </section>
@@ -235,7 +236,7 @@ function homePage() {
 <section class="wrap pt-120 stack-40" aria-labelledby="ui-h">
   <div class="intro">${eyebrow('Admin UI')}<h2 id="ui-h" class="h-l">Run by the departments that own the content.</h2>
     <p class="body-l">The same design as the gateway's admin, in light, dark and Lumen. A department's editors look after their own knowledge bases and assistants; platform admins look after the rest.</p></div>
-  <div class="grid-280">${C.ADMIN_AREAS.map(a => `<article class="card pillar"><span class="tile tone-accent" aria-hidden="true">${icon(a.icon, 'big-icon')}</span><h3>${a.title}</h3><p>${a.body}</p></article>`).join('')}</div>
+  <div class="grid-340">${C.UI_SHOTS.map(s => `<figure class="ui-shot"><div class="frame frame-sm">${shot(s.file, s.alt, 'r-15 ratio-43')}</div><figcaption><span class="b">${s.title}</span><span>${s.body}</span></figcaption></figure>`).join('')}</div>
 </section>
 <section class="wrap pt-120 stack-40" aria-labelledby="deploy-h">
   <div class="intro">${eyebrow('Deploy')}<h2 id="deploy-h" class="h-l">Runs on your own servers, next to your gateway.</h2></div>
