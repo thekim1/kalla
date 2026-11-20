@@ -55,6 +55,12 @@ public sealed class Assistant
     /// <summary>The one open draft, if any.</summary>
     public Guid? DraftVersionId { get; set; }
 
+    /// <summary>
+    /// Deleted (Decisions "Deleting knowledge bases, sources and assistants"): no client lists or reaches it, its slug is free
+    /// for a new assistant, and the config retention step purges the row 30 days later once no conversation names it.
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 

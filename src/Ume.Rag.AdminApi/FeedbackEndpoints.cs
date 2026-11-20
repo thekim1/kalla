@@ -36,7 +36,7 @@ public static class FeedbackEndpoints
                 var page = await (from f in rows
                                   join m in admin.Db.Messages.AsNoTracking() on f.MessageId equals m.Id
                                   join c in admin.Db.Conversations.AsNoTracking() on f.ConversationId equals c.Id
-                                  join a in admin.Db.Assistants.AsNoTracking() on c.AssistantId equals a.Id
+                                  join a in admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking() on c.AssistantId equals a.Id
                                   orderby f.CreatedAt descending, f.Id descending
                                   select new
                                   {
@@ -97,7 +97,7 @@ public static class FeedbackEndpoints
                     .SingleOrDefaultAsync(ct) ?? new FeedbackTotals(0, 0, 0, 0);
 
                 // Import health per Open WebUI client (chat §14.2–§14.3): only clients serving one of the caller's assistants.
-                var assistants = admin.Db.Assistants.AsNoTracking().Where(a => departments.Contains(a.DepartmentId)).Select(a => a.Id);
+                var assistants = admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking().Where(a => departments.Contains(a.DepartmentId)).Select(a => a.Id);
                 var served = admin.Db.AssistantAudiences.AsNoTracking()
                     .Where(x => x.Kind == AssistantAudienceKinds.Client && x.SubjectId != null && assistants.Contains(x.AssistantId)).Select(x => x.SubjectId!.Value);
                 var imports = await (from s in admin.Db.FeedbackImportState.AsNoTracking()
@@ -123,7 +123,7 @@ public static class FeedbackEndpoints
                     var departments = admin.Departments().Select(d => d.Id);
                     var department = await (from f in admin.Db.Feedback.AsNoTracking()
                                             join c in admin.Db.Conversations.AsNoTracking() on f.ConversationId equals c.Id
-                                            join a in admin.Db.Assistants.AsNoTracking() on c.AssistantId equals a.Id
+                                            join a in admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking() on c.AssistantId equals a.Id
                                             where f.Id == id && departments.Contains(a.DepartmentId)
                                             select (Guid?)a.DepartmentId)
                         .SingleOrDefaultAsync(attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
@@ -146,7 +146,7 @@ public static class FeedbackEndpoints
     private static IQueryable<Feedback> Filtered(AdminContext admin, FeedbackQuery q)
     {
         var departments = admin.Departments().Select(d => d.Id);
-        var assistants = admin.Db.Assistants.AsNoTracking().Where(a => departments.Contains(a.DepartmentId)).Select(a => a.Id);
+        var assistants = admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking().Where(a => departments.Contains(a.DepartmentId)).Select(a => a.Id);
         var conversations = admin.Db.Conversations.AsNoTracking().Where(c => assistants.Contains(c.AssistantId));
         if (q.AssistantId is { } assistant)
         {

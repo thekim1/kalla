@@ -71,7 +71,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing. (That a deleted source's documents leave the index is A-36.)
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; data-model §2.1, §8.
 
-### [ ] B-51 Delete an assistant (#878)
+### [x] B-51 Delete an assistant (#878)
 - **Do:** the same decision; admin §4.5 (the assistants row): `config."Assistants"."DeletedAt"` with the partial
   unique index on `Slug`; `DELETE /api/assistants/{id}` (`Manage`, from any state, the draft discarded, audit
   `assistant.delete`); a deleted assistant is in no list, answers 404 on every route, is served to no client

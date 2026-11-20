@@ -46,7 +46,7 @@ public static class CostEndpoints
             {
                 var period = CostPeriod.Of(from, to, granularity, Today(admin));
                 var departments = await admin.Departments().Select(d => d.Id).ToArrayAsync(ct);
-                _ = await admin.Db.Assistants.AsNoTracking().Where(a => a.Id == id && departments.Contains(a.DepartmentId)).Select(a => (Guid?)a.Id)
+                _ = await admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking().Where(a => a.Id == id && departments.Contains(a.DepartmentId)).Select(a => (Guid?)a.Id)
                     .SingleOrDefaultAsync(ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 var rows = await AssistantUsageAsync(admin, period, departments, [id], ct);
                 var clients = await ClientNamesAsync(admin, rows, ct);

@@ -2460,4 +2460,11 @@ export const DELETE = {
     `Its ${documents} documents leave the search at once and are then removed for good. This cannot be undone.`,
   sourceDeleted: (name: string) => `The source ${name} has been deleted.`,
   close: 'Close',
+  assistantTitle: 'Delete the assistant?',
+  assistantApps: (names: string) => `It is offered to: ${names}. No app can use it any more.`,
+  assistantNoApps: 'It is offered to no app.',
+  assistantQuestions: (count: string) => `Questions in the last 7 days: ${count}.`,
+  assistantConsequence:
+    'This cannot be undone. Its name is free for a new assistant at once, and an app that has chats or settings for that name keeps them for the new one. Its conversations and statistics stay for their own time.',
+  assistantDeleted: (name: string) => `The assistant ${name} has been deleted.`,
 } as const

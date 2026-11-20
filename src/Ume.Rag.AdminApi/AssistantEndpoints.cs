@@ -382,6 +382,36 @@ public static class AssistantEndpoints
                 SetStateAsync(admin, id, request, AssistantStates.Active, ct))
             .RequireAuthorization(AdminPolicies.Edit).WithName("UnarchiveAssistant").WithSummary("Offer the assistant again with the same published version");
 
+        // Decisions "Deleting knowledge bases, sources and assistants": from any state, a soft delete; the name is free at once,
+        // no client lists or reaches it, its conversations and statistics stay their own time, and the config retention step
+        // purges the row 30 days later once no conversation names it. The draft goes with the delete.
+        assistants.MapDelete("/{id:guid}", async (Guid id, [Microsoft.AspNetCore.Mvc.FromQuery] string? version, AdminContext admin, CancellationToken ct) =>
+            {
+                await admin.WriteAsync(async attempt =>
+                {
+                    var assistant = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(assistant, version);
+                    var before = AssistantAudit.Of(assistant);
+                    var draft = assistant.DraftVersionId is { } d ? await admin.Db.AssistantVersions.SingleAsync(v => v.Id == d, attempt) : null;
+                    assistant.DraftVersionId = null;
+                    assistant.DeletedAt = admin.Now;
+                    assistant.UpdatedAt = admin.Now;
+                    assistant.UpdatedBy = admin.Actor;
+                    await admin.Db.SaveChangesAsync(attempt);
+                    if (draft is not null)
+                    {
+                        admin.Db.AssistantVersions.Remove(draft);
+                    }
+
+                    return new AdminChange<bool>(true, "delete", AuditEntityTypes.Assistant, assistant.Id, before, null)
+                    {
+                        DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
+                    };
+                }, ct);
+                return Results.NoContent();
+            })
+            .RequireAuthorization(AdminPolicies.Manage).WithName("DeleteAssistant").WithSummary("Delete an assistant from any state; its name is free at once");
+
         assistants.MapPut("/{id:guid}/retention", async (Guid id, RetentionRequest request, AdminContext admin, CancellationToken ct) =>
             {
                 var saved = await admin.WriteAsync(async attempt =>

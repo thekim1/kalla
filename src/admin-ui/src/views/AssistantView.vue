@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useTabQuery } from '@/composables/useTabQuery'
 import { ApiError } from '@/api/client'
@@ -31,7 +32,7 @@ import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
+import { ASSISTANT, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -44,6 +45,7 @@ type Tab = 'draft' | 'test' | 'versions' | 'audience' | 'storage' | 'statistics'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
+const router = useRouter()
 const assistant = useLoadable<Assistant | null>(null)
 /** The tab is kept in `?tab=`, so a reload or a link opens it. */
 const tab = useTabQuery<Tab>(['draft', 'test', 'versions', 'audience', 'storage', 'statistics'])
@@ -120,6 +122,23 @@ const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-depar
 const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
 const moving = ref(false)
 const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+// Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, from any state, the name typed;
+// the dialog names the apps it is offered to and its questions of the last 7 days (the list row's count).
+const deleting = ref(false)
+const questions7d = ref<number | null>(null)
+async function openDelete(): Promise<void> {
+  const current = assistant.data.value!
+  questions7d.value = await api.assistants.list({ q: current.slug, pageSize: 50 })
+    .then((page) => page.items.find((a) => a.id === current.id)?.questions7d ?? null)
+    .catch(() => null)
+  deleting.value = true
+}
+async function deleteAssistant(): Promise<void> {
+  const deleted = assistant.data.value!
+  await api.assistants.remove(deleted.id, deleted.version)
+  ui.notify(DELETE.assistantDeleted(deleted.name))
+  void router.push({ name: 'assistants' })
+}
 
 const tabs = [
   { value: 'draft' as const, label: ASSISTANT.tabs.draft },
@@ -438,6 +457,7 @@ onMounted(load)
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
         </template>
+        <UiButton v-if="canManage" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
         <UiButton
           v-if="canEdit && assistant.data.value.draft" variant="primary" :loading="busy === 'publish'" data-test="publish" @click="publish"
         >
@@ -628,6 +648,14 @@ onMounted(load)
         v-model:open="archiving" :title="ASSISTANT.archiveTitle" :consequence="ASSISTANT.archiveConsequence" :confirm-label="ASSISTANT.archive" danger
         :action="archive"
       />
+      <ConfirmDialog
+        v-if="canManage" v-model:open="deleting" :title="DELETE.assistantTitle" :confirm-label="DELETE.action" danger
+        :confirm-name="assistant.data.value.name" :confirm-name-label="DELETE.typeName(assistant.data.value.name)" :action="deleteAssistant"
+      >
+        <p data-test="delete-apps">{{ whoCanUse.length > 0 ? DELETE.assistantApps(whoCanUse.join(', ')) : DELETE.assistantNoApps }}</p>
+        <p data-test="delete-questions">{{ DELETE.assistantQuestions(questions7d === null ? '–' : formatNumber(questions7d)) }}</p>
+        <p>{{ DELETE.assistantConsequence }}</p>
+      </ConfirmDialog>
     </template>
   </AsyncState>
 </template>
